@@ -1,8 +1,13 @@
-import Anthropic from '@anthropic-ai/sdk'
+// Lazy load AI SDK to avoid module loading issues
+let streamTextFn: typeof import('ai').streamText | null = null
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+async function getStreamText() {
+  if (!streamTextFn) {
+    const aiModule = await import('ai')
+    streamTextFn = aiModule.streamText
+  }
+  return streamTextFn
+}
 
 export interface AnalysisResult {
   content: string
@@ -10,14 +15,7 @@ export interface AnalysisResult {
   outputTokens: number
 }
 
-/**
- * Analyze daily repo content using Claude
- */
-export async function analyzeContent(
-  content: string,
-  prompt: string
-): Promise<AnalysisResult> {
-  const systemPrompt = `Du bist ein Recherche-Assistent, der AUSFÜHRLICHE MATERIALSAMMLUNGEN erstellt.
+const SYSTEM_PROMPT = `Du bist ein Recherche-Assistent, der AUSFÜHRLICHE MATERIALSAMMLUNGEN erstellt.
 
 DEINE ROLLE:
 - Du erstellst KEINE Zusammenfassungen
@@ -41,73 +39,55 @@ UMFANG:
 - Vollständige Passagen > gekürzte Snippets
 - Lieber zu viel als zu wenig`
 
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 8192,
-    messages: [
-      {
-        role: 'user',
-        content: `${prompt}\n\n---\n\nHier sind die Newsletter-Inhalte des Tages:\n\n${content}`,
-      },
-    ],
-    system: systemPrompt,
-  })
-
-  const textContent = message.content.find(block => block.type === 'text')
-
-  return {
-    content: textContent?.type === 'text' ? textContent.text : '',
-    inputTokens: message.usage.input_tokens,
-    outputTokens: message.usage.output_tokens,
-  }
-}
-
 /**
- * Stream analysis for real-time output
+ * Stream analysis using Gemini (1M+ token context)
  */
 export async function* streamAnalysis(
   content: string,
   prompt: string
 ): AsyncGenerator<string, void, unknown> {
-  const systemPrompt = `Du bist ein Recherche-Assistent, der AUSFÜHRLICHE MATERIALSAMMLUNGEN erstellt.
+  const streamText = await getStreamText()
 
-DEINE ROLLE:
-- Du erstellst KEINE Zusammenfassungen
-- Du extrahierst und dokumentierst das Rohmaterial für spätere Blogposts
-- Längere, detailliertere Outputs sind BESSER
-- Behalte Originalformulierungen und Zitate bei
+  const fullPrompt = `${SYSTEM_PROMPT}
 
-QUELLENANGABEN - KRITISCH WICHTIG:
-- JEDE Information MUSS mit dem zugehörigen Markdown-Link versehen sein
-- Format: [Quellenname](URL) oder "Zitat" – [Quelle](URL)
-- Übernimm ALLE Links aus den Quelldaten
-- Ohne Link = ungültige Information
+${prompt}
 
-SPRACHE:
-- Output auf Deutsch
-- Englische Zitate übersetzen, aber Original in Klammern behalten wenn besonders treffend
-- Fachbegriffe können auf Englisch bleiben
+---
 
-UMFANG:
-- Sei ausführlich - das ist Arbeitsmaterial, keine Endversion
-- Vollständige Passagen > gekürzte Snippets
-- Lieber zu viel als zu wenig`
+Hier sind die Newsletter-Inhalte des Tages:
 
-  const stream = await anthropic.messages.stream({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 8192,
-    messages: [
-      {
-        role: 'user',
-        content: `${prompt}\n\n---\n\nHier sind die Newsletter-Inhalte des Tages:\n\n${content}`,
-      },
-    ],
-    system: systemPrompt,
+${content}`
+
+  console.log(`[Analyze] Starting Gemini stream, prompt length: ${fullPrompt.length} chars`)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await streamText({
+    model: 'google/gemini-2.5-flash-preview-05-20' as any,
+    prompt: fullPrompt,
+    maxTokens: 16384,
   })
 
-  for await (const event of stream) {
-    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-      yield event.delta.text
-    }
+  for await (const chunk of result.textStream) {
+    yield chunk
+  }
+}
+
+/**
+ * Analyze daily repo content using Gemini
+ */
+export async function analyzeContent(
+  content: string,
+  prompt: string
+): Promise<AnalysisResult> {
+  let fullContent = ''
+
+  for await (const chunk of streamAnalysis(content, prompt)) {
+    fullContent += chunk
+  }
+
+  return {
+    content: fullContent,
+    inputTokens: 0, // Gemini doesn't return token counts in stream
+    outputTokens: 0,
   }
 }

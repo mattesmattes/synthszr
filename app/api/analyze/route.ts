@@ -54,10 +54,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Build content string with token limit awareness
-    // Claude limit: 200k tokens ≈ ~600k characters
-    // Limit each item to 10k chars, and total to ~500k chars to leave room for prompt
-    const MAX_CHARS_PER_ITEM = 10000
-    const MAX_TOTAL_CHARS = 500000
+    // Gemini has 1M+ token context, but we still limit for reasonable processing
+    // Limit each item to 20k chars, and total to ~2M chars
+    const MAX_CHARS_PER_ITEM = 20000
+    const MAX_TOTAL_CHARS = 2000000
 
     const contentParts: string[] = []
     let totalChars = 0
