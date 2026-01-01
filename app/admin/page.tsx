@@ -881,7 +881,7 @@ function GenerateImagesButton({ postId }: { postId: string }) {
         )}
       </Button>
       <p className="text-xs text-muted-foreground mt-2 text-center">
-        Generiert bis zu 5 Bilder aus den Digest-Quellen
+        Visualisiert bis zu 5 News-Snippets aus dem Blogpost
       </p>
     </div>
   )
