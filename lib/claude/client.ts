@@ -60,15 +60,20 @@ ${content}`
 
   console.log(`[Analyze] Starting Gemini stream, prompt length: ${fullPrompt.length} chars`)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await streamText({
-    model: 'google/gemini-2.5-flash-preview-05-20' as any,
-    prompt: fullPrompt,
-    maxTokens: 16384,
-  })
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await streamText({
+      model: 'google/gemini-2.0-flash' as any,
+      prompt: fullPrompt,
+      maxTokens: 16384,
+    })
 
-  for await (const chunk of result.textStream) {
-    yield chunk
+    for await (const chunk of result.textStream) {
+      yield chunk
+    }
+  } catch (error) {
+    console.error('[Analyze] Gemini error:', error)
+    throw error
   }
 }
 
