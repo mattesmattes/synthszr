@@ -172,13 +172,15 @@ export function PostImageGallery({ postId, onCoverChange }: PostImageGalleryProp
                       : 'border-transparent hover:border-muted-foreground/30'
                   )}
                 >
-                  <div className="relative aspect-video" style={{ backgroundColor: '#CCFF00' }}>
-                    <img
-                      src={image.image_url}
-                      alt="Generated visualization"
-                      className="w-full h-full object-cover"
-                      style={{ mixBlendMode: 'multiply' }}
-                    />
+                  <div
+                    className="relative aspect-video"
+                    style={{
+                      backgroundColor: '#CCFF00',
+                      backgroundImage: `url(${image.image_url})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }}
+                  >
                     {selectedCoverId === image.id && (
                       <div className="absolute top-2 left-2">
                         <Badge className="bg-primary text-primary-foreground">
