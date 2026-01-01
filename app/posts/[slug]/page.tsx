@@ -5,6 +5,9 @@ import { BlogHeader } from "@/components/blog-header"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
 import { ArrowLeft } from "lucide-react"
 
+// Disable caching for posts to always show current cover image
+export const dynamic = 'force-dynamic'
+
 interface PostData {
   id: string
   title: string
