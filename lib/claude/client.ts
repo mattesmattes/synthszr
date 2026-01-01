@@ -63,7 +63,7 @@ ${content}`
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await streamText({
-      model: 'google/gemini-2.0-flash' as any,
+      model: 'google/gemini-1.5-flash' as any,
       prompt: fullPrompt,
       maxTokens: 16384,
     })
