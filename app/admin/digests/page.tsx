@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Sparkles, Play, Calendar, Loader2, Copy, Check, Save, PenTool, FileText, Gauge, Mail, Link2, Hash, ChevronDown, BookOpen, ExternalLink, Trash2, Clock, AlertCircle } from 'lucide-react'
+import { Sparkles, Play, Calendar, Loader2, Copy, Check, Save, PenTool, FileText, Gauge, Mail, Link2, Hash, ChevronDown, BookOpen, ExternalLink, Trash2, Clock, AlertCircle, ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -84,6 +85,8 @@ export default function DigestsPage() {
   const [vocabularyIntensity, setVocabularyIntensity] = useState(50)
   const [savingBlog, setSavingBlog] = useState(false)
   const [deletingDigestId, setDeletingDigestId] = useState<string | null>(null)
+  const [enableDithering, setEnableDithering] = useState(false)
+  const [ditheringGain, setDitheringGain] = useState(1.0)
 
   const supabase = createClient()
 
@@ -383,6 +386,8 @@ export default function DigestsPage() {
               newsItems: sectionsToProcess.map(s => ({
                 text: `${s.title}\n\n${s.content.slice(0, 2000)}`,
               })),
+              enableDithering,
+              ditheringGain,
             }),
           }).catch(err => console.error('Image generation error:', err))
         }
@@ -645,6 +650,43 @@ export default function DigestsPage() {
                       <span className="font-medium">{vocabularyIntensity}%</span>
                     </div>
                     <Slider value={[vocabularyIntensity]} onValueChange={(v) => setVocabularyIntensity(v[0])} max={100} step={5} />
+                  </div>
+                </div>
+
+                <div className="p-3 border rounded bg-muted/30">
+                  <div className="flex items-center gap-2 mb-3">
+                    <ImageIcon className="h-3 w-3" />
+                    <Label className="text-xs font-medium">Bildverarbeitung</Label>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="dithering-switch" className="text-xs">Dithering aktivieren</Label>
+                      <Switch
+                        id="dithering-switch"
+                        checked={enableDithering}
+                        onCheckedChange={setEnableDithering}
+                      />
+                    </div>
+                    {enableDithering && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-muted-foreground">Error Diffusion Gain</span>
+                          <span className="font-medium">{ditheringGain.toFixed(1)}</span>
+                        </div>
+                        <Slider
+                          value={[ditheringGain * 100]}
+                          onValueChange={(v) => setDitheringGain(v[0] / 100)}
+                          min={50}
+                          max={200}
+                          step={10}
+                        />
+                        <div className="flex justify-between text-[9px] text-muted-foreground">
+                          <span>0.5</span>
+                          <span>1.0</span>
+                          <span>2.0</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-col items-center justify-center py-6 text-center">

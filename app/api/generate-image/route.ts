@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
-import { generateAndProcessImage } from '@/lib/gemini/image-generator'
+import { generateAndProcessImage, ImageProcessingOptions } from '@/lib/gemini/image-generator'
 
 export const maxDuration = 300 // Allow up to 5 minutes for batch image generation
 
@@ -9,12 +9,14 @@ interface GenerateImageRequest {
   postId: string
   dailyRepoId?: string
   newsText: string
+  enableDithering?: boolean
+  ditheringGain?: number
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: GenerateImageRequest = await request.json()
-    const { postId, dailyRepoId, newsText } = body
+    const { postId, dailyRepoId, newsText, enableDithering, ditheringGain } = body
 
     if (!postId || !newsText) {
       return NextResponse.json(
@@ -46,8 +48,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate the image
-    const result = await generateAndProcessImage(newsText)
+    // Generate the image with processing options
+    const processingOptions: ImageProcessingOptions = {
+      enableDithering: enableDithering ?? false,
+      ditheringGain: ditheringGain ?? 1.0,
+    }
+    const result = await generateAndProcessImage(newsText, processingOptions)
 
     if (!result.success || !result.imageBase64) {
       // Update record with error
@@ -143,14 +149,24 @@ export async function POST(request: NextRequest) {
 // Batch generate images for multiple news items - generates sequentially to avoid overload
 export async function PUT(request: NextRequest) {
   try {
-    const body: { postId: string; newsItems: Array<{ dailyRepoId?: string; text: string }> } = await request.json()
-    const { postId, newsItems } = body
+    const body: {
+      postId: string
+      newsItems: Array<{ dailyRepoId?: string; text: string }>
+      enableDithering?: boolean
+      ditheringGain?: number
+    } = await request.json()
+    const { postId, newsItems, enableDithering, ditheringGain } = body
 
     if (!postId || !newsItems || newsItems.length === 0) {
       return NextResponse.json(
         { error: 'postId and newsItems are required' },
         { status: 400 }
       )
+    }
+
+    const processingOptions: ImageProcessingOptions = {
+      enableDithering: enableDithering ?? false,
+      ditheringGain: ditheringGain ?? 1.0,
     }
 
     const supabase = await createClient()
@@ -180,8 +196,8 @@ export async function PUT(request: NextRequest) {
           continue
         }
 
-        // Generate the image
-        const result = await generateAndProcessImage(item.text)
+        // Generate the image with processing options
+        const result = await generateAndProcessImage(item.text, processingOptions)
 
         if (!result.success || !result.imageBase64) {
           await supabase

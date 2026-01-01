@@ -242,14 +242,95 @@ export async function whiteToTransparent(
 }
 
 /**
- * Generates a satirical image and processes it for transparency
+ * Floyd-Steinberg error diffusion dithering
+ * Converts grayscale image to pure black & white with dithering
+ * @param imageBase64 Base64 encoded image
+ * @param gain Error diffusion gain/scaling factor (0.5-2.0, default 1.0)
  */
-export async function generateAndProcessImage(newsText: string): Promise<{
+export async function applyDithering(
+  imageBase64: string,
+  gain: number = 1.0
+): Promise<{ base64: string; mimeType: string }> {
+  const buffer = Buffer.from(imageBase64, 'base64')
+
+  // Convert to grayscale first
+  const { data, info } = await sharp(buffer)
+    .grayscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+
+  const width = info.width
+  const height = info.height
+  const pixels = new Float32Array(data) // Use float for error accumulation
+
+  // Floyd-Steinberg error diffusion
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x
+      const oldPixel = pixels[idx]
+      const newPixel = oldPixel < 128 ? 0 : 255
+      pixels[idx] = newPixel
+
+      const error = (oldPixel - newPixel) * gain
+
+      // Distribute error to neighbors
+      if (x + 1 < width) {
+        pixels[idx + 1] += error * 7 / 16
+      }
+      if (y + 1 < height) {
+        if (x > 0) {
+          pixels[(y + 1) * width + (x - 1)] += error * 3 / 16
+        }
+        pixels[(y + 1) * width + x] += error * 5 / 16
+        if (x + 1 < width) {
+          pixels[(y + 1) * width + (x + 1)] += error * 1 / 16
+        }
+      }
+    }
+  }
+
+  // Clamp values and convert back to uint8
+  const output = new Uint8Array(width * height)
+  for (let i = 0; i < pixels.length; i++) {
+    output[i] = Math.max(0, Math.min(255, Math.round(pixels[i])))
+  }
+
+  // Create output image
+  const outputBuffer = await sharp(Buffer.from(output), {
+    raw: {
+      width,
+      height,
+      channels: 1
+    }
+  })
+    .png()
+    .toBuffer()
+
+  return {
+    base64: outputBuffer.toString('base64'),
+    mimeType: 'image/png'
+  }
+}
+
+export interface ImageProcessingOptions {
+  enableDithering?: boolean
+  ditheringGain?: number  // 0.5-2.0, default 1.0
+}
+
+/**
+ * Generates a satirical image and processes it for transparency (and optionally dithering)
+ */
+export async function generateAndProcessImage(
+  newsText: string,
+  options: ImageProcessingOptions = {}
+): Promise<{
   success: boolean
   imageBase64?: string
   mimeType?: string
   error?: string
 }> {
+  const { enableDithering = false, ditheringGain = 1.0 } = options
+
   // Generate the image
   const result = await generateSatiricalImage(newsText)
 
@@ -258,17 +339,27 @@ export async function generateAndProcessImage(newsText: string): Promise<{
   }
 
   try {
+    let processedBase64 = result.imageBase64
+
+    // Apply dithering if enabled
+    if (enableDithering) {
+      console.log(`[Gemini] Applying dithering with gain ${ditheringGain}...`)
+      const dithered = await applyDithering(processedBase64, ditheringGain)
+      processedBase64 = dithered.base64
+    }
+
     // Process for transparency
     console.log('[Gemini] Processing image for transparency...')
-    const processed = await whiteToTransparent(result.imageBase64)
-    console.log('[Gemini] Transparency processing complete')
+    const processed = await whiteToTransparent(processedBase64)
+    console.log('[Gemini] Image processing complete')
+
     return {
       success: true,
       imageBase64: processed.base64,
       mimeType: processed.mimeType
     }
   } catch (error) {
-    console.error('[Gemini] Transparency processing error:', error)
+    console.error('[Gemini] Image processing error:', error)
     // Return original image if processing fails
     return result
   }
