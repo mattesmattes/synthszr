@@ -13,7 +13,8 @@ import {
   Settings,
   PenTool,
   BookOpen,
-  Wand2
+  Wand2,
+  ImageIcon
 } from 'lucide-react'
 
 const navGroups = [
@@ -40,6 +41,11 @@ const navGroups = [
         label: 'Ghostwriter-Prompts',
         href: '/admin/ghostwriter',
         icon: PenTool
+      },
+      {
+        label: 'Bild-Prompts',
+        href: '/admin/image-prompts',
+        icon: ImageIcon
       },
       {
         label: 'Vokabular',

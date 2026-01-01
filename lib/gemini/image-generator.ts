@@ -1,6 +1,7 @@
 import sharp from 'sharp'
+import { createClient } from '@/lib/supabase/server'
 
-const IMAGE_PROMPT_TEMPLATE = `Visualisiere in Schwarz-Weiß die folgende News satirisch im Stil von Mort Drucker ohne in der Visualisierung auf "Mort Drucker" oder "MAD" hinzuweisen.
+const DEFAULT_IMAGE_PROMPT = `Visualisiere in Schwarz-Weiß die folgende News satirisch im Stil von Mort Drucker ohne in der Visualisierung auf "Mort Drucker" oder "MAD" hinzuweisen.
 
 WICHTIGE STILRICHTLINIEN:
 - Klarer Schwarz-Weiß-Kontrast mit Schraffuren und Linienzeichnung
@@ -11,6 +12,29 @@ WICHTIGE STILRICHTLINIEN:
 
 NEWS TEXT:
 {newsText}`
+
+/**
+ * Fetches the active image prompt from the database, or returns the default
+ */
+async function getActiveImagePrompt(): Promise<string> {
+  try {
+    const supabase = await createClient()
+    const { data } = await supabase
+      .from('image_prompts')
+      .select('prompt_text')
+      .eq('is_active', true)
+      .single()
+
+    if (data?.prompt_text) {
+      console.log('[Gemini] Using custom image prompt from database')
+      return data.prompt_text
+    }
+  } catch (error) {
+    // Table might not exist or no active prompt
+    console.log('[Gemini] Using default image prompt')
+  }
+  return DEFAULT_IMAGE_PROMPT
+}
 
 interface GenerateImageResult {
   success: boolean
@@ -62,7 +86,8 @@ export async function generateSatiricalImage(newsText: string): Promise<Generate
         }
       }
 
-      const prompt = IMAGE_PROMPT_TEMPLATE.replace('{newsText}', newsText.slice(0, 2000))
+      const promptTemplate = await getActiveImagePrompt()
+      const prompt = promptTemplate.replace('{newsText}', newsText.slice(0, 2000))
 
       console.log(`[Gemini] Generating image with gemini-3-pro-image, attempt ${attempt}/${maxRetries}`)
 
