@@ -119,14 +119,16 @@ export default function DailyRepoPage() {
     setLoadingItems(false)
   }
 
-  async function deleteItem(id: string) {
-    if (!confirm('Eintrag wirklich löschen?')) return
-    setDeletingId(id)
+  async function deleteRepo(date: string) {
+    if (!confirm(`Alle Einträge für ${new Date(date).toLocaleDateString('de-DE')} wirklich löschen?`)) return
+    setDeletingId(date)
     try {
-      const { error } = await supabase.from('daily_repo').delete().eq('id', id)
+      const { error } = await supabase.from('daily_repo').delete().eq('newsletter_date', date)
       if (error) throw error
-      await fetchItemsForDate(selectedDate)
       await fetchRepoSummaries()
+      if (selectedDate === date) {
+        setItems([])
+      }
     } catch (error) {
       console.error('Delete error:', error)
       alert('Fehler beim Löschen')
@@ -192,14 +194,16 @@ export default function DailyRepoPage() {
               <CardContent className="p-0">
                 <div className="divide-y max-h-[60vh] overflow-y-auto">
                   {repoSummaries.map((repo) => (
-                    <button
+                    <div
                       key={repo.date}
-                      onClick={() => setSelectedDate(repo.date)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors ${
+                      className={`flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors ${
                         selectedDate === repo.date ? 'bg-primary/10' : ''
                       }`}
                     >
-                      <div className="flex-1 min-w-0">
+                      <button
+                        onClick={() => setSelectedDate(repo.date)}
+                        className="flex-1 min-w-0 text-left"
+                      >
                         <div className="text-xs font-medium">
                           {new Date(repo.date).toLocaleDateString('de-DE', {
                             weekday: 'short',
@@ -207,7 +211,7 @@ export default function DailyRepoPage() {
                             month: 'short',
                           })}
                         </div>
-                      </div>
+                      </button>
                       <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                         <span className="flex items-center gap-0.5">
                           <Mail className="h-2.5 w-2.5 text-blue-500" />
@@ -220,8 +224,24 @@ export default function DailyRepoPage() {
                         <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
                           {(repo.totalChars / 1000).toFixed(0)}k
                         </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteRepo(repo.date)
+                          }}
+                          disabled={deletingId === repo.date}
+                          className="h-5 w-5 text-destructive hover:text-destructive ml-1"
+                        >
+                          {deletingId === repo.date ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3 w-3" />
+                          )}
+                        </Button>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </CardContent>
@@ -318,19 +338,6 @@ export default function DailyRepoPage() {
                             </a>
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deleteItem(item.id)}
-                          disabled={deletingId === item.id}
-                          className="h-6 w-6 text-destructive hover:text-destructive"
-                        >
-                          {deletingId === item.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3 w-3" />
-                          )}
-                        </Button>
                       </div>
                     </div>
                   ))}
