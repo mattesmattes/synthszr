@@ -172,7 +172,7 @@ export function PostImageGallery({ postId, onCoverChange }: PostImageGalleryProp
                       : 'border-transparent hover:border-muted-foreground/30'
                   )}
                 >
-                  <div className="relative aspect-video bg-gradient-to-br from-primary/10 to-primary/5">
+                  <div className="relative aspect-video" style={{ backgroundColor: '#CCFF00' }}>
                     <img
                       src={image.image_url}
                       alt="Generated visualization"
