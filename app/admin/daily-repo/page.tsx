@@ -1,15 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash } from 'lucide-react'
+import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash, Eye, Clock, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { createClient } from '@/lib/supabase/client'
 import { FetchProgress } from '@/components/admin/fetch-progress'
 
@@ -34,8 +36,25 @@ export default function DailyRepoPage() {
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   )
+  const [viewingItem, setViewingItem] = useState<DailyRepoItem | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const supabase = createClient()
+
+  async function deleteItem(id: string) {
+    if (!confirm('Eintrag wirklich löschen?')) return
+    setDeletingId(id)
+    try {
+      const { error } = await supabase.from('daily_repo').delete().eq('id', id)
+      if (error) throw error
+      await fetchItems()
+    } catch (error) {
+      console.error('Delete error:', error)
+      alert('Fehler beim Löschen')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   useEffect(() => {
     fetchItems()
@@ -169,84 +188,157 @@ export default function DailyRepoPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            {items.length} Inhalte für {new Date(selectedDate).toLocaleDateString('de-DE')}
-          </p>
-          <Accordion type="single" collapsible className="space-y-2">
-            {items.map((item) => (
-              <AccordionItem
-                key={item.id}
-                value={item.id}
-                className="rounded-lg border bg-card px-4"
-              >
-                <AccordionTrigger className="hover:no-underline">
-                  <div className="flex items-center gap-3 text-left">
+        <Card>
+          <CardContent className="p-0">
+            <div className="divide-y">
+              {items.map((item) => (
+                <div key={item.id} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/50 transition-colors">
+                  {/* Type Icon */}
+                  <div className="shrink-0">
                     {sourceTypeIcon(item.source_type)}
-                    <div>
-                      <div className="font-medium">{item.title}</div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Badge variant="secondary" className="text-xs">
-                          {item.source_type}
-                        </Badge>
-                        {item.source_email && (
-                          <span className="font-mono text-xs">{item.source_email}</span>
-                        )}
-                      </div>
+                  </div>
+
+                  {/* Title & Source */}
+                  <div className="min-w-[200px] max-w-[300px]">
+                    <div className="font-medium truncate">{item.title}</div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      {new Date(item.collected_at).toLocaleTimeString('de-DE', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                      {item.source_email && (
+                        <span className="ml-2 truncate">{item.source_email}</span>
+                      )}
                     </div>
                   </div>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <div className="space-y-4 pt-2">
-                    {/* Content Preview */}
-                    <div>
-                      <h4 className="mb-2 text-sm font-medium">Inhalt (Auszug)</h4>
-                      <p className="whitespace-pre-wrap text-sm text-muted-foreground line-clamp-6">
-                        {item.content?.slice(0, 500)}
-                        {item.content?.length > 500 && '...'}
-                      </p>
-                    </div>
 
-                    {/* Extracted Links */}
-                    {item.metadata?.article_urls && item.metadata.article_urls.length > 0 && (
-                      <div>
-                        <h4 className="mb-2 text-sm font-medium">
-                          Erkannte Artikel-Links ({item.metadata.article_urls.length})
-                        </h4>
-                        <ul className="space-y-1">
-                          {item.metadata.article_urls.slice(0, 5).map((url, i) => (
-                            <li key={i} className="flex items-center gap-2">
-                              <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="truncate text-sm text-blue-600 hover:underline"
-                              >
-                                {url}
-                              </a>
-                            </li>
-                          ))}
-                          {item.metadata.article_urls.length > 5 && (
-                            <li className="text-sm text-muted-foreground">
-                              ... und {item.metadata.article_urls.length - 5} weitere
-                            </li>
-                          )}
-                        </ul>
-                      </div>
+                  {/* Type Badge */}
+                  <Badge variant="secondary" className="shrink-0 text-xs">
+                    {item.source_type}
+                  </Badge>
+
+                  {/* Character Count */}
+                  <Badge variant="outline" className="shrink-0 text-xs">
+                    {((item.content?.length || 0) / 1000).toFixed(1)}k
+                  </Badge>
+
+                  {/* Preview */}
+                  <div className="flex-1 min-w-0 text-sm text-muted-foreground truncate">
+                    {item.content?.slice(0, 80).replace(/\n/g, ' ')}...
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setViewingItem(item)}
+                      title="Inhalt anzeigen"
+                      className="h-8 w-8"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    {item.source_url && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        asChild
+                        title="Original öffnen"
+                        className="h-8 w-8"
+                      >
+                        <a href={item.source_url} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </Button>
                     )}
-
-                    {/* Metadata */}
-                    <div className="text-xs text-muted-foreground">
-                      Gesammelt: {new Date(item.collected_at).toLocaleString('de-DE')}
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteItem(item.id)}
+                      disabled={deletingId === item.id}
+                      title="Löschen"
+                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      {deletingId === item.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
                   </div>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
+
+      {/* View Item Dialog */}
+      <Dialog open={!!viewingItem} onOpenChange={() => setViewingItem(null)}>
+        <DialogContent className="w-[90vw] max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {viewingItem && sourceTypeIcon(viewingItem.source_type)}
+              {viewingItem?.title}
+            </DialogTitle>
+            <DialogDescription>
+              {viewingItem?.source_email && `Von: ${viewingItem.source_email} • `}
+              {viewingItem && `Gesammelt: ${new Date(viewingItem.collected_at).toLocaleString('de-DE')}`}
+              {viewingItem?.content && ` • ${(viewingItem.content.length / 1000).toFixed(1)}k Zeichen`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-4 py-4">
+            {/* Source URL */}
+            {viewingItem?.source_url && (
+              <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
+                <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+                <a
+                  href={viewingItem.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-primary hover:underline truncate"
+                >
+                  {viewingItem.source_url}
+                </a>
+              </div>
+            )}
+
+            {/* Full Content */}
+            <div className="prose prose-sm max-w-none">
+              <pre className="whitespace-pre-wrap text-sm font-sans bg-muted/30 p-4 rounded-lg overflow-auto max-h-[60vh]">
+                {viewingItem?.content}
+              </pre>
+            </div>
+
+            {/* Extracted Links */}
+            {viewingItem?.metadata?.article_urls && viewingItem.metadata.article_urls.length > 0 && (
+              <div className="border rounded-lg p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Link2 className="h-4 w-4" />
+                  Extrahierte Links ({viewingItem.metadata.article_urls.length})
+                </h3>
+                <ul className="space-y-1">
+                  {viewingItem.metadata.article_urls.map((url, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline truncate"
+                      >
+                        {url}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
