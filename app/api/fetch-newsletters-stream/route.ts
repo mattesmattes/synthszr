@@ -58,6 +58,15 @@ export async function POST(request: NextRequest) {
     })
   }
 
+  // Parse request body for optional targetDate
+  let targetDate: string | undefined
+  try {
+    const body = await request.json()
+    targetDate = body.targetDate
+  } catch {
+    // No body or invalid JSON - that's fine, use default behavior
+  }
+
   const encoder = new TextEncoder()
 
   const stream = new ReadableStream({
@@ -67,7 +76,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        console.log('[Newsletter Fetch] Starting...')
+        console.log('[Newsletter Fetch] Starting...', targetDate ? `for date ${targetDate}` : 'last 36 hours')
         const supabase = await createClient()
 
         // Get Gmail tokens
@@ -98,15 +107,26 @@ export async function POST(request: NextRequest) {
 
         send({ type: 'start', phase: 'fetching', total: sources.length })
 
-        // Fetch emails
+        // Fetch emails - use targetDate if provided, otherwise last 36 hours
         const gmailClient = new GmailClient(tokenData.refresh_token)
-        const afterDate = new Date(Date.now() - 36 * 60 * 60 * 1000)
+        let afterDate: Date
+        let beforeDate: Date | undefined
+
+        if (targetDate) {
+          // For specific date: search for emails from that day (midnight to midnight)
+          afterDate = new Date(targetDate + 'T00:00:00')
+          beforeDate = new Date(targetDate + 'T23:59:59')
+          console.log(`[Newsletter Fetch] Searching for date range: ${afterDate.toISOString()} to ${beforeDate.toISOString()}`)
+        } else {
+          afterDate = new Date(Date.now() - 36 * 60 * 60 * 1000)
+        }
+
         const senderEmails = sources.map(s => s.email)
 
         send({ type: 'newsletter', phase: 'fetching', item: { title: 'Emails werden abgerufen...', status: 'processing' } })
 
         console.log('[Newsletter Fetch] Fetching emails from senders:', senderEmails)
-        const emails = await gmailClient.fetchEmailsFromSenders(senderEmails, 50, afterDate)
+        const emails = await gmailClient.fetchEmailsFromSenders(senderEmails, 50, afterDate, beforeDate)
         console.log('[Newsletter Fetch] Fetched', emails.length, 'emails')
 
         send({ type: 'newsletter', phase: 'processing', current: 0, total: emails.length, item: { title: `${emails.length} Emails gefunden`, status: 'success' } })
@@ -162,7 +182,8 @@ export async function POST(request: NextRequest) {
               })
             }
 
-            // Store newsletter
+            // Store newsletter - use targetDate if provided, otherwise use email date
+            const newsletterDate = targetDate || email.date.toISOString().split('T')[0]
             const { error: insertError } = await supabase
               .from('daily_repo')
               .insert({
@@ -171,7 +192,7 @@ export async function POST(request: NextRequest) {
                 title: email.subject,
                 content: parsed.plainText,
                 raw_html: htmlContent,
-                newsletter_date: email.date.toISOString().split('T')[0],
+                newsletter_date: newsletterDate,
               })
 
             if (insertError) {
@@ -249,6 +270,8 @@ export async function POST(request: NextRequest) {
               const extracted = await extractArticleContent(article.url)
 
               if (extracted && extracted.content) {
+                // Use targetDate if provided, otherwise use today
+                const articleDate = targetDate || new Date().toISOString().split('T')[0]
                 await supabase
                   .from('daily_repo')
                   .insert({
@@ -256,7 +279,7 @@ export async function POST(request: NextRequest) {
                     source_url: article.url,
                     title: extracted.title || article.title,
                     content: extracted.content,
-                    newsletter_date: new Date().toISOString().split('T')[0],
+                    newsletter_date: articleDate,
                   })
 
                 processedArticles++

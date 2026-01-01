@@ -55,7 +55,12 @@ const phaseLabels = {
   error: 'Fehler aufgetreten',
 }
 
-export function FetchProgress({ onComplete }: { onComplete?: () => void }) {
+interface FetchProgressProps {
+  onComplete?: () => void
+  targetDate?: string // Optional: YYYY-MM-DD format for fetching specific date
+}
+
+export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
   const [isRunning, setIsRunning] = useState(false)
   const [phase, setPhase] = useState<string>('idle')
   const [progress, setProgress] = useState({ current: 0, total: 0 })
@@ -76,6 +81,8 @@ export function FetchProgress({ onComplete }: { onComplete?: () => void }) {
     try {
       const response = await fetch('/api/fetch-newsletters-stream', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetDate }),
         credentials: 'include',
       })
 
@@ -160,7 +167,7 @@ export function FetchProgress({ onComplete }: { onComplete?: () => void }) {
     } finally {
       setIsRunning(false)
     }
-  }, [onComplete])
+  }, [onComplete, targetDate])
 
   const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
 

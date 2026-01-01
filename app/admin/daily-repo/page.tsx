@@ -363,11 +363,15 @@ export default function DailyRepoPage() {
                 className="rounded border px-2 py-1 text-xs"
               />
             </div>
-            <FetchProgress onComplete={() => {
-              fetchRepoSummaries()
-              fetchItemsForDate(selectedDate)
-              setShowFetchDialog(false)
-            }} />
+            <FetchProgress
+              targetDate={fetchDate}
+              onComplete={() => {
+                fetchRepoSummaries()
+                fetchItemsForDate(fetchDate)
+                setSelectedDate(fetchDate)
+                setShowFetchDialog(false)
+              }}
+            />
           </div>
         </DialogContent>
       </Dialog>

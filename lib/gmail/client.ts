@@ -26,7 +26,8 @@ export class GmailClient {
   async fetchEmailsFromSenders(
     senderEmails: string[],
     maxResults: number = 50,
-    afterDate?: Date
+    afterDate?: Date,
+    beforeDate?: Date
   ): Promise<EmailMessage[]> {
     // Build query for multiple senders - search everywhere (not just inbox)
     const fromQuery = senderEmails.map(email => `from:${email}`).join(' OR ')
@@ -36,6 +37,15 @@ export class GmailClient {
     if (afterDate) {
       const dateStr = afterDate.toISOString().split('T')[0].replace(/-/g, '/')
       query += ` after:${dateStr}`
+    }
+
+    // Add before date filter if provided (for specific date searches)
+    if (beforeDate) {
+      // Gmail's before: is exclusive, so add one day
+      const nextDay = new Date(beforeDate)
+      nextDay.setDate(nextDay.getDate() + 1)
+      const dateStr = nextDay.toISOString().split('T')[0].replace(/-/g, '/')
+      query += ` before:${dateStr}`
     }
 
     // Log the query for debugging
