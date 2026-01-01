@@ -4,6 +4,9 @@ import { FeaturedArticle } from "@/components/featured-article"
 import { Newsletter } from "@/components/newsletter"
 import { createClient } from "@/lib/supabase/server"
 
+// Disable caching to always show current cover images
+export const dynamic = 'force-dynamic'
+
 interface CombinedPost {
   id: string
   title: string
@@ -116,6 +119,7 @@ export default async function Page() {
               date={formatDateFull(featuredPost.created_at)}
               readTime={estimateReadTime(featuredPost.content)}
               category={featuredPost.category.toUpperCase()}
+              coverImageUrl={featuredPost.cover_image_url}
             />
 
             {/* Last 7 Days Headlines */}

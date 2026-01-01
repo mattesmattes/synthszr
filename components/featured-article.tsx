@@ -7,14 +7,28 @@ interface FeaturedArticleProps {
   date: string
   readTime: string
   category: string
+  coverImageUrl?: string | null
 }
 
-export function FeaturedArticle({ slug, title, content, date, readTime, category }: FeaturedArticleProps) {
+export function FeaturedArticle({ slug, title, content, date, readTime, category, coverImageUrl }: FeaturedArticleProps) {
   return (
     <article className="mb-16 border-b border-border pb-16">
       <div className="mb-6">
         <span className="font-mono text-xs text-muted-foreground">LATEST</span>
       </div>
+
+      {coverImageUrl && (
+        <a href={`/posts/${slug}`} className="block mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
+          <div className="relative aspect-[21/9] bg-gradient-to-br from-primary/20 via-primary/10 to-accent/20">
+            <img
+              src={coverImageUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              style={{ mixBlendMode: 'multiply' }}
+            />
+          </div>
+        </a>
+      )}
 
       <a href={`/posts/${slug}`} className="group">
         <h2 className="mb-6 text-3xl font-bold tracking-tight transition-colors group-hover:text-accent md:text-xl lg:text-2xl">
