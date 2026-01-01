@@ -5,22 +5,25 @@ const SESSION_COOKIE_NAME = 'synthszr_session'
 const SESSION_DURATION = 60 * 60 * 24 * 7 // 7 days in seconds
 
 function getSecretKey() {
-  const secret = process.env.ADMIN_PASSWORD
+  // Use JWT_SECRET if available, fallback to ADMIN_PASSWORD for backwards compatibility
+  const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
   if (!secret) {
-    throw new Error('ADMIN_PASSWORD environment variable is not set')
+    throw new Error('JWT_SECRET or ADMIN_PASSWORD environment variable is not set')
   }
   return new TextEncoder().encode(secret)
 }
 
 export interface SessionPayload {
   isAdmin: boolean
+  email?: string
+  name?: string
   expiresAt: Date
 }
 
-export async function createSession(): Promise<string> {
+export async function createSession(email?: string, name?: string): Promise<string> {
   const expiresAt = new Date(Date.now() + SESSION_DURATION * 1000)
 
-  const token = await new SignJWT({ isAdmin: true })
+  const token = await new SignJWT({ isAdmin: true, email, name })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime(expiresAt)
     .setIssuedAt()
@@ -35,6 +38,8 @@ export async function verifySession(token: string): Promise<SessionPayload | nul
 
     return {
       isAdmin: payload.isAdmin as boolean,
+      email: payload.email as string | undefined,
+      name: payload.name as string | undefined,
       expiresAt: new Date((payload.exp as number) * 1000)
     }
   } catch {

@@ -1,26 +1,61 @@
+import Link from "next/link"
 import { BlogHeader } from "@/components/blog-header"
-import { BlogPost } from "@/components/blog-post"
 import { FeaturedArticle } from "@/components/featured-article"
 import { Newsletter } from "@/components/newsletter"
 import { createClient } from "@/lib/supabase/server"
-import type { Post } from "@/lib/types"
+
+interface CombinedPost {
+  id: string
+  title: string
+  slug: string
+  excerpt: string | null
+  content: Record<string, unknown>
+  category: string
+  created_at: string
+}
 
 export default async function Page() {
   const supabase = await createClient()
-  const { data: posts } = await supabase
+
+  // Fetch manual posts
+  const { data: manualPosts } = await supabase
     .from("posts")
     .select("*")
     .eq("published", true)
     .order("created_at", { ascending: false })
 
-  const estimateReadTime = (content: Record<string, unknown>) => {
-    const text = JSON.stringify(content)
-    const words = text.split(/\s+/).length
-    const minutes = Math.ceil(words / 200)
-    return `${minutes} min`
-  }
+  // Fetch AI-generated posts that are published
+  const { data: aiPosts } = await supabase
+    .from("generated_posts")
+    .select("id, title, slug, excerpt, content, category, created_at")
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+
+  // Parse AI posts content from JSON string if needed
+  const parsedAiPosts: CombinedPost[] = (aiPosts || []).map(post => ({
+    ...post,
+    slug: post.slug || post.id,
+    category: post.category || 'AI & Tech',
+    content: typeof post.content === 'string' ? JSON.parse(post.content) : post.content
+  }))
+
+  // Combine and sort all posts
+  const posts: CombinedPost[] = [
+    ...(manualPosts || []),
+    ...parsedAiPosts
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+  // Filter posts from the last 7 days (excluding featured)
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
   const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+    })
+  }
+
+  const formatDateFull = (date: string) => {
     return new Date(date)
       .toLocaleDateString("en-US", {
         year: "numeric",
@@ -30,8 +65,17 @@ export default async function Page() {
       .replace(/\//g, ".")
   }
 
+  const estimateReadTime = (content: Record<string, unknown>) => {
+    const text = JSON.stringify(content)
+    const words = text.split(/\s+/).length
+    const minutes = Math.ceil(words / 200)
+    return `${minutes} min`
+  }
+
   const featuredPost = posts && posts.length > 0 ? posts[0] : null
-  const olderPosts = posts && posts.length > 1 ? posts.slice(1) : []
+  const recentPosts = posts
+    .slice(1)
+    .filter(post => new Date(post.created_at) >= sevenDaysAgo)
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -39,9 +83,9 @@ export default async function Page() {
 
       <main className="mx-auto max-w-5xl px-6 py-12 md:py-20">
         <div className="mb-16 border-b border-border pb-8">
-          <h1 className="text-4xl font-bold tracking-tight md:text-6xl lg:text-7xl">Synthszr</h1>
-          <p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
-            Digital synthesis, minimal design, and the architecture of sound
+          <h1 className="text-4xl font-bold tracking-tight md:text-3xl lg:text-4xl">Synthszr</h1>
+          <p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-sm">
+            Feed the Soul. Run the System
           </p>
         </div>
 
@@ -51,32 +95,45 @@ export default async function Page() {
               slug={featuredPost.slug}
               title={featuredPost.title}
               content={featuredPost.content}
-              date={formatDate(featuredPost.created_at)}
+              date={formatDateFull(featuredPost.created_at)}
               readTime={estimateReadTime(featuredPost.content)}
               category={featuredPost.category.toUpperCase()}
             />
 
-            {olderPosts.length > 0 && (
-              <section>
-                <h3 className="mb-6 font-mono text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Archive
+            {/* Last 7 Days Headlines */}
+            {recentPosts.length > 0 && (
+              <section className="mt-12">
+                <h3 className="mb-4 font-mono text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Letzte 7 Tage
                 </h3>
-                <div className="space-y-1">
-                  {olderPosts.map((post: Post, index: number) => (
-                    <BlogPost
+                <div className="space-y-2 border-l-2 border-border pl-4">
+                  {recentPosts.map((post) => (
+                    <Link
                       key={post.id}
-                      id={String(index + 1).padStart(2, "0")}
-                      slug={post.slug}
-                      title={post.title}
-                      excerpt={post.excerpt || ""}
-                      date={formatDate(post.created_at)}
-                      readTime={estimateReadTime(post.content)}
-                      category={post.category.toUpperCase()}
-                    />
+                      href={`/posts/${post.slug}`}
+                      className="group flex items-baseline gap-3 py-1 transition-colors hover:text-accent"
+                    >
+                      <span className="font-mono text-xs text-muted-foreground shrink-0">
+                        {formatDate(post.created_at)}
+                      </span>
+                      <span className="text-sm font-medium group-hover:underline">
+                        {post.title}
+                      </span>
+                    </Link>
                   ))}
                 </div>
               </section>
             )}
+
+            {/* Archive Button */}
+            <div className="mt-8">
+              <Link
+                href="/archive"
+                className="inline-flex items-center gap-2 rounded border border-border px-4 py-2 font-mono text-xs transition-colors hover:bg-secondary"
+              >
+                Alle Artikel →
+              </Link>
+            </div>
           </>
         ) : (
           <div className="py-20 text-center">
@@ -92,42 +149,17 @@ export default async function Page() {
 
       <footer className="border-t border-border">
         <div className="mx-auto max-w-5xl px-6 py-12">
-          <div className="flex flex-col gap-8 md:flex-row md:justify-between">
-            <div>
-              <h3 className="font-mono text-sm font-bold">Synthszr</h3>
-              <p className="mt-2 text-sm text-muted-foreground">© 2025 All rights reserved</p>
-            </div>
-            <div className="flex gap-12">
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Connect</h4>
-                <ul className="mt-3 space-y-2 text-sm">
-                  <li>
-                    <a href="#" className="hover:text-accent transition-colors">
-                      Twitter
-                    </a>
-                  </li>
-                  <li>
-                    <a href="#" className="hover:text-accent transition-colors">
-                      GitHub
-                    </a>
-                  </li>
-                  <li>
-                    <a href="#" className="hover:text-accent transition-colors">
-                      Discord
-                    </a>
-                  </li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Links</h4>
-                <ul className="mt-3 space-y-2 text-sm">
-                  <li>
-                    <a href="/admin" className="hover:text-accent transition-colors">
-                      Admin
-                    </a>
-                  </li>
-                </ul>
-              </div>
+          <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
+            <a href="https://oh-so.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
+              <img src="/oh-so-logo.svg" alt="OH-SO" className="h-6" />
+            </a>
+            <div className="flex gap-6 text-xs">
+              <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
+                LinkedIn
+              </a>
+              <a href="/impressum" className="hover:text-accent transition-colors">
+                Impressum
+              </a>
             </div>
           </div>
         </div>

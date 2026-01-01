@@ -46,16 +46,17 @@ export async function POST(request: NextRequest) {
       .eq('newsletter_date', digest.digest_date)
       .order('collected_at', { ascending: true })
 
-    // Build a source reference list for the ghostwriter
+    // Build a source reference list for the ghostwriter - ONLY include sources with valid URLs
+    // This prevents the AI from creating broken links using email addresses
     let sourceReference = ''
     if (sources && sources.length > 0) {
-      sourceReference = '\n\n---\n\nVERFÜGBARE QUELLEN MIT LINKS:\n'
-      sourceReference += sources.map((s, i) => {
-        if (s.source_url) {
+      const sourcesWithUrls = sources.filter(s => s.source_url && s.source_url.startsWith('http'))
+      if (sourcesWithUrls.length > 0) {
+        sourceReference = '\n\n---\n\nVERFÜGBARE QUELLEN MIT LINKS (nutze NUR diese URLs):\n'
+        sourceReference += sourcesWithUrls.map((s, i) => {
           return `${i + 1}. [${s.title}](${s.source_url})`
-        }
-        return `${i + 1}. ${s.title} (${s.source_email || 'Newsletter'})`
-      }).join('\n')
+        }).join('\n')
+      }
     }
 
     // Get the ghostwriter prompt

@@ -11,9 +11,10 @@ const protectedRoutes = ['/admin']
 const authRoutes = ['/login']
 
 function getSecretKey() {
-  const secret = process.env.ADMIN_PASSWORD
+  // Use JWT_SECRET if available, fallback to ADMIN_PASSWORD for backwards compatibility
+  const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
   if (!secret) {
-    throw new Error('ADMIN_PASSWORD environment variable is not set')
+    throw new Error('JWT_SECRET or ADMIN_PASSWORD environment variable is not set')
   }
   return new TextEncoder().encode(secret)
 }

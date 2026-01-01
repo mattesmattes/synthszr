@@ -134,7 +134,7 @@ export default function CreateArticlePage() {
   const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
   const [vocabOpen, setVocabOpen] = useState(false)
-  const [vocabularyIntensity, setVocabularyIntensity] = useState(50)
+  const [vocabularyIntensity, setVocabularyIntensity] = useState(10)
 
   // Editable metadata fields
   const [metadata, setMetadata] = useState<ArticleMetadata>({
@@ -162,6 +162,16 @@ export default function CreateArticlePage() {
   useEffect(() => {
     loadData()
   }, [])
+
+  // Parse metadata when generation finishes
+  useEffect(() => {
+    if (!generating && articleContent) {
+      const parsed = parseArticleContent(articleContent)
+      if (parsed.metadata.title) {
+        setMetadata(parsed.metadata)
+      }
+    }
+  }, [generating, articleContent])
 
   async function loadData() {
     setLoading(true)
@@ -265,13 +275,6 @@ export default function CreateArticlePage() {
       setArticleContent(prev => prev + `\n\n**Fehler:** ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
     } finally {
       setGenerating(false)
-      // Parse metadata after generation completes
-      setTimeout(() => {
-        const parsed = parseArticleContent(articleContent)
-        if (parsed.metadata.title) {
-          setMetadata(parsed.metadata)
-        }
-      }, 100)
     }
   }, [selectedDigestId, vocabularyIntensity, articleContent])
 
@@ -279,6 +282,69 @@ export default function CreateArticlePage() {
     navigator.clipboard.writeText(articleContent)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  // Extract individual news items from digest content for image generation
+  function extractNewsItems(digestContent: string): string[] {
+    const items: string[] = []
+
+    // Split by markdown headers (## or ###) to get individual sections
+    const sections = digestContent.split(/(?=^#{2,3}\s)/m)
+
+    for (const section of sections) {
+      const trimmed = section.trim()
+      if (trimmed.length > 100 && trimmed.length < 3000) {
+        // Skip sections that are just headers or too short
+        items.push(trimmed)
+      }
+    }
+
+    // If no sections found, try splitting by double newlines
+    if (items.length === 0) {
+      const paragraphs = digestContent.split(/\n\n+/)
+      for (const para of paragraphs) {
+        const trimmed = para.trim()
+        if (trimmed.length > 100 && trimmed.length < 2000) {
+          items.push(trimmed)
+        }
+      }
+    }
+
+    // Limit to max 5 items for image generation
+    return items.slice(0, 5)
+  }
+
+  // Trigger background image generation for a post
+  async function triggerImageGeneration(postId: string, digestContent: string) {
+    const newsItems = extractNewsItems(digestContent)
+
+    if (newsItems.length === 0) {
+      console.log('No news items found for image generation')
+      return
+    }
+
+    console.log(`Triggering image generation for ${newsItems.length} news items`)
+
+    // Generate images in background (fire and forget)
+    for (const text of newsItems) {
+      fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Include auth cookies
+        body: JSON.stringify({
+          postId,
+          newsText: text,
+        }),
+      })
+        .then(res => {
+          if (!res.ok) {
+            res.json().then(data => console.error('Image generation failed:', data))
+          } else {
+            console.log('Image generation started successfully')
+          }
+        })
+        .catch(err => console.error('Image generation error:', err))
+    }
   }
 
   async function saveAsDraft() {
@@ -296,7 +362,7 @@ export default function CreateArticlePage() {
       // Convert markdown to TipTap JSON and stringify for TEXT column
       const tiptapContent = markdownToTiptap(bodyContent)
 
-      const { error } = await supabase.from('generated_posts').insert({
+      const { data: newPost, error } = await supabase.from('generated_posts').insert({
         digest_id: selectedDigestId,
         prompt_id: activePrompt?.id,
         title,
@@ -306,10 +372,17 @@ export default function CreateArticlePage() {
         content: JSON.stringify(tiptapContent),
         word_count: bodyContent.split(/\s+/).length,
         status: 'draft',
-      })
+        created_at: selectedDigest.digest_date, // Use digest date as publish date
+      }).select('id').single()
 
       if (error) throw error
-      alert('Artikel als Entwurf gespeichert!')
+
+      // Trigger background image generation using the digest content
+      if (newPost?.id && selectedDigest.analysis_content) {
+        triggerImageGeneration(newPost.id, selectedDigest.analysis_content)
+      }
+
+      alert('Artikel als Entwurf gespeichert! Bilder werden im Hintergrund generiert.')
 
       // Reset form after successful save
       setArticleContent('')

@@ -5,10 +5,58 @@ import { BlogHeader } from "@/components/blog-header"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
 import { ArrowLeft } from "lucide-react"
 
+interface PostData {
+  id: string
+  title: string
+  slug: string
+  excerpt: string | null
+  content: Record<string, unknown>
+  category: string
+  created_at: string
+  cover_image_url?: string | null
+}
+
 export default async function PostPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const supabase = await createClient()
-  const { data: post } = await supabase.from("posts").select("*").eq("slug", slug).eq("published", true).single()
+
+  // Try to find in manual posts first
+  let { data: post } = await supabase
+    .from("posts")
+    .select("*")
+    .eq("slug", slug)
+    .eq("published", true)
+    .single()
+
+  // If not found, try AI-generated posts
+  if (!post) {
+    const { data: aiPost } = await supabase
+      .from("generated_posts")
+      .select("id, title, slug, excerpt, content, category, created_at, cover_image_id")
+      .eq("slug", slug)
+      .eq("status", "published")
+      .single()
+
+    if (aiPost) {
+      // Fetch cover image if exists
+      let coverImageUrl: string | null = null
+      if (aiPost.cover_image_id) {
+        const { data: coverImage } = await supabase
+          .from("post_images")
+          .select("image_url")
+          .eq("id", aiPost.cover_image_id)
+          .single()
+        coverImageUrl = coverImage?.image_url || null
+      }
+
+      post = {
+        ...aiPost,
+        category: aiPost.category || 'AI & Tech',
+        content: typeof aiPost.content === 'string' ? JSON.parse(aiPost.content) : aiPost.content,
+        cover_image_url: coverImageUrl
+      } as PostData
+    }
+  }
 
   if (!post) {
     notFound()
@@ -36,18 +84,29 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
         </Link>
 
         <article>
+          {/* Cover Image */}
+          {post.cover_image_url && (
+            <div className="mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
+              <div className="relative aspect-[21/9] bg-gradient-to-br from-primary/20 via-primary/10 to-accent/20">
+                <img
+                  src={post.cover_image_url}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  style={{ mixBlendMode: 'multiply' }}
+                />
+              </div>
+            </div>
+          )}
+
           <header className="mb-12 border-b border-border pb-8">
-            <div className="mb-4 flex items-center gap-4">
-              <span className="rounded-sm bg-primary px-2 py-0.5 font-mono text-xs text-primary-foreground">
-                {post.category.toUpperCase()}
-              </span>
+            <div className="mb-4">
               <time className="font-mono text-xs text-muted-foreground">{formatDate(post.created_at)}</time>
             </div>
-            <h1 className="text-4xl font-bold tracking-tight md:text-5xl">{post.title}</h1>
-            {post.excerpt && <p className="mt-4 text-xl text-muted-foreground">{post.excerpt}</p>}
+            <h1 className="text-3xl font-bold tracking-tight md:text-2xl">{post.title}</h1>
+            {post.excerpt && <p className="mt-4 text-lg text-muted-foreground md:text-sm">{post.excerpt}</p>}
           </header>
 
-          <div className="prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-3xl prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4 prose-p:mb-6 prose-blockquote:border-l-2 prose-blockquote:border-accent prose-blockquote:pl-6 prose-blockquote:italic">
+          <div className="prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-xl prose-h2:text-lg prose-h2:mt-8 prose-h2:mb-3 prose-p:mb-5 prose-blockquote:border-l-2 prose-blockquote:border-accent prose-blockquote:pl-6 prose-blockquote:italic">
             <TiptapRenderer content={post.content} />
           </div>
         </article>

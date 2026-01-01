@@ -12,13 +12,12 @@ interface FeaturedArticleProps {
 export function FeaturedArticle({ slug, title, content, date, readTime, category }: FeaturedArticleProps) {
   return (
     <article className="mb-16 border-b border-border pb-16">
-      <div className="mb-6 flex items-center gap-4">
-        <span className="rounded-sm bg-primary px-2 py-0.5 font-mono text-xs text-primary-foreground">{category}</span>
+      <div className="mb-6">
         <span className="font-mono text-xs text-muted-foreground">LATEST</span>
       </div>
 
       <a href={`/posts/${slug}`} className="group">
-        <h2 className="mb-6 text-3xl font-bold tracking-tight transition-colors group-hover:text-accent md:text-4xl lg:text-5xl">
+        <h2 className="mb-6 text-3xl font-bold tracking-tight transition-colors group-hover:text-accent md:text-xl lg:text-2xl">
           {title}
         </h2>
       </a>

@@ -5,7 +5,7 @@ import { jwtVerify } from 'jose'
 const SESSION_COOKIE_NAME = 'synthszr_session'
 
 function getSecretKey() {
-  const secret = process.env.ADMIN_PASSWORD
+  const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
   if (!secret) return null
   return new TextEncoder().encode(secret)
 }

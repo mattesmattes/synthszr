@@ -11,7 +11,7 @@ export const runtime = 'nodejs'
 const SESSION_COOKIE_NAME = 'synthszr_session'
 
 function getSecretKey() {
-  const secret = process.env.ADMIN_PASSWORD
+  const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
   if (!secret) return null
   return new TextEncoder().encode(secret)
 }
@@ -183,12 +183,15 @@ export async function POST(request: NextRequest) {
             }
 
             // Store newsletter - use targetDate if provided, otherwise use email date
+            // Also store the first article URL as source_url so newsletters have linkable sources
             const newsletterDate = targetDate || email.date.toISOString().split('T')[0]
+            const primaryArticleUrl = links.length > 0 ? links[0].url : null
             const { error: insertError } = await supabase
               .from('daily_repo')
               .insert({
                 source_type: 'newsletter',
                 source_email: email.from,
+                source_url: primaryArticleUrl, // First article link from newsletter
                 title: email.subject,
                 content: parsed.plainText,
                 raw_html: htmlContent,

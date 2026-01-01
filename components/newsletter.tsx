@@ -16,7 +16,7 @@ export function Newsletter() {
   return (
     <section className="mt-20 border-t border-border pt-16">
       <div className="mx-auto max-w-2xl">
-        <h2 className="font-mono text-2xl font-bold md:text-3xl">Stay Updated</h2>
+        <h2 className="font-mono text-2xl font-bold md:text-lg">Stay Updated</h2>
         <p className="mt-4 text-muted-foreground">
           Get notified about new articles, projects, and experiments. No spam, unsubscribe anytime.
         </p>

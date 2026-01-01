@@ -55,19 +55,21 @@ export async function POST(request: NextRequest) {
 
     // Build content string - use full content (no truncation for comprehensive analysis)
     // Format source URLs as markdown links so Claude can reference them properly
+    // For items WITHOUT source_url (like newsletters), do NOT provide a link to avoid broken URLs
     const contentParts = items.map((item, i) => {
       let sourceDisplay: string
-      if (item.source_url) {
-        // Create markdown link for articles with URLs
+      if (item.source_url && item.source_url.startsWith('http')) {
+        // Create markdown link for articles with valid URLs
         try {
-          const linkText = item.source_email || new URL(item.source_url).hostname
+          const linkText = new URL(item.source_url).hostname.replace('www.', '')
           sourceDisplay = `[${linkText}](${item.source_url})`
         } catch {
           // Fallback if URL parsing fails
           sourceDisplay = `[Link](${item.source_url})`
         }
       } else {
-        sourceDisplay = item.source_email || 'Unbekannte Quelle'
+        // No linkable URL - show source email without creating a link
+        sourceDisplay = `${item.source_email || 'Newsletter'} (kein direkter Link verfügbar)`
       }
       return `## ${i + 1}. ${item.title}\n**Quelle:** ${sourceDisplay} (${item.source_type})\n\n${item.content || 'Kein Inhalt'}\n\n---`
     })

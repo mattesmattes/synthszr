@@ -1,19 +1,350 @@
-import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
-import { Button } from "@/components/ui/button"
-import { Plus, Edit, Eye, EyeOff } from "lucide-react"
-import type { Post } from "@/lib/types"
+'use client'
 
-export default async function AdminPage() {
-  const supabase = await createClient()
-  const { data: posts } = await supabase.from("posts").select("*").order("created_at", { ascending: false })
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import {
+  FileText,
+  Loader2,
+  Trash2,
+  Eye,
+  Calendar,
+  Hash,
+  Edit2,
+  BookOpen,
+  Link2,
+  Tag,
+  AlignLeft,
+  Type,
+  Send,
+  Archive,
+  FileEdit,
+  Plus,
+  Sparkles,
+  ExternalLink,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { TiptapEditor } from '@/components/tiptap-editor'
+import { TiptapRenderer } from '@/components/tiptap-renderer'
+import { createClient } from '@/lib/supabase/client'
+
+interface CombinedPost {
+  id: string
+  title: string
+  slug: string
+  excerpt: string | null
+  content: Record<string, unknown>
+  category: string
+  status: 'draft' | 'published' | 'archived'
+  created_at: string
+  source: 'manual' | 'ai'
+  word_count?: number | null
+}
+
+const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese', 'general']
+
+// Extract plain text from TipTap JSON for preview
+function extractTextPreview(content: Record<string, unknown>, maxLength = 200): string {
+  const extractText = (node: Record<string, unknown>): string => {
+    if (node.text) return node.text as string
+    if (node.content && Array.isArray(node.content)) {
+      return node.content.map(extractText).join(' ')
+    }
+    return ''
+  }
+  const text = extractText(content).replace(/\s+/g, ' ').trim()
+  return text.length > maxLength ? text.slice(0, maxLength) + '...' : text
+}
+
+// Generate slug from title
+function generateSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80)
+}
+
+// Count words in TipTap content
+function countWords(content: Record<string, unknown>): number {
+  const text = extractTextPreview(content, 100000)
+  return text.split(/\s+/).filter(Boolean).length
+}
+
+export default function AdminPage() {
+  const [posts, setPosts] = useState<CombinedPost[]>([])
+  const [loading, setLoading] = useState(true)
+  const [viewingPost, setViewingPost] = useState<CombinedPost | null>(null)
+  const [editingPost, setEditingPost] = useState<CombinedPost | null>(null)
+  const [deletingPost, setDeletingPost] = useState<CombinedPost | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [changingStatus, setChangingStatus] = useState<string | null>(null)
+
+  const [editForm, setEditForm] = useState<{
+    title: string
+    slug: string
+    excerpt: string
+    category: string
+    status: 'draft' | 'published' | 'archived'
+    content: Record<string, unknown>
+  }>({ title: '', slug: '', excerpt: '', category: 'AI & Tech', status: 'draft', content: {} })
+
+  const supabase = createClient()
+
+  useEffect(() => {
+    fetchPosts()
+  }, [])
+
+  async function fetchPosts() {
+    setLoading(true)
+
+    // Fetch manual posts
+    const { data: manualPosts } = await supabase
+      .from('posts')
+      .select('id, title, slug, excerpt, content, category, published, created_at')
+      .order('created_at', { ascending: false })
+
+    // Fetch AI-generated posts
+    const { data: aiPosts } = await supabase
+      .from('generated_posts')
+      .select('id, title, slug, excerpt, content, category, status, created_at, word_count')
+      .order('created_at', { ascending: false })
+
+    // Combine and normalize
+    const combined: CombinedPost[] = [
+      ...(manualPosts || []).map(p => {
+        let parsedContent = p.content
+        if (typeof p.content === 'string') {
+          try {
+            parsedContent = JSON.parse(p.content)
+          } catch {
+            parsedContent = { type: 'doc', content: [] }
+          }
+        }
+        return {
+          id: p.id,
+          title: p.title,
+          slug: p.slug,
+          excerpt: p.excerpt,
+          content: parsedContent as Record<string, unknown>,
+          category: p.category || 'general',
+          status: p.published ? 'published' : 'draft' as const,
+          created_at: p.created_at,
+          source: 'manual' as const,
+          word_count: countWords(parsedContent as Record<string, unknown>),
+        }
+      }),
+      ...(aiPosts || []).map(p => {
+        let parsedContent = p.content
+        if (typeof p.content === 'string') {
+          try {
+            parsedContent = JSON.parse(p.content)
+          } catch {
+            parsedContent = { type: 'doc', content: [] }
+          }
+        }
+        return {
+          id: p.id,
+          title: p.title,
+          slug: p.slug || '',
+          excerpt: p.excerpt,
+          content: parsedContent as Record<string, unknown>,
+          category: p.category || 'AI & Tech',
+          status: p.status as 'draft' | 'published' | 'archived',
+          created_at: p.created_at,
+          source: 'ai' as const,
+          word_count: p.word_count,
+        }
+      })
+    ]
+
+    // Sort by created_at descending
+    combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+    setPosts(combined)
+    setLoading(false)
+  }
+
+  function openViewDialog(post: CombinedPost) {
+    setViewingPost(post)
+  }
+
+  function openEditDialog(post: CombinedPost) {
+    setEditingPost(post)
+    setEditForm({
+      title: post.title,
+      slug: post.slug || generateSlug(post.title),
+      excerpt: post.excerpt || '',
+      category: post.category || 'AI & Tech',
+      status: post.status,
+      content: post.content,
+    })
+  }
+
+  async function handleStatusChange(post: CombinedPost, newStatus: 'draft' | 'published' | 'archived') {
+    setChangingStatus(post.id)
+    try {
+      if (post.source === 'manual') {
+        const { error } = await supabase
+          .from('posts')
+          .update({ published: newStatus === 'published', updated_at: new Date().toISOString() })
+          .eq('id', post.id)
+        if (error) throw error
+      } else {
+        const res = await fetch('/api/admin/generated-posts', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: post.id, status: newStatus }),
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const error = await res.json()
+          throw new Error(error.error || 'Fehler beim Statuswechsel')
+        }
+      }
+      fetchPosts()
+    } catch (error) {
+      console.error('Error changing status:', error)
+      alert(error instanceof Error ? error.message : 'Fehler beim Statuswechsel')
+    } finally {
+      setChangingStatus(null)
+    }
+  }
+
+  async function handleSaveEdit() {
+    if (!editingPost) return
+
+    setSaving(true)
+    try {
+      if (editingPost.source === 'manual') {
+        const { error } = await supabase
+          .from('posts')
+          .update({
+            title: editForm.title,
+            slug: editForm.slug,
+            excerpt: editForm.excerpt || null,
+            category: editForm.category,
+            published: editForm.status === 'published',
+            content: editForm.content,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editingPost.id)
+        if (error) throw error
+      } else {
+        const res = await fetch('/api/admin/generated-posts', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingPost.id,
+            title: editForm.title,
+            slug: editForm.slug,
+            excerpt: editForm.excerpt,
+            category: editForm.category,
+            status: editForm.status,
+            content: editForm.content,
+          }),
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const error = await res.json()
+          throw new Error(error.error || 'Fehler beim Speichern')
+        }
+      }
+      setEditingPost(null)
+      fetchPosts()
+    } catch (error) {
+      console.error('Error saving post:', error)
+      alert(error instanceof Error ? error.message : 'Fehler beim Speichern')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!deletingPost) return
+
+    setIsDeleting(true)
+    try {
+      if (deletingPost.source === 'manual') {
+        const { error } = await supabase.from('posts').delete().eq('id', deletingPost.id)
+        if (error) throw error
+      } else {
+        const res = await fetch(`/api/admin/generated-posts?id=${deletingPost.id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const error = await res.json()
+          throw new Error(error.error || 'Fehler beim Löschen')
+        }
+      }
+      setDeletingPost(null)
+      fetchPosts()
+    } catch (error) {
+      console.error('Error deleting post:', error)
+      alert(error instanceof Error ? error.message : 'Fehler beim Löschen')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const statusColors: Record<string, string> = {
+    draft: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+    published: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+    archived: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
+  }
+
+  const statusLabels: Record<string, string> = {
+    draft: 'Entwurf',
+    published: 'Veröffentlicht',
+    archived: 'Archiviert',
+  }
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8 max-w-full overflow-x-hidden">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tighter">Blog Posts</h1>
-          <p className="mt-1 text-muted-foreground">Verwalte deine Blog-Artikel</p>
+          <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
+            <FileText className="h-8 w-8" />
+            Blog Posts
+          </h1>
+          <p className="mt-1 text-muted-foreground">
+            Alle Blog-Artikel (manuell & AI-generiert)
+          </p>
         </div>
         <Button asChild>
           <Link href="/admin/new" className="gap-2">
@@ -23,45 +354,359 @@ export default async function AdminPage() {
         </Button>
       </div>
 
-      <div>
-        {!posts || posts.length === 0 ? (
-          <div className="py-20 text-center">
-            <p className="text-muted-foreground">No posts yet.</p>
-            <Button asChild className="mt-4">
-              <Link href="/admin/new">Create your first post</Link>
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : posts.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <p className="text-muted-foreground mb-4">Noch keine Posts vorhanden.</p>
+            <Button asChild>
+              <Link href="/admin/new">Ersten Post erstellen</Link>
             </Button>
-          </div>
-        ) : (
-          <div className="divide-y divide-border border border-border">
-            {posts.map((post: Post) => (
-              <div key={post.id} className="flex items-center justify-between p-4 hover:bg-secondary/30">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <h2 className="font-bold">{post.title}</h2>
-                    {post.published ? (
-                      <span className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
-                        <Eye className="h-3 w-3" /> Published
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {posts.map((post) => (
+            <Card key={`${post.source}-${post.id}`}>
+              <CardContent className="py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <h3 className="font-medium">{post.title}</h3>
+                      {post.source === 'ai' && (
+                        <Badge variant="secondary" className="text-xs gap-1">
+                          <Sparkles className="h-3 w-3" /> AI
+                        </Badge>
+                      )}
+                      <Badge className={statusColors[post.status]}>
+                        {statusLabels[post.status]}
+                      </Badge>
+                      {post.category && (
+                        <Badge variant="outline" className="text-xs">
+                          {post.category}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {post.excerpt || extractTextPreview(post.content)}
+                    </p>
+                    <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {new Date(post.created_at).toLocaleDateString('de-DE', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
                       </span>
-                    ) : (
-                      <span className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
-                        <EyeOff className="h-3 w-3" /> Draft
-                      </span>
-                    )}
+                      {post.word_count && (
+                        <span className="flex items-center gap-1">
+                          <Hash className="h-3 w-3" />
+                          {post.word_count} Wörter
+                        </span>
+                      )}
+                      {post.slug && (
+                        <span className="flex items-center gap-1">
+                          <Link2 className="h-3 w-3" />
+                          /{post.slug}
+                        </span>
+                      )}
+                      {post.status === 'published' && (
+                        <Link
+                          href={`/posts/${post.slug}`}
+                          target="_blank"
+                          className="flex items-center gap-1 hover:text-primary transition-colors"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Ansehen
+                        </Link>
+                      )}
+                    </div>
                   </div>
-                  <p className="mt-1 font-mono text-xs text-muted-foreground">
-                    /{post.slug} • {post.category} • {new Date(post.created_at).toLocaleDateString()}
-                  </p>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" onClick={() => openViewDialog(post)} title="Vorschau">
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => openEditDialog(post)} title="Bearbeiten">
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    {post.status === 'draft' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleStatusChange(post, 'published')}
+                        disabled={changingStatus === post.id}
+                        title="Veröffentlichen"
+                        className="text-green-600 hover:text-green-700"
+                      >
+                        {changingStatus === post.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
+                    {post.status === 'published' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleStatusChange(post, 'draft')}
+                        disabled={changingStatus === post.id}
+                        title="Zurück zu Entwurf"
+                        className="text-yellow-600 hover:text-yellow-700"
+                      >
+                        {changingStatus === post.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <FileEdit className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
+                    {post.status !== 'archived' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleStatusChange(post, 'archived')}
+                        disabled={changingStatus === post.id}
+                        title="Archivieren"
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        {changingStatus === post.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Archive className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setDeletingPost(post)}
+                      title="Löschen"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/admin/edit/${post.id}`}>
-                    <Edit className="h-4 w-4" />
-                  </Link>
-                </Button>
-              </div>
-            ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* View Dialog */}
+      <Dialog open={!!viewingPost} onOpenChange={() => setViewingPost(null)}>
+        <DialogContent className="w-[90vw] max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {viewingPost?.title}
+              {viewingPost?.source === 'ai' && (
+                <Badge variant="secondary" className="text-xs gap-1">
+                  <Sparkles className="h-3 w-3" /> AI
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {viewingPost?.word_count} Wörter • {viewingPost?.category} • Erstellt am{' '}
+              {viewingPost && new Date(viewingPost.created_at).toLocaleDateString('de-DE')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="prose prose-sm max-w-none dark:prose-invert">
+            {viewingPost && <TiptapRenderer content={viewingPost.content} />}
           </div>
-        )}
-      </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewingPost(null)}>
+              Schließen
+            </Button>
+            <Button onClick={() => {
+              if (viewingPost) {
+                openEditDialog(viewingPost)
+                setViewingPost(null)
+              }
+            }}>
+              <Edit2 className="h-4 w-4 mr-2" />
+              Bearbeiten
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingPost} onOpenChange={() => setEditingPost(null)}>
+        <DialogContent className="w-[90vw] max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              Artikel bearbeiten
+              {editingPost?.source === 'ai' && (
+                <Badge variant="secondary" className="text-xs gap-1">
+                  <Sparkles className="h-3 w-3" /> AI
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Bearbeite Metadaten und Inhalt des Artikels
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 flex-1 overflow-y-auto py-4">
+            {/* Metadata Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-title" className="flex items-center gap-1.5 text-sm">
+                  <Type className="h-3.5 w-3.5" />
+                  Titel
+                </Label>
+                <Input
+                  id="edit-title"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({
+                    ...editForm,
+                    title: e.target.value,
+                    slug: generateSlug(e.target.value),
+                  })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-slug" className="flex items-center gap-1.5 text-sm">
+                  <Link2 className="h-3.5 w-3.5" />
+                  Slug (URL)
+                </Label>
+                <Input
+                  id="edit-slug"
+                  value={editForm.slug}
+                  onChange={(e) => setEditForm({ ...editForm, slug: e.target.value })}
+                  placeholder="artikel-url-slug"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-excerpt" className="flex items-center gap-1.5 text-sm">
+                <AlignLeft className="h-3.5 w-3.5" />
+                Excerpt (SEO-Beschreibung)
+              </Label>
+              <Textarea
+                id="edit-excerpt"
+                value={editForm.excerpt}
+                onChange={(e) => setEditForm({ ...editForm, excerpt: e.target.value })}
+                placeholder="Kurze Zusammenfassung für Vorschau und SEO..."
+                className="h-20 resize-none"
+                maxLength={200}
+              />
+              <p className="text-xs text-muted-foreground">{editForm.excerpt.length}/200 Zeichen</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5 text-sm">
+                  <Tag className="h-3.5 w-3.5" />
+                  Kategorie
+                </Label>
+                <Select
+                  value={editForm.category}
+                  onValueChange={(value) => setEditForm({ ...editForm, category: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5 text-sm">
+                  <Send className="h-3.5 w-3.5" />
+                  Status
+                </Label>
+                <Select
+                  value={editForm.status}
+                  onValueChange={(value: 'draft' | 'published' | 'archived') => setEditForm({ ...editForm, status: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">
+                      <span className="flex items-center gap-2">
+                        <FileEdit className="h-3.5 w-3.5" />
+                        Entwurf
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="published">
+                      <span className="flex items-center gap-2">
+                        <Send className="h-3.5 w-3.5" />
+                        Veröffentlicht
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="archived">
+                      <span className="flex items-center gap-2">
+                        <Archive className="h-3.5 w-3.5" />
+                        Archiviert
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Content Editor */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5 text-sm">
+                <FileText className="h-3.5 w-3.5" />
+                Inhalt
+              </Label>
+              <div className="min-h-[300px] max-h-[40vh] overflow-y-auto border rounded-md">
+                <TiptapEditor
+                  content={editForm.content}
+                  onChange={(content) => setEditForm({ ...editForm, content })}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="border-t pt-4">
+            <Button variant="outline" onClick={() => setEditingPost(null)}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={saving || !editForm.title}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Speichern
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deletingPost} onOpenChange={() => setDeletingPost(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Post löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Möchtest du den Post &quot;{deletingPost?.title}&quot; wirklich löschen?
+              {deletingPost?.status === 'published' && (
+                <span className="block mt-2 text-destructive font-medium">
+                  Achtung: Dieser Post ist bereits veröffentlicht!
+                </span>
+              )}
+              Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

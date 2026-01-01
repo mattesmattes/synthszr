@@ -20,8 +20,8 @@ export function BlogPost({ id, slug, title, excerpt, date, readTime, category }:
                 {category}
               </span>
             </div>
-            <h2 className="mb-2 text-2xl font-bold tracking-tight md:text-3xl">{title}</h2>
-            <p className="text-muted-foreground">{excerpt}</p>
+            <h2 className="mb-2 text-2xl font-bold tracking-tight md:text-lg">{title}</h2>
+            <p className="text-sm text-muted-foreground">{excerpt}</p>
           </div>
           <div className="flex items-center gap-4 text-sm text-muted-foreground md:flex-col md:items-end md:gap-2">
             <time dateTime={date} className="font-mono text-xs">

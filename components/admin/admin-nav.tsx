@@ -37,11 +37,6 @@ const navGroups = [
         icon: Wand2
       },
       {
-        label: 'Generierte Artikel',
-        href: '/admin/generated-articles',
-        icon: FileText
-      },
-      {
         label: 'Ghostwriter-Prompts',
         href: '/admin/ghostwriter',
         icon: PenTool

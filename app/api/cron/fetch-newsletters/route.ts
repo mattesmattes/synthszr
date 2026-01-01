@@ -13,7 +13,7 @@ const CRON_SECRET = process.env.CRON_SECRET
 const SESSION_COOKIE_NAME = 'synthszr_session'
 
 function getSecretKey() {
-  const secret = process.env.ADMIN_PASSWORD
+  const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
   if (!secret) return null
   return new TextEncoder().encode(secret)
 }
@@ -128,11 +128,14 @@ async function processNewsletters() {
       }
 
       // Store newsletter in daily_repo (full content, no truncation)
+      // Also store the first article URL as source_url so newsletters have linkable sources
+      const primaryArticleUrl = articleLinks.length > 0 ? articleLinks[0].url : null
       const { error: insertError } = await supabase
         .from('daily_repo')
         .insert({
           source_type: 'newsletter',
           source_email: email.from,
+          source_url: primaryArticleUrl, // First article link from newsletter
           title: email.subject,
           content: parsed.plainText, // Full newsletter content
           raw_html: htmlContent,

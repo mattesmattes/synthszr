@@ -4,6 +4,9 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* SF Pro System Font Stack for Admin */
+  --font-sf-pro: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
   --background: oklch(0.98 0 0);
   --foreground: oklch(0.12 0 0);
   --card: oklch(0.98 0 0);
@@ -135,17 +138,17 @@
 }
 
 .ProseMirror h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  margin-top: 2rem;
-  margin-bottom: 1rem;
-}
-
-.ProseMirror h2 {
   font-size: 1.5rem;
   font-weight: 700;
   margin-top: 1.5rem;
   margin-bottom: 0.75rem;
+}
+
+.ProseMirror h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
 }
 
 .ProseMirror ul,
@@ -176,36 +179,36 @@
 /* Add prose-article styles for featured article content */
 .prose-article {
   font-family: var(--font-serif);
-  font-size: 1.125rem;
-  line-height: 1.8;
+  font-size: 0.9375rem;
+  line-height: 1.7;
   color: var(--foreground);
 }
 
 .prose-article .ProseMirror p {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .prose-article .ProseMirror h1 {
-  font-size: 2.25rem;
+  font-size: 1.5rem;
   font-weight: 700;
-  margin-top: 2.5rem;
-  margin-bottom: 1.25rem;
+  margin-top: 1.75rem;
+  margin-bottom: 0.875rem;
   font-family: var(--font-sans);
 }
 
 .prose-article .ProseMirror h2 {
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin-top: 2rem;
-  margin-bottom: 1rem;
-  font-family: var(--font-sans);
-}
-
-.prose-article .ProseMirror h3 {
   font-size: 1.25rem;
   font-weight: 700;
   margin-top: 1.5rem;
   margin-bottom: 0.75rem;
+  font-family: var(--font-sans);
+}
+
+.prose-article .ProseMirror h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
   font-family: var(--font-sans);
 }
 
@@ -237,76 +240,32 @@
   opacity: 0.8;
 }
 
-/* Source Links - Neon Cyan Styling */
+/* Source Links - Cyan Styling */
 :root {
-  --neon-cyan: oklch(0.85 0.2 180);
-  --neon-cyan-glow: oklch(0.7 0.25 180);
+  --source-cyan: oklch(0.55 0.15 190);
+  --source-cyan-hover: oklch(0.45 0.18 190);
 }
 
 .dark {
-  --neon-cyan: oklch(0.75 0.25 180);
-  --neon-cyan-glow: oklch(0.6 0.3 180);
+  --source-cyan: oklch(0.75 0.15 190);
+  --source-cyan-hover: oklch(0.85 0.12 190);
 }
 
-/* Source link block container */
-.article-preview source-links,
-.prose source-links,
-.prose-article source-links {
-  display: block;
-  margin: 1rem 0 1.5rem 0;
-  padding: 0.75rem 1rem;
-  background: linear-gradient(135deg, oklch(0.95 0.02 180 / 0.3), oklch(0.98 0 0));
-  border-left: 3px solid var(--neon-cyan);
-  border-radius: 0 0.25rem 0.25rem 0;
-}
-
-.dark .article-preview source-links,
-.dark .prose source-links,
-.dark .prose-article source-links {
-  background: linear-gradient(135deg, oklch(0.2 0.03 180 / 0.4), oklch(0.15 0 0));
-}
-
-/* Source link styling - italic with neon cyan */
-.source-link,
-.article-preview em:has(a),
-.prose em:has(a),
-.prose-article em:has(a) {
-  display: block;
-  font-style: italic;
-  margin: 0.25rem 0;
-}
-
-.source-link a,
-.source-link-anchor,
-.article-preview em a,
-.prose em a,
-.prose-article em a {
-  color: var(--neon-cyan) !important;
-  text-decoration: none !important;
+/* Inline source links: "→ Quelle" format */
+.prose a[href],
+.prose-article a[href],
+.tiptap-content a[href],
+.ProseMirror a[href] {
+  color: var(--source-cyan);
+  text-decoration: none;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease;
 }
 
-.source-link a:hover,
-.source-link-anchor:hover,
-.article-preview em a:hover,
-.prose em a:hover,
-.prose-article em a:hover {
-  color: var(--neon-cyan-glow) !important;
-  text-shadow: 0 0 8px var(--neon-cyan);
-}
-
-/* TipTap rendered source links */
-.tiptap-content .source-link,
-.tiptap-content em:has(a) {
-  display: block;
-  font-style: italic;
-  margin: 0.25rem 0;
-}
-
-.tiptap-content .source-link a,
-.tiptap-content em a {
-  color: var(--neon-cyan) !important;
-  text-decoration: none !important;
-  font-weight: 500;
+.prose a[href]:hover,
+.prose-article a[href]:hover,
+.tiptap-content a[href]:hover,
+.ProseMirror a[href]:hover {
+  color: var(--source-cyan-hover);
+  text-decoration: underline;
 }

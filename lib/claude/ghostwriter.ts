@@ -25,30 +25,24 @@ CATEGORY: [Eine passende Kategorie: AI & Tech, Marketing, Design, Business, Code
 
 Danach folgt der eigentliche Artikel-Content.
 
+TONALITÄT UND STIL:
+- Befolge EXAKT die Tonalitäts-Anweisungen aus dem User-Prompt (News vs. Essay)
+- Bei NEWS-Formaten (Ben Evans Stil): Nüchtern, analytisch, faktenbasiert
+- Bei ESSAY-Formaten (Matthias Schrader Stil): Pointierter, meinungsstark, provokativer
+- WICHTIG bei Daily News: KEINE Formulierungen wie "Diese Woche", "In dieser Woche" - es sind TÄGLICHE News!
+
 QUELLENFORMATIERUNG - KRITISCH:
-- Quellen NIEMALS inline im Fließtext als Links!
-- Stattdessen: Am Ende jedes Themenabschnitts einen Quellenblock einfügen
-- Format für Quellenblöcke:
-
-<source-links>
-*[Quellenname 1](URL)*
-*[Quellenname 2](URL)*
-</source-links>
-
-- Der Quellenname sollte kurz und beschreibend sein (z.B. "OpenAI Blog", "TechCrunch", "Newsletter XY")
-- Die Quellen sind kursiv (*) formatiert
-- Nutze die "VERFÜGBARE QUELLEN MIT LINKS" Liste am Ende des Digests
-
-ARTIKEL-STRUKTUR:
-1. Hook/Einleitung (ohne Quellenblock)
-2. Hauptteil mit 2-4 Themenabschnitten
-   - Jeder Abschnitt endet mit einem <source-links> Block
-3. Fazit/Ausblick (ohne Quellenblock)
+- Format: [→ Quelle](URL) - der Link-Text ist IMMER "→ Quelle", NIE der Name der Quelle
+- Platzierung: Am ENDE des Absatzes, direkt hinter dem LETZTEN Wort (vor dem Punkt)
+- NICHT nach dem ersten Satz! Der Quellenlink kommt am Schluss der gesamten News-Story/des Absatzes
+- Beispiel RICHTIG: "OpenAI stellte das neue Modell vor, das deutlich schneller ist und weniger Energie verbraucht [→ Quelle](URL)."
+- Beispiel FALSCH: "OpenAI stellte das neue Modell vor [→ Quelle](URL). Es ist deutlich schneller..."
+- Bei mehreren Quellen am Ende: "...verbraucht [→ Quelle](URL1) [→ Quelle](URL2)."
+- Nutze NUR URLs aus der "VERFÜGBARE QUELLEN MIT LINKS" Liste
 
 FORMAT:
 - Deutsch, Markdown
 - 800-1500 Wörter (ohne Metadaten)
-- Aktive Sprache, persönlicher aber professioneller Ton
 - Zwischenüberschriften mit ## für bessere Lesbarkeit`
 
   const stream = await anthropic.messages.stream({

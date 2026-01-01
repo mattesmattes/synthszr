@@ -65,7 +65,7 @@ export default function ImpressumPage() {
           <section>
             <h2 className="text-lg font-semibold mb-2">Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV</h2>
             <p className="text-sm">
-              Florian Langmack<br />
+              Matthias &apos;Mattes&apos; Schrader<br />
               Kaiser-Wilhelm-Straße 83<br />
               20355 Hamburg
             </p>

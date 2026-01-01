@@ -15,9 +15,14 @@ import {
   Link2,
   Tag,
   AlignLeft,
-  Type
+  Type,
+  Send,
+  Archive,
+  FileEdit,
+  ImageIcon
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -51,6 +56,8 @@ import {
 } from '@/components/ui/select'
 import { TiptapEditor } from '@/components/tiptap-editor'
 import { TiptapRenderer } from '@/components/tiptap-renderer'
+import { PostImageGallery } from '@/components/post-image-gallery'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface DigestSource {
   id: string
@@ -85,6 +92,19 @@ interface GeneratedPost {
 
 const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese']
 
+// Extract plain text from TipTap JSON for preview
+function extractTextPreview(content: Record<string, unknown>, maxLength = 200): string {
+  const extractText = (node: Record<string, unknown>): string => {
+    if (node.text) return node.text as string
+    if (node.content && Array.isArray(node.content)) {
+      return node.content.map(extractText).join(' ')
+    }
+    return ''
+  }
+  const text = extractText(content).replace(/\s+/g, ' ').trim()
+  return text.length > maxLength ? text.slice(0, maxLength) + '...' : text
+}
+
 // Generate slug from title
 function generateSlug(title: string): string {
   return title
@@ -112,8 +132,10 @@ export default function GeneratedArticlesPage() {
     slug: string
     excerpt: string
     category: string
+    status: 'draft' | 'published' | 'archived'
     content: Record<string, unknown>
-  }>({ title: '', slug: '', excerpt: '', category: 'AI & Tech', content: {} })
+  }>({ title: '', slug: '', excerpt: '', category: 'AI & Tech', status: 'draft', content: {} })
+  const [changingStatus, setChangingStatus] = useState<string | null>(null)
 
   useEffect(() => {
     fetchPosts()
@@ -165,8 +187,33 @@ export default function GeneratedArticlesPage() {
       slug: post.slug || generateSlug(post.title),
       excerpt: post.excerpt || '',
       category: post.category || 'AI & Tech',
+      status: post.status,
       content: post.content
     })
+  }
+
+  async function handleStatusChange(postId: string, newStatus: 'draft' | 'published' | 'archived') {
+    setChangingStatus(postId)
+    try {
+      const res = await fetch('/api/admin/generated-posts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: postId, status: newStatus }),
+        credentials: 'include',
+      })
+
+      if (res.ok) {
+        fetchPosts()
+      } else {
+        const error = await res.json()
+        alert(error.error || 'Fehler beim Statuswechsel')
+      }
+    } catch (error) {
+      console.error('Error changing status:', error)
+      alert('Fehler beim Statuswechsel')
+    } finally {
+      setChangingStatus(null)
+    }
   }
 
   function openDeleteDialog(post: GeneratedPost) {
@@ -187,6 +234,7 @@ export default function GeneratedArticlesPage() {
           slug: editForm.slug,
           excerpt: editForm.excerpt,
           category: editForm.category,
+          status: editForm.status,
           content: editForm.content,
         }),
         credentials: 'include',
@@ -242,7 +290,7 @@ export default function GeneratedArticlesPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8 max-w-full overflow-x-hidden">
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
           <FileText className="h-8 w-8" />
@@ -275,7 +323,7 @@ export default function GeneratedArticlesPage() {
             <Card key={post.id}>
               <CardContent className="py-4">
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <h3 className="font-medium">{post.title}</h3>
                       <Badge className={statusColors[post.status]}>
@@ -287,14 +335,9 @@ export default function GeneratedArticlesPage() {
                         </Badge>
                       )}
                     </div>
-                    {post.excerpt && (
-                      <p className="text-sm text-muted-foreground mb-2 line-clamp-1">
-                        {post.excerpt}
-                      </p>
-                    )}
-                    <div className="text-sm text-muted-foreground line-clamp-2">
-                      <TiptapRenderer content={post.content} />
-                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {post.excerpt || extractTextPreview(post.content)}
+                    </p>
                     <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
@@ -328,13 +371,47 @@ export default function GeneratedArticlesPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <Button variant="ghost" size="icon" onClick={() => openViewDialog(post)} title="Vorschau">
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => openEditDialog(post)} title="Bearbeiten">
-                      <Edit2 className="h-4 w-4" />
+                    <Button variant="ghost" size="icon" asChild title="Bearbeiten">
+                      <Link href={`/admin/generated-articles/edit/${post.id}`}>
+                        <Edit2 className="h-4 w-4" />
+                      </Link>
                     </Button>
+                    {post.status === 'draft' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleStatusChange(post.id, 'published')}
+                        disabled={changingStatus === post.id}
+                        title="Veröffentlichen"
+                        className="text-green-600 hover:text-green-700"
+                      >
+                        {changingStatus === post.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
+                    {post.status === 'published' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleStatusChange(post.id, 'draft')}
+                        disabled={changingStatus === post.id}
+                        title="Zurück zu Entwurf"
+                        className="text-yellow-600 hover:text-yellow-700"
+                      >
+                        {changingStatus === post.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <FileEdit className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
                     <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(post)} title="Löschen">
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -421,36 +498,90 @@ export default function GeneratedArticlesPage() {
               />
               <p className="text-xs text-muted-foreground">{editForm.excerpt.length}/200 Zeichen</p>
             </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1.5 text-sm">
-                <Tag className="h-3.5 w-3.5" />
-                Kategorie
-              </Label>
-              <Select
-                value={editForm.category}
-                onValueChange={(value) => setEditForm({ ...editForm, category: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Content Section */}
-            <div className="space-y-2 flex-1 flex flex-col min-h-0">
-              <Label>Inhalt</Label>
-              <div className="flex-1 min-h-[300px] max-h-[40vh] overflow-y-auto border rounded-md">
-                <TiptapEditor
-                  content={editForm.content}
-                  onChange={(content) => setEditForm({ ...editForm, content })}
-                />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5 text-sm">
+                  <Tag className="h-3.5 w-3.5" />
+                  Kategorie
+                </Label>
+                <Select
+                  value={editForm.category}
+                  onValueChange={(value) => setEditForm({ ...editForm, category: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5 text-sm">
+                  <Send className="h-3.5 w-3.5" />
+                  Status
+                </Label>
+                <Select
+                  value={editForm.status}
+                  onValueChange={(value: 'draft' | 'published' | 'archived') => setEditForm({ ...editForm, status: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">
+                      <span className="flex items-center gap-2">
+                        <FileEdit className="h-3.5 w-3.5" />
+                        Entwurf
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="published">
+                      <span className="flex items-center gap-2">
+                        <Send className="h-3.5 w-3.5" />
+                        Veröffentlicht
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="archived">
+                      <span className="flex items-center gap-2">
+                        <Archive className="h-3.5 w-3.5" />
+                        Archiviert
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+
+            {/* Content and Images Tabs */}
+            <Tabs defaultValue="content" className="flex-1 flex flex-col min-h-0">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="content" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Inhalt
+                </TabsTrigger>
+                <TabsTrigger value="images" className="flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4" />
+                  Bilder
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="content" className="flex-1 flex flex-col min-h-0 mt-4">
+                <div className="flex-1 min-h-[300px] max-h-[40vh] overflow-y-auto border rounded-md">
+                  <TiptapEditor
+                    content={editForm.content}
+                    onChange={(content) => setEditForm({ ...editForm, content })}
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="images" className="flex-1 overflow-y-auto mt-4">
+                {editingPost && (
+                  <PostImageGallery postId={editingPost.id} />
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
           <DialogFooter className="border-t pt-4">
             <Button variant="outline" onClick={() => setEditingPost(null)}>
