@@ -39,6 +39,25 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Get original sources for this digest's date to ensure links are available
+    const { data: sources } = await supabase
+      .from('daily_repo')
+      .select('title, source_url, source_email, source_type')
+      .eq('newsletter_date', digest.digest_date)
+      .order('collected_at', { ascending: true })
+
+    // Build a source reference list for the ghostwriter
+    let sourceReference = ''
+    if (sources && sources.length > 0) {
+      sourceReference = '\n\n---\n\nVERFÜGBARE QUELLEN MIT LINKS:\n'
+      sourceReference += sources.map((s, i) => {
+        if (s.source_url) {
+          return `${i + 1}. [${s.title}](${s.source_url})`
+        }
+        return `${i + 1}. ${s.title} (${s.source_email || 'Newsletter'})`
+      }).join('\n')
+    }
+
     // Get the ghostwriter prompt
     let promptText: string
     if (promptId) {
@@ -94,12 +113,15 @@ export async function POST(request: NextRequest) {
     // Combine prompt with vocabulary
     const fullPrompt = promptText + vocabularyContext
 
+    // Combine digest content with source reference
+    const fullDigestContent = digest.analysis_content + sourceReference
+
     // Stream the response
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of streamGhostwriter(digest.analysis_content, fullPrompt)) {
+          for await (const chunk of streamGhostwriter(fullDigestContent, fullPrompt)) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk })}\n\n`))
           }
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`))

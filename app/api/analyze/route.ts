@@ -109,11 +109,29 @@ export async function POST(request: NextRequest) {
 }
 
 function getDefaultPrompt(): string {
-  return `Es geht mir nicht um die wichtigsten Industrienews, sondern um die originalsten Insights für meinen eigenen Synthzr Newsletter.
+  return `ZIEL: Erstelle eine AUSFÜHRLICHE MATERIALSAMMLUNG für meinen Synthzr Newsletter.
 
-Meine Kernthese ist, dass AI nicht alles effizienter macht, sondern dass die Synthese aus allen Bereichen (Marketing, Design, Business, Code etc.) zu völlig neuen Produkten und Services führen wird und die Wertschöpfung von IT- und Agenturdienstleistern komplett verändern wird.
+KERNTHESE: AI macht nicht alles effizienter – die Synthese aus Marketing, Design, Business und Code führt zu völlig neuen Produkten/Services und verändert die Wertschöpfung von IT- und Agenturdienstleistern komplett.
 
-Erstell aus allen Inhalten des Daily Repos, die hierfür relevant sind, eine ausführlich deutschsprachige Übersicht mit den wichtigsten Passagen der jeweiligen Quellen und Verlinkungen.
+WICHTIG - DAS IST KEINE ZUSAMMENFASSUNG:
+- Extrahiere die VOLLSTÄNDIGEN relevanten Passagen und Zitate aus jeder Quelle
+- Behalte die Originalformulierungen bei (übersetze nur falls nicht auf Deutsch)
+- JEDE erwähnte Information MUSS mit dem Quelllink versehen sein
+- Längere Abschnitte sind ERWÜNSCHT - das ist Rohmaterial für späteren Blogpost
 
-Falls Inhalte nicht auf Deutsch sind, übersetze die relevanten Passagen ins Deutsche.`
+FORMAT FÜR JEDE QUELLE:
+## [Titel der Quelle](URL)
+**Kernaussagen:**
+- [Vollständiges Zitat oder Passage mit Kontext]
+- [Weitere relevante Passage]
+
+**Originalzitate:**
+> "Direktes Zitat aus der Quelle" – [Quelle](URL)
+
+**Relevanz für Synthese-These:**
+[Warum ist das für die Kernthese interessant?]
+
+---
+
+Ignoriere unwichtige oder themenfremde Inhalte, aber bei relevanten Quellen: MEHR IST BESSER.`
 }
