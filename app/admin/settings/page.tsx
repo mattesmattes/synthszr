@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Settings, Mail, Clock, Bell, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { Settings, Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useSearchParams } from 'next/navigation'
 
 interface GmailStatus {
@@ -17,16 +18,58 @@ interface GmailStatus {
   error?: string
 }
 
+interface ScheduleConfig {
+  newsletterFetch: {
+    enabled: boolean
+    hours: number[]
+  }
+  dailyAnalysis: {
+    enabled: boolean
+    hour: number
+    minute: number
+  }
+  postGeneration: {
+    enabled: boolean
+    hour: number
+    minute: number
+  }
+}
+
+const DEFAULT_SCHEDULE: ScheduleConfig = {
+  newsletterFetch: {
+    enabled: true,
+    hours: [0, 6, 12, 18],
+  },
+  dailyAnalysis: {
+    enabled: true,
+    hour: 8,
+    minute: 0,
+  },
+  postGeneration: {
+    enabled: false,
+    hour: 9,
+    minute: 0,
+  },
+}
+
+const HOURS = Array.from({ length: 24 }, (_, i) => i)
+const MINUTES = [0, 10, 20, 30, 40, 50]
+
 export default function SettingsPage() {
   const searchParams = useSearchParams()
   const [gmailStatus, setGmailStatus] = useState<GmailStatus | null>(null)
   const [loading, setLoading] = useState(true)
+  const [schedule, setSchedule] = useState<ScheduleConfig>(DEFAULT_SCHEDULE)
+  const [scheduleLoading, setScheduleLoading] = useState(true)
+  const [savingSchedule, setSavingSchedule] = useState(false)
+  const [scheduleSuccess, setScheduleSuccess] = useState(false)
 
   const success = searchParams.get('success')
   const error = searchParams.get('error')
 
   useEffect(() => {
     fetchGmailStatus()
+    fetchSchedule()
   }, [])
 
   async function fetchGmailStatus() {
@@ -41,8 +84,46 @@ export default function SettingsPage() {
     }
   }
 
+  async function fetchSchedule() {
+    try {
+      const response = await fetch('/api/admin/schedule')
+      if (response.ok) {
+        const data = await response.json()
+        setSchedule(data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch schedule:', error)
+    } finally {
+      setScheduleLoading(false)
+    }
+  }
+
+  async function saveSchedule() {
+    setSavingSchedule(true)
+    setScheduleSuccess(false)
+    try {
+      const response = await fetch('/api/admin/schedule', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(schedule),
+      })
+      if (response.ok) {
+        setScheduleSuccess(true)
+        setTimeout(() => setScheduleSuccess(false), 3000)
+      }
+    } catch (error) {
+      console.error('Failed to save schedule:', error)
+    } finally {
+      setSavingSchedule(false)
+    }
+  }
+
   function handleConnectGmail() {
     window.location.href = '/api/gmail/authorize'
+  }
+
+  function formatTime(hour: number, minute: number): string {
+    return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} UTC`
   }
 
   return (
@@ -156,24 +237,214 @@ export default function SettingsPage() {
               Zeitplan
             </CardTitle>
             <CardDescription>
-              Wann sollen Newsletter abgerufen und analysiert werden?
+              Wann sollen Newsletter abgerufen, analysiert und Blogposts generiert werden?
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Newsletter-Abruf</Label>
-                <p className="text-sm text-muted-foreground">Alle 6 Stunden</p>
+          <CardContent className="space-y-6">
+            {scheduleLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm text-muted-foreground">Lade Zeitplan...</span>
               </div>
-              <code className="rounded bg-secondary px-2 py-1 text-sm">0 */6 * * *</code>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Tägliche Analyse</Label>
-                <p className="text-sm text-muted-foreground">Täglich um 8:00 Uhr</p>
-              </div>
-              <code className="rounded bg-secondary px-2 py-1 text-sm">0 8 * * *</code>
-            </div>
+            ) : (
+              <>
+                {/* Newsletter Fetch */}
+                <div className="space-y-3 pb-4 border-b">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base">Newsletter-Abruf</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Zu welchen Stunden sollen Newsletter abgerufen werden?
+                      </p>
+                    </div>
+                    <Switch
+                      checked={schedule.newsletterFetch.enabled}
+                      onCheckedChange={(enabled) =>
+                        setSchedule({ ...schedule, newsletterFetch: { ...schedule.newsletterFetch, enabled } })
+                      }
+                    />
+                  </div>
+                  {schedule.newsletterFetch.enabled && (
+                    <div className="flex flex-wrap gap-2">
+                      {HOURS.map((hour) => (
+                        <button
+                          key={hour}
+                          onClick={() => {
+                            const hours = schedule.newsletterFetch.hours.includes(hour)
+                              ? schedule.newsletterFetch.hours.filter((h) => h !== hour)
+                              : [...schedule.newsletterFetch.hours, hour].sort((a, b) => a - b)
+                            setSchedule({
+                              ...schedule,
+                              newsletterFetch: { ...schedule.newsletterFetch, hours },
+                            })
+                          }}
+                          className={`px-2 py-1 text-xs rounded border transition-colors ${
+                            schedule.newsletterFetch.hours.includes(hour)
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-background border-border hover:bg-muted'
+                          }`}
+                        >
+                          {hour.toString().padStart(2, '0')}:00
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Daily Analysis */}
+                <div className="space-y-3 pb-4 border-b">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base">Tägliche Analyse</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Wann soll der Digest generiert werden?
+                      </p>
+                    </div>
+                    <Switch
+                      checked={schedule.dailyAnalysis.enabled}
+                      onCheckedChange={(enabled) =>
+                        setSchedule({ ...schedule, dailyAnalysis: { ...schedule.dailyAnalysis, enabled } })
+                      }
+                    />
+                  </div>
+                  {schedule.dailyAnalysis.enabled && (
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={schedule.dailyAnalysis.hour.toString()}
+                        onValueChange={(value) =>
+                          setSchedule({
+                            ...schedule,
+                            dailyAnalysis: { ...schedule.dailyAnalysis, hour: parseInt(value) },
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {HOURS.map((hour) => (
+                            <SelectItem key={hour} value={hour.toString()}>
+                              {hour.toString().padStart(2, '0')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-muted-foreground">:</span>
+                      <Select
+                        value={schedule.dailyAnalysis.minute.toString()}
+                        onValueChange={(value) =>
+                          setSchedule({
+                            ...schedule,
+                            dailyAnalysis: { ...schedule.dailyAnalysis, minute: parseInt(value) },
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MINUTES.map((minute) => (
+                            <SelectItem key={minute} value={minute.toString()}>
+                              {minute.toString().padStart(2, '0')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-sm text-muted-foreground">UTC</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Post Generation */}
+                <div className="space-y-3 pb-4 border-b">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base flex items-center gap-2">
+                        <Sparkles className="h-4 w-4" />
+                        Automatische Blogpost-Generierung
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Wann soll aus dem Digest ein Blogpost mit Bildern generiert werden?
+                      </p>
+                    </div>
+                    <Switch
+                      checked={schedule.postGeneration.enabled}
+                      onCheckedChange={(enabled) =>
+                        setSchedule({ ...schedule, postGeneration: { ...schedule.postGeneration, enabled } })
+                      }
+                    />
+                  </div>
+                  {schedule.postGeneration.enabled && (
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={schedule.postGeneration.hour.toString()}
+                        onValueChange={(value) =>
+                          setSchedule({
+                            ...schedule,
+                            postGeneration: { ...schedule.postGeneration, hour: parseInt(value) },
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {HOURS.map((hour) => (
+                            <SelectItem key={hour} value={hour.toString()}>
+                              {hour.toString().padStart(2, '0')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-muted-foreground">:</span>
+                      <Select
+                        value={schedule.postGeneration.minute.toString()}
+                        onValueChange={(value) =>
+                          setSchedule({
+                            ...schedule,
+                            postGeneration: { ...schedule.postGeneration, minute: parseInt(value) },
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MINUTES.map((minute) => (
+                            <SelectItem key={minute} value={minute.toString()}>
+                              {minute.toString().padStart(2, '0')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-sm text-muted-foreground">UTC</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Save Button */}
+                <div className="flex items-center gap-4">
+                  <Button onClick={saveSchedule} disabled={savingSchedule}>
+                    {savingSchedule ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    Zeitplan speichern
+                  </Button>
+                  {scheduleSuccess && (
+                    <span className="text-sm text-green-600 flex items-center gap-1">
+                      <CheckCircle className="h-4 w-4" />
+                      Gespeichert
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-muted-foreground mt-4">
+                  Hinweis: Die Zeiten sind in UTC angegeben. Der Scheduler prüft alle 10 Minuten, ob ein Job ausgeführt werden soll.
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
