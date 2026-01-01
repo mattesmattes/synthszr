@@ -67,7 +67,7 @@ export default async function ArchivePage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <BlogHeader />
+      {/* <BlogHeader /> */}
 
       <main className="mx-auto max-w-3xl px-6 py-12 md:py-20">
         <Link

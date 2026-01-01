@@ -79,7 +79,7 @@ export default async function Page() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <BlogHeader />
+      {/* <BlogHeader /> */}
 
       <main className="mx-auto max-w-5xl px-6 py-12 md:py-20">
         <div className="mb-16 border-b border-border pb-8">
