@@ -756,34 +756,74 @@ function GenerateImagesButton({ postId }: { postId: string }) {
         return
       }
 
-      // Parse TipTap content to extract text
+      // Parse TipTap content to extract text with headings
       let textContent = ''
+      const extractedSections: Array<{ title: string; content: string }> = []
+
       try {
         const content = typeof post.content === 'string' ? JSON.parse(post.content) : post.content
-        const extractText = (node: Record<string, unknown>): string => {
-          if (node.text) return node.text as string
-          if (node.content && Array.isArray(node.content)) {
-            return node.content.map(extractText).join('\n')
+
+        // Extract text with structure awareness
+        let currentHeading = ''
+        let currentContent = ''
+
+        const processNode = (node: Record<string, unknown>) => {
+          if (node.type === 'heading') {
+            // Save previous section if exists
+            if (currentHeading && currentContent.trim().length > 50) {
+              extractedSections.push({ title: currentHeading, content: currentContent.trim() })
+            }
+            // Start new section
+            currentHeading = ''
+            if (node.content && Array.isArray(node.content)) {
+              currentHeading = node.content.map((n: Record<string, unknown>) => n.text || '').join('')
+            }
+            currentContent = ''
+          } else if (node.text) {
+            currentContent += node.text + ' '
+            textContent += node.text + ' '
+          } else if (node.content && Array.isArray(node.content)) {
+            node.content.forEach(processNode)
+            if (node.type === 'paragraph') currentContent += '\n'
           }
-          return ''
         }
-        textContent = extractText(content)
+
+        processNode(content)
+
+        // Don't forget the last section
+        if (currentHeading && currentContent.trim().length > 50) {
+          extractedSections.push({ title: currentHeading, content: currentContent.trim() })
+        }
       } catch {
         alert('Fehler beim Parsen des Inhalts.')
         return
       }
 
-      // Split into sections (by double newlines or paragraphs)
-      const sections = textContent
-        .split(/\n{2,}/)
-        .map(s => s.trim())
-        .filter(s => s.length > 100)
-        .slice(0, 5)
+      // Use extracted sections, or fall back to text splitting
+      let sectionsToProcess: Array<{ title: string; content: string }> = []
 
-      if (sections.length === 0) {
+      if (extractedSections.length > 0) {
+        sectionsToProcess = extractedSections.slice(0, 5)
+      } else {
+        // Fallback: split by paragraphs
+        const paragraphs = textContent
+          .split(/\n{2,}/)
+          .map(s => s.trim())
+          .filter(s => s.length > 50)
+          .slice(0, 5)
+
+        sectionsToProcess = paragraphs.map((p, i) => ({
+          title: `Abschnitt ${i + 1}`,
+          content: p
+        }))
+      }
+
+      if (sectionsToProcess.length === 0) {
         alert('Keine ausreichenden Textabschnitte für Bildgenerierung gefunden.')
         return
       }
+
+      console.log(`[ImageGen] Found ${sectionsToProcess.length} sections for image generation`)
 
       // Delete any existing failed/generating images for this post
       await supabase
@@ -798,8 +838,8 @@ function GenerateImagesButton({ postId }: { postId: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           postId,
-          newsItems: sections.map((text, i) => ({
-            text: text.slice(0, 2000),
+          newsItems: sectionsToProcess.map(s => ({
+            text: `${s.title}\n\n${s.content.slice(0, 2000)}`,
           })),
         }),
       })

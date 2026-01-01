@@ -349,26 +349,38 @@ export default function DigestsPage() {
 
       // Trigger background image generation from blog content sections
       if (newPost && blogContent) {
-        // Split blog content into sections by ## headings
-        const sections = blogContent
-          .split(/^##\s+/m)
-          .slice(1) // Skip content before first ##
-          .map(section => {
-            const lines = section.trim().split('\n')
-            const title = lines[0] || 'Abschnitt'
-            const content = lines.slice(1).join('\n').trim()
-            return { title, content }
-          })
-          .filter(s => s.content.length > 100) // Only sections with substantial content
-          .slice(0, 5) // Max 5 images
+        // Split blog content into sections by # or ## headings
+        const sections: Array<{ title: string; content: string }> = []
 
-        if (sections.length > 0) {
+        // Match all headings (# or ##) and their content
+        const headingRegex = /^(#{1,2})\s+(.+)$/gm
+        const matches = [...blogContent.matchAll(headingRegex)]
+
+        for (let i = 0; i < matches.length; i++) {
+          const match = matches[i]
+          const title = match[2].trim()
+          const startIndex = match.index! + match[0].length
+          const endIndex = matches[i + 1]?.index ?? blogContent.length
+          const content = blogContent.slice(startIndex, endIndex).trim()
+
+          // Skip very short sections but be more lenient (> 50 chars)
+          if (content.length > 50) {
+            sections.push({ title, content })
+          }
+        }
+
+        // Take up to 5 sections for image generation
+        const sectionsToProcess = sections.slice(0, 5)
+
+        console.log(`[ImageGen] Found ${sections.length} sections, processing ${sectionsToProcess.length}`)
+
+        if (sectionsToProcess.length > 0) {
           fetch('/api/generate-image', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               postId: newPost.id,
-              newsItems: sections.map(s => ({
+              newsItems: sectionsToProcess.map(s => ({
                 text: `${s.title}\n\n${s.content.slice(0, 2000)}`,
               })),
             }),

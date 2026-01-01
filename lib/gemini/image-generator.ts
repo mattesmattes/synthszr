@@ -234,14 +234,16 @@ export async function generateAndProcessImage(newsText: string): Promise<{
 
   try {
     // Process for transparency
+    console.log('[Gemini] Processing image for transparency...')
     const processed = await whiteToTransparent(result.imageBase64)
+    console.log('[Gemini] Transparency processing complete')
     return {
       success: true,
       imageBase64: processed.base64,
       mimeType: processed.mimeType
     }
   } catch (error) {
-    console.error('Image processing error:', error)
+    console.error('[Gemini] Transparency processing error:', error)
     // Return original image if processing fails
     return result
   }
