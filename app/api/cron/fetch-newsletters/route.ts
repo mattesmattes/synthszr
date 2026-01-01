@@ -5,9 +5,8 @@ import { extractArticleContent } from '@/lib/scraper/article-extractor'
 import { createClient } from '@/lib/supabase/server'
 import { jwtVerify } from 'jose'
 
-// Force Node.js runtime for jsdom compatibility
+// Node.js runtime for jsdom compatibility
 export const runtime = 'nodejs'
-export const maxDuration = 300 // Allow up to 5 minutes for CRON job
 
 // Vercel Cron protection
 const CRON_SECRET = process.env.CRON_SECRET

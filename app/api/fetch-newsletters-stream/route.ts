@@ -5,9 +5,8 @@ import { extractArticleContent } from '@/lib/scraper/article-extractor'
 import { createClient } from '@/lib/supabase/server'
 import { jwtVerify } from 'jose'
 
-// Force Node.js runtime for jsdom compatibility
+// Node.js runtime for jsdom compatibility
 export const runtime = 'nodejs'
-export const maxDuration = 60 // Allow up to 60 seconds for newsletter processing
 
 const SESSION_COOKIE_NAME = 'synthszr_session'
 

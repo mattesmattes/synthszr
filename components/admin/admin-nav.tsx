@@ -40,32 +40,7 @@ const navGroups = [
         label: 'Generierte Artikel',
         href: '/admin/generated-articles',
         icon: FileText
-      }
-    ]
-  },
-  {
-    label: 'Newsletter Aggregator',
-    items: [
-      {
-        label: 'Newsletter-Quellen',
-        href: '/admin/newsletters',
-        icon: Mail
       },
-      {
-        label: 'Daily Repo',
-        href: '/admin/daily-repo',
-        icon: Database
-      },
-      {
-        label: 'Digests',
-        href: '/admin/digests',
-        icon: Sparkles
-      }
-    ]
-  },
-  {
-    label: 'Ghostwriter',
-    items: [
       {
         label: 'Ghostwriter-Prompts',
         href: '/admin/ghostwriter',
@@ -79,18 +54,43 @@ const navGroups = [
     ]
   },
   {
-    label: 'Einstellungen',
+    label: 'Digest',
     items: [
+      {
+        label: 'Digests',
+        href: '/admin/digests',
+        icon: Sparkles
+      },
       {
         label: 'Analyse-Prompts',
         href: '/admin/prompts',
         icon: MessageSquare
+      }
+    ]
+  },
+  {
+    label: 'Repo',
+    items: [
+      {
+        label: 'Daily Repo',
+        href: '/admin/daily-repo',
+        icon: Database
+      },
+      {
+        label: 'Newsletter-Quellen',
+        href: '/admin/newsletters',
+        icon: Mail
       },
       {
         label: 'Paywall-Credentials',
         href: '/admin/credentials',
         icon: Key
-      },
+      }
+    ]
+  },
+  {
+    label: 'Einstellungen',
+    items: [
       {
         label: 'Einstellungen',
         href: '/admin/settings',

@@ -11,7 +11,11 @@ import {
   ExternalLink,
   Edit2,
   BookOpen,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Link2,
+  Tag,
+  AlignLeft,
+  Type
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Button } from '@/components/ui/button'
@@ -37,6 +41,14 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { TiptapEditor } from '@/components/tiptap-editor'
 import { TiptapRenderer } from '@/components/tiptap-renderer'
 
@@ -60,12 +72,30 @@ interface Digest {
 interface GeneratedPost {
   id: string
   title: string
+  slug: string | null
+  excerpt: string | null
+  category: string | null
   content: Record<string, unknown>
   word_count: number | null
   status: 'draft' | 'published' | 'archived'
   created_at: string
   digest?: Digest | null
   prompt?: { name: string } | null
+}
+
+const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese']
+
+// Generate slug from title
+function generateSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80)
 }
 
 export default function GeneratedArticlesPage() {
@@ -77,7 +107,13 @@ export default function GeneratedArticlesPage() {
   const [viewingDigest, setViewingDigest] = useState<Digest | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const [editForm, setEditForm] = useState<{ title: string; content: Record<string, unknown> }>({ title: '', content: {} })
+  const [editForm, setEditForm] = useState<{
+    title: string
+    slug: string
+    excerpt: string
+    category: string
+    content: Record<string, unknown>
+  }>({ title: '', slug: '', excerpt: '', category: 'AI & Tech', content: {} })
 
   useEffect(() => {
     fetchPosts()
@@ -124,7 +160,13 @@ export default function GeneratedArticlesPage() {
 
   function openEditDialog(post: GeneratedPost) {
     setEditingPost(post)
-    setEditForm({ title: post.title, content: post.content })
+    setEditForm({
+      title: post.title,
+      slug: post.slug || generateSlug(post.title),
+      excerpt: post.excerpt || '',
+      category: post.category || 'AI & Tech',
+      content: post.content
+    })
   }
 
   function openDeleteDialog(post: GeneratedPost) {
@@ -142,6 +184,9 @@ export default function GeneratedArticlesPage() {
         body: JSON.stringify({
           id: editingPost.id,
           title: editForm.title,
+          slug: editForm.slug,
+          excerpt: editForm.excerpt,
+          category: editForm.category,
           content: editForm.content,
         }),
         credentials: 'include',
@@ -236,7 +281,17 @@ export default function GeneratedArticlesPage() {
                       <Badge className={statusColors[post.status]}>
                         {statusLabels[post.status]}
                       </Badge>
+                      {post.category && (
+                        <Badge variant="outline" className="text-xs">
+                          {post.category}
+                        </Badge>
+                      )}
                     </div>
+                    {post.excerpt && (
+                      <p className="text-sm text-muted-foreground mb-2 line-clamp-1">
+                        {post.excerpt}
+                      </p>
+                    )}
                     <div className="text-sm text-muted-foreground line-clamp-2">
                       <TiptapRenderer content={post.content} />
                     </div>
@@ -317,21 +372,79 @@ export default function GeneratedArticlesPage() {
           <DialogHeader>
             <DialogTitle>Artikel bearbeiten</DialogTitle>
             <DialogDescription>
-              Bearbeite Titel und Inhalt des generierten Artikels
+              Bearbeite Metadaten und Inhalt des generierten Artikels
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 flex-1 overflow-y-auto py-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-title">Titel</Label>
-              <Input
-                id="edit-title"
-                value={editForm.title}
-                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-              />
+            {/* Metadata Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-title" className="flex items-center gap-1.5 text-sm">
+                  <Type className="h-3.5 w-3.5" />
+                  Titel
+                </Label>
+                <Input
+                  id="edit-title"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({
+                    ...editForm,
+                    title: e.target.value,
+                    slug: generateSlug(e.target.value)
+                  })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-slug" className="flex items-center gap-1.5 text-sm">
+                  <Link2 className="h-3.5 w-3.5" />
+                  Slug (URL)
+                </Label>
+                <Input
+                  id="edit-slug"
+                  value={editForm.slug}
+                  onChange={(e) => setEditForm({ ...editForm, slug: e.target.value })}
+                  placeholder="artikel-url-slug"
+                />
+              </div>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-excerpt" className="flex items-center gap-1.5 text-sm">
+                <AlignLeft className="h-3.5 w-3.5" />
+                Excerpt (SEO-Beschreibung)
+              </Label>
+              <Textarea
+                id="edit-excerpt"
+                value={editForm.excerpt}
+                onChange={(e) => setEditForm({ ...editForm, excerpt: e.target.value })}
+                placeholder="Kurze Zusammenfassung für Vorschau und SEO..."
+                className="h-20 resize-none"
+                maxLength={200}
+              />
+              <p className="text-xs text-muted-foreground">{editForm.excerpt.length}/200 Zeichen</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5 text-sm">
+                <Tag className="h-3.5 w-3.5" />
+                Kategorie
+              </Label>
+              <Select
+                value={editForm.category}
+                onValueChange={(value) => setEditForm({ ...editForm, category: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Content Section */}
             <div className="space-y-2 flex-1 flex flex-col min-h-0">
               <Label>Inhalt</Label>
-              <div className="flex-1 min-h-[300px] max-h-[50vh] overflow-y-auto border rounded-md">
+              <div className="flex-1 min-h-[300px] max-h-[40vh] overflow-y-auto border rounded-md">
                 <TiptapEditor
                   content={editForm.content}
                   onChange={(content) => setEditForm({ ...editForm, content })}
@@ -343,7 +456,7 @@ export default function GeneratedArticlesPage() {
             <Button variant="outline" onClick={() => setEditingPost(null)}>
               Abbrechen
             </Button>
-            <Button onClick={handleSaveEdit} disabled={saving}>
+            <Button onClick={handleSaveEdit} disabled={saving || !editForm.title}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Speichern
             </Button>

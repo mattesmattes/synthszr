@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import {
   Wand2,
   Sparkles,
@@ -12,7 +12,11 @@ import {
   Save,
   ChevronDown,
   FileText,
-  Gauge
+  Gauge,
+  Link2,
+  Tag,
+  Type,
+  AlignLeft
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -31,6 +35,8 @@ import {
 } from '@/components/ui/collapsible'
 import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
 import ReactMarkdown from 'react-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
@@ -56,6 +62,67 @@ interface VocabularyEntry {
   category: string
 }
 
+interface ArticleMetadata {
+  title: string
+  excerpt: string
+  category: string
+  slug: string
+}
+
+// Generate slug from title
+function generateSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80)
+}
+
+// Parse frontmatter from generated content
+function parseArticleContent(content: string): { metadata: ArticleMetadata; body: string } {
+  const defaultMetadata: ArticleMetadata = {
+    title: '',
+    excerpt: '',
+    category: 'AI & Tech',
+    slug: ''
+  }
+
+  // Match frontmatter block
+  const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/)
+
+  if (!frontmatterMatch) {
+    // No frontmatter, try to extract title from first heading
+    const titleMatch = content.match(/^#\s+(.+)$/m)
+    if (titleMatch) {
+      defaultMetadata.title = titleMatch[1]
+      defaultMetadata.slug = generateSlug(titleMatch[1])
+    }
+    return { metadata: defaultMetadata, body: content }
+  }
+
+  const [, frontmatter, body] = frontmatterMatch
+  const metadata = { ...defaultMetadata }
+
+  // Parse frontmatter fields
+  const titleMatch = frontmatter.match(/TITLE:\s*(.+)/i)
+  const excerptMatch = frontmatter.match(/EXCERPT:\s*(.+)/i)
+  const categoryMatch = frontmatter.match(/CATEGORY:\s*(.+)/i)
+
+  if (titleMatch) metadata.title = titleMatch[1].trim()
+  if (excerptMatch) metadata.excerpt = excerptMatch[1].trim()
+  if (categoryMatch) metadata.category = categoryMatch[1].trim()
+
+  metadata.slug = generateSlug(metadata.title)
+
+  return { metadata, body: body.trim() }
+}
+
+const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese']
+
 export default function CreateArticlePage() {
   const [digests, setDigests] = useState<Digest[]>([])
   const [selectedDigestId, setSelectedDigestId] = useState<string>('')
@@ -68,6 +135,27 @@ export default function CreateArticlePage() {
   const [saving, setSaving] = useState(false)
   const [vocabOpen, setVocabOpen] = useState(false)
   const [vocabularyIntensity, setVocabularyIntensity] = useState(50)
+
+  // Editable metadata fields
+  const [metadata, setMetadata] = useState<ArticleMetadata>({
+    title: '',
+    excerpt: '',
+    category: 'AI & Tech',
+    slug: ''
+  })
+
+  // Parse content to extract metadata whenever content changes
+  const parsedContent = useMemo(() => {
+    if (!articleContent) return { metadata: metadata, body: '' }
+    return parseArticleContent(articleContent)
+  }, [articleContent])
+
+  // Update metadata when content is parsed (only when generation completes)
+  const updateMetadataFromContent = useCallback(() => {
+    if (parsedContent.metadata.title) {
+      setMetadata(parsedContent.metadata)
+    }
+  }, [parsedContent])
 
   const supabase = createClient()
 
@@ -177,8 +265,15 @@ export default function CreateArticlePage() {
       setArticleContent(prev => prev + `\n\n**Fehler:** ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
     } finally {
       setGenerating(false)
+      // Parse metadata after generation completes
+      setTimeout(() => {
+        const parsed = parseArticleContent(articleContent)
+        if (parsed.metadata.title) {
+          setMetadata(parsed.metadata)
+        }
+      }, 100)
     }
-  }, [selectedDigestId, vocabularyIntensity])
+  }, [selectedDigestId, vocabularyIntensity, articleContent])
 
   function copyToClipboard() {
     navigator.clipboard.writeText(articleContent)
@@ -191,26 +286,34 @@ export default function CreateArticlePage() {
 
     setSaving(true)
     try {
-      // Extract title from first heading or first line
-      const titleMatch = articleContent.match(/^#\s+(.+)$/m)
-      const title = titleMatch
-        ? titleMatch[1]
-        : `Artikel vom ${new Date(selectedDigest.digest_date).toLocaleDateString('de-DE')}`
+      // Use the body content (without frontmatter) for the actual article
+      const bodyContent = parsedContent.body || articleContent
+
+      // Use metadata from state (which can be edited) or fallback
+      const title = metadata.title || `Artikel vom ${new Date(selectedDigest.digest_date).toLocaleDateString('de-DE')}`
+      const slug = metadata.slug || generateSlug(title)
 
       // Convert markdown to TipTap JSON and stringify for TEXT column
-      const tiptapContent = markdownToTiptap(articleContent)
+      const tiptapContent = markdownToTiptap(bodyContent)
 
       const { error } = await supabase.from('generated_posts').insert({
         digest_id: selectedDigestId,
         prompt_id: activePrompt?.id,
         title,
+        slug,
+        excerpt: metadata.excerpt || null,
+        category: metadata.category || 'AI & Tech',
         content: JSON.stringify(tiptapContent),
-        word_count: articleContent.split(/\s+/).length,
+        word_count: bodyContent.split(/\s+/).length,
         status: 'draft',
       })
 
       if (error) throw error
       alert('Artikel als Entwurf gespeichert!')
+
+      // Reset form after successful save
+      setArticleContent('')
+      setMetadata({ title: '', excerpt: '', category: 'AI & Tech', slug: '' })
     } catch (error) {
       console.error('Save error:', error)
       alert('Fehler beim Speichern')
@@ -429,7 +532,82 @@ export default function CreateArticlePage() {
         </div>
 
         {/* Right Column: Output */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-4">
+          {/* Metadata Card - Shows when content is generated */}
+          {articleContent && !generating && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Tag className="h-4 w-4" />
+                  Artikel-Metadaten
+                </CardTitle>
+                <CardDescription>
+                  Diese Felder werden automatisch befüllt und können vor dem Speichern angepasst werden
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="title" className="flex items-center gap-1.5 text-sm">
+                      <Type className="h-3.5 w-3.5" />
+                      Titel
+                    </Label>
+                    <Input
+                      id="title"
+                      value={metadata.title}
+                      onChange={(e) => setMetadata({ ...metadata, title: e.target.value, slug: generateSlug(e.target.value) })}
+                      placeholder="Artikeltitel..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="slug" className="flex items-center gap-1.5 text-sm">
+                      <Link2 className="h-3.5 w-3.5" />
+                      Slug (URL)
+                    </Label>
+                    <Input
+                      id="slug"
+                      value={metadata.slug}
+                      onChange={(e) => setMetadata({ ...metadata, slug: e.target.value })}
+                      placeholder="artikel-url-slug"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="excerpt" className="flex items-center gap-1.5 text-sm">
+                    <AlignLeft className="h-3.5 w-3.5" />
+                    Excerpt (SEO-Beschreibung)
+                  </Label>
+                  <Textarea
+                    id="excerpt"
+                    value={metadata.excerpt}
+                    onChange={(e) => setMetadata({ ...metadata, excerpt: e.target.value })}
+                    placeholder="Kurze Zusammenfassung für Vorschau und SEO..."
+                    className="h-20 resize-none"
+                    maxLength={200}
+                  />
+                  <p className="text-xs text-muted-foreground">{metadata.excerpt.length}/200 Zeichen</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5 text-sm">
+                    <Tag className="h-3.5 w-3.5" />
+                    Kategorie
+                  </Label>
+                  <Select value={metadata.category} onValueChange={(value) => setMetadata({ ...metadata, category: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((cat) => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Article Content Card */}
           <Card className="h-full">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -443,7 +621,7 @@ export default function CreateArticlePage() {
                       {copied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
                       {copied ? 'Kopiert!' : 'Kopieren'}
                     </Button>
-                    <Button size="sm" onClick={saveAsDraft} disabled={saving}>
+                    <Button size="sm" onClick={saveAsDraft} disabled={saving || !metadata.title}>
                       {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
                       Als Entwurf speichern
                     </Button>
@@ -454,7 +632,7 @@ export default function CreateArticlePage() {
                 {generating
                   ? 'Der Ghostwriter schreibt deinen Artikel...'
                   : articleContent
-                    ? `${articleContent.split(/\s+/).length} Wörter generiert`
+                    ? `${parsedContent.body.split(/\s+/).length} Wörter generiert`
                     : 'Wähle einen Digest und klicke auf "Artikel generieren"'
                 }
               </CardDescription>
@@ -471,14 +649,44 @@ export default function CreateArticlePage() {
                   </p>
                 </div>
               ) : (
-                <div className="prose prose-sm max-w-none rounded-lg border bg-muted/30 p-6 min-h-[400px] max-h-[600px] overflow-y-auto">
+                <div className="prose prose-sm max-w-none rounded-lg border bg-muted/30 p-6 min-h-[400px] max-h-[600px] overflow-y-auto article-preview">
                   {generating && !articleContent && (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Ghostwriter schreibt...
                     </div>
                   )}
-                  <ReactMarkdown>{articleContent}</ReactMarkdown>
+                  <ReactMarkdown
+                    components={{
+                      // Custom renderer for source-links blocks
+                      p: ({ children, ...props }) => {
+                        const content = String(children)
+                        // Check if this is a source-links block
+                        if (content.includes('<source-links>') || content.includes('</source-links>')) {
+                          return null // Skip the tag lines
+                        }
+                        return <p {...props}>{children}</p>
+                      },
+                      em: ({ children, ...props }) => {
+                        // Check if this is a source link (italic link)
+                        const childArray = Array.isArray(children) ? children : [children]
+                        const hasLink = childArray.some(child =>
+                          typeof child === 'object' && child !== null && 'type' in child && child.type === 'a'
+                        )
+                        if (hasLink) {
+                          return <em className="source-link" {...props}>{children}</em>
+                        }
+                        return <em {...props}>{children}</em>
+                      },
+                      a: ({ href, children }) => (
+                        <a href={href} target="_blank" rel="noopener noreferrer" className="source-link-anchor">
+                          {children}
+                        </a>
+                      )
+                    }}
+                  >
+                    {parsedContent.body || articleContent}
+                  </ReactMarkdown>
                   {generating && articleContent && (
                     <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />
                   )}

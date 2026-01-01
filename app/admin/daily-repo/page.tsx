@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash, Eye, Clock, Trash2 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useEffect, useState, useMemo } from 'react'
+import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash, Eye, Clock, Trash2, Plus, RefreshCw } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,16 +30,94 @@ interface DailyRepoItem {
   } | null
 }
 
+interface RepoSummary {
+  date: string
+  count: number
+  newsletters: number
+  articles: number
+  totalChars: number
+}
+
 export default function DailyRepoPage() {
+  const [repoSummaries, setRepoSummaries] = useState<RepoSummary[]>([])
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [items, setItems] = useState<DailyRepoItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  )
+  const [loadingItems, setLoadingItems] = useState(false)
   const [viewingItem, setViewingItem] = useState<DailyRepoItem | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [showFetchDialog, setShowFetchDialog] = useState(false)
+  const [fetchDate, setFetchDate] = useState<string>(new Date().toISOString().split('T')[0])
 
   const supabase = createClient()
+
+  // Dates that have repos
+  const repoDates = useMemo(() => new Set(repoSummaries.map(r => r.date)), [repoSummaries])
+
+  useEffect(() => {
+    fetchRepoSummaries()
+  }, [])
+
+  useEffect(() => {
+    if (selectedDate) {
+      fetchItemsForDate(selectedDate)
+    }
+  }, [selectedDate])
+
+  async function fetchRepoSummaries() {
+    setLoading(true)
+
+    // Get all unique newsletter_dates with counts
+    const { data, error } = await supabase
+      .from('daily_repo')
+      .select('newsletter_date, source_type, content')
+      .order('newsletter_date', { ascending: false })
+
+    if (!error && data) {
+      // Group by date
+      const summaryMap = new Map<string, RepoSummary>()
+
+      for (const item of data) {
+        const date = item.newsletter_date
+        if (!date) continue
+
+        const existing = summaryMap.get(date) || {
+          date,
+          count: 0,
+          newsletters: 0,
+          articles: 0,
+          totalChars: 0,
+        }
+
+        existing.count++
+        if (item.source_type === 'newsletter') existing.newsletters++
+        if (item.source_type === 'article') existing.articles++
+        existing.totalChars += item.content?.length || 0
+
+        summaryMap.set(date, existing)
+      }
+
+      setRepoSummaries(Array.from(summaryMap.values()))
+    }
+    setLoading(false)
+  }
+
+  async function fetchItemsForDate(date: string) {
+    setLoadingItems(true)
+
+    const { data, error } = await supabase
+      .from('daily_repo')
+      .select('*')
+      .eq('newsletter_date', date)
+      .order('collected_at', { ascending: false })
+
+    if (!error && data) {
+      setItems(data)
+    } else {
+      setItems([])
+    }
+    setLoadingItems(false)
+  }
 
   async function deleteItem(id: string) {
     if (!confirm('Eintrag wirklich löschen?')) return
@@ -47,7 +125,8 @@ export default function DailyRepoPage() {
     try {
       const { error } = await supabase.from('daily_repo').delete().eq('id', id)
       if (error) throw error
-      await fetchItems()
+      await fetchItemsForDate(selectedDate)
+      await fetchRepoSummaries()
     } catch (error) {
       console.error('Delete error:', error)
       alert('Fehler beim Löschen')
@@ -56,298 +135,275 @@ export default function DailyRepoPage() {
     }
   }
 
-  useEffect(() => {
-    fetchItems()
-  }, [selectedDate])
-
-  async function fetchItems() {
-    setLoading(true)
-
-    // 24-hour window: from previous day 06:00 to selected day 05:59
-    // Example: For 2.1.2026, show content from 1.1.2026 06:00 to 2.1.2026 05:59
-    const selectedDateObj = new Date(selectedDate)
-    const startTime = new Date(selectedDateObj)
-    startTime.setDate(startTime.getDate() - 1) // Previous day
-    startTime.setHours(6, 0, 0, 0) // 06:00
-
-    const endTime = new Date(selectedDateObj)
-    endTime.setHours(5, 59, 59, 999) // 05:59:59 of selected day
-
-    const { data, error } = await supabase
-      .from('daily_repo')
-      .select('*')
-      .gte('collected_at', startTime.toISOString())
-      .lte('collected_at', endTime.toISOString())
-      .order('collected_at', { ascending: false })
-
-    if (error) {
-      console.error('Error fetching items:', error)
-    } else {
-      setItems(data || [])
-    }
-    setLoading(false)
-  }
-
-  const today = new Date().toLocaleDateString('de-DE', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-
   const sourceTypeIcon = (type: string) => {
     switch (type) {
-      case 'newsletter':
-        return <Mail className="h-4 w-4" />
-      case 'article':
-        return <FileText className="h-4 w-4" />
-      case 'pdf':
-        return <FileText className="h-4 w-4" />
-      default:
-        return <Link2 className="h-4 w-4" />
+      case 'newsletter': return <Mail className="h-3 w-3" />
+      case 'article': return <FileText className="h-3 w-3" />
+      default: return <Link2 className="h-3 w-3" />
     }
   }
 
+  // Check if date has a repo (for date picker styling)
+  const hasRepoForDate = (dateStr: string) => repoDates.has(dateStr)
+
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tighter">Daily Repo</h1>
-        <p className="mt-1 text-muted-foreground">
-          Alle gesammelten Inhalte aus Newslettern, Artikeln und PDFs
-        </p>
+    <div className="p-4 md:p-6 max-w-full">
+      <div className="mb-4">
+        <h1 className="text-xl font-bold tracking-tight">Daily Repo</h1>
+        <p className="text-xs text-muted-foreground">Gesammelte Inhalte aus Newslettern und Artikeln</p>
       </div>
 
-      {/* Fetch Progress Component */}
-      <div className="mb-8">
-        <FetchProgress onComplete={fetchItems} />
-      </div>
-
-      <div className="mb-6 flex items-center gap-4">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Calendar className="h-4 w-4" />
-          {today}
+      {/* Actions Bar */}
+      <div className="mb-4 flex items-center gap-2 flex-wrap">
+        <Button size="sm" variant="outline" onClick={() => setShowFetchDialog(true)} className="gap-1.5 text-xs h-7">
+          <Plus className="h-3 w-3" />
+          Neues Repo
+        </Button>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <Calendar className="h-3 w-3 text-muted-foreground" />
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="rounded border px-2 py-0.5 text-xs h-7"
+            style={{
+              fontWeight: hasRepoForDate(selectedDate) ? 600 : 400,
+            }}
+          />
         </div>
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="rounded-md border px-3 py-1 text-sm"
-        />
       </div>
 
-      {/* Statistics Summary */}
-      {!loading && items.length > 0 && (
-        <Card className="mb-6">
-          <CardContent className="pt-6">
-            <div className="grid grid-cols-4 gap-4">
-              <div className="text-center">
-                <div className="flex items-center justify-center gap-1.5 text-2xl font-bold text-foreground">
-                  <Database className="h-5 w-5" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Left: Repo List by Date */}
+        <div className="lg:col-span-1">
+          <div className="text-xs font-medium text-muted-foreground mb-2">Vorhandene Repos</div>
+          {loading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : repoSummaries.length === 0 ? (
+            <Card>
+              <CardContent className="py-4 text-center text-xs text-muted-foreground">
+                Noch keine Repos vorhanden
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <div className="divide-y max-h-[60vh] overflow-y-auto">
+                  {repoSummaries.map((repo) => (
+                    <button
+                      key={repo.date}
+                      onClick={() => setSelectedDate(repo.date)}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors ${
+                        selectedDate === repo.date ? 'bg-primary/10' : ''
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium">
+                          {new Date(repo.date).toLocaleDateString('de-DE', {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short',
+                          })}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <span className="flex items-center gap-0.5">
+                          <Mail className="h-2.5 w-2.5 text-blue-500" />
+                          {repo.newsletters}
+                        </span>
+                        <span className="flex items-center gap-0.5">
+                          <FileText className="h-2.5 w-2.5 text-green-500" />
+                          {repo.articles}
+                        </span>
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
+                          {(repo.totalChars / 1000).toFixed(0)}k
+                        </Badge>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Right: Items for Selected Date */}
+        <div className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-medium text-muted-foreground">
+              {selectedDate && new Date(selectedDate).toLocaleDateString('de-DE', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </div>
+            {items.length > 0 && (
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Database className="h-3 w-3" />
                   {items.length}
-                </div>
-                <div className="text-xs text-muted-foreground">Gesamt</div>
+                </span>
+                <span className="flex items-center gap-1">
+                  <Hash className="h-3 w-3" />
+                  {(items.reduce((s, i) => s + (i.content?.length || 0), 0) / 1000).toFixed(0)}k
+                </span>
               </div>
-              <div className="text-center">
-                <div className="flex items-center justify-center gap-1.5 text-2xl font-bold text-blue-600">
-                  <Mail className="h-5 w-5" />
-                  {items.filter(i => i.source_type === 'newsletter').length}
-                </div>
-                <div className="text-xs text-muted-foreground">Newsletter</div>
-              </div>
-              <div className="text-center">
-                <div className="flex items-center justify-center gap-1.5 text-2xl font-bold text-green-600">
-                  <FileText className="h-5 w-5" />
-                  {items.filter(i => i.source_type === 'article').length}
-                </div>
-                <div className="text-xs text-muted-foreground">Artikel</div>
-              </div>
-              <div className="text-center">
-                <div className="flex items-center justify-center gap-1.5 text-2xl font-bold text-purple-600">
-                  <Hash className="h-5 w-5" />
-                  {(items.reduce((sum, i) => sum + (i.content?.length || 0), 0) / 1000).toFixed(1)}k
-                </div>
-                <div className="text-xs text-muted-foreground">Zeichen</div>
-              </div>
+            )}
+          </div>
+
+          {loadingItems ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : items.length === 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5" />
-              Noch keine Inhalte
-            </CardTitle>
-            <CardDescription>
-              Für diesen Tag wurden noch keine Inhalte gesammelt.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Das Daily Repo sammelt automatisch:
-            </p>
-            <ul className="mt-2 list-inside list-disc text-sm text-muted-foreground">
-              <li>Newsletter-Inhalte von whitelisted Absendern</li>
-              <li>Vollständige Artikel hinter Teaser-Links</li>
-              <li>PDFs von Paywall-geschützten Quellen</li>
-            </ul>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="p-0">
-            <div className="divide-y">
-              {items.map((item) => (
-                <div key={item.id} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/50 transition-colors">
-                  {/* Type Icon */}
-                  <div className="shrink-0">
-                    {sourceTypeIcon(item.source_type)}
-                  </div>
-
-                  {/* Title & Source */}
-                  <div className="min-w-[200px] max-w-[300px]">
-                    <div className="font-medium truncate">{item.title}</div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {new Date(item.collected_at).toLocaleTimeString('de-DE', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                      {item.source_email && (
-                        <span className="ml-2 truncate">{item.source_email}</span>
-                      )}
+          ) : items.length === 0 ? (
+            <Card>
+              <CardContent className="py-6 text-center">
+                <Database className="h-6 w-6 mx-auto mb-2 text-muted-foreground/50" />
+                <p className="text-xs text-muted-foreground">Kein Repo für dieses Datum</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-3 text-xs h-7"
+                  onClick={() => {
+                    setFetchDate(selectedDate)
+                    setShowFetchDialog(true)
+                  }}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Repo erstellen
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <div className="divide-y max-h-[60vh] overflow-y-auto">
+                  {items.map((item) => (
+                    <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 transition-colors text-xs">
+                      <div className="shrink-0 text-muted-foreground">
+                        {sourceTypeIcon(item.source_type)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate text-xs">{item.title}</div>
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <Clock className="h-2.5 w-2.5" />
+                          {new Date(item.collected_at).toLocaleTimeString('de-DE', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                          {item.source_email && (
+                            <span className="ml-1 truncate max-w-[120px]">{item.source_email}</span>
+                          )}
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="shrink-0 text-[9px] px-1 py-0 h-4">
+                        {((item.content?.length || 0) / 1000).toFixed(1)}k
+                      </Badge>
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setViewingItem(item)}
+                          className="h-6 w-6"
+                        >
+                          <Eye className="h-3 w-3" />
+                        </Button>
+                        {item.source_url && (
+                          <Button variant="ghost" size="icon" asChild className="h-6 w-6">
+                            <a href={item.source_url} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteItem(item.id)}
+                          disabled={deletingId === item.id}
+                          className="h-6 w-6 text-destructive hover:text-destructive"
+                        >
+                          {deletingId === item.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* Type Badge */}
-                  <Badge variant="secondary" className="shrink-0 text-xs">
-                    {item.source_type}
-                  </Badge>
-
-                  {/* Character Count */}
-                  <Badge variant="outline" className="shrink-0 text-xs">
-                    {((item.content?.length || 0) / 1000).toFixed(1)}k
-                  </Badge>
-
-                  {/* Preview */}
-                  <div className="flex-1 min-w-0 text-sm text-muted-foreground truncate">
-                    {item.content?.slice(0, 80).replace(/\n/g, ' ')}...
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setViewingItem(item)}
-                      title="Inhalt anzeigen"
-                      className="h-8 w-8"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    {item.source_url && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        asChild
-                        title="Original öffnen"
-                        className="h-8 w-8"
-                      >
-                        <a href={item.source_url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteItem(item.id)}
-                      disabled={deletingId === item.id}
-                      title="Löschen"
-                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      {deletingId === item.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Fetch Dialog */}
+      <Dialog open={showFetchDialog} onOpenChange={setShowFetchDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <RefreshCw className="h-4 w-4" />
+              Newsletter abrufen
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Rufe Newsletter und Artikel für ein bestimmtes Datum ab
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                type="date"
+                value={fetchDate}
+                onChange={(e) => setFetchDate(e.target.value)}
+                className="rounded border px-2 py-1 text-xs"
+              />
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <FetchProgress onComplete={() => {
+              fetchRepoSummaries()
+              fetchItemsForDate(selectedDate)
+              setShowFetchDialog(false)
+            }} />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* View Item Dialog */}
       <Dialog open={!!viewingItem} onOpenChange={() => setViewingItem(null)}>
-        <DialogContent className="w-[90vw] max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-sm">
               {viewingItem && sourceTypeIcon(viewingItem.source_type)}
-              {viewingItem?.title}
+              <span className="truncate">{viewingItem?.title}</span>
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs">
               {viewingItem?.source_email && `Von: ${viewingItem.source_email} • `}
-              {viewingItem && `Gesammelt: ${new Date(viewingItem.collected_at).toLocaleString('de-DE')}`}
+              {viewingItem && new Date(viewingItem.collected_at).toLocaleString('de-DE')}
               {viewingItem?.content && ` • ${(viewingItem.content.length / 1000).toFixed(1)}k Zeichen`}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto space-y-4 py-4">
-            {/* Source URL */}
+          <div className="flex-1 overflow-y-auto space-y-3 py-3">
             {viewingItem?.source_url && (
-              <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
-                <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex items-center gap-2 p-2 bg-muted/50 rounded text-xs">
+                <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
                 <a
                   href={viewingItem.source_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline truncate"
+                  className="text-primary hover:underline truncate"
                 >
                   {viewingItem.source_url}
                 </a>
               </div>
             )}
-
-            {/* Full Content */}
-            <div className="prose prose-sm max-w-none">
-              <pre className="whitespace-pre-wrap text-sm font-sans bg-muted/30 p-4 rounded-lg overflow-auto max-h-[60vh]">
-                {viewingItem?.content}
-              </pre>
-            </div>
-
-            {/* Extracted Links */}
-            {viewingItem?.metadata?.article_urls && viewingItem.metadata.article_urls.length > 0 && (
-              <div className="border rounded-lg p-4">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <Link2 className="h-4 w-4" />
-                  Extrahierte Links ({viewingItem.metadata.article_urls.length})
-                </h3>
-                <ul className="space-y-1">
-                  {viewingItem.metadata.article_urls.map((url, i) => (
-                    <li key={i} className="flex items-center gap-2">
-                      <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-primary hover:underline truncate"
-                      >
-                        {url}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <pre className="whitespace-pre-wrap text-xs font-sans bg-muted/30 p-3 rounded overflow-auto max-h-[55vh]">
+              {viewingItem?.content}
+            </pre>
           </div>
         </DialogContent>
       </Dialog>

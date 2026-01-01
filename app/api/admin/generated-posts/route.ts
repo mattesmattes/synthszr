@@ -57,7 +57,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { id, title, content, status } = body
+    const { id, title, slug, excerpt, category, content, status } = body
 
     if (!id) {
       return NextResponse.json({ error: 'ID erforderlich' }, { status: 400 })
@@ -67,6 +67,9 @@ export async function PUT(request: NextRequest) {
 
     const updateData: Record<string, unknown> = {}
     if (title !== undefined) updateData.title = title
+    if (slug !== undefined) updateData.slug = slug
+    if (excerpt !== undefined) updateData.excerpt = excerpt
+    if (category !== undefined) updateData.category = category
     if (content !== undefined) {
       // Stringify content for TEXT column (not JSONB)
       updateData.content = typeof content === 'string' ? content : JSON.stringify(content)
