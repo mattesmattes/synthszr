@@ -173,7 +173,7 @@ export async function generateSatiricalImage(newsText: string): Promise<Generate
  */
 export async function whiteToTransparent(
   imageBase64: string,
-  threshold: number = 250
+  threshold: number = 240
 ): Promise<{ base64: string; mimeType: string }> {
   const buffer = Buffer.from(imageBase64, 'base64')
 
