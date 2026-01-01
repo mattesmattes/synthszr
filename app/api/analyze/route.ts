@@ -37,17 +37,13 @@ export async function POST(request: NextRequest) {
       promptText = activePrompt?.prompt_text || getDefaultPrompt()
     }
 
-    // Calculate 24-hour window: from selected date 00:00 to selected date 23:59:59
+    // Get content for the selected date (all items with this newsletter_date)
     const targetDate = date || new Date().toISOString().split('T')[0]
-    const startTime = new Date(targetDate + 'T00:00:00Z')
-    const endTime = new Date(targetDate + 'T23:59:59Z')
 
-    // Get content collected within the 24-hour window
     const { data: items } = await supabase
       .from('daily_repo')
       .select('id, title, content, source_type, source_email, source_url, collected_at')
-      .gte('collected_at', startTime.toISOString())
-      .lte('collected_at', endTime.toISOString())
+      .eq('newsletter_date', targetDate)
       .order('collected_at', { ascending: false })
 
     if (!items || items.length === 0) {

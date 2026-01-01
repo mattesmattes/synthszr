@@ -62,10 +62,22 @@ export default function DailyRepoPage() {
 
   async function fetchItems() {
     setLoading(true)
+
+    // 24-hour window: from previous day 06:00 to selected day 05:59
+    // Example: For 2.1.2026, show content from 1.1.2026 06:00 to 2.1.2026 05:59
+    const selectedDateObj = new Date(selectedDate)
+    const startTime = new Date(selectedDateObj)
+    startTime.setDate(startTime.getDate() - 1) // Previous day
+    startTime.setHours(6, 0, 0, 0) // 06:00
+
+    const endTime = new Date(selectedDateObj)
+    endTime.setHours(5, 59, 59, 999) // 05:59:59 of selected day
+
     const { data, error } = await supabase
       .from('daily_repo')
       .select('*')
-      .eq('newsletter_date', selectedDate)
+      .gte('collected_at', startTime.toISOString())
+      .lte('collected_at', endTime.toISOString())
       .order('collected_at', { ascending: false })
 
     if (error) {
