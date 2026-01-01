@@ -55,6 +55,27 @@ const DEFAULT_SCHEDULE: ScheduleConfig = {
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const MINUTES = [0, 10, 20, 30, 40, 50]
 
+// Berlin timezone offset (simplified: +1 in winter, +2 in summer)
+function getBerlinOffset(): number {
+  const now = new Date()
+  const jan = new Date(now.getFullYear(), 0, 1)
+  const jul = new Date(now.getFullYear(), 6, 1)
+  const stdOffset = Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset())
+  const isDST = now.getTimezoneOffset() < stdOffset
+  // Berlin is UTC+1 (CET) or UTC+2 (CEST)
+  return isDST ? 2 : 1
+}
+
+function utcToBerlin(hour: number): number {
+  const offset = getBerlinOffset()
+  return (hour + offset + 24) % 24
+}
+
+function berlinToUtc(hour: number): number {
+  const offset = getBerlinOffset()
+  return (hour - offset + 24) % 24
+}
+
 export default function SettingsPage() {
   const searchParams = useSearchParams()
   const [gmailStatus, setGmailStatus] = useState<GmailStatus | null>(null)
@@ -88,8 +109,22 @@ export default function SettingsPage() {
     try {
       const response = await fetch('/api/admin/schedule')
       if (response.ok) {
-        const data = await response.json()
-        setSchedule(data)
+        const data: ScheduleConfig = await response.json()
+        // Convert UTC to Berlin time for display
+        setSchedule({
+          newsletterFetch: {
+            ...data.newsletterFetch,
+            hours: data.newsletterFetch.hours.map(utcToBerlin),
+          },
+          dailyAnalysis: {
+            ...data.dailyAnalysis,
+            hour: utcToBerlin(data.dailyAnalysis.hour),
+          },
+          postGeneration: {
+            ...data.postGeneration,
+            hour: utcToBerlin(data.postGeneration.hour),
+          },
+        })
       }
     } catch (error) {
       console.error('Failed to fetch schedule:', error)
@@ -102,10 +137,25 @@ export default function SettingsPage() {
     setSavingSchedule(true)
     setScheduleSuccess(false)
     try {
+      // Convert Berlin time back to UTC for storage
+      const utcSchedule: ScheduleConfig = {
+        newsletterFetch: {
+          ...schedule.newsletterFetch,
+          hours: schedule.newsletterFetch.hours.map(berlinToUtc).sort((a, b) => a - b),
+        },
+        dailyAnalysis: {
+          ...schedule.dailyAnalysis,
+          hour: berlinToUtc(schedule.dailyAnalysis.hour),
+        },
+        postGeneration: {
+          ...schedule.postGeneration,
+          hour: berlinToUtc(schedule.postGeneration.hour),
+        },
+      }
       const response = await fetch('/api/admin/schedule', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(schedule),
+        body: JSON.stringify(utcSchedule),
       })
       if (response.ok) {
         setScheduleSuccess(true)
@@ -350,7 +400,7 @@ export default function SettingsPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <span className="text-sm text-muted-foreground">UTC</span>
+                      <span className="text-sm text-muted-foreground">Uhr (MEZ)</span>
                     </div>
                   )}
                 </div>
@@ -417,7 +467,7 @@ export default function SettingsPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <span className="text-sm text-muted-foreground">UTC</span>
+                      <span className="text-sm text-muted-foreground">Uhr (MEZ)</span>
                     </div>
                   )}
                 </div>
@@ -441,7 +491,7 @@ export default function SettingsPage() {
                 </div>
 
                 <p className="text-xs text-muted-foreground mt-4">
-                  Hinweis: Die Zeiten sind in UTC angegeben. Der Scheduler prüft alle 10 Minuten, ob ein Job ausgeführt werden soll.
+                  Hinweis: Zeiten in MEZ (Mitteleuropäische Zeit). Der Scheduler prüft alle 10 Minuten, ob ein Job ausgeführt werden soll.
                 </p>
               </>
             )}
