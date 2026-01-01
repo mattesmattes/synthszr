@@ -53,26 +53,46 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Build content string - use full content (no truncation for comprehensive analysis)
-    // Format source URLs as markdown links so Claude can reference them properly
-    // For items WITHOUT source_url (like newsletters), do NOT provide a link to avoid broken URLs
-    const contentParts = items.map((item, i) => {
+    // Build content string with token limit awareness
+    // Claude limit: 200k tokens ≈ ~600k characters
+    // Limit each item to 10k chars, and total to ~500k chars to leave room for prompt
+    const MAX_CHARS_PER_ITEM = 10000
+    const MAX_TOTAL_CHARS = 500000
+
+    const contentParts: string[] = []
+    let totalChars = 0
+
+    for (let i = 0; i < items.length && totalChars < MAX_TOTAL_CHARS; i++) {
+      const item = items[i]
       let sourceDisplay: string
+
       if (item.source_url && item.source_url.startsWith('http')) {
-        // Create markdown link for articles with valid URLs
         try {
           const linkText = new URL(item.source_url).hostname.replace('www.', '')
           sourceDisplay = `[${linkText}](${item.source_url})`
         } catch {
-          // Fallback if URL parsing fails
           sourceDisplay = `[Link](${item.source_url})`
         }
       } else {
-        // No linkable URL - show source email without creating a link
         sourceDisplay = `${item.source_email || 'Newsletter'} (kein direkter Link verfügbar)`
       }
-      return `## ${i + 1}. ${item.title}\n**Quelle:** ${sourceDisplay} (${item.source_type})\n\n${item.content || 'Kein Inhalt'}\n\n---`
-    })
+
+      // Truncate content if too long
+      const content = (item.content || 'Kein Inhalt').slice(0, MAX_CHARS_PER_ITEM)
+      const truncated = item.content && item.content.length > MAX_CHARS_PER_ITEM ? ' [...]' : ''
+
+      const part = `## ${i + 1}. ${item.title}\n**Quelle:** ${sourceDisplay} (${item.source_type})\n\n${content}${truncated}\n\n---`
+
+      if (totalChars + part.length > MAX_TOTAL_CHARS) {
+        console.log(`[Analyze] Stopping at ${i} items due to size limit (${totalChars} chars)`)
+        break
+      }
+
+      contentParts.push(part)
+      totalChars += part.length
+    }
+
+    console.log(`[Analyze] Processing ${contentParts.length}/${items.length} items, ${totalChars} chars`)
     const fullContent = contentParts.join('\n\n')
 
     // Stream the response
