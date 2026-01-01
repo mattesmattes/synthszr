@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Sparkles, Play, Calendar, Loader2, Copy, Check, Save, PenTool, FileText, Gauge, Mail, Link2, Hash, ChevronDown, BookOpen, ExternalLink } from 'lucide-react'
+import { Sparkles, Play, Calendar, Loader2, Copy, Check, Save, PenTool, FileText, Gauge, Mail, Link2, Hash, ChevronDown, BookOpen, ExternalLink, Trash2, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -316,6 +316,27 @@ export default function DigestsPage() {
   }
 
   const [savingBlog, setSavingBlog] = useState(false)
+  const [deletingDigestId, setDeletingDigestId] = useState<string | null>(null)
+
+  async function deleteDigest(digestId: string) {
+    if (!confirm('Digest wirklich löschen?')) return
+
+    setDeletingDigestId(digestId)
+    try {
+      const { error } = await supabase
+        .from('daily_digests')
+        .delete()
+        .eq('id', digestId)
+
+      if (error) throw error
+      await fetchDigests()
+    } catch (error) {
+      console.error('Delete error:', error)
+      alert('Fehler beim Löschen')
+    } finally {
+      setDeletingDigestId(null)
+    }
+  }
 
   async function saveBlogAsDraft() {
     if (!blogContent || !ghostwriterDigest) {
@@ -535,52 +556,80 @@ export default function DigestsPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
-            {digests.map((digest) => (
-              <Card key={digest.id}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">
-                      {new Date(digest.digest_date).toLocaleDateString('de-DE', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
-                    </CardTitle>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">
-                        {digest.word_count} Wörter
-                      </span>
+          <Card>
+            <CardContent className="p-0">
+              <div className="divide-y">
+                {digests.map((digest) => (
+                  <div key={digest.id} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/50 transition-colors">
+                    {/* Date & Time */}
+                    <div className="min-w-[180px]">
+                      <div className="font-medium">
+                        {new Date(digest.digest_date).toLocaleDateString('de-DE', {
+                          weekday: 'short',
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {new Date(digest.created_at).toLocaleTimeString('de-DE', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Word count */}
+                    <Badge variant="secondary" className="shrink-0">
+                      {digest.word_count} Wörter
+                    </Badge>
+
+                    {/* Preview */}
+                    <div className="flex-1 min-w-0 text-sm text-muted-foreground truncate">
+                      {digest.analysis_content.slice(0, 100).replace(/[#*_\[\]]/g, '')}...
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1 shrink-0">
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon"
                         onClick={() => openDigestDetail(digest)}
-                        className="gap-1"
                         title="Digest anzeigen"
+                        className="h-8 w-8"
                       >
                         <BookOpen className="h-4 w-4" />
                       </Button>
                       <Button
-                        variant="outline"
-                        size="sm"
+                        variant="ghost"
+                        size="icon"
                         onClick={() => openGhostwriter(digest)}
-                        className="gap-1"
+                        title="Blogpost erstellen"
+                        className="h-8 w-8"
                       >
                         <PenTool className="h-4 w-4" />
-                        Blogpost erstellen
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => deleteDigest(digest.id)}
+                        disabled={deletingDigestId === digest.id}
+                        title="Digest löschen"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        {deletingDigestId === digest.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="prose prose-sm max-w-none line-clamp-4 text-muted-foreground">
-                    <ReactMarkdown>{digest.analysis_content.slice(0, 500)}...</ReactMarkdown>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
 
