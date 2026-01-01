@@ -28,7 +28,7 @@ export class GmailClient {
     maxResults: number = 50,
     afterDate?: Date
   ): Promise<EmailMessage[]> {
-    // Build query for multiple senders
+    // Build query for multiple senders - search everywhere (not just inbox)
     const fromQuery = senderEmails.map(email => `from:${email}`).join(' OR ')
     let query = `(${fromQuery})`
 
@@ -38,13 +38,22 @@ export class GmailClient {
       query += ` after:${dateStr}`
     }
 
+    // Log the query for debugging
+    console.log('[Gmail] Search query:', query)
+    console.log('[Gmail] Searching for emails from:', senderEmails.length, 'senders')
+
     try {
       // List messages matching the query
+      // Note: By default this searches all mail, but excludes Spam and Trash
+      // Add includeSpamTrash: true if needed
       const listResponse = await this.gmail.users.messages.list({
         userId: 'me',
         q: query,
         maxResults,
+        includeSpamTrash: false, // Set to true to include spam/trash
       })
+
+      console.log('[Gmail] Found messages:', listResponse.data.messages?.length || 0)
 
       const messages = listResponse.data.messages || []
       const emails: EmailMessage[] = []

@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server'
 import { GmailClient } from '@/lib/gmail/client'
 import { createClient } from '@/lib/supabase/server'
-import { verifySession } from '@/lib/auth/session'
-import { cookies } from 'next/headers'
+import { getSession } from '@/lib/auth/session'
 
 export async function GET() {
   // Verify admin is logged in
-  const cookieStore = await cookies()
-  const session = await verifySession(cookieStore)
+  const session = await getSession()
 
   if (!session) {
     return NextResponse.json(
@@ -19,11 +17,11 @@ export async function GET() {
   try {
     const supabase = await createClient()
 
-    // Get stored tokens
+    // Get stored tokens (single-user setup, so we just get the first one)
     const { data: tokenData, error: tokenError } = await supabase
       .from('gmail_tokens')
       .select('*')
-      .eq('id', 'primary')
+      .limit(1)
       .single()
 
     if (tokenError || !tokenData) {

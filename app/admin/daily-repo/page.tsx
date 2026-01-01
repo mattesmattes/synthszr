@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Database, Calendar, Mail, FileText, Link2, Loader2, RefreshCw, ExternalLink } from 'lucide-react'
+import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   Accordion,
@@ -12,6 +11,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import { createClient } from '@/lib/supabase/client'
+import { FetchProgress } from '@/components/admin/fetch-progress'
 
 interface DailyRepoItem {
   id: string
@@ -31,7 +31,6 @@ interface DailyRepoItem {
 export default function DailyRepoPage() {
   const [items, setItems] = useState<DailyRepoItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [fetching, setFetching] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   )
@@ -58,26 +57,6 @@ export default function DailyRepoPage() {
     setLoading(false)
   }
 
-  async function triggerFetch() {
-    setFetching(true)
-    try {
-      const response = await fetch('/api/cron/fetch-newsletters', {
-        method: 'POST',
-      })
-      const result = await response.json()
-      if (result.success) {
-        alert(`${result.processed} Newsletter verarbeitet`)
-        fetchItems()
-      } else {
-        alert('Fehler: ' + (result.error || 'Unbekannter Fehler'))
-      }
-    } catch (error) {
-      alert('Fehler beim Abrufen der Newsletter')
-    } finally {
-      setFetching(false)
-    }
-  }
-
   const today = new Date().toLocaleDateString('de-DE', {
     weekday: 'long',
     year: 'numeric',
@@ -100,25 +79,16 @@ export default function DailyRepoPage() {
 
   return (
     <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tighter">Daily Repo</h1>
-          <p className="mt-1 text-muted-foreground">
-            Alle gesammelten Inhalte aus Newslettern, Artikeln und PDFs
-          </p>
-        </div>
-        <Button
-          onClick={triggerFetch}
-          disabled={fetching}
-          className="gap-2"
-        >
-          {fetching ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-          Newsletter abrufen
-        </Button>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold tracking-tighter">Daily Repo</h1>
+        <p className="mt-1 text-muted-foreground">
+          Alle gesammelten Inhalte aus Newslettern, Artikeln und PDFs
+        </p>
+      </div>
+
+      {/* Fetch Progress Component */}
+      <div className="mb-8">
+        <FetchProgress onComplete={fetchItems} />
       </div>
 
       <div className="mb-6 flex items-center gap-4">
@@ -133,6 +103,44 @@ export default function DailyRepoPage() {
           className="rounded-md border px-3 py-1 text-sm"
         />
       </div>
+
+      {/* Statistics Summary */}
+      {!loading && items.length > 0 && (
+        <Card className="mb-6">
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-1.5 text-2xl font-bold text-foreground">
+                  <Database className="h-5 w-5" />
+                  {items.length}
+                </div>
+                <div className="text-xs text-muted-foreground">Gesamt</div>
+              </div>
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-1.5 text-2xl font-bold text-blue-600">
+                  <Mail className="h-5 w-5" />
+                  {items.filter(i => i.source_type === 'newsletter').length}
+                </div>
+                <div className="text-xs text-muted-foreground">Newsletter</div>
+              </div>
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-1.5 text-2xl font-bold text-green-600">
+                  <FileText className="h-5 w-5" />
+                  {items.filter(i => i.source_type === 'article').length}
+                </div>
+                <div className="text-xs text-muted-foreground">Artikel</div>
+              </div>
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-1.5 text-2xl font-bold text-purple-600">
+                  <Hash className="h-5 w-5" />
+                  {(items.reduce((sum, i) => sum + (i.content?.length || 0), 0) / 1000).toFixed(1)}k
+                </div>
+                <div className="text-xs text-muted-foreground">Zeichen</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-12">

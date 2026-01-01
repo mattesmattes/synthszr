@@ -112,6 +112,20 @@ export default function SettingsPage() {
                       </p>
                     )}
                   </>
+                ) : gmailStatus?.error ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <XCircle className="h-4 w-4 text-orange-500" />
+                      <p className="text-sm font-medium text-orange-600">Token abgelaufen</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {gmailStatus.email && `${gmailStatus.email} - `}
+                      Bitte neu verbinden um fortzufahren
+                    </p>
+                    <p className="text-xs text-orange-600 mt-1">
+                      Hinweis: Bei Google Cloud Apps im &quot;Testing&quot;-Modus läuft der Token nach 7 Tagen ab.
+                    </p>
+                  </>
                 ) : (
                   <>
                     <div className="flex items-center gap-2">

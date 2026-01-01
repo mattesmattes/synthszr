@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { MessageSquare, Plus, Trash2, Edit2, Loader2, Check, Star } from 'lucide-react'
+import { PenTool, Plus, Trash2, Edit2, Loader2, Check, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -28,7 +28,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-interface AnalysisPrompt {
+interface GhostwriterPrompt {
   id: string
   name: string
   prompt_text: string
@@ -37,14 +37,14 @@ interface AnalysisPrompt {
   updated_at: string
 }
 
-export default function PromptsPage() {
-  const [prompts, setPrompts] = useState<AnalysisPrompt[]>([])
+export default function GhostwriterPage() {
+  const [prompts, setPrompts] = useState<GhostwriterPrompt[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [editingPrompt, setEditingPrompt] = useState<AnalysisPrompt | null>(null)
-  const [deletingPrompt, setDeletingPrompt] = useState<AnalysisPrompt | null>(null)
+  const [editingPrompt, setEditingPrompt] = useState<GhostwriterPrompt | null>(null)
+  const [deletingPrompt, setDeletingPrompt] = useState<GhostwriterPrompt | null>(null)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -59,7 +59,7 @@ export default function PromptsPage() {
   async function fetchPrompts() {
     setLoading(true)
     try {
-      const res = await fetch('/api/admin/analysis-prompts', { credentials: 'include' })
+      const res = await fetch('/api/admin/ghostwriter-prompts', { credentials: 'include' })
       if (res.ok) {
         const data = await res.json()
         setPrompts(data)
@@ -77,7 +77,7 @@ export default function PromptsPage() {
     setDialogOpen(true)
   }
 
-  function openEditDialog(prompt: AnalysisPrompt) {
+  function openEditDialog(prompt: GhostwriterPrompt) {
     setEditingPrompt(prompt)
     setFormData({
       name: prompt.name,
@@ -87,7 +87,7 @@ export default function PromptsPage() {
     setDialogOpen(true)
   }
 
-  function openDeleteDialog(prompt: AnalysisPrompt) {
+  function openDeleteDialog(prompt: GhostwriterPrompt) {
     setDeletingPrompt(prompt)
     setDeleteDialogOpen(true)
   }
@@ -102,7 +102,7 @@ export default function PromptsPage() {
         ? { id: editingPrompt.id, ...formData }
         : formData
 
-      const res = await fetch('/api/admin/analysis-prompts', {
+      const res = await fetch('/api/admin/ghostwriter-prompts', {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -128,7 +128,7 @@ export default function PromptsPage() {
     if (!deletingPrompt) return
 
     try {
-      const res = await fetch(`/api/admin/analysis-prompts?id=${deletingPrompt.id}`, {
+      const res = await fetch(`/api/admin/ghostwriter-prompts?id=${deletingPrompt.id}`, {
         method: 'DELETE',
         credentials: 'include',
       })
@@ -147,9 +147,9 @@ export default function PromptsPage() {
     }
   }
 
-  async function toggleActive(prompt: AnalysisPrompt) {
+  async function toggleActive(prompt: GhostwriterPrompt) {
     try {
-      const res = await fetch('/api/admin/analysis-prompts', {
+      const res = await fetch('/api/admin/ghostwriter-prompts', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -173,9 +173,9 @@ export default function PromptsPage() {
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tighter">Analyse-Prompts</h1>
+          <h1 className="text-3xl font-bold tracking-tighter">Ghostwriter-Prompts</h1>
           <p className="mt-1 text-muted-foreground">
-            Konfiguriere die Prompts für die AI-Analyse der Newsletter-Inhalte
+            Prompts für die automatische Blogartikel-Generierung aus Digests
           </p>
         </div>
         <Button className="gap-2" onClick={openAddDialog}>
@@ -192,11 +192,11 @@ export default function PromptsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
+              <PenTool className="h-5 w-5" />
               Keine Prompts vorhanden
             </CardTitle>
             <CardDescription>
-              Erstelle deinen ersten Analyse-Prompt, um Digests aus den Newsletter-Inhalten zu generieren.
+              Erstelle deinen ersten Ghostwriter-Prompt, um Blogposts aus Digests zu generieren.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -216,7 +216,7 @@ export default function PromptsPage() {
                         </Badge>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground line-clamp-3 whitespace-pre-wrap">
+                    <p className="text-sm text-muted-foreground line-clamp-3">
                       {prompt.prompt_text}
                     </p>
                     <p className="text-xs text-muted-foreground mt-2">
@@ -256,10 +256,10 @@ export default function PromptsPage() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>
-              {editingPrompt ? 'Prompt bearbeiten' : 'Neuer Analyse-Prompt'}
+              {editingPrompt ? 'Prompt bearbeiten' : 'Neuer Ghostwriter-Prompt'}
             </DialogTitle>
             <DialogDescription>
-              Definiere, wie Claude die Newsletter-Inhalte analysieren und zusammenfassen soll.
+              Definiere Stil, Tonalität und Struktur für die Blogartikel-Generierung.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
@@ -278,7 +278,7 @@ export default function PromptsPage() {
                 <Label htmlFor="prompt_text">Prompt</Label>
                 <Textarea
                   id="prompt_text"
-                  placeholder="Beschreibe, wie die Inhalte analysiert werden sollen..."
+                  placeholder="Beschreibe Stil, Tonalität und Struktur..."
                   value={formData.prompt_text}
                   onChange={(e) => setFormData({ ...formData, prompt_text: e.target.value })}
                   className="font-mono text-sm flex-1 min-h-[200px] max-h-[50vh] resize-y"

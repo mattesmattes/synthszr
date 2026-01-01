@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getAuthUrl } from '@/lib/gmail/oauth'
-import { verifySession } from '@/lib/auth/session'
-import { cookies } from 'next/headers'
+import { getSession } from '@/lib/auth/session'
 
 export async function GET() {
   // Verify admin is logged in
-  const cookieStore = await cookies()
-  const session = await verifySession(cookieStore)
+  const session = await getSession()
 
   if (!session) {
     return NextResponse.json(

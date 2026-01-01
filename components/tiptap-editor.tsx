@@ -1,9 +1,11 @@
 "use client"
 
+import { useEffect } from "react"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
+import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
-import { Bold, Italic, List, ListOrdered, Heading1, Heading2, Quote, Undo, Redo } from "lucide-react"
+import { Bold, Italic, List, ListOrdered, Heading1, Heading2, Quote, Undo, Redo, Link as LinkIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -16,6 +18,12 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
   const editor = useEditor({
     extensions: [
       StarterKit,
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-primary underline',
+        },
+      }),
       Placeholder.configure({
         placeholder: "Start writing...",
       }),
@@ -30,6 +38,18 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
       },
     },
   })
+
+  // Update editor content when prop changes (e.g., when opening edit dialog)
+  useEffect(() => {
+    if (editor && content) {
+      // Only update if content is different to avoid cursor jumping
+      const currentContent = JSON.stringify(editor.getJSON())
+      const newContent = JSON.stringify(content)
+      if (currentContent !== newContent) {
+        editor.commands.setContent(content)
+      }
+    }
+  }, [editor, content])
 
   if (!editor) {
     return null

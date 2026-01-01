@@ -10,7 +10,10 @@ import {
   MessageSquare,
   Database,
   Sparkles,
-  Settings
+  Settings,
+  PenTool,
+  BookOpen,
+  Wand2
 } from 'lucide-react'
 
 const navGroups = [
@@ -26,6 +29,16 @@ const navGroups = [
       {
         label: 'Neuer Post',
         href: '/admin/new',
+        icon: FileText
+      },
+      {
+        label: 'AI Artikel erstellen',
+        href: '/admin/create-article',
+        icon: Wand2
+      },
+      {
+        label: 'Generierte Artikel',
+        href: '/admin/generated-articles',
         icon: FileText
       }
     ]
@@ -47,6 +60,21 @@ const navGroups = [
         label: 'Digests',
         href: '/admin/digests',
         icon: Sparkles
+      }
+    ]
+  },
+  {
+    label: 'Ghostwriter',
+    items: [
+      {
+        label: 'Ghostwriter-Prompts',
+        href: '/admin/ghostwriter',
+        icon: PenTool
+      },
+      {
+        label: 'Vokabular',
+        href: '/admin/vocabulary',
+        icon: BookOpen
       }
     ]
   },

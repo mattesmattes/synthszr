@@ -40,26 +40,49 @@ export async function GET(request: NextRequest) {
     // Store tokens in database
     const supabase = await createClient()
 
-    // Upsert gmail tokens
-    const { error: dbError } = await supabase
+    // Check if we already have a token entry
+    const { data: existingToken } = await supabase
       .from('gmail_tokens')
-      .upsert({
-        id: 'primary', // Single-user setup, so we use a fixed ID
-        email: profile.email,
-        access_token: tokens.access_token || '',
-        refresh_token: tokens.refresh_token,
-        token_type: tokens.token_type || 'Bearer',
-        expiry_date: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'id'
-      })
+      .select('id')
+      .limit(1)
+      .single()
 
-    if (dbError) {
-      console.error('Error storing tokens:', dbError)
-      return NextResponse.redirect(
-        new URL('/admin/settings?error=db_error', request.url)
-      )
+    if (existingToken) {
+      // Update existing token
+      const { error: dbError } = await supabase
+        .from('gmail_tokens')
+        .update({
+          email: profile.email,
+          access_token: tokens.access_token || '',
+          refresh_token: tokens.refresh_token,
+          token_expiry: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingToken.id)
+
+      if (dbError) {
+        console.error('Error updating tokens:', dbError)
+        return NextResponse.redirect(
+          new URL('/admin/settings?error=db_error', request.url)
+        )
+      }
+    } else {
+      // Insert new token
+      const { error: dbError } = await supabase
+        .from('gmail_tokens')
+        .insert({
+          email: profile.email,
+          access_token: tokens.access_token || '',
+          refresh_token: tokens.refresh_token,
+          token_expiry: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
+        })
+
+      if (dbError) {
+        console.error('Error inserting tokens:', dbError)
+        return NextResponse.redirect(
+          new URL('/admin/settings?error=db_error', request.url)
+        )
+      }
     }
 
     // Success - redirect to settings page
