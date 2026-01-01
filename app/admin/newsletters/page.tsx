@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Mail, Plus, Trash2, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react'
+import { Mail, Plus, Trash2, ToggleLeft, ToggleRight, Loader2, Search, CheckCircle2, Circle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -24,6 +24,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { createClient } from '@/lib/supabase/client'
 
 interface NewsletterSource {
@@ -34,6 +36,15 @@ interface NewsletterSource {
   created_at: string
 }
 
+interface ScannedSender {
+  email: string
+  name: string
+  count: number
+  subjects: string[]
+  latestDate: string
+  isLikelyNewsletter: boolean
+}
+
 export default function NewslettersPage() {
   const [sources, setSources] = useState<NewsletterSource[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,6 +52,14 @@ export default function NewslettersPage() {
   const [newEmail, setNewEmail] = useState('')
   const [newName, setNewName] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Gmail scan state
+  const [scanDialogOpen, setScanDialogOpen] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [scannedSenders, setScannedSenders] = useState<ScannedSender[]>([])
+  const [selectedSenders, setSelectedSenders] = useState<Set<string>>(new Set())
+  const [importing, setImporting] = useState(false)
+  const [scanError, setScanError] = useState<string | null>(null)
 
   const supabase = createClient()
 
@@ -117,6 +136,89 @@ export default function NewslettersPage() {
     }
   }
 
+  async function scanGmailSenders() {
+    setScanning(true)
+    setScanError(null)
+    setScannedSenders([])
+    setSelectedSenders(new Set())
+
+    try {
+      const response = await fetch('/api/admin/scan-gmail-senders')
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Fehler beim Scannen')
+      }
+
+      setScannedSenders(data.senders)
+      // Pre-select likely newsletters
+      const likelyNewsletters = new Set(
+        data.senders
+          .filter((s: ScannedSender) => s.isLikelyNewsletter)
+          .map((s: ScannedSender) => s.email)
+      )
+      setSelectedSenders(likelyNewsletters)
+    } catch (error) {
+      console.error('Error scanning Gmail:', error)
+      setScanError(error instanceof Error ? error.message : 'Unbekannter Fehler')
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  function toggleSenderSelection(email: string) {
+    setSelectedSenders(prev => {
+      const next = new Set(prev)
+      if (next.has(email)) {
+        next.delete(email)
+      } else {
+        next.add(email)
+      }
+      return next
+    })
+  }
+
+  function selectAllSenders() {
+    setSelectedSenders(new Set(scannedSenders.map(s => s.email)))
+  }
+
+  function deselectAllSenders() {
+    setSelectedSenders(new Set())
+  }
+
+  async function importSelectedSenders() {
+    if (selectedSenders.size === 0) return
+
+    setImporting(true)
+    const sendersToImport = scannedSenders.filter(s => selectedSenders.has(s.email))
+
+    try {
+      const { error } = await supabase
+        .from('newsletter_sources')
+        .insert(
+          sendersToImport.map(s => ({
+            email: s.email.toLowerCase(),
+            name: s.name || null,
+            enabled: true,
+          }))
+        )
+
+      if (error) {
+        throw error
+      }
+
+      setScanDialogOpen(false)
+      setScannedSenders([])
+      setSelectedSenders(new Set())
+      fetchSources()
+    } catch (error) {
+      console.error('Error importing senders:', error)
+      alert('Fehler beim Importieren: ' + (error instanceof Error ? error.message : 'Unbekannter Fehler'))
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
@@ -126,58 +228,193 @@ export default function NewslettersPage() {
             E-Mail-Adressen von Newslettern, die gesammelt werden sollen
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Quelle hinzufügen
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Newsletter-Quelle hinzufügen</DialogTitle>
-              <DialogDescription>
-                Füge eine E-Mail-Adresse hinzu, von der Newsletter gesammelt werden sollen.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">E-Mail-Adresse *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="newsletter@example.com"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="name">Name (optional)</Label>
-                <Input
-                  id="name"
-                  placeholder="z.B. Morning Brew"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                Abbrechen
+        <div className="flex gap-2">
+          {/* Gmail Scan Dialog */}
+          <Dialog open={scanDialogOpen} onOpenChange={setScanDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2" onClick={() => {
+                setScanDialogOpen(true)
+                if (scannedSenders.length === 0) {
+                  scanGmailSenders()
+                }
+              }}>
+                <Search className="h-4 w-4" />
+                Gmail scannen
               </Button>
-              <Button onClick={addSource} disabled={saving || !newEmail.trim()}>
-                {saving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Speichern...
-                  </>
-                ) : (
-                  'Hinzufügen'
-                )}
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[90vh]">
+              <DialogHeader>
+                <DialogTitle>Newsletter aus Gmail importieren</DialogTitle>
+                <DialogDescription>
+                  Scannt die letzten 30 Tage nach regelmäßigen Absendern. Werbung und transaktionale E-Mails werden gefiltert.
+                </DialogDescription>
+              </DialogHeader>
+
+              {scanning ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    Scanne Gmail-Posteingang...
+                  </p>
+                </div>
+              ) : scanError ? (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-red-600">{scanError}</p>
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={scanGmailSenders}
+                  >
+                    Erneut versuchen
+                  </Button>
+                </div>
+              ) : scannedSenders.length === 0 ? (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Keine neuen Newsletter-Quellen gefunden.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between border-b pb-3">
+                    <p className="text-sm text-muted-foreground">
+                      {scannedSenders.length} potenzielle Newsletter gefunden
+                    </p>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={selectAllSenders}>
+                        Alle auswählen
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={deselectAllSenders}>
+                        Keine auswählen
+                      </Button>
+                    </div>
+                  </div>
+
+                  <ScrollArea className="h-[60vh] pr-4">
+                    <div className="space-y-2">
+                      {scannedSenders.map((sender) => (
+                        <div
+                          key={sender.email}
+                          className={`flex items-start gap-3 rounded-lg border p-3 transition-colors cursor-pointer hover:bg-muted/50 ${
+                            selectedSenders.has(sender.email) ? 'border-primary bg-primary/5' : ''
+                          }`}
+                          onClick={() => toggleSenderSelection(sender.email)}
+                        >
+                          <Checkbox
+                            checked={selectedSenders.has(sender.email)}
+                            onCheckedChange={() => toggleSenderSelection(sender.email)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="mt-1"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium truncate">
+                                {sender.name || sender.email}
+                              </span>
+                              {sender.isLikelyNewsletter && (
+                                <Badge variant="secondary" className="text-xs">
+                                  Newsletter
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className="text-xs">
+                                {sender.count} E-Mails
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground font-mono truncate mt-0.5">
+                              {sender.email}
+                            </p>
+                            {sender.subjects.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {sender.subjects.slice(0, 2).map((subject, i) => (
+                                  <p key={i} className="text-xs text-muted-foreground truncate">
+                                    „{subject}"
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </>
+              )}
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setScanDialogOpen(false)}>
+                  Abbrechen
+                </Button>
+                <Button
+                  onClick={importSelectedSenders}
+                  disabled={importing || selectedSenders.size === 0}
+                >
+                  {importing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Importiere...
+                    </>
+                  ) : (
+                    `${selectedSenders.size} Quellen importieren`
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Manual Add Dialog */}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                Manuell hinzufügen
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Newsletter-Quelle hinzufügen</DialogTitle>
+                <DialogDescription>
+                  Füge eine E-Mail-Adresse hinzu, von der Newsletter gesammelt werden sollen.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">E-Mail-Adresse *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="newsletter@example.com"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name (optional)</Label>
+                  <Input
+                    id="name"
+                    placeholder="z.B. Morning Brew"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  Abbrechen
+                </Button>
+                <Button onClick={addSource} disabled={saving || !newEmail.trim()}>
+                  {saving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Speichern...
+                    </>
+                  ) : (
+                    'Hinzufügen'
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Card>

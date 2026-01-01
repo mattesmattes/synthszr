@@ -680,7 +680,10 @@ export default function AdminPage() {
 
               <TabsContent value="images" className="flex-1 overflow-y-auto mt-4">
                 {editingPost?.source === 'ai' ? (
-                  <PostImageGallery postId={editingPost.id} />
+                  <div className="space-y-4">
+                    <PostImageGallery postId={editingPost.id} />
+                    <GenerateImagesButton postId={editingPost.id} />
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center py-12 text-muted-foreground">
                     <p>Bildergalerie nur für AI-generierte Artikel verfügbar</p>
@@ -729,6 +732,114 @@ export default function AdminPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  )
+}
+
+// Component to manually trigger image generation for a post
+function GenerateImagesButton({ postId }: { postId: string }) {
+  const [generating, setGenerating] = useState(false)
+  const supabase = createClient()
+
+  async function generateImages() {
+    setGenerating(true)
+    try {
+      // Get the post to find its digest_id
+      const { data: post } = await supabase
+        .from('generated_posts')
+        .select('digest_id')
+        .eq('id', postId)
+        .single()
+
+      if (!post?.digest_id) {
+        alert('Keine Digest-ID gefunden. Bilder können nicht generiert werden.')
+        return
+      }
+
+      // Get the digest to find its date
+      const { data: digest } = await supabase
+        .from('daily_digests')
+        .select('digest_date')
+        .eq('id', post.digest_id)
+        .single()
+
+      if (!digest) {
+        alert('Digest nicht gefunden.')
+        return
+      }
+
+      // Get sources from the digest's date
+      const { data: sources } = await supabase
+        .from('daily_repo')
+        .select('id, title, content')
+        .eq('newsletter_date', digest.digest_date)
+        .not('content', 'is', null)
+        .limit(5)
+
+      if (!sources || sources.length === 0) {
+        alert('Keine Quellen für Bildgenerierung gefunden.')
+        return
+      }
+
+      // Delete any existing failed/generating images for this post
+      await supabase
+        .from('post_images')
+        .delete()
+        .eq('post_id', postId)
+        .in('generation_status', ['pending', 'generating', 'failed'])
+
+      // Trigger image generation
+      const response = await fetch('/api/generate-image', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postId,
+          newsItems: sources.map(s => ({
+            dailyRepoId: s.id,
+            text: `${s.title}\n\n${(s.content || '').slice(0, 2000)}`,
+          })),
+        }),
+      })
+
+      if (response.ok) {
+        alert('Bildgenerierung gestartet! Die Seite wird aktualisiert.')
+        window.location.reload()
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || 'Unbekannter Fehler')
+      }
+    } catch (error) {
+      console.error('Error generating images:', error)
+      alert('Fehler: ' + (error instanceof Error ? error.message : 'Unbekannter Fehler'))
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <div className="border-t pt-4">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={generateImages}
+        disabled={generating}
+        className="w-full"
+      >
+        {generating ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Generiere Bilder...
+          </>
+        ) : (
+          <>
+            <ImageIcon className="h-4 w-4 mr-2" />
+            Neue Bilder generieren
+          </>
+        )}
+      </Button>
+      <p className="text-xs text-muted-foreground mt-2 text-center">
+        Generiert bis zu 5 Bilder aus den Digest-Quellen
+      </p>
     </div>
   )
 }

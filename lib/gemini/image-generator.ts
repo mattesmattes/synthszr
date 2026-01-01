@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import sharp from 'sharp'
 
 const IMAGE_PROMPT_TEMPLATE = `Visualisiere in Schwarz-Weiß die folgende News satirisch im Stil von Mort Drucker ohne in der Visualisierung auf "Mort Drucker" oder "MAD" hinzuweisen.
@@ -20,8 +19,25 @@ interface GenerateImageResult {
   error?: string
 }
 
+// Lazy load generateText to avoid module loading issues (same as tbos)
+let generateTextFn: typeof import('ai').generateText | null = null
+
+async function getGenerateText() {
+  if (!generateTextFn) {
+    try {
+      const aiModule = await import('ai')
+      generateTextFn = aiModule.generateText
+    } catch (error) {
+      console.error('[Gemini] Failed to import AI SDK:', error)
+      return null
+    }
+  }
+  return generateTextFn
+}
+
 /**
- * Generates a satirical black & white image based on news text using Gemini
+ * Generates a satirical black & white image based on news text using Gemini 3
+ * Uses the same approach as tbos with AI SDK 5.x
  */
 export async function generateSatiricalImage(newsText: string): Promise<GenerateImageResult> {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
@@ -33,56 +49,120 @@ export async function generateSatiricalImage(newsText: string): Promise<Generate
     }
   }
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey)
+  const maxRetries = 3
+  let lastError: Error | null = null
 
-    // Use Gemini 2.0 Flash with image generation capabilities
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash-exp',
-      generationConfig: {
-        responseModalities: ['TEXT', 'IMAGE'] as unknown as undefined,
-      } as unknown as undefined,
-    })
-
-    const prompt = IMAGE_PROMPT_TEMPLATE.replace('{newsText}', newsText.slice(0, 2000))
-
-    console.log('Generating image with prompt length:', prompt.length)
-
-    const result = await model.generateContent(prompt)
-    const response = result.response
-
-    console.log('Gemini response received')
-
-    // Check for image parts in the response
-    const parts = response.candidates?.[0]?.content?.parts || []
-
-    for (const part of parts) {
-      // Check if part has inline data (image)
-      if ('inlineData' in part && part.inlineData) {
-        const inlineData = part.inlineData as { data: string; mimeType: string }
-        console.log('Found image in response, mimeType:', inlineData.mimeType)
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const generateText = await getGenerateText()
+      if (!generateText) {
         return {
-          success: true,
-          imageBase64: inlineData.data,
-          mimeType: inlineData.mimeType || 'image/png'
+          success: false,
+          error: 'AI SDK not loaded'
         }
       }
-    }
 
-    // Log what we got instead
-    const textParts = parts.filter(p => 'text' in p).map(p => (p as { text: string }).text)
-    console.log('No image found. Text response:', textParts.join('\n').slice(0, 500))
+      const prompt = IMAGE_PROMPT_TEMPLATE.replace('{newsText}', newsText.slice(0, 2000))
 
-    return {
-      success: false,
-      error: 'No image generated in response. Model may not support image generation.'
+      console.log(`[Gemini] Generating image with gemini-3-pro-image, attempt ${attempt}/${maxRetries}`)
+
+      // Use Gemini 3 Pro Image - same approach as tbos
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await generateText({
+        model: 'google/gemini-3-pro-image' as any,
+        providerOptions: {
+          google: {
+            responseModalities: ['TEXT', 'IMAGE'],
+          },
+        },
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text' as const,
+                text: prompt,
+              },
+            ],
+          },
+        ],
+      })
+
+      // Check for image in response files
+      const imageFile = result.files?.[0]
+      if (imageFile && imageFile.base64) {
+        console.log('[Gemini] Image generation successful')
+
+        // Get mimeType - could be mimeType or mediaType depending on SDK version
+        let mimeType = (imageFile as any).mimeType || (imageFile as any).mediaType
+        if (!mimeType || mimeType === 'undefined') {
+          // Detect from base64 signature
+          if (imageFile.base64.startsWith('iVBORw0KGgo')) {
+            mimeType = 'image/png'
+          } else if (imageFile.base64.startsWith('/9j/')) {
+            mimeType = 'image/jpeg'
+          } else if (imageFile.base64.startsWith('R0lGOD')) {
+            mimeType = 'image/gif'
+          } else if (imageFile.base64.startsWith('UklGR')) {
+            mimeType = 'image/webp'
+          } else {
+            mimeType = 'image/png'
+          }
+          console.log('[Gemini] Detected mimeType:', mimeType)
+        }
+
+        return {
+          success: true,
+          imageBase64: imageFile.base64,
+          mimeType: mimeType || 'image/png'
+        }
+      }
+
+      // Log what we got instead
+      console.log('[Gemini] No image in response. Text:', result.text?.slice(0, 200))
+
+      if (attempt < maxRetries) {
+        const delay = attempt * 1000
+        console.log(`[Gemini] Retrying in ${delay / 1000}s...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue
+      }
+
+      return {
+        success: false,
+        error: 'No image generated in response'
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      const errorMessage = lastError.message
+
+      console.error(`[Gemini] Attempt ${attempt} error:`, errorMessage)
+
+      // Check if retryable
+      const isRetryable =
+        errorMessage.includes('Gateway') ||
+        errorMessage.includes('gateway') ||
+        errorMessage.includes('temporarily unavailable') ||
+        errorMessage.includes('service is currently unavailable') ||
+        errorMessage.includes('503') ||
+        errorMessage.includes('502') ||
+        errorMessage.includes('429')
+
+      if (isRetryable && attempt < maxRetries) {
+        const delay = attempt * 1000
+        console.log(`[Gemini] Retrying in ${delay / 1000}s...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue
+      }
+
+      break
     }
-  } catch (error) {
-    console.error('Gemini image generation error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }
+  }
+
+  console.error('[Gemini] All attempts failed:', lastError?.message)
+  return {
+    success: false,
+    error: lastError?.message || 'Unknown error'
   }
 }
 

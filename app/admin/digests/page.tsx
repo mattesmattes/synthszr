@@ -337,16 +337,43 @@ export default function DigestsPage() {
         : `Artikel vom ${new Date(ghostwriterDigest.digest_date).toLocaleDateString('de-DE')}`
 
       const tiptapContent = markdownToTiptap(blogContent)
-      const { error } = await supabase.from('generated_posts').insert({
+      const { data: newPost, error } = await supabase.from('generated_posts').insert({
         digest_id: ghostwriterDigest.id,
         title,
         content: JSON.stringify(tiptapContent),
         word_count: blogContent.split(/\s+/).length,
         status: 'draft',
-      })
+      }).select().single()
 
       if (error) throw error
-      alert('Artikel als Entwurf gespeichert!')
+
+      // Trigger background image generation
+      if (newPost) {
+        // Get sources from the digest's date for image generation
+        const { data: sources } = await supabase
+          .from('daily_repo')
+          .select('id, title, content')
+          .eq('newsletter_date', ghostwriterDigest.digest_date)
+          .not('content', 'is', null)
+          .limit(5)
+
+        if (sources && sources.length > 0) {
+          // Fire and forget - don't wait for image generation
+          fetch('/api/generate-image', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              postId: newPost.id,
+              newsItems: sources.map(s => ({
+                dailyRepoId: s.id,
+                text: `${s.title}\n\n${(s.content || '').slice(0, 2000)}`,
+              })),
+            }),
+          }).catch(err => console.error('Image generation error:', err))
+        }
+      }
+
+      alert('Artikel als Entwurf gespeichert! Bilder werden im Hintergrund generiert.')
       setGhostwriterOpen(false)
     } catch (error) {
       console.error('Save error:', error)

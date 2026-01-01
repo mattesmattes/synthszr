@@ -207,4 +207,117 @@ export class GmailClient {
       messagesTotal: response.data.messagesTotal || 0,
     }
   }
+
+  /**
+   * Scan unique senders from the last N days
+   * Returns aggregated sender info with email count and sample subjects
+   */
+  async scanUniqueSenders(
+    days: number = 30,
+    maxMessages: number = 500
+  ): Promise<Array<{
+    email: string
+    name: string
+    count: number
+    subjects: string[]
+    latestDate: Date
+  }>> {
+    const afterDate = new Date()
+    afterDate.setDate(afterDate.getDate() - days)
+    const dateStr = afterDate.toISOString().split('T')[0].replace(/-/g, '/')
+
+    // Search for emails that look like newsletters (excluding obvious non-newsletters)
+    // category:promotions often catches newsletters, category:updates too
+    // Exclude sent mail, drafts, and trash
+    const query = `after:${dateStr} -in:sent -in:drafts -in:trash`
+
+    console.log('[Gmail] Scanning unique senders with query:', query)
+
+    try {
+      const listResponse = await this.gmail.users.messages.list({
+        userId: 'me',
+        q: query,
+        maxResults: maxMessages,
+        includeSpamTrash: false,
+      })
+
+      console.log('[Gmail] Found messages to scan:', listResponse.data.messages?.length || 0)
+
+      const messages = listResponse.data.messages || []
+      const senderMap = new Map<string, {
+        email: string
+        name: string
+        count: number
+        subjects: string[]
+        latestDate: Date
+      }>()
+
+      // Fetch headers for each message (we only need From, Subject, Date)
+      for (const msg of messages) {
+        if (!msg.id) continue
+
+        try {
+          const fullMessage = await this.gmail.users.messages.get({
+            userId: 'me',
+            id: msg.id,
+            format: 'metadata',
+            metadataHeaders: ['From', 'Subject', 'Date'],
+          })
+
+          const headers = fullMessage.data.payload?.headers || []
+          const getHeader = (name: string): string => {
+            const header = headers.find(h => h.name?.toLowerCase() === name.toLowerCase())
+            return header?.value || ''
+          }
+
+          const fromRaw = getHeader('From')
+          const subject = getHeader('Subject')
+          const dateStr = getHeader('Date')
+
+          // Parse "Name <email@domain.com>" format
+          const emailMatch = fromRaw.match(/<([^>]+)>/)
+          const email = emailMatch ? emailMatch[1].toLowerCase() : fromRaw.toLowerCase().trim()
+          const nameMatch = fromRaw.match(/^([^<]+)/)
+          const name = nameMatch ? nameMatch[1].trim().replace(/^["']|["']$/g, '') : email
+
+          if (!email || !email.includes('@')) continue
+
+          const existing = senderMap.get(email)
+          const msgDate = dateStr ? new Date(dateStr) : new Date()
+
+          if (existing) {
+            existing.count++
+            if (existing.subjects.length < 3 && subject) {
+              existing.subjects.push(subject)
+            }
+            if (msgDate > existing.latestDate) {
+              existing.latestDate = msgDate
+            }
+          } else {
+            senderMap.set(email, {
+              email,
+              name: name || email,
+              count: 1,
+              subjects: subject ? [subject] : [],
+              latestDate: msgDate,
+            })
+          }
+        } catch (err) {
+          // Skip individual message errors
+          console.warn('[Gmail] Error fetching message:', msg.id, err)
+        }
+      }
+
+      // Convert to array and sort by count (most emails first)
+      const results = Array.from(senderMap.values())
+        .sort((a, b) => b.count - a.count)
+
+      console.log('[Gmail] Found unique senders:', results.length)
+
+      return results
+    } catch (error) {
+      console.error('Error scanning senders:', error)
+      throw error
+    }
+  }
 }
