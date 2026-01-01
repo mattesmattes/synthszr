@@ -3,7 +3,7 @@ import { put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
 import { generateAndProcessImage } from '@/lib/gemini/image-generator'
 
-export const maxDuration = 60 // Allow up to 60 seconds for image generation
+export const maxDuration = 300 // Allow up to 5 minutes for batch image generation
 
 interface GenerateImageRequest {
   postId: string
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Batch generate images for multiple news items
+// Batch generate images for multiple news items - generates sequentially to avoid overload
 export async function PUT(request: NextRequest) {
   try {
     const body: { postId: string; newsItems: Array<{ dailyRepoId?: string; text: string }> } = await request.json()
@@ -153,25 +153,115 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Start generation for each news item asynchronously
-    const results = await Promise.allSettled(
-      newsItems.map(async (item) => {
-        const response = await fetch(new URL('/api/generate-image', request.url), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            postId,
-            dailyRepoId: item.dailyRepoId,
-            newsText: item.text,
-          }),
+    const supabase = await createClient()
+    const results: Array<{ success: boolean; error?: string; imageId?: string }> = []
+
+    // Process images sequentially to avoid API rate limits
+    for (const item of newsItems) {
+      try {
+        console.log(`[Gemini] Starting image generation for postId=${postId}`)
+
+        // Create pending image record
+        const { data: imageRecord, error: insertError } = await supabase
+          .from('post_images')
+          .insert({
+            post_id: postId,
+            daily_repo_id: item.dailyRepoId || null,
+            image_url: '',
+            source_text: item.text.slice(0, 5000),
+            generation_status: 'generating',
+          })
+          .select()
+          .single()
+
+        if (insertError || !imageRecord) {
+          console.error('Failed to create image record:', insertError)
+          results.push({ success: false, error: 'Failed to create record' })
+          continue
+        }
+
+        // Generate the image
+        const result = await generateAndProcessImage(item.text)
+
+        if (!result.success || !result.imageBase64) {
+          await supabase
+            .from('post_images')
+            .update({
+              generation_status: 'failed',
+              error_message: result.error || 'Unknown error',
+            })
+            .eq('id', imageRecord.id)
+
+          results.push({ success: false, error: result.error, imageId: imageRecord.id })
+          continue
+        }
+
+        // Upload to Vercel Blob
+        const fileName = `post-images/${postId}/${imageRecord.id}.png`
+        const imageBuffer = Buffer.from(result.imageBase64, 'base64')
+
+        try {
+          const blob = await put(fileName, imageBuffer, {
+            access: 'public',
+            contentType: result.mimeType || 'image/png',
+          })
+
+          await supabase
+            .from('post_images')
+            .update({
+              image_url: blob.url,
+              generation_status: 'completed',
+            })
+            .eq('id', imageRecord.id)
+
+          // Set as cover if first completed image
+          const { count } = await supabase
+            .from('post_images')
+            .select('*', { count: 'exact', head: true })
+            .eq('post_id', postId)
+            .eq('generation_status', 'completed')
+
+          if (count === 1) {
+            await supabase
+              .from('post_images')
+              .update({ is_cover: true })
+              .eq('id', imageRecord.id)
+
+            await supabase
+              .from('generated_posts')
+              .update({ cover_image_id: imageRecord.id })
+              .eq('id', postId)
+          }
+
+          results.push({ success: true, imageId: imageRecord.id })
+          console.log(`[Gemini] Image generated successfully for postId=${postId}`)
+        } catch (uploadError) {
+          console.error('Failed to upload image:', uploadError)
+          await supabase
+            .from('post_images')
+            .update({
+              generation_status: 'failed',
+              error_message: 'Failed to upload to storage',
+            })
+            .eq('id', imageRecord.id)
+
+          results.push({ success: false, error: 'Upload failed', imageId: imageRecord.id })
+        }
+      } catch (itemError) {
+        console.error('Item generation error:', itemError)
+        results.push({
+          success: false,
+          error: itemError instanceof Error ? itemError.message : 'Unknown error'
         })
-        return response.json()
-      })
-    )
+      }
+
+      // Small delay between generations to avoid rate limits
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
 
     return NextResponse.json({
-      success: true,
-      results: results.map((r) => r.status === 'fulfilled' ? r.value : { error: 'failed' }),
+      success: results.some(r => r.success),
+      results,
     })
   } catch (error) {
     console.error('Batch generate error:', error)
