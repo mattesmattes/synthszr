@@ -21,6 +21,7 @@ import {
   Plus,
   Sparkles,
   ExternalLink,
+  ImageIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -55,6 +56,8 @@ import {
 } from '@/components/ui/select'
 import { TiptapEditor } from '@/components/tiptap-editor'
 import { TiptapRenderer } from '@/components/tiptap-renderer'
+import { PostImageGallery } from '@/components/post-image-gallery'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase/client'
 
 interface CombinedPost {
@@ -653,19 +656,38 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Content Editor */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1.5 text-sm">
-                <FileText className="h-3.5 w-3.5" />
-                Inhalt
-              </Label>
-              <div className="min-h-[300px] max-h-[40vh] overflow-y-auto border rounded-md">
-                <TiptapEditor
-                  content={editForm.content}
-                  onChange={(content) => setEditForm({ ...editForm, content })}
-                />
-              </div>
-            </div>
+            {/* Content and Images Tabs */}
+            <Tabs defaultValue="content" className="flex-1 flex flex-col min-h-0">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="content" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Inhalt
+                </TabsTrigger>
+                <TabsTrigger value="images" className="flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4" />
+                  Bilder
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="content" className="flex-1 flex flex-col min-h-0 mt-4">
+                <div className="flex-1 min-h-[300px] max-h-[40vh] overflow-y-auto border rounded-md">
+                  <TiptapEditor
+                    content={editForm.content}
+                    onChange={(content) => setEditForm({ ...editForm, content })}
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="images" className="flex-1 overflow-y-auto mt-4">
+                {editingPost?.source === 'ai' ? (
+                  <PostImageGallery postId={editingPost.id} />
+                ) : (
+                  <div className="flex items-center justify-center py-12 text-muted-foreground">
+                    <p>Bildergalerie nur für AI-generierte Artikel verfügbar</p>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
           <DialogFooter className="border-t pt-4">
             <Button variant="outline" onClick={() => setEditingPost(null)}>
