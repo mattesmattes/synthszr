@@ -87,17 +87,18 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
         </Link>
 
         <article>
-          {/* Cover Image */}
+          {/* Cover Image with neon-yellow background visible through transparent areas */}
           {post.cover_image_url && (
             <div className="mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
-              <div className="relative aspect-[21/9]" style={{ backgroundColor: '#CCFF00' }}>
-                <img
-                  src={post.cover_image_url}
-                  alt=""
-                  className="w-full h-full object-cover"
-                  style={{ mixBlendMode: 'multiply' }}
-                />
-              </div>
+              <div
+                className="relative aspect-[21/9]"
+                style={{
+                  backgroundColor: '#CCFF00',
+                  backgroundImage: `url(${post.cover_image_url})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              />
             </div>
           )}
 
