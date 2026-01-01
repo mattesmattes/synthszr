@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Slider } from '@/components/ui/slider'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -33,6 +34,8 @@ interface ImagePrompt {
   name: string
   prompt_text: string
   is_active: boolean
+  enable_dithering: boolean
+  dithering_gain: number
   created_at: string
   updated_at: string
 }
@@ -62,6 +65,8 @@ export default function ImagePromptsPage() {
     name: '',
     prompt_text: '',
     is_active: false,
+    enable_dithering: false,
+    dithering_gain: 1.0,
   })
 
   useEffect(() => {
@@ -85,7 +90,13 @@ export default function ImagePromptsPage() {
 
   function openAddDialog() {
     setEditingPrompt(null)
-    setFormData({ name: '', prompt_text: DEFAULT_PROMPT, is_active: false })
+    setFormData({
+      name: '',
+      prompt_text: DEFAULT_PROMPT,
+      is_active: false,
+      enable_dithering: false,
+      dithering_gain: 1.0,
+    })
     setDialogOpen(true)
   }
 
@@ -95,6 +106,8 @@ export default function ImagePromptsPage() {
       name: prompt.name,
       prompt_text: prompt.prompt_text,
       is_active: prompt.is_active,
+      enable_dithering: prompt.enable_dithering ?? false,
+      dithering_gain: prompt.dithering_gain ?? 1.0,
     })
     setDialogOpen(true)
   }
@@ -316,6 +329,39 @@ export default function ImagePromptsPage() {
                   onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
                 />
                 <Label htmlFor="is_active">Als aktiven Prompt setzen</Label>
+              </div>
+
+              {/* Dithering Settings */}
+              <div className="border rounded-lg p-4 space-y-4">
+                <h4 className="text-sm font-medium">Dithering-Einstellungen</h4>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="enable_dithering"
+                    checked={formData.enable_dithering}
+                    onCheckedChange={(checked) => setFormData({ ...formData, enable_dithering: checked })}
+                  />
+                  <Label htmlFor="enable_dithering">Floyd-Steinberg Dithering aktivieren</Label>
+                </div>
+                {formData.enable_dithering && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="dithering_gain">Error Diffusion Gain</Label>
+                      <span className="text-sm text-muted-foreground">{formData.dithering_gain.toFixed(2)}</span>
+                    </div>
+                    <Slider
+                      id="dithering_gain"
+                      min={0.5}
+                      max={2.0}
+                      step={0.1}
+                      value={[formData.dithering_gain]}
+                      onValueChange={([value]) => setFormData({ ...formData, dithering_gain: value })}
+                      className="w-full"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Steuert die Stärke des Dithering-Effekts (0.5 = subtil, 2.0 = stark)
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter className="border-t pt-4">

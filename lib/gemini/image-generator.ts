@@ -13,27 +13,49 @@ WICHTIGE STILRICHTLINIEN:
 NEWS TEXT:
 {newsText}`
 
+interface ActiveImagePromptSettings {
+  promptText: string
+  enableDithering: boolean
+  ditheringGain: number
+}
+
 /**
- * Fetches the active image prompt from the database, or returns the default
+ * Fetches the active image prompt and dithering settings from the database
  */
-async function getActiveImagePrompt(): Promise<string> {
+async function getActiveImagePromptSettings(): Promise<ActiveImagePromptSettings> {
   try {
     const supabase = await createClient()
     const { data } = await supabase
       .from('image_prompts')
-      .select('prompt_text')
+      .select('prompt_text, enable_dithering, dithering_gain')
       .eq('is_active', true)
       .single()
 
     if (data?.prompt_text) {
       console.log('[Gemini] Using custom image prompt from database')
-      return data.prompt_text
+      return {
+        promptText: data.prompt_text,
+        enableDithering: data.enable_dithering ?? false,
+        ditheringGain: data.dithering_gain ?? 1.0,
+      }
     }
   } catch (error) {
     // Table might not exist or no active prompt
     console.log('[Gemini] Using default image prompt')
   }
-  return DEFAULT_IMAGE_PROMPT
+  return {
+    promptText: DEFAULT_IMAGE_PROMPT,
+    enableDithering: false,
+    ditheringGain: 1.0,
+  }
+}
+
+/**
+ * Fetches the active image prompt from the database, or returns the default
+ */
+async function getActiveImagePrompt(): Promise<string> {
+  const settings = await getActiveImagePromptSettings()
+  return settings.promptText
 }
 
 interface GenerateImageResult {
@@ -319,17 +341,30 @@ export interface ImageProcessingOptions {
 
 /**
  * Generates a satirical image and processes it for transparency (and optionally dithering)
+ * If no options provided, uses settings from the active image prompt in the database
  */
 export async function generateAndProcessImage(
   newsText: string,
-  options: ImageProcessingOptions = {}
+  options?: ImageProcessingOptions
 ): Promise<{
   success: boolean
   imageBase64?: string
   mimeType?: string
   error?: string
 }> {
-  const { enableDithering = false, ditheringGain = 1.0 } = options
+  // If no options provided, get settings from active prompt in database
+  let enableDithering: boolean
+  let ditheringGain: number
+
+  if (options) {
+    enableDithering = options.enableDithering ?? false
+    ditheringGain = options.ditheringGain ?? 1.0
+  } else {
+    const promptSettings = await getActiveImagePromptSettings()
+    enableDithering = promptSettings.enableDithering
+    ditheringGain = promptSettings.ditheringGain
+    console.log(`[Gemini] Using DB settings: dithering=${enableDithering}, gain=${ditheringGain}`)
+  }
 
   // Generate the image
   const result = await generateSatiricalImage(newsText)

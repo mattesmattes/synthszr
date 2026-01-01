@@ -49,10 +49,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate the image with processing options
-    const processingOptions: ImageProcessingOptions = {
-      enableDithering: enableDithering ?? false,
-      ditheringGain: ditheringGain ?? 1.0,
-    }
+    // If no explicit dithering settings provided, let generator use DB settings
+    const processingOptions: ImageProcessingOptions | undefined =
+      enableDithering !== undefined || ditheringGain !== undefined
+        ? {
+            enableDithering: enableDithering ?? false,
+            ditheringGain: ditheringGain ?? 1.0,
+          }
+        : undefined
     const result = await generateAndProcessImage(newsText, processingOptions)
 
     if (!result.success || !result.imageBase64) {
@@ -164,10 +168,14 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const processingOptions: ImageProcessingOptions = {
-      enableDithering: enableDithering ?? false,
-      ditheringGain: ditheringGain ?? 1.0,
-    }
+    // If no explicit dithering settings provided, let generator use DB settings
+    const processingOptions: ImageProcessingOptions | undefined =
+      enableDithering !== undefined || ditheringGain !== undefined
+        ? {
+            enableDithering: enableDithering ?? false,
+            ditheringGain: ditheringGain ?? 1.0,
+          }
+        : undefined
 
     const supabase = await createClient()
     const results: Array<{ success: boolean; error?: string; imageId?: string }> = []

@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { name, prompt_text, is_active } = body
+    const { name, prompt_text, is_active, enable_dithering, dithering_gain } = body
 
     if (!name || !prompt_text) {
       return NextResponse.json(
@@ -70,6 +70,8 @@ export async function POST(request: NextRequest) {
         name: name.trim(),
         prompt_text: prompt_text.trim(),
         is_active: is_active || false,
+        enable_dithering: enable_dithering ?? false,
+        dithering_gain: dithering_gain ?? 1.0,
       })
       .select()
       .single()
@@ -95,7 +97,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { id, name, prompt_text, is_active } = body
+    const { id, name, prompt_text, is_active, enable_dithering, dithering_gain } = body
 
     if (!id || !name || !prompt_text) {
       return NextResponse.json(
@@ -120,6 +122,8 @@ export async function PUT(request: NextRequest) {
         name: name.trim(),
         prompt_text: prompt_text.trim(),
         is_active: is_active || false,
+        enable_dithering: enable_dithering ?? false,
+        dithering_gain: dithering_gain ?? 1.0,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
@@ -165,14 +169,29 @@ export async function DELETE(request: NextRequest) {
   return NextResponse.json({ success: true })
 }
 
-// Helper to get active prompt (used by image generator)
+// Helper to get active prompt with settings (used by image generator)
+export interface ActiveImagePromptSettings {
+  promptText: string
+  enableDithering: boolean
+  ditheringGain: number
+}
+
 export async function getActiveImagePrompt(): Promise<string> {
+  const settings = await getActiveImagePromptSettings()
+  return settings.promptText
+}
+
+export async function getActiveImagePromptSettings(): Promise<ActiveImagePromptSettings> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('image_prompts')
-    .select('prompt_text')
+    .select('prompt_text, enable_dithering, dithering_gain')
     .eq('is_active', true)
     .single()
 
-  return data?.prompt_text || DEFAULT_PROMPT
+  return {
+    promptText: data?.prompt_text || DEFAULT_PROMPT,
+    enableDithering: data?.enable_dithering ?? false,
+    ditheringGain: data?.dithering_gain ?? 1.0,
+  }
 }
