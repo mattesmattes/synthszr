@@ -12,6 +12,7 @@ interface CombinedPost {
   content: Record<string, unknown>
   category: string
   created_at: string
+  cover_image_url?: string | null
 }
 
 export default async function Page() {
@@ -24,19 +25,36 @@ export default async function Page() {
     .eq("published", true)
     .order("created_at", { ascending: false })
 
-  // Fetch AI-generated posts that are published
+  // Fetch AI-generated posts that are published with cover images
   const { data: aiPosts } = await supabase
     .from("generated_posts")
-    .select("id, title, slug, excerpt, content, category, created_at")
+    .select("id, title, slug, excerpt, content, category, created_at, cover_image_id")
     .eq("status", "published")
     .order("created_at", { ascending: false })
+
+  // Fetch cover images for AI posts
+  const coverImageIds = (aiPosts || [])
+    .map(p => p.cover_image_id)
+    .filter((id): id is string => !!id)
+
+  const { data: coverImages } = coverImageIds.length > 0
+    ? await supabase
+        .from("post_images")
+        .select("id, image_url")
+        .in("id", coverImageIds)
+    : { data: [] }
+
+  const coverImageMap = new Map(
+    (coverImages || []).map(img => [img.id, img.image_url])
+  )
 
   // Parse AI posts content from JSON string if needed
   const parsedAiPosts: CombinedPost[] = (aiPosts || []).map(post => ({
     ...post,
     slug: post.slug || post.id,
     category: post.category || 'AI & Tech',
-    content: typeof post.content === 'string' ? JSON.parse(post.content) : post.content
+    content: typeof post.content === 'string' ? JSON.parse(post.content) : post.content,
+    cover_image_url: post.cover_image_id ? coverImageMap.get(post.cover_image_id) : null
   }))
 
   // Combine and sort all posts

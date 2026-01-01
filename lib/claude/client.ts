@@ -1,13 +1,5 @@
-// Lazy load AI SDK to avoid module loading issues
-let streamTextFn: typeof import('ai').streamText | null = null
-
-async function getStreamText() {
-  if (!streamTextFn) {
-    const aiModule = await import('ai')
-    streamTextFn = aiModule.streamText
-  }
-  return streamTextFn
-}
+import { streamText } from 'ai'
+import { google } from '@ai-sdk/google'
 
 export interface AnalysisResult {
   content: string
@@ -46,8 +38,6 @@ export async function* streamAnalysis(
   content: string,
   prompt: string
 ): AsyncGenerator<string, void, unknown> {
-  const streamText = await getStreamText()
-
   const fullPrompt = `${SYSTEM_PROMPT}
 
 ${prompt}
@@ -61,9 +51,8 @@ ${content}`
   console.log(`[Analyze] Starting Gemini stream, prompt length: ${fullPrompt.length} chars`)
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await streamText({
-      model: 'google/gemini-1.5-flash' as any,
+    const result = streamText({
+      model: google('gemini-1.5-flash'),
       prompt: fullPrompt,
       maxTokens: 16384,
     })
