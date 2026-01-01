@@ -6,7 +6,7 @@ export function BlogHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-sm">
+    <header className="border-b border-border bg-background/80 backdrop-blur-sm">
       <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
         <a href="/" className="font-mono text-xl font-bold tracking-tight">
           S/
