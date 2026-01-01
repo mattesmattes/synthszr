@@ -62,12 +62,16 @@ export function FetchProgress({ onComplete }: { onComplete?: () => void }) {
   const [items, setItems] = useState<ProgressItem[]>([])
   const [summary, setSummary] = useState<{ newsletters: number; articles: number; errors: number; totalCharacters: number } | null>(null)
 
+  // Live stats during fetch
+  const [liveStats, setLiveStats] = useState({ newsletters: 0, articles: 0, errors: 0, totalCharacters: 0 })
+
   const startFetch = useCallback(async () => {
     setIsRunning(true)
     setPhase('fetching')
     setProgress({ current: 0, total: 0 })
     setItems([])
     setSummary(null)
+    setLiveStats({ newsletters: 0, articles: 0, errors: 0, totalCharacters: 0 })
 
     try {
       const response = await fetch('/api/fetch-newsletters-stream', {
@@ -120,6 +124,18 @@ export function FetchProgress({ onComplete }: { onComplete?: () => void }) {
                   }
                   return [...prev, event.item!]
                 })
+
+                // Update live stats when item succeeds
+                if (event.item.status === 'success') {
+                  setLiveStats(prev => ({
+                    ...prev,
+                    newsletters: prev.newsletters + (event.type === 'newsletter' ? 1 : 0),
+                    articles: prev.articles + (event.type === 'article' ? 1 : 0),
+                    totalCharacters: prev.totalCharacters + (event.type === 'newsletter' ? 5000 : 3000) // Estimated
+                  }))
+                } else if (event.item.status === 'error') {
+                  setLiveStats(prev => ({ ...prev, errors: prev.errors + 1 }))
+                }
               }
 
               if (event.type === 'complete' && event.summary) {
@@ -191,8 +207,42 @@ export function FetchProgress({ onComplete }: { onComplete?: () => void }) {
           </div>
         )}
 
-        {/* Summary */}
-        {summary && (
+        {/* Live Stats during fetch */}
+        {isRunning && (
+          <div className="grid grid-cols-4 gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-xl font-bold text-blue-600">
+                <Mail className="h-4 w-4" />
+                {liveStats.newsletters}
+              </div>
+              <div className="text-xs text-muted-foreground">Newsletter</div>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-xl font-bold text-green-600">
+                <FileText className="h-4 w-4" />
+                {liveStats.articles}
+              </div>
+              <div className="text-xs text-muted-foreground">Artikel</div>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-xl font-bold text-purple-600">
+                <Hash className="h-4 w-4" />
+                {(liveStats.totalCharacters / 1000).toFixed(0)}k
+              </div>
+              <div className="text-xs text-muted-foreground">Zeichen</div>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-xl font-bold text-red-600">
+                <XCircle className="h-4 w-4" />
+                {liveStats.errors}
+              </div>
+              <div className="text-xs text-muted-foreground">Fehler</div>
+            </div>
+          </div>
+        )}
+
+        {/* Final Summary */}
+        {summary && !isRunning && (
           <div className="grid grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-2xl font-bold text-blue-600">
