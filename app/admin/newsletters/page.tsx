@@ -241,103 +241,99 @@ export default function NewslettersPage() {
                 Gmail scannen
               </Button>
             </DialogTrigger>
-            <DialogContent className="flex max-w-3xl flex-col overflow-hidden" style={{ maxHeight: '85vh' }}>
-              <DialogHeader className="flex-shrink-0">
-                <DialogTitle>Newsletter aus Gmail importieren</DialogTitle>
-                <DialogDescription>
-                  Scannt die letzten 30 Tage nach regelmäßigen Absendern.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="flex-1 overflow-hidden">
-                {scanning ? (
-                  <div className="flex flex-col items-center justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                    <p className="mt-4 text-sm text-muted-foreground">
-                      Scanne Gmail-Posteingang...
-                    </p>
-                  </div>
-                ) : scanError ? (
-                  <div className="py-8 text-center">
-                    <p className="text-sm text-red-600">{scanError}</p>
-                    <Button
-                      variant="outline"
-                      className="mt-4"
-                      onClick={scanGmailSenders}
-                    >
-                      Erneut versuchen
-                    </Button>
-                  </div>
-                ) : scannedSenders.length === 0 ? (
-                  <div className="py-8 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      Keine neuen Newsletter-Quellen gefunden.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex h-full flex-col">
-                    <div className="mb-3 flex flex-shrink-0 items-center justify-between border-b pb-3">
-                      <p className="text-sm text-muted-foreground">
-                        {scannedSenders.length} gefunden · {selectedSenders.size} ausgewählt
-                      </p>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="sm" onClick={selectAllSenders}>
-                          Alle
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={deselectAllSenders}>
-                          Keine
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto pr-2">
-                      <div className="space-y-2">
-                        {scannedSenders.map((sender) => (
-                          <div
-                            key={sender.email}
-                            className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 ${
-                              selectedSenders.has(sender.email) ? 'border-primary bg-primary/5' : ''
-                            }`}
-                            onClick={() => toggleSenderSelection(sender.email)}
-                          >
-                            <Checkbox
-                              checked={selectedSenders.has(sender.email)}
-                              onCheckedChange={() => toggleSenderSelection(sender.email)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="mt-0.5 flex-shrink-0"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <span className="truncate text-sm font-medium">
-                                  {sender.name || sender.email}
-                                </span>
-                                {sender.isLikelyNewsletter && (
-                                  <Badge variant="secondary" className="flex-shrink-0 text-xs">
-                                    Newsletter
-                                  </Badge>
-                                )}
-                                <Badge variant="outline" className="flex-shrink-0 text-xs">
-                                  {sender.count}×
-                                </Badge>
-                              </div>
-                              <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-                                {sender.email}
-                              </p>
-                              {sender.subjects.length > 0 && (
-                                <p className="mt-1 truncate text-xs text-muted-foreground">
-                                  „{sender.subjects[0]}"
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
+            <DialogContent className="max-w-2xl p-0">
+              <div className="p-6 pb-0">
+                <DialogHeader>
+                  <DialogTitle>Newsletter aus Gmail importieren</DialogTitle>
+                  <DialogDescription>
+                    Scannt die letzten 30 Tage nach regelmäßigen Absendern.
+                  </DialogDescription>
+                </DialogHeader>
               </div>
 
-              <DialogFooter className="flex-shrink-0 border-t pt-4">
+              {scanning ? (
+                <div className="flex flex-col items-center justify-center py-12 px-6">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    Scanne Gmail-Posteingang...
+                  </p>
+                </div>
+              ) : scanError ? (
+                <div className="py-8 px-6 text-center">
+                  <p className="text-sm text-red-600">{scanError}</p>
+                  <Button variant="outline" className="mt-4" onClick={scanGmailSenders}>
+                    Erneut versuchen
+                  </Button>
+                </div>
+              ) : scannedSenders.length === 0 ? (
+                <div className="py-8 px-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Keine neuen Newsletter-Quellen gefunden.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between px-6 py-2 border-y bg-muted/30">
+                    <p className="text-sm text-muted-foreground">
+                      {scannedSenders.length} gefunden · {selectedSenders.size} ausgewählt
+                    </p>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={selectAllSenders}>
+                        Alle
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={deselectAllSenders}>
+                        Keine
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-[50vh] overflow-y-auto px-6 py-3">
+                    <div className="space-y-2">
+                      {scannedSenders.map((sender) => (
+                        <div
+                          key={sender.email}
+                          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 ${
+                            selectedSenders.has(sender.email) ? 'border-primary bg-primary/5' : ''
+                          }`}
+                          onClick={() => toggleSenderSelection(sender.email)}
+                        >
+                          <Checkbox
+                            checked={selectedSenders.has(sender.email)}
+                            onCheckedChange={() => toggleSenderSelection(sender.email)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="mt-0.5 flex-shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-sm font-medium">
+                                {sender.name || sender.email}
+                              </span>
+                              {sender.isLikelyNewsletter && (
+                                <Badge variant="secondary" className="text-xs">
+                                  Newsletter
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className="text-xs">
+                                {sender.count}×
+                              </Badge>
+                            </div>
+                            <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                              {sender.email}
+                            </p>
+                            {sender.subjects.length > 0 && (
+                              <p className="mt-1 truncate text-xs text-muted-foreground">
+                                „{sender.subjects[0]}"
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="flex justify-end gap-2 p-6 pt-4 border-t">
                 <Button variant="outline" onClick={() => setScanDialogOpen(false)}>
                   Abbrechen
                 </Button>
@@ -354,7 +350,7 @@ export default function NewslettersPage() {
                     `${selectedSenders.size} importieren`
                   )}
                 </Button>
-              </DialogFooter>
+              </div>
             </DialogContent>
           </Dialog>
 
