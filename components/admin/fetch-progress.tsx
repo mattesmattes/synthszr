@@ -13,8 +13,11 @@ import {
   Clock,
   SkipForward,
   Loader2,
-  Hash
+  Hash,
+  RotateCcw
 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
 interface ProgressItem {
@@ -66,6 +69,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
   const [progress, setProgress] = useState({ current: 0, total: 0 })
   const [items, setItems] = useState<ProgressItem[]>([])
   const [summary, setSummary] = useState<{ newsletters: number; articles: number; errors: number; totalCharacters: number } | null>(null)
+  const [forceRefresh, setForceRefresh] = useState(false)
 
   // Live stats during fetch
   const [liveStats, setLiveStats] = useState({ newsletters: 0, articles: 0, errors: 0, totalCharacters: 0 })
@@ -82,7 +86,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
       const response = await fetch('/api/fetch-newsletters-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetDate }),
+        body: JSON.stringify({ targetDate, force: forceRefresh }),
         credentials: 'include',
       })
 
@@ -167,7 +171,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
     } finally {
       setIsRunning(false)
     }
-  }, [onComplete, targetDate])
+  }, [onComplete, targetDate, forceRefresh])
 
   const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
 
@@ -179,23 +183,43 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
             <RefreshCw className={cn("h-5 w-5", isRunning && "animate-spin")} />
             Newsletter Abruf
           </CardTitle>
-          <Button
-            onClick={startFetch}
-            disabled={isRunning}
-            size="sm"
-          >
-            {isRunning ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Läuft...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Jetzt abrufen
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="force-refresh"
+                checked={forceRefresh}
+                onCheckedChange={setForceRefresh}
+                disabled={isRunning}
+              />
+              <Label htmlFor="force-refresh" className="text-xs text-muted-foreground cursor-pointer">
+                <RotateCcw className="h-3 w-3 inline mr-1" />
+                Neu laden
+              </Label>
+            </div>
+            <Button
+              onClick={startFetch}
+              disabled={isRunning}
+              size="sm"
+              variant={forceRefresh ? "destructive" : "default"}
+            >
+              {isRunning ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Läuft...
+                </>
+              ) : forceRefresh ? (
+                <>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Neu laden
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Abrufen
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

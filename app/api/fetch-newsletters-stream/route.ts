@@ -58,11 +58,13 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  // Parse request body for optional targetDate
+  // Parse request body for optional targetDate and force flag
   let targetDate: string | undefined
+  let force = false
   try {
     const body = await request.json()
     targetDate = body.targetDate
+    force = body.force === true
   } catch {
     // No body or invalid JSON - that's fine, use default behavior
   }
@@ -159,14 +161,19 @@ export async function POST(request: NextRequest) {
               .single()
 
             if (existing) {
-              send({
-                type: 'newsletter',
-                phase: 'processing',
-                current: i + 1,
-                total: emails.length,
-                item: { title: email.subject, from: email.from, status: 'skipped' }
-              })
-              continue
+              if (force) {
+                // Delete existing entry to allow re-processing
+                await supabase.from('daily_repo').delete().eq('id', existing.id)
+              } else {
+                send({
+                  type: 'newsletter',
+                  phase: 'processing',
+                  current: i + 1,
+                  total: emails.length,
+                  item: { title: email.subject, from: email.from, status: 'skipped' }
+                })
+                continue
+              }
             }
 
             const htmlContent = email.htmlBody || email.textBody || ''
@@ -260,14 +267,19 @@ export async function POST(request: NextRequest) {
                 .single()
 
               if (existingArticle) {
-                send({
-                  type: 'article',
-                  phase: 'extracting',
-                  current: i + 1,
-                  total: articlesToProcess.length,
-                  item: { title: article.title, url: article.url, status: 'skipped' }
-                })
-                continue
+                if (force) {
+                  // Delete existing entry to allow re-processing
+                  await supabase.from('daily_repo').delete().eq('id', existingArticle.id)
+                } else {
+                  send({
+                    type: 'article',
+                    phase: 'extracting',
+                    current: i + 1,
+                    total: articlesToProcess.length,
+                    item: { title: article.title, url: article.url, status: 'skipped' }
+                  })
+                  continue
+                }
               }
 
               const extracted = await extractArticleContent(article.url)
