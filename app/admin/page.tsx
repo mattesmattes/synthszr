@@ -744,40 +744,44 @@ function GenerateImagesButton({ postId }: { postId: string }) {
   async function generateImages() {
     setGenerating(true)
     try {
-      // Get the post to find its digest_id
+      // Get the post content
       const { data: post } = await supabase
         .from('generated_posts')
-        .select('digest_id')
+        .select('content')
         .eq('id', postId)
         .single()
 
-      if (!post?.digest_id) {
-        alert('Keine Digest-ID gefunden. Bilder können nicht generiert werden.')
+      if (!post?.content) {
+        alert('Kein Post-Inhalt gefunden.')
         return
       }
 
-      // Get the digest to find its date
-      const { data: digest } = await supabase
-        .from('daily_digests')
-        .select('digest_date')
-        .eq('id', post.digest_id)
-        .single()
-
-      if (!digest) {
-        alert('Digest nicht gefunden.')
+      // Parse TipTap content to extract text
+      let textContent = ''
+      try {
+        const content = typeof post.content === 'string' ? JSON.parse(post.content) : post.content
+        const extractText = (node: Record<string, unknown>): string => {
+          if (node.text) return node.text as string
+          if (node.content && Array.isArray(node.content)) {
+            return node.content.map(extractText).join('\n')
+          }
+          return ''
+        }
+        textContent = extractText(content)
+      } catch {
+        alert('Fehler beim Parsen des Inhalts.')
         return
       }
 
-      // Get sources from the digest's date
-      const { data: sources } = await supabase
-        .from('daily_repo')
-        .select('id, title, content')
-        .eq('newsletter_date', digest.digest_date)
-        .not('content', 'is', null)
-        .limit(5)
+      // Split into sections (by double newlines or paragraphs)
+      const sections = textContent
+        .split(/\n{2,}/)
+        .map(s => s.trim())
+        .filter(s => s.length > 100)
+        .slice(0, 5)
 
-      if (!sources || sources.length === 0) {
-        alert('Keine Quellen für Bildgenerierung gefunden.')
+      if (sections.length === 0) {
+        alert('Keine ausreichenden Textabschnitte für Bildgenerierung gefunden.')
         return
       }
 
@@ -788,15 +792,14 @@ function GenerateImagesButton({ postId }: { postId: string }) {
         .eq('post_id', postId)
         .in('generation_status', ['pending', 'generating', 'failed'])
 
-      // Trigger image generation
+      // Trigger image generation from post content sections
       const response = await fetch('/api/generate-image', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           postId,
-          newsItems: sources.map(s => ({
-            dailyRepoId: s.id,
-            text: `${s.title}\n\n${(s.content || '').slice(0, 2000)}`,
+          newsItems: sections.map((text, i) => ({
+            text: text.slice(0, 2000),
           })),
         }),
       })

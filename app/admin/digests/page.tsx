@@ -347,26 +347,29 @@ export default function DigestsPage() {
 
       if (error) throw error
 
-      // Trigger background image generation
-      if (newPost) {
-        // Get sources from the digest's date for image generation
-        const { data: sources } = await supabase
-          .from('daily_repo')
-          .select('id, title, content')
-          .eq('newsletter_date', ghostwriterDigest.digest_date)
-          .not('content', 'is', null)
-          .limit(5)
+      // Trigger background image generation from blog content sections
+      if (newPost && blogContent) {
+        // Split blog content into sections by ## headings
+        const sections = blogContent
+          .split(/^##\s+/m)
+          .slice(1) // Skip content before first ##
+          .map(section => {
+            const lines = section.trim().split('\n')
+            const title = lines[0] || 'Abschnitt'
+            const content = lines.slice(1).join('\n').trim()
+            return { title, content }
+          })
+          .filter(s => s.content.length > 100) // Only sections with substantial content
+          .slice(0, 5) // Max 5 images
 
-        if (sources && sources.length > 0) {
-          // Fire and forget - don't wait for image generation
+        if (sections.length > 0) {
           fetch('/api/generate-image', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               postId: newPost.id,
-              newsItems: sources.map(s => ({
-                dailyRepoId: s.id,
-                text: `${s.title}\n\n${(s.content || '').slice(0, 2000)}`,
+              newsItems: sections.map(s => ({
+                text: `${s.title}\n\n${s.content.slice(0, 2000)}`,
               })),
             }),
           }).catch(err => console.error('Image generation error:', err))
