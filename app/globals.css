@@ -279,22 +279,22 @@
   font-weight: 600;
 }
 
-/* Style headings containing "Mattes Take" */
+/* Style headings containing "Mattes Take" with neon yellow background */
+.tiptap-content h1.mattes-take-heading,
 .tiptap-content h2.mattes-take-heading,
+.tiptap-content h3.mattes-take-heading,
+.prose h1.mattes-take-heading,
 .prose h2.mattes-take-heading,
-.prose-article h2.mattes-take-heading {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5em;
-}
-
-.tiptap-content h2.mattes-take-heading::before,
-.prose h2.mattes-take-heading::before,
-.prose-article h2.mattes-take-heading::before {
-  content: "";
+.prose h3.mattes-take-heading,
+.prose-article h1.mattes-take-heading,
+.prose-article h2.mattes-take-heading,
+.prose-article h3.mattes-take-heading,
+.ProseMirror h1.mattes-take-heading,
+.ProseMirror h2.mattes-take-heading,
+.ProseMirror h3.mattes-take-heading {
   display: inline-block;
-  width: 0.75em;
-  height: 0.75em;
   background-color: #CCFF00;
+  color: #000;
+  padding: 0.15em 0.4em;
   border-radius: 2px;
 }
