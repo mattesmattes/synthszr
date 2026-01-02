@@ -254,6 +254,122 @@ export default function DigestsPage() {
     setGhostwriterOpen(true)
   }
 
+  function copyBlogToClipboard() {
+    navigator.clipboard.writeText(blogContent)
+    setBlogCopied(true)
+    setTimeout(() => setBlogCopied(false), 2000)
+  }
+
+  async function deleteDigest(digestId: string) {
+    if (!confirm('Digest wirklich löschen?')) return
+    setDeletingDigestId(digestId)
+    try {
+      const { error } = await supabase.from('daily_digests').delete().eq('id', digestId)
+      if (error) throw error
+      await fetchDigests()
+    } catch (error) {
+      console.error('Delete error:', error)
+      alert('Fehler beim Löschen')
+    } finally {
+      setDeletingDigestId(null)
+    }
+  }
+
+  // Core save logic - reused by both auto-save and manual save
+  const savePostAsDraft = useCallback(async (content: string, digest: Digest, showAlert: boolean = true): Promise<boolean> => {
+    try {
+      const titleMatch = content.match(/^#\s+(.+)$/m)
+      const title = titleMatch
+        ? titleMatch[1]
+        : `Artikel vom ${new Date(digest.digest_date).toLocaleDateString('de-DE')}`
+
+      const tiptapContent = markdownToTiptap(content)
+      const { data: newPost, error } = await supabase.from('generated_posts').insert({
+        digest_id: digest.id,
+        title,
+        content: JSON.stringify(tiptapContent),
+        word_count: content.split(/\s+/).length,
+        status: 'draft',
+      }).select().single()
+
+      if (error) throw error
+
+      // Trigger background image generation from blog content sections
+      if (newPost && content) {
+        // Split blog content into sections by # or ## headings
+        const sections: Array<{ title: string; content: string }> = []
+
+        // Match all headings (# or ##) and their content
+        const headingRegex = /^(#{1,2})\s+(.+)$/gm
+        const matches = [...content.matchAll(headingRegex)]
+
+        for (let i = 0; i < matches.length; i++) {
+          const match = matches[i]
+          const sectionTitle = match[2].trim()
+          const startIndex = match.index! + match[0].length
+          const endIndex = matches[i + 1]?.index ?? content.length
+          const sectionContent = content.slice(startIndex, endIndex).trim()
+
+          // Skip very short sections but be more lenient (> 50 chars)
+          if (sectionContent.length > 50) {
+            sections.push({ title: sectionTitle, content: sectionContent })
+          }
+        }
+
+        // Take up to 5 sections for image generation
+        const sectionsToProcess = sections.slice(0, 5)
+
+        console.log(`[ImageGen] Found ${sections.length} sections, processing ${sectionsToProcess.length}`)
+
+        if (sectionsToProcess.length > 0) {
+          console.log(`[ImageGen] Triggering image generation for post ${newPost.id}`)
+          fetch('/api/generate-image', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              postId: newPost.id,
+              newsItems: sectionsToProcess.map(s => ({
+                text: `${s.title}\n\n${s.content.slice(0, 2000)}`,
+              })),
+            }),
+          })
+            .then(res => {
+              if (!res.ok) {
+                console.error('[ImageGen] API returned error:', res.status)
+              } else {
+                console.log('[ImageGen] Image generation request sent successfully')
+              }
+            })
+            .catch(err => console.error('[ImageGen] Fetch error:', err))
+        } else {
+          console.log('[ImageGen] No sections found to process')
+        }
+      }
+
+      if (showAlert) {
+        alert('Artikel als Entwurf gespeichert! Bilder werden im Hintergrund generiert.')
+      }
+      return true
+    } catch (error) {
+      console.error('Save error:', error)
+      if (showAlert) {
+        alert('Fehler beim Speichern')
+      }
+      return false
+    }
+  }, [supabase])
+
+  // Manual save button handler
+  async function saveBlogAsDraft() {
+    if (!blogContent || !ghostwriterDigest) return
+    setSavingBlog(true)
+    const success = await savePostAsDraft(blogContent, ghostwriterDigest, true)
+    if (success) {
+      setGhostwriterOpen(false)
+    }
+    setSavingBlog(false)
+  }
+
   const startGhostwriting = useCallback(async () => {
     if (!ghostwriterDigest) return
     setGhostwriting(true)
@@ -307,7 +423,12 @@ export default function DigestsPage() {
 
       // Auto-save as draft after successful generation
       if (finalContent && !finalContent.includes('**Fehler:**')) {
-        await autoSaveDraft(finalContent, ghostwriterDigest)
+        console.log('[AutoSave] Saving draft automatically...')
+        const success = await savePostAsDraft(finalContent, ghostwriterDigest, false)
+        if (success) {
+          console.log('[AutoSave] Draft saved successfully')
+          setGhostwriterOpen(false)
+        }
       }
     } catch (error) {
       console.error('Ghostwriter error:', error)
@@ -315,123 +436,7 @@ export default function DigestsPage() {
     } finally {
       setGhostwriting(false)
     }
-  }, [ghostwriterDigest, vocabularyIntensity])
-
-  function copyBlogToClipboard() {
-    navigator.clipboard.writeText(blogContent)
-    setBlogCopied(true)
-    setTimeout(() => setBlogCopied(false), 2000)
-  }
-
-  async function deleteDigest(digestId: string) {
-    if (!confirm('Digest wirklich löschen?')) return
-    setDeletingDigestId(digestId)
-    try {
-      const { error } = await supabase.from('daily_digests').delete().eq('id', digestId)
-      if (error) throw error
-      await fetchDigests()
-    } catch (error) {
-      console.error('Delete error:', error)
-      alert('Fehler beim Löschen')
-    } finally {
-      setDeletingDigestId(null)
-    }
-  }
-
-  // Core save logic - reused by both auto-save and manual save
-  async function savePostAsDraft(content: string, digest: Digest, showAlert: boolean = true): Promise<boolean> {
-    try {
-      const titleMatch = content.match(/^#\s+(.+)$/m)
-      const title = titleMatch
-        ? titleMatch[1]
-        : `Artikel vom ${new Date(digest.digest_date).toLocaleDateString('de-DE')}`
-
-      const tiptapContent = markdownToTiptap(content)
-      const { data: newPost, error } = await supabase.from('generated_posts').insert({
-        digest_id: digest.id,
-        title,
-        content: JSON.stringify(tiptapContent),
-        word_count: content.split(/\s+/).length,
-        status: 'draft',
-      }).select().single()
-
-      if (error) throw error
-
-      // Trigger background image generation from blog content sections
-      if (newPost && content) {
-        // Split blog content into sections by # or ## headings
-        const sections: Array<{ title: string; content: string }> = []
-
-        // Match all headings (# or ##) and their content
-        const headingRegex = /^(#{1,2})\s+(.+)$/gm
-        const matches = [...content.matchAll(headingRegex)]
-
-        for (let i = 0; i < matches.length; i++) {
-          const match = matches[i]
-          const sectionTitle = match[2].trim()
-          const startIndex = match.index! + match[0].length
-          const endIndex = matches[i + 1]?.index ?? content.length
-          const sectionContent = content.slice(startIndex, endIndex).trim()
-
-          // Skip very short sections but be more lenient (> 50 chars)
-          if (sectionContent.length > 50) {
-            sections.push({ title: sectionTitle, content: sectionContent })
-          }
-        }
-
-        // Take up to 5 sections for image generation
-        const sectionsToProcess = sections.slice(0, 5)
-
-        console.log(`[ImageGen] Found ${sections.length} sections, processing ${sectionsToProcess.length}`)
-
-        if (sectionsToProcess.length > 0) {
-          fetch('/api/generate-image', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              postId: newPost.id,
-              newsItems: sectionsToProcess.map(s => ({
-                text: `${s.title}\n\n${s.content.slice(0, 2000)}`,
-              })),
-              // Dithering settings are now read from active image prompt in DB
-            }),
-          }).catch(err => console.error('Image generation error:', err))
-        }
-      }
-
-      if (showAlert) {
-        alert('Artikel als Entwurf gespeichert! Bilder werden im Hintergrund generiert.')
-      }
-      return true
-    } catch (error) {
-      console.error('Save error:', error)
-      if (showAlert) {
-        alert('Fehler beim Speichern')
-      }
-      return false
-    }
-  }
-
-  // Auto-save after ghostwriting completes
-  async function autoSaveDraft(content: string, digest: Digest) {
-    console.log('[AutoSave] Saving draft automatically...')
-    const success = await savePostAsDraft(content, digest, false)
-    if (success) {
-      console.log('[AutoSave] Draft saved successfully')
-      setGhostwriterOpen(false)
-    }
-  }
-
-  // Manual save button handler
-  async function saveBlogAsDraft() {
-    if (!blogContent || !ghostwriterDigest) return
-    setSavingBlog(true)
-    const success = await savePostAsDraft(blogContent, ghostwriterDigest, true)
-    if (success) {
-      setGhostwriterOpen(false)
-    }
-    setSavingBlog(false)
-  }
+  }, [ghostwriterDigest, vocabularyIntensity, savePostAsDraft])
 
   return (
     <div className="p-4 md:p-6 max-w-full">
