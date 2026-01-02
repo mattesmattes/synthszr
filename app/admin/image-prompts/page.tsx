@@ -36,6 +36,7 @@ interface ImagePrompt {
   is_active: boolean
   enable_dithering: boolean
   dithering_gain: number
+  dithering_coarseness: number
   image_scale: number
   created_at: string
   updated_at: string
@@ -68,6 +69,7 @@ export default function ImagePromptsPage() {
     is_active: false,
     enable_dithering: false,
     dithering_gain: 1.0,
+    dithering_coarseness: 1,
     image_scale: 1.0,
   })
 
@@ -98,6 +100,7 @@ export default function ImagePromptsPage() {
       is_active: false,
       enable_dithering: false,
       dithering_gain: 1.0,
+      dithering_coarseness: 1,
       image_scale: 1.0,
     })
     setDialogOpen(true)
@@ -111,6 +114,7 @@ export default function ImagePromptsPage() {
       is_active: prompt.is_active,
       enable_dithering: prompt.enable_dithering ?? false,
       dithering_gain: prompt.dithering_gain ?? 1.0,
+      dithering_coarseness: prompt.dithering_coarseness ?? 1,
       image_scale: prompt.image_scale ?? 1.0,
     })
     setDialogOpen(true)
@@ -188,6 +192,7 @@ export default function ImagePromptsPage() {
           is_active: !prompt.is_active,
           enable_dithering: prompt.enable_dithering,
           dithering_gain: prompt.dithering_gain,
+          dithering_coarseness: prompt.dithering_coarseness,
           image_scale: prompt.image_scale,
         }),
         credentials: 'include',
@@ -218,6 +223,7 @@ export default function ImagePromptsPage() {
           is_active: prompt.is_active,
           enable_dithering: updates.enable_dithering ?? prompt.enable_dithering,
           dithering_gain: updates.dithering_gain ?? prompt.dithering_gain,
+          dithering_coarseness: updates.dithering_coarseness ?? prompt.dithering_coarseness,
           image_scale: updates.image_scale ?? prompt.image_scale,
         }),
         credentials: 'include',
@@ -323,57 +329,60 @@ export default function ImagePromptsPage() {
                 <div className="mt-4 pt-4 border-t space-y-4">
                   <h4 className="text-sm font-medium">Bildverarbeitung</h4>
 
-                  {/* Dithering Toggle & Gain */}
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id={`dithering-${prompt.id}`}
-                        checked={prompt.enable_dithering ?? false}
-                        onCheckedChange={(checked) =>
-                          updatePromptSettings(prompt, { enable_dithering: checked })
-                        }
-                      />
-                      <Label htmlFor={`dithering-${prompt.id}`} className="text-sm">
-                        Dithering
-                      </Label>
+                  {/* Dithering Toggle & Settings */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id={`dithering-${prompt.id}`}
+                          checked={prompt.enable_dithering ?? false}
+                          onCheckedChange={(checked) =>
+                            updatePromptSettings(prompt, { enable_dithering: checked })
+                          }
+                        />
+                        <Label htmlFor={`dithering-${prompt.id}`} className="text-sm">
+                          Dithering
+                        </Label>
+                      </div>
+                      {prompt.enable_dithering && (
+                        <div className="flex-1 flex items-center gap-3">
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">Gain:</span>
+                          <Slider
+                            min={0.5}
+                            max={2.0}
+                            step={0.1}
+                            value={[prompt.dithering_gain ?? 1.0]}
+                            onValueChange={([value]) =>
+                              updatePromptSettings(prompt, { dithering_gain: value })
+                            }
+                            className="flex-1 max-w-[150px]"
+                          />
+                          <span className="text-xs text-muted-foreground w-8">
+                            {(prompt.dithering_gain ?? 1.0).toFixed(1)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     {prompt.enable_dithering && (
-                      <div className="flex-1 flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">Gain:</span>
+                      <div className="flex items-center gap-3 pl-10">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Grobheit:</span>
                         <Slider
-                          min={0.5}
-                          max={2.0}
-                          step={0.1}
-                          value={[prompt.dithering_gain ?? 1.0]}
+                          min={1}
+                          max={8}
+                          step={1}
+                          value={[prompt.dithering_coarseness ?? 1]}
                           onValueChange={([value]) =>
-                            updatePromptSettings(prompt, { dithering_gain: value })
+                            updatePromptSettings(prompt, { dithering_coarseness: value })
                           }
-                          className="flex-1 max-w-[200px]"
+                          className="flex-1 max-w-[150px]"
                         />
                         <span className="text-xs text-muted-foreground w-8">
-                          {(prompt.dithering_gain ?? 1.0).toFixed(1)}
+                          {prompt.dithering_coarseness ?? 1}
                         </span>
                       </div>
                     )}
                   </div>
 
-                  {/* Image Scale */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm whitespace-nowrap">Skalierung:</span>
-                    <Slider
-                      min={0.25}
-                      max={2.0}
-                      step={0.25}
-                      value={[prompt.image_scale ?? 1.0]}
-                      onValueChange={([value]) =>
-                        updatePromptSettings(prompt, { image_scale: value })
-                      }
-                      className="flex-1 max-w-[200px]"
-                    />
-                    <span className="text-sm text-muted-foreground w-12">
-                      {((prompt.image_scale ?? 1.0) * 100).toFixed(0)}%
-                    </span>
-                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -442,46 +451,47 @@ export default function ImagePromptsPage() {
                     <Label htmlFor="enable_dithering">Floyd-Steinberg Dithering</Label>
                   </div>
                   {formData.enable_dithering && (
-                    <div className="space-y-2 pl-6">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="dithering_gain">Error Diffusion Gain</Label>
-                        <span className="text-sm text-muted-foreground">{formData.dithering_gain.toFixed(1)}</span>
+                    <div className="space-y-4 pl-6">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="dithering_gain">Error Diffusion Gain</Label>
+                          <span className="text-sm text-muted-foreground">{formData.dithering_gain.toFixed(1)}</span>
+                        </div>
+                        <Slider
+                          id="dithering_gain"
+                          min={0.5}
+                          max={2.0}
+                          step={0.1}
+                          value={[formData.dithering_gain]}
+                          onValueChange={([value]) => setFormData({ ...formData, dithering_gain: value })}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Stärke des Dithering-Effekts (0.5 = subtil, 2.0 = stark)
+                        </p>
                       </div>
-                      <Slider
-                        id="dithering_gain"
-                        min={0.5}
-                        max={2.0}
-                        step={0.1}
-                        value={[formData.dithering_gain]}
-                        onValueChange={([value]) => setFormData({ ...formData, dithering_gain: value })}
-                        className="w-full"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Stärke des Dithering-Effekts (0.5 = subtil, 2.0 = stark)
-                      </p>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="dithering_coarseness">Grobheit (Anti-Moiré)</Label>
+                          <span className="text-sm text-muted-foreground">{formData.dithering_coarseness}</span>
+                        </div>
+                        <Slider
+                          id="dithering_coarseness"
+                          min={1}
+                          max={8}
+                          step={1}
+                          value={[formData.dithering_coarseness]}
+                          onValueChange={([value]) => setFormData({ ...formData, dithering_coarseness: value })}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Größere Werte = gröbere Punkte, verhindert Moiré-Effekte (1 = fein, 8 = sehr grob)
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
 
-                {/* Image Scaling */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="image_scale">Bildskalierung</Label>
-                    <span className="text-sm text-muted-foreground">{(formData.image_scale * 100).toFixed(0)}%</span>
-                  </div>
-                  <Slider
-                    id="image_scale"
-                    min={0.25}
-                    max={2.0}
-                    step={0.25}
-                    value={[formData.image_scale]}
-                    onValueChange={([value]) => setFormData({ ...formData, image_scale: value })}
-                    className="w-full"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Skaliert das generierte Bild (25% - 200%)
-                  </p>
-                </div>
               </div>
             </div>
             <DialogFooter className="border-t pt-4">

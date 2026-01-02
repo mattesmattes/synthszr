@@ -17,6 +17,7 @@ interface ActiveImagePromptSettings {
   promptText: string
   enableDithering: boolean
   ditheringGain: number
+  ditheringCoarseness: number
   imageScale: number
 }
 
@@ -28,7 +29,7 @@ async function getActiveImagePromptSettings(): Promise<ActiveImagePromptSettings
     const supabase = await createClient()
     const { data } = await supabase
       .from('image_prompts')
-      .select('prompt_text, enable_dithering, dithering_gain, image_scale')
+      .select('prompt_text, enable_dithering, dithering_gain, dithering_coarseness, image_scale')
       .eq('is_active', true)
       .single()
 
@@ -38,6 +39,7 @@ async function getActiveImagePromptSettings(): Promise<ActiveImagePromptSettings
         promptText: data.prompt_text,
         enableDithering: data.enable_dithering ?? false,
         ditheringGain: data.dithering_gain ?? 1.0,
+        ditheringCoarseness: data.dithering_coarseness ?? 1,
         imageScale: data.image_scale ?? 1.0,
       }
     }
@@ -49,6 +51,7 @@ async function getActiveImagePromptSettings(): Promise<ActiveImagePromptSettings
     promptText: DEFAULT_IMAGE_PROMPT,
     enableDithering: false,
     ditheringGain: 1.0,
+    ditheringCoarseness: 1,
     imageScale: 1.0,
   }
 }
@@ -271,18 +274,34 @@ export async function whiteToTransparent(
  * Converts grayscale image to pure black & white with dithering
  * @param imageBase64 Base64 encoded image
  * @param gain Error diffusion gain/scaling factor (0.5-2.0, default 1.0)
+ * @param coarseness Dithering coarseness (1-8, default 1). Higher = coarser/larger dots, prevents moiré
  */
 export async function applyDithering(
   imageBase64: string,
-  gain: number = 1.0
+  gain: number = 1.0,
+  coarseness: number = 1
 ): Promise<{ base64: string; mimeType: string }> {
   const buffer = Buffer.from(imageBase64, 'base64')
 
-  // Convert to grayscale first
-  const { data, info } = await sharp(buffer)
-    .grayscale()
-    .raw()
-    .toBuffer({ resolveWithObject: true })
+  // Get original dimensions
+  const metadata = await sharp(buffer).metadata()
+  const originalWidth = metadata.width!
+  const originalHeight = metadata.height!
+
+  // Downscale for coarser dithering (coarseness 1 = no downscale, 2 = half, etc.)
+  const scaleFactor = 1 / Math.max(1, Math.min(8, coarseness))
+  const workWidth = Math.round(originalWidth * scaleFactor)
+  const workHeight = Math.round(originalHeight * scaleFactor)
+
+  console.log(`[Dithering] Coarseness ${coarseness}: working at ${workWidth}x${workHeight}, will upscale to ${originalWidth}x${originalHeight}`)
+
+  // Convert to grayscale and optionally downscale
+  let image = sharp(buffer).grayscale()
+  if (coarseness > 1) {
+    image = image.resize(workWidth, workHeight, { kernel: sharp.kernel.lanczos2 })
+  }
+
+  const { data, info } = await image.raw().toBuffer({ resolveWithObject: true })
 
   const width = info.width
   const height = info.height
@@ -320,16 +339,23 @@ export async function applyDithering(
     output[i] = Math.max(0, Math.min(255, Math.round(pixels[i])))
   }
 
-  // Create output image
-  const outputBuffer = await sharp(Buffer.from(output), {
+  // Create dithered image at working resolution
+  let outputImage = sharp(Buffer.from(output), {
     raw: {
       width,
       height,
       channels: 1
     }
   })
-    .png()
-    .toBuffer()
+
+  // Upscale back to original size using nearest-neighbor to preserve sharp dithering pattern
+  if (coarseness > 1) {
+    outputImage = outputImage.resize(originalWidth, originalHeight, {
+      kernel: sharp.kernel.nearest
+    })
+  }
+
+  const outputBuffer = await outputImage.png().toBuffer()
 
   return {
     base64: outputBuffer.toString('base64'),
@@ -379,8 +405,9 @@ export async function scaleImage(
 
 export interface ImageProcessingOptions {
   enableDithering?: boolean
-  ditheringGain?: number  // 0.5-2.0, default 1.0
-  imageScale?: number     // 0.25-2.0, default 1.0
+  ditheringGain?: number       // 0.5-2.0, default 1.0
+  ditheringCoarseness?: number // 1-8, default 1 (higher = larger dots, prevents moiré)
+  imageScale?: number          // 0.25-2.0, default 1.0
 }
 
 /**
@@ -399,18 +426,21 @@ export async function generateAndProcessImage(
   // If no options provided, get settings from active prompt in database
   let enableDithering: boolean
   let ditheringGain: number
+  let ditheringCoarseness: number
   let imageScale: number
 
   if (options) {
     enableDithering = options.enableDithering ?? false
     ditheringGain = options.ditheringGain ?? 1.0
+    ditheringCoarseness = options.ditheringCoarseness ?? 1
     imageScale = options.imageScale ?? 1.0
   } else {
     const promptSettings = await getActiveImagePromptSettings()
     enableDithering = promptSettings.enableDithering
     ditheringGain = promptSettings.ditheringGain
+    ditheringCoarseness = promptSettings.ditheringCoarseness
     imageScale = promptSettings.imageScale
-    console.log(`[Gemini] Using DB settings: dithering=${enableDithering}, gain=${ditheringGain}, scale=${imageScale}`)
+    console.log(`[Gemini] Using DB settings: dithering=${enableDithering}, gain=${ditheringGain}, coarseness=${ditheringCoarseness}, scale=${imageScale}`)
   }
 
   // Generate the image
@@ -432,8 +462,8 @@ export async function generateAndProcessImage(
 
     // Apply dithering if enabled
     if (enableDithering) {
-      console.log(`[Gemini] Applying dithering with gain ${ditheringGain}...`)
-      const dithered = await applyDithering(processedBase64, ditheringGain)
+      console.log(`[Gemini] Applying dithering with gain ${ditheringGain}, coarseness ${ditheringCoarseness}...`)
+      const dithered = await applyDithering(processedBase64, ditheringGain, ditheringCoarseness)
       processedBase64 = dithered.base64
     }
 
