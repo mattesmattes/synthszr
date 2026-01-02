@@ -354,15 +354,25 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     }
   }, [editor, content])
 
-  // Process "Mattes Take" headings to add styling class
-  const processMattesTakeHeadings = useCallback(() => {
+  // Process "Mattes Take" text to add styling class
+  const processMattesTakeText = useCallback(() => {
     if (!containerRef.current) return
 
+    // First check headings
     const headings = containerRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6')
     headings.forEach((heading) => {
       const text = heading.textContent || ''
       if (text.toLowerCase().includes('mattes take') || text.toLowerCase().includes("mattes' take")) {
         heading.classList.add('mattes-take-heading')
+      }
+    })
+
+    // Then check bold/strong elements for "Mattes Take"
+    const strongElements = containerRef.current.querySelectorAll('strong, b')
+    strongElements.forEach((strong) => {
+      const text = strong.textContent || ''
+      if (text.toLowerCase().includes('mattes take') || text.toLowerCase().includes("mattes' take")) {
+        strong.classList.add('mattes-take')
       }
     })
   }, [])
@@ -373,11 +383,11 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       // Wait for DOM to update
       const timeoutId = setTimeout(() => {
         processCompanyNames()
-        processMattesTakeHeadings()
+        processMattesTakeText()
       }, 100)
       return () => clearTimeout(timeoutId)
     }
-  }, [editor, content, processCompanyNames, processMattesTakeHeadings])
+  }, [editor, content, processCompanyNames, processMattesTakeText])
 
   if (!editor) {
     return null
