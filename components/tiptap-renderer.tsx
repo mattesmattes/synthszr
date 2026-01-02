@@ -361,7 +361,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     const headings = containerRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6')
     headings.forEach((heading) => {
       const text = heading.textContent || ''
-      if (text.toLowerCase().includes('mattes take') || text.toLowerCase().includes('mattes' take')) {
+      if (text.toLowerCase().includes('mattes take') || text.toLowerCase().includes("mattes' take")) {
         heading.classList.add('mattes-take-heading')
       }
     })
