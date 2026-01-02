@@ -77,13 +77,11 @@ export default async function Page() {
   }
 
   const formatDateFull = (date: string) => {
-    return new Date(date)
-      .toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      })
-      .replace(/\//g, ".")
+    return new Date(date).toLocaleDateString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
   }
 
   const estimateReadTime = (content: Record<string, unknown>) => {

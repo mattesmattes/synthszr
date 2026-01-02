@@ -66,10 +66,10 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
+    return new Date(date).toLocaleDateString("de-DE", {
       day: "numeric",
+      month: "long",
+      year: "numeric",
     })
   }
 
