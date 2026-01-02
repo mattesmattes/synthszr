@@ -193,7 +193,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
         <div className="mx-auto max-w-5xl px-6 py-12">
           <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
             <a href="https://oh-so.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
-              <img src="/oh-so-logo.svg" alt="OH-SO" className="h-6" />
+              <img src="/oh-so-logo.svg" alt="OH-SO" className="h-9" />
             </a>
             <div className="flex gap-6 text-xs">
               <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
