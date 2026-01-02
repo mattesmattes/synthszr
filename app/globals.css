@@ -269,3 +269,32 @@
   color: var(--source-cyan-hover);
   text-decoration: underline;
 }
+
+/* Mattes Take styling - neon yellow background */
+.mattes-take {
+  background-color: #CCFF00;
+  color: #000;
+  padding: 0.25em 0.5em;
+  border-radius: 0.25em;
+  font-weight: 600;
+}
+
+/* Style headings containing "Mattes Take" */
+.tiptap-content h2.mattes-take-heading,
+.prose h2.mattes-take-heading,
+.prose-article h2.mattes-take-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.tiptap-content h2.mattes-take-heading::before,
+.prose h2.mattes-take-heading::before,
+.prose-article h2.mattes-take-heading::before {
+  content: "";
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  background-color: #CCFF00;
+  border-radius: 2px;
+}
