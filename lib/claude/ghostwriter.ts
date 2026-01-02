@@ -32,12 +32,13 @@ TONALITÄT UND STIL:
 - WICHTIG bei Daily News: KEINE Formulierungen wie "Diese Woche", "In dieser Woche" - es sind TÄGLICHE News!
 
 QUELLENFORMATIERUNG - KRITISCH:
-- Format: [→ Quelle](URL) - der Link-Text ist IMMER "→ Quelle", NIE der Name der Quelle
+- Format: [→ Publikationsname](URL) - der Link-Text ist der NAME der Publikation (z.B. "→ The Information", "→ TechCrunch", "→ Stratechery")
 - Platzierung: Am ENDE des Absatzes, direkt hinter dem LETZTEN Wort (vor dem Punkt)
 - NICHT nach dem ersten Satz! Der Quellenlink kommt am Schluss der gesamten News-Story/des Absatzes
-- Beispiel RICHTIG: "OpenAI stellte das neue Modell vor, das deutlich schneller ist und weniger Energie verbraucht [→ Quelle](URL)."
+- Beispiel RICHTIG: "OpenAI stellte das neue Modell vor, das deutlich schneller ist und weniger Energie verbraucht [→ The Information](URL)."
 - Beispiel FALSCH: "OpenAI stellte das neue Modell vor [→ Quelle](URL). Es ist deutlich schneller..."
-- Bei mehreren Quellen am Ende: "...verbraucht [→ Quelle](URL1) [→ Quelle](URL2)."
+- Bei mehreren Quellen am Ende: "...verbraucht [→ Reuters](URL1) [→ Bloomberg](URL2)."
+- Extrahiere den Publikationsnamen aus dem Quellentitel oder der URL (z.B. "theinformation.com" → "The Information")
 - Nutze NUR URLs aus der "VERFÜGBARE QUELLEN MIT LINKS" Liste
 
 FORMAT:

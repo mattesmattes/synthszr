@@ -251,7 +251,7 @@
   --source-cyan-hover: oklch(0.85 0.12 190);
 }
 
-/* Inline source links: "→ Quelle" format */
+/* Inline source links: "→ Publikationsname" format */
 .prose a[href],
 .prose-article a[href],
 .tiptap-content a[href],
