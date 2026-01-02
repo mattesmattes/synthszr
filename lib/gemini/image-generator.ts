@@ -108,12 +108,12 @@ export async function generateSatiricalImage(newsText: string): Promise<Generate
       const promptTemplate = await getActiveImagePrompt()
       const prompt = promptTemplate.replace('{newsText}', newsText.slice(0, 2000))
 
-      console.log(`[Gemini] Generating image with Vercel AI SDK, attempt ${attempt}/${maxRetries}`)
+      console.log(`[Gemini] Generating image with Vercel AI SDK (Gemini 3), attempt ${attempt}/${maxRetries}`)
 
-      // Use Vercel AI SDK with Gemini model
+      // Use Vercel AI SDK with Gemini 3 model
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await generateText({
-        model: 'google/gemini-2.0-flash-exp' as any,
+        model: 'google/gemini-3-pro-image' as any,
         providerOptions: {
           google: {
             responseModalities: ['TEXT', 'IMAGE'],
