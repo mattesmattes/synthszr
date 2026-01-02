@@ -87,27 +87,22 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
         </Link>
 
         <article>
-          {/* Logo and Cover Image */}
+          {/* Cover Image with centered Logo overlay */}
           {post.cover_image_url && (
-            <div className="mb-8 -mx-6 md:mx-0">
-              {/* Centered Logo */}
-              <div className="flex justify-center mb-4 px-6 md:px-0">
+            <div className="mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
+              <div
+                className="relative aspect-[4/3] md:aspect-[21/9] flex items-center justify-center"
+                style={{
+                  backgroundColor: '#CCFF00',
+                  backgroundImage: `url(${post.cover_image_url})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              >
                 <img
                   src="/synthszr-logo.svg"
                   alt="Synthszr"
-                  className="h-6 md:h-8 w-auto"
-                />
-              </div>
-              {/* Cover Image */}
-              <div className="md:rounded-lg overflow-hidden">
-                <div
-                  className="relative aspect-[4/3] md:aspect-[21/9]"
-                  style={{
-                    backgroundColor: '#CCFF00',
-                    backgroundImage: `url(${post.cover_image_url})`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }}
+                  className="h-12 md:h-16 w-auto"
                 />
               </div>
             </div>
