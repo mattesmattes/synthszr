@@ -5,12 +5,22 @@ interface FeaturedArticleProps {
   title: string
   content: Record<string, unknown>
   date: string
+  createdAt: string
   readTime: string
   category: string
   coverImageUrl?: string | null
 }
 
-export function FeaturedArticle({ slug, title, content, date, readTime, category, coverImageUrl }: FeaturedArticleProps) {
+function formatDateWithWeekday(dateString: string): string {
+  const d = new Date(dateString)
+  const weekday = d.toLocaleDateString("de-DE", { weekday: "long" })
+  const day = d.getDate().toString().padStart(2, '0')
+  const month = (d.getMonth() + 1).toString().padStart(2, '0')
+  const year = d.getFullYear()
+  return `Update vom ${weekday}, den ${day}.${month}.${year}`
+}
+
+export function FeaturedArticle({ slug, title, content, date, createdAt, readTime, category, coverImageUrl }: FeaturedArticleProps) {
   return (
     <article className="mb-16 border-b border-border pb-16">
       {coverImageUrl && (
@@ -33,18 +43,17 @@ export function FeaturedArticle({ slug, title, content, date, readTime, category
         </a>
       )}
 
+      <div className="mb-4">
+        <span className="inline-block px-2 py-1 font-mono text-xs font-medium text-black" style={{ backgroundColor: '#CCFF00' }}>
+          {formatDateWithWeekday(createdAt)}
+        </span>
+      </div>
+
       <a href={`/posts/${slug}`} className="group">
         <h2 className="mb-6 text-3xl font-bold tracking-tight transition-colors group-hover:text-accent md:text-xl lg:text-2xl">
           {title}
         </h2>
       </a>
-
-      <div className="mb-8 flex items-center gap-6 text-sm text-muted-foreground">
-        <time dateTime={date} className="font-mono text-xs">
-          {date}
-        </time>
-        <span className="font-mono text-xs">{readTime}</span>
-      </div>
 
       <div className="prose-article">
         <TiptapRenderer content={content} />

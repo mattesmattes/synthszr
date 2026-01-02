@@ -3,7 +3,7 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { BlogHeader } from "@/components/blog-header"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, ArrowRight } from "lucide-react"
 
 // Disable caching for posts to always show current cover image
 export const dynamic = 'force-dynamic'
@@ -17,6 +17,12 @@ interface PostData {
   category: string
   created_at: string
   cover_image_url?: string | null
+}
+
+interface AdjacentPost {
+  slug: string
+  title: string
+  created_at: string
 }
 
 export default async function PostPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -65,10 +71,43 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
     notFound()
   }
 
-  const formatDate = (date: string) => {
+  // Fetch adjacent posts for navigation
+  const currentDate = post.created_at
+
+  // Get newer post (next)
+  const { data: newerPosts } = await supabase
+    .from("generated_posts")
+    .select("slug, title, created_at")
+    .eq("status", "published")
+    .gt("created_at", currentDate)
+    .order("created_at", { ascending: true })
+    .limit(1)
+
+  // Get older post (previous)
+  const { data: olderPosts } = await supabase
+    .from("generated_posts")
+    .select("slug, title, created_at")
+    .eq("status", "published")
+    .lt("created_at", currentDate)
+    .order("created_at", { ascending: false })
+    .limit(1)
+
+  const newerPost: AdjacentPost | null = newerPosts?.[0] || null
+  const olderPost: AdjacentPost | null = olderPosts?.[0] || null
+
+  const formatDateWithWeekday = (date: string) => {
+    const d = new Date(date)
+    const weekday = d.toLocaleDateString("de-DE", { weekday: "long" })
+    const day = d.getDate().toString().padStart(2, '0')
+    const month = (d.getMonth() + 1).toString().padStart(2, '0')
+    const year = d.getFullYear()
+    return `Update vom ${weekday}, den ${day}.${month}.${year}`
+  }
+
+  const formatNavDate = (date: string) => {
     return new Date(date).toLocaleDateString("de-DE", {
-      day: "numeric",
-      month: "long",
+      day: "2-digit",
+      month: "2-digit",
       year: "numeric",
     })
   }
@@ -78,14 +117,6 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
       {/* <BlogHeader /> */}
 
       <main className="mx-auto max-w-3xl px-6 py-12 md:py-20">
-        <Link
-          href="/"
-          className="mb-8 inline-flex items-center gap-2 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Back to all posts
-        </Link>
-
         <article>
           {/* Cover Image with centered Logo overlay */}
           {post.cover_image_url && (
@@ -110,7 +141,9 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
 
           <header className="mb-12 border-b border-border pb-8">
             <div className="mb-4">
-              <time className="font-mono text-xs text-muted-foreground">{formatDate(post.created_at)}</time>
+              <span className="inline-block px-2 py-1 font-mono text-xs font-medium text-black" style={{ backgroundColor: '#CCFF00' }}>
+                {formatDateWithWeekday(post.created_at)}
+              </span>
             </div>
             <h1 className="text-3xl font-bold tracking-tight md:text-2xl">{post.title}</h1>
             {post.excerpt && <p className="mt-4 text-lg text-muted-foreground md:text-sm">{post.excerpt}</p>}
@@ -122,9 +155,34 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
         </article>
 
         <footer className="mt-16 border-t border-border pt-8">
-          <Link href="/" className="font-mono text-xs text-muted-foreground transition-colors hover:text-foreground">
-            ← Back to Synthszr
-          </Link>
+          <div className="flex justify-between items-center">
+            {newerPost ? (
+              <Link
+                href={`/posts/${newerPost.slug}`}
+                className="flex items-center gap-2 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                {formatNavDate(newerPost.created_at)}
+              </Link>
+            ) : (
+              <Link
+                href="/"
+                className="flex items-center gap-2 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                Home
+              </Link>
+            )}
+            {olderPost && (
+              <Link
+                href={`/posts/${olderPost.slug}`}
+                className="flex items-center gap-2 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {formatNavDate(olderPost.created_at)}
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            )}
+          </div>
         </footer>
       </main>
     </div>

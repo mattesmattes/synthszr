@@ -109,6 +109,7 @@ export default async function Page() {
               title={featuredPost.title}
               content={featuredPost.content}
               date={formatDateFull(featuredPost.created_at)}
+              createdAt={featuredPost.created_at}
               readTime={estimateReadTime(featuredPost.content)}
               category={featuredPost.category.toUpperCase()}
               coverImageUrl={featuredPost.cover_image_url}
