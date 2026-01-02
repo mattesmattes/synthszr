@@ -87,18 +87,29 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
         </Link>
 
         <article>
-          {/* Cover Image with neon-yellow background visible through transparent areas */}
+          {/* Logo and Cover Image */}
           {post.cover_image_url && (
-            <div className="mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
-              <div
-                className="relative aspect-[4/3] md:aspect-[21/9]"
-                style={{
-                  backgroundColor: '#CCFF00',
-                  backgroundImage: `url(${post.cover_image_url})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                }}
-              />
+            <div className="mb-8 -mx-6 md:mx-0">
+              {/* Centered Logo */}
+              <div className="flex justify-center mb-4 px-6 md:px-0">
+                <img
+                  src="/synthszr-logo.svg"
+                  alt="Synthszr"
+                  className="h-6 md:h-8 w-auto"
+                />
+              </div>
+              {/* Cover Image */}
+              <div className="md:rounded-lg overflow-hidden">
+                <div
+                  className="relative aspect-[4/3] md:aspect-[21/9]"
+                  style={{
+                    backgroundColor: '#CCFF00',
+                    backgroundImage: `url(${post.cover_image_url})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
+                />
+              </div>
             </div>
           )}
 

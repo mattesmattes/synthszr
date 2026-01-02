@@ -18,17 +18,28 @@ export function FeaturedArticle({ slug, title, content, date, readTime, category
       </div>
 
       {coverImageUrl && (
-        <a href={`/posts/${slug}`} className="block mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
-          <div
-            className="relative aspect-[4/3] md:aspect-[21/9]"
-            style={{
-              backgroundColor: '#CCFF00',
-              backgroundImage: `url(${coverImageUrl})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-            }}
-          />
-        </a>
+        <div className="mb-8 -mx-6 md:mx-0">
+          {/* Centered Logo */}
+          <div className="flex justify-center mb-4 px-6 md:px-0">
+            <img
+              src="/synthszr-logo.svg"
+              alt="Synthszr"
+              className="h-6 md:h-8 w-auto"
+            />
+          </div>
+          {/* Cover Image */}
+          <a href={`/posts/${slug}`} className="block md:rounded-lg overflow-hidden">
+            <div
+              className="relative aspect-[4/3] md:aspect-[21/9]"
+              style={{
+                backgroundColor: '#CCFF00',
+                backgroundImage: `url(${coverImageUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+            />
+          </a>
+        </div>
       )}
 
       <a href={`/posts/${slug}`} className="group">
