@@ -20,7 +20,7 @@ export function FeaturedArticle({ slug, title, content, date, readTime, category
       {coverImageUrl && (
         <a href={`/posts/${slug}`} className="block mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
           <div
-            className="relative aspect-[21/9]"
+            className="relative aspect-[4/3] md:aspect-[21/9]"
             style={{
               backgroundColor: '#CCFF00',
               backgroundImage: `url(${coverImageUrl})`,
