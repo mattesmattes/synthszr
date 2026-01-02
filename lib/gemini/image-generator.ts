@@ -17,6 +17,7 @@ interface ActiveImagePromptSettings {
   promptText: string
   enableDithering: boolean
   ditheringGain: number
+  imageScale: number
 }
 
 /**
@@ -27,7 +28,7 @@ async function getActiveImagePromptSettings(): Promise<ActiveImagePromptSettings
     const supabase = await createClient()
     const { data } = await supabase
       .from('image_prompts')
-      .select('prompt_text, enable_dithering, dithering_gain')
+      .select('prompt_text, enable_dithering, dithering_gain, image_scale')
       .eq('is_active', true)
       .single()
 
@@ -37,6 +38,7 @@ async function getActiveImagePromptSettings(): Promise<ActiveImagePromptSettings
         promptText: data.prompt_text,
         enableDithering: data.enable_dithering ?? false,
         ditheringGain: data.dithering_gain ?? 1.0,
+        imageScale: data.image_scale ?? 1.0,
       }
     }
   } catch (error) {
@@ -47,6 +49,7 @@ async function getActiveImagePromptSettings(): Promise<ActiveImagePromptSettings
     promptText: DEFAULT_IMAGE_PROMPT,
     enableDithering: false,
     ditheringGain: 1.0,
+    imageScale: 1.0,
   }
 }
 
@@ -334,13 +337,54 @@ export async function applyDithering(
   }
 }
 
+/**
+ * Scales an image by a given factor
+ * @param imageBase64 Base64 encoded image
+ * @param scale Scale factor (0.25-2.0, where 1.0 = no scaling)
+ */
+export async function scaleImage(
+  imageBase64: string,
+  scale: number
+): Promise<{ base64: string; mimeType: string }> {
+  if (scale === 1.0) {
+    // No scaling needed
+    return { base64: imageBase64, mimeType: 'image/png' }
+  }
+
+  const buffer = Buffer.from(imageBase64, 'base64')
+  const image = sharp(buffer)
+  const metadata = await image.metadata()
+
+  if (!metadata.width || !metadata.height) {
+    throw new Error('Could not determine image dimensions')
+  }
+
+  const newWidth = Math.round(metadata.width * scale)
+  const newHeight = Math.round(metadata.height * scale)
+
+  console.log(`[Gemini] Scaling image from ${metadata.width}x${metadata.height} to ${newWidth}x${newHeight}`)
+
+  const outputBuffer = await image
+    .resize(newWidth, newHeight, {
+      kernel: scale > 1 ? sharp.kernel.lanczos3 : sharp.kernel.lanczos2,
+    })
+    .png()
+    .toBuffer()
+
+  return {
+    base64: outputBuffer.toString('base64'),
+    mimeType: 'image/png'
+  }
+}
+
 export interface ImageProcessingOptions {
   enableDithering?: boolean
   ditheringGain?: number  // 0.5-2.0, default 1.0
+  imageScale?: number     // 0.25-2.0, default 1.0
 }
 
 /**
- * Generates a satirical image and processes it for transparency (and optionally dithering)
+ * Generates a satirical image and processes it for transparency (and optionally dithering/scaling)
  * If no options provided, uses settings from the active image prompt in the database
  */
 export async function generateAndProcessImage(
@@ -355,15 +399,18 @@ export async function generateAndProcessImage(
   // If no options provided, get settings from active prompt in database
   let enableDithering: boolean
   let ditheringGain: number
+  let imageScale: number
 
   if (options) {
     enableDithering = options.enableDithering ?? false
     ditheringGain = options.ditheringGain ?? 1.0
+    imageScale = options.imageScale ?? 1.0
   } else {
     const promptSettings = await getActiveImagePromptSettings()
     enableDithering = promptSettings.enableDithering
     ditheringGain = promptSettings.ditheringGain
-    console.log(`[Gemini] Using DB settings: dithering=${enableDithering}, gain=${ditheringGain}`)
+    imageScale = promptSettings.imageScale
+    console.log(`[Gemini] Using DB settings: dithering=${enableDithering}, gain=${ditheringGain}, scale=${imageScale}`)
   }
 
   // Generate the image
@@ -375,6 +422,13 @@ export async function generateAndProcessImage(
 
   try {
     let processedBase64 = result.imageBase64
+
+    // Apply scaling first (before dithering for better quality)
+    if (imageScale !== 1.0) {
+      console.log(`[Gemini] Scaling image by ${(imageScale * 100).toFixed(0)}%...`)
+      const scaled = await scaleImage(processedBase64, imageScale)
+      processedBase64 = scaled.base64
+    }
 
     // Apply dithering if enabled
     if (enableDithering) {

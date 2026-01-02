@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { name, prompt_text, is_active, enable_dithering, dithering_gain } = body
+    const { name, prompt_text, is_active, enable_dithering, dithering_gain, image_scale } = body
 
     if (!name || !prompt_text) {
       return NextResponse.json(
@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
         is_active: is_active || false,
         enable_dithering: enable_dithering ?? false,
         dithering_gain: dithering_gain ?? 1.0,
+        image_scale: image_scale ?? 1.0,
       })
       .select()
       .single()
@@ -97,7 +98,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { id, name, prompt_text, is_active, enable_dithering, dithering_gain } = body
+    const { id, name, prompt_text, is_active, enable_dithering, dithering_gain, image_scale } = body
 
     if (!id || !name || !prompt_text) {
       return NextResponse.json(
@@ -124,6 +125,7 @@ export async function PUT(request: NextRequest) {
         is_active: is_active || false,
         enable_dithering: enable_dithering ?? false,
         dithering_gain: dithering_gain ?? 1.0,
+        image_scale: image_scale ?? 1.0,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
@@ -174,6 +176,7 @@ export interface ActiveImagePromptSettings {
   promptText: string
   enableDithering: boolean
   ditheringGain: number
+  imageScale: number
 }
 
 export async function getActiveImagePrompt(): Promise<string> {
@@ -185,7 +188,7 @@ export async function getActiveImagePromptSettings(): Promise<ActiveImagePromptS
   const supabase = await createClient()
   const { data } = await supabase
     .from('image_prompts')
-    .select('prompt_text, enable_dithering, dithering_gain')
+    .select('prompt_text, enable_dithering, dithering_gain, image_scale')
     .eq('is_active', true)
     .single()
 
@@ -193,5 +196,6 @@ export async function getActiveImagePromptSettings(): Promise<ActiveImagePromptS
     promptText: data?.prompt_text || DEFAULT_PROMPT,
     enableDithering: data?.enable_dithering ?? false,
     ditheringGain: data?.dithering_gain ?? 1.0,
+    imageScale: data?.image_scale ?? 1.0,
   }
 }

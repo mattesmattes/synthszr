@@ -36,6 +36,7 @@ interface ImagePrompt {
   is_active: boolean
   enable_dithering: boolean
   dithering_gain: number
+  image_scale: number
   created_at: string
   updated_at: string
 }
@@ -67,6 +68,7 @@ export default function ImagePromptsPage() {
     is_active: false,
     enable_dithering: false,
     dithering_gain: 1.0,
+    image_scale: 1.0,
   })
 
   useEffect(() => {
@@ -96,6 +98,7 @@ export default function ImagePromptsPage() {
       is_active: false,
       enable_dithering: false,
       dithering_gain: 1.0,
+      image_scale: 1.0,
     })
     setDialogOpen(true)
   }
@@ -108,6 +111,7 @@ export default function ImagePromptsPage() {
       is_active: prompt.is_active,
       enable_dithering: prompt.enable_dithering ?? false,
       dithering_gain: prompt.dithering_gain ?? 1.0,
+      image_scale: prompt.image_scale ?? 1.0,
     })
     setDialogOpen(true)
   }
@@ -182,6 +186,9 @@ export default function ImagePromptsPage() {
           name: prompt.name,
           prompt_text: prompt.prompt_text,
           is_active: !prompt.is_active,
+          enable_dithering: prompt.enable_dithering,
+          dithering_gain: prompt.dithering_gain,
+          image_scale: prompt.image_scale,
         }),
         credentials: 'include',
       })
@@ -191,6 +198,38 @@ export default function ImagePromptsPage() {
       }
     } catch (error) {
       console.error('Error toggling active:', error)
+    }
+  }
+
+  async function updatePromptSettings(prompt: ImagePrompt, updates: Partial<ImagePrompt>) {
+    // Optimistically update local state
+    setPrompts(prompts.map(p =>
+      p.id === prompt.id ? { ...p, ...updates } : p
+    ))
+
+    try {
+      const res = await fetch('/api/admin/image-prompts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: prompt.id,
+          name: prompt.name,
+          prompt_text: prompt.prompt_text,
+          is_active: prompt.is_active,
+          enable_dithering: updates.enable_dithering ?? prompt.enable_dithering,
+          dithering_gain: updates.dithering_gain ?? prompt.dithering_gain,
+          image_scale: updates.image_scale ?? prompt.image_scale,
+        }),
+        credentials: 'include',
+      })
+
+      if (!res.ok) {
+        // Revert on error
+        fetchPrompts()
+      }
+    } catch (error) {
+      console.error('Error updating settings:', error)
+      fetchPrompts()
     }
   }
 
@@ -250,7 +289,7 @@ export default function ImagePromptsPage() {
                         </Badge>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground line-clamp-3 font-mono">
+                    <p className="text-sm text-muted-foreground line-clamp-2 font-mono">
                       {prompt.prompt_text}
                     </p>
                     <p className="text-xs text-muted-foreground mt-2">
@@ -277,6 +316,63 @@ export default function ImagePromptsPage() {
                     <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(prompt)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
+                  </div>
+                </div>
+
+                {/* Image Processing Settings - directly on card */}
+                <div className="mt-4 pt-4 border-t space-y-4">
+                  <h4 className="text-sm font-medium">Bildverarbeitung</h4>
+
+                  {/* Dithering Toggle & Gain */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id={`dithering-${prompt.id}`}
+                        checked={prompt.enable_dithering ?? false}
+                        onCheckedChange={(checked) =>
+                          updatePromptSettings(prompt, { enable_dithering: checked })
+                        }
+                      />
+                      <Label htmlFor={`dithering-${prompt.id}`} className="text-sm">
+                        Dithering
+                      </Label>
+                    </div>
+                    {prompt.enable_dithering && (
+                      <div className="flex-1 flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Gain:</span>
+                        <Slider
+                          min={0.5}
+                          max={2.0}
+                          step={0.1}
+                          value={[prompt.dithering_gain ?? 1.0]}
+                          onValueChange={([value]) =>
+                            updatePromptSettings(prompt, { dithering_gain: value })
+                          }
+                          className="flex-1 max-w-[200px]"
+                        />
+                        <span className="text-xs text-muted-foreground w-8">
+                          {(prompt.dithering_gain ?? 1.0).toFixed(1)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Image Scale */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm whitespace-nowrap">Skalierung:</span>
+                    <Slider
+                      min={0.25}
+                      max={2.0}
+                      step={0.25}
+                      value={[prompt.image_scale ?? 1.0]}
+                      onValueChange={([value]) =>
+                        updatePromptSettings(prompt, { image_scale: value })
+                      }
+                      className="flex-1 max-w-[200px]"
+                    />
+                    <span className="text-sm text-muted-foreground w-12">
+                      {((prompt.image_scale ?? 1.0) * 100).toFixed(0)}%
+                    </span>
                   </div>
                 </div>
               </CardContent>
@@ -331,37 +427,61 @@ export default function ImagePromptsPage() {
                 <Label htmlFor="is_active">Als aktiven Prompt setzen</Label>
               </div>
 
-              {/* Dithering Settings */}
+              {/* Image Processing Settings */}
               <div className="border rounded-lg p-4 space-y-4">
-                <h4 className="text-sm font-medium">Dithering-Einstellungen</h4>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="enable_dithering"
-                    checked={formData.enable_dithering}
-                    onCheckedChange={(checked) => setFormData({ ...formData, enable_dithering: checked })}
-                  />
-                  <Label htmlFor="enable_dithering">Floyd-Steinberg Dithering aktivieren</Label>
-                </div>
-                {formData.enable_dithering && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="dithering_gain">Error Diffusion Gain</Label>
-                      <span className="text-sm text-muted-foreground">{formData.dithering_gain.toFixed(2)}</span>
-                    </div>
-                    <Slider
-                      id="dithering_gain"
-                      min={0.5}
-                      max={2.0}
-                      step={0.1}
-                      value={[formData.dithering_gain]}
-                      onValueChange={([value]) => setFormData({ ...formData, dithering_gain: value })}
-                      className="w-full"
+                <h4 className="text-sm font-medium">Bildverarbeitung</h4>
+
+                {/* Dithering */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="enable_dithering"
+                      checked={formData.enable_dithering}
+                      onCheckedChange={(checked) => setFormData({ ...formData, enable_dithering: checked })}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Steuert die Stärke des Dithering-Effekts (0.5 = subtil, 2.0 = stark)
-                    </p>
+                    <Label htmlFor="enable_dithering">Floyd-Steinberg Dithering</Label>
                   </div>
-                )}
+                  {formData.enable_dithering && (
+                    <div className="space-y-2 pl-6">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="dithering_gain">Error Diffusion Gain</Label>
+                        <span className="text-sm text-muted-foreground">{formData.dithering_gain.toFixed(1)}</span>
+                      </div>
+                      <Slider
+                        id="dithering_gain"
+                        min={0.5}
+                        max={2.0}
+                        step={0.1}
+                        value={[formData.dithering_gain]}
+                        onValueChange={([value]) => setFormData({ ...formData, dithering_gain: value })}
+                        className="w-full"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Stärke des Dithering-Effekts (0.5 = subtil, 2.0 = stark)
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Image Scaling */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="image_scale">Bildskalierung</Label>
+                    <span className="text-sm text-muted-foreground">{(formData.image_scale * 100).toFixed(0)}%</span>
+                  </div>
+                  <Slider
+                    id="image_scale"
+                    min={0.25}
+                    max={2.0}
+                    step={0.25}
+                    value={[formData.image_scale]}
+                    onValueChange={([value]) => setFormData({ ...formData, image_scale: value })}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Skaliert das generierte Bild (25% - 200%)
+                  </p>
+                </div>
               </div>
             </div>
             <DialogFooter className="border-t pt-4">
