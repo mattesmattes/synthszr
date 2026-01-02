@@ -102,7 +102,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
                 <img
                   src="/synthszr-logo.svg"
                   alt="Synthszr"
-                  className="h-12 md:h-16 w-auto"
+                  className="h-24 md:h-32 w-auto"
                 />
               </div>
             </div>

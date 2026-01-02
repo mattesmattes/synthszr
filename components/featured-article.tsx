@@ -27,7 +27,7 @@ export function FeaturedArticle({ slug, title, content, date, readTime, category
             <img
               src="/synthszr-logo.svg"
               alt="Synthszr"
-              className="h-12 md:h-16 w-auto"
+              className="h-24 md:h-32 w-auto"
             />
           </div>
         </a>
