@@ -1,5 +1,6 @@
 import sharp from 'sharp'
 import { createClient } from '@/lib/supabase/server'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 const DEFAULT_IMAGE_PROMPT = `Visualisiere in Schwarz-Weiß die folgende News satirisch im Stil von Mort Drucker ohne in der Visualisierung auf "Mort Drucker" oder "MAD" hinzuweisen.
 
@@ -71,25 +72,9 @@ interface GenerateImageResult {
   error?: string
 }
 
-// Lazy load generateText to avoid module loading issues (same as tbos)
-let generateTextFn: typeof import('ai').generateText | null = null
-
-async function getGenerateText() {
-  if (!generateTextFn) {
-    try {
-      const aiModule = await import('ai')
-      generateTextFn = aiModule.generateText
-    } catch (error) {
-      console.error('[Gemini] Failed to import AI SDK:', error)
-      return null
-    }
-  }
-  return generateTextFn
-}
-
 /**
- * Generates a satirical black & white image based on news text using Gemini 3
- * Uses the same approach as tbos with AI SDK 5.x
+ * Generates a satirical black & white image based on news text using Gemini
+ * Uses Google Generative AI SDK directly (not through Vercel AI SDK to avoid billing)
  */
 export async function generateSatiricalImage(newsText: string): Promise<GenerateImageResult> {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
@@ -106,73 +91,39 @@ export async function generateSatiricalImage(newsText: string): Promise<Generate
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const generateText = await getGenerateText()
-      if (!generateText) {
-        return {
-          success: false,
-          error: 'AI SDK not loaded'
-        }
-      }
-
       const promptTemplate = await getActiveImagePrompt()
       const prompt = promptTemplate.replace('{newsText}', newsText.slice(0, 2000))
 
-      console.log(`[Gemini] Generating image with gemini-3-pro-image, attempt ${attempt}/${maxRetries}`)
+      console.log(`[Gemini] Generating image with gemini-2.0-flash-exp, attempt ${attempt}/${maxRetries}`)
 
-      // Use Gemini 3 Pro Image - same approach as tbos
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await generateText({
-        model: 'google/gemini-3-pro-image' as any,
-        providerOptions: {
-          google: {
-            responseModalities: ['TEXT', 'IMAGE'],
-          },
+      // Use Google Generative AI SDK directly
+      const genAI = new GoogleGenerativeAI(apiKey)
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.0-flash-exp',
+        generationConfig: {
+          // @ts-expect-error - responseModalities is supported but not in types yet
+          responseModalities: ['Text', 'Image'],
         },
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text' as const,
-                text: prompt,
-              },
-            ],
-          },
-        ],
       })
 
-      // Check for image in response files
-      const imageFile = result.files?.[0]
-      if (imageFile && imageFile.base64) {
-        console.log('[Gemini] Image generation successful')
+      const result = await model.generateContent(prompt)
+      const response = result.response
 
-        // Get mimeType - could be mimeType or mediaType depending on SDK version
-        let mimeType = (imageFile as any).mimeType || (imageFile as any).mediaType
-        if (!mimeType || mimeType === 'undefined') {
-          // Detect from base64 signature
-          if (imageFile.base64.startsWith('iVBORw0KGgo')) {
-            mimeType = 'image/png'
-          } else if (imageFile.base64.startsWith('/9j/')) {
-            mimeType = 'image/jpeg'
-          } else if (imageFile.base64.startsWith('R0lGOD')) {
-            mimeType = 'image/gif'
-          } else if (imageFile.base64.startsWith('UklGR')) {
-            mimeType = 'image/webp'
-          } else {
-            mimeType = 'image/png'
+      // Check for image in response parts
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData?.data) {
+          console.log('[Gemini] Image generation successful')
+          return {
+            success: true,
+            imageBase64: part.inlineData.data,
+            mimeType: part.inlineData.mimeType || 'image/png'
           }
-          console.log('[Gemini] Detected mimeType:', mimeType)
-        }
-
-        return {
-          success: true,
-          imageBase64: imageFile.base64,
-          mimeType: mimeType || 'image/png'
         }
       }
 
       // Log what we got instead
-      console.log('[Gemini] No image in response. Text:', result.text?.slice(0, 200))
+      const text = response.text()
+      console.log('[Gemini] No image in response. Text:', text?.slice(0, 200))
 
       if (attempt < maxRetries) {
         const delay = attempt * 1000
