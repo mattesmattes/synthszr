@@ -101,12 +101,6 @@ export default async function Page() {
       {/* <BlogHeader /> */}
 
       <main className="mx-auto max-w-5xl px-6 py-12 md:py-20">
-        <div className="mb-16 border-b border-border pb-8">
-          <h1 className="text-4xl font-bold tracking-tight md:text-3xl lg:text-4xl">Synthszr</h1>
-          <p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-sm">
-            Feed the Soul. Run the System
-          </p>
-        </div>
 
         {featuredPost ? (
           <>

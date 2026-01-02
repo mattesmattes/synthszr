@@ -13,10 +13,6 @@ interface FeaturedArticleProps {
 export function FeaturedArticle({ slug, title, content, date, readTime, category, coverImageUrl }: FeaturedArticleProps) {
   return (
     <article className="mb-16 border-b border-border pb-16">
-      <div className="mb-6">
-        <span className="font-mono text-xs text-muted-foreground">LATEST</span>
-      </div>
-
       {coverImageUrl && (
         <div className="mb-8 -mx-6 md:mx-0">
           {/* Centered Logo */}
