@@ -135,7 +135,14 @@ export async function generateSatiricalImage(newsText: string): Promise<Generate
       // Check for image in response files
       const imageFile = result.files?.[0]
       if (imageFile && imageFile.base64) {
-        console.log('[Gemini] Image generation successful')
+        // Log image dimensions
+        try {
+          const imgBuffer = Buffer.from(imageFile.base64, 'base64')
+          const metadata = await sharp(imgBuffer).metadata()
+          console.log(`[Gemini] Image generation successful: ${metadata.width}x${metadata.height} (${metadata.format})`)
+        } catch {
+          console.log('[Gemini] Image generation successful (could not read dimensions)')
+        }
 
         // Get mimeType - could be mimeType or mediaType depending on SDK version
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

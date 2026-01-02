@@ -3,6 +3,7 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { BlogHeader } from "@/components/blog-header"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
+import { Newsletter } from "@/components/newsletter"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 
 // Disable caching for posts to always show current cover image
@@ -154,7 +155,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           </div>
         </article>
 
-        <footer className="mt-16 border-t border-border pt-8">
+        <nav className="mt-16 border-t border-border pt-8">
           <div className="flex justify-between items-center">
             {newerPost ? (
               <Link
@@ -183,8 +184,28 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
               </Link>
             )}
           </div>
-        </footer>
+        </nav>
+
+        <Newsletter />
       </main>
+
+      <footer className="border-t border-border">
+        <div className="mx-auto max-w-5xl px-6 py-12">
+          <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
+            <a href="https://oh-so.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
+              <img src="/oh-so-logo.svg" alt="OH-SO" className="h-6" />
+            </a>
+            <div className="flex gap-6 text-xs">
+              <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
+                LinkedIn
+              </a>
+              <a href="/impressum" className="hover:text-accent transition-colors">
+                Impressum
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
