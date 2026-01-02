@@ -259,6 +259,8 @@ export default function DigestsPage() {
     setGhostwriting(true)
     setBlogContent('')
 
+    let finalContent = ''
+
     try {
       const response = await fetch('/api/ghostwriter', {
         method: 'POST',
@@ -290,7 +292,10 @@ export default function DigestsPage() {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
-              if (data.text) setBlogContent(prev => prev + data.text)
+              if (data.text) {
+                finalContent += data.text
+                setBlogContent(prev => prev + data.text)
+              }
               if (data.error) throw new Error(data.error)
             } catch (e) {
               if (e instanceof SyntaxError) continue
@@ -298,6 +303,11 @@ export default function DigestsPage() {
             }
           }
         }
+      }
+
+      // Auto-save as draft after successful generation
+      if (finalContent && !finalContent.includes('**Fehler:**')) {
+        await autoSaveDraft(finalContent, ghostwriterDigest)
       }
     } catch (error) {
       console.error('Ghostwriter error:', error)
@@ -328,45 +338,44 @@ export default function DigestsPage() {
     }
   }
 
-  async function saveBlogAsDraft() {
-    if (!blogContent || !ghostwriterDigest) return
-    setSavingBlog(true)
+  // Core save logic - reused by both auto-save and manual save
+  async function savePostAsDraft(content: string, digest: Digest, showAlert: boolean = true): Promise<boolean> {
     try {
-      const titleMatch = blogContent.match(/^#\s+(.+)$/m)
+      const titleMatch = content.match(/^#\s+(.+)$/m)
       const title = titleMatch
         ? titleMatch[1]
-        : `Artikel vom ${new Date(ghostwriterDigest.digest_date).toLocaleDateString('de-DE')}`
+        : `Artikel vom ${new Date(digest.digest_date).toLocaleDateString('de-DE')}`
 
-      const tiptapContent = markdownToTiptap(blogContent)
+      const tiptapContent = markdownToTiptap(content)
       const { data: newPost, error } = await supabase.from('generated_posts').insert({
-        digest_id: ghostwriterDigest.id,
+        digest_id: digest.id,
         title,
         content: JSON.stringify(tiptapContent),
-        word_count: blogContent.split(/\s+/).length,
+        word_count: content.split(/\s+/).length,
         status: 'draft',
       }).select().single()
 
       if (error) throw error
 
       // Trigger background image generation from blog content sections
-      if (newPost && blogContent) {
+      if (newPost && content) {
         // Split blog content into sections by # or ## headings
         const sections: Array<{ title: string; content: string }> = []
 
         // Match all headings (# or ##) and their content
         const headingRegex = /^(#{1,2})\s+(.+)$/gm
-        const matches = [...blogContent.matchAll(headingRegex)]
+        const matches = [...content.matchAll(headingRegex)]
 
         for (let i = 0; i < matches.length; i++) {
           const match = matches[i]
-          const title = match[2].trim()
+          const sectionTitle = match[2].trim()
           const startIndex = match.index! + match[0].length
-          const endIndex = matches[i + 1]?.index ?? blogContent.length
-          const content = blogContent.slice(startIndex, endIndex).trim()
+          const endIndex = matches[i + 1]?.index ?? content.length
+          const sectionContent = content.slice(startIndex, endIndex).trim()
 
           // Skip very short sections but be more lenient (> 50 chars)
-          if (content.length > 50) {
-            sections.push({ title, content })
+          if (sectionContent.length > 50) {
+            sections.push({ title: sectionTitle, content: sectionContent })
           }
         }
 
@@ -390,14 +399,38 @@ export default function DigestsPage() {
         }
       }
 
-      alert('Artikel als Entwurf gespeichert! Bilder werden im Hintergrund generiert.')
-      setGhostwriterOpen(false)
+      if (showAlert) {
+        alert('Artikel als Entwurf gespeichert! Bilder werden im Hintergrund generiert.')
+      }
+      return true
     } catch (error) {
       console.error('Save error:', error)
-      alert('Fehler beim Speichern')
-    } finally {
-      setSavingBlog(false)
+      if (showAlert) {
+        alert('Fehler beim Speichern')
+      }
+      return false
     }
+  }
+
+  // Auto-save after ghostwriting completes
+  async function autoSaveDraft(content: string, digest: Digest) {
+    console.log('[AutoSave] Saving draft automatically...')
+    const success = await savePostAsDraft(content, digest, false)
+    if (success) {
+      console.log('[AutoSave] Draft saved successfully')
+      setGhostwriterOpen(false)
+    }
+  }
+
+  // Manual save button handler
+  async function saveBlogAsDraft() {
+    if (!blogContent || !ghostwriterDigest) return
+    setSavingBlog(true)
+    const success = await savePostAsDraft(blogContent, ghostwriterDigest, true)
+    if (success) {
+      setGhostwriterOpen(false)
+    }
+    setSavingBlog(false)
   }
 
   return (
