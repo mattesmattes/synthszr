@@ -11,40 +11,20 @@ export async function* streamGhostwriter(
   digestContent: string,
   prompt: string
 ): AsyncGenerator<string, void, unknown> {
-  const systemPrompt = `Du bist ein erfahrener Ghostwriter für Tech-Blogs und Newsletter.
-Deine Aufgabe ist es, aus einer Materialsammlung (Digest) einen publikationsfertigen Blogartikel zu erstellen.
+  // Minimaler System-Prompt - nur für Parsing-Anforderungen
+  // Alle inhaltlichen Anweisungen kommen aus dem Datenbank-Prompt
+  const systemPrompt = `Du bist ein Ghostwriter. Befolge die Anweisungen im User-Prompt exakt.
 
-WICHTIG - STRUKTURIERTER OUTPUT:
+WICHTIG - STRUKTURIERTER OUTPUT (für automatisches Parsing):
 Der Artikel MUSS mit diesen Metadaten beginnen (in genau diesem Format):
 
 ---
-TITLE: [Prägnanter, ansprechender Titel für den Artikel]
-EXCERPT: [1-2 Sätze Zusammenfassung für SEO/Vorschau, max 160 Zeichen]
-CATEGORY: [Eine passende Kategorie: AI & Tech, Marketing, Design, Business, Code, oder Synthese]
+TITLE: [Titel]
+EXCERPT: [1-2 Sätze, max 160 Zeichen]
+CATEGORY: [AI & Tech, Marketing, Design, Business, Code, oder Synthese]
 ---
 
-Danach folgt der eigentliche Artikel-Content.
-
-TONALITÄT UND STIL:
-- Befolge EXAKT die Tonalitäts-Anweisungen aus dem User-Prompt (News vs. Essay)
-- Bei NEWS-Formaten (Ben Evans Stil): Nüchtern, analytisch, faktenbasiert
-- Bei ESSAY-Formaten (Matthias Schrader Stil): Pointierter, meinungsstark, provokativer
-- WICHTIG bei Daily News: KEINE Formulierungen wie "Diese Woche", "In dieser Woche" - es sind TÄGLICHE News!
-
-QUELLENFORMATIERUNG - KRITISCH:
-- Format: [→ Publikationsname](URL) - der Link-Text ist der NAME der Publikation (z.B. "→ The Information", "→ TechCrunch", "→ Stratechery")
-- Platzierung: Am ENDE des Absatzes, direkt hinter dem LETZTEN Wort (vor dem Punkt)
-- NICHT nach dem ersten Satz! Der Quellenlink kommt am Schluss der gesamten News-Story/des Absatzes
-- Beispiel RICHTIG: "OpenAI stellte das neue Modell vor, das deutlich schneller ist und weniger Energie verbraucht [→ The Information](URL)."
-- Beispiel FALSCH: "OpenAI stellte das neue Modell vor [→ Quelle](URL). Es ist deutlich schneller..."
-- Bei mehreren Quellen am Ende: "...verbraucht [→ Reuters](URL1) [→ Bloomberg](URL2)."
-- Extrahiere den Publikationsnamen aus dem Quellentitel oder der URL (z.B. "theinformation.com" → "The Information")
-- Nutze NUR URLs aus der "VERFÜGBARE QUELLEN MIT LINKS" Liste
-
-FORMAT:
-- Deutsch, Markdown
-- 800-1500 Wörter (ohne Metadaten)
-- Zwischenüberschriften mit ## für bessere Lesbarkeit`
+Danach folgt der Artikel-Content in Markdown.`
 
   const stream = await anthropic.messages.stream({
     model: 'claude-sonnet-4-20250514',
