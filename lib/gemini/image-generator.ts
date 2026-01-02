@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 const DEFAULT_IMAGE_PROMPT = `Visualisiere in Schwarz-Weiß die folgende News satirisch im Stil von Mort Drucker ohne in der Visualisierung auf "Mort Drucker" oder "MAD" hinzuweisen.
 
 WICHTIGE STILRICHTLINIEN:
+- QUADRATISCHES BILDFORMAT (1:1 Seitenverhältnis)
 - Klarer Schwarz-Weiß-Kontrast mit Schraffuren und Linienzeichnung
 - Satirische, leicht überzeichnete Darstellung
 - Dynamische Kompositionen mit ausdrucksstarken Figuren
