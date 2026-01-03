@@ -39,6 +39,15 @@ export async function POST(request: NextRequest) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
         }
 
+        // Send keep-alive every 10 seconds to prevent Vercel timeout
+        const keepAliveInterval = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(`: keep-alive\n\n`))
+          } catch {
+            // Stream might be closed
+          }
+        }, 10000)
+
         try {
           await runSynthesisPipelineWithProgress(
             digestId,
@@ -62,6 +71,7 @@ export async function POST(request: NextRequest) {
             error: error instanceof Error ? error.message : 'Unknown error',
           })
         } finally {
+          clearInterval(keepAliveInterval)
           controller.close()
         }
       },
