@@ -579,11 +579,26 @@ export async function runSynthesisPipelineWithProgress(
   // Phase 2: Develop syntheses in parallel batches with progress updates
   const synthesesMap = new Map<string, DevelopedSynthesis>()
   const BATCH_SIZE = 3 // Process 3 at a time to balance speed vs rate limits
+  const PIPELINE_TIMEOUT_MS = 240000 // 4 minutes max for entire pipeline
+  const pipelineStartTime = Date.now()
 
   const { developSynthesis } = await import('./develop')
 
+  console.log(`[Pipeline] Starting Phase 2: Develop ${allCandidates.length} syntheses`)
+
   // Process in batches of BATCH_SIZE
   for (let batchStart = 0; batchStart < allCandidates.length; batchStart += BATCH_SIZE) {
+    // Check global timeout at start of each batch
+    const elapsed = Date.now() - pipelineStartTime
+    if (elapsed > PIPELINE_TIMEOUT_MS) {
+      console.log(`[Pipeline] Global timeout after ${elapsed}ms - stopping with ${synthesesDeveloped} syntheses`)
+      onProgress({
+        type: 'error',
+        error: `Pipeline timeout nach ${Math.round(elapsed / 1000)}s - ${synthesesDeveloped} Synthesen erstellt`,
+      })
+      break
+    }
+
     const batch = allCandidates.slice(batchStart, batchStart + BATCH_SIZE)
 
     // Show progress for batch start
@@ -594,10 +609,16 @@ export async function runSynthesisPipelineWithProgress(
       itemTitle: `Batch ${Math.floor(batchStart / BATCH_SIZE) + 1}: ${batch.map(c => c.sourceItem.title.slice(0, 20)).join(', ')}...`,
     })
 
-    // Process batch in parallel - developSynthesis has its own 25s timeout with AbortController
+    // Process batch in parallel - developSynthesis has 20s hard timeout via Promise.race
+    const batchNumber = Math.floor(batchStart / BATCH_SIZE) + 1
+    console.log(`[Pipeline] Starting batch ${batchNumber} with ${batch.length} items`)
+
+    const batchStartTime = Date.now()
     const batchResults = await Promise.all(
       batch.map(async (candidate, batchIndex) => {
         const globalIndex = batchStart + batchIndex
+        const itemStartTime = Date.now()
+        console.log(`[Pipeline] Batch ${batchNumber} item ${batchIndex + 1}: Starting "${candidate.sourceItem.title.slice(0, 30)}..."`)
 
         try {
           // developSynthesis now has built-in timeout and always returns (never throws)
@@ -607,14 +628,20 @@ export async function runSynthesisPipelineWithProgress(
             prompt.core_thesis
           )
 
+          const elapsed = Date.now() - itemStartTime
+          console.log(`[Pipeline] Batch ${batchNumber} item ${batchIndex + 1}: Completed in ${elapsed}ms`)
           return { candidate, synthesis, globalIndex, success: true }
         } catch (error) {
-          console.error(`[Pipeline] Unexpected error developing synthesis:`, error)
+          const elapsed = Date.now() - itemStartTime
+          console.error(`[Pipeline] Batch ${batchNumber} item ${batchIndex + 1}: Failed after ${elapsed}ms:`, error)
           errors.push(`Failed to develop synthesis for ${candidate.sourceItem.title}`)
           return { candidate, synthesis: null, globalIndex, success: false }
         }
       })
     )
+
+    const batchElapsed = Date.now() - batchStartTime
+    console.log(`[Pipeline] Batch ${batchNumber} completed in ${batchElapsed}ms`)
 
     // Process results and send progress updates
     for (const result of batchResults) {
