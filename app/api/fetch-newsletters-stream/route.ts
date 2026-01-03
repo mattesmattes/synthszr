@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { GmailClient } from '@/lib/gmail/client'
 import { parseNewsletterHtml } from '@/lib/email/parser'
-import { extractArticleContent, isArticleTooOld } from '@/lib/scraper/article-extractor'
+import { extractArticleContent, isArticleTooOld, isLikelyArticleUrl, isNonArticleLinkText } from '@/lib/scraper/article-extractor'
 import { createClient } from '@/lib/supabase/server'
 import { jwtVerify } from 'jose'
 
@@ -192,8 +192,13 @@ export async function POST(request: NextRequest) {
             const htmlContent = email.htmlBody || email.textBody || ''
             const parsed = parseNewsletterHtml(htmlContent, email.subject, email.from, email.date)
 
-            // Extract article links
-            const links = parsed.links.filter(link => link.type === 'article')
+            // Extract article links - filter out non-article URLs and subscribe links
+            const links = parsed.links.filter(link => {
+              if (link.type !== 'article') return false
+              if (!isLikelyArticleUrl(link.url)) return false
+              if (isNonArticleLinkText(link.text)) return false
+              return true
+            })
             for (const link of links) {
               articleUrls.push({
                 url: link.url,
