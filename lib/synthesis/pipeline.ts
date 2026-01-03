@@ -19,7 +19,7 @@ export interface SynthesisPipelineResult {
 }
 
 export interface SynthesisProgressEvent {
-  type: 'init' | 'searching' | 'scoring' | 'developing' | 'developed' | 'complete' | 'error'
+  type: 'init' | 'searching' | 'scoring' | 'developing' | 'developed' | 'complete' | 'error' | 'partial'
   totalItems?: number
   currentItem?: number
   itemTitle?: string
@@ -29,6 +29,7 @@ export interface SynthesisProgressEvent {
     historicalReference: string
   }
   error?: string
+  message?: string
 }
 
 export interface SynthesisPrompt {
@@ -599,9 +600,14 @@ export async function runSynthesisPipelineWithProgress(
   const processedSourceIds = new Set<string>()
   if (existingSyntheses) {
     for (const s of existingSyntheses) {
-      const candidate = s.synthesis_candidates as { source_item_id: string } | null
-      if (candidate?.source_item_id) {
-        processedSourceIds.add(candidate.source_item_id)
+      // Handle both array and single object cases from Supabase join
+      const candidates = s.synthesis_candidates as unknown as { source_item_id: string }[] | { source_item_id: string } | null
+      if (Array.isArray(candidates)) {
+        for (const c of candidates) {
+          if (c?.source_item_id) processedSourceIds.add(c.source_item_id)
+        }
+      } else if (candidates?.source_item_id) {
+        processedSourceIds.add(candidates.source_item_id)
       }
     }
   }
