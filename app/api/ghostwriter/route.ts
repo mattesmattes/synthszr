@@ -108,38 +108,34 @@ export async function POST(request: NextRequest) {
     let diversityWarning = ''
 
     if (sources && sources.length > 0) {
-      // Analyze source diversity
-      const sourceEmailCount: Record<string, number> = {}
-      const sourceDomainCount: Record<string, number> = {}
+      // Analyze source diversity by SPECIFIC newsletter (not platform)
+      // Count by the specific sender email address
+      const sourceCount: Record<string, number> = {}
 
       for (const s of sources) {
-        // Count by email
         if (s.source_email) {
-          sourceEmailCount[s.source_email] = (sourceEmailCount[s.source_email] || 0) + 1
-        }
-        // Count by URL domain
-        if (s.source_url) {
+          // Extract email address from format like "Newsletter Name <email@domain.com>"
+          const emailMatch = s.source_email.match(/<([^>]+)>/)
+          const sourceId = emailMatch ? emailMatch[1].toLowerCase() : s.source_email.toLowerCase().trim()
+          sourceCount[sourceId] = (sourceCount[sourceId] || 0) + 1
+        } else if (s.source_url) {
+          // Fallback to URL domain for articles without email
           try {
             const domain = new URL(s.source_url).hostname.replace('www.', '')
-            sourceDomainCount[domain] = (sourceDomainCount[domain] || 0) + 1
+            sourceCount[domain] = (sourceCount[domain] || 0) + 1
           } catch {
             // Invalid URL, skip
           }
         }
       }
 
-      // Check if any source exceeds 30%
+      // Check if any SPECIFIC newsletter exceeds 30%
       const threshold = sources.length * 0.3
       const overrepresentedSources: string[] = []
 
-      for (const [email, count] of Object.entries(sourceEmailCount)) {
+      for (const [sourceId, count] of Object.entries(sourceCount)) {
         if (count > threshold) {
-          overrepresentedSources.push(`${email} (${count}/${sources.length} = ${Math.round(count/sources.length*100)}%)`)
-        }
-      }
-      for (const [domain, count] of Object.entries(sourceDomainCount)) {
-        if (count > threshold) {
-          overrepresentedSources.push(`${domain} (${count}/${sources.length} = ${Math.round(count/sources.length*100)}%)`)
+          overrepresentedSources.push(`${sourceId} (${count}/${sources.length} = ${Math.round(count/sources.length*100)}%)`)
         }
       }
 

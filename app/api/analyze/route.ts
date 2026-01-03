@@ -122,27 +122,35 @@ export async function POST(request: NextRequest) {
     }
 
     // ENFORCE 30% MAX SOURCE DIVERSITY
-    // Group items by source domain
-    const getSourceDomain = (item: typeof rawItems[0]): string => {
+    // Group items by SPECIFIC newsletter (not platform)
+    // e.g., "Machine Learning Pills" and "Lenny's Newsletter" are separate sources,
+    // even though both are on Substack
+    const getSourceIdentifier = (item: typeof rawItems[0]): string => {
+      // Primary: Use the specific sender email as unique identifier
+      // This correctly separates different Substack newsletters
+      if (item.source_email) {
+        // Extract email address from format like "Newsletter Name <email@domain.com>"
+        const emailMatch = item.source_email.match(/<([^>]+)>/)
+        if (emailMatch) return emailMatch[1].toLowerCase()
+        // Or use the whole string if no angle brackets
+        return item.source_email.toLowerCase().trim()
+      }
+      // Fallback: Use URL domain for articles without email source
       if (item.source_url) {
         try {
           return new URL(item.source_url).hostname.replace('www.', '')
         } catch {}
-      }
-      if (item.source_email) {
-        const match = item.source_email.match(/@([^>]+)/)
-        if (match) return match[1]
       }
       return 'unknown'
     }
 
     const itemsBySource = new Map<string, typeof rawItems>()
     for (const item of rawItems) {
-      const domain = getSourceDomain(item)
-      if (!itemsBySource.has(domain)) {
-        itemsBySource.set(domain, [])
+      const sourceId = getSourceIdentifier(item)
+      if (!itemsBySource.has(sourceId)) {
+        itemsBySource.set(sourceId, [])
       }
-      itemsBySource.get(domain)!.push(item)
+      itemsBySource.get(sourceId)!.push(item)
     }
 
     // Calculate max items per source (30% of total, minimum 2)
