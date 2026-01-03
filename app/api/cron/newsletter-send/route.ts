@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
     const { data: todaysPosts } = await supabase
       .from('generated_posts')
       .select('id, title, slug, excerpt, content')
-      .eq('published', true)
+      .eq('status', 'published')
       .gte('created_at', today.toISOString())
       .order('created_at', { ascending: false })
       .limit(1)

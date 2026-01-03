@@ -12,7 +12,7 @@ interface Post {
   id: string
   title: string
   slug: string
-  published: boolean
+  status: string
   created_at: string
 }
 
@@ -77,8 +77,8 @@ export default function NewsletterSendPage() {
     // Fetch published posts
     const { data: postsData } = await supabase
       .from('generated_posts')
-      .select('id, title, slug, published, created_at')
-      .eq('published', true)
+      .select('id, title, slug, status, created_at')
+      .eq('status', 'published')
       .order('created_at', { ascending: false })
       .limit(20)
 
