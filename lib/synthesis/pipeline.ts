@@ -61,6 +61,7 @@ async function getActiveSynthesisPrompt(): Promise<SynthesisPrompt | null> {
 
 /**
  * Get daily_repo items associated with a digest
+ * If sources_used is empty, try to match items by title from the digest content
  */
 async function getDigestItems(digestId: string): Promise<
   Array<{
@@ -72,10 +73,10 @@ async function getDigestItems(digestId: string): Promise<
 > {
   const supabase = await createClient()
 
-  // Get the digest to find its date
+  // Get the digest to find its date and content
   const { data: digest, error: digestError } = await supabase
     .from('daily_digests')
-    .select('digest_date, sources_used')
+    .select('digest_date, sources_used, analysis_content')
     .eq('id', digestId)
     .single()
 
@@ -85,6 +86,7 @@ async function getDigestItems(digestId: string): Promise<
 
   // If sources_used is available, use those specific items
   if (digest.sources_used && digest.sources_used.length > 0) {
+    console.log(`[Pipeline] Using ${digest.sources_used.length} sources from sources_used`)
     const { data, error } = await supabase
       .from('daily_repo')
       .select('id, title, content, embedding')
@@ -94,14 +96,32 @@ async function getDigestItems(digestId: string): Promise<
     return data || []
   }
 
-  // Otherwise, get items from that date
-  const { data, error } = await supabase
+  // Otherwise, get ALL items from that date and filter by which appear in digest content
+  const { data: allItems, error } = await supabase
     .from('daily_repo')
     .select('id, title, content, embedding')
     .eq('newsletter_date', digest.digest_date)
 
   if (error) throw error
-  return data || []
+  if (!allItems || allItems.length === 0) return []
+
+  // Filter to only items whose titles appear in the digest content
+  const digestContent = digest.analysis_content || ''
+  const matchedItems = allItems.filter(item => {
+    // Check if the first 50 chars of title appear in digest
+    const titleSnippet = item.title.slice(0, 50)
+    return digestContent.includes(titleSnippet)
+  })
+
+  console.log(`[Pipeline] Matched ${matchedItems.length} items from digest content (of ${allItems.length} total for date)`)
+
+  // If no matches found, fall back to all items but limit to 10
+  if (matchedItems.length === 0) {
+    console.log(`[Pipeline] No title matches, using first 10 items`)
+    return allItems.slice(0, 10)
+  }
+
+  return matchedItems
 }
 
 /**

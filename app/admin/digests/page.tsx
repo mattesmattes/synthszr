@@ -246,10 +246,32 @@ export default function DigestsPage() {
     if (!streamedContent) return
     setSaving(true)
     try {
+      // Get the items for this date to store as sources_used
+      // Only use items that are referenced in the digest content (by title match)
+      const { data: allItems } = await supabase
+        .from('daily_repo')
+        .select('id, title')
+        .eq('newsletter_date', selectedDate)
+
+      // Find which items are actually referenced in the digest
+      const sourcesUsed: string[] = []
+      if (allItems) {
+        for (const item of allItems) {
+          // Check if the item title appears in the digest content
+          // This identifies which items were actually analyzed and included
+          if (streamedContent.includes(item.title.slice(0, 50))) {
+            sourcesUsed.push(item.id)
+          }
+        }
+      }
+
+      console.log(`[Digest] Found ${sourcesUsed.length} sources in digest content (of ${allItems?.length || 0} total)`)
+
       const { data, error } = await supabase.from('daily_digests').insert({
         digest_date: selectedDate,
         analysis_content: streamedContent,
         word_count: streamedContent.split(/\s+/).length,
+        sources_used: sourcesUsed.length > 0 ? sourcesUsed : null,
       }).select('id').single()
       if (error) throw error
 
