@@ -95,12 +95,27 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Get original sources for this digest's date to ensure links are available
-    const { data: sources } = await supabase
-      .from('daily_repo')
-      .select('title, source_url, source_email, source_type')
-      .eq('newsletter_date', digest.digest_date)
-      .order('collected_at', { ascending: true })
+    // Get original sources for this digest
+    // IMPORTANT: Use sources_used if available (matches what syntheses were created for)
+    // Otherwise fall back to newsletter_date (legacy behavior)
+    let sources: Array<{ title: string; source_url: string | null; source_email: string | null; source_type: string }> | null = null
+
+    if (digest.sources_used && digest.sources_used.length > 0) {
+      console.log(`[Ghostwriter] Using ${digest.sources_used.length} items from sources_used`)
+      const { data } = await supabase
+        .from('daily_repo')
+        .select('title, source_url, source_email, source_type')
+        .in('id', digest.sources_used)
+      sources = data
+    } else {
+      console.log(`[Ghostwriter] Fallback: Loading items by newsletter_date`)
+      const { data } = await supabase
+        .from('daily_repo')
+        .select('title, source_url, source_email, source_type')
+        .eq('newsletter_date', digest.digest_date)
+        .order('collected_at', { ascending: true })
+      sources = data
+    }
 
     // Build a source reference list for the ghostwriter
     // Use canonical URLs for known newsletters without direct article URLs
