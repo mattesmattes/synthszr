@@ -354,25 +354,25 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     }
   }, [editor, content])
 
-  // Process "Mattes Take" text to add styling class
-  const processMattesTakeText = useCallback(() => {
+  // Process "Mattes Synthese" text to add styling class
+  const processMattesSyntheseText = useCallback(() => {
     if (!containerRef.current) return
 
     // First check headings
     const headings = containerRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6')
     headings.forEach((heading) => {
       const text = heading.textContent || ''
-      if (text.toLowerCase().includes('mattes take') || text.toLowerCase().includes("mattes' take")) {
-        heading.classList.add('mattes-take-heading')
+      if (text.toLowerCase().includes('mattes synthese') || text.toLowerCase().includes("mattes' synthese")) {
+        heading.classList.add('mattes-synthese-heading')
       }
     })
 
-    // Then check bold/strong elements for "Mattes Take"
+    // Then check bold/strong elements for "Mattes Synthese"
     const strongElements = containerRef.current.querySelectorAll('strong, b')
     strongElements.forEach((strong) => {
       const text = strong.textContent || ''
-      if (text.toLowerCase().includes('mattes take') || text.toLowerCase().includes("mattes' take")) {
-        strong.classList.add('mattes-take')
+      if (text.toLowerCase().includes('mattes synthese') || text.toLowerCase().includes("mattes' synthese")) {
+        strong.classList.add('mattes-synthese')
       }
     })
   }, [])
@@ -383,11 +383,11 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       // Wait for DOM to update
       const timeoutId = setTimeout(() => {
         processCompanyNames()
-        processMattesTakeText()
+        processMattesSyntheseText()
       }, 100)
       return () => clearTimeout(timeoutId)
     }
-  }, [editor, content, processCompanyNames, processMattesTakeText])
+  }, [editor, content, processCompanyNames, processMattesSyntheseText])
 
   if (!editor) {
     return null
