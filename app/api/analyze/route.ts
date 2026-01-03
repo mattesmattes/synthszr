@@ -29,15 +29,43 @@ const NEWSLETTER_CANONICAL_URLS: Record<string, string> = {
   'wall street journal': 'https://www.wsj.com',
   'bloomberg': 'https://www.bloomberg.com',
   'medium': 'https://medium.com',
-  'substack': 'https://substack.com',
+  // Note: No generic 'substack' - we extract specific newsletter URLs
+}
+
+// Extract specific Substack newsletter URL from email
+// e.g., "Machine Learning Pills <mlpills@substack.com>" → { name: "Machine Learning Pills", url: "https://mlpills.substack.com" }
+function extractSubstackInfo(email: string | null): { name: string; url: string } | null {
+  if (!email || !email.includes('@substack.com')) return null
+
+  // Extract subdomain from email (before @substack.com)
+  const subdomainMatch = email.match(/([a-z0-9_+-]+)@substack\.com/i)
+  if (!subdomainMatch) return null
+
+  // Clean subdomain (remove + variants like "getfivethings+tech")
+  let subdomain = subdomainMatch[1].split('+')[0]
+
+  // Extract newsletter name (before the < in email)
+  const nameMatch = email.match(/^"?([^"<]+)/);
+  const name = nameMatch?.[1]?.trim() || subdomain
+
+  return {
+    name,
+    url: `https://${subdomain}.substack.com`
+  }
 }
 
 // Find a canonical URL for a source based on title or email
-function findCanonicalUrl(title: string, email: string | null): string | null {
+function findCanonicalUrl(title: string, email: string | null): { name: string; url: string } | null {
+  // First check for Substack (extract specific newsletter URL)
+  const substackInfo = extractSubstackInfo(email)
+  if (substackInfo) return substackInfo
+
+  // Then check canonical URLs
   const searchText = `${title} ${email || ''}`.toLowerCase()
   for (const [key, url] of Object.entries(NEWSLETTER_CANONICAL_URLS)) {
     if (searchText.includes(key)) {
-      return url
+      const name = email?.split('<')[0].trim() || key
+      return { name, url }
     }
   }
   return null
@@ -167,11 +195,10 @@ export async function POST(request: NextRequest) {
           sourceDisplay = `[Link](${item.source_url})`
         }
       } else {
-        // Try to find a canonical URL for known sources
-        const canonicalUrl = findCanonicalUrl(item.title, item.source_email)
-        if (canonicalUrl) {
-          const sourceName = item.source_email?.split('<')[0].trim() || 'Newsletter'
-          sourceDisplay = `[${sourceName}](${canonicalUrl})`
+        // Try to find a canonical URL for known sources (including specific Substack newsletters)
+        const sourceInfo = findCanonicalUrl(item.title, item.source_email)
+        if (sourceInfo) {
+          sourceDisplay = `[${sourceInfo.name}](${sourceInfo.url})`
         } else {
           sourceDisplay = `${item.source_email || 'Newsletter'} (kein direkter Link verfügbar)`
         }

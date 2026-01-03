@@ -34,7 +34,29 @@ const NEWSLETTER_CANONICAL_URLS: Record<string, string> = {
   'wall street journal': 'https://www.wsj.com',
   'bloomberg': 'https://www.bloomberg.com',
   'medium': 'https://medium.com',
-  'substack': 'https://substack.com',
+  // Note: No generic 'substack' - we extract specific newsletter URLs below
+}
+
+// Extract specific Substack newsletter URL from email
+// e.g., "Machine Learning Pills <mlpills@substack.com>" → { name: "Machine Learning Pills", url: "https://mlpills.substack.com" }
+function extractSubstackInfo(email: string | null): { name: string; url: string } | null {
+  if (!email || !email.includes('@substack.com')) return null
+
+  // Extract subdomain from email (before @substack.com)
+  const subdomainMatch = email.match(/([a-z0-9_+-]+)@substack\.com/i)
+  if (!subdomainMatch) return null
+
+  // Clean subdomain (remove + variants like "getfivethings+tech")
+  const subdomain = subdomainMatch[1].split('+')[0]
+
+  // Extract newsletter name (before the < in email)
+  const nameMatch = email.match(/^"?([^"<]+)/)
+  const name = nameMatch?.[1]?.trim() || subdomain
+
+  return {
+    name,
+    url: `https://${subdomain}.substack.com`
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -132,24 +154,32 @@ export async function POST(request: NextRequest) {
       const sourcesWithUrls = sources.map(s => {
         // If source has a valid URL, use it
         if (s.source_url && s.source_url.startsWith('http')) {
-          return { title: s.title, url: s.source_url, email: s.source_email }
+          return { title: s.title, url: s.source_url, sourceName: null }
         }
+
+        // First check for Substack (extract specific newsletter URL)
+        const substackInfo = extractSubstackInfo(s.source_email)
+        if (substackInfo) {
+          return { title: s.title, url: substackInfo.url, sourceName: substackInfo.name }
+        }
+
         // Otherwise, try to find a canonical URL based on title or email
         const titleLower = s.title?.toLowerCase() || ''
         const emailLower = s.source_email?.toLowerCase() || ''
 
         for (const [key, canonicalUrl] of Object.entries(NEWSLETTER_CANONICAL_URLS)) {
           if (titleLower.includes(key) || emailLower.includes(key)) {
-            return { title: s.title, url: canonicalUrl, email: s.source_email }
+            const sourceName = s.source_email?.split('<')[0].trim() || key
+            return { title: s.title, url: canonicalUrl, sourceName }
           }
         }
         return null
-      }).filter((s): s is { title: string; url: string; email: string | null } => s !== null)
+      }).filter((s): s is { title: string; url: string; sourceName: string | null } => s !== null)
 
       if (sourcesWithUrls.length > 0) {
         sourceReference = '\n\n---\n\nVERFÜGBARE QUELLEN MIT LINKS (nutze NUR diese URLs):\n'
         sourceReference += sourcesWithUrls.map((s, i) => {
-          const sourceInfo = s.email ? ` [via: ${s.email.split('<')[0].trim()}]` : ''
+          const sourceInfo = s.sourceName ? ` [via: ${s.sourceName}]` : ''
           return `${i + 1}. [${s.title}](${s.url})${sourceInfo}`
         }).join('\n')
       }
