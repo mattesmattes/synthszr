@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { GmailClient } from '@/lib/gmail/client'
 import { parseNewsletterHtml } from '@/lib/email/parser'
-import { extractArticleContent } from '@/lib/scraper/article-extractor'
+import { extractArticleContent, isArticleTooOld } from '@/lib/scraper/article-extractor'
 import { createClient } from '@/lib/supabase/server'
 import { jwtVerify } from 'jose'
 
@@ -303,13 +303,57 @@ export async function POST(request: NextRequest) {
               const extracted = await extractArticleContent(article.url)
 
               if (extracted && extracted.content) {
+                // Check if article is too old (max 48 hours for daily newsletter)
+                if (isArticleTooOld(extracted.publishedDate, 48)) {
+                  const ageInfo = extracted.publishedDate
+                    ? ` (${Math.round((Date.now() - extracted.publishedDate.getTime()) / (1000 * 60 * 60 * 24))} Tage alt)`
+                    : ''
+                  send({
+                    type: 'article',
+                    phase: 'extracting',
+                    current: i + 1,
+                    total: articlesToProcess.length,
+                    item: {
+                      title: extracted.title || article.title,
+                      url: article.url,
+                      status: 'skipped',
+                      error: `Artikel zu alt${ageInfo}`
+                    }
+                  })
+                  continue
+                }
+
                 // Use targetDate if provided, otherwise use today
                 const articleDate = targetDate || new Date().toISOString().split('T')[0]
+                // Use the resolved final URL if available (resolves tracking redirects)
+                // This ensures we store clean URLs like mlpills.substack.com/p/... instead of substack.com/redirect/...
+                const resolvedUrl = extracted.finalUrl || article.url
+
+                // Check if the RESOLVED URL already exists (prevents duplicates from different tracking URLs)
+                if (extracted.finalUrl) {
+                  const { data: existingResolved } = await supabase
+                    .from('daily_repo')
+                    .select('id')
+                    .eq('source_url', resolvedUrl)
+                    .single()
+
+                  if (existingResolved && !force) {
+                    send({
+                      type: 'article',
+                      phase: 'extracting',
+                      current: i + 1,
+                      total: articlesToProcess.length,
+                      item: { title: extracted.title || article.title, url: resolvedUrl, status: 'skipped' }
+                    })
+                    continue
+                  }
+                }
+
                 await supabase
                   .from('daily_repo')
                   .insert({
                     source_type: 'article',
-                    source_url: article.url,
+                    source_url: resolvedUrl,
                     source_email: article.newsletterEmail,  // Track which newsletter this article came from
                     title: extracted.title || article.title,
                     content: extracted.content,
@@ -323,7 +367,7 @@ export async function POST(request: NextRequest) {
                   phase: 'extracting',
                   current: i + 1,
                   total: articlesToProcess.length,
-                  item: { title: extracted.title || article.title, url: article.url, status: 'success' }
+                  item: { title: extracted.title || article.title, url: resolvedUrl, status: 'success' }
                 })
               } else {
                 send({
