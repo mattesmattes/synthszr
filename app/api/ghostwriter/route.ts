@@ -124,25 +124,30 @@ export async function POST(request: NextRequest) {
     try {
       const syntheses = await getSynthesesForDigest(digestId)
       if (syntheses && syntheses.length > 0) {
-        synthesisContext = '\n\n---\n\n## ENTWICKELTE SYNTHESEN FÜR "MATTES SYNTHESE"\n\n'
-        synthesisContext += 'Jede Synthese ist einem spezifischen News-Artikel zugeordnet. '
-        synthesisContext += 'Füge die Synthese als "Mattes Synthese" Kommentar DIREKT NACH dem jeweiligen Artikel ein:\n\n'
+        synthesisContext = '\n\n---\n\n## HINTERGRUND-RECHERCHE FÜR "MATTES SYNTHESE"\n\n'
+        synthesisContext += 'Für jeden Artikel wurde eine historische Verbindung recherchiert. '
+        synthesisContext += 'Diese Recherche dient als HINTERGRUNDWISSEN für deinen "Mattes Synthese" Kommentar.\n\n'
+        synthesisContext += '**WICHTIG:** Übernimm die Recherche NICHT wörtlich! Nutze sie stattdessen als Basis:\n'
+        synthesisContext += '- Nimm die historische Verbindung zur Kenntnis\n'
+        synthesisContext += '- Reflektiere die aktuelle News vor diesem Hintergrund\n'
+        synthesisContext += '- Ordne die News in den größeren Kontext ein\n'
+        synthesisContext += '- Formuliere deinen EIGENEN Kommentar im Ghostwriter-Stil\n\n'
 
         for (const synthesis of syntheses) {
           // Show which article this synthesis belongs to
           if (synthesis.sourceArticleTitle) {
-            synthesisContext += `**ZU ARTIKEL:** "${synthesis.sourceArticleTitle.slice(0, 80)}..."\n`
+            synthesisContext += `**ARTIKEL:** "${synthesis.sourceArticleTitle.slice(0, 80)}..."\n`
           }
-          synthesisContext += `### ${synthesis.headline}\n`
-          synthesisContext += `${synthesis.content}\n`
+          synthesisContext += `**Recherchierte Verbindung:** ${synthesis.headline}\n`
+          synthesisContext += `**Kontext:** ${synthesis.content}\n`
           if (synthesis.historicalReference) {
-            synthesisContext += `> Historische Referenz: ${synthesis.historicalReference}\n`
+            synthesisContext += `**Historischer Bezug:** ${synthesis.historicalReference}\n`
           }
           synthesisContext += '\n---\n\n'
         }
 
-        synthesisContext += '**WICHTIG:** Jede Synthese gehört zu einem bestimmten Artikel (siehe "ZU ARTIKEL"). '
-        synthesisContext += 'Platziere die "Mattes Synthese" als Kommentar direkt nach dem entsprechenden News-Abschnitt.'
+        synthesisContext += 'Schreibe zu jedem Artikel mit Recherche-Hintergrund einen "Mattes Synthese" Kommentar, '
+        synthesisContext += 'der die aktuelle News im Licht der historischen Verbindung reflektiert und einordnet.'
       }
     } catch (error) {
       console.log('[Ghostwriter] No syntheses available (table may not exist yet)')
