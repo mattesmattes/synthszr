@@ -298,3 +298,31 @@
   padding: 0.15em 0.4em;
   border-radius: 2px;
 }
+
+/* News headline links with favicon - no underline, inherit heading color */
+.tiptap-content h2.news-heading-processed a,
+.prose h2.news-heading-processed a,
+.prose-article h2.news-heading-processed a,
+.ProseMirror h2.news-heading-processed a {
+  color: inherit !important;
+  text-decoration: none !important;
+  font-weight: inherit;
+}
+
+.tiptap-content h2.news-heading-processed a:hover,
+.prose h2.news-heading-processed a:hover,
+.prose-article h2.news-heading-processed a:hover,
+.ProseMirror h2.news-heading-processed a:hover {
+  opacity: 0.8;
+  text-decoration: none !important;
+}
+
+/* Favicon styling in news headings */
+.tiptap-content h2.news-heading-processed img,
+.prose h2.news-heading-processed img,
+.prose-article h2.news-heading-processed img,
+.ProseMirror h2.news-heading-processed img {
+  display: inline-block;
+  vertical-align: middle;
+  opacity: 0.7;
+}

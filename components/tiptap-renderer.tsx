@@ -386,17 +386,116 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     })
   }, [])
 
-  // Process company names after editor renders
+  // Process news headings: add favicon + link, remove source links from paragraphs
+  const processNewsHeadings = useCallback(() => {
+    if (!containerRef.current) return
+
+    // Find all H2 headings (news headlines)
+    const h2s = containerRef.current.querySelectorAll('h2')
+
+    h2s.forEach((h2) => {
+      // Skip if already processed or is "Mattes Synthese" heading
+      if (h2.classList.contains('news-heading-processed')) return
+      const headingText = h2.textContent?.toLowerCase() || ''
+      if (headingText.includes('mattes synthese') || headingText.includes("mattes' synthese")) return
+
+      // Find the next sibling paragraph that contains a source link
+      let nextSibling = h2.nextElementSibling
+      let sourceUrl: string | null = null
+      let sourceLinkElement: Element | null = null
+
+      // Look through the next few siblings to find a paragraph with a source link
+      for (let i = 0; i < 3 && nextSibling; i++) {
+        if (nextSibling.tagName.toLowerCase() === 'p') {
+          // Find links that match the pattern "→ Source" or just arrow links
+          const links = nextSibling.querySelectorAll('a')
+          links.forEach((link) => {
+            const linkText = link.textContent || ''
+            // Match patterns like "→ Medium", "→ TechCrunch", etc.
+            if (linkText.trim().startsWith('→') || linkText.trim().match(/^→\s/)) {
+              sourceUrl = link.getAttribute('href')
+              sourceLinkElement = link
+            }
+          })
+          if (sourceUrl) break
+        }
+        // Also check if next is heading (don't look further)
+        if (nextSibling.tagName.toLowerCase().match(/^h[1-6]$/)) break
+        nextSibling = nextSibling.nextElementSibling
+      }
+
+      if (sourceUrl) {
+        // Extract domain for favicon
+        try {
+          const url = new URL(sourceUrl)
+          const domain = url.hostname
+
+          // Create wrapper link for heading content
+          const headingContent = h2.innerHTML
+          const faviconImg = document.createElement('img')
+          faviconImg.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`
+          faviconImg.alt = domain
+          faviconImg.className = 'inline-block w-5 h-5 mr-2 align-middle opacity-70'
+          faviconImg.style.marginTop = '-2px'
+
+          // Create link wrapper
+          const linkWrapper = document.createElement('a')
+          linkWrapper.href = sourceUrl
+          linkWrapper.target = '_blank'
+          linkWrapper.rel = 'noopener noreferrer'
+          linkWrapper.className = 'no-underline hover:opacity-80 transition-opacity'
+          linkWrapper.innerHTML = headingContent
+
+          // Clear heading and add favicon + linked content
+          h2.innerHTML = ''
+          h2.appendChild(faviconImg)
+          h2.appendChild(linkWrapper)
+          h2.classList.add('news-heading-processed')
+
+          // Remove the source link from the paragraph
+          if (sourceLinkElement) {
+            // Check if link is at end of paragraph (possibly with trailing dot/space)
+            const linkToRemove = sourceLinkElement as Element
+            const parent = linkToRemove.parentNode
+            if (parent) {
+              // Remove preceding " " or "." if present
+              const prevSibling = linkToRemove.previousSibling
+              if (prevSibling && prevSibling.nodeType === Node.TEXT_NODE) {
+                const text = prevSibling.textContent || ''
+                // Remove trailing space, dot, or arrow from previous text
+                prevSibling.textContent = text.replace(/\s*$/, '')
+              }
+              // Remove the link element
+              linkToRemove.remove()
+              // Remove trailing dot after link if present
+              const nextNode = parent.lastChild
+              if (nextNode && nextNode.nodeType === Node.TEXT_NODE) {
+                const text = nextNode.textContent || ''
+                if (text.trim() === '.' || text.trim() === '') {
+                  nextNode.textContent = text.replace(/\.\s*$/, '')
+                }
+              }
+            }
+          }
+        } catch {
+          // Invalid URL, skip favicon
+        }
+      }
+    })
+  }, [])
+
+  // Process company names and news headings after editor renders
   useEffect(() => {
     if (editor) {
       // Wait for DOM to update
       const timeoutId = setTimeout(() => {
+        processNewsHeadings() // Process news headings first (adds favicons, removes source links)
         processCompanyNames()
         processMattesSyntheseText()
       }, 100)
       return () => clearTimeout(timeoutId)
     }
-  }, [editor, content, processCompanyNames, processMattesSyntheseText])
+  }, [editor, content, processCompanyNames, processMattesSyntheseText, processNewsHeadings])
 
   if (!editor) {
     return null
