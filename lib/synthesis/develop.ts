@@ -100,7 +100,7 @@ export async function developSynthesis(
   candidate: ScoredCandidate,
   developmentPrompt: string,
   coreThesis: string,
-  timeoutMs: number = 25000 // 25 second timeout (shorter to ensure we finish before Vercel timeout)
+  timeoutMs: number = 15000 // 15 second timeout - aggressive to prevent hangs
 ): Promise<DevelopedSynthesis> {
   const fallbackSynthesis: DevelopedSynthesis = {
     headline: `Verbindung: ${candidate.synthesisType}`,
@@ -110,9 +110,10 @@ export async function developSynthesis(
   }
 
   // Wrap the entire operation in a hard timeout as last resort
+  // Hard timeout at 20s guarantees we never wait longer than this
   return withHardTimeout(
     developSynthesisInternal(candidate, developmentPrompt, coreThesis, timeoutMs),
-    timeoutMs + 10000, // Hard timeout 10s after soft timeout
+    20000, // Hard 20s timeout - absolute maximum wait
     fallbackSynthesis
   )
 }
@@ -134,7 +135,7 @@ async function developSynthesisInternal(
 
   const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
-    timeout: timeoutMs + 5000, // SDK timeout slightly higher than our abort
+    timeout: 18000, // SDK timeout at 18s (between soft 15s and hard 20s)
   })
 
   const currentNews = `${candidate.sourceItem.title}\n\n${candidate.sourceItem.content.slice(0, 2000)}`
