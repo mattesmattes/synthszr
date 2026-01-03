@@ -436,7 +436,7 @@ export async function getSynthesesForDigest(
  * Run the synthesis pipeline with progress callbacks for streaming UI
  */
 // Pipeline version for deployment verification
-const PIPELINE_VERSION = 'v6-sequential'
+const PIPELINE_VERSION = 'v7-simple-loop'
 
 export async function runSynthesisPipelineWithProgress(
   digestId: string,
@@ -581,19 +581,21 @@ export async function runSynthesisPipelineWithProgress(
     }
   }
 
-  // Phase 2: Develop syntheses in parallel batches with progress updates
+  // Phase 2: Develop syntheses ONE BY ONE - no parallelization
   const synthesesMap = new Map<string, DevelopedSynthesis>()
-  const BATCH_SIZE = 1 // Process 1 at a time to avoid concurrency issues
   const PIPELINE_TIMEOUT_MS = 240000 // 4 minutes max for entire pipeline
   const pipelineStartTime = Date.now()
 
+  // Direct import, no dynamic import
   const { developSynthesis } = await import('./develop')
 
-  console.log(`[Pipeline] Starting Phase 2: Develop ${allCandidates.length} syntheses`)
+  console.log(`[Pipeline ${PIPELINE_VERSION}] Phase 2: Processing ${allCandidates.length} items sequentially`)
 
-  // Process in batches of BATCH_SIZE
-  for (let batchStart = 0; batchStart < allCandidates.length; batchStart += BATCH_SIZE) {
-    // Check global timeout at start of each batch
+  // Simple sequential loop - NO Promise.all, NO batching
+  for (let i = 0; i < allCandidates.length; i++) {
+    const candidate = allCandidates[i]
+
+    // Check global timeout
     const elapsed = Date.now() - pipelineStartTime
     if (elapsed > PIPELINE_TIMEOUT_MS) {
       console.log(`[Pipeline] Global timeout after ${elapsed}ms - stopping with ${synthesesDeveloped} syntheses`)
@@ -604,79 +606,57 @@ export async function runSynthesisPipelineWithProgress(
       break
     }
 
-    const batch = allCandidates.slice(batchStart, batchStart + BATCH_SIZE)
-
-    // Show progress for batch start
+    // Show progress
     onProgress({
       type: 'developing',
-      currentItem: batchStart + 1,
+      currentItem: i + 1,
       totalItems: allCandidates.length,
-      itemTitle: `Batch ${Math.floor(batchStart / BATCH_SIZE) + 1}: ${batch.map(c => c.sourceItem.title.slice(0, 20)).join(', ')}...`,
+      itemTitle: candidate.sourceItem.title.slice(0, 50),
     })
 
-    // Process batch in parallel - developSynthesis has 20s hard timeout via Promise.race
-    const batchNumber = Math.floor(batchStart / BATCH_SIZE) + 1
-    console.log(`[Pipeline] Starting batch ${batchNumber} with ${batch.length} items`)
+    console.log(`[Pipeline] Item ${i + 1}/${allCandidates.length}: Starting "${candidate.sourceItem.title.slice(0, 40)}..."`)
+    const itemStartTime = Date.now()
 
-    const batchStartTime = Date.now()
-    const batchResults = await Promise.all(
-      batch.map(async (candidate, batchIndex) => {
-        const globalIndex = batchStart + batchIndex
-        const itemStartTime = Date.now()
-        console.log(`[Pipeline] Batch ${batchNumber} item ${batchIndex + 1}: Starting "${candidate.sourceItem.title.slice(0, 30)}..."`)
+    try {
+      // Simple await - no Promise.all, no Promise.race wrapper here
+      const synthesis = await developSynthesis(
+        candidate,
+        prompt.development_prompt,
+        prompt.core_thesis
+      )
 
-        try {
-          // developSynthesis now has built-in timeout and always returns (never throws)
-          const synthesis = await developSynthesis(
-            candidate,
-            prompt.development_prompt,
-            prompt.core_thesis
-          )
+      const itemElapsed = Date.now() - itemStartTime
+      console.log(`[Pipeline] Item ${i + 1}: Completed in ${itemElapsed}ms`)
 
-          const elapsed = Date.now() - itemStartTime
-          console.log(`[Pipeline] Batch ${batchNumber} item ${batchIndex + 1}: Completed in ${elapsed}ms`)
-          return { candidate, synthesis, globalIndex, success: true }
-        } catch (error) {
-          const elapsed = Date.now() - itemStartTime
-          console.error(`[Pipeline] Batch ${batchNumber} item ${batchIndex + 1}: Failed after ${elapsed}ms:`, error)
-          errors.push(`Failed to develop synthesis for ${candidate.sourceItem.title}`)
-          return { candidate, synthesis: null, globalIndex, success: false }
-        }
+      // Store result
+      const key = `${candidate.sourceItem.id}-${candidate.relatedItem.id}`
+      synthesesMap.set(key, {
+        ...synthesis,
+        candidateId: key,
       })
-    )
+      synthesesDeveloped++
 
-    const batchElapsed = Date.now() - batchStartTime
-    console.log(`[Pipeline] Batch ${batchNumber} completed in ${batchElapsed}ms`)
-
-    // Process results and send progress updates
-    for (const result of batchResults) {
-      if (result.success && result.synthesis) {
-        const key = `${result.candidate.sourceItem.id}-${result.candidate.relatedItem.id}`
-        synthesesMap.set(key, {
-          ...result.synthesis,
-          candidateId: key,
-        })
-
-        synthesesDeveloped++
-
-        // Send the developed synthesis to the client
-        onProgress({
-          type: 'developed',
-          currentItem: result.globalIndex + 1,
-          totalItems: allCandidates.length,
-          itemTitle: result.candidate.sourceItem.title,
-          synthesis: {
-            headline: result.synthesis.headline,
-            content: result.synthesis.content,
-            historicalReference: result.synthesis.historicalReference,
-          },
-        })
-      }
+      // Send progress
+      onProgress({
+        type: 'developed',
+        currentItem: i + 1,
+        totalItems: allCandidates.length,
+        itemTitle: candidate.sourceItem.title,
+        synthesis: {
+          headline: synthesis.headline,
+          content: synthesis.content,
+          historicalReference: synthesis.historicalReference,
+        },
+      })
+    } catch (error) {
+      const itemElapsed = Date.now() - itemStartTime
+      console.error(`[Pipeline] Item ${i + 1}: Failed after ${itemElapsed}ms:`, error)
+      errors.push(`Failed: ${candidate.sourceItem.title}`)
     }
 
-    // Small delay between items to respect rate limits
-    if (batchStart + BATCH_SIZE < allCandidates.length) {
-      await new Promise((resolve) => setTimeout(resolve, 500))
+    // Small delay between items
+    if (i < allCandidates.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 300))
     }
   }
 
