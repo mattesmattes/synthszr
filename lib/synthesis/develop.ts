@@ -72,15 +72,23 @@ function estimateThesisAlignment(synthesis: string, coreThesis: string): number 
 
 /**
  * Develop a single synthesis using Claude Opus with timeout
+ * Uses AbortController for proper request cancellation
  */
 export async function developSynthesis(
   candidate: ScoredCandidate,
   developmentPrompt: string,
-  coreThesis: string
+  coreThesis: string,
+  timeoutMs: number = 25000 // 25 second timeout (shorter to ensure we finish before Vercel timeout)
 ): Promise<DevelopedSynthesis> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => {
+    console.log(`[Synthesis] Aborting request after ${timeoutMs}ms timeout`)
+    controller.abort()
+  }, timeoutMs)
+
   const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
-    timeout: 60000, // 60 second timeout
+    timeout: timeoutMs + 5000, // SDK timeout slightly higher than our abort
   })
 
   const currentNews = `${candidate.sourceItem.title}\n\n${candidate.sourceItem.content.slice(0, 2000)}`
@@ -96,17 +104,24 @@ export async function developSynthesis(
   console.log(`[Synthesis] Developing synthesis for "${candidate.sourceItem.title.slice(0, 50)}..."`)
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-opus-4-20250514',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }],
-    })
+    const response = await anthropic.messages.create(
+      {
+        model: 'claude-opus-4-20250514',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }],
+      },
+      { signal: controller.signal }
+    )
+
+    clearTimeout(timeoutId)
 
     const text =
       response.content[0].type === 'text' ? response.content[0].text : ''
 
     const parsed = parseSynthesisResponse(text)
     const alignment = estimateThesisAlignment(parsed.synthese, coreThesis)
+
+    console.log(`[Synthesis] Successfully developed: "${parsed.headline.slice(0, 40)}..."`)
 
     return {
       headline: parsed.headline,
@@ -115,11 +130,16 @@ export async function developSynthesis(
       coreThesisAlignment: alignment,
     }
   } catch (error) {
-    console.error(`[Synthesis] Opus API error:`, error)
+    clearTimeout(timeoutId)
+
+    const isAborted = error instanceof Error && error.name === 'AbortError'
+    const errorType = isAborted ? 'Timeout' : 'API error'
+    console.error(`[Synthesis] ${errorType}:`, isAborted ? `Aborted after ${timeoutMs}ms` : error)
+
     // Return a fallback synthesis instead of throwing
     return {
       headline: `Verbindung: ${candidate.synthesisType}`,
-      content: `Zusammenhang zwischen "${candidate.sourceItem.title.slice(0, 50)}" und historischer News konnte nicht entwickelt werden.`,
+      content: `Zusammenhang zwischen "${candidate.sourceItem.title.slice(0, 50)}" und historischer News konnte nicht entwickelt werden (${errorType}).`,
       historicalReference: candidate.relatedItem.title,
       coreThesisAlignment: 0,
     }

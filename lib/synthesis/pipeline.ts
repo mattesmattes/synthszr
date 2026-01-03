@@ -512,18 +512,6 @@ export async function runSynthesisPipelineWithProgress(
   // Phase 2: Develop syntheses in parallel batches with progress updates
   const synthesesMap = new Map<string, DevelopedSynthesis>()
   const BATCH_SIZE = 3 // Process 3 at a time to balance speed vs rate limits
-  const TIMEOUT_MS = 30000 // 30 second timeout per synthesis
-
-  // Helper: timeout wrapper that guarantees we don't hang
-  const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
-    return Promise.race([
-      promise,
-      new Promise<T>((resolve) => setTimeout(() => {
-        console.log(`[Pipeline] Timeout after ${ms}ms, using fallback`)
-        resolve(fallback)
-      }, ms))
-    ])
-  }
 
   const { developSynthesis } = await import('./develop')
 
@@ -539,30 +527,22 @@ export async function runSynthesisPipelineWithProgress(
       itemTitle: `Batch ${Math.floor(batchStart / BATCH_SIZE) + 1}: ${batch.map(c => c.sourceItem.title.slice(0, 20)).join(', ')}...`,
     })
 
-    // Process batch in parallel
+    // Process batch in parallel - developSynthesis has its own 25s timeout with AbortController
     const batchResults = await Promise.all(
       batch.map(async (candidate, batchIndex) => {
         const globalIndex = batchStart + batchIndex
 
         try {
-          // Fallback synthesis if timeout occurs
-          const fallbackSynthesis: DevelopedSynthesis = {
-            headline: `Verbindung: ${candidate.synthesisType}`,
-            content: `Historische Verbindung zu "${candidate.relatedItem.title.slice(0, 50)}..." (Timeout)`,
-            historicalReference: candidate.relatedItem.title,
-            coreThesisAlignment: 0,
-          }
-
-          // 30-second timeout per synthesis
-          const synthesis = await withTimeout(
-            developSynthesis(candidate, prompt.development_prompt, prompt.core_thesis),
-            TIMEOUT_MS,
-            fallbackSynthesis
+          // developSynthesis now has built-in timeout and always returns (never throws)
+          const synthesis = await developSynthesis(
+            candidate,
+            prompt.development_prompt,
+            prompt.core_thesis
           )
 
           return { candidate, synthesis, globalIndex, success: true }
         } catch (error) {
-          console.error(`[Pipeline] Failed to develop synthesis:`, error)
+          console.error(`[Pipeline] Unexpected error developing synthesis:`, error)
           errors.push(`Failed to develop synthesis for ${candidate.sourceItem.title}`)
           return { candidate, synthesis: null, globalIndex, success: false }
         }
