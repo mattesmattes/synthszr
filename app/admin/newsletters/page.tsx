@@ -151,7 +151,7 @@ export default function NewslettersPage() {
 
       setScannedSenders(data.senders)
       // Pre-select likely newsletters
-      const likelyNewsletters = new Set(
+      const likelyNewsletters = new Set<string>(
         data.senders
           .filter((s: ScannedSender) => s.isLikelyNewsletter)
           .map((s: ScannedSender) => s.email)

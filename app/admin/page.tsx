@@ -165,7 +165,7 @@ export default function AdminPage() {
           excerpt: p.excerpt,
           content: parsedContent as Record<string, unknown>,
           category: p.category || 'general',
-          status: p.published ? 'published' : 'draft' as const,
+          status: (p.published ? 'published' : 'draft') as 'draft' | 'published' | 'archived',
           created_at: p.created_at,
           source: 'manual' as const,
           word_count: countWords(parsedContent as Record<string, unknown>),

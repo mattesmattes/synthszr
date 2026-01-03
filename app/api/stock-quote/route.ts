@@ -139,6 +139,7 @@ interface RealTimeQuote {
   previousClose?: number
   change?: number
   change_p?: number
+  currency?: string
 }
 
 export async function GET(request: NextRequest) {

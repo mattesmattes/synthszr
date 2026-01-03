@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { del } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
+import { getSession } from '@/lib/auth/session'
 
 // Get images for a post
 export async function GET(request: NextRequest) {
+  // Require admin authentication
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const { searchParams } = new URL(request.url)
   const postId = searchParams.get('postId')
 
@@ -28,6 +35,12 @@ export async function GET(request: NextRequest) {
 
 // Set cover image
 export async function PATCH(request: NextRequest) {
+  // Require admin authentication
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     const { postId, imageId } = await request.json()
 
@@ -74,6 +87,12 @@ export async function PATCH(request: NextRequest) {
 
 // Delete an image
 export async function DELETE(request: NextRequest) {
+  // Require admin authentication
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const { searchParams } = new URL(request.url)
   const imageId = searchParams.get('imageId')
 

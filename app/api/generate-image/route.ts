@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
 import { generateAndProcessImage, ImageProcessingOptions } from '@/lib/gemini/image-generator'
+import { getSession } from '@/lib/auth/session'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 
 export const maxDuration = 300 // Allow up to 5 minutes for batch image generation
 
@@ -14,6 +16,21 @@ interface GenerateImageRequest {
 }
 
 export async function POST(request: NextRequest) {
+  // Require admin authentication
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Rate limiting: 5 requests per minute for expensive image generation
+  const rateLimitResult = await checkRateLimit(
+    `generate-image:${getClientIP(request)}`,
+    rateLimiters.strict() ?? undefined
+  )
+  if (!rateLimitResult.success) {
+    return rateLimitResponse(rateLimitResult)
+  }
+
   try {
     const body: GenerateImageRequest = await request.json()
     const { postId, dailyRepoId, newsText, enableDithering, ditheringGain } = body
@@ -152,6 +169,21 @@ export async function POST(request: NextRequest) {
 
 // Batch generate images for multiple news items - generates sequentially to avoid overload
 export async function PUT(request: NextRequest) {
+  // Require admin authentication
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Rate limiting: stricter for batch operations (3 per minute)
+  const rateLimitResult = await checkRateLimit(
+    `generate-image-batch:${getClientIP(request)}`,
+    rateLimiters.strict() ?? undefined
+  )
+  if (!rateLimitResult.success) {
+    return rateLimitResponse(rateLimitResult)
+  }
+
   try {
     const body: {
       postId: string

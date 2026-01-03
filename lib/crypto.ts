@@ -5,9 +5,31 @@ const KEY_LENGTH = 32
 const IV_LENGTH = 16
 const AUTH_TAG_LENGTH = 16
 
+// Cache the derived key to avoid repeated scrypt calls
+let cachedKey: Buffer | null = null
+let cachedSalt: string | null = null
+
 function getKey(): Buffer {
-  const secret = process.env.ENCRYPTION_KEY || process.env.ADMIN_PASSWORD || 'default-key-change-me'
-  return scryptSync(secret, 'salt', KEY_LENGTH)
+  const secret = process.env.ENCRYPTION_KEY
+  if (!secret) {
+    throw new Error(
+      'ENCRYPTION_KEY environment variable is required. ' +
+      'Generate one with: openssl rand -base64 32'
+    )
+  }
+
+  // Use a consistent salt derived from the secret for key derivation
+  // This ensures the same key is derived each time for decryption
+  const salt = secret.slice(0, 16)
+
+  // Return cached key if salt hasn't changed
+  if (cachedKey && cachedSalt === salt) {
+    return cachedKey
+  }
+
+  cachedKey = scryptSync(secret, salt, KEY_LENGTH)
+  cachedSalt = salt
+  return cachedKey
 }
 
 export function encrypt(text: string): string {

@@ -52,13 +52,13 @@ export async function extractArticleContent(url: string): Promise<ExtractedArtic
     }
 
     return {
-      title: article.title,
-      content: article.content, // HTML content
-      textContent: article.textContent, // Plain text
-      excerpt: article.excerpt,
-      byline: article.byline,
-      siteName: article.siteName,
-      length: article.length,
+      title: article.title ?? null,
+      content: article.content ?? null, // HTML content
+      textContent: article.textContent ?? null, // Plain text
+      excerpt: article.excerpt ?? null,
+      byline: article.byline ?? null,
+      siteName: article.siteName ?? null,
+      length: article.length ?? 0,
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {

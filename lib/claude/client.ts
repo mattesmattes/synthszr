@@ -54,7 +54,7 @@ ${content}`
     const result = streamText({
       model: google('gemini-2.0-flash'),
       prompt: fullPrompt,
-      maxTokens: 16384,
+      maxOutputTokens: 16384,
     })
 
     for await (const chunk of result.textStream) {
