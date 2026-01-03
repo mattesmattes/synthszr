@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
           await runSynthesisPipelineWithProgress(
             digestId,
             {
-              maxItemsToProcess: options?.maxItems || 20, // Limited to 20 to stay under Vercel 5min timeout
+              maxItemsToProcess: options?.maxItems || 50, // Continuation handles time constraints
               maxCandidatesPerItem: options?.maxCandidates || 5,
               minSimilarity: options?.minSimilarity || 0.65,
               maxAgeDays: options?.maxAge || 90,

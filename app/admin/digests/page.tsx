@@ -66,7 +66,7 @@ interface RepoDate {
 }
 
 interface SynthesisProgress {
-  phase: 'searching' | 'scoring' | 'developing' | 'complete' | 'error'
+  phase: 'searching' | 'scoring' | 'developing' | 'complete' | 'partial' | 'error'
   currentItem: number
   totalItems: number
   itemTitle: string
@@ -358,6 +358,13 @@ export default function DigestsPage() {
                 setSynthesisProgress(prev => ({
                   ...prev,
                   phase: 'complete',
+                }))
+              } else if (event.type === 'partial') {
+                // Time limit reached - show message to continue
+                setSynthesisProgress(prev => ({
+                  ...prev,
+                  phase: 'partial',
+                  error: event.message,
                 }))
               } else if (event.type === 'error') {
                 setSynthesisProgress(prev => ({
@@ -1102,6 +1109,24 @@ export default function DigestsPage() {
               </div>
             )}
 
+            {/* Partial Complete - Time limit reached */}
+            {synthesisProgress.phase === 'partial' && (
+              <div className="flex flex-col gap-2 p-3 rounded bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-xs">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{synthesisProgress.error}</span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => generateSyntheses(selectedDigestForSynthesis!.id)}
+                  className="self-start text-xs h-6"
+                >
+                  Fortsetzen →
+                </Button>
+              </div>
+            )}
+
             {/* Error Message */}
             {synthesisProgress.phase === 'error' && (
               <div className="flex items-center gap-2 p-3 rounded bg-destructive/10 border border-destructive/30 text-destructive text-xs">
@@ -1168,7 +1193,7 @@ export default function DigestsPage() {
               onClick={() => setSynthesisProgressOpen(false)}
               className="text-xs h-7"
             >
-              {synthesisProgress.phase === 'complete' || synthesisProgress.phase === 'error'
+              {synthesisProgress.phase === 'complete' || synthesisProgress.phase === 'error' || synthesisProgress.phase === 'partial'
                 ? 'Schließen'
                 : 'Im Hintergrund fortsetzen'}
             </Button>

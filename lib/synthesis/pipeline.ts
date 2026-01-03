@@ -235,7 +235,7 @@ export async function runSynthesisPipeline(
   } = {}
 ): Promise<SynthesisPipelineResult> {
   const {
-    maxItemsToProcess = 20, // Limited to stay under Vercel 5min timeout (each item ~10-15s) // Process all items by default
+    maxItemsToProcess = 50, // No limit needed - continuation handles time constraints // Process all items by default
     maxCandidatesPerItem = 5,
     minSimilarity = 0.65, // Slightly lower threshold to find more candidates
     maxAgeDays = 90,
@@ -436,7 +436,7 @@ export async function getSynthesesForDigest(
  * Run the synthesis pipeline with progress callbacks for streaming UI
  */
 // Pipeline version for deployment verification
-const PIPELINE_VERSION = 'v8-max20'
+const PIPELINE_VERSION = 'v9-continuation'
 
 export async function runSynthesisPipelineWithProgress(
   digestId: string,
@@ -451,7 +451,7 @@ export async function runSynthesisPipelineWithProgress(
   console.log(`[Pipeline ${PIPELINE_VERSION}] Starting for digest ${digestId}`)
 
   const {
-    maxItemsToProcess = 20, // Limited to stay under Vercel 5min timeout (each item ~10-15s)
+    maxItemsToProcess = 50, // No limit needed - continuation handles time constraints
     maxCandidatesPerItem = 5,
     minSimilarity = 0.65,
     maxAgeDays = 90,
@@ -465,10 +465,11 @@ export async function runSynthesisPipelineWithProgress(
 
   const supabase = await createClient()
 
-  // Clean up any existing syntheses/candidates for this digest (prevents duplicates on re-run)
-  await supabase.from('developed_syntheses').delete().eq('digest_id', digestId)
+  // NOTE: We do NOT delete existing syntheses to support continuation
+  // The pipeline will skip items that already have syntheses
+  // Only delete synthesis_candidates to regenerate them fresh
   await supabase.from('synthesis_candidates').delete().eq('digest_id', digestId)
-  console.log(`[Pipeline] Cleaned up existing data for digest ${digestId}`)
+  console.log(`[Pipeline] Continuation mode: keeping existing syntheses, regenerating candidates`)
 
   // Get active synthesis prompt
   const prompt = await getActiveSynthesisPrompt()
@@ -583,38 +584,69 @@ export async function runSynthesisPipelineWithProgress(
 
   // Phase 2: Develop syntheses ONE BY ONE - no parallelization
   const synthesesMap = new Map<string, DevelopedSynthesis>()
-  const PIPELINE_TIMEOUT_MS = 240000 // 4 minutes max for entire pipeline
+  const PIPELINE_TIMEOUT_MS = 250000 // 250 seconds - leave 50s buffer before Vercel's 300s limit
   const pipelineStartTime = Date.now()
 
   // Direct import, no dynamic import
   const { developSynthesis } = await import('./develop')
 
-  console.log(`[Pipeline ${PIPELINE_VERSION}] Phase 2: Processing ${allCandidates.length} items sequentially`)
+  // Check which items already have syntheses (for continuation)
+  const { data: existingSyntheses } = await supabase
+    .from('developed_syntheses')
+    .select('candidate_id, synthesis_candidates!inner(source_item_id)')
+    .eq('digest_id', digestId)
+
+  const processedSourceIds = new Set<string>()
+  if (existingSyntheses) {
+    for (const s of existingSyntheses) {
+      const candidate = s.synthesis_candidates as { source_item_id: string } | null
+      if (candidate?.source_item_id) {
+        processedSourceIds.add(candidate.source_item_id)
+      }
+    }
+  }
+
+  // Filter out already processed items
+  const remainingCandidates = allCandidates.filter(
+    c => !processedSourceIds.has(c.sourceItem.id)
+  )
+
+  const skippedCount = allCandidates.length - remainingCandidates.length
+  if (skippedCount > 0) {
+    console.log(`[Pipeline] Skipping ${skippedCount} already processed items`)
+  }
+
+  console.log(`[Pipeline ${PIPELINE_VERSION}] Phase 2: Processing ${remainingCandidates.length} items sequentially (${skippedCount} already done)`)
 
   // Simple sequential loop - NO Promise.all, NO batching
-  for (let i = 0; i < allCandidates.length; i++) {
-    const candidate = allCandidates[i]
+  let stoppedDueToTimeout = false
+  for (let i = 0; i < remainingCandidates.length; i++) {
+    const candidate = remainingCandidates[i]
 
-    // Check global timeout
+    // Check global timeout - stop with enough buffer to save results
     const elapsed = Date.now() - pipelineStartTime
     if (elapsed > PIPELINE_TIMEOUT_MS) {
-      console.log(`[Pipeline] Global timeout after ${elapsed}ms - stopping with ${synthesesDeveloped} syntheses`)
+      const remaining = remainingCandidates.length - i
+      console.log(`[Pipeline] Time limit reached after ${elapsed}ms - ${remaining} items remaining`)
+      stoppedDueToTimeout = true
       onProgress({
-        type: 'error',
-        error: `Pipeline timeout nach ${Math.round(elapsed / 1000)}s - ${synthesesDeveloped} Synthesen erstellt`,
+        type: 'partial',
+        message: `Zeit-Limit erreicht. ${synthesesDeveloped} Synthesen erstellt, ${remaining} verbleibend. Starte erneut für Rest.`,
       })
       break
     }
 
-    // Show progress
+    // Show progress (include skipped count in total)
+    const overallProgress = skippedCount + i + 1
+    const overallTotal = skippedCount + remainingCandidates.length
     onProgress({
       type: 'developing',
-      currentItem: i + 1,
-      totalItems: allCandidates.length,
+      currentItem: overallProgress,
+      totalItems: overallTotal,
       itemTitle: candidate.sourceItem.title.slice(0, 50),
     })
 
-    console.log(`[Pipeline] Item ${i + 1}/${allCandidates.length}: Starting "${candidate.sourceItem.title.slice(0, 40)}..."`)
+    console.log(`[Pipeline] Item ${i + 1}/${remainingCandidates.length}: Starting "${candidate.sourceItem.title.slice(0, 40)}..."`)
     const itemStartTime = Date.now()
 
     try {
@@ -639,8 +671,8 @@ export async function runSynthesisPipelineWithProgress(
       // Send progress
       onProgress({
         type: 'developed',
-        currentItem: i + 1,
-        totalItems: allCandidates.length,
+        currentItem: overallProgress,
+        totalItems: overallTotal,
         itemTitle: candidate.sourceItem.title,
         synthesis: {
           headline: synthesis.headline,
@@ -655,7 +687,7 @@ export async function runSynthesisPipelineWithProgress(
     }
 
     // Small delay between items
-    if (i < allCandidates.length - 1) {
+    if (i < remainingCandidates.length - 1) {
       await new Promise((resolve) => setTimeout(resolve, 300))
     }
   }
