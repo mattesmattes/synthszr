@@ -1,7 +1,8 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { IBM_Plex_Serif, Space_Mono } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
+import { Analytics } from "@/components/analytics"
+import { ConsentBanner } from "@/components/consent-banner"
 import "./globals.css"
 
 const ibmPlexSerif = IBM_Plex_Serif({
@@ -49,6 +50,7 @@ export default function RootLayout({
       <body className={`${ibmPlexSerif.variable} ${spaceMono.variable} font-serif antialiased`}>
         {children}
         <Analytics />
+        <ConsentBanner />
       </body>
     </html>
   )
