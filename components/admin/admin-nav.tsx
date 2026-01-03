@@ -15,7 +15,9 @@ import {
   BookOpen,
   Wand2,
   ImageIcon,
-  Lightbulb
+  Lightbulb,
+  Users,
+  Send
 } from 'lucide-react'
 
 const navGroups = [
@@ -92,6 +94,21 @@ const navGroups = [
         label: 'Paywall-Credentials',
         href: '/admin/credentials',
         icon: Key
+      }
+    ]
+  },
+  {
+    label: 'Newsletter',
+    items: [
+      {
+        label: 'Subscriber',
+        href: '/admin/subscribers',
+        icon: Users
+      },
+      {
+        label: 'Versenden',
+        href: '/admin/newsletter-send',
+        icon: Send
       }
     ]
   },
