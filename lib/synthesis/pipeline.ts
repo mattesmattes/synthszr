@@ -189,6 +189,13 @@ export async function runSynthesisPipeline(
 
   console.log(`[Pipeline] Starting synthesis pipeline for digest ${digestId}`)
 
+  const supabase = await createClient()
+
+  // Clean up any existing syntheses/candidates for this digest (prevents duplicates on re-run)
+  await supabase.from('developed_syntheses').delete().eq('digest_id', digestId)
+  await supabase.from('synthesis_candidates').delete().eq('digest_id', digestId)
+  console.log(`[Pipeline] Cleaned up existing data for digest ${digestId}`)
+
   // Get active synthesis prompt
   const prompt = await getActiveSynthesisPrompt()
   if (!prompt) {
@@ -209,7 +216,6 @@ export async function runSynthesisPipeline(
   console.log(`[Pipeline] Processing ${itemsToProcess.length} items`)
 
   const allCandidates: ScoredCandidate[] = []
-  const supabase = await createClient()
 
   // For each item, find and score similar items
   for (const item of itemsToProcess) {
@@ -377,6 +383,13 @@ export async function runSynthesisPipelineWithProgress(
 
   console.log(`[Pipeline] Starting streaming synthesis pipeline for digest ${digestId}`)
 
+  const supabase = await createClient()
+
+  // Clean up any existing syntheses/candidates for this digest (prevents duplicates on re-run)
+  await supabase.from('developed_syntheses').delete().eq('digest_id', digestId)
+  await supabase.from('synthesis_candidates').delete().eq('digest_id', digestId)
+  console.log(`[Pipeline] Cleaned up existing data for digest ${digestId}`)
+
   // Get active synthesis prompt
   const prompt = await getActiveSynthesisPrompt()
   if (!prompt) {
@@ -401,7 +414,6 @@ export async function runSynthesisPipelineWithProgress(
   })
 
   const allCandidates: ScoredCandidate[] = []
-  const supabase = await createClient()
 
   // Phase 1: Search and score for each item
   for (let i = 0; i < itemsToProcess.length; i++) {
