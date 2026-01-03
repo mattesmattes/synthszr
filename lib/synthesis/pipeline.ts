@@ -437,7 +437,7 @@ export async function getSynthesesForDigest(
  * Run the synthesis pipeline with progress callbacks for streaming UI
  */
 // Pipeline version for deployment verification
-const PIPELINE_VERSION = 'v10-auto-batch'
+const PIPELINE_VERSION = 'v11-timeout-fix'
 
 export async function runSynthesisPipelineWithProgress(
   digestId: string,
@@ -449,6 +449,10 @@ export async function runSynthesisPipelineWithProgress(
   } = {},
   onProgress: (event: SynthesisProgressEvent) => void
 ): Promise<SynthesisPipelineResult> {
+  // CRITICAL: Start timing from function entry to account for Phase 1 time
+  const PIPELINE_TIMEOUT_MS = 250000 // 250 seconds - leave 50s buffer before Vercel's 300s limit
+  const pipelineStartTime = Date.now()
+
   console.log(`[Pipeline ${PIPELINE_VERSION}] Starting for digest ${digestId}`)
 
   const {
@@ -585,8 +589,26 @@ export async function runSynthesisPipelineWithProgress(
 
   // Phase 2: Develop syntheses ONE BY ONE - no parallelization
   const synthesesMap = new Map<string, DevelopedSynthesis>()
-  const PIPELINE_TIMEOUT_MS = 250000 // 250 seconds - leave 50s buffer before Vercel's 300s limit
-  const pipelineStartTime = Date.now()
+  // Note: PIPELINE_TIMEOUT_MS and pipelineStartTime are defined at function entry
+
+  // Check if Phase 1 already used too much time
+  const phase1Time = Date.now() - pipelineStartTime
+  console.log(`[Pipeline] Phase 1 completed in ${Math.round(phase1Time / 1000)}s`)
+  if (phase1Time > PIPELINE_TIMEOUT_MS) {
+    console.log(`[Pipeline] Phase 1 already exceeded timeout (${phase1Time}ms > ${PIPELINE_TIMEOUT_MS}ms)`)
+    onProgress({
+      type: 'partial',
+      message: `Phase 1 dauerte zu lange (${Math.round(phase1Time / 1000)}s). Bitte erneut starten.`,
+    })
+    return {
+      success: true,
+      digestId,
+      candidatesFound,
+      synthesesDeveloped: 0,
+      itemsProcessed: 0,
+      errors,
+    }
+  }
 
   // Direct import, no dynamic import
   const { developSynthesis } = await import('./develop')
