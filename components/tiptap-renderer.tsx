@@ -122,6 +122,15 @@ function StockTickerInline({ company }: StockTickerInlineProps) {
   if (!data) return null
 
   const arrow = data.direction === 'up' ? '↑' : data.direction === 'down' ? '↓' : '→'
+
+  // Background colors: Positive=Neon green, Neutral=Gray, Negative=Cyan
+  const bgClass = data.direction === 'up'
+    ? 'bg-[#CCFF00]'  // Neon green
+    : data.direction === 'down'
+    ? 'bg-cyan-400'   // Cyan
+    : 'bg-gray-300 dark:bg-gray-600'  // Gray
+
+  // Text colors for dialog (keep original styling there)
   const colorClass = data.direction === 'up'
     ? 'text-green-600 dark:text-green-400'
     : data.direction === 'down'
@@ -148,9 +157,9 @@ function StockTickerInline({ company }: StockTickerInlineProps) {
     <>
       <button
         onClick={() => setDialogOpen(true)}
-        className={`text-xs font-medium ${colorClass} hover:underline cursor-pointer`}
+        className={`text-xs font-medium text-black px-1.5 py-0.5 rounded ${bgClass} hover:opacity-80 cursor-pointer ml-1`}
       >
-        {' '}({arrow}{Math.abs(data.changePercent).toFixed(1)}%)
+        {arrow}{Math.abs(data.changePercent).toFixed(1)}%
       </button>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
