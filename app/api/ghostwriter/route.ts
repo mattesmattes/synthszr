@@ -68,11 +68,56 @@ export async function POST(request: NextRequest) {
     // Build a source reference list for the ghostwriter
     // Use canonical URLs for known newsletters without direct article URLs
     let sourceReference = ''
+    let diversityWarning = ''
+
     if (sources && sources.length > 0) {
+      // Analyze source diversity
+      const sourceEmailCount: Record<string, number> = {}
+      const sourceDomainCount: Record<string, number> = {}
+
+      for (const s of sources) {
+        // Count by email
+        if (s.source_email) {
+          sourceEmailCount[s.source_email] = (sourceEmailCount[s.source_email] || 0) + 1
+        }
+        // Count by URL domain
+        if (s.source_url) {
+          try {
+            const domain = new URL(s.source_url).hostname.replace('www.', '')
+            sourceDomainCount[domain] = (sourceDomainCount[domain] || 0) + 1
+          } catch {
+            // Invalid URL, skip
+          }
+        }
+      }
+
+      // Check if any source exceeds 30%
+      const threshold = sources.length * 0.3
+      const overrepresentedSources: string[] = []
+
+      for (const [email, count] of Object.entries(sourceEmailCount)) {
+        if (count > threshold) {
+          overrepresentedSources.push(`${email} (${count}/${sources.length} = ${Math.round(count/sources.length*100)}%)`)
+        }
+      }
+      for (const [domain, count] of Object.entries(sourceDomainCount)) {
+        if (count > threshold) {
+          overrepresentedSources.push(`${domain} (${count}/${sources.length} = ${Math.round(count/sources.length*100)}%)`)
+        }
+      }
+
+      if (overrepresentedSources.length > 0) {
+        diversityWarning = '\n\n---\n\n⚠️ **QUELLEN-DIVERSITÄT WARNUNG:**\n'
+        diversityWarning += 'Folgende Quellen sind überrepräsentiert (>30%):\n'
+        diversityWarning += overrepresentedSources.map(s => `- ${s}`).join('\n')
+        diversityWarning += '\n\n**WICHTIG:** Achte darauf, dass im finalen Blog-Post keine Quelle mehr als 30% der News ausmacht. '
+        diversityWarning += 'Priorisiere News aus unterrepräsentierten Quellen und kürze ggf. News aus überrepräsentierten Quellen.\n'
+      }
+
       const sourcesWithUrls = sources.map(s => {
         // If source has a valid URL, use it
         if (s.source_url && s.source_url.startsWith('http')) {
-          return { title: s.title, url: s.source_url }
+          return { title: s.title, url: s.source_url, email: s.source_email }
         }
         // Otherwise, try to find a canonical URL based on title or email
         const titleLower = s.title?.toLowerCase() || ''
@@ -80,16 +125,17 @@ export async function POST(request: NextRequest) {
 
         for (const [key, canonicalUrl] of Object.entries(NEWSLETTER_CANONICAL_URLS)) {
           if (titleLower.includes(key) || emailLower.includes(key)) {
-            return { title: s.title, url: canonicalUrl }
+            return { title: s.title, url: canonicalUrl, email: s.source_email }
           }
         }
         return null
-      }).filter((s): s is { title: string; url: string } => s !== null)
+      }).filter((s): s is { title: string; url: string; email: string | null } => s !== null)
 
       if (sourcesWithUrls.length > 0) {
         sourceReference = '\n\n---\n\nVERFÜGBARE QUELLEN MIT LINKS (nutze NUR diese URLs):\n'
         sourceReference += sourcesWithUrls.map((s, i) => {
-          return `${i + 1}. [${s.title}](${s.url})`
+          const sourceInfo = s.email ? ` [via: ${s.email.split('<')[0].trim()}]` : ''
+          return `${i + 1}. [${s.title}](${s.url})${sourceInfo}`
         }).join('\n')
       }
     }
@@ -183,8 +229,31 @@ export async function POST(request: NextRequest) {
     // Combine prompt with vocabulary
     const fullPrompt = promptText + vocabularyContext
 
-    // Combine digest content with source reference and syntheses
-    const fullDigestContent = digest.analysis_content + sourceReference + synthesisContext
+    // Add explicit enforcement rules that appear at the end of the digest content
+    // These are harder for the AI to ignore since they're the last thing it sees before generating
+    const enforcementRules = `
+
+---
+
+## QUALITÄTS-CHECKLISTE (MUSS EINGEHALTEN WERDEN):
+
+1. **NEWS-LÄNGE:** Jeder News-Artikel MUSS exakt 5-7 Sätze haben. Nicht 3, nicht 4. Mindestens 5, maximal 7 Sätze.
+   - Satz 1-2: Was ist passiert?
+   - Satz 3-4: Kontext und Bedeutung
+   - Satz 5-7: Einordnung und weiterführender Gedanke
+
+2. **MATTES SYNTHESE:** Jeder Kommentar MUSS auf der mitgelieferten Hintergrund-Recherche basieren.
+   - Nimm Bezug auf die historische Verbindung
+   - Zeige, dass du den größeren Kontext verstehst
+   - Formuliere eine eigenständige These
+
+3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
+
+**WICHTIG:** Diese Regeln haben Priorität. Halte dich strikt daran.
+`
+
+    // Combine digest content with source reference, syntheses, and enforcement rules
+    const fullDigestContent = digest.analysis_content + diversityWarning + sourceReference + synthesisContext + enforcementRules
 
     // Stream the response
     const encoder = new TextEncoder()

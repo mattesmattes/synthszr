@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
         let processedArticles = 0
         let errors = 0
         let totalCharacters = 0
-        const articleUrls: Array<{ url: string; title: string; newsletterTitle: string }> = []
+        const articleUrls: Array<{ url: string; title: string; newsletterTitle: string; newsletterEmail: string }> = []
 
         // Process newsletters
         for (let i = 0; i < emails.length; i++) {
@@ -185,7 +185,8 @@ export async function POST(request: NextRequest) {
               articleUrls.push({
                 url: link.url,
                 title: link.text || 'Unbekannter Artikel',
-                newsletterTitle: email.subject
+                newsletterTitle: email.subject,
+                newsletterEmail: email.from  // Track source newsletter for article
               })
             }
 
@@ -292,6 +293,7 @@ export async function POST(request: NextRequest) {
                   .insert({
                     source_type: 'article',
                     source_url: article.url,
+                    source_email: article.newsletterEmail,  // Track which newsletter this article came from
                     title: extracted.title || article.title,
                     content: extracted.content,
                     newsletter_date: articleDate,

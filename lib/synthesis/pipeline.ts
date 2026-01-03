@@ -93,7 +93,22 @@ async function getDigestItems(digestId: string): Promise<
       .in('id', digest.sources_used)
 
     if (error) throw error
-    return data || []
+    if (!data) return []
+
+    // Deduplicate by title even for sources_used (in case duplicates were stored)
+    const seenTitles = new Set<string>()
+    const uniqueItems = data.filter(item => {
+      const normalizedTitle = item.title.trim().toLowerCase().slice(0, 100)
+      if (seenTitles.has(normalizedTitle)) {
+        console.log(`[Pipeline] Skipping duplicate in sources_used: "${item.title.slice(0, 40)}..."`)
+        return false
+      }
+      seenTitles.add(normalizedTitle)
+      return true
+    })
+
+    console.log(`[Pipeline] After deduplication: ${uniqueItems.length} unique items (from ${data.length} sources_used)`)
+    return uniqueItems
   }
 
   // Otherwise, get ALL items from that date and filter by which appear in digest content
@@ -115,13 +130,36 @@ async function getDigestItems(digestId: string): Promise<
 
   console.log(`[Pipeline] Matched ${matchedItems.length} items from digest content (of ${allItems.length} total for date)`)
 
-  // If no matches found, fall back to all items but limit to 10
-  if (matchedItems.length === 0) {
-    console.log(`[Pipeline] No title matches, using first 10 items`)
-    return allItems.slice(0, 10)
+  // Deduplicate by title - keep only the FIRST item per unique title
+  // This fixes the issue where the same article is imported multiple times with different IDs
+  const seenTitles = new Set<string>()
+  const uniqueItems = matchedItems.filter(item => {
+    // Normalize title for comparison (trim, lowercase first 100 chars)
+    const normalizedTitle = item.title.trim().toLowerCase().slice(0, 100)
+    if (seenTitles.has(normalizedTitle)) {
+      console.log(`[Pipeline] Skipping duplicate: "${item.title.slice(0, 40)}..."`)
+      return false
+    }
+    seenTitles.add(normalizedTitle)
+    return true
+  })
+
+  console.log(`[Pipeline] After deduplication: ${uniqueItems.length} unique items (removed ${matchedItems.length - uniqueItems.length} duplicates)`)
+
+  // If no matches found, fall back to all items but limit to 10 (also deduplicated)
+  if (uniqueItems.length === 0) {
+    console.log(`[Pipeline] No title matches, using first 10 unique items`)
+    const seenFallback = new Set<string>()
+    const uniqueFallback = allItems.filter(item => {
+      const normalizedTitle = item.title.trim().toLowerCase().slice(0, 100)
+      if (seenFallback.has(normalizedTitle)) return false
+      seenFallback.add(normalizedTitle)
+      return true
+    })
+    return uniqueFallback.slice(0, 10)
   }
 
-  return matchedItems
+  return uniqueItems
 }
 
 /**
