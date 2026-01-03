@@ -235,7 +235,7 @@ export async function runSynthesisPipeline(
   } = {}
 ): Promise<SynthesisPipelineResult> {
   const {
-    maxItemsToProcess = 50, // Process all items by default
+    maxItemsToProcess = 20, // Limited to stay under Vercel 5min timeout (each item ~10-15s) // Process all items by default
     maxCandidatesPerItem = 5,
     minSimilarity = 0.65, // Slightly lower threshold to find more candidates
     maxAgeDays = 90,
@@ -436,7 +436,7 @@ export async function getSynthesesForDigest(
  * Run the synthesis pipeline with progress callbacks for streaming UI
  */
 // Pipeline version for deployment verification
-const PIPELINE_VERSION = 'v7-simple-loop'
+const PIPELINE_VERSION = 'v8-max20'
 
 export async function runSynthesisPipelineWithProgress(
   digestId: string,
@@ -451,7 +451,7 @@ export async function runSynthesisPipelineWithProgress(
   console.log(`[Pipeline ${PIPELINE_VERSION}] Starting for digest ${digestId}`)
 
   const {
-    maxItemsToProcess = 50,
+    maxItemsToProcess = 20, // Limited to stay under Vercel 5min timeout (each item ~10-15s)
     maxCandidatesPerItem = 5,
     minSimilarity = 0.65,
     maxAgeDays = 90,
