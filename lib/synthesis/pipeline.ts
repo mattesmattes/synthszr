@@ -152,22 +152,21 @@ async function storeSyntheses(
 
 /**
  * Run the full synthesis pipeline for a digest
+ * Creates exactly ONE synthesis per article (the highest scoring one)
  */
 export async function runSynthesisPipeline(
   digestId: string,
   options: {
     maxItemsToProcess?: number
     maxCandidatesPerItem?: number
-    maxSynthesesTotal?: number
     minSimilarity?: number
     maxAgeDays?: number
   } = {}
 ): Promise<SynthesisPipelineResult> {
   const {
-    maxItemsToProcess = 10,
+    maxItemsToProcess = 50, // Process all items by default
     maxCandidatesPerItem = 5,
-    maxSynthesesTotal = 5,
-    minSimilarity = 0.7,
+    minSimilarity = 0.65, // Slightly lower threshold to find more candidates
     maxAgeDays = 90,
   } = options
 
@@ -239,12 +238,15 @@ export async function runSynthesisPipeline(
         { minTotalScore: 12 }
       )
 
-      // Get top candidates
-      const topCandidates = getTopCandidates(scoredCandidates, maxCandidatesPerItem)
-      allCandidates.push(...topCandidates)
-      candidatesFound += topCandidates.length
-
-      console.log(`[Pipeline] Scored ${topCandidates.length} promising candidates`)
+      // Get the BEST candidate for this item (exactly 1)
+      if (scoredCandidates.length > 0) {
+        const bestCandidate = scoredCandidates[0] // Already sorted by score
+        allCandidates.push(bestCandidate)
+        candidatesFound++
+        console.log(`[Pipeline] Best candidate score: ${bestCandidate.totalScore} (${bestCandidate.synthesisType})`)
+      } else {
+        console.log(`[Pipeline] No candidates passed scoring threshold`)
+      }
     } catch (error) {
       const msg = `Error processing item ${item.id}: ${error}`
       console.error(`[Pipeline] ${msg}`)
@@ -255,12 +257,8 @@ export async function runSynthesisPipeline(
   // Store all candidates
   await storeCandidates(digestId, allCandidates)
 
-  // Sort all candidates by score and take top N for development
-  const topOverall = allCandidates
-    .sort((a, b) => b.totalScore - a.totalScore)
-    .slice(0, maxSynthesesTotal)
-
-  if (topOverall.length === 0) {
+  // allCandidates now contains exactly 1 candidate per item (the best one)
+  if (allCandidates.length === 0) {
     console.log('[Pipeline] No candidates to develop')
     return {
       success: true,
@@ -272,14 +270,14 @@ export async function runSynthesisPipeline(
     }
   }
 
-  console.log(`[Pipeline] Developing ${topOverall.length} syntheses with Claude Opus`)
+  console.log(`[Pipeline] Developing ${allCandidates.length} syntheses with Claude Opus (1 per article)`)
 
-  // Develop syntheses
+  // Develop syntheses for ALL candidates (one per article)
   const syntheses = await developSyntheses(
-    topOverall,
+    allCandidates,
     prompt.development_prompt,
     prompt.core_thesis,
-    { maxSyntheses: maxSynthesesTotal }
+    { maxSyntheses: allCandidates.length } // No limit - process all
   )
 
   synthesesDeveloped = syntheses.size

@@ -28,11 +28,11 @@ export async function POST(request: NextRequest) {
 
     console.log(`[API] Starting synthesis pipeline for digest ${digestId}`)
 
+    // Pipeline now creates exactly 1 synthesis per article
     const result = await runSynthesisPipeline(digestId, {
-      maxItemsToProcess: options?.maxItems || 10,
+      maxItemsToProcess: options?.maxItems || 50,
       maxCandidatesPerItem: options?.maxCandidates || 5,
-      maxSynthesesTotal: options?.maxSyntheses || 5,
-      minSimilarity: options?.minSimilarity || 0.7,
+      minSimilarity: options?.minSimilarity || 0.65,
       maxAgeDays: options?.maxAge || 90,
     })
 
