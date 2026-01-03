@@ -72,7 +72,7 @@ function estimateThesisAlignment(synthesis: string, coreThesis: string): number 
 }
 
 // Version marker for deployment verification
-const SYNTHESIS_VERSION = 'v5-sequential'
+const SYNTHESIS_VERSION = 'v6-debug'
 
 /**
  * Helper: Hard timeout wrapper using Promise.race
@@ -119,24 +119,28 @@ export async function developSynthesis(
   candidate: ScoredCandidate,
   developmentPrompt: string,
   coreThesis: string,
-  timeoutMs: number = 15000 // 15 second timeout - aggressive to prevent hangs
+  timeoutMs: number = 10000 // 10 second timeout
 ): Promise<DevelopedSynthesis> {
+  const itemLabel = candidate.sourceItem.title.slice(0, 30)
+  console.log(`[Synthesis ${SYNTHESIS_VERSION}] START: "${itemLabel}"`)
+
   const fallbackSynthesis: DevelopedSynthesis = {
-    headline: `Verbindung: ${candidate.synthesisType}`,
-    content: `Zusammenhang zwischen "${candidate.sourceItem.title.slice(0, 50)}" und historischer News konnte nicht entwickelt werden (Timeout).`,
+    headline: `Timeout: ${candidate.synthesisType}`,
+    content: `Timeout bei "${candidate.sourceItem.title.slice(0, 50)}"`,
     historicalReference: candidate.relatedItem.title,
     coreThesisAlignment: 0,
   }
 
-  // Wrap the entire operation in a hard timeout as last resort
-  // Hard timeout at 20s guarantees we never wait longer than this
-  const itemLabel = candidate.sourceItem.title.slice(0, 30)
-  return withHardTimeout(
+  // Hard timeout at 12s guarantees we never wait longer
+  const result = await withHardTimeout(
     developSynthesisInternal(candidate, developmentPrompt, coreThesis, timeoutMs),
-    20000, // Hard 20s timeout - absolute maximum wait
+    12000, // 12s hard timeout
     fallbackSynthesis,
     itemLabel
   )
+
+  console.log(`[Synthesis ${SYNTHESIS_VERSION}] END: "${itemLabel}" -> ${result.headline.slice(0, 30)}`)
+  return result
 }
 
 /**
@@ -156,7 +160,7 @@ async function developSynthesisInternal(
 
   const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
-    timeout: 18000, // SDK timeout at 18s (between soft 15s and hard 20s)
+    timeout: 11000, // SDK timeout at 11s
   })
 
   const currentNews = `${candidate.sourceItem.title}\n\n${candidate.sourceItem.content.slice(0, 2000)}`
@@ -169,7 +173,7 @@ async function developSynthesisInternal(
     .replace('{synthesis_type}', candidate.synthesisType)
     .replace('{core_thesis}', coreThesis)
 
-  console.log(`[Synthesis ${SYNTHESIS_VERSION}] Developing synthesis for "${candidate.sourceItem.title.slice(0, 50)}..."`)
+  console.log(`[Synthesis] >>> CALLING ANTHROPIC API...`)
 
   try {
     const response = await anthropic.messages.create(
@@ -181,6 +185,7 @@ async function developSynthesisInternal(
       { signal: controller.signal }
     )
 
+    console.log(`[Synthesis] <<< API RETURNED`)
     clearTimeout(timeoutId)
 
     const text =
