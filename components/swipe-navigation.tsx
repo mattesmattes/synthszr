@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 
 interface SwipeNavigationProps {
   children: React.ReactNode
@@ -15,110 +15,142 @@ export function SwipeNavigation({
   newerPostSlug
 }: SwipeNavigationProps) {
   const router = useRouter()
-  const [debug, setDebug] = useState('')
-  const touchStartX = useRef<number>(0)
-  const touchStartY = useRef<number>(0)
-  const touchEndX = useRef<number>(0)
-  const isSwiping = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const debugRef = useRef<HTMLDivElement>(null)
+
+  // Touch tracking refs (no re-renders)
+  const touchStartX = useRef(0)
+  const touchStartY = useRef(0)
+  const touchStartTime = useRef(0)
+  const currentDeltaX = useRef(0)
+  const isTracking = useRef(false)
+
+  const navigate = useCallback((direction: 'left' | 'right') => {
+    if (direction === 'right') {
+      // Swipe right → newer post or home
+      if (newerPostSlug) {
+        router.push(`/posts/${newerPostSlug}`)
+      } else {
+        router.push('/')
+      }
+    } else {
+      // Swipe left → older post
+      if (olderPostSlug) {
+        router.push(`/posts/${olderPostSlug}`)
+      }
+    }
+  }, [olderPostSlug, newerPostSlug, router])
 
   useEffect(() => {
-    const minSwipeDistance = 80 // Minimum swipe distance in pixels
-    const maxVerticalDistance = 100 // Max vertical movement to count as horizontal swipe
+    const container = containerRef.current
+    if (!container) return
+
+    const minSwipeDistance = 60 // Reduced for snappier feel
+    const maxVerticalRatio = 1.5 // Allow some diagonal movement
+    const minVelocity = 0.4 // px/ms - fast swipe threshold
+
+    const updateDebug = (text: string, highlight: boolean = false) => {
+      if (debugRef.current) {
+        debugRef.current.textContent = text
+        debugRef.current.style.background = highlight ? '#CCFF00' : 'rgba(0,0,0,0.5)'
+        debugRef.current.style.color = highlight ? 'black' : 'white'
+      }
+    }
 
     const handleTouchStart = (e: TouchEvent) => {
       touchStartX.current = e.touches[0].clientX
       touchStartY.current = e.touches[0].clientY
-      touchEndX.current = e.touches[0].clientX
-      isSwiping.current = true
-      setDebug(`Start: ${Math.round(touchStartX.current)}px`)
+      touchStartTime.current = Date.now()
+      currentDeltaX.current = 0
+      isTracking.current = true
     }
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (!isSwiping.current) return
-      touchEndX.current = e.touches[0].clientX
-      const deltaX = touchEndX.current - touchStartX.current
+      if (!isTracking.current) return
+
+      const deltaX = e.touches[0].clientX - touchStartX.current
       const deltaY = e.touches[0].clientY - touchStartY.current
+      currentDeltaX.current = deltaX
 
-      // Show debug while moving
-      const direction = deltaX > 0 ? 'RIGHT' : 'LEFT'
-      setDebug(`${direction}: ${Math.abs(Math.round(deltaX))}px`)
-
-      // If moving too much vertically, cancel the horizontal swipe detection
-      if (Math.abs(deltaY) > maxVerticalDistance) {
-        isSwiping.current = false
-        setDebug('')
+      // Cancel if moving too vertically
+      if (Math.abs(deltaY) > Math.abs(deltaX) * maxVerticalRatio && Math.abs(deltaY) > 30) {
+        isTracking.current = false
+        updateDebug(`← ${olderPostSlug ? 'älter' : '–'} | ${newerPostSlug ? 'neuer' : 'home'} →`, false)
+        return
       }
+
+      // Visual feedback
+      const direction = deltaX > 0 ? '→' : '←'
+      const target = deltaX > 0
+        ? (newerPostSlug ? 'neuer' : 'home')
+        : (olderPostSlug ? 'älter' : '–')
+      updateDebug(`${direction} ${Math.abs(Math.round(deltaX))}px → ${target}`, true)
     }
 
     const handleTouchEnd = () => {
-      if (!isSwiping.current) return
+      if (!isTracking.current) return
+      isTracking.current = false
 
-      const deltaX = touchEndX.current - touchStartX.current
+      const deltaX = currentDeltaX.current
+      const elapsed = Date.now() - touchStartTime.current
+      const velocity = Math.abs(deltaX) / elapsed // px/ms
       const absDistance = Math.abs(deltaX)
 
-      setDebug(`End: ${deltaX > 0 ? 'RIGHT' : 'LEFT'} ${absDistance}px`)
+      // Trigger navigation if:
+      // 1. Swiped far enough, OR
+      // 2. Swiped fast enough (even if short)
+      const shouldNavigate = absDistance >= minSwipeDistance ||
+        (velocity >= minVelocity && absDistance >= 30)
 
-      if (absDistance >= minSwipeDistance) {
+      if (shouldNavigate) {
         if (deltaX > 0) {
-          // Swiped right - go to newer post or home
-          setDebug(`→ Navigating to ${newerPostSlug || 'home'}`)
-          setTimeout(() => {
-            if (newerPostSlug) {
-              router.push(`/posts/${newerPostSlug}`)
-            } else {
-              router.push('/')
-            }
-          }, 100)
+          updateDebug('→ navigiere...', true)
+          navigate('right')
+        } else if (olderPostSlug) {
+          updateDebug('← navigiere...', true)
+          navigate('left')
         } else {
-          // Swiped left - go to older post
-          if (olderPostSlug) {
-            setDebug(`← Navigating to ${olderPostSlug}`)
-            setTimeout(() => {
-              router.push(`/posts/${olderPostSlug}`)
-            }, 100)
-          } else {
-            setDebug('← No older post')
-          }
+          updateDebug('← kein älterer Post', false)
         }
+      } else {
+        updateDebug(`← ${olderPostSlug ? 'älter' : '–'} | ${newerPostSlug ? 'neuer' : 'home'} →`, false)
       }
-
-      isSwiping.current = false
-
-      // Clear debug after a delay
-      setTimeout(() => setDebug(''), 2000)
     }
 
-    // Add event listeners with passive: false to allow preventDefault if needed
-    window.addEventListener('touchstart', handleTouchStart, { passive: true })
-    window.addEventListener('touchmove', handleTouchMove, { passive: true })
-    window.addEventListener('touchend', handleTouchEnd, { passive: true })
+    // Use passive listeners for better scroll performance
+    container.addEventListener('touchstart', handleTouchStart, { passive: true })
+    container.addEventListener('touchmove', handleTouchMove, { passive: true })
+    container.addEventListener('touchend', handleTouchEnd, { passive: true })
 
     return () => {
-      window.removeEventListener('touchstart', handleTouchStart)
-      window.removeEventListener('touchmove', handleTouchMove)
-      window.removeEventListener('touchend', handleTouchEnd)
+      container.removeEventListener('touchstart', handleTouchStart)
+      container.removeEventListener('touchmove', handleTouchMove)
+      container.removeEventListener('touchend', handleTouchEnd)
     }
-  }, [olderPostSlug, newerPostSlug, router])
+  }, [olderPostSlug, newerPostSlug, navigate])
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      {/* Debug indicator - remove after testing */}
-      <div style={{
-        position: 'fixed',
-        bottom: 20,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        background: debug ? '#CCFF00' : 'rgba(0,0,0,0.5)',
-        color: debug ? 'black' : 'white',
-        padding: '8px 16px',
-        borderRadius: 8,
-        fontSize: 12,
-        fontFamily: 'monospace',
-        zIndex: 9999,
-        transition: 'all 0.2s',
-        opacity: debug ? 1 : 0.5,
-      }}>
-        {debug || `← ${olderPostSlug ? 'older' : 'none'} | ${newerPostSlug ? 'newer' : 'home'} →`}
+    <div ref={containerRef} style={{ minHeight: '100vh' }}>
+      {/* Debug indicator */}
+      <div
+        ref={debugRef}
+        style={{
+          position: 'fixed',
+          bottom: 20,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.5)',
+          color: 'white',
+          padding: '8px 16px',
+          borderRadius: 8,
+          fontSize: 12,
+          fontFamily: 'monospace',
+          zIndex: 9999,
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        ← {olderPostSlug ? 'älter' : '–'} | {newerPostSlug ? 'neuer' : 'home'} →
       </div>
       {children}
     </div>
