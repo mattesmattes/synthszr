@@ -145,6 +145,17 @@ export default function DailyRepoPage() {
     }
   }
 
+  // Extract domain from URL and return favicon URL
+  const getFaviconUrl = (url: string | null) => {
+    if (!url) return null
+    try {
+      const domain = new URL(url).hostname
+      return `https://www.google.com/s2/favicons?domain=${domain}&sz=16`
+    } catch {
+      return null
+    }
+  }
+
   // Check if date has a repo (for date picker styling)
   const hasRepoForDate = (dateStr: string) => repoDates.has(dateStr)
 
@@ -301,10 +312,28 @@ export default function DailyRepoPage() {
             <Card>
               <CardContent className="p-0">
                 <div className="divide-y max-h-[60vh] overflow-y-auto">
-                  {items.map((item) => (
+                  {items.map((item) => {
+                    const faviconUrl = getFaviconUrl(item.source_url)
+                    return (
                     <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 transition-colors text-xs">
                       <div className="shrink-0 text-muted-foreground">
-                        {sourceTypeIcon(item.source_type)}
+                        {faviconUrl ? (
+                          <img
+                            src={faviconUrl}
+                            alt=""
+                            width={14}
+                            height={14}
+                            className="rounded-sm"
+                            onError={(e) => {
+                              // Fallback to source type icon on error
+                              e.currentTarget.style.display = 'none'
+                              e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                            }}
+                          />
+                        ) : null}
+                        <span className={faviconUrl ? 'hidden' : ''}>
+                          {sourceTypeIcon(item.source_type)}
+                        </span>
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="font-medium truncate text-xs">{item.title}</div>
@@ -340,7 +369,8 @@ export default function DailyRepoPage() {
                         )}
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </CardContent>
             </Card>
