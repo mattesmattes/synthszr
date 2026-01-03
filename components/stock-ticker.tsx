@@ -53,17 +53,19 @@ export function StockTicker({ company }: StockTickerProps) {
   }
 
   const arrow = quote.direction === 'up' ? '↑' : quote.direction === 'down' ? '↓' : '→'
-  const colorClass = quote.direction === 'up'
-    ? 'text-green-600 dark:text-green-400'
+
+  // Background colors: Positive=Neon green, Neutral=Gray, Negative=Cyan
+  const bgClass = quote.direction === 'up'
+    ? 'bg-[#CCFF00]'  // Neon green
     : quote.direction === 'down'
-    ? 'text-red-600 dark:text-red-400'
-    : 'text-foreground'
+    ? 'bg-cyan-400'   // Cyan
+    : 'bg-gray-300 dark:bg-gray-600'  // Gray
 
   const formattedPercent = Math.abs(quote.changePercent).toFixed(1)
 
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${colorClass}`}>
-      <span className="ml-1">({arrow}{formattedPercent}%)</span>
+    <span className={`inline-flex items-center gap-0.5 text-xs font-medium text-black px-1.5 py-0.5 rounded ${bgClass}`}>
+      <span>{arrow}{formattedPercent}%</span>
     </span>
   )
 }
