@@ -54,9 +54,9 @@ export function StockTicker({ company }: StockTickerProps) {
 
   const arrow = quote.direction === 'up' ? '↑' : quote.direction === 'down' ? '↓' : '→'
 
-  // Background colors: Positive=Neon green, Neutral=Gray, Negative=Cyan
+  // Background colors: Positive=Green, Neutral=Gray, Negative=Cyan
   const bgClass = quote.direction === 'up'
-    ? 'bg-[#CCFF00]'  // Neon green
+    ? 'bg-[#22C55E]'  // Green (Tailwind green-500)
     : quote.direction === 'down'
     ? 'bg-cyan-400'   // Cyan
     : 'bg-gray-300 dark:bg-gray-600'  // Gray

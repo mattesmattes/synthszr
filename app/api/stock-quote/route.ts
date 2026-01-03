@@ -173,9 +173,9 @@ export async function GET(request: NextRequest) {
 
     const data: RealTimeQuote = await response.json()
 
-    // Calculate performance
+    // Calculate performance - neutral threshold is ±0.5%
     const changePercent = data.change_p ?? 0
-    const direction = changePercent > 0.1 ? 'up' : changePercent < -0.1 ? 'down' : 'neutral'
+    const direction = changePercent > 0.5 ? 'up' : changePercent < -0.5 ? 'down' : 'neutral'
 
     // Format company name for display
     const displayName = Object.entries(COMPANY_TICKERS).find(
