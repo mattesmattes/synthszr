@@ -18,6 +18,7 @@ interface NewsletterEmailProps {
   content: string
   postUrl: string
   unsubscribeUrl: string
+  footerText?: string
 }
 
 export function NewsletterEmail({
@@ -26,6 +27,7 @@ export function NewsletterEmail({
   content,
   postUrl,
   unsubscribeUrl,
+  footerText = 'Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.',
 }: NewsletterEmailProps) {
   return (
     <Html>
@@ -48,7 +50,7 @@ export function NewsletterEmail({
           </Section>
           <Section style={footerSection}>
             <Text style={footer}>
-              Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.
+              {footerText}
             </Text>
             <Link href={unsubscribeUrl} style={unsubscribeLink}>
               Newsletter abbestellen

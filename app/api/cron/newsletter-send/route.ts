@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { NewsletterEmail } from '@/lib/resend/templates/newsletter'
 import { render } from '@react-email/components'
@@ -13,65 +12,111 @@ function getSupabase() {
   )
 }
 
-// Check admin auth
-async function isAuthenticated(): Promise<boolean> {
-  const cookieStore = await cookies()
-  const authCookie = cookieStore.get('admin_authenticated')
-  return authCookie?.value === 'true'
+// Verify cron secret (Vercel cron jobs send this header)
+function verifyCronAuth(request: NextRequest): boolean {
+  const authHeader = request.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+
+  // Allow if CRON_SECRET matches or if called from Vercel cron (no secret needed)
+  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+    return true
+  }
+
+  // Allow if x-vercel-cron header is present (Vercel cron jobs)
+  if (request.headers.get('x-vercel-cron') === '1') {
+    return true
+  }
+
+  // In development, allow without auth
+  if (process.env.NODE_ENV === 'development') {
+    return true
+  }
+
+  return false
 }
 
-// GET: List newsletter sends
-export async function GET() {
-  if (!(await isAuthenticated())) {
+export async function GET(request: NextRequest) {
+  // Verify authorization
+  if (!verifyCronAuth(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {
     const supabase = getSupabase()
 
-    const { data, error } = await supabase
-      .from('newsletter_sends')
-      .select('*, generated_posts(title, slug)')
-      .order('sent_at', { ascending: false })
-      .limit(50)
-
-    if (error) {
-      console.error('Fetch newsletter sends error:', error)
-      return NextResponse.json({ error: 'Failed to fetch sends' }, { status: 500 })
-    }
-
-    return NextResponse.json({ sends: data })
-  } catch (error) {
-    console.error('Newsletter sends GET error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
-// POST: Send newsletter
-export async function POST(request: NextRequest) {
-  if (!(await isAuthenticated())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  try {
-    const supabase = getSupabase()
-
-    const body = await request.json()
-    const { postId, testEmail } = body
-
-    if (!postId) {
-      return NextResponse.json({ error: 'Post ID required' }, { status: 400 })
-    }
-
-    // Fetch the post
-    const { data: post, error: postError } = await supabase
-      .from('generated_posts')
-      .select('*')
-      .eq('id', postId)
+    // Check if cron is enabled
+    const { data: cronSettings } = await supabase
+      .from('newsletter_settings')
+      .select('value')
+      .eq('key', 'cron_schedule')
       .single()
 
-    if (postError || !post) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    const settings = cronSettings?.value as { enabled?: boolean; hour?: number; minute?: number } || {}
+
+    if (!settings.enabled) {
+      return NextResponse.json({
+        success: true,
+        message: 'Cron is disabled',
+        sent: false,
+      })
+    }
+
+    // Check current hour matches scheduled time (with 15 min tolerance)
+    const now = new Date()
+    const currentHour = now.getUTCHours()
+    const currentMinute = now.getUTCMinutes()
+    const scheduledHour = settings.hour ?? 9
+    const scheduledMinute = settings.minute ?? 0
+
+    // Only send if we're within 15 minutes of the scheduled time
+    const isScheduledTime =
+      currentHour === scheduledHour &&
+      currentMinute >= scheduledMinute &&
+      currentMinute < scheduledMinute + 15
+
+    if (!isScheduledTime) {
+      return NextResponse.json({
+        success: true,
+        message: `Not scheduled time. Current: ${currentHour}:${currentMinute} UTC, Scheduled: ${scheduledHour}:${scheduledMinute} UTC`,
+        sent: false,
+      })
+    }
+
+    // Get today's published posts that haven't been sent yet
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const { data: todaysPosts } = await supabase
+      .from('generated_posts')
+      .select('id, title, slug, excerpt, content')
+      .eq('published', true)
+      .gte('created_at', today.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (!todaysPosts || todaysPosts.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'No new posts to send today',
+        sent: false,
+      })
+    }
+
+    const post = todaysPosts[0]
+
+    // Check if this post was already sent
+    const { data: existingSend } = await supabase
+      .from('newsletter_sends')
+      .select('id')
+      .eq('post_id', post.id)
+      .single()
+
+    if (existingSend) {
+      return NextResponse.json({
+        success: true,
+        message: 'Post already sent',
+        sent: false,
+      })
     }
 
     // Fetch email template settings
@@ -85,36 +130,9 @@ export async function POST(request: NextRequest) {
     const subjectTemplate = templates.subjectTemplate || '{{title}}'
     const footerText = templates.footerText || 'Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.'
 
-    // Apply template variables
     const subject = subjectTemplate.replace(/\{\{title\}\}/g, post.title)
     const previewText = post.excerpt || ''
     const postUrl = `${BASE_URL}/blog/${post.slug}`
-
-    // If testEmail, send only to that address
-    if (testEmail) {
-      const html = await render(
-        NewsletterEmail({
-          subject,
-          previewText,
-          content: generateEmailContent(post),
-          postUrl,
-          unsubscribeUrl: `${BASE_URL}/newsletter/unsubscribe?id=test`,
-          footerText,
-        })
-      )
-
-      await getResend().emails.send({
-        from: FROM_EMAIL,
-        to: testEmail,
-        subject: `[TEST] ${subject}`,
-        html,
-      })
-
-      return NextResponse.json({
-        success: true,
-        message: `Test-E-Mail an ${testEmail} gesendet`,
-      })
-    }
 
     // Get all active subscribers
     const { data: subscribers, error: subError } = await supabase
@@ -124,11 +142,13 @@ export async function POST(request: NextRequest) {
 
     if (subError || !subscribers || subscribers.length === 0) {
       return NextResponse.json({
-        error: 'Keine aktiven Subscriber gefunden',
-      }, { status: 400 })
+        success: true,
+        message: 'No active subscribers',
+        sent: false,
+      })
     }
 
-    // Send to all subscribers using Resend batch
+    // Send to all subscribers
     const emailPromises = subscribers.map(async (subscriber) => {
       const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
       const html = await render(
@@ -156,7 +176,7 @@ export async function POST(request: NextRequest) {
 
     // Log the send
     await supabase.from('newsletter_sends').insert({
-      post_id: postId,
+      post_id: post.id,
       subject,
       preview_text: previewText,
       recipient_count: successCount,
@@ -165,12 +185,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Newsletter an ${successCount} Subscriber gesendet`,
+      message: `Newsletter sent to ${successCount} subscribers`,
+      sent: true,
       successCount,
       failCount,
     })
   } catch (error) {
-    console.error('Newsletter send error:', error)
+    console.error('Cron newsletter send error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
