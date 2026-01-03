@@ -27,15 +27,18 @@ export interface SearchOptions {
  */
 export async function findSimilarItems(
   itemId: string,
-  embedding: number[],
+  embedding: number[] | string,
   options: SearchOptions = {}
 ): Promise<SimilarItem[]> {
   const { maxAge = 90, limit = 10, minSimilarity = 0.7 } = options
 
   const supabase = await createClient()
 
-  // Convert embedding array to pgvector format string
-  const embeddingString = `[${embedding.join(',')}]`
+  // Convert embedding to pgvector format string if needed
+  // The embedding can be either an array or a string (from database)
+  const embeddingString = typeof embedding === 'string'
+    ? embedding
+    : `[${embedding.join(',')}]`
 
   const { data, error } = await supabase.rpc('find_similar_items', {
     query_embedding: embeddingString,

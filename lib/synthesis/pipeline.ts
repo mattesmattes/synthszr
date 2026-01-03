@@ -67,7 +67,7 @@ async function getDigestItems(digestId: string): Promise<
     id: string
     title: string
     content: string
-    embedding: number[] | null
+    embedding: string | number[] | null  // Can be string from DB, array if newly generated, or null
   }>
 > {
   const supabase = await createClient()
@@ -221,22 +221,30 @@ export async function runSynthesisPipeline(
   for (const item of itemsToProcess) {
     try {
       // Get or generate embedding
-      let embedding = item.embedding
-      if (!embedding || (Array.isArray(embedding) && embedding.length === 0)) {
+      // Embedding can be a string (from DB) or array (newly generated) or null
+      let embedding: string | number[] | null = item.embedding
+      const hasValidEmbedding = embedding && (
+        (typeof embedding === 'string' && embedding.length > 10) ||
+        (Array.isArray(embedding) && embedding.length > 0)
+      )
+
+      if (!hasValidEmbedding) {
         console.log(`[Pipeline] Generating embedding for "${item.title.slice(0, 30)}..."`)
         const text = prepareTextForEmbedding(item.title, item.content)
-        embedding = await generateEmbedding(text)
+        const newEmbedding = await generateEmbedding(text)
 
         // Store the embedding for future use
-        const embeddingString = `[${embedding.join(',')}]`
+        const embeddingString = `[${newEmbedding.join(',')}]`
         await supabase
           .from('daily_repo')
           .update({ embedding: embeddingString })
           .eq('id', item.id)
+
+        embedding = embeddingString
       }
 
-      // Find similar items
-      const similarItems = await findSimilarItems(item.id, embedding as number[], {
+      // Find similar items (embedding is now guaranteed to be a valid string or array)
+      const similarItems = await findSimilarItems(item.id, embedding as string | number[], {
         maxAge: maxAgeDays,
         limit: maxCandidatesPerItem * 2, // Get extra for filtering
         minSimilarity,
@@ -428,20 +436,28 @@ export async function runSynthesisPipelineWithProgress(
 
     try {
       // Get or generate embedding
-      let embedding = item.embedding
-      if (!embedding || (Array.isArray(embedding) && embedding.length === 0)) {
-        const text = prepareTextForEmbedding(item.title, item.content)
-        embedding = await generateEmbedding(text)
+      // Embedding can be a string (from DB) or array (newly generated) or null
+      let embedding: string | number[] | null = item.embedding
+      const hasValidEmbedding = embedding && (
+        (typeof embedding === 'string' && embedding.length > 10) ||
+        (Array.isArray(embedding) && embedding.length > 0)
+      )
 
-        const embeddingString = `[${embedding.join(',')}]`
+      if (!hasValidEmbedding) {
+        const text = prepareTextForEmbedding(item.title, item.content)
+        const newEmbedding = await generateEmbedding(text)
+
+        const embeddingString = `[${newEmbedding.join(',')}]`
         await supabase
           .from('daily_repo')
           .update({ embedding: embeddingString })
           .eq('id', item.id)
+
+        embedding = embeddingString
       }
 
-      // Find similar items
-      const similarItems = await findSimilarItems(item.id, embedding as number[], {
+      // Find similar items (embedding is now guaranteed to be a valid string or array)
+      const similarItems = await findSimilarItems(item.id, embedding as string | number[], {
         maxAge: maxAgeDays,
         limit: maxCandidatesPerItem * 2,
         minSimilarity,
