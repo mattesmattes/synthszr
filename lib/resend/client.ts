@@ -14,8 +14,8 @@ export function getResend(): Resend {
   return _resend
 }
 
-// Absender-E-Mail - mit Resend's Test-Domain oder eigener verifizierter Domain
-export const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Synthszr <onboarding@resend.dev>'
+// Absender-E-Mail - mit verifizierter Domain mail.synthszr.com
+export const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Synthszr <newsletter@mail.synthszr.com>'
 
 // Base URL für Links in E-Mails
 export const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://synthszr.vercel.app'
