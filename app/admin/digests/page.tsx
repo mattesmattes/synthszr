@@ -98,6 +98,8 @@ export default function DigestsPage() {
 
   const [viewingDigest, setViewingDigest] = useState<Digest | null>(null)
   const [digestSources, setDigestSources] = useState<SourceItem[]>([])
+  // Track which item IDs are being analyzed - these will be stored as sources_used
+  const [analyzedItemIds, setAnalyzedItemIds] = useState<string[]>([])
   const [loadingDigestSources, setLoadingDigestSources] = useState(false)
   const [digestSyntheses, setDigestSyntheses] = useState<DevelopedSynthesis[]>([])
   const [loadingDigestSyntheses, setLoadingDigestSyntheses] = useState(false)
@@ -193,6 +195,7 @@ export default function DigestsPage() {
   const startAnalysis = useCallback(async () => {
     setAnalyzing(true)
     setStreamedContent('')
+    setAnalyzedItemIds([]) // Reset the analyzed item IDs
 
     try {
       const response = await fetch('/api/analyze', {
@@ -225,6 +228,11 @@ export default function DigestsPage() {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
+              // Capture the item IDs from the first event
+              if (data.type === 'sources' && data.itemIds) {
+                console.log(`[Analyze] Received ${data.itemIds.length} source item IDs`)
+                setAnalyzedItemIds(data.itemIds)
+              }
               if (data.text) setStreamedContent(prev => prev + data.text)
               if (data.error) throw new Error(data.error)
             } catch (e) {
@@ -246,32 +254,18 @@ export default function DigestsPage() {
     if (!streamedContent) return
     setSaving(true)
     try {
-      // Get the items for this date to store as sources_used
-      // Only use items that are referenced in the digest content (by title match)
-      const { data: allItems } = await supabase
-        .from('daily_repo')
-        .select('id, title')
-        .eq('newsletter_date', selectedDate)
+      // Use the analyzedItemIds captured during the analysis phase
+      // These are the ACTUAL items that were sent to Gemini, not title-matched
+      // Title matching fails because Gemini rewrites everything
+      const sourcesUsed = analyzedItemIds.length > 0 ? analyzedItemIds : null
 
-      // Find which items are actually referenced in the digest
-      const sourcesUsed: string[] = []
-      if (allItems) {
-        for (const item of allItems) {
-          // Check if the item title appears in the digest content
-          // This identifies which items were actually analyzed and included
-          if (streamedContent.includes(item.title.slice(0, 50))) {
-            sourcesUsed.push(item.id)
-          }
-        }
-      }
-
-      console.log(`[Digest] Found ${sourcesUsed.length} sources in digest content (of ${allItems?.length || 0} total)`)
+      console.log(`[Digest] Using ${analyzedItemIds.length} analyzed item IDs as sources_used`)
 
       const { data, error } = await supabase.from('daily_digests').insert({
         digest_date: selectedDate,
         analysis_content: streamedContent,
         word_count: streamedContent.split(/\s+/).length,
-        sources_used: sourcesUsed.length > 0 ? sourcesUsed : null,
+        sources_used: sourcesUsed,
       }).select('id').single()
       if (error) throw error
 

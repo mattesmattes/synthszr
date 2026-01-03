@@ -92,7 +92,10 @@ export async function POST(request: NextRequest) {
       totalChars += part.length
     }
 
+    // Track which items are actually being processed
+    const processedItemIds = items.slice(0, contentParts.length).map(item => item.id)
     console.log(`[Analyze] Processing ${contentParts.length}/${items.length} items, ${totalChars} chars`)
+    console.log(`[Analyze] Item IDs being processed: ${processedItemIds.join(', ')}`)
     const fullContent = contentParts.join('\n\n')
 
     // Stream the response
@@ -100,6 +103,12 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          // FIRST: Send the item IDs so the client knows which items are in this digest
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'sources',
+            itemIds: processedItemIds
+          })}\n\n`))
+
           for await (const chunk of streamAnalysis(fullContent, promptText)) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk })}\n\n`))
           }
