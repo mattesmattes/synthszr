@@ -72,14 +72,59 @@ function estimateThesisAlignment(synthesis: string, coreThesis: string): number 
 }
 
 /**
+ * Helper: Hard timeout wrapper using Promise.race
+ * This is a last-resort safety net when AbortController doesn't work
+ */
+function withHardTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  fallbackValue: T
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => {
+      setTimeout(() => {
+        console.log(`[Synthesis] Hard timeout triggered after ${timeoutMs}ms`)
+        resolve(fallbackValue)
+      }, timeoutMs)
+    }),
+  ])
+}
+
+/**
  * Develop a single synthesis using Claude Opus with timeout
  * Uses AbortController for proper request cancellation
+ * Plus Promise.race as a hard fallback if AbortController fails
  */
 export async function developSynthesis(
   candidate: ScoredCandidate,
   developmentPrompt: string,
   coreThesis: string,
   timeoutMs: number = 25000 // 25 second timeout (shorter to ensure we finish before Vercel timeout)
+): Promise<DevelopedSynthesis> {
+  const fallbackSynthesis: DevelopedSynthesis = {
+    headline: `Verbindung: ${candidate.synthesisType}`,
+    content: `Zusammenhang zwischen "${candidate.sourceItem.title.slice(0, 50)}" und historischer News konnte nicht entwickelt werden (Timeout).`,
+    historicalReference: candidate.relatedItem.title,
+    coreThesisAlignment: 0,
+  }
+
+  // Wrap the entire operation in a hard timeout as last resort
+  return withHardTimeout(
+    developSynthesisInternal(candidate, developmentPrompt, coreThesis, timeoutMs),
+    timeoutMs + 10000, // Hard timeout 10s after soft timeout
+    fallbackSynthesis
+  )
+}
+
+/**
+ * Internal implementation of synthesis development
+ */
+async function developSynthesisInternal(
+  candidate: ScoredCandidate,
+  developmentPrompt: string,
+  coreThesis: string,
+  timeoutMs: number
 ): Promise<DevelopedSynthesis> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => {
