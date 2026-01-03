@@ -509,8 +509,10 @@ export async function runSynthesisPipelineWithProgress(
     }
   }
 
-  // Phase 2: Develop syntheses one by one with progress updates
+  // Phase 2: Develop syntheses in parallel batches with progress updates
   const synthesesMap = new Map<string, DevelopedSynthesis>()
+  const BATCH_SIZE = 3 // Process 3 at a time to balance speed vs rate limits
+  const TIMEOUT_MS = 30000 // 30 second timeout per synthesis
 
   // Helper: timeout wrapper that guarantees we don't hang
   const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
@@ -523,62 +525,79 @@ export async function runSynthesisPipelineWithProgress(
     ])
   }
 
-  for (let i = 0; i < allCandidates.length; i++) {
-    const candidate = allCandidates[i]
+  const { developSynthesis } = await import('./develop')
 
+  // Process in batches of BATCH_SIZE
+  for (let batchStart = 0; batchStart < allCandidates.length; batchStart += BATCH_SIZE) {
+    const batch = allCandidates.slice(batchStart, batchStart + BATCH_SIZE)
+
+    // Show progress for batch start
     onProgress({
       type: 'developing',
-      currentItem: i + 1,
+      currentItem: batchStart + 1,
       totalItems: allCandidates.length,
-      itemTitle: candidate.sourceItem.title,
+      itemTitle: `Batch ${Math.floor(batchStart / BATCH_SIZE) + 1}: ${batch.map(c => c.sourceItem.title.slice(0, 20)).join(', ')}...`,
     })
 
-    try {
-      const { developSynthesis } = await import('./develop')
+    // Process batch in parallel
+    const batchResults = await Promise.all(
+      batch.map(async (candidate, batchIndex) => {
+        const globalIndex = batchStart + batchIndex
 
-      // Fallback synthesis if timeout occurs
-      const fallbackSynthesis: DevelopedSynthesis = {
-        headline: `Verbindung: ${candidate.synthesisType}`,
-        content: `Historische Verbindung zu "${candidate.relatedItem.title.slice(0, 50)}..." (Timeout)`,
-        historicalReference: candidate.relatedItem.title,
-        coreThesisAlignment: 0,
+        try {
+          // Fallback synthesis if timeout occurs
+          const fallbackSynthesis: DevelopedSynthesis = {
+            headline: `Verbindung: ${candidate.synthesisType}`,
+            content: `Historische Verbindung zu "${candidate.relatedItem.title.slice(0, 50)}..." (Timeout)`,
+            historicalReference: candidate.relatedItem.title,
+            coreThesisAlignment: 0,
+          }
+
+          // 30-second timeout per synthesis
+          const synthesis = await withTimeout(
+            developSynthesis(candidate, prompt.development_prompt, prompt.core_thesis),
+            TIMEOUT_MS,
+            fallbackSynthesis
+          )
+
+          return { candidate, synthesis, globalIndex, success: true }
+        } catch (error) {
+          console.error(`[Pipeline] Failed to develop synthesis:`, error)
+          errors.push(`Failed to develop synthesis for ${candidate.sourceItem.title}`)
+          return { candidate, synthesis: null, globalIndex, success: false }
+        }
+      })
+    )
+
+    // Process results and send progress updates
+    for (const result of batchResults) {
+      if (result.success && result.synthesis) {
+        const key = `${result.candidate.sourceItem.id}-${result.candidate.relatedItem.id}`
+        synthesesMap.set(key, {
+          ...result.synthesis,
+          candidateId: key,
+        })
+
+        synthesesDeveloped++
+
+        // Send the developed synthesis to the client
+        onProgress({
+          type: 'developed',
+          currentItem: result.globalIndex + 1,
+          totalItems: allCandidates.length,
+          itemTitle: result.candidate.sourceItem.title,
+          synthesis: {
+            headline: result.synthesis.headline,
+            content: result.synthesis.content,
+            historicalReference: result.synthesis.historicalReference,
+          },
+        })
       }
-
-      // Hard 45-second timeout per synthesis
-      const synthesis = await withTimeout(
-        developSynthesis(candidate, prompt.development_prompt, prompt.core_thesis),
-        45000,
-        fallbackSynthesis
-      )
-
-      const key = `${candidate.sourceItem.id}-${candidate.relatedItem.id}`
-      synthesesMap.set(key, {
-        ...synthesis,
-        candidateId: key,
-      })
-
-      synthesesDeveloped++
-
-      // Send the developed synthesis to the client
-      onProgress({
-        type: 'developed',
-        currentItem: i + 1,
-        totalItems: allCandidates.length,
-        itemTitle: candidate.sourceItem.title,
-        synthesis: {
-          headline: synthesis.headline,
-          content: synthesis.content,
-          historicalReference: synthesis.historicalReference,
-        },
-      })
-    } catch (error) {
-      console.error(`[Pipeline] Failed to develop synthesis:`, error)
-      errors.push(`Failed to develop synthesis for ${candidate.sourceItem.title}`)
     }
 
-    // Small delay between Opus calls
-    if (i < allCandidates.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 500))
+    // Small delay between batches to respect rate limits
+    if (batchStart + BATCH_SIZE < allCandidates.length) {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
     }
   }
 
