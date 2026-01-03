@@ -435,6 +435,9 @@ export async function getSynthesesForDigest(
 /**
  * Run the synthesis pipeline with progress callbacks for streaming UI
  */
+// Pipeline version for deployment verification
+const PIPELINE_VERSION = 'v5-with-logging'
+
 export async function runSynthesisPipelineWithProgress(
   digestId: string,
   options: {
@@ -445,6 +448,8 @@ export async function runSynthesisPipelineWithProgress(
   } = {},
   onProgress: (event: SynthesisProgressEvent) => void
 ): Promise<SynthesisPipelineResult> {
+  console.log(`[Pipeline ${PIPELINE_VERSION}] Starting for digest ${digestId}`)
+
   const {
     maxItemsToProcess = 50,
     maxCandidatesPerItem = 5,
