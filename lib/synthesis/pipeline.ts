@@ -436,7 +436,7 @@ export async function getSynthesesForDigest(
  * Run the synthesis pipeline with progress callbacks for streaming UI
  */
 // Pipeline version for deployment verification
-const PIPELINE_VERSION = 'v9-continuation'
+const PIPELINE_VERSION = 'v10-auto-batch'
 
 export async function runSynthesisPipelineWithProgress(
   digestId: string,

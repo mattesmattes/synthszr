@@ -295,98 +295,119 @@ export default function DigestsPage() {
     })
     setSynthesisProgressOpen(true)
 
-    try {
-      const response = await fetch('/api/synthesis-stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ digestId }),
-        credentials: 'include',
-      })
+    // Auto-continuation loop
+    let shouldContinue = true
+    let batchNumber = 1
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Synthese fehlgeschlagen')
-      }
+    while (shouldContinue) {
+      shouldContinue = false // Will be set to true if we get a 'partial' event
 
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('No reader')
+      try {
+        console.log(`[Synthesis] Starting batch ${batchNumber}...`)
 
-      const decoder = new TextDecoder()
-      let buffer = ''
+        const response = await fetch('/api/synthesis-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ digestId }),
+          credentials: 'include',
+        })
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || 'Synthese fehlgeschlagen')
+        }
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n\n')
-        buffer = lines.pop() || ''
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error('No reader')
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const event = JSON.parse(line.slice(6))
+        const decoder = new TextDecoder()
+        let buffer = ''
 
-              if (event.type === 'init') {
-                setSynthesisProgress(prev => ({
-                  ...prev,
-                  totalItems: event.totalItems,
-                }))
-              } else if (event.type === 'searching' || event.type === 'scoring') {
-                setSynthesisProgress(prev => ({
-                  ...prev,
-                  phase: event.type,
-                  currentItem: event.currentItem,
-                  totalItems: event.totalItems,
-                  itemTitle: event.itemTitle,
-                }))
-              } else if (event.type === 'developing') {
-                setSynthesisProgress(prev => ({
-                  ...prev,
-                  phase: 'developing',
-                  currentItem: event.currentItem,
-                  totalItems: event.totalItems,
-                  itemTitle: event.itemTitle,
-                }))
-              } else if (event.type === 'developed') {
-                setSynthesisProgress(prev => ({
-                  ...prev,
-                  currentItem: event.currentItem,
-                  syntheses: [...prev.syntheses, event.synthesis],
-                }))
-              } else if (event.type === 'complete') {
-                setSynthesisProgress(prev => ({
-                  ...prev,
-                  phase: 'complete',
-                }))
-              } else if (event.type === 'partial') {
-                // Time limit reached - show message to continue
-                setSynthesisProgress(prev => ({
-                  ...prev,
-                  phase: 'partial',
-                  error: event.message,
-                }))
-              } else if (event.type === 'error') {
-                setSynthesisProgress(prev => ({
-                  ...prev,
-                  phase: 'error',
-                  error: event.error,
-                }))
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const event = JSON.parse(line.slice(6))
+
+                if (event.type === 'init') {
+                  setSynthesisProgress(prev => ({
+                    ...prev,
+                    totalItems: event.totalItems,
+                  }))
+                } else if (event.type === 'searching' || event.type === 'scoring') {
+                  setSynthesisProgress(prev => ({
+                    ...prev,
+                    phase: event.type,
+                    currentItem: event.currentItem,
+                    totalItems: event.totalItems,
+                    itemTitle: event.itemTitle,
+                  }))
+                } else if (event.type === 'developing') {
+                  setSynthesisProgress(prev => ({
+                    ...prev,
+                    phase: 'developing',
+                    currentItem: event.currentItem,
+                    totalItems: event.totalItems,
+                    itemTitle: event.itemTitle,
+                  }))
+                } else if (event.type === 'developed') {
+                  setSynthesisProgress(prev => ({
+                    ...prev,
+                    currentItem: event.currentItem,
+                    syntheses: [...prev.syntheses, event.synthesis],
+                  }))
+                } else if (event.type === 'complete') {
+                  setSynthesisProgress(prev => ({
+                    ...prev,
+                    phase: 'complete',
+                  }))
+                  shouldContinue = false
+                } else if (event.type === 'partial') {
+                  // Time limit reached - will auto-continue after stream ends
+                  console.log(`[Synthesis] Batch ${batchNumber} partial, will continue...`)
+                  setSynthesisProgress(prev => ({
+                    ...prev,
+                    itemTitle: `Batch ${batchNumber} fertig, starte Batch ${batchNumber + 1}...`,
+                  }))
+                  shouldContinue = true
+                } else if (event.type === 'error') {
+                  setSynthesisProgress(prev => ({
+                    ...prev,
+                    phase: 'error',
+                    error: event.error,
+                  }))
+                  shouldContinue = false
+                }
+              } catch (e) {
+                if (e instanceof SyntaxError) continue
+                throw e
               }
-            } catch (e) {
-              if (e instanceof SyntaxError) continue
-              throw e
             }
           }
         }
+
+        batchNumber++
+
+        // Small delay between batches
+        if (shouldContinue) {
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+      } catch (error) {
+        console.error('Synthesis stream error:', error)
+        setSynthesisProgress(prev => ({
+          ...prev,
+          phase: 'error',
+          error: error instanceof Error ? error.message : 'Unbekannter Fehler',
+        }))
+        shouldContinue = false
       }
-    } catch (error) {
-      console.error('Synthesis stream error:', error)
-      setSynthesisProgress(prev => ({
-        ...prev,
-        phase: 'error',
-        error: error instanceof Error ? error.message : 'Unbekannter Fehler',
-      }))
     }
   }
 
@@ -1109,24 +1130,6 @@ export default function DigestsPage() {
               </div>
             )}
 
-            {/* Partial Complete - Time limit reached */}
-            {synthesisProgress.phase === 'partial' && (
-              <div className="flex flex-col gap-2 p-3 rounded bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-xs">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>{synthesisProgress.error}</span>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => generateSyntheses(selectedDigestForSynthesis!.id)}
-                  className="self-start text-xs h-6"
-                >
-                  Fortsetzen →
-                </Button>
-              </div>
-            )}
-
             {/* Error Message */}
             {synthesisProgress.phase === 'error' && (
               <div className="flex items-center gap-2 p-3 rounded bg-destructive/10 border border-destructive/30 text-destructive text-xs">
@@ -1193,7 +1196,7 @@ export default function DigestsPage() {
               onClick={() => setSynthesisProgressOpen(false)}
               className="text-xs h-7"
             >
-              {synthesisProgress.phase === 'complete' || synthesisProgress.phase === 'error' || synthesisProgress.phase === 'partial'
+              {synthesisProgress.phase === 'complete' || synthesisProgress.phase === 'error'
                 ? 'Schließen'
                 : 'Im Hintergrund fortsetzen'}
             </Button>
