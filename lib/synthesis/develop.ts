@@ -72,7 +72,7 @@ function estimateThesisAlignment(synthesis: string, coreThesis: string): number 
 }
 
 // Version marker for deployment verification
-const SYNTHESIS_VERSION = 'v3-20s-timeout'
+const SYNTHESIS_VERSION = 'v4-fixed-catch'
 
 /**
  * Helper: Hard timeout wrapper using Promise.race
@@ -84,23 +84,30 @@ function withHardTimeout<T>(
   fallbackValue: T,
   label: string = 'unknown'
 ): Promise<T> {
-  let resolved = false
+  let settled = false
 
-  return Promise.race([
-    promise.then((result) => {
-      resolved = true
+  const wrappedPromise = promise
+    .then((result) => {
+      settled = true
       console.log(`[Synthesis ${SYNTHESIS_VERSION}] Promise resolved for: ${label}`)
       return result
-    }),
-    new Promise<T>((resolve) => {
-      setTimeout(() => {
-        if (!resolved) {
-          console.log(`[Synthesis ${SYNTHESIS_VERSION}] HARD TIMEOUT after ${timeoutMs}ms for: ${label}`)
-          resolve(fallbackValue)
-        }
-      }, timeoutMs)
-    }),
-  ])
+    })
+    .catch((error) => {
+      settled = true
+      console.log(`[Synthesis ${SYNTHESIS_VERSION}] Promise rejected for: ${label}`, error)
+      return fallbackValue
+    })
+
+  const timeoutPromise = new Promise<T>((resolve) => {
+    setTimeout(() => {
+      if (!settled) {
+        console.log(`[Synthesis ${SYNTHESIS_VERSION}] HARD TIMEOUT after ${timeoutMs}ms for: ${label}`)
+        resolve(fallbackValue)
+      }
+    }, timeoutMs)
+  })
+
+  return Promise.race([wrappedPromise, timeoutPromise])
 }
 
 /**
