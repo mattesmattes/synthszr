@@ -3,6 +3,24 @@ import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter } from '@/lib/claude/ghostwriter'
 
+// Canonical URLs for newsletter sources that may not have direct article URLs
+const NEWSLETTER_CANONICAL_URLS: Record<string, string> = {
+  'techmeme': 'https://techmeme.com',
+  'stratechery': 'https://stratechery.com',
+  'ben evans': 'https://www.ben-evans.com',
+  'benedict evans': 'https://www.ben-evans.com',
+  'the information': 'https://www.theinformation.com',
+  'axios': 'https://www.axios.com',
+  'morning brew': 'https://www.morningbrew.com',
+  'tldr': 'https://tldr.tech',
+  'platformer': 'https://www.platformer.news',
+  'the verge': 'https://www.theverge.com',
+  'techcrunch': 'https://techcrunch.com',
+  'wired': 'https://www.wired.com',
+  'ars technica': 'https://arstechnica.com',
+  'hacker news': 'https://news.ycombinator.com',
+}
+
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) {
@@ -46,15 +64,31 @@ export async function POST(request: NextRequest) {
       .eq('newsletter_date', digest.digest_date)
       .order('collected_at', { ascending: true })
 
-    // Build a source reference list for the ghostwriter - ONLY include sources with valid URLs
-    // This prevents the AI from creating broken links using email addresses
+    // Build a source reference list for the ghostwriter
+    // Use canonical URLs for known newsletters without direct article URLs
     let sourceReference = ''
     if (sources && sources.length > 0) {
-      const sourcesWithUrls = sources.filter(s => s.source_url && s.source_url.startsWith('http'))
+      const sourcesWithUrls = sources.map(s => {
+        // If source has a valid URL, use it
+        if (s.source_url && s.source_url.startsWith('http')) {
+          return { title: s.title, url: s.source_url }
+        }
+        // Otherwise, try to find a canonical URL based on title or email
+        const titleLower = s.title?.toLowerCase() || ''
+        const emailLower = s.source_email?.toLowerCase() || ''
+
+        for (const [key, canonicalUrl] of Object.entries(NEWSLETTER_CANONICAL_URLS)) {
+          if (titleLower.includes(key) || emailLower.includes(key)) {
+            return { title: s.title, url: canonicalUrl }
+          }
+        }
+        return null
+      }).filter((s): s is { title: string; url: string } => s !== null)
+
       if (sourcesWithUrls.length > 0) {
         sourceReference = '\n\n---\n\nVERFÜGBARE QUELLEN MIT LINKS (nutze NUR diese URLs):\n'
         sourceReference += sourcesWithUrls.map((s, i) => {
-          return `${i + 1}. [${s.title}](${s.source_url})`
+          return `${i + 1}. [${s.title}](${s.url})`
         }).join('\n')
       }
     }
