@@ -202,6 +202,9 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
               <a href="/impressum" className="hover:text-accent transition-colors">
                 Impressum
               </a>
+              <a href="/datenschutz" className="hover:text-accent transition-colors">
+                Datenschutz
+              </a>
             </div>
           </div>
         </div>

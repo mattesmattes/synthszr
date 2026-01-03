@@ -175,6 +175,9 @@ export default async function Page() {
               <a href="/impressum" className="hover:text-accent transition-colors">
                 Impressum
               </a>
+              <a href="/datenschutz" className="hover:text-accent transition-colors">
+                Datenschutz
+              </a>
             </div>
           </div>
         </div>
