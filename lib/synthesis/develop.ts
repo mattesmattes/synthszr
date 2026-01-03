@@ -71,7 +71,7 @@ function estimateThesisAlignment(synthesis: string, coreThesis: string): number 
 }
 
 /**
- * Develop a single synthesis using Claude Opus
+ * Develop a single synthesis using Claude Opus with timeout
  */
 export async function developSynthesis(
   candidate: ScoredCandidate,
@@ -80,6 +80,7 @@ export async function developSynthesis(
 ): Promise<DevelopedSynthesis> {
   const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
+    timeout: 60000, // 60 second timeout
   })
 
   const currentNews = `${candidate.sourceItem.title}\n\n${candidate.sourceItem.content.slice(0, 2000)}`
@@ -94,23 +95,34 @@ export async function developSynthesis(
 
   console.log(`[Synthesis] Developing synthesis for "${candidate.sourceItem.title.slice(0, 50)}..."`)
 
-  const response = await anthropic.messages.create({
-    model: 'claude-opus-4-20250514',
-    max_tokens: 1024,
-    messages: [{ role: 'user', content: prompt }],
-  })
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-opus-4-20250514',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    })
 
-  const text =
-    response.content[0].type === 'text' ? response.content[0].text : ''
+    const text =
+      response.content[0].type === 'text' ? response.content[0].text : ''
 
-  const parsed = parseSynthesisResponse(text)
-  const alignment = estimateThesisAlignment(parsed.synthese, coreThesis)
+    const parsed = parseSynthesisResponse(text)
+    const alignment = estimateThesisAlignment(parsed.synthese, coreThesis)
 
-  return {
-    headline: parsed.headline,
-    content: parsed.synthese,
-    historicalReference: parsed.referenz,
-    coreThesisAlignment: alignment,
+    return {
+      headline: parsed.headline,
+      content: parsed.synthese,
+      historicalReference: parsed.referenz,
+      coreThesisAlignment: alignment,
+    }
+  } catch (error) {
+    console.error(`[Synthesis] Opus API error:`, error)
+    // Return a fallback synthesis instead of throwing
+    return {
+      headline: `Verbindung: ${candidate.synthesisType}`,
+      content: `Zusammenhang zwischen "${candidate.sourceItem.title.slice(0, 50)}" und historischer News konnte nicht entwickelt werden.`,
+      historicalReference: candidate.relatedItem.title,
+      coreThesisAlignment: 0,
+    }
   }
 }
 
