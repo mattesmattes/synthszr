@@ -15,7 +15,6 @@ export function SwipeNavigation({
   newerPostSlug
 }: SwipeNavigationProps) {
   const router = useRouter()
-  const containerRef = useRef<HTMLDivElement>(null)
   const debugRef = useRef<HTMLDivElement>(null)
 
   // Touch tracking refs (no re-renders)
@@ -27,14 +26,12 @@ export function SwipeNavigation({
 
   const navigate = useCallback((direction: 'left' | 'right') => {
     if (direction === 'right') {
-      // Swipe right → newer post or home
       if (newerPostSlug) {
         router.push(`/posts/${newerPostSlug}`)
       } else {
         router.push('/')
       }
     } else {
-      // Swipe left → older post
       if (olderPostSlug) {
         router.push(`/posts/${olderPostSlug}`)
       }
@@ -42,12 +39,9 @@ export function SwipeNavigation({
   }, [olderPostSlug, newerPostSlug, router])
 
   useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const minSwipeDistance = 60 // Reduced for snappier feel
-    const maxVerticalRatio = 1.5 // Allow some diagonal movement
-    const minVelocity = 0.4 // px/ms - fast swipe threshold
+    const minSwipeDistance = 50
+    const maxVerticalRatio = 2
+    const minVelocity = 0.3
 
     const updateDebug = (text: string, highlight: boolean = false) => {
       if (debugRef.current) {
@@ -63,6 +57,7 @@ export function SwipeNavigation({
       touchStartTime.current = Date.now()
       currentDeltaX.current = 0
       isTracking.current = true
+      updateDebug('touch...', true)
     }
 
     const handleTouchMove = (e: TouchEvent) => {
@@ -73,13 +68,12 @@ export function SwipeNavigation({
       currentDeltaX.current = deltaX
 
       // Cancel if moving too vertically
-      if (Math.abs(deltaY) > Math.abs(deltaX) * maxVerticalRatio && Math.abs(deltaY) > 30) {
+      if (Math.abs(deltaY) > Math.abs(deltaX) * maxVerticalRatio && Math.abs(deltaY) > 20) {
         isTracking.current = false
         updateDebug(`← ${olderPostSlug ? 'älter' : '–'} | ${newerPostSlug ? 'neuer' : 'home'} →`, false)
         return
       }
 
-      // Visual feedback
       const direction = deltaX > 0 ? '→' : '←'
       const target = deltaX > 0
         ? (newerPostSlug ? 'neuer' : 'home')
@@ -93,14 +87,11 @@ export function SwipeNavigation({
 
       const deltaX = currentDeltaX.current
       const elapsed = Date.now() - touchStartTime.current
-      const velocity = Math.abs(deltaX) / elapsed // px/ms
+      const velocity = Math.abs(deltaX) / elapsed
       const absDistance = Math.abs(deltaX)
 
-      // Trigger navigation if:
-      // 1. Swiped far enough, OR
-      // 2. Swiped fast enough (even if short)
       const shouldNavigate = absDistance >= minSwipeDistance ||
-        (velocity >= minVelocity && absDistance >= 30)
+        (velocity >= minVelocity && absDistance >= 25)
 
       if (shouldNavigate) {
         if (deltaX > 0) {
@@ -110,28 +101,27 @@ export function SwipeNavigation({
           updateDebug('← navigiere...', true)
           navigate('left')
         } else {
-          updateDebug('← kein älterer Post', false)
+          updateDebug('← kein älterer', false)
         }
       } else {
         updateDebug(`← ${olderPostSlug ? 'älter' : '–'} | ${newerPostSlug ? 'neuer' : 'home'} →`, false)
       }
     }
 
-    // Use passive listeners for better scroll performance
-    container.addEventListener('touchstart', handleTouchStart, { passive: true })
-    container.addEventListener('touchmove', handleTouchMove, { passive: true })
-    container.addEventListener('touchend', handleTouchEnd, { passive: true })
+    // Window-level events to catch all touches
+    window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchmove', handleTouchMove, { passive: true })
+    window.addEventListener('touchend', handleTouchEnd, { passive: true })
 
     return () => {
-      container.removeEventListener('touchstart', handleTouchStart)
-      container.removeEventListener('touchmove', handleTouchMove)
-      container.removeEventListener('touchend', handleTouchEnd)
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleTouchEnd)
     }
   }, [olderPostSlug, newerPostSlug, navigate])
 
   return (
-    <div ref={containerRef} style={{ minHeight: '100vh' }}>
-      {/* Debug indicator */}
+    <div style={{ minHeight: '100vh' }}>
       <div
         ref={debugRef}
         style={{
