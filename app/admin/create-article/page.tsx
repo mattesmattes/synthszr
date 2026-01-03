@@ -310,8 +310,8 @@ export default function CreateArticlePage() {
       }
     }
 
-    // Limit to max 5 items for image generation
-    return items.slice(0, 5)
+    // Limit to max 3 items for image generation
+    return items.slice(0, 3)
   }
 
   // Trigger background image generation for a post

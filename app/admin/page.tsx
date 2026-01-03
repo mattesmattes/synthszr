@@ -803,14 +803,14 @@ function GenerateImagesButton({ postId }: { postId: string }) {
       let sectionsToProcess: Array<{ title: string; content: string }> = []
 
       if (extractedSections.length > 0) {
-        sectionsToProcess = extractedSections.slice(0, 5)
+        sectionsToProcess = extractedSections.slice(0, 3)
       } else {
         // Fallback: split by paragraphs
         const paragraphs = textContent
           .split(/\n{2,}/)
           .map(s => s.trim())
           .filter(s => s.length > 50)
-          .slice(0, 5)
+          .slice(0, 3)
 
         sectionsToProcess = paragraphs.map((p, i) => ({
           title: `Abschnitt ${i + 1}`,

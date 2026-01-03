@@ -491,8 +491,8 @@ export default function DigestsPage() {
           }
         }
 
-        // Take up to 5 sections for image generation
-        const sectionsToProcess = sections.slice(0, 5)
+        // Take up to 3 sections for image generation
+        const sectionsToProcess = sections.slice(0, 3)
 
         console.log(`[ImageGen] Found ${sections.length} sections, processing ${sectionsToProcess.length}`)
 
