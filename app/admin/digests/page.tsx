@@ -17,6 +17,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import {
   Collapsible,
   CollapsibleContent,
@@ -64,6 +65,19 @@ interface RepoDate {
   count: number
 }
 
+interface SynthesisProgress {
+  phase: 'searching' | 'scoring' | 'developing' | 'complete' | 'error'
+  currentItem: number
+  totalItems: number
+  itemTitle: string
+  syntheses: Array<{
+    headline: string
+    content: string
+    historicalReference: string
+  }>
+  error?: string
+}
+
 export default function DigestsPage() {
   const [digests, setDigests] = useState<Digest[]>([])
   const [loading, setLoading] = useState(true)
@@ -87,7 +101,16 @@ export default function DigestsPage() {
   const [loadingDigestSources, setLoadingDigestSources] = useState(false)
   const [digestSyntheses, setDigestSyntheses] = useState<DevelopedSynthesis[]>([])
   const [loadingDigestSyntheses, setLoadingDigestSyntheses] = useState(false)
-  const [runningSynthesis, setRunningSynthesis] = useState(false)
+
+  // Synthesis progress dialog state
+  const [synthesisProgressOpen, setSynthesisProgressOpen] = useState(false)
+  const [synthesisProgress, setSynthesisProgress] = useState<SynthesisProgress>({
+    phase: 'searching',
+    currentItem: 0,
+    totalItems: 0,
+    itemTitle: '',
+    syntheses: [],
+  })
 
   const [ghostwriterOpen, setGhostwriterOpen] = useState(false)
   const [ghostwriterDigest, setGhostwriterDigest] = useState<Digest | null>(null)
@@ -230,31 +253,117 @@ export default function DigestsPage() {
       }).select('id').single()
       if (error) throw error
 
-      // Trigger synthesis pipeline in background (non-blocking)
-      if (data?.id) {
-        fetch('/api/synthesis', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ digestId: data.id }),
-          credentials: 'include',
-        }).then(res => {
-          if (res.ok) {
-            console.log('[Digest] Synthesis pipeline triggered for:', data.id)
-          } else {
-            console.error('[Digest] Synthesis trigger failed with status:', res.status)
-          }
-        }).catch(err => {
-          console.error('[Digest] Synthesis trigger failed:', err)
-        })
-      }
-
       await fetchDigests()
       setStreamedContent('')
+      setSaving(false)
+
+      // Start streaming synthesis pipeline with progress dialog
+      if (data?.id) {
+        startSynthesisWithProgress(data.id)
+      }
     } catch (error) {
       console.error('Save error:', error)
       alert('Fehler beim Speichern')
-    } finally {
       setSaving(false)
+    }
+  }
+
+  async function startSynthesisWithProgress(digestId: string) {
+    // Reset and open progress dialog
+    setSynthesisProgress({
+      phase: 'searching',
+      currentItem: 0,
+      totalItems: 0,
+      itemTitle: '',
+      syntheses: [],
+    })
+    setSynthesisProgressOpen(true)
+
+    try {
+      const response = await fetch('/api/synthesis-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ digestId }),
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Synthese fehlgeschlagen')
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No reader')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6))
+
+              if (event.type === 'init') {
+                setSynthesisProgress(prev => ({
+                  ...prev,
+                  totalItems: event.totalItems,
+                }))
+              } else if (event.type === 'searching' || event.type === 'scoring') {
+                setSynthesisProgress(prev => ({
+                  ...prev,
+                  phase: event.type,
+                  currentItem: event.currentItem,
+                  totalItems: event.totalItems,
+                  itemTitle: event.itemTitle,
+                }))
+              } else if (event.type === 'developing') {
+                setSynthesisProgress(prev => ({
+                  ...prev,
+                  phase: 'developing',
+                  currentItem: event.currentItem,
+                  totalItems: event.totalItems,
+                  itemTitle: event.itemTitle,
+                }))
+              } else if (event.type === 'developed') {
+                setSynthesisProgress(prev => ({
+                  ...prev,
+                  currentItem: event.currentItem,
+                  syntheses: [...prev.syntheses, event.synthesis],
+                }))
+              } else if (event.type === 'complete') {
+                setSynthesisProgress(prev => ({
+                  ...prev,
+                  phase: 'complete',
+                }))
+              } else if (event.type === 'error') {
+                setSynthesisProgress(prev => ({
+                  ...prev,
+                  phase: 'error',
+                  error: event.error,
+                }))
+              }
+            } catch (e) {
+              if (e instanceof SyntaxError) continue
+              throw e
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Synthesis stream error:', error)
+      setSynthesisProgress(prev => ({
+        ...prev,
+        phase: 'error',
+        error: error instanceof Error ? error.message : 'Unbekannter Fehler',
+      }))
     }
   }
 
@@ -293,39 +402,9 @@ export default function DigestsPage() {
   }
 
   async function triggerSynthesis(digest: Digest) {
-    setRunningSynthesis(true)
-    try {
-      const res = await fetch('/api/synthesis', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ digestId: digest.id }),
-        credentials: 'include',
-      })
-
-      if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.error || 'Synthese fehlgeschlagen')
-      }
-
-      const result = await res.json()
-      console.log('[Synthesis] Result:', result)
-
-      // Reload syntheses
-      const { data: newSyntheses } = await supabase
-        .from('developed_syntheses')
-        .select('id, synthesis_headline, synthesis_content, historical_reference, core_thesis_alignment, created_at')
-        .eq('digest_id', digest.id)
-        .order('core_thesis_alignment', { ascending: false })
-
-      if (newSyntheses) setDigestSyntheses(newSyntheses as DevelopedSynthesis[])
-
-      alert(`Synthese abgeschlossen! ${result.synthesesDeveloped || 0} Synthesen erstellt.`)
-    } catch (error) {
-      console.error('Synthesis error:', error)
-      alert(`Fehler: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
-    } finally {
-      setRunningSynthesis(false)
-    }
+    // Close detail dialog and open progress dialog
+    setViewingDigest(null)
+    startSynthesisWithProgress(digest.id)
   }
 
   function openGhostwriter(digest: Digest) {
@@ -947,20 +1026,10 @@ export default function DigestsPage() {
               variant="outline"
               size="sm"
               onClick={() => viewingDigest && triggerSynthesis(viewingDigest)}
-              disabled={runningSynthesis}
               className="gap-1.5 text-xs h-7"
             >
-              {runningSynthesis ? (
-                <>
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Synthese läuft...
-                </>
-              ) : (
-                <>
-                  <Lightbulb className="h-3 w-3" />
-                  Synthese starten
-                </>
-              )}
+              <Lightbulb className="h-3 w-3" />
+              Synthese starten
             </Button>
             <Button size="sm" onClick={() => {
               setViewingDigest(null)
@@ -969,6 +1038,140 @@ export default function DigestsPage() {
               <PenTool className="h-3 w-3" />
               Blogpost erstellen
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Synthesis Progress Dialog */}
+      <Dialog open={synthesisProgressOpen} onOpenChange={setSynthesisProgressOpen}>
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <Lightbulb className="h-4 w-4 text-[#E8FF00]" />
+              Synthese-Generierung
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {synthesisProgress.phase === 'complete'
+                ? `${synthesisProgress.syntheses.length} Synthesen erstellt`
+                : synthesisProgress.phase === 'error'
+                ? 'Fehler bei der Synthese'
+                : 'Historische Verbindungen werden analysiert...'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-4 py-3">
+            {/* Progress Section */}
+            {synthesisProgress.phase !== 'complete' && synthesisProgress.phase !== 'error' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">
+                    {synthesisProgress.phase === 'searching' && '🔍 Suche ähnliche Artikel...'}
+                    {synthesisProgress.phase === 'scoring' && '📊 Bewerte Kandidaten...'}
+                    {synthesisProgress.phase === 'developing' && '✨ Generiere Synthese...'}
+                  </span>
+                  <span className="font-medium">
+                    {synthesisProgress.currentItem} / {synthesisProgress.totalItems}
+                  </span>
+                </div>
+                <Progress
+                  value={
+                    synthesisProgress.totalItems > 0
+                      ? (synthesisProgress.currentItem / synthesisProgress.totalItems) * 100
+                      : 0
+                  }
+                  className="h-2"
+                />
+                {synthesisProgress.itemTitle && (
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    {synthesisProgress.itemTitle}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Error Message */}
+            {synthesisProgress.phase === 'error' && (
+              <div className="flex items-center gap-2 p-3 rounded bg-destructive/10 border border-destructive/30 text-destructive text-xs">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{synthesisProgress.error}</span>
+              </div>
+            )}
+
+            {/* Generated Syntheses */}
+            {synthesisProgress.syntheses.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold flex items-center gap-1.5">
+                  <Lightbulb className="h-3 w-3 text-[#E8FF00]" />
+                  Generierte Synthesen ({synthesisProgress.syntheses.length})
+                </h3>
+                <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                  {synthesisProgress.syntheses.map((synthesis, index) => (
+                    <div
+                      key={index}
+                      className="border-l-2 border-[#E8FF00] pl-3 py-2 bg-[#E8FF00]/5 rounded-r"
+                    >
+                      <h4 className="text-xs font-medium mb-1">{synthesis.headline}</h4>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        {synthesis.content}
+                      </p>
+                      {synthesis.historicalReference && (
+                        <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic">
+                          ↩ {synthesis.historicalReference}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {synthesisProgress.phase !== 'error' &&
+              synthesisProgress.syntheses.length === 0 &&
+              synthesisProgress.phase !== 'complete' && (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-[#E8FF00] mb-3" />
+                  <p className="text-xs text-muted-foreground">
+                    Analysiere historische Verbindungen...
+                  </p>
+                </div>
+              )}
+
+            {/* Complete State */}
+            {synthesisProgress.phase === 'complete' && synthesisProgress.syntheses.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <AlertCircle className="h-8 w-8 text-muted-foreground mb-3" />
+                <p className="text-xs text-muted-foreground">
+                  Keine passenden historischen Verbindungen gefunden.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="border-t pt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSynthesisProgressOpen(false)}
+              className="text-xs h-7"
+            >
+              {synthesisProgress.phase === 'complete' || synthesisProgress.phase === 'error'
+                ? 'Schließen'
+                : 'Im Hintergrund fortsetzen'}
+            </Button>
+            {synthesisProgress.phase === 'complete' && synthesisProgress.syntheses.length > 0 && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setSynthesisProgressOpen(false)
+                  // Could open ghostwriter here if desired
+                }}
+                className="gap-1.5 text-xs h-7"
+              >
+                <Check className="h-3 w-3" />
+                Fertig
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

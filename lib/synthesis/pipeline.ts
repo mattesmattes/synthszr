@@ -18,6 +18,19 @@ export interface SynthesisPipelineResult {
   errors: string[]
 }
 
+export interface SynthesisProgressEvent {
+  type: 'init' | 'searching' | 'scoring' | 'developing' | 'developed' | 'complete' | 'error'
+  totalItems?: number
+  currentItem?: number
+  itemTitle?: string
+  synthesis?: {
+    headline: string
+    content: string
+    historicalReference: string
+  }
+  error?: string
+}
+
 export interface SynthesisPrompt {
   id: string
   name: string
@@ -336,4 +349,212 @@ export async function getSynthesesForDigest(
     historicalReference: s.historical_reference,
     coreThesisAlignment: s.core_thesis_alignment,
   }))
+}
+
+/**
+ * Run the synthesis pipeline with progress callbacks for streaming UI
+ */
+export async function runSynthesisPipelineWithProgress(
+  digestId: string,
+  options: {
+    maxItemsToProcess?: number
+    maxCandidatesPerItem?: number
+    minSimilarity?: number
+    maxAgeDays?: number
+  } = {},
+  onProgress: (event: SynthesisProgressEvent) => void
+): Promise<SynthesisPipelineResult> {
+  const {
+    maxItemsToProcess = 50,
+    maxCandidatesPerItem = 5,
+    minSimilarity = 0.65,
+    maxAgeDays = 90,
+  } = options
+
+  const errors: string[] = []
+  let candidatesFound = 0
+  let synthesesDeveloped = 0
+
+  console.log(`[Pipeline] Starting streaming synthesis pipeline for digest ${digestId}`)
+
+  // Get active synthesis prompt
+  const prompt = await getActiveSynthesisPrompt()
+  if (!prompt) {
+    onProgress({ type: 'error', error: 'Kein aktiver Synthese-Prompt gefunden' })
+    return {
+      success: false,
+      digestId,
+      itemsProcessed: 0,
+      candidatesFound: 0,
+      synthesesDeveloped: 0,
+      errors: ['No active synthesis prompt found'],
+    }
+  }
+
+  // Get items from the digest
+  const items = await getDigestItems(digestId)
+  const itemsToProcess = items.slice(0, maxItemsToProcess)
+
+  onProgress({
+    type: 'init',
+    totalItems: itemsToProcess.length,
+  })
+
+  const allCandidates: ScoredCandidate[] = []
+  const supabase = await createClient()
+
+  // Phase 1: Search and score for each item
+  for (let i = 0; i < itemsToProcess.length; i++) {
+    const item = itemsToProcess[i]
+
+    onProgress({
+      type: 'searching',
+      currentItem: i + 1,
+      totalItems: itemsToProcess.length,
+      itemTitle: item.title,
+    })
+
+    try {
+      // Get or generate embedding
+      let embedding = item.embedding
+      if (!embedding || (Array.isArray(embedding) && embedding.length === 0)) {
+        const text = prepareTextForEmbedding(item.title, item.content)
+        embedding = await generateEmbedding(text)
+
+        const embeddingString = `[${embedding.join(',')}]`
+        await supabase
+          .from('daily_repo')
+          .update({ embedding: embeddingString })
+          .eq('id', item.id)
+      }
+
+      // Find similar items
+      const similarItems = await findSimilarItems(item.id, embedding as number[], {
+        maxAge: maxAgeDays,
+        limit: maxCandidatesPerItem * 2,
+        minSimilarity,
+      })
+
+      if (similarItems.length === 0) {
+        continue
+      }
+
+      onProgress({
+        type: 'scoring',
+        currentItem: i + 1,
+        totalItems: itemsToProcess.length,
+        itemTitle: item.title,
+      })
+
+      // Score candidates
+      const scoredCandidates = await scoreSynthesisCandidates(
+        { id: item.id, title: item.title, content: item.content },
+        similarItems,
+        prompt.scoring_prompt,
+        { minTotalScore: 12 }
+      )
+
+      // Get the BEST candidate for this item
+      if (scoredCandidates.length > 0) {
+        const bestCandidate = scoredCandidates[0]
+        allCandidates.push(bestCandidate)
+        candidatesFound++
+      }
+    } catch (error) {
+      const msg = `Error processing item ${item.id}: ${error}`
+      console.error(`[Pipeline] ${msg}`)
+      errors.push(msg)
+    }
+  }
+
+  // Store all candidates
+  await storeCandidates(digestId, allCandidates)
+
+  if (allCandidates.length === 0) {
+    return {
+      success: true,
+      digestId,
+      itemsProcessed: itemsToProcess.length,
+      candidatesFound,
+      synthesesDeveloped: 0,
+      errors,
+    }
+  }
+
+  // Phase 2: Develop syntheses one by one with progress updates
+  const synthesesMap = new Map<string, DevelopedSynthesis>()
+
+  for (let i = 0; i < allCandidates.length; i++) {
+    const candidate = allCandidates[i]
+
+    onProgress({
+      type: 'developing',
+      currentItem: i + 1,
+      totalItems: allCandidates.length,
+      itemTitle: candidate.sourceItem.title,
+    })
+
+    try {
+      const { developSynthesis } = await import('./develop')
+      const synthesis = await developSynthesis(
+        candidate,
+        prompt.development_prompt,
+        prompt.core_thesis
+      )
+
+      const key = `${candidate.sourceItem.id}-${candidate.relatedItem.id}`
+      synthesesMap.set(key, {
+        ...synthesis,
+        candidateId: key,
+      })
+
+      synthesesDeveloped++
+
+      // Send the developed synthesis to the client
+      onProgress({
+        type: 'developed',
+        currentItem: i + 1,
+        totalItems: allCandidates.length,
+        itemTitle: candidate.sourceItem.title,
+        synthesis: {
+          headline: synthesis.headline,
+          content: synthesis.content,
+          historicalReference: synthesis.historicalReference,
+        },
+      })
+    } catch (error) {
+      console.error(`[Pipeline] Failed to develop synthesis:`, error)
+      errors.push(`Failed to develop synthesis for ${candidate.sourceItem.title}`)
+    }
+
+    // Small delay between Opus calls
+    if (i < allCandidates.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+  }
+
+  // Get candidate IDs for linking
+  const { data: storedCandidates } = await supabase
+    .from('synthesis_candidates')
+    .select('id, source_item_id, related_item_id')
+    .eq('digest_id', digestId)
+
+  const candidateIdMap = new Map<string, string>()
+  if (storedCandidates) {
+    for (const c of storedCandidates) {
+      candidateIdMap.set(`${c.source_item_id}-${c.related_item_id}`, c.id)
+    }
+  }
+
+  // Store syntheses
+  await storeSyntheses(digestId, synthesesMap, candidateIdMap)
+
+  return {
+    success: true,
+    digestId,
+    itemsProcessed: itemsToProcess.length,
+    candidatesFound,
+    synthesesDeveloped,
+    errors,
+  }
 }
