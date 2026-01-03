@@ -10,6 +10,19 @@ export const runtime = 'nodejs'
 
 const SESSION_COOKIE_NAME = 'synthszr_session'
 
+/**
+ * Extract specific Substack newsletter URL from email address
+ * e.g., "Machine Learning Pills <mlpills@substack.com>" → "https://mlpills.substack.com"
+ */
+function getSubstackNewsletterUrl(email: string | null): string | null {
+  if (!email || !email.includes('@substack.com')) return null
+  const match = email.match(/([a-z0-9_+-]+)@substack\.com/i)
+  if (!match) return null
+  // Remove + variants (e.g., "getfivethings+tech" → "getfivethings")
+  const subdomain = match[1].split('+')[0]
+  return `https://${subdomain}.substack.com`
+}
+
 function getSecretKey() {
   const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
   if (!secret) return null
@@ -191,15 +204,19 @@ export async function POST(request: NextRequest) {
             }
 
             // Store newsletter - use targetDate if provided, otherwise use email date
-            // Also store the first article URL as source_url so newsletters have linkable sources
+            // For Substack newsletters: use specific newsletter URL (for proper favicon)
+            // For others: use first article URL as source_url
             const newsletterDate = targetDate || email.date.toISOString().split('T')[0]
+            const substackUrl = getSubstackNewsletterUrl(email.from)
             const primaryArticleUrl = links.length > 0 ? links[0].url : null
+            // Prefer Substack-specific URL for proper favicon display
+            const sourceUrl = substackUrl || primaryArticleUrl
             const { error: insertError } = await supabase
               .from('daily_repo')
               .insert({
                 source_type: 'newsletter',
                 source_email: email.from,
-                source_url: primaryArticleUrl, // First article link from newsletter
+                source_url: sourceUrl,
                 title: email.subject,
                 content: parsed.plainText,
                 raw_html: htmlContent,

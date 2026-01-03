@@ -428,13 +428,26 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         // Extract domain for favicon
         try {
           const url = new URL(sourceUrl)
-          const domain = url.hostname
+          let faviconDomain = url.hostname
+
+          // Special handling for Substack: use subdomain for favicon if available
+          // e.g., "mlpills.substack.com" → use that for favicon (shows newsletter icon)
+          // e.g., "substack.com/redirect/..." → try to extract from link text
+          if (faviconDomain === 'substack.com' || faviconDomain === 'www.substack.com') {
+            // For generic substack.com URLs (redirects, app-links), try to get newsletter name from link text
+            // The link text is often formatted as "→ Newsletter Name" or "→ mlpills.substack.com"
+            const linkText = sourceLinkElement?.textContent || ''
+            const substackMatch = linkText.match(/([a-z0-9_-]+)\.substack\.com/i)
+            if (substackMatch) {
+              faviconDomain = `${substackMatch[1]}.substack.com`
+            }
+          }
 
           // Create wrapper link for heading content
           const headingContent = h2.innerHTML
           const faviconImg = document.createElement('img')
-          faviconImg.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`
-          faviconImg.alt = domain
+          faviconImg.src = `https://www.google.com/s2/favicons?domain=${faviconDomain}&sz=32`
+          faviconImg.alt = faviconDomain
           faviconImg.className = 'inline-block w-5 h-5 mr-2 align-middle opacity-70'
           faviconImg.style.marginTop = '-2px'
 
