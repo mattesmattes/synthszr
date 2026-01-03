@@ -358,16 +358,23 @@ export async function runSynthesisPipeline(
 }
 
 /**
- * Get developed syntheses for a digest
+ * Get developed syntheses for a digest, including the source article title
  */
 export async function getSynthesesForDigest(
   digestId: string
 ): Promise<DevelopedSynthesis[]> {
   const supabase = await createClient()
 
+  // Join through synthesis_candidates to get source_item_id, then to daily_repo for title
   const { data, error } = await supabase
     .from('developed_syntheses')
-    .select('*')
+    .select(`
+      *,
+      synthesis_candidates!inner(
+        source_item_id,
+        daily_repo!synthesis_candidates_source_item_id_fkey(title)
+      )
+    `)
     .eq('digest_id', digestId)
     .order('core_thesis_alignment', { ascending: false })
 
@@ -382,6 +389,8 @@ export async function getSynthesesForDigest(
     content: s.synthesis_content,
     historicalReference: s.historical_reference,
     coreThesisAlignment: s.core_thesis_alignment,
+    // Extract source article title from the joined data
+    sourceArticleTitle: s.synthesis_candidates?.daily_repo?.title || null,
   }))
 }
 

@@ -125,20 +125,24 @@ export async function POST(request: NextRequest) {
       const syntheses = await getSynthesesForDigest(digestId)
       if (syntheses && syntheses.length > 0) {
         synthesisContext = '\n\n---\n\n## ENTWICKELTE SYNTHESEN FÜR "MATTES SYNTHESE"\n\n'
-        synthesisContext += 'Die folgenden Synthesen wurden aus der Analyse historischer Verbindungen entwickelt. '
-        synthesisContext += 'Nutze sie als Grundlage für die "Mattes Synthese" Abschnitte im Artikel:\n\n'
+        synthesisContext += 'Jede Synthese ist einem spezifischen News-Artikel zugeordnet. '
+        synthesisContext += 'Füge die Synthese als "Mattes Synthese" Kommentar DIREKT NACH dem jeweiligen Artikel ein:\n\n'
 
         for (const synthesis of syntheses) {
+          // Show which article this synthesis belongs to
+          if (synthesis.sourceArticleTitle) {
+            synthesisContext += `**ZU ARTIKEL:** "${synthesis.sourceArticleTitle.slice(0, 80)}..."\n`
+          }
           synthesisContext += `### ${synthesis.headline}\n`
           synthesisContext += `${synthesis.content}\n`
           if (synthesis.historicalReference) {
             synthesisContext += `> Historische Referenz: ${synthesis.historicalReference}\n`
           }
-          synthesisContext += '\n'
+          synthesisContext += '\n---\n\n'
         }
 
-        synthesisContext += '**Hinweis:** Integriere diese Synthesen natürlich in den Artikel. '
-        synthesisContext += 'Verwende die Headlines als Inspiration für Zwischenüberschriften oder Abschnittstitel.'
+        synthesisContext += '**WICHTIG:** Jede Synthese gehört zu einem bestimmten Artikel (siehe "ZU ARTIKEL"). '
+        synthesisContext += 'Platziere die "Mattes Synthese" als Kommentar direkt nach dem entsprechenden News-Abschnitt.'
       }
     } catch (error) {
       console.log('[Ghostwriter] No syntheses available (table may not exist yet)')

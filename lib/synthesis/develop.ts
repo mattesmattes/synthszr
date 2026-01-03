@@ -12,6 +12,7 @@ export interface DevelopedSynthesis {
   content: string
   historicalReference: string
   coreThesisAlignment: number
+  sourceArticleTitle?: string | null  // Title of the news article this synthesis belongs to
 }
 
 interface ParsedSynthesis {
