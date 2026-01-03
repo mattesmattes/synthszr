@@ -71,6 +71,9 @@ function estimateThesisAlignment(synthesis: string, coreThesis: string): number 
   return Math.min(10, Math.round((matches / thesisKeywords.length) * 15))
 }
 
+// Version marker for deployment verification
+const SYNTHESIS_VERSION = 'v3-20s-timeout'
+
 /**
  * Helper: Hard timeout wrapper using Promise.race
  * This is a last-resort safety net when AbortController doesn't work
@@ -78,14 +81,23 @@ function estimateThesisAlignment(synthesis: string, coreThesis: string): number 
 function withHardTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
-  fallbackValue: T
+  fallbackValue: T,
+  label: string = 'unknown'
 ): Promise<T> {
+  let resolved = false
+
   return Promise.race([
-    promise,
+    promise.then((result) => {
+      resolved = true
+      console.log(`[Synthesis ${SYNTHESIS_VERSION}] Promise resolved for: ${label}`)
+      return result
+    }),
     new Promise<T>((resolve) => {
       setTimeout(() => {
-        console.log(`[Synthesis] Hard timeout triggered after ${timeoutMs}ms`)
-        resolve(fallbackValue)
+        if (!resolved) {
+          console.log(`[Synthesis ${SYNTHESIS_VERSION}] HARD TIMEOUT after ${timeoutMs}ms for: ${label}`)
+          resolve(fallbackValue)
+        }
       }, timeoutMs)
     }),
   ])
@@ -111,10 +123,12 @@ export async function developSynthesis(
 
   // Wrap the entire operation in a hard timeout as last resort
   // Hard timeout at 20s guarantees we never wait longer than this
+  const itemLabel = candidate.sourceItem.title.slice(0, 30)
   return withHardTimeout(
     developSynthesisInternal(candidate, developmentPrompt, coreThesis, timeoutMs),
     20000, // Hard 20s timeout - absolute maximum wait
-    fallbackSynthesis
+    fallbackSynthesis,
+    itemLabel
   )
 }
 
@@ -148,7 +162,7 @@ async function developSynthesisInternal(
     .replace('{synthesis_type}', candidate.synthesisType)
     .replace('{core_thesis}', coreThesis)
 
-  console.log(`[Synthesis] Developing synthesis for "${candidate.sourceItem.title.slice(0, 50)}..."`)
+  console.log(`[Synthesis ${SYNTHESIS_VERSION}] Developing synthesis for "${candidate.sourceItem.title.slice(0, 50)}..."`)
 
   try {
     const response = await anthropic.messages.create(
