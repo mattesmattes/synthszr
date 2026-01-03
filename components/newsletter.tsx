@@ -47,7 +47,7 @@ export function Newsletter() {
       <div className="mx-auto max-w-2xl">
         <h2 className="font-mono text-2xl font-bold md:text-lg">Stay Updated</h2>
         <p className="mt-4 text-muted-foreground">
-          Erhalte Benachrichtigungen über neue Artikel und Experimente. Kein Spam, jederzeit abbestellbar.
+          Die tägliche Tagessynthese jeden Morgen per Mail.
         </p>
 
         {status === 'success' ? (
