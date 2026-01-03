@@ -813,9 +813,6 @@ export default function DigestsPage() {
                     <Button variant="ghost" size="icon" onClick={() => openDigestDetail(digest)} className="h-6 w-6">
                       <BookOpen className="h-3 w-3" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => openGhostwriter(digest)} className="h-6 w-6">
-                      <PenTool className="h-3 w-3" />
-                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
