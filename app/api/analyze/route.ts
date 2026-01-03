@@ -40,18 +40,71 @@ export async function POST(request: NextRequest) {
     // Get content for the selected date (all items with this newsletter_date)
     const targetDate = date || new Date().toISOString().split('T')[0]
 
-    const { data: items } = await supabase
+    const { data: rawItems } = await supabase
       .from('daily_repo')
       .select('id, title, content, source_type, source_email, source_url, collected_at')
       .eq('newsletter_date', targetDate)
       .order('collected_at', { ascending: false })
 
-    if (!items || items.length === 0) {
+    if (!rawItems || rawItems.length === 0) {
       return new Response(JSON.stringify({ error: 'Keine Inhalte für dieses Datum gefunden' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       })
     }
+
+    // ENFORCE 30% MAX SOURCE DIVERSITY
+    // Group items by source domain
+    const getSourceDomain = (item: typeof rawItems[0]): string => {
+      if (item.source_url) {
+        try {
+          return new URL(item.source_url).hostname.replace('www.', '')
+        } catch {}
+      }
+      if (item.source_email) {
+        const match = item.source_email.match(/@([^>]+)/)
+        if (match) return match[1]
+      }
+      return 'unknown'
+    }
+
+    const itemsBySource = new Map<string, typeof rawItems>()
+    for (const item of rawItems) {
+      const domain = getSourceDomain(item)
+      if (!itemsBySource.has(domain)) {
+        itemsBySource.set(domain, [])
+      }
+      itemsBySource.get(domain)!.push(item)
+    }
+
+    // Calculate max items per source (30% of total, minimum 2)
+    const maxPerSource = Math.max(2, Math.floor(rawItems.length * 0.3))
+    console.log(`[Analyze] Source diversity: max ${maxPerSource} items per source (30% of ${rawItems.length})`)
+
+    // Filter items to enforce diversity
+    const diverseItems: typeof rawItems = []
+    const sourceStats: Record<string, { total: number; used: number }> = {}
+
+    for (const [domain, domainItems] of itemsBySource) {
+      sourceStats[domain] = { total: domainItems.length, used: 0 }
+
+      // Take up to maxPerSource items from this source
+      const itemsToUse = domainItems.slice(0, maxPerSource)
+      diverseItems.push(...itemsToUse)
+      sourceStats[domain].used = itemsToUse.length
+
+      if (domainItems.length > maxPerSource) {
+        console.log(`[Analyze] LIMITED ${domain}: ${domainItems.length} → ${maxPerSource} items`)
+      }
+    }
+
+    // Shuffle to mix sources (don't have all items from one source together)
+    const items = diverseItems.sort(() => Math.random() - 0.5)
+
+    console.log(`[Analyze] After diversity filter: ${items.length} items (from ${rawItems.length})`)
+    console.log(`[Analyze] Source distribution:`, Object.entries(sourceStats)
+      .map(([d, s]) => `${d}: ${s.used}/${s.total}`)
+      .join(', '))
 
     // Build content string with token limit awareness
     // Gemini has 1M+ token context, but we still limit for reasonable processing
