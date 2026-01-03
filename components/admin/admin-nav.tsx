@@ -56,10 +56,10 @@ const navGroups = [
     ]
   },
   {
-    label: 'Digest',
+    label: 'News & Synthese',
     items: [
       {
-        label: 'Digests',
+        label: 'News',
         href: '/admin/digests',
         icon: Sparkles
       },

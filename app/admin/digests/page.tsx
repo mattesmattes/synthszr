@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Sparkles, Play, Calendar, Loader2, Copy, Check, Save, PenTool, FileText, Gauge, Mail, Link2, Hash, ChevronDown, BookOpen, ExternalLink, Trash2, Clock, AlertCircle, ImageIcon } from 'lucide-react'
+import { Sparkles, Play, Calendar, Loader2, Copy, Check, Save, PenTool, FileText, Gauge, Mail, Link2, Hash, ChevronDown, BookOpen, ExternalLink, Trash2, Clock, AlertCircle, ImageIcon, Lightbulb } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
@@ -50,6 +50,15 @@ interface Digest {
   word_count: number | null
 }
 
+interface DevelopedSynthesis {
+  id: string
+  synthesis_headline: string | null
+  synthesis_content: string
+  historical_reference: string | null
+  core_thesis_alignment: number | null
+  created_at: string
+}
+
 interface RepoDate {
   date: string
   count: number
@@ -76,6 +85,8 @@ export default function DigestsPage() {
   const [viewingDigest, setViewingDigest] = useState<Digest | null>(null)
   const [digestSources, setDigestSources] = useState<SourceItem[]>([])
   const [loadingDigestSources, setLoadingDigestSources] = useState(false)
+  const [digestSyntheses, setDigestSyntheses] = useState<DevelopedSynthesis[]>([])
+  const [loadingDigestSyntheses, setLoadingDigestSyntheses] = useState(false)
 
   const [ghostwriterOpen, setGhostwriterOpen] = useState(false)
   const [ghostwriterDigest, setGhostwriterDigest] = useState<Digest | null>(null)
@@ -252,16 +263,29 @@ export default function DigestsPage() {
   async function openDigestDetail(digest: Digest) {
     setViewingDigest(digest)
     setLoadingDigestSources(true)
+    setLoadingDigestSyntheses(true)
     setDigestSources([])
+    setDigestSyntheses([])
 
-    const { data } = await supabase
-      .from('daily_repo')
-      .select('id, title, source_type, source_email, source_url, content')
-      .eq('newsletter_date', digest.digest_date)
-      .order('collected_at', { ascending: true })
+    // Fetch sources and syntheses in parallel
+    const [sourcesResult, synthesesResult] = await Promise.all([
+      supabase
+        .from('daily_repo')
+        .select('id, title, source_type, source_email, source_url, content')
+        .eq('newsletter_date', digest.digest_date)
+        .order('collected_at', { ascending: true }),
+      supabase
+        .from('developed_syntheses')
+        .select('id, synthesis_headline, synthesis_content, historical_reference, core_thesis_alignment, created_at')
+        .eq('digest_id', digest.id)
+        .order('core_thesis_alignment', { ascending: false })
+    ])
 
-    if (data) setDigestSources(data as SourceItem[])
+    if (sourcesResult.data) setDigestSources(sourcesResult.data as SourceItem[])
+    if (synthesesResult.data) setDigestSyntheses(synthesesResult.data as DevelopedSynthesis[])
+
     setLoadingDigestSources(false)
+    setLoadingDigestSyntheses(false)
   }
 
   function openGhostwriter(digest: Digest) {
@@ -457,7 +481,7 @@ export default function DigestsPage() {
   return (
     <div className="p-4 md:p-6 max-w-full">
       <div className="mb-4">
-        <h1 className="text-xl font-bold tracking-tight">Digests</h1>
+        <h1 className="text-xl font-bold tracking-tight">News und Synthese</h1>
         <p className="text-xs text-muted-foreground">AI-generierte Analysen aus dem Daily Repo</p>
       </div>
 
@@ -784,6 +808,7 @@ export default function DigestsPage() {
             <DialogDescription className="text-xs">
               {viewingDigest?.word_count && `${viewingDigest.word_count} Wörter`}
               {digestSources.length > 0 && ` • ${digestSources.length} Quellen`}
+              {digestSyntheses.length > 0 && ` • ${digestSyntheses.length} Synthesen`}
             </DialogDescription>
           </DialogHeader>
 
@@ -819,6 +844,44 @@ export default function DigestsPage() {
                 </div>
               </div>
             )}
+
+            {/* Syntheses Section */}
+            {loadingDigestSyntheses ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Lade Synthesen...
+              </div>
+            ) : digestSyntheses.length > 0 && (
+              <div className="border rounded p-3 bg-[#E8FF00]/10 border-[#E8FF00]/30">
+                <h3 className="text-xs font-semibold mb-3 flex items-center gap-1.5">
+                  <Lightbulb className="h-3 w-3 text-[#E8FF00]" />
+                  <span>Mattes Synthese ({digestSyntheses.length})</span>
+                </h3>
+                <div className="space-y-3">
+                  {digestSyntheses.map((synthesis) => (
+                    <div key={synthesis.id} className="border-l-2 border-[#E8FF00] pl-3 py-1">
+                      {synthesis.synthesis_headline && (
+                        <h4 className="text-xs font-medium mb-1">{synthesis.synthesis_headline}</h4>
+                      )}
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        {synthesis.synthesis_content}
+                      </p>
+                      {synthesis.historical_reference && (
+                        <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic">
+                          ↩ {synthesis.historical_reference}
+                        </p>
+                      )}
+                      {synthesis.core_thesis_alignment !== null && (
+                        <Badge variant="outline" className="mt-1.5 text-[9px] px-1.5 py-0 h-4 bg-[#E8FF00]/20 border-[#E8FF00]/40">
+                          Relevanz: {synthesis.core_thesis_alignment}/10
+                        </Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {viewingDigest?.analysis_content && (
               <div className="prose prose-sm max-w-none dark:prose-invert text-xs">
                 <ReactMarkdown
