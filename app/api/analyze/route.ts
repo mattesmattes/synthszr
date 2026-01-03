@@ -3,6 +3,46 @@ import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 import { streamAnalysis } from '@/lib/claude/client'
 
+// Canonical URLs for newsletter sources that may not have direct article URLs
+const NEWSLETTER_CANONICAL_URLS: Record<string, string> = {
+  'techmeme': 'https://techmeme.com',
+  'stratechery': 'https://stratechery.com',
+  'ben evans': 'https://www.ben-evans.com',
+  'the information': 'https://www.theinformation.com',
+  'axios': 'https://www.axios.com',
+  'morning brew': 'https://www.morningbrew.com',
+  'tldr': 'https://tldr.tech',
+  'platformer': 'https://www.platformer.news',
+  'the verge': 'https://www.theverge.com',
+  'techcrunch': 'https://techcrunch.com',
+  'wired': 'https://www.wired.com',
+  'ars technica': 'https://arstechnica.com',
+  'hacker news': 'https://news.ycombinator.com',
+  'handelsblatt': 'https://www.handelsblatt.com',
+  'morning briefing': 'https://www.handelsblatt.com/newsletter',
+  'spiegel': 'https://www.spiegel.de',
+  'faz': 'https://www.faz.net',
+  'zeit': 'https://www.zeit.de',
+  'heise': 'https://www.heise.de',
+  't3n': 'https://t3n.de',
+  'wsj': 'https://www.wsj.com',
+  'wall street journal': 'https://www.wsj.com',
+  'bloomberg': 'https://www.bloomberg.com',
+  'medium': 'https://medium.com',
+  'substack': 'https://substack.com',
+}
+
+// Find a canonical URL for a source based on title or email
+function findCanonicalUrl(title: string, email: string | null): string | null {
+  const searchText = `${title} ${email || ''}`.toLowerCase()
+  for (const [key, url] of Object.entries(NEWSLETTER_CANONICAL_URLS)) {
+    if (searchText.includes(key)) {
+      return url
+    }
+  }
+  return null
+}
+
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) {
@@ -127,7 +167,14 @@ export async function POST(request: NextRequest) {
           sourceDisplay = `[Link](${item.source_url})`
         }
       } else {
-        sourceDisplay = `${item.source_email || 'Newsletter'} (kein direkter Link verfügbar)`
+        // Try to find a canonical URL for known sources
+        const canonicalUrl = findCanonicalUrl(item.title, item.source_email)
+        if (canonicalUrl) {
+          const sourceName = item.source_email?.split('<')[0].trim() || 'Newsletter'
+          sourceDisplay = `[${sourceName}](${canonicalUrl})`
+        } else {
+          sourceDisplay = `${item.source_email || 'Newsletter'} (kein direkter Link verfügbar)`
+        }
       }
 
       // Truncate content if too long

@@ -20,6 +20,21 @@ const NEWSLETTER_CANONICAL_URLS: Record<string, string> = {
   'wired': 'https://www.wired.com',
   'ars technica': 'https://arstechnica.com',
   'hacker news': 'https://news.ycombinator.com',
+  // German sources
+  'handelsblatt': 'https://www.handelsblatt.com',
+  'morning briefing': 'https://www.handelsblatt.com/newsletter',
+  'spiegel': 'https://www.spiegel.de',
+  'faz': 'https://www.faz.net',
+  'zeit': 'https://www.zeit.de',
+  'heise': 'https://www.heise.de',
+  't3n': 'https://t3n.de',
+  'gruenderszene': 'https://www.businessinsider.de/gruenderszene',
+  // More international sources
+  'wsj': 'https://www.wsj.com',
+  'wall street journal': 'https://www.wsj.com',
+  'bloomberg': 'https://www.bloomberg.com',
+  'medium': 'https://medium.com',
+  'substack': 'https://substack.com',
 }
 
 export async function POST(request: NextRequest) {
