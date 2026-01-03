@@ -31,6 +31,7 @@ export function PostImageGallery({ postId, onCoverChange }: PostImageGalleryProp
   const [loading, setLoading] = useState(true)
   const [selectedCoverId, setSelectedCoverId] = useState<string | null>(null)
   const [savingCover, setSavingCover] = useState(false)
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
 
   const fetchImages = useCallback(async () => {
     try {
@@ -103,6 +104,32 @@ export function PostImageGallery({ postId, onCoverChange }: PostImageGalleryProp
       }
     } catch (error) {
       console.error('Failed to delete image:', error)
+    }
+  }
+
+  async function handleRecreateImage(imageId: string) {
+    if (!confirm('Bild neu generieren? Dies kostet ca. $0.20 AI Gateway Credits.')) return
+
+    setRegeneratingId(imageId)
+
+    try {
+      const res = await fetch('/api/post-images', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageId }),
+      })
+
+      if (res.ok) {
+        fetchImages()
+      } else {
+        const data = await res.json()
+        alert('Fehler: ' + (data.error || 'Regenerierung fehlgeschlagen'))
+      }
+    } catch (error) {
+      console.error('Failed to recreate image:', error)
+      alert('Fehler bei der Regenerierung')
+    } finally {
+      setRegeneratingId(null)
     }
   }
 
@@ -199,18 +226,39 @@ export function PostImageGallery({ postId, onCoverChange }: PostImageGalleryProp
                   </div>
                 </Label>
 
-                {/* Delete button */}
-                <Button
-                  variant="destructive"
-                  size="icon"
-                  className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    handleDeleteImage(image.id)
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
+                {/* Action buttons */}
+                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {/* Recreate button */}
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      handleRecreateImage(image.id)
+                    }}
+                    disabled={regeneratingId === image.id}
+                    title="Bild neu generieren"
+                  >
+                    {regeneratingId === image.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3 w-3" />
+                    )}
+                  </Button>
+                  {/* Delete button */}
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      handleDeleteImage(image.id)
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
 
                 {/* Source text preview */}
                 {image.source_text && (
@@ -255,10 +303,28 @@ export function PostImageGallery({ postId, onCoverChange }: PostImageGalleryProp
             </h4>
             {failedImages.map((image) => (
               <div key={image.id} className="p-3 rounded-lg bg-destructive/10 text-sm">
-                <p className="text-destructive font-medium">{image.error_message}</p>
-                <p className="text-muted-foreground line-clamp-1 mt-1">
-                  {image.source_text?.slice(0, 100)}...
-                </p>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-destructive font-medium">{image.error_message}</p>
+                    <p className="text-muted-foreground line-clamp-1 mt-1">
+                      {image.source_text?.slice(0, 100)}...
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleRecreateImage(image.id)}
+                    disabled={regeneratingId === image.id}
+                    className="flex-shrink-0"
+                  >
+                    {regeneratingId === image.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    ) : (
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                    )}
+                    Retry
+                  </Button>
+                </div>
               </div>
             ))}
           </div>

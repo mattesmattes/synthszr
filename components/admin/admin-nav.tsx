@@ -14,7 +14,8 @@ import {
   PenTool,
   BookOpen,
   Wand2,
-  ImageIcon
+  ImageIcon,
+  Lightbulb
 } from 'lucide-react'
 
 const navGroups = [
@@ -66,6 +67,11 @@ const navGroups = [
         label: 'Analyse-Prompts',
         href: '/admin/prompts',
         icon: MessageSquare
+      },
+      {
+        label: 'Synthese-Prompts',
+        href: '/admin/synthesis',
+        icon: Lightbulb
       }
     ]
   },

@@ -25,40 +25,37 @@ if (!ANTHROPIC_API_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY })
 
-const GHOSTWRITER_SYSTEM_PROMPT = `Du bist ein erfahrener Ghostwriter für Tech-Blogs und Newsletter.
-Deine Aufgabe ist es, aus einer Materialsammlung (Digest) einen publikationsfertigen Blogartikel zu erstellen.
+// Minimaler System-Prompt - alle inhaltlichen Anweisungen kommen aus dem Datenbank-Prompt
+const GHOSTWRITER_SYSTEM_PROMPT = `Du bist ein Ghostwriter. Befolge die Anweisungen im User-Prompt exakt.
 
-WICHTIG - STRUKTURIERTER OUTPUT:
+WICHTIG - STRUKTURIERTER OUTPUT (für automatisches Parsing):
 Der Artikel MUSS mit diesen Metadaten beginnen (in genau diesem Format):
 
 ---
-TITLE: [Prägnanter, ansprechender Titel für den Artikel]
-EXCERPT: [1-2 Sätze Zusammenfassung für SEO/Vorschau, max 160 Zeichen]
-CATEGORY: [Eine passende Kategorie: AI & Tech, Marketing, Design, Business, Code, oder Synthese]
+TITLE: [Titel]
+EXCERPT: [1-2 Sätze, max 160 Zeichen]
+CATEGORY: [AI & Tech, Marketing, Design, Business, Code, oder Synthese]
 ---
 
-Danach folgt der eigentliche Artikel-Content.
+Danach folgt der Artikel-Content in Markdown.`
 
-TONALITÄT UND STIL:
-- Befolge EXAKT die Tonalitäts-Anweisungen aus dem User-Prompt (News vs. Essay)
-- Bei NEWS-Formaten (Ben Evans Stil): Nüchtern, analytisch, faktenbasiert
-- Bei ESSAY-Formaten (Matthias Schrader Stil): Pointierter, meinungsstark, provokativer
-- WICHTIG bei Daily News: KEINE Formulierungen wie "Diese Woche", "In dieser Woche" - es sind TÄGLICHE News!
-
-QUELLENFORMATIERUNG - KRITISCH:
-- Format: [→ Publikationsname](URL) - der Link-Text ist der NAME der Publikation (z.B. "→ The Information", "→ TechCrunch", "→ Stratechery")
-- Platzierung: Am ENDE des Absatzes, direkt hinter dem LETZTEN Wort (vor dem Punkt)
-- NICHT nach dem ersten Satz! Der Quellenlink kommt am Schluss der gesamten News-Story/des Absatzes
-- Beispiel RICHTIG: "OpenAI stellte das neue Modell vor, das deutlich schneller ist und weniger Energie verbraucht [→ The Information](URL)."
-- Beispiel FALSCH: "OpenAI stellte das neue Modell vor [→ Quelle](URL). Es ist deutlich schneller..."
-- Bei mehreren Quellen am Ende: "...verbraucht [→ Reuters](URL1) [→ Bloomberg](URL2)."
-- Extrahiere den Publikationsnamen aus dem Quellentitel oder der URL (z.B. "theinformation.com" → "The Information")
-- Nutze NUR URLs aus der "VERFÜGBARE QUELLEN MIT LINKS" Liste
-
-FORMAT:
-- Deutsch, Markdown
-- 800-1500 Wörter (ohne Metadaten)
-- Zwischenüberschriften mit ## für bessere Lesbarkeit`
+// Canonical URLs for newsletter sources
+const NEWSLETTER_CANONICAL_URLS = {
+  'techmeme': 'https://techmeme.com',
+  'stratechery': 'https://stratechery.com',
+  'ben evans': 'https://www.ben-evans.com',
+  'benedict evans': 'https://www.ben-evans.com',
+  'the information': 'https://www.theinformation.com',
+  'axios': 'https://www.axios.com',
+  'morning brew': 'https://www.morningbrew.com',
+  'tldr': 'https://tldr.tech',
+  'platformer': 'https://www.platformer.news',
+  'the verge': 'https://www.theverge.com',
+  'techcrunch': 'https://techcrunch.com',
+  'wired': 'https://www.wired.com',
+  'ars technica': 'https://arstechnica.com',
+  'hacker news': 'https://news.ycombinator.com',
+}
 
 // Simple markdown to TipTap converter (inline version)
 function convertMarkdownToTiptap(markdown) {
@@ -197,14 +194,30 @@ async function regeneratePost(post) {
     .eq('newsletter_date', digest.digest_date)
     .order('collected_at', { ascending: true })
 
-  // Build source reference
+  // Build source reference with canonical URL fallback
   let sourceReference = ''
   if (sources && sources.length > 0) {
-    const sourcesWithUrls = sources.filter(s => s.source_url && s.source_url.startsWith('http'))
+    const sourcesWithUrls = sources.map(s => {
+      // If source has a valid URL, use it
+      if (s.source_url && s.source_url.startsWith('http')) {
+        return { title: s.title, url: s.source_url }
+      }
+      // Otherwise, try to find a canonical URL based on title or email
+      const titleLower = s.title?.toLowerCase() || ''
+      const emailLower = s.source_email?.toLowerCase() || ''
+
+      for (const [key, canonicalUrl] of Object.entries(NEWSLETTER_CANONICAL_URLS)) {
+        if (titleLower.includes(key) || emailLower.includes(key)) {
+          return { title: s.title, url: canonicalUrl }
+        }
+      }
+      return null
+    }).filter(s => s !== null)
+
     if (sourcesWithUrls.length > 0) {
       sourceReference = '\n\n---\n\nVERFÜGBARE QUELLEN MIT LINKS (nutze NUR diese URLs):\n'
       sourceReference += sourcesWithUrls.map((s, i) => {
-        return `${i + 1}. [${s.title}](${s.source_url})`
+        return `${i + 1}. [${s.title}](${s.url})`
       }).join('\n')
     }
   }
@@ -288,10 +301,11 @@ async function regeneratePost(post) {
 async function main() {
   console.log('🚀 Starting post regeneration...\n')
 
-  // Get all generated posts
+  // Get all published generated posts
   const { data: posts, error } = await supabase
     .from('generated_posts')
     .select('id, title, digest_id, excerpt, category')
+    .eq('status', 'published')
     .order('created_at', { ascending: false })
 
   if (error) {

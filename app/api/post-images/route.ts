@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { del } from '@vercel/blob'
+import { del, put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
+import { generateAndProcessImage } from '@/lib/gemini/image-generator'
 
 // Get images for a post
 export async function GET(request: NextRequest) {
@@ -139,4 +140,113 @@ export async function DELETE(request: NextRequest) {
   }
 
   return NextResponse.json({ success: true })
+}
+
+// Recreate/regenerate an image
+export async function PUT(request: NextRequest) {
+  // Require admin authentication
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
+    const { imageId } = await request.json()
+
+    if (!imageId) {
+      return NextResponse.json({ error: 'imageId is required' }, { status: 400 })
+    }
+
+    const supabase = await createClient()
+
+    // Get existing image record
+    const { data: image, error: fetchError } = await supabase
+      .from('post_images')
+      .select('*')
+      .eq('id', imageId)
+      .single()
+
+    if (fetchError || !image) {
+      return NextResponse.json({ error: 'Image not found' }, { status: 404 })
+    }
+
+    if (!image.source_text) {
+      return NextResponse.json(
+        { error: 'No source text available for regeneration' },
+        { status: 400 }
+      )
+    }
+
+    // Set status to generating
+    await supabase
+      .from('post_images')
+      .update({
+        generation_status: 'generating',
+        error_message: null,
+      })
+      .eq('id', imageId)
+
+    // Delete old blob if exists
+    if (image.image_url) {
+      try {
+        await del(image.image_url)
+      } catch (e) {
+        console.error('Failed to delete old blob:', e)
+      }
+    }
+
+    // Generate new image
+    console.log(`[Recreate] Regenerating image ${imageId}...`)
+    const result = await generateAndProcessImage(image.source_text)
+
+    if (!result.success || !result.imageBase64) {
+      await supabase
+        .from('post_images')
+        .update({
+          generation_status: 'failed',
+          error_message: result.error || 'Regeneration failed',
+        })
+        .eq('id', imageId)
+
+      return NextResponse.json(
+        { error: result.error || 'Regeneration failed' },
+        { status: 500 }
+      )
+    }
+
+    // Upload to Vercel Blob
+    const fileName = `post-images/${image.post_id}/${imageId}-${Date.now()}.png`
+    const imageBuffer = Buffer.from(result.imageBase64, 'base64')
+
+    const blob = await put(fileName, imageBuffer, {
+      access: 'public',
+      contentType: result.mimeType || 'image/png',
+    })
+
+    // Update record
+    const { data: updatedImage, error: updateError } = await supabase
+      .from('post_images')
+      .update({
+        image_url: blob.url,
+        generation_status: 'completed',
+        error_message: null,
+      })
+      .eq('id', imageId)
+      .select()
+      .single()
+
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+
+    console.log(`[Recreate] Image ${imageId} regenerated successfully`)
+
+    return NextResponse.json({ success: true, image: updatedImage })
+  } catch (error) {
+    console.error('Recreate image error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    )
+  }
 }

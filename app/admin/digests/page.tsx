@@ -211,12 +211,28 @@ export default function DigestsPage() {
     if (!streamedContent) return
     setSaving(true)
     try {
-      const { error } = await supabase.from('daily_digests').insert({
+      const { data, error } = await supabase.from('daily_digests').insert({
         digest_date: selectedDate,
         analysis_content: streamedContent,
         word_count: streamedContent.split(/\s+/).length,
-      })
+      }).select('id').single()
       if (error) throw error
+
+      // Trigger synthesis pipeline in background (non-blocking)
+      if (data?.id) {
+        fetch('/api/synthesis', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ digestId: data.id }),
+        }).then(res => {
+          if (res.ok) {
+            console.log('[Digest] Synthesis pipeline triggered for:', data.id)
+          }
+        }).catch(err => {
+          console.error('[Digest] Synthesis trigger failed:', err)
+        })
+      }
+
       await fetchDigests()
       setStreamedContent('')
     } catch (error) {

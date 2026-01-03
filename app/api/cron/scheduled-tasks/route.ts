@@ -338,7 +338,7 @@ async function generateDailyPost(supabase: Awaited<ReturnType<typeof createClien
       }
     }
 
-    const sectionsToProcess = sections.slice(0, 5)
+    const sectionsToProcess = sections.slice(0, 3) // Reduced from 5 to save AI Gateway costs (~$0.20/image)
 
     if (sectionsToProcess.length > 0) {
       console.log(`[PostGen] Triggering image generation for ${sectionsToProcess.length} sections`)

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter } from '@/lib/claude/ghostwriter'
+import { getSynthesesForDigest } from '@/lib/synthesis/pipeline'
 
 // Canonical URLs for newsletter sources that may not have direct article URLs
 const NEWSLETTER_CANONICAL_URLS: Record<string, string> = {
@@ -118,6 +119,31 @@ export async function POST(request: NextRequest) {
       .select('term, preferred_usage, avoid_alternatives, context')
       .order('category')
 
+    // Get developed syntheses for this digest (if available)
+    let synthesisContext = ''
+    try {
+      const syntheses = await getSynthesesForDigest(digestId)
+      if (syntheses && syntheses.length > 0) {
+        synthesisContext = '\n\n---\n\n## ENTWICKELTE SYNTHESEN FÜR "MATTES SYNTHESE"\n\n'
+        synthesisContext += 'Die folgenden Synthesen wurden aus der Analyse historischer Verbindungen entwickelt. '
+        synthesisContext += 'Nutze sie als Grundlage für die "Mattes Synthese" Abschnitte im Artikel:\n\n'
+
+        for (const synthesis of syntheses) {
+          synthesisContext += `### ${synthesis.headline}\n`
+          synthesisContext += `${synthesis.content}\n`
+          if (synthesis.historicalReference) {
+            synthesisContext += `> Historische Referenz: ${synthesis.historicalReference}\n`
+          }
+          synthesisContext += '\n'
+        }
+
+        synthesisContext += '**Hinweis:** Integriere diese Synthesen natürlich in den Artikel. '
+        synthesisContext += 'Verwende die Headlines als Inspiration für Zwischenüberschriften oder Abschnittstitel.'
+      }
+    } catch (error) {
+      console.log('[Ghostwriter] No syntheses available (table may not exist yet)')
+    }
+
     // Build vocabulary context based on intensity (0-100)
     let vocabularyContext = ''
     if (vocabulary && vocabulary.length > 0 && vocabularyIntensity > 0) {
@@ -148,8 +174,8 @@ export async function POST(request: NextRequest) {
     // Combine prompt with vocabulary
     const fullPrompt = promptText + vocabularyContext
 
-    // Combine digest content with source reference
-    const fullDigestContent = digest.analysis_content + sourceReference
+    // Combine digest content with source reference and syntheses
+    const fullDigestContent = digest.analysis_content + sourceReference + synthesisContext
 
     // Stream the response
     const encoder = new TextEncoder()

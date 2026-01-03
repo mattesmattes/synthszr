@@ -1,5 +1,10 @@
 import sharp from 'sharp'
 import { createClient } from '@/lib/supabase/server'
+import { GoogleGenerativeAI } from '@google/generative-ai'
+
+// Use direct Google API instead of Vercel AI Gateway
+// Note: Direct API is geographically restricted - disabled due to "Image generation not available in your country" error
+const USE_DIRECT_GOOGLE_API = false
 
 const DEFAULT_IMAGE_PROMPT = `Visualisiere in Schwarz-Weiß die folgende News satirisch im Stil von Mort Drucker ohne in der Visualisierung auf "Mort Drucker" oder "MAD" hinzuweisen.
 
@@ -71,7 +76,7 @@ interface GenerateImageResult {
   error?: string
 }
 
-// Lazy load generateText to avoid module loading issues
+// Lazy load generateText to avoid module loading issues (for Vercel AI SDK fallback)
 let generateTextFn: typeof import('ai').generateText | null = null
 
 async function getGenerateText() {
@@ -88,90 +93,152 @@ async function getGenerateText() {
 }
 
 /**
+ * Generate image using direct Google Generative AI API
+ * Bypasses Vercel AI Gateway - uses GOOGLE_GENERATIVE_AI_API_KEY
+ */
+async function generateImageDirectGoogle(prompt: string): Promise<GenerateImageResult> {
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) {
+    return { success: false, error: 'GOOGLE_GENERATIVE_AI_API_KEY not configured' }
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey)
+
+  // Use gemini-2.0-flash-exp for image generation (supports imagen)
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.0-flash-exp',
+    generationConfig: {
+      // @ts-expect-error - responseModalities is valid for image generation
+      responseModalities: ['TEXT', 'IMAGE'],
+    },
+  })
+
+  console.log('[Gemini Direct] Generating image with gemini-2.0-flash-exp...')
+
+  try {
+    const result = await model.generateContent(prompt)
+    const response = result.response
+
+    // Check for inline images in the response
+    for (const candidate of response.candidates || []) {
+      for (const part of candidate.content?.parts || []) {
+        if (part.inlineData) {
+          const { mimeType, data } = part.inlineData
+          console.log(`[Gemini Direct] Image generated successfully (${mimeType})`)
+
+          // Log dimensions
+          try {
+            const imgBuffer = Buffer.from(data, 'base64')
+            const metadata = await sharp(imgBuffer).metadata()
+            console.log(`[Gemini Direct] Dimensions: ${metadata.width}x${metadata.height}`)
+          } catch {
+            // Ignore dimension logging errors
+          }
+
+          return {
+            success: true,
+            imageBase64: data,
+            mimeType: mimeType || 'image/png'
+          }
+        }
+      }
+    }
+
+    // No image found
+    const text = response.text()
+    console.log('[Gemini Direct] No image in response. Text:', text?.slice(0, 200))
+    return { success: false, error: 'No image generated in response' }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('[Gemini Direct] Error:', errorMessage)
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Generate image using Vercel AI SDK (goes through Vercel AI Gateway)
+ */
+async function generateImageVercelSDK(prompt: string): Promise<GenerateImageResult> {
+  const generateText = await getGenerateText()
+  if (!generateText) {
+    return { success: false, error: 'AI SDK not loaded' }
+  }
+
+  console.log('[Gemini Vercel] Generating image with Vercel AI SDK (Gemini 3)...')
+
+  // Use Vercel AI SDK with Gemini 3 model
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await generateText({
+    model: 'google/gemini-3-pro-image' as any,
+    providerOptions: {
+      google: {
+        responseModalities: ['TEXT', 'IMAGE'],
+      },
+    },
+    messages: [
+      {
+        role: 'user',
+        content: [{ type: 'text' as const, text: prompt }],
+      },
+    ],
+  })
+
+  // Check for image in response files
+  const imageFile = result.files?.[0]
+  if (imageFile && imageFile.base64) {
+    // Log image dimensions
+    try {
+      const imgBuffer = Buffer.from(imageFile.base64, 'base64')
+      const metadata = await sharp(imgBuffer).metadata()
+      console.log(`[Gemini Vercel] Image generated: ${metadata.width}x${metadata.height} (${metadata.format})`)
+    } catch {
+      console.log('[Gemini Vercel] Image generated (could not read dimensions)')
+    }
+
+    // Get mimeType
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mimeType = (imageFile as any).mimeType || (imageFile as any).mediaType
+    if (!mimeType || mimeType === 'undefined') {
+      if (imageFile.base64.startsWith('iVBORw0KGgo')) mimeType = 'image/png'
+      else if (imageFile.base64.startsWith('/9j/')) mimeType = 'image/jpeg'
+      else mimeType = 'image/png'
+    }
+
+    return {
+      success: true,
+      imageBase64: imageFile.base64,
+      mimeType: mimeType || 'image/png'
+    }
+  }
+
+  console.log('[Gemini Vercel] No image in response. Text:', result.text?.slice(0, 200))
+  return { success: false, error: 'No image generated in response' }
+}
+
+/**
  * Generates a satirical black & white image based on news text using Gemini
- * Uses Vercel AI SDK for image generation
+ * Uses direct Google API or Vercel AI SDK based on USE_DIRECT_GOOGLE_API flag
  */
 export async function generateSatiricalImage(newsText: string): Promise<GenerateImageResult> {
   const maxRetries = 3
   let lastError: Error | null = null
 
+  const promptTemplate = await getActiveImagePrompt()
+  const prompt = promptTemplate.replace('{newsText}', newsText.slice(0, 2000))
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const generateText = await getGenerateText()
-      if (!generateText) {
-        return {
-          success: false,
-          error: 'AI SDK not loaded'
-        }
+      console.log(`[Gemini] Attempt ${attempt}/${maxRetries}, using ${USE_DIRECT_GOOGLE_API ? 'Direct Google API' : 'Vercel AI SDK'}`)
+
+      const result = USE_DIRECT_GOOGLE_API
+        ? await generateImageDirectGoogle(prompt)
+        : await generateImageVercelSDK(prompt)
+
+      if (result.success) {
+        return result
       }
 
-      const promptTemplate = await getActiveImagePrompt()
-      const prompt = promptTemplate.replace('{newsText}', newsText.slice(0, 2000))
-
-      console.log(`[Gemini] Generating image with Vercel AI SDK (Gemini 3), attempt ${attempt}/${maxRetries}`)
-
-      // Use Vercel AI SDK with Gemini 3 model
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await generateText({
-        model: 'google/gemini-3-pro-image' as any,
-        providerOptions: {
-          google: {
-            responseModalities: ['TEXT', 'IMAGE'],
-          },
-        },
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text' as const,
-                text: prompt,
-              },
-            ],
-          },
-        ],
-      })
-
-      // Check for image in response files
-      const imageFile = result.files?.[0]
-      if (imageFile && imageFile.base64) {
-        // Log image dimensions
-        try {
-          const imgBuffer = Buffer.from(imageFile.base64, 'base64')
-          const metadata = await sharp(imgBuffer).metadata()
-          console.log(`[Gemini] Image generation successful: ${metadata.width}x${metadata.height} (${metadata.format})`)
-        } catch {
-          console.log('[Gemini] Image generation successful (could not read dimensions)')
-        }
-
-        // Get mimeType - could be mimeType or mediaType depending on SDK version
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let mimeType = (imageFile as any).mimeType || (imageFile as any).mediaType
-        if (!mimeType || mimeType === 'undefined') {
-          // Detect from base64 signature
-          if (imageFile.base64.startsWith('iVBORw0KGgo')) {
-            mimeType = 'image/png'
-          } else if (imageFile.base64.startsWith('/9j/')) {
-            mimeType = 'image/jpeg'
-          } else if (imageFile.base64.startsWith('R0lGOD')) {
-            mimeType = 'image/gif'
-          } else if (imageFile.base64.startsWith('UklGR')) {
-            mimeType = 'image/webp'
-          } else {
-            mimeType = 'image/png'
-          }
-          console.log('[Gemini] Detected mimeType:', mimeType)
-        }
-
-        return {
-          success: true,
-          imageBase64: imageFile.base64,
-          mimeType: mimeType || 'image/png'
-        }
-      }
-
-      // Log what we got instead
-      console.log('[Gemini] No image in response. Text:', result.text?.slice(0, 200))
+      lastError = new Error(result.error || 'Unknown error')
 
       if (attempt < maxRetries) {
         const delay = attempt * 1000
@@ -179,26 +246,16 @@ export async function generateSatiricalImage(newsText: string): Promise<Generate
         await new Promise(resolve => setTimeout(resolve, delay))
         continue
       }
-
-      return {
-        success: false,
-        error: 'No image generated in response'
-      }
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))
-      const errorMessage = lastError.message
-
-      console.error(`[Gemini] Attempt ${attempt} error:`, errorMessage)
+      console.error(`[Gemini] Attempt ${attempt} error:`, lastError.message)
 
       // Check if retryable
       const isRetryable =
-        errorMessage.includes('Gateway') ||
-        errorMessage.includes('gateway') ||
-        errorMessage.includes('temporarily unavailable') ||
-        errorMessage.includes('service is currently unavailable') ||
-        errorMessage.includes('503') ||
-        errorMessage.includes('502') ||
-        errorMessage.includes('429')
+        lastError.message.includes('429') ||
+        lastError.message.includes('503') ||
+        lastError.message.includes('502') ||
+        lastError.message.includes('temporarily unavailable')
 
       if (isRetryable && attempt < maxRetries) {
         const delay = attempt * 1000
@@ -206,8 +263,6 @@ export async function generateSatiricalImage(newsText: string): Promise<Generate
         await new Promise(resolve => setTimeout(resolve, delay))
         continue
       }
-
-      break
     }
   }
 
