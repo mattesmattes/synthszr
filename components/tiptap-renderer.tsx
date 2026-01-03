@@ -436,7 +436,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
           if (faviconDomain === 'substack.com' || faviconDomain === 'www.substack.com') {
             // For generic substack.com URLs (redirects, app-links), try to get newsletter name from link text
             // The link text is often formatted as "→ Newsletter Name" or "→ mlpills.substack.com"
-            const linkText = sourceLinkElement?.textContent || ''
+            const linkText = (sourceLinkElement as Element | null)?.textContent || ''
             const substackMatch = linkText.match(/([a-z0-9_-]+)\.substack\.com/i)
             if (substackMatch) {
               faviconDomain = `${substackMatch[1]}.substack.com`
