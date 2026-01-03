@@ -35,7 +35,13 @@ export default function ImpressumPage() {
           <section>
             <h2 className="text-lg font-semibold mb-2">Vertreten durch</h2>
             <p className="text-sm">
-              Geschäftsführer: Axel Averdung, Florian Langmack, Holger Blank, Matthias Schrader, Philipp Kafkoulas, Pia Schott
+              Geschäftsführer:{' '}
+              <a href="https://www.linkedin.com/in/axelaverdung/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Axel Averdung</a>,{' '}
+              <a href="https://www.linkedin.com/in/florian-langmack-b8849b83/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Florian Langmack</a>,{' '}
+              <a href="https://www.linkedin.com/in/holgerblank/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Holger Blank</a>,{' '}
+              <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Matthias Schrader</a>,{' '}
+              <a href="https://www.linkedin.com/in/philipp-kafkoulas/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Philipp Kafkoulas</a>,{' '}
+              <a href="https://www.linkedin.com/in/pia-schott-47309ab/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Pia Schott</a>
             </p>
           </section>
 
@@ -65,7 +71,7 @@ export default function ImpressumPage() {
           <section>
             <h2 className="text-lg font-semibold mb-2">Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV</h2>
             <p className="text-sm">
-              Matthias &apos;Mattes&apos; Schrader<br />
+              <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Matthias &apos;Mattes&apos; Schrader</a><br />
               Kaiser-Wilhelm-Straße 83<br />
               20355 Hamburg
             </p>
