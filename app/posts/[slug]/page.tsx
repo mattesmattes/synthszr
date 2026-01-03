@@ -119,8 +119,8 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
       olderPostSlug={olderPost?.slug}
       newerPostSlug={newerPost?.slug}
     >
-      <div className="min-h-screen bg-background text-foreground">
-        {/* <BlogHeader /> */}
+    <div className="min-h-screen bg-background text-foreground">
+      {/* <BlogHeader /> */}
 
         <main className="mx-auto max-w-3xl px-6 py-12 md:py-20">
         <article>
@@ -214,7 +214,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           </div>
         </div>
       </footer>
-      </div>
+    </div>
     </SwipeNavigation>
   )
 }

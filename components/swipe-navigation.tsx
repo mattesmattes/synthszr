@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 
 interface SwipeNavigationProps {
   children: React.ReactNode
@@ -15,65 +15,53 @@ export function SwipeNavigation({
   newerPostSlug
 }: SwipeNavigationProps) {
   const router = useRouter()
-  const containerRef = useRef<HTMLDivElement>(null)
   const touchStartX = useRef<number>(0)
   const touchStartY = useRef<number>(0)
-  const isSwiping = useRef<boolean>(false)
 
-  const handleTouchStart = useCallback((e: TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX
-    touchStartY.current = e.touches[0].clientY
-    isSwiping.current = true
-  }, [])
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX.current = e.touches[0].clientX
+      touchStartY.current = e.touches[0].clientY
+    }
 
-  const handleTouchEnd = useCallback((e: TouchEvent) => {
-    if (!isSwiping.current) return
-    isSwiping.current = false
+    const handleTouchEnd = (e: TouchEvent) => {
+      const touchEndX = e.changedTouches[0].clientX
+      const touchEndY = e.changedTouches[0].clientY
 
-    const touchEndX = e.changedTouches[0].clientX
-    const touchEndY = e.changedTouches[0].clientY
+      const deltaX = touchEndX - touchStartX.current
+      const deltaY = touchEndY - touchStartY.current
 
-    const deltaX = touchEndX - touchStartX.current
-    const deltaY = touchEndY - touchStartY.current
+      // Minimum swipe distance (px)
+      const minSwipeDistance = 100
 
-    // Minimum swipe distance (px)
-    const minSwipeDistance = 80
+      // Must be primarily horizontal swipe
+      if (Math.abs(deltaX) < minSwipeDistance) return
+      if (Math.abs(deltaY) > Math.abs(deltaX) * 0.5) return
 
-    // Ensure horizontal swipe is dominant (not vertical scrolling)
-    if (Math.abs(deltaX) < minSwipeDistance) return
-    if (Math.abs(deltaY) > Math.abs(deltaX) * 0.7) return
-
-    if (deltaX > 0) {
-      // Swipe right → newer post or home
-      if (newerPostSlug) {
-        router.push(`/posts/${newerPostSlug}`)
+      if (deltaX > 0) {
+        // Swipe right (finger moves left→right) → newer post or home
+        if (newerPostSlug) {
+          router.push(`/posts/${newerPostSlug}`)
+        } else {
+          router.push('/')
+        }
       } else {
-        router.push('/')
+        // Swipe left (finger moves right→left) → older post
+        if (olderPostSlug) {
+          router.push(`/posts/${olderPostSlug}`)
+        }
       }
-    } else {
-      // Swipe left → older post
-      if (olderPostSlug) {
-        router.push(`/posts/${olderPostSlug}`)
-      }
+    }
+
+    // Register on document level to catch all touch events
+    document.addEventListener('touchstart', handleTouchStart, { passive: true })
+    document.addEventListener('touchend', handleTouchEnd, { passive: true })
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart)
+      document.removeEventListener('touchend', handleTouchEnd)
     }
   }, [router, olderPostSlug, newerPostSlug])
 
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    container.addEventListener('touchstart', handleTouchStart, { passive: true })
-    container.addEventListener('touchend', handleTouchEnd, { passive: true })
-
-    return () => {
-      container.removeEventListener('touchstart', handleTouchStart)
-      container.removeEventListener('touchend', handleTouchEnd)
-    }
-  }, [handleTouchStart, handleTouchEnd])
-
-  return (
-    <div ref={containerRef} className="min-h-screen">
-      {children}
-    </div>
-  )
+  return <>{children}</>
 }
