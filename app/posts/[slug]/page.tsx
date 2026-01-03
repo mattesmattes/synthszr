@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { BlogHeader } from "@/components/blog-header"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
 import { Newsletter } from "@/components/newsletter"
+import { SwipeNavigation } from "@/components/swipe-navigation"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 
 // Disable caching for posts to always show current cover image
@@ -114,10 +115,14 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* <BlogHeader /> */}
+    <SwipeNavigation
+      olderPostSlug={olderPost?.slug}
+      newerPostSlug={newerPost?.slug}
+    >
+      <div className="min-h-screen bg-background text-foreground">
+        {/* <BlogHeader /> */}
 
-      <main className="mx-auto max-w-3xl px-6 py-12 md:py-20">
+        <main className="mx-auto max-w-3xl px-6 py-12 md:py-20">
         <article>
           {/* Cover Image with centered Logo overlay */}
           {post.cover_image_url && (
@@ -209,6 +214,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </SwipeNavigation>
   )
 }
