@@ -512,6 +512,17 @@ export async function runSynthesisPipelineWithProgress(
   // Phase 2: Develop syntheses one by one with progress updates
   const synthesesMap = new Map<string, DevelopedSynthesis>()
 
+  // Helper: timeout wrapper that guarantees we don't hang
+  const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+    return Promise.race([
+      promise,
+      new Promise<T>((resolve) => setTimeout(() => {
+        console.log(`[Pipeline] Timeout after ${ms}ms, using fallback`)
+        resolve(fallback)
+      }, ms))
+    ])
+  }
+
   for (let i = 0; i < allCandidates.length; i++) {
     const candidate = allCandidates[i]
 
@@ -524,10 +535,20 @@ export async function runSynthesisPipelineWithProgress(
 
     try {
       const { developSynthesis } = await import('./develop')
-      const synthesis = await developSynthesis(
-        candidate,
-        prompt.development_prompt,
-        prompt.core_thesis
+
+      // Fallback synthesis if timeout occurs
+      const fallbackSynthesis: DevelopedSynthesis = {
+        headline: `Verbindung: ${candidate.synthesisType}`,
+        content: `Historische Verbindung zu "${candidate.relatedItem.title.slice(0, 50)}..." (Timeout)`,
+        historicalReference: candidate.relatedItem.title,
+        coreThesisAlignment: 0,
+      }
+
+      // Hard 45-second timeout per synthesis
+      const synthesis = await withTimeout(
+        developSynthesis(candidate, prompt.development_prompt, prompt.core_thesis),
+        45000,
+        fallbackSynthesis
       )
 
       const key = `${candidate.sourceItem.id}-${candidate.relatedItem.id}`
