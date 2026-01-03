@@ -87,6 +87,7 @@ export default function DigestsPage() {
   const [loadingDigestSources, setLoadingDigestSources] = useState(false)
   const [digestSyntheses, setDigestSyntheses] = useState<DevelopedSynthesis[]>([])
   const [loadingDigestSyntheses, setLoadingDigestSyntheses] = useState(false)
+  const [runningSynthesis, setRunningSynthesis] = useState(false)
 
   const [ghostwriterOpen, setGhostwriterOpen] = useState(false)
   const [ghostwriterDigest, setGhostwriterDigest] = useState<Digest | null>(null)
@@ -235,9 +236,12 @@ export default function DigestsPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ digestId: data.id }),
+          credentials: 'include',
         }).then(res => {
           if (res.ok) {
             console.log('[Digest] Synthesis pipeline triggered for:', data.id)
+          } else {
+            console.error('[Digest] Synthesis trigger failed with status:', res.status)
           }
         }).catch(err => {
           console.error('[Digest] Synthesis trigger failed:', err)
@@ -286,6 +290,42 @@ export default function DigestsPage() {
 
     setLoadingDigestSources(false)
     setLoadingDigestSyntheses(false)
+  }
+
+  async function triggerSynthesis(digest: Digest) {
+    setRunningSynthesis(true)
+    try {
+      const res = await fetch('/api/synthesis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ digestId: digest.id }),
+        credentials: 'include',
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Synthese fehlgeschlagen')
+      }
+
+      const result = await res.json()
+      console.log('[Synthesis] Result:', result)
+
+      // Reload syntheses
+      const { data: newSyntheses } = await supabase
+        .from('developed_syntheses')
+        .select('id, synthesis_headline, synthesis_content, historical_reference, core_thesis_alignment, created_at')
+        .eq('digest_id', digest.id)
+        .order('core_thesis_alignment', { ascending: false })
+
+      if (newSyntheses) setDigestSyntheses(newSyntheses as DevelopedSynthesis[])
+
+      alert(`Synthese abgeschlossen! ${result.synthesesDeveloped || 0} Synthesen erstellt.`)
+    } catch (error) {
+      console.error('Synthesis error:', error)
+      alert(`Fehler: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
+    } finally {
+      setRunningSynthesis(false)
+    }
   }
 
   function openGhostwriter(digest: Digest) {
@@ -902,6 +942,25 @@ export default function DigestsPage() {
           <DialogFooter className="border-t pt-3">
             <Button variant="outline" size="sm" onClick={() => setViewingDigest(null)} className="text-xs h-7">
               Schließen
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => viewingDigest && triggerSynthesis(viewingDigest)}
+              disabled={runningSynthesis}
+              className="gap-1.5 text-xs h-7"
+            >
+              {runningSynthesis ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Synthese läuft...
+                </>
+              ) : (
+                <>
+                  <Lightbulb className="h-3 w-3" />
+                  Synthese starten
+                </>
+              )}
             </Button>
             <Button size="sm" onClick={() => {
               setViewingDigest(null)
