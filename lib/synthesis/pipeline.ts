@@ -436,7 +436,7 @@ export async function getSynthesesForDigest(
  * Run the synthesis pipeline with progress callbacks for streaming UI
  */
 // Pipeline version for deployment verification
-const PIPELINE_VERSION = 'v5-with-logging'
+const PIPELINE_VERSION = 'v6-sequential'
 
 export async function runSynthesisPipelineWithProgress(
   digestId: string,
@@ -583,7 +583,7 @@ export async function runSynthesisPipelineWithProgress(
 
   // Phase 2: Develop syntheses in parallel batches with progress updates
   const synthesesMap = new Map<string, DevelopedSynthesis>()
-  const BATCH_SIZE = 3 // Process 3 at a time to balance speed vs rate limits
+  const BATCH_SIZE = 1 // Process 1 at a time to avoid concurrency issues
   const PIPELINE_TIMEOUT_MS = 240000 // 4 minutes max for entire pipeline
   const pipelineStartTime = Date.now()
 
@@ -674,9 +674,9 @@ export async function runSynthesisPipelineWithProgress(
       }
     }
 
-    // Small delay between batches to respect rate limits
+    // Small delay between items to respect rate limits
     if (batchStart + BATCH_SIZE < allCandidates.length) {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, 500))
     }
   }
 

@@ -72,7 +72,7 @@ function estimateThesisAlignment(synthesis: string, coreThesis: string): number 
 }
 
 // Version marker for deployment verification
-const SYNTHESIS_VERSION = 'v4-fixed-catch'
+const SYNTHESIS_VERSION = 'v5-sequential'
 
 /**
  * Helper: Hard timeout wrapper using Promise.race
