@@ -437,7 +437,7 @@ export async function getSynthesesForDigest(
  * Run the synthesis pipeline with progress callbacks for streaming UI
  */
 // Pipeline version for deployment verification
-const PIPELINE_VERSION = 'v12-phase1-timeout'
+const PIPELINE_VERSION = 'v13-full-continuation'
 
 export async function runSynthesisPipelineWithProgress(
   digestId: string,
@@ -470,11 +470,9 @@ export async function runSynthesisPipelineWithProgress(
 
   const supabase = await createClient()
 
-  // NOTE: We do NOT delete existing syntheses to support continuation
-  // The pipeline will skip items that already have syntheses
-  // Only delete synthesis_candidates to regenerate them fresh
-  await supabase.from('synthesis_candidates').delete().eq('digest_id', digestId)
-  console.log(`[Pipeline] Continuation mode: keeping existing syntheses, regenerating candidates`)
+  // NOTE: We keep BOTH syntheses AND candidates to support continuation
+  // The pipeline will skip items that already have candidates
+  console.log(`[Pipeline] Continuation mode: keeping existing syntheses and candidates`)
 
   // Get active synthesis prompt
   const prompt = await getActiveSynthesisPrompt()
@@ -494,6 +492,26 @@ export async function runSynthesisPipelineWithProgress(
   const items = await getDigestItems(digestId)
   const itemsToProcess = items.slice(0, maxItemsToProcess)
 
+  // Get existing candidates to skip already-processed items (Phase 1 continuation)
+  const { data: existingCandidates } = await supabase
+    .from('synthesis_candidates')
+    .select('source_item_id')
+    .eq('digest_id', digestId)
+
+  const alreadyScoredIds = new Set<string>()
+  if (existingCandidates) {
+    for (const c of existingCandidates) {
+      alreadyScoredIds.add(c.source_item_id)
+    }
+  }
+
+  const itemsNeedingScoring = itemsToProcess.filter(item => !alreadyScoredIds.has(item.id))
+  const skippedPhase1 = itemsToProcess.length - itemsNeedingScoring.length
+
+  if (skippedPhase1 > 0) {
+    console.log(`[Pipeline] Phase 1 continuation: skipping ${skippedPhase1} already-scored items`)
+  }
+
   onProgress({
     type: 'init',
     totalItems: itemsToProcess.length,
@@ -505,24 +523,25 @@ export async function runSynthesisPipelineWithProgress(
   // Reserve 60s for Phase 2 - stop Phase 1 early if needed
   const PHASE1_TIMEOUT_MS = PIPELINE_TIMEOUT_MS - 60000
 
-  for (let i = 0; i < itemsToProcess.length; i++) {
-    const item = itemsToProcess[i]
+  for (let i = 0; i < itemsNeedingScoring.length; i++) {
+    const item = itemsNeedingScoring[i]
+    const overallIndex = skippedPhase1 + i
 
     // Check timeout during Phase 1 - leave time for Phase 2
     const phase1Elapsed = Date.now() - pipelineStartTime
     if (phase1Elapsed > PHASE1_TIMEOUT_MS) {
-      const remaining = itemsToProcess.length - i
-      console.log(`[Pipeline] Phase 1 time limit reached at item ${i + 1}/${itemsToProcess.length} - ${remaining} items skipped`)
+      const remaining = itemsNeedingScoring.length - i
+      console.log(`[Pipeline] Phase 1 time limit reached at item ${overallIndex + 1}/${itemsToProcess.length} - ${remaining} items remaining`)
       onProgress({
         type: 'partial',
-        message: `Phase 1 Zeit-Limit bei Item ${i + 1}/${itemsToProcess.length}. ${candidatesFound} Kandidaten gefunden.`,
+        message: `Phase 1 Zeit-Limit bei Item ${overallIndex + 1}/${itemsToProcess.length}. ${candidatesFound} neue Kandidaten.`,
       })
       break
     }
 
     onProgress({
       type: 'searching',
-      currentItem: i + 1,
+      currentItem: overallIndex + 1,
       totalItems: itemsToProcess.length,
       itemTitle: item.title,
     })
@@ -588,27 +607,17 @@ export async function runSynthesisPipelineWithProgress(
     }
   }
 
-  // Store all candidates
-  await storeCandidates(digestId, allCandidates)
-
-  if (allCandidates.length === 0) {
-    return {
-      success: true,
-      digestId,
-      itemsProcessed: itemsToProcess.length,
-      candidatesFound,
-      synthesesDeveloped: 0,
-      errors,
-    }
+  // Store new candidates (if any)
+  if (allCandidates.length > 0) {
+    await storeCandidates(digestId, allCandidates)
   }
 
   // Phase 2: Develop syntheses ONE BY ONE - no parallelization
   const synthesesMap = new Map<string, DevelopedSynthesis>()
-  // Note: PIPELINE_TIMEOUT_MS and pipelineStartTime are defined at function entry
 
   // Check if Phase 1 already used too much time
   const phase1Time = Date.now() - pipelineStartTime
-  console.log(`[Pipeline] Phase 1 completed in ${Math.round(phase1Time / 1000)}s`)
+  console.log(`[Pipeline] Phase 1 completed in ${Math.round(phase1Time / 1000)}s, found ${candidatesFound} new candidates`)
   if (phase1Time > PIPELINE_TIMEOUT_MS) {
     console.log(`[Pipeline] Phase 1 already exceeded timeout (${phase1Time}ms > ${PIPELINE_TIMEOUT_MS}ms)`)
     onProgress({
@@ -620,10 +629,64 @@ export async function runSynthesisPipelineWithProgress(
       digestId,
       candidatesFound,
       synthesesDeveloped: 0,
-      itemsProcessed: 0,
+      itemsProcessed: itemsNeedingScoring.length,
       errors,
     }
   }
+
+  // Get ALL candidates from DB for Phase 2 (includes previous runs)
+  const { data: dbCandidates } = await supabase
+    .from('synthesis_candidates')
+    .select(`
+      id,
+      source_item_id,
+      related_item_id,
+      similarity_score,
+      synthesis_type,
+      originality_score,
+      relevance_score,
+      reasoning,
+      daily_repo!synthesis_candidates_source_item_id_fkey(id, title, content),
+      related:daily_repo!synthesis_candidates_related_item_id_fkey(id, title, content, collected_at, similarity)
+    `)
+    .eq('digest_id', digestId)
+
+  if (!dbCandidates || dbCandidates.length === 0) {
+    console.log(`[Pipeline] No candidates found in database`)
+    return {
+      success: true,
+      digestId,
+      itemsProcessed: itemsNeedingScoring.length,
+      candidatesFound,
+      synthesesDeveloped: 0,
+      errors,
+    }
+  }
+
+  // Convert DB candidates to ScoredCandidate format
+  const allDbCandidates: ScoredCandidate[] = dbCandidates.map(c => ({
+    sourceItem: {
+      id: c.source_item_id,
+      title: (c.daily_repo as { title: string })?.title || '',
+      content: (c.daily_repo as { content: string })?.content || '',
+    },
+    relatedItem: {
+      id: c.related_item_id,
+      title: (c.related as { title: string })?.title || '',
+      content: (c.related as { content: string })?.content || '',
+      collected_at: (c.related as { collected_at: string })?.collected_at || '',
+      similarity: c.similarity_score,
+    },
+    similarityScore: c.similarity_score,
+    originalityScore: c.originality_score,
+    relevanceScore: c.relevance_score,
+    synthesisType: c.synthesis_type as SynthesisType,
+    reasoning: c.reasoning || '',
+    daysAgo: 0,
+    totalScore: c.originality_score + c.relevance_score,
+  }))
+
+  console.log(`[Pipeline] Found ${allDbCandidates.length} total candidates in database`)
 
   // Direct import, no dynamic import
   const { developSynthesis } = await import('./develop')
@@ -650,11 +713,11 @@ export async function runSynthesisPipelineWithProgress(
   }
 
   // Filter out already processed items
-  const remainingCandidates = allCandidates.filter(
+  const remainingCandidates = allDbCandidates.filter(
     c => !processedSourceIds.has(c.sourceItem.id)
   )
 
-  const skippedCount = allCandidates.length - remainingCandidates.length
+  const skippedCount = allDbCandidates.length - remainingCandidates.length
   if (skippedCount > 0) {
     console.log(`[Pipeline] Skipping ${skippedCount} already processed items`)
   }
