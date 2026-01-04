@@ -329,7 +329,7 @@ export default function SettingsPage() {
                 <div className="space-y-3 pb-4 border-b">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-base">Newsletter-Abruf</Label>
+                      <Label className="text-base">Daily Repo Crawl</Label>
                       <p className="text-sm text-muted-foreground">
                         Wann sollen Newsletter abgerufen werden?
                       </p>
