@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { getSession } from '@/lib/auth/session'
 
 // Lazy initialization to avoid build-time errors
 function getSupabase() {
@@ -10,16 +10,10 @@ function getSupabase() {
   )
 }
 
-// Check admin auth
-async function isAuthenticated(): Promise<boolean> {
-  const cookieStore = await cookies()
-  const authCookie = cookieStore.get('admin_authenticated')
-  return authCookie?.value === 'true'
-}
-
 // GET: Get newsletter settings
 export async function GET(request: NextRequest) {
-  if (!(await isAuthenticated())) {
+  const session = await getSession()
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -63,7 +57,8 @@ export async function GET(request: NextRequest) {
 
 // POST: Update or create a setting
 export async function POST(request: NextRequest) {
-  if (!(await isAuthenticated())) {
+  const session = await getSession()
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

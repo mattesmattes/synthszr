@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { getSession } from '@/lib/auth/session'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { NewsletterEmail } from '@/lib/resend/templates/newsletter'
 import { render } from '@react-email/components'
@@ -13,7 +13,7 @@ function getSupabase() {
   )
 }
 
-// Check admin auth (via cookie or cron secret header)
+// Check admin auth (via session or cron secret header for Vercel cron jobs)
 async function isAuthenticated(request?: NextRequest): Promise<boolean> {
   // Check for cron secret in header (for scheduled tasks on Vercel)
   if (request) {
@@ -23,15 +23,15 @@ async function isAuthenticated(request?: NextRequest): Promise<boolean> {
     }
   }
 
-  // Check for admin cookie
-  const cookieStore = await cookies()
-  const authCookie = cookieStore.get('admin_authenticated')
-  return authCookie?.value === 'true'
+  // Check for session
+  const session = await getSession()
+  return !!session
 }
 
 // GET: List newsletter sends
 export async function GET() {
-  if (!(await isAuthenticated())) {
+  const session = await getSession()
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
