@@ -121,8 +121,8 @@ export function NewsletterEmail({
             <Img
               src={`${baseUrl}/logo-nl.png`}
               alt="Synthszr"
-              width="200"
-              height="59"
+              width="100"
+              height="29"
               style={logo}
             />
           </Section>
