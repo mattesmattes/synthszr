@@ -7,7 +7,10 @@ export const maxDuration = 300 // 5 minutes max
 interface ScheduleConfig {
   newsletterFetch: {
     enabled: boolean
-    hours: number[]
+    hour: number
+    minute: number
+    // Legacy support
+    hours?: number[]
   }
   dailyAnalysis: {
     enabled: boolean
@@ -19,12 +22,18 @@ interface ScheduleConfig {
     hour: number
     minute: number
   }
+  newsletterSend?: {
+    enabled: boolean
+    hour: number
+    minute: number
+  }
 }
 
 const DEFAULT_SCHEDULE: ScheduleConfig = {
   newsletterFetch: {
     enabled: true,
-    hours: [0, 6, 12, 18],
+    hour: 6,
+    minute: 0,
   },
   dailyAnalysis: {
     enabled: true,
@@ -35,6 +44,11 @@ const DEFAULT_SCHEDULE: ScheduleConfig = {
     enabled: false,
     hour: 9,
     minute: 0,
+  },
+  newsletterSend: {
+    enabled: false,
+    hour: 9,
+    minute: 30,
   },
 }
 
@@ -103,9 +117,10 @@ export async function GET(request: NextRequest) {
 
   // Check Newsletter Fetch
   if (config.newsletterFetch.enabled) {
-    const shouldRun = config.newsletterFetch.hours.some(hour =>
-      isTimeMatch(hour, 0, currentHour, currentMinute)
-    )
+    // Support both new format (hour/minute) and legacy format (hours array)
+    const fetchHour = config.newsletterFetch.hour ?? config.newsletterFetch.hours?.[0] ?? 6
+    const fetchMinute = config.newsletterFetch.minute ?? 0
+    const shouldRun = isTimeMatch(fetchHour, fetchMinute, currentHour, currentMinute)
 
     if (shouldRun && !(await hasRunRecently(supabase, 'newsletter_fetch', 60))) {
       console.log('[Scheduler] Triggering newsletter fetch...')
@@ -181,6 +196,48 @@ export async function GET(request: NextRequest) {
       }
     } else {
       results.postGeneration = 'not_scheduled'
+    }
+  }
+
+  // Check Newsletter Send
+  if (config.newsletterSend?.enabled) {
+    if (isTimeMatch(config.newsletterSend.hour, config.newsletterSend.minute, currentHour, currentMinute)) {
+      if (!(await hasRunRecently(supabase, 'newsletter_send', 60))) {
+        console.log('[Scheduler] Triggering newsletter send...')
+        try {
+          const baseUrl = process.env.VERCEL_URL
+            ? `https://${process.env.VERCEL_URL}`
+            : 'http://localhost:3000'
+
+          // Get latest published post
+          const { data: latestPost } = await supabase
+            .from('generated_posts')
+            .select('id')
+            .eq('status', 'published')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single()
+
+          if (latestPost) {
+            await fetch(`${baseUrl}/api/admin/newsletter-send`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ postId: latestPost.id }),
+            })
+            await markTaskRun(supabase, 'newsletter_send')
+            results.newsletterSend = 'triggered'
+          } else {
+            results.newsletterSend = 'no_post'
+          }
+        } catch (error) {
+          console.error('[Scheduler] Newsletter send error:', error)
+          results.newsletterSend = 'error'
+        }
+      } else {
+        results.newsletterSend = 'already_ran'
+      }
+    } else {
+      results.newsletterSend = 'not_scheduled'
     }
   }
 

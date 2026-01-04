@@ -21,7 +21,8 @@ interface GmailStatus {
 interface ScheduleConfig {
   newsletterFetch: {
     enabled: boolean
-    hours: number[]
+    hour: number
+    minute: number
   }
   dailyAnalysis: {
     enabled: boolean
@@ -43,7 +44,8 @@ interface ScheduleConfig {
 const DEFAULT_SCHEDULE: ScheduleConfig = {
   newsletterFetch: {
     enabled: true,
-    hours: [0, 6, 12, 18],
+    hour: 6,
+    minute: 0,
   },
   dailyAnalysis: {
     enabled: true,
@@ -121,10 +123,17 @@ export default function SettingsPage() {
       if (response.ok) {
         const data: ScheduleConfig = await response.json()
         // Convert UTC to Berlin time for display
+        // Handle legacy format (hours array) by converting to single hour
+        const newsletterFetchHour = data.newsletterFetch.hour !== undefined
+          ? data.newsletterFetch.hour
+          : (data.newsletterFetch.hours?.[0] ?? 6)
+        const newsletterFetchMinute = data.newsletterFetch.minute ?? 0
+
         setSchedule({
           newsletterFetch: {
-            ...data.newsletterFetch,
-            hours: data.newsletterFetch.hours.map(utcToBerlin),
+            enabled: data.newsletterFetch.enabled,
+            hour: utcToBerlin(newsletterFetchHour),
+            minute: newsletterFetchMinute,
           },
           dailyAnalysis: {
             ...data.dailyAnalysis,
@@ -155,7 +164,7 @@ export default function SettingsPage() {
       const utcSchedule: ScheduleConfig = {
         newsletterFetch: {
           ...schedule.newsletterFetch,
-          hours: schedule.newsletterFetch.hours.map(berlinToUtc).sort((a, b) => a - b),
+          hour: berlinToUtc(schedule.newsletterFetch.hour),
         },
         dailyAnalysis: {
           ...schedule.dailyAnalysis,
@@ -322,7 +331,7 @@ export default function SettingsPage() {
                     <div>
                       <Label className="text-base">Newsletter-Abruf</Label>
                       <p className="text-sm text-muted-foreground">
-                        Zu welchen Stunden sollen Newsletter abgerufen werden?
+                        Wann sollen Newsletter abgerufen werden?
                       </p>
                     </div>
                     <Switch
@@ -333,28 +342,49 @@ export default function SettingsPage() {
                     />
                   </div>
                   {schedule.newsletterFetch.enabled && (
-                    <div className="flex flex-wrap gap-2">
-                      {HOURS.map((hour) => (
-                        <button
-                          key={hour}
-                          onClick={() => {
-                            const hours = schedule.newsletterFetch.hours.includes(hour)
-                              ? schedule.newsletterFetch.hours.filter((h) => h !== hour)
-                              : [...schedule.newsletterFetch.hours, hour].sort((a, b) => a - b)
-                            setSchedule({
-                              ...schedule,
-                              newsletterFetch: { ...schedule.newsletterFetch, hours },
-                            })
-                          }}
-                          className={`px-2 py-1 text-xs rounded border transition-colors ${
-                            schedule.newsletterFetch.hours.includes(hour)
-                              ? 'bg-primary text-primary-foreground border-primary'
-                              : 'bg-background border-border hover:bg-muted'
-                          }`}
-                        >
-                          {hour.toString().padStart(2, '0')}:00
-                        </button>
-                      ))}
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={schedule.newsletterFetch.hour.toString()}
+                        onValueChange={(value) =>
+                          setSchedule({
+                            ...schedule,
+                            newsletterFetch: { ...schedule.newsletterFetch, hour: parseInt(value) },
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {HOURS.map((hour) => (
+                            <SelectItem key={hour} value={hour.toString()}>
+                              {hour.toString().padStart(2, '0')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-muted-foreground">:</span>
+                      <Select
+                        value={schedule.newsletterFetch.minute.toString()}
+                        onValueChange={(value) =>
+                          setSchedule({
+                            ...schedule,
+                            newsletterFetch: { ...schedule.newsletterFetch, minute: parseInt(value) },
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MINUTES.map((minute) => (
+                            <SelectItem key={minute} value={minute.toString()}>
+                              {minute.toString().padStart(2, '0')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-sm text-muted-foreground">Uhr (MEZ)</span>
                     </div>
                   )}
                 </div>

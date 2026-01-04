@@ -5,7 +5,8 @@ import { getSession } from '@/lib/auth/session'
 export interface ScheduleConfig {
   newsletterFetch: {
     enabled: boolean
-    hours: number[]  // e.g., [0, 6, 12, 18] for every 6 hours
+    hour: number
+    minute: number
   }
   dailyAnalysis: {
     enabled: boolean
@@ -27,7 +28,8 @@ export interface ScheduleConfig {
 const DEFAULT_SCHEDULE: ScheduleConfig = {
   newsletterFetch: {
     enabled: true,
-    hours: [0, 6, 12, 18],
+    hour: 6,
+    minute: 0,
   },
   dailyAnalysis: {
     enabled: true,
