@@ -235,17 +235,24 @@ SPRACHE:
     analysis_content: analysisContent,
     word_count: wordCount,
     sources_used: processedItemIds,
-    updated_at: new Date().toISOString(),
   }
 
   let digestId
   if (existingDigest) {
-    await supabase.from('daily_digests').update(digestData).eq('id', existingDigest.id)
+    const { error: updateError } = await supabase.from('daily_digests').update(digestData).eq('id', existingDigest.id)
+    if (updateError) console.error(`   ❌ Update error: ${updateError.message}`)
     digestId = existingDigest.id
     console.log(`   ✓ Updated existing digest: ${digestId}`)
   } else {
-    const { data: newDigest } = await supabase.from('daily_digests').insert(digestData).select('id').single()
-    digestId = newDigest?.id
+    const { data: newDigest, error: insertError } = await supabase.from('daily_digests').insert(digestData).select('id').single()
+    if (insertError) {
+      console.error(`   ❌ Insert error: ${insertError.message}`)
+      // Try to find the digest we just created by date
+      const { data: findDigest } = await supabase.from('daily_digests').select('id').eq('digest_date', date).single()
+      digestId = findDigest?.id
+    } else {
+      digestId = newDigest?.id
+    }
     console.log(`   ✓ Created new digest: ${digestId}`)
   }
 
@@ -535,8 +542,6 @@ async function runArticleGeneration(digestId, date) {
     word_count: wordCount,
     status: 'draft',
     category: 'tagessynthese',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
   }
 
   let postId

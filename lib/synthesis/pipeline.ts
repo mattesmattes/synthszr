@@ -437,7 +437,7 @@ export async function getSynthesesForDigest(
  * Run the synthesis pipeline with progress callbacks for streaming UI
  */
 // Pipeline version for deployment verification
-const PIPELINE_VERSION = 'v11-timeout-fix'
+const PIPELINE_VERSION = 'v12-phase1-timeout'
 
 export async function runSynthesisPipelineWithProgress(
   digestId: string,
@@ -502,8 +502,23 @@ export async function runSynthesisPipelineWithProgress(
   const allCandidates: ScoredCandidate[] = []
 
   // Phase 1: Search and score for each item
+  // Reserve 60s for Phase 2 - stop Phase 1 early if needed
+  const PHASE1_TIMEOUT_MS = PIPELINE_TIMEOUT_MS - 60000
+
   for (let i = 0; i < itemsToProcess.length; i++) {
     const item = itemsToProcess[i]
+
+    // Check timeout during Phase 1 - leave time for Phase 2
+    const phase1Elapsed = Date.now() - pipelineStartTime
+    if (phase1Elapsed > PHASE1_TIMEOUT_MS) {
+      const remaining = itemsToProcess.length - i
+      console.log(`[Pipeline] Phase 1 time limit reached at item ${i + 1}/${itemsToProcess.length} - ${remaining} items skipped`)
+      onProgress({
+        type: 'partial',
+        message: `Phase 1 Zeit-Limit bei Item ${i + 1}/${itemsToProcess.length}. ${candidatesFound} Kandidaten gefunden.`,
+      })
+      break
+    }
 
     onProgress({
       type: 'searching',
