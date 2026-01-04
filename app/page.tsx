@@ -104,6 +104,20 @@ export default async function Page() {
 
         {featuredPost ? (
           <>
+            {/* Why Link - above cover image */}
+            <Link
+              href="/why"
+              className="block mb-6 text-center hover:opacity-80 transition-opacity"
+            >
+              <span className="text-lg font-bold tracking-tight">
+                Feed the Soul. Run the System.
+              </span>
+              <br />
+              <span className="text-sm text-muted-foreground">
+                Die News Synthese zum Start in den Tag.
+              </span>
+            </Link>
+
             <FeaturedArticle
               slug={featuredPost.slug}
               title={featuredPost.title}

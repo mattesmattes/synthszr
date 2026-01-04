@@ -17,7 +17,8 @@ import {
   ImageIcon,
   Lightbulb,
   Users,
-  Send
+  Send,
+  HelpCircle
 } from 'lucide-react'
 
 const navGroups = [
@@ -54,6 +55,11 @@ const navGroups = [
         label: 'Vokabular',
         href: '/admin/vocabulary',
         icon: BookOpen
+      },
+      {
+        label: 'Why',
+        href: '/admin/why',
+        icon: HelpCircle
       }
     ]
   },

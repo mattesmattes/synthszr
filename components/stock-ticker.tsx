@@ -54,11 +54,11 @@ export function StockTicker({ company }: StockTickerProps) {
 
   const arrow = quote.direction === 'up' ? '↑' : quote.direction === 'down' ? '↓' : '→'
 
-  // Background colors: Positive=Green, Neutral=Gray, Negative=Cyan
+  // Background colors: Positive=Neon Green, Neutral=Gray, Negative=Neon Orange
   const bgClass = quote.direction === 'up'
-    ? 'bg-[#22C55E]'  // Green (Tailwind green-500)
+    ? 'bg-[#39FF14]'  // Neon Green
     : quote.direction === 'down'
-    ? 'bg-cyan-400'   // Cyan
+    ? 'bg-[#FF6600]'  // Neon Orange
     : 'bg-gray-300 dark:bg-gray-600'  // Gray
 
   const formattedPercent = Math.abs(quote.changePercent).toFixed(1)

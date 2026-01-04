@@ -134,7 +134,7 @@ export default function CreateArticlePage() {
   const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
   const [vocabOpen, setVocabOpen] = useState(false)
-  const [vocabularyIntensity, setVocabularyIntensity] = useState(10)
+  const [vocabularyIntensity, setVocabularyIntensity] = useState(50)
 
   // Editable metadata fields
   const [metadata, setMetadata] = useState<ArticleMetadata>({
