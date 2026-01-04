@@ -23,6 +23,8 @@ interface ScheduleConfig {
     enabled: boolean
     hour: number
     minute: number
+    // Legacy support for old format
+    hours?: number[]
   }
   dailyAnalysis: {
     enabled: boolean
