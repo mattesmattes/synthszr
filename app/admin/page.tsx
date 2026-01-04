@@ -22,6 +22,7 @@ import {
   Sparkles,
   ExternalLink,
   ImageIcon,
+  Bot,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -71,6 +72,15 @@ interface CombinedPost {
   created_at: string
   source: 'manual' | 'ai'
   word_count?: number | null
+  ai_model?: string | null
+}
+
+type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro'
+
+const AI_MODEL_LABELS: Record<AIModel, { label: string; color: string }> = {
+  'claude-opus-4': { label: 'Opus 4', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' },
+  'claude-sonnet-4': { label: 'Sonnet 4', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
+  'gemini-2.5-pro': { label: 'Gemini', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' },
 }
 
 const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese', 'general']
@@ -144,7 +154,7 @@ export default function AdminPage() {
     // Fetch AI-generated posts
     const { data: aiPosts } = await supabase
       .from('generated_posts')
-      .select('id, title, slug, excerpt, content, category, status, created_at, word_count')
+      .select('id, title, slug, excerpt, content, category, status, created_at, word_count, ai_model')
       .order('created_at', { ascending: false })
 
     // Combine and normalize
@@ -191,6 +201,7 @@ export default function AdminPage() {
           created_at: p.created_at,
           source: 'ai' as const,
           word_count: p.word_count,
+          ai_model: p.ai_model,
         }
       })
     ]
@@ -391,6 +402,12 @@ export default function AdminPage() {
                       {post.category && (
                         <Badge variant="outline" className="text-xs">
                           {post.category}
+                        </Badge>
+                      )}
+                      {post.ai_model && AI_MODEL_LABELS[post.ai_model as AIModel] && (
+                        <Badge className={`text-xs ${AI_MODEL_LABELS[post.ai_model as AIModel].color}`}>
+                          <Bot className="h-3 w-3 mr-1" />
+                          {AI_MODEL_LABELS[post.ai_model as AIModel].label}
                         </Badge>
                       )}
                     </div>
