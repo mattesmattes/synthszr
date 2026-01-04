@@ -363,24 +363,31 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     }
   }, [editor, content])
 
-  // Process "Mattes Synthese" text to add styling class
+  // Process "Mattes Synthese" or "Synthszr Take" text to add styling class
   const processMattesSyntheseText = useCallback(() => {
     if (!containerRef.current) return
+
+    const isSyntheseText = (text: string) => {
+      const lower = text.toLowerCase()
+      return lower.includes('mattes synthese') ||
+             lower.includes("mattes' synthese") ||
+             lower.includes('synthszr take')
+    }
 
     // First check headings
     const headings = containerRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6')
     headings.forEach((heading) => {
       const text = heading.textContent || ''
-      if (text.toLowerCase().includes('mattes synthese') || text.toLowerCase().includes("mattes' synthese")) {
+      if (isSyntheseText(text)) {
         heading.classList.add('mattes-synthese-heading')
       }
     })
 
-    // Then check bold/strong elements for "Mattes Synthese"
+    // Then check bold/strong elements
     const strongElements = containerRef.current.querySelectorAll('strong, b')
     strongElements.forEach((strong) => {
       const text = strong.textContent || ''
-      if (text.toLowerCase().includes('mattes synthese') || text.toLowerCase().includes("mattes' synthese")) {
+      if (isSyntheseText(text)) {
         strong.classList.add('mattes-synthese')
       }
     })
@@ -394,10 +401,10 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     const h2s = containerRef.current.querySelectorAll('h2')
 
     h2s.forEach((h2) => {
-      // Skip if already processed or is "Mattes Synthese" heading
+      // Skip if already processed or is "Mattes Synthese" / "Synthszr Take" heading
       if (h2.classList.contains('news-heading-processed')) return
       const headingText = h2.textContent?.toLowerCase() || ''
-      if (headingText.includes('mattes synthese') || headingText.includes("mattes' synthese")) return
+      if (headingText.includes('mattes synthese') || headingText.includes("mattes' synthese") || headingText.includes('synthszr take')) return
 
       // Find the next sibling paragraph that contains a source link
       let nextSibling = h2.nextElementSibling
