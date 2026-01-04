@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
             {
               maxItemsToProcess: options?.maxItems || 50, // Continuation handles time constraints
               maxCandidatesPerItem: options?.maxCandidates || 5,
-              minSimilarity: options?.minSimilarity || 0.65,
+              minSimilarity: options?.minSimilarity || 0.5,
               maxAgeDays: options?.maxAge || 90,
             },
             // Progress callback

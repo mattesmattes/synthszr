@@ -238,7 +238,7 @@ export async function runSynthesisPipeline(
   const {
     maxItemsToProcess = 50, // No limit needed - continuation handles time constraints // Process all items by default
     maxCandidatesPerItem = 5,
-    minSimilarity = 0.65, // Slightly lower threshold to find more candidates
+    minSimilarity = 0.5, // Lower threshold to find more candidates
     maxAgeDays = 90,
   } = options
 
@@ -458,7 +458,7 @@ export async function runSynthesisPipelineWithProgress(
   const {
     maxItemsToProcess = 50, // No limit needed - continuation handles time constraints
     maxCandidatesPerItem = 5,
-    minSimilarity = 0.65,
+    minSimilarity = 0.5,
     maxAgeDays = 90,
   } = options
 

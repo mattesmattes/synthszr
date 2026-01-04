@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     const result = await runSynthesisPipeline(digestId, {
       maxItemsToProcess: options?.maxItems || 50,
       maxCandidatesPerItem: options?.maxCandidates || 5,
-      minSimilarity: options?.minSimilarity || 0.65,
+      minSimilarity: options?.minSimilarity || 0.5,
       maxAgeDays: options?.maxAge || 90,
     })
 
