@@ -23,6 +23,7 @@ interface NewsletterEmailProps {
   footerText?: string
   coverImageUrl?: string | null
   postDate?: string
+  baseUrl?: string
 }
 
 export function NewsletterEmail({
@@ -34,6 +35,7 @@ export function NewsletterEmail({
   footerText = 'Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.',
   coverImageUrl,
   postDate,
+  baseUrl = 'https://synthszr.vercel.app',
 }: NewsletterEmailProps) {
   const formattedDate = postDate
     ? new Date(postDate).toLocaleDateString('de-DE', {
@@ -117,7 +119,7 @@ export function NewsletterEmail({
           {/* Header with Logo */}
           <Section style={headerSection}>
             <Img
-              src="https://synthszr.com/synthszr-logo.svg"
+              src={`${baseUrl}/synthszr-logo.svg`}
               alt="Synthszr"
               width="120"
               height="32"
@@ -174,7 +176,7 @@ export function NewsletterEmail({
           {/* Footer */}
           <Section style={footerSection}>
             <Img
-              src="https://synthszr.com/oh-so-logo.svg"
+              src={`${baseUrl}/oh-so-logo.svg`}
               alt="OH-SO"
               width="80"
               height="32"

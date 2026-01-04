@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
           footerText,
           coverImageUrl,
           postDate,
+          baseUrl: BASE_URL,
         })
       )
 
@@ -156,6 +157,7 @@ export async function POST(request: NextRequest) {
           footerText,
           coverImageUrl,
           postDate,
+          baseUrl: BASE_URL,
         })
       )
 
