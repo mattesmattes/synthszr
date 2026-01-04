@@ -1,8 +1,10 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
-import { streamGhostwriter } from '@/lib/claude/ghostwriter'
+import { streamGhostwriter, type AIModel } from '@/lib/claude/ghostwriter'
 import { getSynthesesForDigest } from '@/lib/synthesis/pipeline'
+
+const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro']
 
 // Canonical URLs for newsletter sources that may not have direct article URLs
 const NEWSLETTER_CANONICAL_URLS: Record<string, string> = {
@@ -70,7 +72,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { digestId, promptId, vocabularyIntensity = 50 } = body
+    const { digestId, promptId, vocabularyIntensity = 50, model: requestedModel } = body
 
     if (!digestId) {
       return new Response(JSON.stringify({ error: 'Digest ID erforderlich' }), {
@@ -78,6 +80,10 @@ export async function POST(request: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
       })
     }
+
+    // Validate and default the model
+    const model: AIModel = VALID_MODELS.includes(requestedModel) ? requestedModel : 'gemini-2.5-pro'
+    console.log(`[Ghostwriter] Requested model: ${requestedModel}, using: ${model}`)
 
     const supabase = await createClient()
 
@@ -316,10 +322,13 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of streamGhostwriter(fullDigestContent, fullPrompt)) {
+          // Send initial event with model info
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model, started: true })}\n\n`))
+
+          for await (const chunk of streamGhostwriter(fullDigestContent, fullPrompt, model)) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk })}\n\n`))
           }
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`))
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, model })}\n\n`))
         } catch (error) {
           controller.enqueue(
             encoder.encode(

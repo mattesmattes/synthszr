@@ -16,7 +16,8 @@ import {
   Link2,
   Tag,
   Type,
-  AlignLeft
+  AlignLeft,
+  Bot
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -68,6 +69,14 @@ interface ArticleMetadata {
   category: string
   slug: string
 }
+
+type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro'
+
+const AI_MODELS: { value: AIModel; label: string; description: string }[] = [
+  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Schnell, großer Kontext (1M+ Token)' },
+  { value: 'claude-sonnet-4', label: 'Claude Sonnet 4', description: 'Ausgewogen, gute Qualität' },
+  { value: 'claude-opus-4', label: 'Claude Opus 4', description: 'Höchste Qualität, langsamer' },
+]
 
 // Generate slug from title
 function generateSlug(title: string): string {
@@ -135,6 +144,8 @@ export default function CreateArticlePage() {
   const [saving, setSaving] = useState(false)
   const [vocabOpen, setVocabOpen] = useState(false)
   const [vocabularyIntensity, setVocabularyIntensity] = useState(50)
+  const [selectedModel, setSelectedModel] = useState<AIModel>('gemini-2.5-pro')
+  const [usedModel, setUsedModel] = useState<AIModel | null>(null)
 
   // Editable metadata fields
   const [metadata, setMetadata] = useState<ArticleMetadata>({
@@ -225,12 +236,13 @@ export default function CreateArticlePage() {
 
     setGenerating(true)
     setArticleContent('')
+    setUsedModel(null)
 
     try {
       const response = await fetch('/api/ghostwriter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ digestId: selectedDigestId, vocabularyIntensity }),
+        body: JSON.stringify({ digestId: selectedDigestId, vocabularyIntensity, model: selectedModel }),
         credentials: 'include',
       })
 
@@ -260,6 +272,9 @@ export default function CreateArticlePage() {
               if (data.text) {
                 setArticleContent(prev => prev + data.text)
               }
+              if (data.model) {
+                setUsedModel(data.model)
+              }
               if (data.error) {
                 throw new Error(data.error)
               }
@@ -276,7 +291,7 @@ export default function CreateArticlePage() {
     } finally {
       setGenerating(false)
     }
-  }, [selectedDigestId, vocabularyIntensity, articleContent])
+  }, [selectedDigestId, vocabularyIntensity, selectedModel])
 
   function copyToClipboard() {
     navigator.clipboard.writeText(articleContent)
@@ -373,6 +388,7 @@ export default function CreateArticlePage() {
         word_count: bodyContent.split(/\s+/).length,
         status: 'draft',
         created_at: selectedDigest.digest_date, // Use digest date as publish date
+        ai_model: usedModel || selectedModel, // Store the model used for generation
       }).select('id').single()
 
       if (error) throw error
@@ -487,6 +503,38 @@ export default function CreateArticlePage() {
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Kein aktiver Prompt. Erstelle einen unter Ghostwriter-Prompts.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* AI Model Selection */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Bot className="h-4 w-4" />
+                AI-Modell
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Select value={selectedModel} onValueChange={(value: AIModel) => setSelectedModel(value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Modell wählen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {AI_MODELS.map(model => (
+                    <SelectItem key={model.value} value={model.value}>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{model.label}</span>
+                        <span className="text-xs text-muted-foreground">{model.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {usedModel && usedModel !== selectedModel && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Letzter Artikel generiert mit: <Badge variant="outline" className="text-xs">{AI_MODELS.find(m => m.value === usedModel)?.label}</Badge>
                 </p>
               )}
             </CardContent>
