@@ -13,8 +13,17 @@ function getSupabase() {
   )
 }
 
-// Check admin auth
-async function isAuthenticated(): Promise<boolean> {
+// Check admin auth (via cookie or cron secret header)
+async function isAuthenticated(request?: NextRequest): Promise<boolean> {
+  // Check for cron secret in header (for scheduled tasks on Vercel)
+  if (request) {
+    const authHeader = request.headers.get('authorization')
+    if (authHeader === `Bearer ${process.env.CRON_SECRET}`) {
+      return true
+    }
+  }
+
+  // Check for admin cookie
   const cookieStore = await cookies()
   const authCookie = cookieStore.get('admin_authenticated')
   return authCookie?.value === 'true'
@@ -49,7 +58,7 @@ export async function GET() {
 
 // POST: Send newsletter
 export async function POST(request: NextRequest) {
-  if (!(await isAuthenticated())) {
+  if (!(await isAuthenticated(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

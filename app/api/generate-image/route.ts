@@ -16,9 +16,12 @@ interface GenerateImageRequest {
 }
 
 export async function POST(request: NextRequest) {
-  // Require admin authentication
+  // Allow authentication via session OR cron secret (for scheduled tasks on Vercel)
   const session = await getSession()
-  if (!session) {
+  const authHeader = request.headers.get('authorization')
+  const cronSecretValid = authHeader === `Bearer ${process.env.CRON_SECRET}`
+
+  if (!session && !cronSecretValid) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -169,9 +172,12 @@ export async function POST(request: NextRequest) {
 
 // Batch generate images for multiple news items - generates sequentially to avoid overload
 export async function PUT(request: NextRequest) {
-  // Require admin authentication
+  // Allow authentication via session OR cron secret (for scheduled tasks on Vercel)
   const session = await getSession()
-  if (!session) {
+  const authHeader = request.headers.get('authorization')
+  const cronSecretValid = authHeader === `Bearer ${process.env.CRON_SECRET}`
+
+  if (!session && !cronSecretValid) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

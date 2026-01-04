@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { runSynthesisPipeline } from '@/lib/synthesis/pipeline'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes max
@@ -144,28 +145,21 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Check Daily Analysis
+  // Check Daily Analysis (News & Synthese Erstellung)
   if (config.dailyAnalysis.enabled) {
     if (isTimeMatch(config.dailyAnalysis.hour, config.dailyAnalysis.minute, currentHour, currentMinute)) {
       if (!(await hasRunRecently(supabase, 'daily_analysis', 60))) {
-        console.log('[Scheduler] Triggering daily analysis...')
+        console.log('[Scheduler] Triggering daily analysis and synthesis...')
         try {
-          // Trigger analysis for yesterday's date
-          const yesterday = new Date()
-          yesterday.setDate(yesterday.getDate() - 1)
-          const dateStr = yesterday.toISOString().split('T')[0]
-
-          const baseUrl = process.env.VERCEL_URL
-            ? `https://${process.env.VERCEL_URL}`
-            : 'http://localhost:3000'
-
-          await fetch(`${baseUrl}/api/analyze`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ date: dateStr }),
-          })
+          const digestResult = await runDailyAnalysisAndSynthesis(supabase)
           await markTaskRun(supabase, 'daily_analysis')
-          results.dailyAnalysis = 'triggered'
+          results.dailyAnalysis = digestResult.success ? 'completed' : 'error'
+          if (digestResult.digestId) {
+            results.digestId = digestResult.digestId
+          }
+          if (digestResult.synthesesCreated !== undefined) {
+            results.synthesesCreated = digestResult.synthesesCreated.toString()
+          }
         } catch (error) {
           console.error('[Scheduler] Daily analysis error:', error)
           results.dailyAnalysis = 'error'
@@ -221,7 +215,10 @@ export async function GET(request: NextRequest) {
           if (latestPost) {
             await fetch(`${baseUrl}/api/admin/newsletter-send`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+              },
               body: JSON.stringify({ postId: latestPost.id }),
             })
             await markTaskRun(supabase, 'newsletter_send')
@@ -300,7 +297,10 @@ async function generateDailyPost(supabase: Awaited<ReturnType<typeof createClien
 
   const response = await fetch(`${baseUrl}/api/ghostwriter`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+    },
     body: JSON.stringify({
       digestContent: digest.analysis_content,
       customPrompt: promptData?.prompt_text,
@@ -402,7 +402,10 @@ async function generateDailyPost(supabase: Awaited<ReturnType<typeof createClien
 
       fetch(`${baseUrl}/api/generate-image`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+        },
         body: JSON.stringify({
           postId: newPost.id,
           newsItems: sectionsToProcess.map(s => ({
@@ -414,4 +417,154 @@ async function generateDailyPost(supabase: Awaited<ReturnType<typeof createClien
   }
 
   console.log('[PostGen] Post generation complete')
+}
+
+// Run daily analysis, save digest, and trigger synthesis
+async function runDailyAnalysisAndSynthesis(supabase: Awaited<ReturnType<typeof createClient>>): Promise<{
+  success: boolean
+  digestId?: string
+  synthesesCreated?: number
+  error?: string
+}> {
+  // Use yesterday's date for analysis
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const dateStr = yesterday.toISOString().split('T')[0]
+
+  console.log(`[DailyAnalysis] Starting analysis for ${dateStr}`)
+
+  // Check if we already have a digest for this date
+  const { data: existingDigest } = await supabase
+    .from('daily_digests')
+    .select('id')
+    .eq('digest_date', dateStr)
+    .single()
+
+  if (existingDigest) {
+    console.log(`[DailyAnalysis] Digest already exists for ${dateStr}, skipping analysis`)
+    // Still run synthesis if no syntheses exist
+    const { count } = await supabase
+      .from('developed_syntheses')
+      .select('id', { count: 'exact', head: true })
+      .eq('digest_id', existingDigest.id)
+
+    if (!count || count === 0) {
+      console.log(`[DailyAnalysis] Running synthesis for existing digest ${existingDigest.id}`)
+      const synthResult = await runSynthesisPipeline(existingDigest.id)
+      return {
+        success: true,
+        digestId: existingDigest.id,
+        synthesesCreated: synthResult.synthesesDeveloped,
+      }
+    }
+    return { success: true, digestId: existingDigest.id }
+  }
+
+  const baseUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : 'http://localhost:3000'
+
+  // Step 1: Stream analysis and collect content
+  console.log('[DailyAnalysis] Calling analyze API...')
+  const response = await fetch(`${baseUrl}/api/analyze`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+    },
+    body: JSON.stringify({ date: dateStr }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error('[DailyAnalysis] Analyze API failed:', errorText)
+    return { success: false, error: `Analyze API failed: ${response.status}` }
+  }
+
+  // Read the SSE stream and collect content
+  const reader = response.body?.getReader()
+  if (!reader) {
+    return { success: false, error: 'No response reader' }
+  }
+
+  const decoder = new TextDecoder()
+  let analysisContent = ''
+  let analyzedItemIds: string[] = []
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const chunk = decoder.decode(value, { stream: true })
+      const lines = chunk.split('\n\n')
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            if (data.type === 'sources' && data.itemIds) {
+              analyzedItemIds = data.itemIds
+            } else if (data.text) {
+              analysisContent += data.text
+            } else if (data.done) {
+              console.log('[DailyAnalysis] Analysis stream complete')
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  if (!analysisContent || analysisContent.length < 100) {
+    console.error('[DailyAnalysis] Analysis content too short or empty')
+    return { success: false, error: 'Analysis content empty or too short' }
+  }
+
+  console.log(`[DailyAnalysis] Collected ${analysisContent.length} chars, ${analyzedItemIds.length} source items`)
+
+  // Step 2: Save digest to database
+  const { data: newDigest, error: insertError } = await supabase
+    .from('daily_digests')
+    .insert({
+      digest_date: dateStr,
+      analysis_content: analysisContent,
+      word_count: analysisContent.split(/\s+/).length,
+      sources_used: analyzedItemIds.length > 0 ? analyzedItemIds : null,
+    })
+    .select('id')
+    .single()
+
+  if (insertError || !newDigest) {
+    console.error('[DailyAnalysis] Failed to save digest:', insertError)
+    return { success: false, error: `Failed to save digest: ${insertError?.message}` }
+  }
+
+  console.log(`[DailyAnalysis] Saved digest ${newDigest.id}`)
+
+  // Step 3: Run synthesis pipeline
+  console.log('[DailyAnalysis] Starting synthesis pipeline...')
+  try {
+    const synthResult = await runSynthesisPipeline(newDigest.id)
+    console.log(`[DailyAnalysis] Synthesis complete: ${synthResult.synthesesDeveloped} syntheses created`)
+
+    return {
+      success: true,
+      digestId: newDigest.id,
+      synthesesCreated: synthResult.synthesesDeveloped,
+    }
+  } catch (synthError) {
+    console.error('[DailyAnalysis] Synthesis failed:', synthError)
+    // Still return success for digest creation
+    return {
+      success: true,
+      digestId: newDigest.id,
+      synthesesCreated: 0,
+      error: `Synthesis failed: ${synthError instanceof Error ? synthError.message : 'Unknown'}`,
+    }
+  }
 }

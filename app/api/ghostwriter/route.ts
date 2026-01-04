@@ -62,8 +62,12 @@ function extractSubstackInfo(email: string | null): { name: string; url: string 
 }
 
 export async function POST(request: NextRequest) {
+  // Allow authentication via session OR cron secret (for scheduled tasks on Vercel)
   const session = await getSession()
-  if (!session) {
+  const authHeader = request.headers.get('authorization')
+  const cronSecretValid = authHeader === `Bearer ${process.env.CRON_SECRET}`
+
+  if (!session && !cronSecretValid) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
