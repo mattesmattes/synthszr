@@ -119,10 +119,10 @@ export function NewsletterEmail({
           {/* Header with Logo */}
           <Section style={headerSection}>
             <Img
-              src={`${baseUrl}/synthszr-logo.png`}
+              src={`${baseUrl}/icon-192.png`}
               alt="Synthszr"
-              width="120"
-              height="32"
+              width="48"
+              height="48"
               style={logo}
             />
           </Section>
@@ -179,7 +179,7 @@ export function NewsletterEmail({
               <Img
                 src={`${baseUrl}/oh-so-logo.png`}
                 alt="OH-SO"
-                width="80"
+                width="32"
                 height="32"
                 style={footerLogo}
               />
