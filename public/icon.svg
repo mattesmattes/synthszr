@@ -1,12 +1,15 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="180" height="180" rx="37" fill="#CCFF00"/>
-  <text
-    x="90"
-    y="108"
-    font-family="Helvetica, Arial, sans-serif"
-    font-size="72"
-    font-weight="bold"
-    fill="black"
-    text-anchor="middle"
-  >syn</text>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Ebene_1" data-name="Ebene 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32.19 31.13">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #d6fe51;
+      }
+    </style>
+  </defs>
+  <path class="cls-1" d="M7.64.05h16.79c5.42-.41,7.51,1.69,7.11,7.11,0,0,0,16.79,0,16.79.04,3.59-.02,5.43-2.94,6.76-2.24.85-18.17.11-20.96.35-3.59.04-5.43-.02-6.76-2.94C.03,25.88.77,9.94.53,7.16.12,1.73,2.21-.36,7.64.05Z"/>
+  <g>
+    <path d="M4.86,19.7H0c.09,9.95,20.75,8.21,16.72-2.1-2.07-4.3-9.47-1.82-11.18-5.81.41-2.84,6.45-2.21,6.33.79h4.86C16.38,3.43-2.95,5.06.94,14.68c2.08,4.02,9.85,1.91,11.19,5.77-.35,3.68-7.48,2.94-7.27-.75Z"/>
+    <path d="M20.21,7.15v18.59h5.11c.15-5.06-1.81-16.4,6.87-14.17v-4.75c-2.86-.76-5.95,1.13-7.05,3.78h-.07v-3.45h-4.86Z"/>
+  </g>
 </svg>
