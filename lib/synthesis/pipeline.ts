@@ -6,7 +6,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { generateEmbedding, prepareTextForEmbedding } from '@/lib/embeddings/generator'
 import { findSimilarItems, getItemEmbedding, SimilarItem } from './search'
-import { scoreSynthesisCandidates, getTopCandidates, ScoredCandidate } from './score'
+import { scoreSynthesisCandidates, getTopCandidates, ScoredCandidate, SynthesisType } from './score'
 import { developSyntheses, DevelopedSynthesis } from './develop'
 
 export interface SynthesisPipelineResult {
@@ -647,7 +647,7 @@ export async function runSynthesisPipelineWithProgress(
       relevance_score,
       reasoning,
       daily_repo!synthesis_candidates_source_item_id_fkey(id, title, content),
-      related:daily_repo!synthesis_candidates_related_item_id_fkey(id, title, content, collected_at, similarity)
+      related:daily_repo!synthesis_candidates_related_item_id_fkey(id, title, content, collected_at, source_type, source_email)
     `)
     .eq('digest_id', digestId)
 
@@ -664,27 +664,35 @@ export async function runSynthesisPipelineWithProgress(
   }
 
   // Convert DB candidates to ScoredCandidate format
-  const allDbCandidates: ScoredCandidate[] = dbCandidates.map(c => ({
-    sourceItem: {
-      id: c.source_item_id,
-      title: (c.daily_repo as { title: string })?.title || '',
-      content: (c.daily_repo as { content: string })?.content || '',
-    },
-    relatedItem: {
-      id: c.related_item_id,
-      title: (c.related as { title: string })?.title || '',
-      content: (c.related as { content: string })?.content || '',
-      collected_at: (c.related as { collected_at: string })?.collected_at || '',
-      similarity: c.similarity_score,
-    },
-    similarityScore: c.similarity_score,
-    originalityScore: c.originality_score,
-    relevanceScore: c.relevance_score,
-    synthesisType: c.synthesis_type as SynthesisType,
-    reasoning: c.reasoning || '',
-    daysAgo: 0,
-    totalScore: c.originality_score + c.relevance_score,
-  }))
+  type DbRecord = { id?: string; title?: string; content?: string; collected_at?: string; source_type?: string; source_email?: string | null }
+  const allDbCandidates: ScoredCandidate[] = dbCandidates.map(c => {
+    // Supabase returns single object for !inner joins
+    const sourceData = c.daily_repo as DbRecord | null
+    const relatedData = c.related as DbRecord | null
+    return {
+      sourceItem: {
+        id: c.source_item_id,
+        title: sourceData?.title || '',
+        content: sourceData?.content || '',
+      },
+      relatedItem: {
+        id: c.related_item_id,
+        title: relatedData?.title || '',
+        content: relatedData?.content || '',
+        collected_at: relatedData?.collected_at || '',
+        source_type: relatedData?.source_type || 'unknown',
+        source_email: relatedData?.source_email || null,
+        similarity: c.similarity_score,
+      },
+      similarityScore: c.similarity_score,
+      originalityScore: c.originality_score,
+      relevanceScore: c.relevance_score,
+      synthesisType: c.synthesis_type as SynthesisType,
+      reasoning: c.reasoning || '',
+      daysAgo: 0,
+      totalScore: c.originality_score + c.relevance_score,
+    }
+  })
 
   console.log(`[Pipeline] Found ${allDbCandidates.length} total candidates in database`)
 
