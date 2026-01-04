@@ -18,8 +18,8 @@ const spaceMono = Space_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Synthszr — Digital Synthesis",
-  description: "Exploring the intersection of technology, design, and digital synthesis",
+  title: "Synthszr — AI is about Synthesis not Efficiency.",
+  description: "Exploring the intersection of business, design and technology in the age of AI",
   generator: "v0.app",
   icons: {
     icon: "/icon.svg",
