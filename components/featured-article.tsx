@@ -18,7 +18,7 @@ function formatDateWithWeekday(dateString: string): string {
   const day = d.getDate().toString().padStart(2, '0')
   const month = (d.getMonth() + 1).toString().padStart(2, '0')
   const year = d.getFullYear()
-  return `Update vom ${weekday}, den ${day}.${month}.${year}`
+  return `${weekday}, der ${day}.${month}.${year}`
 }
 
 export function FeaturedArticle({ slug, title, excerpt, content, date, createdAt, readTime, category, coverImageUrl }: FeaturedArticleProps) {
