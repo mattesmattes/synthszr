@@ -72,16 +72,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Post ID required' }, { status: 400 })
     }
 
-    // Fetch the post
+    // Fetch the post with cover image
     const { data: post, error: postError } = await supabase
       .from('generated_posts')
-      .select('*')
+      .select('*, post_images!cover_image_id(image_url)')
       .eq('id', postId)
       .single()
 
     if (postError || !post) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
+
+    // Extract cover image URL
+    const coverImageUrl = (post.post_images as { image_url?: string } | null)?.image_url || null
 
     // Fetch email template settings
     const { data: templateSettings } = await supabase
@@ -97,7 +100,8 @@ export async function POST(request: NextRequest) {
     // Apply template variables
     const subject = subjectTemplate.replace(/\{\{title\}\}/g, post.title)
     const previewText = post.excerpt || ''
-    const postUrl = `${BASE_URL}/blog/${post.slug}`
+    const postUrl = `${BASE_URL}/posts/${post.slug}`
+    const postDate = post.created_at
 
     // If testEmail, send only to that address
     if (testEmail) {
@@ -109,6 +113,8 @@ export async function POST(request: NextRequest) {
           postUrl,
           unsubscribeUrl: `${BASE_URL}/newsletter/unsubscribe?id=test`,
           footerText,
+          coverImageUrl,
+          postDate,
         })
       )
 
@@ -148,6 +154,8 @@ export async function POST(request: NextRequest) {
           postUrl,
           unsubscribeUrl,
           footerText,
+          coverImageUrl,
+          postDate,
         })
       )
 
@@ -186,24 +194,26 @@ export async function POST(request: NextRequest) {
 
 // Convert post content to email-friendly HTML
 function generateEmailContent(post: { content?: unknown; excerpt?: string }): string {
-  let content = post.content
+  const rawContent = post.content
 
   // If content is a JSON string, parse it first
-  if (typeof content === 'string') {
+  if (typeof rawContent === 'string') {
     try {
-      const parsed = JSON.parse(content)
+      const parsed = JSON.parse(rawContent)
       if (parsed && typeof parsed === 'object' && parsed.type === 'doc') {
-        content = parsed
+        return convertTiptapToHtml(parsed as TiptapDoc)
       }
     } catch {
       // Not JSON, might be HTML string - use as is
-      return content
+      return rawContent
     }
+    // If we couldn't parse it and it's a string, return as is
+    return rawContent
   }
 
-  // If content is TipTap JSON, convert to basic HTML
-  if (content && typeof content === 'object') {
-    return convertTiptapToHtml(content as TiptapDoc)
+  // If content is TipTap JSON object, convert to basic HTML
+  if (rawContent && typeof rawContent === 'object') {
+    return convertTiptapToHtml(rawContent as TiptapDoc)
   }
 
   // Fallback to excerpt
