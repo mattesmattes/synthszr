@@ -33,11 +33,16 @@ export default function AdminWhyPage() {
         .single()
 
       if (data) {
+        console.log('[Why Load] Loaded page:', data.id)
+        console.log('[Why Load] Title:', data.title)
+        console.log('[Why Load] Content:', JSON.stringify(data.content).slice(0, 100))
         setPage(data)
         setTitle(data.title)
         setContent(data.content)
       } else if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching page:', error)
+        console.error('[Why Load] Error fetching page:', error)
+      } else {
+        console.log('[Why Load] No existing page found, will create new')
       }
       setLoading(false)
     }
@@ -63,13 +68,18 @@ export default function AdminWhyPage() {
 
     let error = null
     if (page) {
-      console.log('[Why Save] Updating existing page...')
+      console.log('[Why Save] Updating existing page with ID:', page.id)
       const result = await supabase
         .from('static_pages')
         .update(pageData)
         .eq('id', page.id)
+        .select()
       error = result.error
-      console.log('[Why Save] Update result:', error ? 'FAILED' : 'OK', error?.message)
+      const updatedCount = result.data?.length || 0
+      console.log('[Why Save] Update result:', error ? 'FAILED' : 'OK', 'Updated rows:', updatedCount, error?.message)
+      if (updatedCount === 0 && !error) {
+        console.log('[Why Save] WARNING: No rows updated! ID mismatch?')
+      }
     } else {
       console.log('[Why Save] Inserting new page...')
       const result = await supabase

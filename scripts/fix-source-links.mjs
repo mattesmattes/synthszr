@@ -25,92 +25,50 @@ async function fixPosts() {
     if (!content?.content) continue
 
     let modified = false
-    const collectedLinks = []
 
-    // Process each node - collect links and remove from paragraphs
+    // Remove any "Quellen" section that was added previously
+    const quellenIndex = content.content.findIndex(node =>
+      node.type === 'heading' &&
+      node.content?.[0]?.text === 'Quellen'
+    )
+    if (quellenIndex > -1) {
+      // Remove Quellen heading and all following paragraphs with → links
+      let removeCount = 1
+      for (let i = quellenIndex + 1; i < content.content.length; i++) {
+        const node = content.content[i]
+        if (node.type === 'paragraph' && node.content?.[0]?.text === '→ ') {
+          removeCount++
+        } else {
+          break
+        }
+      }
+      content.content.splice(quellenIndex, removeCount)
+      modified = true
+      console.log(`  Removed Quellen section from: ${post.title.slice(0, 40)}`)
+    }
+
+    // Now ensure each paragraph with a link has the → prefix
     content.content.forEach((node) => {
-      if (node.type === 'paragraph' && node.content && node.content.length >= 1) {
-        // Find link items at the end of paragraph
-        const newContent = []
+      if (node.type === 'paragraph' && node.content && node.content.length >= 2) {
+        const lastItem = node.content[node.content.length - 1]
+        const secondLastItem = node.content[node.content.length - 2]
 
-        for (let i = 0; i < node.content.length; i++) {
-          const item = node.content[i]
-          const isLink = item.marks?.some(m => m.type === 'link')
+        // Check if last item is a link
+        if (lastItem.marks?.some(m => m.type === 'link')) {
+          const prevText = secondLastItem?.text || ''
 
-          if (isLink) {
-            const linkMark = item.marks.find(m => m.type === 'link')
-            const url = linkMark?.attrs?.href
-            const text = item.text
-
-            // Collect the link
-            if (url && text && !text.includes('Synthszr Take') && !text.includes('Mattes')) {
-              collectedLinks.push({ text, url })
+          // Add → if not already there
+          if (!prevText.endsWith('→ ') && !prevText.endsWith('→')) {
+            if (secondLastItem && secondLastItem.text) {
+              secondLastItem.text = secondLastItem.text.trimEnd() + ' → '
               modified = true
-
-              // Remove trailing " → " from previous text item
-              if (newContent.length > 0) {
-                const lastItem = newContent[newContent.length - 1]
-                if (lastItem.text && lastItem.text.endsWith(' → ')) {
-                  lastItem.text = lastItem.text.slice(0, -3).trimEnd()
-                }
-              }
-              continue // Skip adding this link
             }
           }
-
-          newContent.push(item)
         }
-
-        node.content = newContent
       }
     })
 
-    // Add links section at the end if we collected any
-    if (collectedLinks.length > 0) {
-      // Remove duplicates
-      const uniqueLinks = []
-      const seen = new Set()
-      for (const link of collectedLinks) {
-        const key = link.url
-        if (!seen.has(key)) {
-          seen.add(key)
-          uniqueLinks.push(link)
-        }
-      }
-
-      // Add a divider heading
-      content.content.push({
-        type: 'heading',
-        attrs: { level: 3 },
-        content: [{ type: 'text', text: 'Quellen' }]
-      })
-
-      // Add each link as a paragraph
-      for (const link of uniqueLinks) {
-        content.content.push({
-          type: 'paragraph',
-          content: [
-            { type: 'text', text: '→ ' },
-            {
-              type: 'text',
-              text: link.text,
-              marks: [{
-                type: 'link',
-                attrs: {
-                  href: link.url,
-                  target: '_blank',
-                  rel: 'noopener noreferrer nofollow',
-                  class: null
-                }
-              }]
-            }
-          ]
-        })
-      }
-    }
-
     if (modified) {
-      // Update the post
       const { error: updateError } = await supabase
         .from('generated_posts')
         .update({ content })
@@ -119,7 +77,7 @@ async function fixPosts() {
       if (updateError) {
         console.error(`Error updating ${post.title}:`, updateError)
       } else {
-        console.log(`✓ Fixed: ${post.title.slice(0, 50)} (${collectedLinks.length} links moved)`)
+        console.log(`✓ Fixed: ${post.title.slice(0, 50)}`)
         fixedCount++
       }
     }
