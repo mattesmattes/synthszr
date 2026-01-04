@@ -13,6 +13,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from('synthesis_prompts')
       .select('*')
+      .eq('is_archived', false)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -140,9 +141,11 @@ export async function DELETE(request: NextRequest) {
     }
 
     const supabase = await createClient()
+
+    // Archive instead of delete
     const { error } = await supabase
       .from('synthesis_prompts')
-      .delete()
+      .update({ is_archived: true, is_active: false })
       .eq('id', id)
 
     if (error) throw error
