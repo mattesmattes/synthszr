@@ -393,7 +393,7 @@ export default function SettingsPage() {
                 <div className="space-y-3 pb-4 border-b">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-base">Tägliche Analyse</Label>
+                      <Label className="text-base">News & Synthese Erstellung</Label>
                       <p className="text-sm text-muted-foreground">
                         Wann soll der Digest generiert werden?
                       </p>
