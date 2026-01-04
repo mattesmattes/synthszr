@@ -121,6 +121,7 @@ export default async function Page() {
             <FeaturedArticle
               slug={featuredPost.slug}
               title={featuredPost.title}
+              excerpt={featuredPost.excerpt}
               content={featuredPost.content}
               date={formatDateFull(featuredPost.created_at)}
               createdAt={featuredPost.created_at}

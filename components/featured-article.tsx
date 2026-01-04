@@ -3,6 +3,7 @@ import { TiptapRenderer } from "./tiptap-renderer"
 interface FeaturedArticleProps {
   slug: string
   title: string
+  excerpt?: string | null
   content: Record<string, unknown>
   date: string
   createdAt: string
@@ -20,7 +21,7 @@ function formatDateWithWeekday(dateString: string): string {
   return `Update vom ${weekday}, den ${day}.${month}.${year}`
 }
 
-export function FeaturedArticle({ slug, title, content, date, createdAt, readTime, category, coverImageUrl }: FeaturedArticleProps) {
+export function FeaturedArticle({ slug, title, excerpt, content, date, createdAt, readTime, category, coverImageUrl }: FeaturedArticleProps) {
   return (
     <article className="mb-16 border-b border-border pb-16">
       {coverImageUrl && (
@@ -50,10 +51,16 @@ export function FeaturedArticle({ slug, title, content, date, createdAt, readTim
       </div>
 
       <a href={`/posts/${slug}`} className="group">
-        <h2 className="mb-6 text-3xl font-bold tracking-tight transition-colors group-hover:text-accent md:text-xl lg:text-2xl">
+        <h2 className="mb-3 text-3xl font-bold tracking-tight transition-colors group-hover:text-accent md:text-xl lg:text-2xl">
           {title}
         </h2>
       </a>
+
+      {excerpt && (
+        <p className="mb-6 text-lg text-muted-foreground leading-relaxed">
+          {excerpt}
+        </p>
+      )}
 
       <div className="prose-article">
         <TiptapRenderer content={content} />
