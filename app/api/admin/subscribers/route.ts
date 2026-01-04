@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
+  const search = searchParams.get('search')
   const page = parseInt(searchParams.get('page') || '1')
   const limit = parseInt(searchParams.get('limit') || '50')
   const offset = (page - 1) * limit
@@ -40,6 +41,10 @@ export async function GET(request: NextRequest) {
 
     if (status && status !== 'all') {
       query = query.eq('status', status)
+    }
+
+    if (search) {
+      query = query.ilike('email', `%${search}%`)
     }
 
     const { data, error, count } = await query

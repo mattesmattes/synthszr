@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download } from 'lucide-react'
+import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download, Search } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 interface Subscriber {
   id: string
@@ -37,15 +38,18 @@ export default function SubscribersPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     fetchSubscribers()
-  }, [statusFilter])
+  }, [statusFilter, searchQuery])
 
   async function fetchSubscribers() {
     setLoading(true)
     try {
-      const res = await fetch(`/api/admin/subscribers?status=${statusFilter}`)
+      const params = new URLSearchParams({ status: statusFilter })
+      if (searchQuery) params.set('search', searchQuery)
+      const res = await fetch(`/api/admin/subscribers?${params}`)
       if (res.ok) {
         const json = await res.json()
         setData(json)
@@ -173,6 +177,18 @@ export default function SubscribersPage() {
           </Card>
         </div>
       )}
+
+      {/* Search */}
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          type="text"
+          placeholder="E-Mail suchen..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 h-8 text-sm"
+        />
+      </div>
 
       {/* Filter */}
       <div className="flex gap-1 mb-4">
