@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, type AIModel } from '@/lib/claude/ghostwriter'
 import { getSynthesesForDigest } from '@/lib/synthesis/pipeline'
 
-const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro']
+const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview']
 
 // Canonical URLs for newsletter sources that may not have direct article URLs
 const NEWSLETTER_CANONICAL_URLS: Record<string, string> = {

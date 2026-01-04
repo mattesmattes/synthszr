@@ -70,10 +70,11 @@ interface ArticleMetadata {
   slug: string
 }
 
-type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro'
+type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro' | 'gemini-3-pro-preview'
 
 const AI_MODELS: { value: AIModel; label: string; description: string }[] = [
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Schnell, großer Kontext (1M+ Token)' },
+  { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview', description: 'Neuestes Gemini, experimentell' },
   { value: 'claude-sonnet-4', label: 'Claude Sonnet 4', description: 'Ausgewogen, gute Qualität' },
   { value: 'claude-opus-4', label: 'Claude Opus 4', description: 'Höchste Qualität, langsamer' },
 ]

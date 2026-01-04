@@ -3,12 +3,13 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
-export type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro'
+export type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro' | 'gemini-3-pro-preview'
 
 export const AI_MODEL_LABELS: Record<AIModel, string> = {
   'claude-opus-4': 'Claude Opus 4',
   'claude-sonnet-4': 'Claude Sonnet 4',
   'gemini-2.5-pro': 'Gemini 2.5 Pro',
+  'gemini-3-pro-preview': 'Gemini 3 Pro Preview',
 }
 
 // Minimaler System-Prompt - nur für Parsing-Anforderungen
@@ -38,19 +39,22 @@ export async function* streamGhostwriter(
 
   console.log(`[Ghostwriter] Using model: ${model}`)
 
-  if (model === 'gemini-2.5-pro') {
-    yield* streamGemini(userMessage)
+  if (model === 'gemini-2.5-pro' || model === 'gemini-3-pro-preview') {
+    yield* streamGemini(userMessage, model)
   } else {
     yield* streamClaude(userMessage, model)
   }
 }
 
 /**
- * Stream from Gemini 2.5 Pro
+ * Stream from Gemini models
  */
-async function* streamGemini(userMessage: string): AsyncGenerator<string, void, unknown> {
+async function* streamGemini(
+  userMessage: string,
+  modelId: 'gemini-2.5-pro' | 'gemini-3-pro-preview'
+): AsyncGenerator<string, void, unknown> {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-pro',
+    model: modelId,
     systemInstruction: SYSTEM_PROMPT,
   })
 
