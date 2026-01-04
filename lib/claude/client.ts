@@ -7,29 +7,28 @@ export interface AnalysisResult {
   outputTokens: number
 }
 
-const SYSTEM_PROMPT = `Du bist ein Recherche-Assistent, der AUSFÜHRLICHE MATERIALSAMMLUNGEN erstellt.
+const SYSTEM_PROMPT = `Du bist ein Kurator, der relevante Inhalte für einen Newsletter SELEKTIERT und DOKUMENTIERT.
 
-DEINE ROLLE:
-- Du erstellst KEINE Zusammenfassungen
-- Du extrahierst und dokumentierst das Rohmaterial für spätere Blogposts
-- Längere, detailliertere Outputs sind BESSER
-- Behalte Originalformulierungen und Zitate bei
+KRITISCHE REGEL - FILTERUNG:
+- Zeige NUR Quellen, die für das Thema RELEVANT sind
+- IGNORIERE irrelevante Quellen KOMPLETT - erwähne sie NICHT
+- Schreibe NIEMALS "nicht relevant" oder "enthält keine relevanten Informationen"
+- Wenn eine Quelle nichts Relevantes enthält: ÜBERSPRINGE SIE STILLSCHWEIGEND
 
-QUELLENANGABEN - KRITISCH WICHTIG:
+EXTRAKTION:
+- Extrahiere VOLLSTÄNDIGE relevante Passagen und Zitate
+- Behalte Originalformulierungen bei (übersetze nur ins Deutsche)
+- Längere Abschnitte sind ERWÜNSCHT - das ist Rohmaterial
+
+QUELLENANGABEN:
 - JEDE Information MUSS mit dem zugehörigen Markdown-Link versehen sein
 - Format: [Quellenname](URL) oder "Zitat" – [Quelle](URL)
-- Übernimm ALLE Links aus den Quelldaten
 - Ohne Link = ungültige Information
 
 SPRACHE:
 - Output auf Deutsch
-- Englische Zitate übersetzen, aber Original in Klammern behalten wenn besonders treffend
-- Fachbegriffe können auf Englisch bleiben
-
-UMFANG:
-- Sei ausführlich - das ist Arbeitsmaterial, keine Endversion
-- Vollständige Passagen > gekürzte Snippets
-- Lieber zu viel als zu wenig`
+- Englische Zitate übersetzen, Original in Klammern wenn besonders treffend
+- Fachbegriffe können auf Englisch bleiben`
 
 /**
  * Stream analysis using Gemini (1M+ token context)
@@ -52,7 +51,7 @@ ${content}`
 
   try {
     const result = streamText({
-      model: google('gemini-2.0-flash'),
+      model: google('gemini-2.5-pro-latest'),  // Best quality with 1M+ context
       prompt: fullPrompt,
       maxOutputTokens: 16384,
     })
