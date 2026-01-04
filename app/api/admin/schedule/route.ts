@@ -17,6 +17,11 @@ export interface ScheduleConfig {
     hour: number
     minute: number
   }
+  newsletterSend?: {
+    enabled: boolean
+    hour: number
+    minute: number
+  }
 }
 
 const DEFAULT_SCHEDULE: ScheduleConfig = {
@@ -33,6 +38,11 @@ const DEFAULT_SCHEDULE: ScheduleConfig = {
     enabled: false,
     hour: 9,
     minute: 0,
+  },
+  newsletterSend: {
+    enabled: false,
+    hour: 9,
+    minute: 30,
   },
 }
 

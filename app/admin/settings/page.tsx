@@ -33,6 +33,11 @@ interface ScheduleConfig {
     hour: number
     minute: number
   }
+  newsletterSend: {
+    enabled: boolean
+    hour: number
+    minute: number
+  }
 }
 
 const DEFAULT_SCHEDULE: ScheduleConfig = {
@@ -49,6 +54,11 @@ const DEFAULT_SCHEDULE: ScheduleConfig = {
     enabled: false,
     hour: 9,
     minute: 0,
+  },
+  newsletterSend: {
+    enabled: false,
+    hour: 9,
+    minute: 30,
   },
 }
 
@@ -124,6 +134,10 @@ export default function SettingsPage() {
             ...data.postGeneration,
             hour: utcToBerlin(data.postGeneration.hour),
           },
+          newsletterSend: data.newsletterSend ? {
+            ...data.newsletterSend,
+            hour: utcToBerlin(data.newsletterSend.hour),
+          } : DEFAULT_SCHEDULE.newsletterSend,
         })
       }
     } catch (error) {
@@ -150,6 +164,10 @@ export default function SettingsPage() {
         postGeneration: {
           ...schedule.postGeneration,
           hour: berlinToUtc(schedule.postGeneration.hour),
+        },
+        newsletterSend: {
+          ...schedule.newsletterSend,
+          hour: berlinToUtc(schedule.newsletterSend.hour),
         },
       }
       const response = await fetch('/api/admin/schedule', {
@@ -453,6 +471,73 @@ export default function SettingsPage() {
                           setSchedule({
                             ...schedule,
                             postGeneration: { ...schedule.postGeneration, minute: parseInt(value) },
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MINUTES.map((minute) => (
+                            <SelectItem key={minute} value={minute.toString()}>
+                              {minute.toString().padStart(2, '0')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-sm text-muted-foreground">Uhr (MEZ)</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Newsletter Send */}
+                <div className="space-y-3 pb-4 border-b">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base flex items-center gap-2">
+                        <Mail className="h-4 w-4" />
+                        Newsletter-Versand
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Wann soll der Newsletter an Subscriber versendet werden?
+                      </p>
+                    </div>
+                    <Switch
+                      checked={schedule.newsletterSend.enabled}
+                      onCheckedChange={(enabled) =>
+                        setSchedule({ ...schedule, newsletterSend: { ...schedule.newsletterSend, enabled } })
+                      }
+                    />
+                  </div>
+                  {schedule.newsletterSend.enabled && (
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={schedule.newsletterSend.hour.toString()}
+                        onValueChange={(value) =>
+                          setSchedule({
+                            ...schedule,
+                            newsletterSend: { ...schedule.newsletterSend, hour: parseInt(value) },
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {HOURS.map((hour) => (
+                            <SelectItem key={hour} value={hour.toString()}>
+                              {hour.toString().padStart(2, '0')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-muted-foreground">:</span>
+                      <Select
+                        value={schedule.newsletterSend.minute.toString()}
+                        onValueChange={(value) =>
+                          setSchedule({
+                            ...schedule,
+                            newsletterSend: { ...schedule.newsletterSend, minute: parseInt(value) },
                           })
                         }
                       >
