@@ -119,7 +119,7 @@ export function NewsletterEmail({
           {/* Header with Logo */}
           <Section style={headerSection}>
             <Img
-              src={`${baseUrl}/synthszr-logo.svg`}
+              src={`${baseUrl}/synthszr-logo.png`}
               alt="Synthszr"
               width="120"
               height="32"
@@ -175,13 +175,15 @@ export function NewsletterEmail({
 
           {/* Footer */}
           <Section style={footerSection}>
-            <Img
-              src={`${baseUrl}/oh-so-logo.svg`}
-              alt="OH-SO"
-              width="80"
-              height="32"
-              style={footerLogo}
-            />
+            <Link href="https://oh-so.com">
+              <Img
+                src={`${baseUrl}/oh-so-logo.png`}
+                alt="OH-SO"
+                width="80"
+                height="32"
+                style={footerLogo}
+              />
+            </Link>
             <Text style={footer}>
               {footerText}
             </Text>
