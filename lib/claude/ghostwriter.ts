@@ -1,11 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
 /**
- * Stream ghostwriter blog post generation
+ * Stream ghostwriter blog post generation using Gemini 2.5 Pro
  */
 export async function* streamGhostwriter(
   digestContent: string,
@@ -26,21 +24,19 @@ CATEGORY: [AI & Tech, Marketing, Design, Business, Code, oder Synthese]
 
 Danach folgt der Artikel-Content in Markdown.`
 
-  const stream = await anthropic.messages.stream({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 8192,
-    messages: [
-      {
-        role: 'user',
-        content: `${prompt}\n\n---\n\nHier ist der Digest, aus dem du einen Blogartikel erstellen sollst:\n\n${digestContent}`,
-      },
-    ],
-    system: systemPrompt,
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-pro',
+    systemInstruction: systemPrompt,
   })
 
-  for await (const event of stream) {
-    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-      yield event.delta.text
+  const userMessage = `${prompt}\n\n---\n\nHier ist der Digest, aus dem du einen Blogartikel erstellen sollst:\n\n${digestContent}`
+
+  const result = await model.generateContentStream(userMessage)
+
+  for await (const chunk of result.stream) {
+    const text = chunk.text()
+    if (text) {
+      yield text
     }
   }
 }
