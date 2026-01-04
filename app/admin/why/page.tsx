@@ -56,49 +56,40 @@ export default function AdminWhyPage() {
 
     console.log('[Why Save] Starting save...')
     console.log('[Why Save] Title:', title)
-    console.log('[Why Save] Content:', JSON.stringify(content).slice(0, 200))
-    console.log('[Why Save] Existing page ID:', page?.id)
+    console.log('[Why Save] Content keys:', Object.keys(content))
+    console.log('[Why Save] Content:', JSON.stringify(content).slice(0, 300))
 
-    const pageData = {
-      slug: 'why',
-      title,
-      content,
-      updated_at: new Date().toISOString(),
+    // Validate content
+    if (!content || Object.keys(content).length === 0) {
+      alert('Fehler: Inhalt ist leer!')
+      setSaving(false)
+      return
     }
 
-    let error = null
-    if (page) {
-      console.log('[Why Save] Updating existing page with ID:', page.id)
-      const result = await supabase
-        .from('static_pages')
-        .update(pageData)
-        .eq('id', page.id)
-        .select()
-      error = result.error
-      const updatedCount = result.data?.length || 0
-      console.log('[Why Save] Update result:', error ? 'FAILED' : 'OK', 'Updated rows:', updatedCount, error?.message)
-      if (updatedCount === 0 && !error) {
-        console.log('[Why Save] WARNING: No rows updated! ID mismatch?')
-      }
-    } else {
-      console.log('[Why Save] Inserting new page...')
-      const result = await supabase
-        .from('static_pages')
-        .insert(pageData)
-        .select()
-      error = result.error
-      if (result.data && result.data[0]) {
-        setPage(result.data[0])
-      }
-      console.log('[Why Save] Insert result:', error ? 'FAILED' : 'OK', error?.message)
-    }
+    // Use upsert with slug as the unique key
+    const { data, error } = await supabase
+      .from('static_pages')
+      .upsert(
+        {
+          slug: 'why',
+          title: title || 'Why',
+          content: content,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'slug' }
+      )
+      .select()
+
+    console.log('[Why Save] Upsert result:', error ? 'FAILED' : 'OK')
+    console.log('[Why Save] Returned data:', data)
+    if (error) console.log('[Why Save] Error:', error.message)
 
     if (error) {
-      console.error('[Why Save] Error:', error)
       alert(`Fehler beim Speichern: ${error.message}`)
     } else {
-      console.log('[Why Save] Success!')
-      // Visual feedback
+      if (data && data[0]) {
+        setPage(data[0])
+      }
       alert('Gespeichert!')
     }
 
