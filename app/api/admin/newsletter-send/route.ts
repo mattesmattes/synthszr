@@ -186,14 +186,24 @@ export async function POST(request: NextRequest) {
 
 // Convert post content to email-friendly HTML
 function generateEmailContent(post: { content?: unknown; excerpt?: string }): string {
-  // If content is TipTap JSON, convert to basic HTML
-  if (post.content && typeof post.content === 'object') {
-    return convertTiptapToHtml(post.content as TiptapDoc)
+  let content = post.content
+
+  // If content is a JSON string, parse it first
+  if (typeof content === 'string') {
+    try {
+      const parsed = JSON.parse(content)
+      if (parsed && typeof parsed === 'object' && parsed.type === 'doc') {
+        content = parsed
+      }
+    } catch {
+      // Not JSON, might be HTML string - use as is
+      return content
+    }
   }
 
-  // If it's already a string, use it
-  if (typeof post.content === 'string') {
-    return post.content
+  // If content is TipTap JSON, convert to basic HTML
+  if (content && typeof content === 'object') {
+    return convertTiptapToHtml(content as TiptapDoc)
   }
 
   // Fallback to excerpt
