@@ -5,37 +5,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
-// Source link patterns to detect (names of publications)
-const SOURCE_PATTERNS = [
-  'Exponential View', 'Tech Brew', 'The Electric', 'How I AI', 'The Algorithmic Bridge',
-  'The Verge', 'TechCrunch', 'Wired', 'Ars Technica', 'MIT Technology Review',
-  'Bloomberg', 'Reuters', 'Financial Times', 'Wall Street Journal', 'New York Times',
-  'Stratechery', 'Benedict Evans', 'Ben Thompson', 'a]16z', 'Andreessen Horowitz',
-  'Hacker News', 'Slashdot', 'The Information', 'Protocol', 'The Register',
-  'ZDNet', 'CNET', 'Engadget', 'Gizmodo', 'Mashable', 'VentureBeat', 'SiliconAngle',
-  'Medium', 'Substack', 'LinkedIn', 'Twitter', 'X.com',
-  // Add newsletter names
-  '.substack.com', '.beehiiv.com', '.ghost.io'
-]
-
-function isSourceLink(text, url) {
-  // Check if this looks like a source attribution link
-  if (!text || !url) return false
-
-  // Check common patterns
-  const lowerText = text.toLowerCase()
-
-  // If it's a very short text at end of paragraph, likely a source
-  if (text.length < 50) {
-    // Check if URL is external
-    if (url.startsWith('http')) {
-      return true
-    }
-  }
-
-  return false
-}
-
 async function fixPosts() {
   const { data: posts, error } = await supabase
     .from('generated_posts')
@@ -56,37 +25,89 @@ async function fixPosts() {
     if (!content?.content) continue
 
     let modified = false
+    const collectedLinks = []
 
-    // Process each node
+    // Process each node - collect links and remove from paragraphs
     content.content.forEach((node) => {
-      if (node.type === 'paragraph' && node.content && node.content.length >= 2) {
-        // Check if last item is a link
-        const lastItem = node.content[node.content.length - 1]
-        const secondLastItem = node.content[node.content.length - 2]
+      if (node.type === 'paragraph' && node.content && node.content.length >= 1) {
+        // Find link items at the end of paragraph
+        const newContent = []
 
-        if (lastItem.marks?.some(m => m.type === 'link')) {
-          const linkUrl = lastItem.marks.find(m => m.type === 'link')?.attrs?.href
+        for (let i = 0; i < node.content.length; i++) {
+          const item = node.content[i]
+          const isLink = item.marks?.some(m => m.type === 'link')
 
-          // Check if there's already an arrow before the link
-          const prevText = secondLastItem?.text || ''
-          if (!prevText.endsWith('→ ') && !prevText.endsWith('→') && isSourceLink(lastItem.text, linkUrl)) {
-            // Add arrow before the link
-            if (secondLastItem && secondLastItem.text) {
-              // Add space and arrow to previous text
-              secondLastItem.text = secondLastItem.text.trimEnd() + ' → '
+          if (isLink) {
+            const linkMark = item.marks.find(m => m.type === 'link')
+            const url = linkMark?.attrs?.href
+            const text = item.text
+
+            // Collect the link
+            if (url && text && !text.includes('Synthszr Take') && !text.includes('Mattes')) {
+              collectedLinks.push({ text, url })
               modified = true
-            } else {
-              // Insert a new text node with arrow
-              node.content.splice(node.content.length - 1, 0, {
-                type: 'text',
-                text: '→ '
-              })
-              modified = true
+
+              // Remove trailing " → " from previous text item
+              if (newContent.length > 0) {
+                const lastItem = newContent[newContent.length - 1]
+                if (lastItem.text && lastItem.text.endsWith(' → ')) {
+                  lastItem.text = lastItem.text.slice(0, -3).trimEnd()
+                }
+              }
+              continue // Skip adding this link
             }
           }
+
+          newContent.push(item)
         }
+
+        node.content = newContent
       }
     })
+
+    // Add links section at the end if we collected any
+    if (collectedLinks.length > 0) {
+      // Remove duplicates
+      const uniqueLinks = []
+      const seen = new Set()
+      for (const link of collectedLinks) {
+        const key = link.url
+        if (!seen.has(key)) {
+          seen.add(key)
+          uniqueLinks.push(link)
+        }
+      }
+
+      // Add a divider heading
+      content.content.push({
+        type: 'heading',
+        attrs: { level: 3 },
+        content: [{ type: 'text', text: 'Quellen' }]
+      })
+
+      // Add each link as a paragraph
+      for (const link of uniqueLinks) {
+        content.content.push({
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: '→ ' },
+            {
+              type: 'text',
+              text: link.text,
+              marks: [{
+                type: 'link',
+                attrs: {
+                  href: link.url,
+                  target: '_blank',
+                  rel: 'noopener noreferrer nofollow',
+                  class: null
+                }
+              }]
+            }
+          ]
+        })
+      }
+    }
 
     if (modified) {
       // Update the post
@@ -98,7 +119,7 @@ async function fixPosts() {
       if (updateError) {
         console.error(`Error updating ${post.title}:`, updateError)
       } else {
-        console.log(`✓ Fixed: ${post.title.slice(0, 50)}`)
+        console.log(`✓ Fixed: ${post.title.slice(0, 50)} (${collectedLinks.length} links moved)`)
         fixedCount++
       }
     }
