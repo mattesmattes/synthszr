@@ -95,9 +95,9 @@ interface GeneratedPost {
 type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro'
 
 const AI_MODEL_LABELS: Record<AIModel, { label: string; color: string }> = {
-  'claude-opus-4': { label: 'Opus 4', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' },
-  'claude-sonnet-4': { label: 'Sonnet 4', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
-  'gemini-2.5-pro': { label: 'Gemini', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' },
+  'claude-opus-4': { label: 'Claude Opus 4', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' },
+  'claude-sonnet-4': { label: 'Claude Sonnet 4', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
+  'gemini-2.5-pro': { label: 'Gemini 2.5 Pro', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' },
 }
 
 const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese']
