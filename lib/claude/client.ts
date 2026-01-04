@@ -51,7 +51,7 @@ ${content}`
 
   try {
     const result = streamText({
-      model: google('gemini-2.5-pro-latest'),  // Best quality with 1M+ context
+      model: google('gemini-2.5-pro'),  // Best quality with 1M+ context
       prompt: fullPrompt,
       maxOutputTokens: 16384,
     })
