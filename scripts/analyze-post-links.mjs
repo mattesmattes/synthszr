@@ -26,7 +26,10 @@ async function analyze() {
           console.log(`\nPara ${idx}:`)
           node.content.forEach((item, i) => {
             const isLink = item.marks?.some(m => m.type === 'link')
-            console.log(`  [${i}] ${isLink ? 'LINK' : 'TEXT'}: "${item.text?.slice(0, 60) || ''}"`)
+            // Show full text, including trailing characters
+            const text = item.text || ''
+            const displayText = text.length > 80 ? text.slice(0, 40) + '...' + text.slice(-20) : text
+            console.log(`  [${i}] ${isLink ? 'LINK' : 'TEXT'}: "${displayText}"`)
           })
         }
       }
