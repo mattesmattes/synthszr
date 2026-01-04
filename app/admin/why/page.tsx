@@ -68,22 +68,19 @@ export default function AdminWhyPage() {
         .from('static_pages')
         .update(pageData)
         .eq('id', page.id)
-        .select()
-        .single()
       error = result.error
-      console.log('[Why Save] Update result:', result.data ? 'OK' : 'FAILED', result.error?.message)
+      console.log('[Why Save] Update result:', error ? 'FAILED' : 'OK', error?.message)
     } else {
       console.log('[Why Save] Inserting new page...')
       const result = await supabase
         .from('static_pages')
         .insert(pageData)
         .select()
-        .single()
       error = result.error
-      if (result.data) {
-        setPage(result.data)
+      if (result.data && result.data[0]) {
+        setPage(result.data[0])
       }
-      console.log('[Why Save] Insert result:', result.data ? 'OK' : 'FAILED', result.error?.message)
+      console.log('[Why Save] Insert result:', error ? 'FAILED' : 'OK', error?.message)
     }
 
     if (error) {
