@@ -49,6 +49,11 @@ export default function AdminWhyPage() {
     setSaving(true)
     const supabase = createClient()
 
+    console.log('[Why Save] Starting save...')
+    console.log('[Why Save] Title:', title)
+    console.log('[Why Save] Content:', JSON.stringify(content).slice(0, 200))
+    console.log('[Why Save] Existing page ID:', page?.id)
+
     const pageData = {
       slug: 'why',
       title,
@@ -58,12 +63,17 @@ export default function AdminWhyPage() {
 
     let error = null
     if (page) {
+      console.log('[Why Save] Updating existing page...')
       const result = await supabase
         .from('static_pages')
         .update(pageData)
         .eq('id', page.id)
+        .select()
+        .single()
       error = result.error
+      console.log('[Why Save] Update result:', result.data ? 'OK' : 'FAILED', result.error?.message)
     } else {
+      console.log('[Why Save] Inserting new page...')
       const result = await supabase
         .from('static_pages')
         .insert(pageData)
@@ -73,11 +83,16 @@ export default function AdminWhyPage() {
       if (result.data) {
         setPage(result.data)
       }
+      console.log('[Why Save] Insert result:', result.data ? 'OK' : 'FAILED', result.error?.message)
     }
 
     if (error) {
-      console.error('Error saving:', error)
+      console.error('[Why Save] Error:', error)
       alert(`Fehler beim Speichern: ${error.message}`)
+    } else {
+      console.log('[Why Save] Success!')
+      // Visual feedback
+      alert('Gespeichert!')
     }
 
     setSaving(false)
