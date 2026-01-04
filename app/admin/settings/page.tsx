@@ -459,7 +459,7 @@ export default function SettingsPage() {
                     <div>
                       <Label className="text-base flex items-center gap-2">
                         <Sparkles className="h-4 w-4" />
-                        Automatische Blogpost-Generierung
+                        AI Artikel erstellen
                       </Label>
                       <p className="text-sm text-muted-foreground">
                         Wann soll aus dem Digest ein Blogpost mit Bildern generiert werden?
