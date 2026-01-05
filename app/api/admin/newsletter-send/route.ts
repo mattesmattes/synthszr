@@ -144,34 +144,58 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Send to all subscribers using Resend batch
-    const emailPromises = subscribers.map(async (subscriber) => {
-      const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
-      const html = await render(
-        NewsletterEmail({
-          subject,
-          previewText,
-          content: generateEmailContent(post),
-          postUrl,
-          unsubscribeUrl,
-          footerText,
-          coverImageUrl,
-          postDate,
-          baseUrl: BASE_URL,
+    // Send to all subscribers using Resend batch API (max 100 per batch)
+    const emailContent = generateEmailContent(post)
+    let successCount = 0
+    let failCount = 0
+
+    // Process in batches of 100 (Resend batch limit)
+    const BATCH_SIZE = 100
+    for (let i = 0; i < subscribers.length; i += BATCH_SIZE) {
+      const batch = subscribers.slice(i, i + BATCH_SIZE)
+
+      // Prepare batch emails
+      const batchEmails = await Promise.all(
+        batch.map(async (subscriber) => {
+          const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
+          const html = await render(
+            NewsletterEmail({
+              subject,
+              previewText,
+              content: emailContent,
+              postUrl,
+              unsubscribeUrl,
+              footerText,
+              coverImageUrl,
+              postDate,
+              baseUrl: BASE_URL,
+            })
+          )
+          return {
+            from: FROM_EMAIL,
+            to: subscriber.email,
+            subject,
+            html,
+          }
         })
       )
 
-      return getResend().emails.send({
-        from: FROM_EMAIL,
-        to: subscriber.email,
-        subject,
-        html,
-      })
-    })
+      try {
+        // Use Resend batch API
+        const result = await getResend().batch.send(batchEmails)
+        if (result.data) {
+          successCount += batchEmails.length
+        }
+      } catch (error) {
+        console.error(`Batch ${i / BATCH_SIZE + 1} failed:`, error)
+        failCount += batchEmails.length
+      }
 
-    const results = await Promise.allSettled(emailPromises)
-    const successCount = results.filter(r => r.status === 'fulfilled').length
-    const failCount = results.filter(r => r.status === 'rejected').length
+      // Small delay between batches to avoid rate limits
+      if (i + BATCH_SIZE < subscribers.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+    }
 
     // Log the send
     await supabase.from('newsletter_sends').insert({
