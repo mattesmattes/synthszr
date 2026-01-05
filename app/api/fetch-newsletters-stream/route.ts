@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
           .eq('enabled', true)
 
         if (!sources || sources.length === 0) {
-          send({ type: 'complete', phase: 'done', summary: { newsletters: 0, articles: 0, errors: 0, totalCharacters: 0 } })
+          send({ type: 'complete', phase: 'done', summary: { newsletters: 0, articles: 0, emailNotes: 0, errors: 0, totalCharacters: 0 } })
           controller.close()
           return
         }
