@@ -42,9 +42,48 @@ async function isAdminSession(request: NextRequest): Promise<boolean> {
   }
 }
 
+// Configuration for +dailyrepo email imports
+const EMAIL_NOTE_CONFIG = {
+  senderEmail: 'mattes.schrader@oh-so.com',
+  subjectTag: '+dailyrepo',
+  hoursBack: 24,
+}
+
+/**
+ * Extract plain text from email body for email notes
+ */
+function extractPlainTextFromEmail(htmlBody: string | null, textBody: string | null): string {
+  if (textBody) return textBody.trim()
+  if (!htmlBody) return ''
+
+  return htmlBody
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<\/?(p|div|br|h[1-6]|li|tr)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n\s*\n/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Clean up the subject line by removing the +dailyrepo tag
+ */
+function cleanDailyRepoSubject(subject: string): string {
+  return subject
+    .replace(/\+dailyrepo/gi, '')
+    .replace(/^\s*[-:]\s*/, '')
+    .trim() || 'E-Mail Notiz'
+}
+
 interface ProgressEvent {
-  type: 'start' | 'newsletter' | 'article' | 'complete' | 'error'
-  phase: 'fetching' | 'processing' | 'extracting' | 'done'
+  type: 'start' | 'newsletter' | 'article' | 'email_note' | 'complete' | 'error'
+  phase: 'fetching' | 'processing' | 'extracting' | 'importing_notes' | 'done'
   current?: number
   total?: number
   item?: {
@@ -57,6 +96,7 @@ interface ProgressEvent {
   summary?: {
     newsletters: number
     articles: number
+    emailNotes: number
     errors: number
     totalCharacters: number
   }
@@ -258,6 +298,153 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // ========================================
+        // PHASE 2: Import +dailyrepo email notes
+        // ========================================
+        let processedEmailNotes = 0
+
+        send({
+          type: 'email_note',
+          phase: 'importing_notes',
+          item: { title: 'Suche +dailyrepo E-Mails...', status: 'processing' }
+        })
+
+        try {
+          const emailNotes = await gmailClient.fetchEmailsBySubject(
+            EMAIL_NOTE_CONFIG.senderEmail,
+            EMAIL_NOTE_CONFIG.subjectTag,
+            50,
+            EMAIL_NOTE_CONFIG.hoursBack
+          )
+
+          console.log('[Newsletter Fetch] Found', emailNotes.length, '+dailyrepo emails')
+
+          if (emailNotes.length > 0) {
+            send({
+              type: 'email_note',
+              phase: 'importing_notes',
+              current: 0,
+              total: emailNotes.length,
+              item: { title: `${emailNotes.length} +dailyrepo E-Mails gefunden`, status: 'success' }
+            })
+
+            for (let i = 0; i < emailNotes.length; i++) {
+              const note = emailNotes[i]
+              const cleanedTitle = cleanDailyRepoSubject(note.subject)
+
+              send({
+                type: 'email_note',
+                phase: 'importing_notes',
+                current: i + 1,
+                total: emailNotes.length,
+                item: { title: cleanedTitle, from: note.from, status: 'processing' }
+              })
+
+              try {
+                // Check if already exists
+                const { data: existing } = await supabase
+                  .from('daily_repo')
+                  .select('id')
+                  .eq('source_email', note.from)
+                  .eq('title', cleanedTitle)
+                  .eq('source_type', 'email_note')
+                  .single()
+
+                if (existing) {
+                  if (force) {
+                    await supabase.from('daily_repo').delete().eq('id', existing.id)
+                  } else {
+                    send({
+                      type: 'email_note',
+                      phase: 'importing_notes',
+                      current: i + 1,
+                      total: emailNotes.length,
+                      item: { title: cleanedTitle, from: note.from, status: 'skipped' }
+                    })
+                    continue
+                  }
+                }
+
+                const content = extractPlainTextFromEmail(note.htmlBody, note.textBody)
+
+                if (!content || content.length < 10) {
+                  errors++
+                  send({
+                    type: 'email_note',
+                    phase: 'importing_notes',
+                    current: i + 1,
+                    total: emailNotes.length,
+                    item: { title: cleanedTitle, from: note.from, status: 'error', error: 'Kein Inhalt' }
+                  })
+                  continue
+                }
+
+                const noteDate = targetDate || note.date.toISOString().split('T')[0]
+                const { error: insertError } = await supabase
+                  .from('daily_repo')
+                  .insert({
+                    source_type: 'email_note',
+                    source_email: note.from,
+                    source_url: null,
+                    title: cleanedTitle,
+                    content: content,
+                    newsletter_date: noteDate,
+                  })
+
+                if (insertError) {
+                  throw new Error(insertError.message)
+                }
+
+                processedEmailNotes++
+                totalCharacters += content.length
+                send({
+                  type: 'email_note',
+                  phase: 'importing_notes',
+                  current: i + 1,
+                  total: emailNotes.length,
+                  item: { title: cleanedTitle, from: note.from, status: 'success' }
+                })
+
+              } catch (err) {
+                errors++
+                send({
+                  type: 'email_note',
+                  phase: 'importing_notes',
+                  current: i + 1,
+                  total: emailNotes.length,
+                  item: {
+                    title: cleanedTitle,
+                    from: note.from,
+                    status: 'error',
+                    error: err instanceof Error ? err.message : 'Unbekannter Fehler'
+                  }
+                })
+              }
+            }
+          } else {
+            send({
+              type: 'email_note',
+              phase: 'importing_notes',
+              item: { title: 'Keine +dailyrepo E-Mails gefunden', status: 'skipped' }
+            })
+          }
+        } catch (err) {
+          console.error('[Newsletter Fetch] Error fetching +dailyrepo emails:', err)
+          send({
+            type: 'email_note',
+            phase: 'importing_notes',
+            item: {
+              title: '+dailyrepo Import fehlgeschlagen',
+              status: 'error',
+              error: err instanceof Error ? err.message : 'Unbekannter Fehler'
+            }
+          })
+        }
+
+        // ========================================
+        // PHASE 3: Extract articles from newsletters
+        // ========================================
+
         // Process article links (limit to first 25 for comprehensive coverage)
         const articlesToProcess = articleUrls.slice(0, 25)
 
@@ -415,6 +602,7 @@ export async function POST(request: NextRequest) {
           summary: {
             newsletters: processedNewsletters,
             articles: processedArticles,
+            emailNotes: processedEmailNotes,
             errors,
             totalCharacters
           }

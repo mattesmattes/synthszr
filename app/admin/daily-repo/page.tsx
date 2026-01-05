@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash, Eye, Clock, Trash2, Plus, RefreshCw } from 'lucide-react'
+import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash, Eye, Clock, Trash2, Plus, RefreshCw, StickyNote } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -141,6 +141,7 @@ export default function DailyRepoPage() {
     switch (type) {
       case 'newsletter': return <Mail className="h-3 w-3" />
       case 'article': return <FileText className="h-3 w-3" />
+      case 'email_note': return <StickyNote className="h-3 w-3 text-orange-500" />
       default: return <Link2 className="h-3 w-3" />
     }
   }

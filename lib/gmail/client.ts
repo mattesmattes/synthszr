@@ -209,6 +209,65 @@ export class GmailClient {
   }
 
   /**
+   * Fetch emails by sender and subject pattern
+   * Used for importing emails with specific subject tags like "+dailyrepo"
+   */
+  async fetchEmailsBySubject(
+    senderEmail: string,
+    subjectContains: string,
+    maxResults: number = 50,
+    hoursBack: number = 24
+  ): Promise<EmailMessage[]> {
+    // Build query: from sender with subject containing the pattern
+    // Gmail search: subject:"text" matches subjects containing "text"
+    const afterDate = new Date(Date.now() - hoursBack * 60 * 60 * 1000)
+    const dateStr = afterDate.toISOString().split('T')[0].replace(/-/g, '/')
+
+    // Escape special characters in subject for Gmail query
+    const escapedSubject = subjectContains.replace(/[+]/g, '')
+    const query = `from:${senderEmail} subject:"${escapedSubject}" after:${dateStr}`
+
+    console.log('[Gmail] Fetching emails by subject with query:', query)
+
+    try {
+      const listResponse = await this.gmail.users.messages.list({
+        userId: 'me',
+        q: query,
+        maxResults,
+        includeSpamTrash: false,
+      })
+
+      console.log('[Gmail] Found messages:', listResponse.data.messages?.length || 0)
+
+      const messages = listResponse.data.messages || []
+      const emails: EmailMessage[] = []
+
+      for (const msg of messages) {
+        if (!msg.id) continue
+
+        const fullMessage = await this.gmail.users.messages.get({
+          userId: 'me',
+          id: msg.id,
+          format: 'full',
+        })
+
+        const email = this.parseMessage(fullMessage.data)
+        if (email) {
+          // Double-check subject contains the pattern (case-insensitive)
+          if (email.subject.toLowerCase().includes(subjectContains.toLowerCase())) {
+            emails.push(email)
+          }
+        }
+      }
+
+      return emails
+    } catch (error) {
+      console.error('Error fetching emails by subject:', error)
+      throw error
+    }
+  }
+
+  /**
    * Scan unique senders from the last N days
    * Returns aggregated sender info with email count and sample subjects
    */
