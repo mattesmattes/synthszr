@@ -124,9 +124,9 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
 
         <main className="mx-auto max-w-3xl px-6 py-12 md:py-20">
         <article>
-          {/* Cover Image with centered Logo overlay */}
+          {/* Cover Image with centered Logo overlay - links to home */}
           {post.cover_image_url && (
-            <div className="mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
+            <Link href="/" className="block mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
               <div
                 className="relative aspect-[4/3] md:aspect-[21/9] flex items-center justify-center"
                 style={{
@@ -142,7 +142,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
                   className="h-24 md:h-32 w-auto"
                 />
               </div>
-            </div>
+            </Link>
           )}
 
           <header className="mb-12 border-b border-border pb-8">
