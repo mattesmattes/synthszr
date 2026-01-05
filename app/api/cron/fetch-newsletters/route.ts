@@ -2,11 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { GmailClient } from '@/lib/gmail/client'
 import { parseNewsletterHtml } from '@/lib/email/parser'
 import { extractArticleContent } from '@/lib/scraper/article-extractor'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { jwtVerify } from 'jose'
 
 // Node.js runtime for jsdom compatibility
 export const runtime = 'nodejs'
+
+// Supabase client for cron jobs (no cookies needed)
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
 
 // Vercel Cron protection
 const CRON_SECRET = process.env.CRON_SECRET
@@ -35,7 +43,7 @@ async function isAdminSession(request: NextRequest): Promise<boolean> {
 
 // Shared newsletter processing logic
 async function processNewsletters() {
-  const supabase = await createClient()
+  const supabase = getSupabase()
 
   // Get Gmail tokens (single-user setup)
   const { data: tokenData, error: tokenError } = await supabase

@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { runSynthesisPipeline } from '@/lib/synthesis/pipeline'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes max
+
+// Supabase client for cron jobs (no cookies needed)
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
 
 interface ScheduleConfig {
   newsletterFetch: {
@@ -63,7 +71,7 @@ function isTimeMatch(hour: number, minute: number, currentHour: number, currentM
 }
 
 // Helper to check if we already ran this task today/this hour
-async function hasRunRecently(supabase: Awaited<ReturnType<typeof createClient>>, taskKey: string, withinMinutes: number): Promise<boolean> {
+async function hasRunRecently(supabase: ReturnType<typeof getSupabase>, taskKey: string, withinMinutes: number): Promise<boolean> {
   const { data } = await supabase
     .from('settings')
     .select('value')
@@ -79,7 +87,7 @@ async function hasRunRecently(supabase: Awaited<ReturnType<typeof createClient>>
   return diffMinutes < withinMinutes
 }
 
-async function markTaskRun(supabase: Awaited<ReturnType<typeof createClient>>, taskKey: string) {
+async function markTaskRun(supabase: ReturnType<typeof getSupabase>, taskKey: string) {
   await supabase
     .from('settings')
     .upsert({
@@ -98,7 +106,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const supabase = await createClient()
+  const supabase = getSupabase()
   const now = new Date()
   const currentHour = now.getUTCHours()
   const currentMinute = now.getUTCMinutes()
@@ -247,7 +255,7 @@ export async function GET(request: NextRequest) {
 }
 
 // Generate a blog post from the latest digest
-async function generateDailyPost(supabase: Awaited<ReturnType<typeof createClient>>) {
+async function generateDailyPost(supabase: ReturnType<typeof getSupabase>) {
   // Get the latest digest that doesn't have a generated post yet
   const { data: digest } = await supabase
     .from('daily_digests')
@@ -420,7 +428,7 @@ async function generateDailyPost(supabase: Awaited<ReturnType<typeof createClien
 }
 
 // Run daily analysis, save digest, and trigger synthesis
-async function runDailyAnalysisAndSynthesis(supabase: Awaited<ReturnType<typeof createClient>>): Promise<{
+async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof getSupabase>): Promise<{
   success: boolean
   digestId?: string
   synthesesCreated?: number
