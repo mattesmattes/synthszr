@@ -279,12 +279,26 @@ function renderContent(content?: TiptapNode[]): string {
     if (node.type === 'text') {
       let text = node.text || ''
 
+      // Check if text contains "Synthszr Take:" and style it
+      const synthszrPattern = /(Synthszr Take:?)/gi
+      const hasBoldMark = node.marks?.some(m => m.type === 'bold')
+
+      // If "Synthszr Take:" is not already bold, wrap it with styling
+      if (!hasBoldMark && synthszrPattern.test(text)) {
+        text = text.replace(synthszrPattern, '<strong style="background-color: #CCFF00; padding: 2px 6px;">$1</strong>')
+      }
+
       // Apply marks
       if (node.marks) {
         for (const mark of node.marks) {
           switch (mark.type) {
             case 'bold':
-              text = `<strong>${text}</strong>`
+              // Check if this is "Synthszr Take:" - add background styling
+              if (/synthszr take:?/i.test(text)) {
+                text = `<strong style="background-color: #CCFF00; padding: 2px 6px;">${text}</strong>`
+              } else {
+                text = `<strong>${text}</strong>`
+              }
               break
             case 'italic':
               text = `<em>${text}</em>`

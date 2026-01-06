@@ -367,6 +367,12 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
   const processMattesSyntheseText = useCallback(() => {
     if (!containerRef.current) return
 
+    const synthesePatterns = [
+      /mattes synthese:?/gi,
+      /mattes' synthese:?/gi,
+      /synthszr take:?/gi,
+    ]
+
     const isSyntheseText = (text: string) => {
       const lower = text.toLowerCase()
       return lower.includes('mattes synthese') ||
@@ -391,6 +397,59 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         strong.classList.add('mattes-synthese')
       }
     })
+
+    // Also check for plain text "Synthszr Take:" that's not already in a styled element
+    const walker = document.createTreeWalker(
+      containerRef.current,
+      NodeFilter.SHOW_TEXT,
+      null
+    )
+
+    const nodesToProcess: { node: Text; pattern: RegExp; match: RegExpExecArray }[] = []
+    let textNode: Text | null
+    while ((textNode = walker.nextNode() as Text | null)) {
+      const text = textNode.textContent || ''
+      // Skip if parent is already styled or is a heading
+      const parent = textNode.parentElement
+      if (parent?.classList.contains('mattes-synthese') ||
+          parent?.classList.contains('mattes-synthese-heading') ||
+          parent?.tagName === 'STRONG' ||
+          parent?.tagName === 'B' ||
+          isInsideHeading(textNode)) {
+        continue
+      }
+
+      for (const pattern of synthesePatterns) {
+        pattern.lastIndex = 0
+        const match = pattern.exec(text)
+        if (match) {
+          nodesToProcess.push({ node: textNode, pattern, match })
+          break
+        }
+      }
+    }
+
+    // Process nodes (wrap "Synthszr Take:" in styled span)
+    for (const { node, match } of nodesToProcess) {
+      const text = node.textContent || ''
+      const before = text.slice(0, match.index)
+      const matchedText = match[0]
+      const after = text.slice(match.index + matchedText.length)
+
+      const beforeNode = document.createTextNode(before)
+      const styledSpan = document.createElement('span')
+      styledSpan.className = 'mattes-synthese font-bold'
+      styledSpan.textContent = matchedText
+      const afterNode = document.createTextNode(after)
+
+      const parent = node.parentNode
+      if (parent) {
+        parent.insertBefore(beforeNode, node)
+        parent.insertBefore(styledSpan, node)
+        parent.insertBefore(afterNode, node)
+        parent.removeChild(node)
+      }
+    }
   }, [])
 
   // Process news headings: add favicon + link, remove source links from paragraphs
