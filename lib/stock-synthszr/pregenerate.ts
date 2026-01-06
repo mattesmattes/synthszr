@@ -122,7 +122,10 @@ export async function pregenerateStockSynthszr(
         recencyDays: 90,
       })
 
-      // Store in cache
+      // Store in cache with explicit timestamps
+      const now = new Date()
+      const expiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000) // 14 days
+
       const { error: insertError } = await supabase
         .from('stock_synthszr_cache')
         .upsert(
@@ -131,6 +134,8 @@ export async function pregenerateStockSynthszr(
             currency: ticker.currency,
             data: result,
             model: result.model,
+            created_at: now.toISOString(),
+            expires_at: expiresAt.toISOString(),
           },
           {
             onConflict: 'company,currency',

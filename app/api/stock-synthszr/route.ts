@@ -73,7 +73,10 @@ export async function POST(request: NextRequest) {
       recencyDays: 90,
     })
 
-    // Store in database cache (14-day TTL is set by default in the table)
+    // Store in database cache (14-day TTL)
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000) // 14 days
+
     const { error: insertError } = await supabase
       .from('stock_synthszr_cache')
       .upsert(
@@ -82,6 +85,8 @@ export async function POST(request: NextRequest) {
           currency,
           data: result,
           model: result.model,
+          created_at: now.toISOString(),
+          expires_at: expiresAt.toISOString(),
         },
         {
           onConflict: 'company,currency',
@@ -91,6 +96,8 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       console.warn('[stock-synthszr] Cache insert failed:', insertError.message)
+    } else {
+      console.log(`[stock-synthszr] Cached result for ${company}`)
     }
 
     // Add created_at to result
