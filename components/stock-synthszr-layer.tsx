@@ -6,6 +6,57 @@ import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 
+/**
+ * Parse inline citations like "([domain] (url))" or "(domain (url))" and render as links
+ * Returns React elements with clickable source links
+ */
+function parseInlineCitations(text: string): React.ReactNode[] {
+  // Match patterns like: ([domain] (url)) or (domain (url)) or [domain](url)
+  const citationRegex = /\(\[?([^\]\)]+)\]?\s*\(?(https?:\/\/[^\s\)]+)\)?\)/g
+  const parts: React.ReactNode[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = citationRegex.exec(text)) !== null) {
+    // Add text before the citation
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index))
+    }
+
+    const domain = match[1].replace(/^\[|\]$/g, '').trim()
+    const url = match[2]
+
+    // Add the citation as a link
+    parts.push(
+      <a
+        key={`citation-${match.index}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-primary hover:underline"
+      >
+        [{domain}]
+      </a>
+    )
+
+    lastIndex = match.index + match[0].length
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex))
+  }
+
+  return parts.length > 0 ? parts : [text]
+}
+
+/**
+ * Check if a risk flag is actually a source citation (contains URL)
+ */
+function isSourceCitation(flag: string): boolean {
+  return flag.includes('http://') || flag.includes('https://') || flag.includes('www.')
+}
+
 interface StockSynthszrLayerProps {
   company: string
   currency?: string
@@ -164,7 +215,7 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
         <ol className="list-decimal space-y-2 pl-5 text-sm">
           {data.key_takeaways.map((item, index) => (
             <li key={`takeaway-${index}`} className="leading-relaxed">
-              {item}
+              {parseInlineCitations(item)}
             </li>
           ))}
         </ol>
@@ -195,7 +246,7 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
                   {idea.rating}
                 </span>
               </div>
-              <p className="text-sm leading-relaxed">{idea.thesis}</p>
+              <p className="text-sm leading-relaxed">{parseInlineCitations(idea.thesis)}</p>
               {typeof idea.time_horizon_months === 'number' && (
                 <p className="mt-3 text-xs text-muted-foreground">
                   Zeithorizont: {idea.time_horizon_months} {idea.time_horizon_months === 1 ? 'Monat' : 'Monate'}
@@ -203,14 +254,16 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
               )}
               {Array.isArray(idea.risk_flags) && idea.risk_flags.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {idea.risk_flags.map((flag, flagIndex) => (
-                    <span
-                      key={`risk-${index}-${flagIndex}`}
-                      className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
-                    >
-                      {flag}
-                    </span>
-                  ))}
+                  {idea.risk_flags
+                    .filter((flag) => !isSourceCitation(flag))
+                    .map((flag, flagIndex) => (
+                      <span
+                        key={`risk-${index}-${flagIndex}`}
+                        className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+                      >
+                        {flag}
+                      </span>
+                    ))}
                 </div>
               )}
             </article>
@@ -238,7 +291,7 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
             </span>
             <span>Empfehlung</span>
           </div>
-          <p className="text-sm leading-relaxed">{data.final_recommendation.rationale}</p>
+          <p className="text-sm leading-relaxed">{parseInlineCitations(data.final_recommendation.rationale)}</p>
         </div>
       </section>
 
@@ -250,7 +303,7 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
         </header>
         <ul className="space-y-2 rounded-lg border border-[#CCFF00]/30 bg-[#CCFF00]/10 p-4 text-sm leading-relaxed">
           {data.contrarian_insights.map((insight, index) => (
-            <li key={`contrarian-${index}`}>• {insight}</li>
+            <li key={`contrarian-${index}`}>• {parseInlineCitations(insight)}</li>
           ))}
         </ul>
       </section>
