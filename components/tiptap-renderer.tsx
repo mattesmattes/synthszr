@@ -137,7 +137,7 @@ function SynthszrRatingLink({ company, displayName, rating }: SynthszrRatingLink
         className="inline-flex items-center gap-1.5 font-medium hover:underline cursor-pointer text-foreground"
       >
         <span className="opacity-40">|</span>
-        <span>Synthszr Empfehlung: {displayName}</span>
+        <span>Synthszr Vote: {displayName}</span>
         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold ${ratingBadgeStyles[rating]}`}>
           {ratingLabels[rating]}
         </span>
