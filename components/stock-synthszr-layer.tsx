@@ -289,6 +289,25 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
           </ul>
         </section>
       )}
+
+      {/* Legal Disclaimer */}
+      <section className="mt-6 pt-4 border-t border-border">
+        <p className="text-[10px] leading-relaxed text-muted-foreground">
+          <strong>Rechtlicher Hinweis:</strong> Diese Analyse wurde vollständig durch künstliche Intelligenz (KI) erstellt
+          und stellt <strong>keine Anlageberatung</strong> dar. Die dargestellten Informationen, Bewertungen und
+          Empfehlungen dienen ausschließlich zu Informationszwecken und ersetzen keine professionelle Finanzberatung.
+          Der Betreiber übernimmt <strong>keine Haftung</strong> für Entscheidungen, die auf Grundlage dieser
+          KI-generierten Inhalte getroffen werden. Anlageentscheidungen sollten stets unter Berücksichtigung der
+          persönlichen finanziellen Situation und nach Rücksprache mit einem qualifizierten Finanzberater getroffen werden.
+          {' '}
+          <a
+            href="/impressum"
+            className="underline hover:text-foreground"
+          >
+            Impressum & Betreiberangaben
+          </a>
+        </p>
+      </section>
     </div>
   )
 }
