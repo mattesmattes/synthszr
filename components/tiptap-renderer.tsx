@@ -134,7 +134,7 @@ function SynthszrRatingLink({ company, displayName, rating }: SynthszrRatingLink
     <>
       <button
         onClick={() => setShowSynthszr(true)}
-        className="inline-flex items-center gap-1.5 text-base font-medium hover:underline cursor-pointer text-foreground"
+        className="inline-flex items-center gap-1.5 font-medium hover:underline cursor-pointer text-foreground"
       >
         <span className="opacity-40">|</span>
         <span>Synthszr Empfehlung: {displayName}</span>
