@@ -121,7 +121,7 @@ const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string }> = {
   'grab': { symbol: 'GRAB', exchange: 'US' },
 
   // Korean
-  'samsung': { symbol: '005930', exchange: 'KS' },
+  'samsung': { symbol: '005930', exchange: 'KO' },
 
   // Others
   'uber': { symbol: 'UBER', exchange: 'US' },
