@@ -113,9 +113,10 @@ interface SynthszrRatingLinkProps {
   company: string
   displayName: string
   rating: 'BUY' | 'HOLD' | 'SELL'
+  isFirst: boolean
 }
 
-function SynthszrRatingLink({ company, displayName, rating }: SynthszrRatingLinkProps) {
+function SynthszrRatingLink({ company, displayName, rating, isFirst }: SynthszrRatingLinkProps) {
   const [showSynthszr, setShowSynthszr] = useState(false)
 
   // Neon colors matching stock performance badges
@@ -135,10 +136,13 @@ function SynthszrRatingLink({ company, displayName, rating }: SynthszrRatingLink
     <>
       <button
         onClick={() => setShowSynthszr(true)}
-        className="inline-flex items-center gap-1.5 font-medium hover:underline cursor-pointer text-foreground"
+        className="inline-flex items-center gap-1 font-medium hover:underline cursor-pointer text-foreground"
       >
-        <span className="opacity-40">|</span>
-        <span>Synthszr Vote: {displayName}</span>
+        {isFirst ? (
+          <span>Synthszr Vote: {displayName}</span>
+        ) : (
+          <span>, {displayName}</span>
+        )}
         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold ${ratingBadgeStyles[rating]}`}>
           {ratingLabels[rating]}
         </span>
@@ -316,7 +320,7 @@ interface TiptapRendererProps {
 export function TiptapRenderer({ content }: TiptapRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [tickerPortals, setTickerPortals] = useState<Array<{ element: HTMLElement; company: string }>>([])
-  const [ratingPortals, setRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL' }>>([])
+  const [ratingPortals, setRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean }>>([])
 
   const editor = useEditor({
     extensions: [
@@ -646,7 +650,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
           .map((r: StockRatingResult) => [r.company.toLowerCase(), r.rating as 'BUY' | 'HOLD' | 'SELL'])
       )
 
-      const portals: Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL' }> = []
+      const portals: Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean }> = []
 
       // Add rating links to each section
       for (const section of sectionsToProcess) {
@@ -660,9 +664,9 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         const ratingsContainer = document.createElement('span')
         ratingsContainer.className = 'synthszr-ratings-container ml-2'
 
-        for (const company of companiesWithRatings) {
+        companiesWithRatings.forEach((company, idx) => {
           const rating = ratingsMap.get(company.apiName.toLowerCase())
-          if (!rating) continue
+          if (!rating) return
 
           const placeholder = document.createElement('span')
           placeholder.className = 'synthszr-rating-placeholder inline-block'
@@ -676,8 +680,9 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
             company: company.apiName,
             displayName: company.displayName,
             rating,
+            isFirst: idx === 0,
           })
-        }
+        })
 
         // Append to end of paragraph
         section.element.appendChild(ratingsContainer)
@@ -828,9 +833,9 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       {tickerPortals.map(({ element, company }, index) =>
         createPortal(<StockTickerInline company={company} />, element, `ticker-${index}`)
       )}
-      {ratingPortals.map(({ element, company, displayName, rating }, index) =>
+      {ratingPortals.map(({ element, company, displayName, rating, isFirst }, index) =>
         createPortal(
-          <SynthszrRatingLink company={company} displayName={displayName} rating={rating} />,
+          <SynthszrRatingLink company={company} displayName={displayName} rating={rating} isFirst={isFirst} />,
           element,
           `rating-${index}`
         )
