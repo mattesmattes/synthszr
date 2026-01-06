@@ -587,14 +587,31 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       // Skip if already processed
       if (container.classList.contains('synthszr-ratings-processed')) return
 
-      // Get all text content in this paragraph
-      const paragraphText = container.textContent || ''
+      // Collect text from the news paragraph(s) BEFORE the Synthszr Take
+      // Go back through previous siblings to find news content (stop at H2 or start)
+      let textToSearch = ''
+      let prevElement = container.previousElementSibling
+      while (prevElement) {
+        // Stop if we hit a heading (new section)
+        if (prevElement.tagName.match(/^H[1-6]$/)) break
+        // Stop if we hit another Synthszr Take
+        if (prevElement.textContent?.toLowerCase().includes('synthszr take') ||
+            prevElement.textContent?.toLowerCase().includes('mattes synthese')) break
+        // Collect text from paragraphs
+        if (prevElement.tagName === 'P') {
+          textToSearch = (prevElement.textContent || '') + ' ' + textToSearch
+        }
+        prevElement = prevElement.previousElementSibling
+      }
 
-      // Find all mentioned companies
+      // Also include the Synthszr Take paragraph itself
+      textToSearch += ' ' + (container.textContent || '')
+
+      // Find all mentioned companies in the combined text
       const companies: Array<{ apiName: string; displayName: string }> = []
       for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
         const regex = new RegExp(`\\b${displayName}\\b`, 'gi')
-        if (regex.test(paragraphText)) {
+        if (regex.test(textToSearch)) {
           companies.push({ apiName, displayName })
         }
       }
