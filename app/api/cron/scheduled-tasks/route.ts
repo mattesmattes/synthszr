@@ -108,10 +108,17 @@ export async function GET(request: NextRequest) {
 
   const supabase = getSupabase()
   const now = new Date()
-  const currentHour = now.getUTCHours()
-  const currentMinute = now.getUTCMinutes()
 
-  console.log(`[Scheduler] Running at ${currentHour}:${currentMinute} UTC`)
+  // Check if runAll mode (for daily cron on Hobby plan)
+  const { searchParams } = new URL(request.url)
+  const runAll = searchParams.get('runAll') === 'true'
+
+  // Use Europe/Berlin timezone (MEZ/MESZ) since admin UI uses MEZ
+  const berlinTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }))
+  const currentHour = berlinTime.getHours()
+  const currentMinute = berlinTime.getMinutes()
+
+  console.log(`[Scheduler] Running at ${currentHour}:${String(currentMinute).padStart(2, '0')} MEZ (${now.getUTCHours()}:${String(now.getUTCMinutes()).padStart(2, '0')} UTC)${runAll ? ' [runAll mode]' : ''}`)
 
   // Get schedule config
   const { data: configData } = await supabase
@@ -129,7 +136,7 @@ export async function GET(request: NextRequest) {
     // Support both new format (hour/minute) and legacy format (hours array)
     const fetchHour = config.newsletterFetch.hour ?? config.newsletterFetch.hours?.[0] ?? 6
     const fetchMinute = config.newsletterFetch.minute ?? 0
-    const shouldRun = isTimeMatch(fetchHour, fetchMinute, currentHour, currentMinute)
+    const shouldRun = runAll || isTimeMatch(fetchHour, fetchMinute, currentHour, currentMinute)
 
     if (shouldRun && !(await hasRunRecently(supabase, 'newsletter_fetch', 60))) {
       console.log('[Scheduler] Triggering newsletter fetch...')
@@ -155,7 +162,7 @@ export async function GET(request: NextRequest) {
 
   // Check Daily Analysis (News & Synthese Erstellung)
   if (config.dailyAnalysis.enabled) {
-    if (isTimeMatch(config.dailyAnalysis.hour, config.dailyAnalysis.minute, currentHour, currentMinute)) {
+    if (runAll || isTimeMatch(config.dailyAnalysis.hour, config.dailyAnalysis.minute, currentHour, currentMinute)) {
       if (!(await hasRunRecently(supabase, 'daily_analysis', 60))) {
         console.log('[Scheduler] Triggering daily analysis and synthesis...')
         try {
@@ -182,7 +189,7 @@ export async function GET(request: NextRequest) {
 
   // Check Post Generation
   if (config.postGeneration.enabled) {
-    if (isTimeMatch(config.postGeneration.hour, config.postGeneration.minute, currentHour, currentMinute)) {
+    if (runAll || isTimeMatch(config.postGeneration.hour, config.postGeneration.minute, currentHour, currentMinute)) {
       if (!(await hasRunRecently(supabase, 'post_generation', 60))) {
         console.log('[Scheduler] Triggering post generation...')
         try {
@@ -203,7 +210,7 @@ export async function GET(request: NextRequest) {
 
   // Check Newsletter Send
   if (config.newsletterSend?.enabled) {
-    if (isTimeMatch(config.newsletterSend.hour, config.newsletterSend.minute, currentHour, currentMinute)) {
+    if (runAll || isTimeMatch(config.newsletterSend.hour, config.newsletterSend.minute, currentHour, currentMinute)) {
       if (!(await hasRunRecently(supabase, 'newsletter_send', 60))) {
         console.log('[Scheduler] Triggering newsletter send...')
         try {
@@ -249,7 +256,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     success: true,
     timestamp: now.toISOString(),
-    currentTime: `${currentHour}:${currentMinute} UTC`,
+    currentTime: `${currentHour}:${String(currentMinute).padStart(2, '0')} MEZ`,
     results,
   })
 }

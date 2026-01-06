@@ -1,12 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/scheduled-tasks",
-      "schedule": "*/10 * * * *"
-    },
-    {
-      "path": "/api/cron/newsletter-send",
-      "schedule": "0,15,30,45 * * * *"
+      "path": "/api/cron/scheduled-tasks?runAll=true",
+      "schedule": "0 4 * * *"
     }
   ],
   "headers": [
