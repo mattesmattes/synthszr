@@ -44,7 +44,7 @@ async function isAdminSession(request: NextRequest): Promise<boolean> {
 
 // Configuration for +dailyrepo email imports
 const EMAIL_NOTE_CONFIG = {
-  senderEmail: 'mattes@oh-so.com',
+  senderEmail: null, // No sender filter - any email with +dailyrepo in subject
   subjectTag: '+dailyrepo',
   hoursBack: 24,
 }

@@ -213,19 +213,20 @@ export class GmailClient {
    * Used for importing emails with specific subject tags like "+dailyrepo"
    */
   async fetchEmailsBySubject(
-    senderEmail: string,
+    senderEmail: string | null,
     subjectContains: string,
     maxResults: number = 50,
     hoursBack: number = 24
   ): Promise<EmailMessage[]> {
-    // Build query: from sender with subject containing the pattern
+    // Build query: optionally filter by sender, always filter by subject
     // Gmail search: subject:"text" matches subjects containing "text"
     const afterDate = new Date(Date.now() - hoursBack * 60 * 60 * 1000)
     const dateStr = afterDate.toISOString().split('T')[0].replace(/-/g, '/')
 
     // Escape special characters in subject for Gmail query
     const escapedSubject = subjectContains.replace(/[+]/g, '')
-    const query = `from:${senderEmail} subject:"${escapedSubject}" after:${dateStr}`
+    const fromFilter = senderEmail ? `from:${senderEmail} ` : ''
+    const query = `${fromFilter}subject:"${escapedSubject}" after:${dateStr}`
 
     console.log('[Gmail] Fetching emails by subject with query:', query)
 
