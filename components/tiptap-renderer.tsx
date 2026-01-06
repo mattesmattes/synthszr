@@ -80,6 +80,7 @@ const KNOWN_COMPANIES: Record<string, string> = {
   'Roblox': 'roblox',
   'Unity': 'unity',
   'Robinhood': 'robinhood',
+  'Samsung': 'samsung',
 }
 
 interface StockData {

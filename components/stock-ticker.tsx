@@ -83,5 +83,5 @@ export const KNOWN_COMPANIES = [
   'JPMorgan', 'Goldman Sachs', 'Morgan Stanley', 'Visa', 'Mastercard',
   'Coinbase', 'Siemens', 'Allianz', 'Deutsche Bank', 'Bayer', 'BASF',
   'Adidas', 'Zalando', 'Uber', 'Airbnb', 'DoorDash', 'Roblox', 'Unity',
-  'Robinhood'
+  'Robinhood', 'Samsung'
 ]

@@ -120,6 +120,9 @@ const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string }> = {
   'sea limited': { symbol: 'SE', exchange: 'US' },
   'grab': { symbol: 'GRAB', exchange: 'US' },
 
+  // Korean
+  'samsung': { symbol: '005930', exchange: 'KS' },
+
   // Others
   'uber': { symbol: 'UBER', exchange: 'US' },
   'airbnb': { symbol: 'ABNB', exchange: 'US' },
