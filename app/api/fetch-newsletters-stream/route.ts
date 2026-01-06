@@ -44,9 +44,9 @@ async function isAdminSession(request: NextRequest): Promise<boolean> {
 
 // Configuration for +dailyrepo email imports
 const EMAIL_NOTE_CONFIG = {
-  senderEmail: 'mattes.schrader@oh-so.com',
+  senderEmail: 'mattes@oh-so.com',
   subjectTag: '+dailyrepo',
-  hoursBack: 168, // 7 days - to catch emails from past week
+  hoursBack: 24,
 }
 
 /**
