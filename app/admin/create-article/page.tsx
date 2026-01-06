@@ -175,15 +175,31 @@ export default function CreateArticlePage() {
     loadData()
   }, [])
 
-  // Parse metadata when generation finishes
+  // Track if we just finished generating (to trigger auto-save)
+  const [justFinishedGenerating, setJustFinishedGenerating] = useState(false)
+
+  // Parse metadata when generation finishes and trigger auto-save
   useEffect(() => {
     if (!generating && articleContent) {
       const parsed = parseArticleContent(articleContent)
       if (parsed.metadata.title) {
         setMetadata(parsed.metadata)
+        setJustFinishedGenerating(true)
       }
     }
   }, [generating, articleContent])
+
+  // Auto-save when generation completes
+  useEffect(() => {
+    if (justFinishedGenerating && metadata.title && !saving) {
+      setJustFinishedGenerating(false)
+      // Small delay to ensure metadata state is updated
+      const timer = setTimeout(() => {
+        saveAsDraft()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [justFinishedGenerating, metadata.title, saving])
 
   async function loadData() {
     setLoading(true)
