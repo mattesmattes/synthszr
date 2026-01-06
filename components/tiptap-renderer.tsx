@@ -410,9 +410,11 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         // Skip if already shown in this section
         if (sectionCompanies.has(apiName)) continue
 
-        // Match company name optionally followed by German compound word parts (e.g., "Google-Aktien")
+        // Match company name optionally followed by:
+        // - German possessive "s" (e.g., "Metas", "Googles")
+        // - Compound word parts with hyphen (e.g., "Google-Aktien")
         // Not already followed by stock ticker indicator
-        const regex = new RegExp(`\\b${displayName}(-[\\wäöüÄÖÜß]+)*\\b(?!\\s*\\([↑↓→])`, 'g')
+        const regex = new RegExp(`\\b${displayName}s?(-[\\wäöüÄÖÜß]+)*\\b(?!\\s*\\([↑↓→])`, 'g')
         const match = regex.exec(text)
         if (match) {
           matches.push({
@@ -612,10 +614,11 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       // Also include the Synthszr Take paragraph itself
       textToSearch += ' ' + (container.textContent || '')
 
-      // Find all mentioned companies in the combined text (including compound words like "Google-Aktien")
+      // Find all mentioned companies in the combined text
+      // Matches: "Meta", "Metas" (possessive), "Google-Aktien" (compound)
       const companies: Array<{ apiName: string; displayName: string }> = []
       for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
-        const regex = new RegExp(`\\b${displayName}(-[\\wäöüÄÖÜß]+)*\\b`, 'gi')
+        const regex = new RegExp(`\\b${displayName}s?(-[\\wäöüÄÖÜß]+)*\\b`, 'gi')
         if (regex.test(textToSearch)) {
           companies.push({ apiName, displayName })
         }
