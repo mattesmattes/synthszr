@@ -563,6 +563,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
 
     // Find all Synthszr Take / Mattes Synthese markers
     const syntheszrMarkers = containerRef.current.querySelectorAll('.mattes-synthese, .mattes-synthese-heading')
+    console.log('[SynthszrRatings] Found markers:', syntheszrMarkers.length)
     if (syntheszrMarkers.length === 0) return
 
     // For each marker, find the containing paragraph/section and extract companies
@@ -599,10 +600,12 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       }
     })
 
+    console.log('[SynthszrRatings] Sections to process:', sectionsToProcess.length, sectionsToProcess.map(s => s.companies))
     if (sectionsToProcess.length === 0) return
 
     // Collect all unique companies for batch API call
     const allCompanies = [...new Set(sectionsToProcess.flatMap(s => s.companies.map(c => c.apiName)))]
+    console.log('[SynthszrRatings] Companies to fetch:', allCompanies)
 
     // Fetch ratings from cache
     try {
@@ -612,6 +615,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         body: JSON.stringify({ companies: allCompanies }),
       })
       const json = await response.json()
+      console.log('[SynthszrRatings] API response:', json)
 
       if (!json.ok || !json.ratings) return
 
