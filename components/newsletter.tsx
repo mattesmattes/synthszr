@@ -47,7 +47,7 @@ export function Newsletter() {
       <div className="mx-auto max-w-2xl">
         <h2 className="font-mono text-2xl font-bold md:text-lg">Stay Updated</h2>
         <p className="mt-4 text-muted-foreground">
-          Die morgendliche Tagessynthese jeden Morgen per Mail.
+          Die morgendliche Tagessynthese per Mail.
         </p>
 
         {status === 'success' ? (
