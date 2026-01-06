@@ -98,8 +98,55 @@ interface StockData {
   timestamp: number
 }
 
+interface StockRatingResult {
+  company: string
+  rating: 'BUY' | 'HOLD' | 'SELL' | null
+  cached: boolean
+}
+
 interface StockTickerInlineProps {
   company: string
+}
+
+interface SynthszrRatingLinkProps {
+  company: string
+  displayName: string
+  rating: 'BUY' | 'HOLD' | 'SELL'
+}
+
+function SynthszrRatingLink({ company, displayName, rating }: SynthszrRatingLinkProps) {
+  const [showSynthszr, setShowSynthszr] = useState(false)
+
+  const ratingColors = {
+    BUY: 'text-green-600 dark:text-green-400',
+    HOLD: 'text-amber-600 dark:text-amber-400',
+    SELL: 'text-red-600 dark:text-red-400',
+  }
+
+  const ratingLabels = {
+    BUY: 'Buy',
+    HOLD: 'Hold',
+    SELL: 'Sell',
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setShowSynthszr(true)}
+        className={`inline-flex items-center gap-1 text-xs font-medium hover:underline cursor-pointer ${ratingColors[rating]}`}
+      >
+        <span className="opacity-50">|</span>
+        <span>{displayName} Synthszr</span>
+        <span className="font-bold">{ratingLabels[rating]}</span>
+      </button>
+      {showSynthszr && (
+        <StockSynthszrLayer
+          company={company}
+          onClose={() => setShowSynthszr(false)}
+        />
+      )}
+    </>
+  )
 }
 
 function StockTickerInline({ company }: StockTickerInlineProps) {
@@ -265,6 +312,7 @@ interface TiptapRendererProps {
 export function TiptapRenderer({ content }: TiptapRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [tickerPortals, setTickerPortals] = useState<Array<{ element: HTMLElement; company: string }>>([])
+  const [ratingPortals, setRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL' }>>([])
 
   const editor = useEditor({
     extensions: [
@@ -509,6 +557,114 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     }
   }, [])
 
+  // Add Synthszr rating links at the end of each Synthszr Take section
+  const processSynthszrRatingLinks = useCallback(async () => {
+    if (!containerRef.current) return
+
+    // Find all Synthszr Take / Mattes Synthese markers
+    const syntheszrMarkers = containerRef.current.querySelectorAll('.mattes-synthese, .mattes-synthese-heading')
+    if (syntheszrMarkers.length === 0) return
+
+    // For each marker, find the containing paragraph/section and extract companies
+    const sectionsToProcess: Array<{
+      element: Element
+      companies: Array<{ apiName: string; displayName: string }>
+    }> = []
+
+    syntheszrMarkers.forEach((marker) => {
+      // Find the paragraph containing this marker
+      let container: Element | null = marker
+      while (container && container.tagName !== 'P' && container !== containerRef.current) {
+        container = container.parentElement
+      }
+      if (!container || container === containerRef.current) return
+
+      // Skip if already processed
+      if (container.classList.contains('synthszr-ratings-processed')) return
+
+      // Get all text content in this paragraph
+      const paragraphText = container.textContent || ''
+
+      // Find all mentioned companies
+      const companies: Array<{ apiName: string; displayName: string }> = []
+      for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
+        const regex = new RegExp(`\\b${displayName}\\b`, 'gi')
+        if (regex.test(paragraphText)) {
+          companies.push({ apiName, displayName })
+        }
+      }
+
+      if (companies.length > 0) {
+        sectionsToProcess.push({ element: container, companies })
+      }
+    })
+
+    if (sectionsToProcess.length === 0) return
+
+    // Collect all unique companies for batch API call
+    const allCompanies = [...new Set(sectionsToProcess.flatMap(s => s.companies.map(c => c.apiName)))]
+
+    // Fetch ratings from cache
+    try {
+      const response = await fetch('/api/stock-synthszr/batch-ratings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companies: allCompanies }),
+      })
+      const json = await response.json()
+
+      if (!json.ok || !json.ratings) return
+
+      const ratingsMap = new Map<string, 'BUY' | 'HOLD' | 'SELL'>(
+        json.ratings
+          .filter((r: StockRatingResult) => r.rating !== null)
+          .map((r: StockRatingResult) => [r.company.toLowerCase(), r.rating as 'BUY' | 'HOLD' | 'SELL'])
+      )
+
+      const portals: Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL' }> = []
+
+      // Add rating links to each section
+      for (const section of sectionsToProcess) {
+        const companiesWithRatings = section.companies.filter(c =>
+          ratingsMap.has(c.apiName.toLowerCase())
+        )
+
+        if (companiesWithRatings.length === 0) continue
+
+        // Create a span container for the rating links
+        const ratingsContainer = document.createElement('span')
+        ratingsContainer.className = 'synthszr-ratings-container ml-2'
+
+        for (const company of companiesWithRatings) {
+          const rating = ratingsMap.get(company.apiName.toLowerCase())
+          if (!rating) continue
+
+          const placeholder = document.createElement('span')
+          placeholder.className = 'synthszr-rating-placeholder inline-block'
+          placeholder.dataset.company = company.apiName
+          placeholder.dataset.displayName = company.displayName
+          placeholder.dataset.rating = rating
+
+          ratingsContainer.appendChild(placeholder)
+          portals.push({
+            element: placeholder,
+            company: company.apiName,
+            displayName: company.displayName,
+            rating,
+          })
+        }
+
+        // Append to end of paragraph
+        section.element.appendChild(ratingsContainer)
+        section.element.classList.add('synthszr-ratings-processed')
+      }
+
+      setRatingPortals(portals)
+    } catch (error) {
+      console.error('[TiptapRenderer] Failed to fetch Synthszr ratings:', error)
+    }
+  }, [])
+
   // Process news headings: add favicon + link, remove source links from paragraphs
   const processNewsHeadings = useCallback(() => {
     if (!containerRef.current) return
@@ -628,10 +784,14 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         processNewsHeadings() // Process news headings first (adds favicons, removes source links)
         processCompanyNames()
         processMattesSyntheseText()
+        // Process Synthszr rating links after text is styled
+        setTimeout(() => {
+          processSynthszrRatingLinks()
+        }, 50)
       }, 100)
       return () => clearTimeout(timeoutId)
     }
-  }, [editor, content, processCompanyNames, processMattesSyntheseText, processNewsHeadings])
+  }, [editor, content, processCompanyNames, processMattesSyntheseText, processNewsHeadings, processSynthszrRatingLinks])
 
   if (!editor) {
     return null
@@ -642,6 +802,13 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       <EditorContent editor={editor} />
       {tickerPortals.map(({ element, company }, index) =>
         createPortal(<StockTickerInline company={company} />, element, `ticker-${index}`)
+      )}
+      {ratingPortals.map(({ element, company, displayName, rating }, index) =>
+        createPortal(
+          <SynthszrRatingLink company={company} displayName={displayName} rating={rating} />,
+          element,
+          `rating-${index}`
+        )
       )}
     </div>
   )
