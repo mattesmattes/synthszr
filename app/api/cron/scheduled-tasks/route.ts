@@ -319,7 +319,7 @@ async function generateDailyPost(supabase: ReturnType<typeof getSupabase>) {
     body: JSON.stringify({
       digestContent: digest.analysis_content,
       customPrompt: promptData?.prompt_text,
-      vocabularyIntensity: 50,
+      vocabularyIntensity: 10,
     }),
   })
 

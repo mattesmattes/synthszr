@@ -119,7 +119,7 @@ export default function DigestsPage() {
   const [ghostwriting, setGhostwriting] = useState(false)
   const [blogContent, setBlogContent] = useState('')
   const [blogCopied, setBlogCopied] = useState(false)
-  const [vocabularyIntensity, setVocabularyIntensity] = useState(50)
+  const [vocabularyIntensity, setVocabularyIntensity] = useState(10)
   const [savingBlog, setSavingBlog] = useState(false)
   const [deletingDigestId, setDeletingDigestId] = useState<string | null>(null)
 

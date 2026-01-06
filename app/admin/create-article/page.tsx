@@ -144,7 +144,7 @@ export default function CreateArticlePage() {
   const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
   const [vocabOpen, setVocabOpen] = useState(false)
-  const [vocabularyIntensity, setVocabularyIntensity] = useState(50)
+  const [vocabularyIntensity, setVocabularyIntensity] = useState(10)
   const [selectedModel, setSelectedModel] = useState<AIModel>('gemini-2.5-pro')
   const [usedModel, setUsedModel] = useState<AIModel | null>(null)
 
