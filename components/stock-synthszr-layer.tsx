@@ -259,7 +259,7 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
                     .map((flag, flagIndex) => (
                       <span
                         key={`risk-${index}-${flagIndex}`}
-                        className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+                        className="rounded-sm bg-muted px-2 py-1 text-[11px] text-muted-foreground"
                       >
                         {flag}
                       </span>
