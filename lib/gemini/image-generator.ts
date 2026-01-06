@@ -15,6 +15,11 @@ WICHTIGE STILRICHTLINIEN:
 - Keine Text-Elemente oder Beschriftungen im Bild
 - Keine Referenzen auf MAD Magazine oder den Künstler
 
+BILDFORMAT:
+- Generiere das Bild im Breitformat mit Seitenverhältnis 21:9 (ultrawide/cinematic)
+- Breite sollte etwa 2.3x die Höhe sein
+- Horizontale, panoramaartige Komposition
+
 NEWS TEXT:
 {newsText}`
 
