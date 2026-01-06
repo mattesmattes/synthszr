@@ -240,34 +240,22 @@
   opacity: 0.8;
 }
 
-/* Source Links - Cyan Styling */
-:root {
-  --source-cyan: oklch(0.55 0.15 190);
-  --source-cyan-hover: oklch(0.45 0.18 190);
-}
-
-.dark {
-  --source-cyan: oklch(0.75 0.15 190);
-  --source-cyan-hover: oklch(0.85 0.12 190);
-}
-
 /* Inline source links: "→ Publikationsname" format */
 .prose a[href],
 .prose-article a[href],
 .tiptap-content a[href],
 .ProseMirror a[href] {
-  color: var(--source-cyan);
-  text-decoration: none;
+  color: inherit;
+  text-decoration: underline;
   font-weight: 500;
-  transition: color 0.15s ease;
+  transition: opacity 0.15s ease;
 }
 
 .prose a[href]:hover,
 .prose-article a[href]:hover,
 .tiptap-content a[href]:hover,
 .ProseMirror a[href]:hover {
-  color: var(--source-cyan-hover);
-  text-decoration: underline;
+  opacity: 0.7;
 }
 
 /* Mattes Synthese styling - neon yellow background */
