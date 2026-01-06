@@ -82,7 +82,7 @@ export async function fetchStockSynthszr({
   }
 
   const configuredModel = process.env.OPENAI_MODEL?.trim() || null
-  const candidateModels = configuredModel ? [configuredModel] : ['gpt-4.1', 'gpt-4o']
+  const candidateModels = configuredModel ? [configuredModel] : ['gpt-4o', 'gpt-4-turbo']
 
   const priceSnippet =
     typeof price === 'number' && Number.isFinite(price)
