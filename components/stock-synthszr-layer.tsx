@@ -187,9 +187,9 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
                 <span
                   className={cn(
                     'rounded-full px-2 py-0.5 text-[11px] font-bold',
-                    idea.rating === 'BUY' && 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
-                    idea.rating === 'SELL' && 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
-                    idea.rating === 'HOLD' && 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                    idea.rating === 'BUY' && 'bg-[#39FF14] text-black',
+                    idea.rating === 'SELL' && 'bg-[#FF6600] text-black',
+                    idea.rating === 'HOLD' && 'bg-gray-300 dark:bg-gray-500 text-black dark:text-white'
                   )}
                 >
                   {idea.rating}
@@ -228,13 +228,10 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
           <div className="mb-2 flex items-center gap-3 text-sm font-semibold uppercase tracking-wide">
             <span
               className={cn(
-                'rounded-full px-3 py-1 text-xs',
-                data.final_recommendation.rating === 'BUY' &&
-                  'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
-                data.final_recommendation.rating === 'SELL' &&
-                  'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
-                data.final_recommendation.rating === 'HOLD' &&
-                  'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                'rounded-full px-3 py-1 text-xs font-bold',
+                data.final_recommendation.rating === 'BUY' && 'bg-[#39FF14] text-black',
+                data.final_recommendation.rating === 'SELL' && 'bg-[#FF6600] text-black',
+                data.final_recommendation.rating === 'HOLD' && 'bg-gray-300 dark:bg-gray-500 text-black dark:text-white'
               )}
             >
               {data.final_recommendation.rating}

@@ -117,10 +117,11 @@ interface SynthszrRatingLinkProps {
 function SynthszrRatingLink({ company, displayName, rating }: SynthszrRatingLinkProps) {
   const [showSynthszr, setShowSynthszr] = useState(false)
 
-  const ratingColors = {
-    BUY: 'text-green-600 dark:text-green-400',
-    HOLD: 'text-amber-600 dark:text-amber-400',
-    SELL: 'text-red-600 dark:text-red-400',
+  // Neon colors matching stock performance badges
+  const ratingBadgeStyles = {
+    BUY: 'bg-[#39FF14] text-black',      // Neon Green
+    HOLD: 'bg-gray-300 dark:bg-gray-500 text-black dark:text-white',  // Gray
+    SELL: 'bg-[#FF6600] text-black',     // Neon Orange
   }
 
   const ratingLabels = {
@@ -133,11 +134,13 @@ function SynthszrRatingLink({ company, displayName, rating }: SynthszrRatingLink
     <>
       <button
         onClick={() => setShowSynthszr(true)}
-        className={`inline-flex items-center gap-1 text-xs font-medium hover:underline cursor-pointer ${ratingColors[rating]}`}
+        className="inline-flex items-center gap-1.5 text-base font-medium hover:underline cursor-pointer text-foreground"
       >
-        <span className="opacity-50">|</span>
-        <span>{displayName} Synthszr</span>
-        <span className="font-bold">{ratingLabels[rating]}</span>
+        <span className="opacity-40">|</span>
+        <span>Synthszr Empfehlung: {displayName}</span>
+        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold ${ratingBadgeStyles[rating]}`}>
+          {ratingLabels[rating]}
+        </span>
       </button>
       {showSynthszr && (
         <StockSynthszrLayer
@@ -320,7 +323,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       Link.configure({
         openOnClick: true,
         HTMLAttributes: {
-          class: 'text-primary underline hover:text-primary/80',
+          class: 'text-foreground underline hover:text-foreground/70',
           target: '_blank',
           rel: 'noopener noreferrer',
         },
