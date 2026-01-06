@@ -39,6 +39,16 @@ export function SwipeNavigation({
   }, [olderPostSlug, newerPostSlug, router])
 
   useEffect(() => {
+    // Only enable swipe navigation on mobile (viewport < 768px)
+    const isMobile = window.matchMedia('(max-width: 767px)').matches
+    if (!isMobile) {
+      // Hide debug indicator on desktop
+      if (debugRef.current) {
+        debugRef.current.style.display = 'none'
+      }
+      return
+    }
+
     const minSwipeDistance = 50
     const maxVerticalRatio = 2
     const minVelocity = 0.3
