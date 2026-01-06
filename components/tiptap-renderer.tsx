@@ -277,7 +277,24 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     return false
   }
 
-  // Find and mark company names after render
+  // Get the current section (H2) for a node
+  const getCurrentSection = (node: Node): Element | null => {
+    let current: Node | null = node
+    while (current && current !== containerRef.current) {
+      // Walk backwards through siblings to find preceding H2
+      let sibling: Node | null = current
+      while (sibling) {
+        if (sibling instanceof HTMLElement && sibling.tagName === 'H2') {
+          return sibling
+        }
+        sibling = sibling.previousSibling
+      }
+      current = current.parentNode
+    }
+    return null
+  }
+
+  // Find and mark company names after render (once per news section)
   const processCompanyNames = useCallback(() => {
     if (!containerRef.current) return
 
@@ -288,6 +305,9 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       null
     )
 
+    // Track which companies already have a ticker in each section
+    const shownInSection = new Map<Element | null, Set<string>>()
+
     const nodesToProcess: { node: Text; matches: Array<{ company: string; index: number; length: number }> }[] = []
 
     let node: Text | null
@@ -295,19 +315,30 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       // Skip nodes inside headings - stock tickers only in body text
       if (isInsideHeading(node)) continue
 
+      const section = getCurrentSection(node)
+      if (!shownInSection.has(section)) {
+        shownInSection.set(section, new Set())
+      }
+      const sectionCompanies = shownInSection.get(section)!
+
       const text = node.textContent || ''
       const matches: Array<{ company: string; index: number; length: number }> = []
 
       for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
+        // Skip if already shown in this section
+        if (sectionCompanies.has(apiName)) continue
+
         // Match company name followed by word boundary (not already followed by stock ticker)
         const regex = new RegExp(`\\b${displayName}\\b(?!\\s*\\([↑↓→])`, 'g')
-        let match: RegExpExecArray | null
-        while ((match = regex.exec(text)) !== null) {
+        const match = regex.exec(text)
+        if (match) {
           matches.push({
             company: apiName,
             index: match.index,
             length: displayName.length,
           })
+          // Mark as shown for this section (only first occurrence)
+          sectionCompanies.add(apiName)
         }
       }
 
