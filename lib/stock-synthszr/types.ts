@@ -17,6 +17,7 @@ export interface StockSynthszrResult {
     rationale: string
   }
   model?: string
+  created_at?: string
 }
 
 export interface FetchStockSynthszrOptions {

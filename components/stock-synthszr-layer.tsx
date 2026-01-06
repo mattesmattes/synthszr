@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { X, RefreshCcw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { X, RefreshCcw, TrendingUp, TrendingDown, Minus, Calendar } from 'lucide-react'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
@@ -29,15 +29,6 @@ export function StockSynthszrLayer({
   onClose,
 }: StockSynthszrLayerProps) {
   const [state, setState] = useState<FetchState>({ status: 'loading' })
-  const [refreshCount, setRefreshCount] = useState(0)
-
-  const refresh = useCallback(() => {
-    setRefreshCount((count) => count + 1)
-  }, [])
-
-  useEffect(() => {
-    setRefreshCount(0)
-  }, [company])
 
   useEffect(() => {
     if (!company) return
@@ -53,7 +44,6 @@ export function StockSynthszrLayer({
             company,
             currency,
             price,
-            force: refreshCount > 0,
           }),
           signal: controller.signal,
         })
@@ -74,7 +64,7 @@ export function StockSynthszrLayer({
     return () => {
       controller.abort()
     }
-  }, [company, currency, price, refreshCount])
+  }, [company, currency, price])
 
   const resolvedModelLabel =
     state.status === 'success'
@@ -116,16 +106,23 @@ export function StockSynthszrLayer({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={refresh}
-              disabled={state.status === 'loading'}
-              className="flex-1 md:flex-none"
-            >
-              <RefreshCcw className={cn("h-4 w-4 sm:mr-2", state.status === 'loading' && "animate-spin")} />
-              <span className="hidden sm:inline">Neu berechnen</span>
-            </Button>
+            {state.status === 'success' && state.data.created_at && (
+              <div className="flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-xs text-muted-foreground">
+                <Calendar className="h-3.5 w-3.5" />
+                <span>
+                  Erstellt am {new Date(state.data.created_at).toLocaleDateString('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                  })}
+                </span>
+              </div>
+            )}
+            {state.status === 'loading' && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <RefreshCcw className="h-4 w-4 animate-spin" />
+              </div>
+            )}
             <Button variant="ghost" size="icon" onClick={onClose} aria-label="Modal schließen">
               <X className="h-5 w-5" />
             </Button>
@@ -143,14 +140,9 @@ export function StockSynthszrLayer({
           {state.status === 'error' && (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-destructive">
               <p>{state.message}</p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={refresh}>
-                  Erneut versuchen
-                </Button>
-                <Button variant="ghost" size="sm" onClick={onClose}>
-                  Schließen
-                </Button>
-              </div>
+              <Button variant="ghost" size="sm" onClick={onClose}>
+                Schließen
+              </Button>
             </div>
           )}
           {state.status === 'success' && <SynthesisContent data={state.data} />}

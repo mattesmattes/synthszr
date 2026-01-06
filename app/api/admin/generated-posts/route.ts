@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
+import { pregenerateStockSynthszr } from '@/lib/stock-synthszr/pregenerate'
 
 export async function GET() {
   const session = await getSession()
@@ -87,6 +88,17 @@ export async function PUT(request: NextRequest) {
     }
     if (status !== undefined) updateData.status = status
 
+    // Check if we're publishing (need to know previous status)
+    let wasPublished = false
+    if (status === 'published') {
+      const { data: currentPost } = await supabase
+        .from('generated_posts')
+        .select('status, content')
+        .eq('id', id)
+        .single()
+      wasPublished = currentPost?.status === 'published'
+    }
+
     const { data, error } = await supabase
       .from('generated_posts')
       .update(updateData)
@@ -96,6 +108,18 @@ export async function PUT(request: NextRequest) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Pre-generate Stock-Synthszr when publishing (async, don't block response)
+    if (status === 'published' && !wasPublished && content) {
+      const contentToProcess = typeof content === 'string' ? content : JSON.stringify(content)
+      pregenerateStockSynthszr(contentToProcess)
+        .then((result) => {
+          console.log(`[stock-synthszr] Pre-generation complete: ${result.generated} generated, ${result.skipped} cached, ${result.errors} errors`)
+        })
+        .catch((err) => {
+          console.error('[stock-synthszr] Pre-generation failed:', err)
+        })
     }
 
     return NextResponse.json(data)

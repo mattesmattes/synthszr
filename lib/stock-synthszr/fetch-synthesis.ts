@@ -82,7 +82,7 @@ export async function fetchStockSynthszr({
   }
 
   const configuredModel = process.env.OPENAI_MODEL?.trim() || null
-  const candidateModels = configuredModel ? [configuredModel] : ['gpt-4o', 'gpt-4-turbo']
+  const candidateModels = configuredModel ? [configuredModel] : ['gpt-5.2', 'gpt-5', 'gpt-4o']
 
   const priceSnippet =
     typeof price === 'number' && Number.isFinite(price)
@@ -139,6 +139,7 @@ export async function fetchStockSynthszr({
         if (!parsed.model) {
           parsed.model = model
         }
+        parsed.created_at = new Date().toISOString()
         return parsed
       } catch (parseError) {
         console.error('[stock-synthszr] JSON-Parse-Fehler. Roher Output:', jsonString)
