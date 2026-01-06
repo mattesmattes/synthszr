@@ -31,7 +31,6 @@ export async function POST(request: NextRequest) {
   try {
     const payload = await request.json().catch(() => ({}))
     const companies = Array.isArray(payload?.companies) ? payload.companies : []
-    const currency = typeof payload?.currency === 'string' ? payload.currency : 'EUR'
 
     if (companies.length === 0) {
       return NextResponse.json({ ok: true, ratings: [] })
@@ -48,7 +47,7 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabase()
     const results: StockRatingResult[] = []
 
-    // Query cache for each company
+    // Query cache for each company (any currency - rating is the same)
     for (const company of companies) {
       if (typeof company !== 'string' || !company.trim()) continue
 
@@ -56,7 +55,6 @@ export async function POST(request: NextRequest) {
         .from('stock_synthszr_cache')
         .select('company, data, created_at')
         .ilike('company', company.trim())
-        .eq('currency', currency)
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false })
         .limit(1)
