@@ -11,7 +11,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { TrendingUp, TrendingDown, Minus, Sparkles } from "lucide-react"
+import { StockSynthszrLayer } from "./stock-synthszr-layer"
+import { Button } from "./ui/button"
 
 // Known public companies that we want to show stock tickers for
 const KNOWN_COMPANIES: Record<string, string> = {
@@ -103,6 +105,7 @@ interface StockTickerInlineProps {
 function StockTickerInline({ company }: StockTickerInlineProps) {
   const [data, setData] = useState<StockData | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [showSynthszr, setShowSynthszr] = useState(false)
 
   useEffect(() => {
     async function fetchQuote() {
@@ -211,6 +214,18 @@ function StockTickerInline({ company }: StockTickerInlineProps) {
               </div>
             </div>
 
+            {/* Stock-Synthszr Button */}
+            <Button
+              onClick={() => {
+                setDialogOpen(false)
+                setShowSynthszr(true)
+              }}
+              className="w-full bg-[#CCFF00] text-black hover:bg-[#CCFF00]/80"
+            >
+              <Sparkles className="h-4 w-4 mr-2" />
+              Stock-Synthszr generieren
+            </Button>
+
             {/* Timestamp & Source */}
             <div className="flex items-center justify-between pt-2 border-t">
               <p className="text-xs text-muted-foreground">
@@ -228,6 +243,17 @@ function StockTickerInline({ company }: StockTickerInlineProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Stock-Synthszr Layer */}
+      {showSynthszr && (
+        <StockSynthszrLayer
+          company={company}
+          currency={data.currency}
+          price={data.price}
+          changePercent={data.changePercent}
+          onClose={() => setShowSynthszr(false)}
+        />
+      )}
     </>
   )
 }
