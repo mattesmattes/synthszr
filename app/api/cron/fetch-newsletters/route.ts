@@ -94,6 +94,20 @@ async function processNewsletters() {
   const senderEmails = sources.map(s => s.email)
   const emails = await gmailClient.fetchEmailsFromSenders(senderEmails, 50, lastFetch)
 
+  // Also fetch emails with "+dailyrepo" subject tag (user-tagged emails for import)
+  const hoursBack = Math.ceil((Date.now() - lastFetch.getTime()) / (1000 * 60 * 60)) || 36
+  const taggedEmails = await gmailClient.fetchEmailsBySubject(null, '+dailyrepo', 20, hoursBack)
+  console.log(`[Fetch] Found ${taggedEmails.length} emails with +dailyrepo tag`)
+
+  // Merge emails, avoiding duplicates (by message ID)
+  const emailIds = new Set(emails.map(e => e.id))
+  for (const taggedEmail of taggedEmails) {
+    if (!emailIds.has(taggedEmail.id)) {
+      emails.push(taggedEmail)
+      emailIds.add(taggedEmail.id)
+    }
+  }
+
   let processedNewsletters = 0
   let processedArticles = 0
   let errors = 0
