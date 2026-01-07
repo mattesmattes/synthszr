@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     // Check if user is allowed
     if (!isAllowedAdmin(userInfo.email)) {
-      console.log(`Unauthorized login attempt from: ${userInfo.email}`)
+      console.log('Unauthorized login attempt:', userInfo.email)
       return NextResponse.redirect(`${baseUrl}/login?error=unauthorized`)
     }
 
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     const sessionToken = await createSession(userInfo.email, userInfo.name)
     await setSessionCookie(sessionToken)
 
-    console.log(`Admin login successful: ${userInfo.email}`)
+    console.log('Admin login successful:', userInfo.email)
     return NextResponse.redirect(`${baseUrl}/admin`)
   } catch (err) {
     console.error('Google OAuth callback error:', err)
