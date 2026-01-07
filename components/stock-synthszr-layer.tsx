@@ -59,6 +59,7 @@ function isSourceCitation(flag: string): boolean {
 
 interface StockSynthszrLayerProps {
   company: string
+  symbol?: string
   currency?: string
   price?: number | null
   changePercent?: number | null
@@ -74,6 +75,7 @@ const DEFAULT_RECENCY_DAYS = 90
 
 export function StockSynthszrLayer({
   company,
+  symbol,
   currency = 'EUR',
   price,
   changePercent,
@@ -122,18 +124,32 @@ export function StockSynthszrLayer({
       ? state.data.model?.toUpperCase() || 'AI'
       : null
 
+  // Display ticker symbol in uppercase, fallback to company name
+  const displayTitle = symbol ? symbol.toUpperCase() : company.toUpperCase()
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-0 backdrop-blur-md md:p-4">
       <div className="relative flex h-full w-full flex-col overflow-hidden border-border bg-background shadow-2xl md:h-[90vh] md:max-w-5xl md:rounded-xl md:border">
+        {/* Close button - absolute top right */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          aria-label="Modal schließen"
+          className="absolute right-2 top-2 z-10"
+        >
+          <X className="h-5 w-5" />
+        </Button>
+
         {/* Header */}
-        <div className="flex flex-col gap-3 border-b border-border px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6 md:py-4">
+        <div className="flex flex-col gap-3 border-b border-border px-4 py-3 pr-12 md:flex-row md:items-center md:justify-between md:px-6 md:py-4">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-mono uppercase tracking-wide text-muted-foreground">
               Stock-Synthszr
               {resolvedModelLabel ? ` (${resolvedModelLabel})` : null}
             </p>
             <h2 className="truncate text-base font-semibold md:text-lg">
-              {company}
+              {displayTitle}
             </h2>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {typeof price === 'number' && Number.isFinite(price) && (
@@ -153,7 +169,6 @@ export function StockSynthszrLayer({
                   {changePercent > 0 ? '+' : ''}{changePercent.toFixed(1)}%
                 </span>
               )}
-              <span>· Zeitfenster {DEFAULT_RECENCY_DAYS} Tage</span>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -174,9 +189,6 @@ export function StockSynthszrLayer({
                 <RefreshCcw className="h-4 w-4 animate-spin" />
               </div>
             )}
-            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Modal schließen">
-              <X className="h-5 w-5" />
-            </Button>
           </div>
         </div>
 
@@ -210,7 +222,6 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
       <section>
         <header className="mb-3">
           <h3 className="text-base font-semibold">Key Takeaways</h3>
-          <p className="text-xs text-muted-foreground">Direkt vom Modell recherchiert (5 Fakten)</p>
         </header>
         <ol className="list-decimal space-y-2 pl-5 text-sm">
           {data.key_takeaways.map((item, index) => (
@@ -274,8 +285,7 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
       {/* Final Recommendation */}
       <section>
         <header className="mb-3">
-          <h3 className="text-base font-semibold">Gesamtfazit</h3>
-          <p className="text-xs text-muted-foreground">Abschließende Empfehlung des Modells</p>
+          <h3 className="text-base font-semibold">Synthszr Vote</h3>
         </header>
         <div className="rounded-lg border border-border bg-background p-4 shadow-sm">
           <div className="mb-2 flex items-center gap-3 text-sm font-semibold uppercase tracking-wide">

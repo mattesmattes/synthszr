@@ -303,6 +303,7 @@ function StockTickerInline({ company }: StockTickerInlineProps) {
       {showSynthszr && (
         <StockSynthszrLayer
           company={company}
+          symbol={data.symbol}
           currency={data.currency}
           price={data.price}
           changePercent={data.changePercent}
