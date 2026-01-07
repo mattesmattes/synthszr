@@ -119,11 +119,6 @@ export function StockSynthszrLayer({
     }
   }, [company, currency, price])
 
-  const resolvedModelLabel =
-    state.status === 'success'
-      ? state.data.model?.toUpperCase() || 'AI'
-      : null
-
   // Display ticker symbol in uppercase, fallback to company name
   const displayTitle = symbol ? symbol.toUpperCase() : company.toUpperCase()
 
@@ -146,7 +141,6 @@ export function StockSynthszrLayer({
           <div className="min-w-0 flex-1">
             <p className="text-xs font-mono uppercase tracking-wide text-muted-foreground">
               Stock-Synthszr
-              {resolvedModelLabel ? ` (${resolvedModelLabel})` : null}
             </p>
             <h2 className="truncate text-base font-semibold md:text-lg">
               {displayTitle}
