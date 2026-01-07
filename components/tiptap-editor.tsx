@@ -1,13 +1,22 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
-import { Bold, Italic, List, ListOrdered, Heading1, Heading2, Quote, Undo, Redo, Link as LinkIcon } from "lucide-react"
+import { Bold, Italic, List, ListOrdered, Heading1, Heading2, Quote, Undo, Redo, Link as LinkIcon, Unlink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 interface TiptapEditorProps {
   content: Record<string, unknown>
@@ -15,6 +24,9 @@ interface TiptapEditorProps {
 }
 
 export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false)
+  const [linkUrl, setLinkUrl] = useState("")
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -50,6 +62,39 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
       }
     }
   }, [editor, content])
+
+  // Open link dialog - pre-fill with existing link URL if cursor is on a link
+  const openLinkDialog = useCallback(() => {
+    if (!editor) return
+    const previousUrl = editor.getAttributes("link").href || ""
+    setLinkUrl(previousUrl)
+    setLinkDialogOpen(true)
+  }, [editor])
+
+  // Set or update link
+  const setLink = useCallback(() => {
+    if (!editor) return
+
+    // Empty URL removes the link
+    if (linkUrl === "") {
+      editor.chain().focus().extendMarkRange("link").unsetLink().run()
+    } else {
+      // Ensure URL has protocol
+      const url = linkUrl.startsWith("http://") || linkUrl.startsWith("https://")
+        ? linkUrl
+        : `https://${linkUrl}`
+      editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run()
+    }
+
+    setLinkDialogOpen(false)
+    setLinkUrl("")
+  }, [editor, linkUrl])
+
+  // Remove link
+  const removeLink = useCallback(() => {
+    if (!editor) return
+    editor.chain().focus().extendMarkRange("link").unsetLink().run()
+  }, [editor])
 
   if (!editor) {
     return null
@@ -128,6 +173,27 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
           type="button"
           variant="ghost"
           size="sm"
+          onClick={openLinkDialog}
+          className={cn(editor.isActive("link") && "bg-secondary")}
+          title="Link hinzufügen/bearbeiten"
+        >
+          <LinkIcon className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={removeLink}
+          disabled={!editor.isActive("link")}
+          title="Link entfernen"
+        >
+          <Unlink className="h-4 w-4" />
+        </Button>
+        <div className="mx-1 w-px bg-border" />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
           onClick={() => editor.chain().focus().undo().run()}
           disabled={!editor.can().undo()}
         >
@@ -144,6 +210,44 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
         </Button>
       </div>
       <EditorContent editor={editor} />
+
+      {/* Link Dialog */}
+      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Link bearbeiten</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="link-url">URL</Label>
+              <Input
+                id="link-url"
+                placeholder="https://example.com"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    setLink()
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLinkDialogOpen(false)}
+            >
+              Abbrechen
+            </Button>
+            <Button type="button" onClick={setLink}>
+              Speichern
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
