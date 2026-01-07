@@ -188,9 +188,13 @@ async function processNewsletters() {
   const articlesToProcess = articleUrls.slice(0, 25)
   console.log(`[Cron] Processing ${articlesToProcess.length} articles from ${articleUrls.length} total links`)
 
+  let articlesSkipped = 0
+  let articlesFailed = 0
+  let articlesNoContent = 0
+
   for (const article of articlesToProcess) {
     try {
-      // Check if article already exists
+      // Check if article already exists (by URL or resolved URL)
       const { data: existingArticle } = await supabase
         .from('daily_repo')
         .select('id')
@@ -198,36 +202,67 @@ async function processNewsletters() {
         .single()
 
       if (existingArticle) {
+        articlesSkipped++
         continue // Already processed
       }
 
       const extracted = await extractArticleContent(article.url)
 
-      if (extracted && extracted.content) {
-        const { error: articleInsertError } = await supabase
-          .from('daily_repo')
-          .insert({
-            source_type: 'article',
-            source_url: article.url,
-            title: extracted.title || article.title,
-            content: extracted.content, // Full article content
-            newsletter_date: article.newsletterDate,
-          })
+      if (!extracted) {
+        articlesFailed++
+        console.log(`[Cron] Extraction failed for: ${article.url.slice(0, 60)}...`)
+        continue
+      }
 
-        if (!articleInsertError) {
-          processedArticles++
-          processedItems.push({
-            type: 'article',
-            title: extracted.title || article.title,
-            url: article.url
-          })
-        }
+      if (!extracted.content) {
+        articlesNoContent++
+        console.log(`[Cron] No content extracted for: ${article.url.slice(0, 60)}...`)
+        continue
+      }
+
+      // Use the resolved final URL if available, otherwise the original
+      const sourceUrl = extracted.finalUrl || article.url
+
+      // Check for duplicate by resolved URL too
+      const { data: existingByFinalUrl } = await supabase
+        .from('daily_repo')
+        .select('id')
+        .eq('source_url', sourceUrl)
+        .single()
+
+      if (existingByFinalUrl) {
+        articlesSkipped++
+        continue
+      }
+
+      const { error: articleInsertError } = await supabase
+        .from('daily_repo')
+        .insert({
+          source_type: 'article',
+          source_url: sourceUrl, // Use resolved URL
+          title: extracted.title || article.title,
+          content: extracted.content, // Full article content
+          newsletter_date: article.newsletterDate,
+        })
+
+      if (!articleInsertError) {
+        processedArticles++
+        processedItems.push({
+          type: 'article',
+          title: extracted.title || article.title,
+          url: sourceUrl
+        })
+      } else {
+        console.error(`[Cron] Insert error for ${sourceUrl}:`, articleInsertError.message)
       }
     } catch (err) {
-      console.error(`Error extracting article ${article.url}:`, err)
+      articlesFailed++
+      console.error(`[Cron] Error extracting article ${article.url}:`, err)
       // Don't count article extraction failures as critical errors
     }
   }
+
+  console.log(`[Cron] Article processing: ${processedArticles} stored, ${articlesSkipped} skipped (existing), ${articlesFailed} failed, ${articlesNoContent} no content`)
 
   // Update last fetch timestamp
   await supabase
@@ -244,6 +279,13 @@ async function processNewsletters() {
     message: `Processed ${processedNewsletters} newsletters and ${processedArticles} articles`,
     processed: processedNewsletters,
     articles: processedArticles,
+    articleStats: {
+      attempted: articlesToProcess.length,
+      stored: processedArticles,
+      skipped: articlesSkipped,
+      failed: articlesFailed,
+      noContent: articlesNoContent,
+    },
     errors,
     totalEmails: emails.length,
     processedItems,
