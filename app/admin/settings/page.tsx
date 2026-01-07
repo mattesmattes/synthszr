@@ -99,7 +99,7 @@ export default function SettingsPage() {
   const [savingSchedule, setSavingSchedule] = useState(false)
   const [scheduleSuccess, setScheduleSuccess] = useState(false)
   const [triggeringSchedule, setTriggeringSchedule] = useState(false)
-  const [triggerResult, setTriggerResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [triggerResult, setTriggerResult] = useState<{ success: boolean; message: string; details?: Record<string, string> } | null>(null)
 
   const success = searchParams.get('success')
   const error = searchParams.get('error')
@@ -211,14 +211,31 @@ export default function SettingsPage() {
       const data = await response.json()
       if (response.ok && data.success) {
         const results = data.results || {}
-        const completedTasks = Object.entries(results)
-          .filter(([_, status]) => status === 'completed' || status === 'triggered')
-          .map(([task]) => task)
+        const statusLabels: Record<string, string> = {
+          'completed': '✓ Fertig',
+          'triggered': '✓ Gestartet',
+          'skipped': '⏭ Übersprungen',
+          'already_ran': '⏭ Bereits gelaufen',
+          'not_scheduled': '○ Nicht geplant',
+          'error': '✗ Fehler',
+          'no_post': '○ Kein Post',
+        }
+        const taskLabels: Record<string, string> = {
+          'newsletterFetch': 'Newsletter Abruf',
+          'dailyAnalysis': 'News & Synthese',
+          'postGeneration': 'Post Generierung',
+          'newsletterSend': 'Newsletter Versand',
+        }
+        const details: Record<string, string> = {}
+        for (const [task, status] of Object.entries(results)) {
+          if (taskLabels[task]) {
+            details[taskLabels[task]] = statusLabels[status as string] || String(status)
+          }
+        }
         setTriggerResult({
           success: true,
-          message: completedTasks.length > 0
-            ? `Erfolgreich: ${completedTasks.join(', ')}`
-            : 'Alle Tasks wurden übersprungen (bereits gelaufen oder nicht geplant)',
+          message: data.currentTime ? `Ausgeführt um ${data.currentTime}` : 'Tasks ausgeführt',
+          details,
         })
       } else {
         setTriggerResult({
@@ -233,7 +250,7 @@ export default function SettingsPage() {
       })
     } finally {
       setTriggeringSchedule(false)
-      setTimeout(() => setTriggerResult(null), 10000)
+      setTimeout(() => setTriggerResult(null), 15000)
     }
   }
 
@@ -666,13 +683,25 @@ export default function SettingsPage() {
                     </Button>
                   </div>
                   {triggerResult && (
-                    <div className={`mt-3 flex items-center gap-2 text-sm ${triggerResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                      {triggerResult.success ? (
-                        <CheckCircle className="h-4 w-4" />
-                      ) : (
-                        <XCircle className="h-4 w-4" />
+                    <div className="mt-3 space-y-2">
+                      <div className={`flex items-center gap-2 text-sm ${triggerResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                        {triggerResult.success ? (
+                          <CheckCircle className="h-4 w-4" />
+                        ) : (
+                          <XCircle className="h-4 w-4" />
+                        )}
+                        {triggerResult.message}
+                      </div>
+                      {triggerResult.details && Object.keys(triggerResult.details).length > 0 && (
+                        <div className="rounded-md bg-muted p-3 text-xs space-y-1">
+                          {Object.entries(triggerResult.details).map(([task, status]) => (
+                            <div key={task} className="flex justify-between">
+                              <span className="text-muted-foreground">{task}</span>
+                              <span>{status}</span>
+                            </div>
+                          ))}
+                        </div>
                       )}
-                      {triggerResult.message}
                     </div>
                   )}
                 </div>
