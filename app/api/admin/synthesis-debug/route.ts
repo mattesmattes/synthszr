@@ -243,5 +243,48 @@ export async function GET(request: NextRequest) {
       : 'Alle Voraussetzungen scheinen erfüllt. Prüfe die Vercel-Logs für Details.',
   }
 
+  // 7. Test similarity search with a sample item
+  const sampleItemId = debug.sourceItems && typeof debug.sourceItems === 'object' && 'sample' in debug.sourceItems
+    ? (debug.sourceItems as { sample?: Array<{ id: string }> }).sample?.[0]?.id
+    : null
+
+  if (sampleItemId) {
+    // Get the embedding for this item
+    const { data: itemWithEmbedding } = await supabase
+      .from('daily_repo')
+      .select('id, title, embedding')
+      .eq('id', sampleItemId)
+      .single()
+
+    if (itemWithEmbedding?.embedding) {
+      // Try direct similarity search via RPC
+      const { data: similarItems, error: searchError } = await supabase.rpc('find_similar_items', {
+        query_embedding: itemWithEmbedding.embedding,
+        item_id: sampleItemId,
+        max_age_days: 90,
+        match_threshold: 0.3, // Lower threshold for testing
+        match_count: 5,
+      })
+
+      debug.similarityTest = {
+        testItemId: sampleItemId,
+        testItemTitle: itemWithEmbedding.title?.slice(0, 50),
+        embeddingLength: typeof itemWithEmbedding.embedding === 'string'
+          ? itemWithEmbedding.embedding.length
+          : 'array',
+        embeddingPreview: typeof itemWithEmbedding.embedding === 'string'
+          ? itemWithEmbedding.embedding.slice(0, 50) + '...'
+          : 'array format',
+        searchError: searchError?.message,
+        resultsCount: similarItems?.length || 0,
+        results: similarItems?.slice(0, 3).map((r: { id: string; title: string; similarity: number }) => ({
+          id: r.id,
+          title: r.title?.slice(0, 40),
+          similarity: r.similarity,
+        })),
+      }
+    }
+  }
+
   return NextResponse.json(debug)
 }
