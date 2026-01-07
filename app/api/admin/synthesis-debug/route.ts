@@ -1,0 +1,228 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { jwtVerify } from 'jose'
+
+export const runtime = 'nodejs'
+
+// Supabase client for admin operations
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
+
+const SESSION_COOKIE_NAME = 'synthszr_session'
+
+function getSecretKey() {
+  const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
+  if (!secret) return null
+  return new TextEncoder().encode(secret)
+}
+
+async function isAdminSession(request: NextRequest): Promise<boolean> {
+  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  if (!sessionToken) return false
+
+  const secretKey = getSecretKey()
+  if (!secretKey) return false
+
+  try {
+    await jwtVerify(sessionToken, secretKey)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * GET: Debug synthesis pipeline for a digest
+ * Query params:
+ * - digestId: UUID of the digest to analyze
+ */
+export async function GET(request: NextRequest) {
+  // Check admin auth
+  if (process.env.NODE_ENV === 'production') {
+    const isAdmin = await isAdminSession(request)
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+  }
+
+  const { searchParams } = new URL(request.url)
+  const digestId = searchParams.get('digestId')
+
+  if (!digestId) {
+    return NextResponse.json({ error: 'digestId required' }, { status: 400 })
+  }
+
+  const supabase = getSupabase()
+  const debug: Record<string, unknown> = {}
+
+  // 1. Get the digest
+  const { data: digest, error: digestError } = await supabase
+    .from('daily_digests')
+    .select('id, digest_date, sources_used, created_at')
+    .eq('id', digestId)
+    .single()
+
+  if (digestError || !digest) {
+    return NextResponse.json({ error: 'Digest not found', digestError }, { status: 404 })
+  }
+
+  debug.digest = {
+    id: digest.id,
+    digest_date: digest.digest_date,
+    sources_used_count: digest.sources_used?.length || 0,
+    created_at: digest.created_at,
+  }
+
+  // 2. Check if sources_used has items
+  if (digest.sources_used && digest.sources_used.length > 0) {
+    const { data: sourceItems, error: sourceError } = await supabase
+      .from('daily_repo')
+      .select('id, title, embedding, collected_at, newsletter_date')
+      .in('id', digest.sources_used)
+
+    debug.sourceItems = {
+      requested: digest.sources_used.length,
+      found: sourceItems?.length || 0,
+      withEmbeddings: sourceItems?.filter(i => i.embedding !== null).length || 0,
+      withoutEmbeddings: sourceItems?.filter(i => i.embedding === null).length || 0,
+      sample: sourceItems?.slice(0, 3).map(i => ({
+        id: i.id,
+        title: i.title?.slice(0, 50),
+        hasEmbedding: i.embedding !== null,
+        collected_at: i.collected_at,
+        newsletter_date: i.newsletter_date,
+      })),
+      error: sourceError?.message,
+    }
+  } else {
+    // Fallback: get items by date
+    const { data: dateItems, error: dateError } = await supabase
+      .from('daily_repo')
+      .select('id, title, embedding, collected_at, newsletter_date')
+      .eq('newsletter_date', digest.digest_date)
+
+    debug.dateItems = {
+      date: digest.digest_date,
+      found: dateItems?.length || 0,
+      withEmbeddings: dateItems?.filter(i => i.embedding !== null).length || 0,
+      withoutEmbeddings: dateItems?.filter(i => i.embedding === null).length || 0,
+      sample: dateItems?.slice(0, 3).map(i => ({
+        id: i.id,
+        title: i.title?.slice(0, 50),
+        hasEmbedding: i.embedding !== null,
+        collected_at: i.collected_at,
+        newsletter_date: i.newsletter_date,
+      })),
+      error: dateError?.message,
+    }
+  }
+
+  // 3. Check overall embedding status in daily_repo
+  const { count: totalItems } = await supabase
+    .from('daily_repo')
+    .select('id', { count: 'exact', head: true })
+
+  const { count: itemsWithEmbeddings } = await supabase
+    .from('daily_repo')
+    .select('id', { count: 'exact', head: true })
+    .not('embedding', 'is', null)
+
+  debug.embeddingStatus = {
+    totalItems: totalItems || 0,
+    withEmbeddings: itemsWithEmbeddings || 0,
+    missingEmbeddings: (totalItems || 0) - (itemsWithEmbeddings || 0),
+    percentComplete: totalItems ? Math.round((itemsWithEmbeddings || 0) / totalItems * 100) : 0,
+  }
+
+  // 4. Check historical items (older than digest date, within 90 days)
+  const digestDate = new Date(digest.digest_date)
+  const minDate = new Date(digestDate)
+  minDate.setDate(minDate.getDate() - 90)
+
+  const { count: historicalTotal } = await supabase
+    .from('daily_repo')
+    .select('id', { count: 'exact', head: true })
+    .lt('newsletter_date', digest.digest_date)
+    .gt('newsletter_date', minDate.toISOString().split('T')[0])
+
+  const { count: historicalWithEmbeddings } = await supabase
+    .from('daily_repo')
+    .select('id', { count: 'exact', head: true })
+    .lt('newsletter_date', digest.digest_date)
+    .gt('newsletter_date', minDate.toISOString().split('T')[0])
+    .not('embedding', 'is', null)
+
+  debug.historicalItems = {
+    dateRange: {
+      from: minDate.toISOString().split('T')[0],
+      to: digest.digest_date,
+    },
+    total: historicalTotal || 0,
+    withEmbeddings: historicalWithEmbeddings || 0,
+    missingEmbeddings: (historicalTotal || 0) - (historicalWithEmbeddings || 0),
+  }
+
+  // 5. Check existing synthesis candidates for this digest
+  const { count: existingCandidates } = await supabase
+    .from('synthesis_candidates')
+    .select('id', { count: 'exact', head: true })
+    .eq('digest_id', digestId)
+
+  const { count: existingSyntheses } = await supabase
+    .from('developed_syntheses')
+    .select('id', { count: 'exact', head: true })
+    .eq('digest_id', digestId)
+
+  debug.existingSynthesis = {
+    candidates: existingCandidates || 0,
+    developedSyntheses: existingSyntheses || 0,
+  }
+
+  // 6. Diagnosis
+  const issues: string[] = []
+
+  if (debug.embeddingStatus && typeof debug.embeddingStatus === 'object' && 'missingEmbeddings' in debug.embeddingStatus) {
+    const embStatus = debug.embeddingStatus as { missingEmbeddings: number; percentComplete: number }
+    if (embStatus.missingEmbeddings > 0 && embStatus.percentComplete < 80) {
+      issues.push(`Nur ${embStatus.percentComplete}% der Items haben Embeddings. Bitte Backfill ausführen.`)
+    }
+  }
+
+  if (debug.historicalItems && typeof debug.historicalItems === 'object' && 'withEmbeddings' in debug.historicalItems) {
+    const histItems = debug.historicalItems as { withEmbeddings: number; total: number; missingEmbeddings: number }
+    if (histItems.withEmbeddings === 0) {
+      issues.push('Keine historischen Items haben Embeddings. Similarity Search findet nichts.')
+    } else if (histItems.missingEmbeddings > histItems.withEmbeddings) {
+      issues.push(`Viele historische Items ohne Embeddings (${histItems.missingEmbeddings} von ${histItems.total})`)
+    }
+  }
+
+  if (debug.sourceItems && typeof debug.sourceItems === 'object' && 'found' in debug.sourceItems) {
+    const srcItems = debug.sourceItems as { found: number; withEmbeddings: number }
+    if (srcItems.found === 0) {
+      issues.push('Keine Source-Items für diesen Digest gefunden.')
+    } else if (srcItems.withEmbeddings === 0) {
+      issues.push('Keines der Source-Items hat ein Embedding.')
+    }
+  }
+
+  if (debug.dateItems && typeof debug.dateItems === 'object' && 'found' in debug.dateItems) {
+    const dtItems = debug.dateItems as { found: number }
+    if (dtItems.found === 0) {
+      issues.push(`Keine Items für Datum ${digest.digest_date} gefunden.`)
+    }
+  }
+
+  debug.diagnosis = {
+    issues,
+    recommendation: issues.length > 0
+      ? 'Führe den Embedding-Backfill aus und starte die Synthese erneut.'
+      : 'Alle Voraussetzungen scheinen erfüllt. Prüfe die Vercel-Logs für Details.',
+  }
+
+  return NextResponse.json(debug)
+}

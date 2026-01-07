@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Settings, Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play } from 'lucide-react'
+import { Settings, Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, Database, RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -101,13 +101,69 @@ export default function SettingsPage() {
   const [triggeringSchedule, setTriggeringSchedule] = useState(false)
   const [triggerResult, setTriggerResult] = useState<{ success: boolean; message: string; details?: Record<string, string> } | null>(null)
 
+  // Embedding status
+  const [embeddingStatus, setEmbeddingStatus] = useState<{
+    total: number
+    withEmbeddings: number
+    missingEmbeddings: number
+    percentComplete: number
+  } | null>(null)
+  const [embeddingLoading, setEmbeddingLoading] = useState(true)
+  const [backfillRunning, setBackfillRunning] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<{
+    success: boolean
+    message: string
+    processed?: number
+    remaining?: number
+  } | null>(null)
+
   const success = searchParams.get('success')
   const error = searchParams.get('error')
 
   useEffect(() => {
     fetchGmailStatus()
     fetchSchedule()
+    fetchEmbeddingStatus()
   }, [])
+
+  async function fetchEmbeddingStatus() {
+    setEmbeddingLoading(true)
+    try {
+      const response = await fetch('/api/admin/backfill-embeddings')
+      if (response.ok) {
+        const data = await response.json()
+        setEmbeddingStatus(data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch embedding status:', error)
+    } finally {
+      setEmbeddingLoading(false)
+    }
+  }
+
+  async function runBackfill() {
+    setBackfillRunning(true)
+    setBackfillResult(null)
+    try {
+      const response = await fetch('/api/admin/backfill-embeddings?batchSize=50', { method: 'POST' })
+      const data = await response.json()
+      setBackfillResult({
+        success: data.success,
+        message: data.message,
+        processed: data.processed,
+        remaining: data.remaining,
+      })
+      // Refresh status after backfill
+      fetchEmbeddingStatus()
+    } catch (error) {
+      setBackfillResult({
+        success: false,
+        message: 'Netzwerkfehler beim Backfill',
+      })
+    } finally {
+      setBackfillRunning(false)
+    }
+  }
 
   async function fetchGmailStatus() {
     try {
@@ -710,6 +766,95 @@ export default function SettingsPage() {
                   Hinweis: Zeiten in MEZ (Mitteleuropäische Zeit). Der Scheduler prüft alle 10 Minuten, ob ein Job ausgeführt werden soll.
                 </p>
               </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Embedding Status */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5" />
+              Synthese-Embeddings
+            </CardTitle>
+            <CardDescription>
+              Embeddings werden für die Synthese-Pipeline benötigt, um ähnliche historische Artikel zu finden
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {embeddingLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm text-muted-foreground">Lade Status...</span>
+              </div>
+            ) : embeddingStatus ? (
+              <>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Embeddings vorhanden</span>
+                    <span className="font-medium">{embeddingStatus.withEmbeddings} / {embeddingStatus.total}</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-green-500 transition-all"
+                      style={{ width: `${embeddingStatus.percentComplete}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{embeddingStatus.percentComplete}% vollständig</span>
+                    <span>{embeddingStatus.missingEmbeddings} fehlend</span>
+                  </div>
+                </div>
+
+                {embeddingStatus.missingEmbeddings > 0 && (
+                  <div className="pt-4 border-t">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">Embeddings generieren</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Fehlende Embeddings für historische Artikel erzeugen
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={runBackfill}
+                        disabled={backfillRunning}
+                      >
+                        {backfillRunning ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                        )}
+                        Backfill starten
+                      </Button>
+                    </div>
+                    {backfillResult && (
+                      <div className="mt-3">
+                        <div className={`flex items-center gap-2 text-sm ${backfillResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                          {backfillResult.success ? (
+                            <CheckCircle className="h-4 w-4" />
+                          ) : (
+                            <XCircle className="h-4 w-4" />
+                          )}
+                          {backfillResult.message}
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Hinweis: Verarbeitet 50 Items pro Durchlauf. Bei vielen fehlenden Embeddings mehrmals ausführen.
+                    </p>
+                  </div>
+                )}
+
+                {embeddingStatus.missingEmbeddings === 0 && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <CheckCircle className="h-4 w-4" />
+                    Alle Items haben Embeddings
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Status nicht verfügbar</p>
             )}
           </CardContent>
         </Card>
