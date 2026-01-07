@@ -252,7 +252,7 @@ export async function GET(request: NextRequest) {
     // Get the embedding for this item
     const { data: itemWithEmbedding } = await supabase
       .from('daily_repo')
-      .select('id, title, embedding')
+      .select('id, title, content, embedding')
       .eq('id', sampleItemId)
       .single()
 
@@ -282,6 +282,79 @@ export async function GET(request: NextRequest) {
           title: r.title?.slice(0, 40),
           similarity: r.similarity,
         })),
+      }
+
+      // 8. Test actual scoring with Claude Haiku (if similarity search found results)
+      if (similarItems && similarItems.length > 0 && searchParams.get('testScoring') === 'true') {
+        const testSimilarItem = similarItems[0]
+
+        // Get active synthesis prompt
+        const { data: activePrompt } = await supabase
+          .from('synthesis_prompts')
+          .select('scoring_prompt')
+          .eq('is_active', true)
+          .single()
+
+        if (activePrompt?.scoring_prompt) {
+          try {
+            const Anthropic = (await import('@anthropic-ai/sdk')).default
+            const anthropic = new Anthropic({
+              apiKey: process.env.ANTHROPIC_API_KEY,
+            })
+
+            const currentNews = `${itemWithEmbedding.title}\n\n${(itemWithEmbedding.content || '').slice(0, 1500)}`
+            const historicalNews = `${testSimilarItem.title}\n\n${(testSimilarItem.content || '').slice(0, 1500)}`
+            const daysAgo = Math.round((Date.now() - new Date(testSimilarItem.collected_at).getTime()) / (1000 * 60 * 60 * 24))
+
+            const prompt = activePrompt.scoring_prompt
+              .replace('{current_news}', currentNews)
+              .replace('{historical_news}', historicalNews)
+              .replace('{days_ago}', String(daysAgo))
+
+            const response = await anthropic.messages.create({
+              model: 'claude-3-5-haiku-20241022',
+              max_tokens: 256,
+              messages: [{ role: 'user', content: prompt }],
+            })
+
+            const text = response.content[0].type === 'text' ? response.content[0].text : ''
+
+            // Parse structured response
+            const originalityMatch = text.match(/ORIGINALITÄT:\s*(\d+)/i)
+            const relevanceMatch = text.match(/RELEVANZ:\s*(\d+)/i)
+            const typeMatch = text.match(/TYP:\s*(contradiction|evolution|cross_domain|validation|pattern)/i)
+
+            const originality = originalityMatch ? parseInt(originalityMatch[1], 10) : 5
+            const relevance = relevanceMatch ? parseInt(relevanceMatch[1], 10) : 5
+            const totalScore = originality + relevance
+
+            debug.scoringTest = {
+              testItemTitle: itemWithEmbedding.title?.slice(0, 50),
+              historicalItemTitle: testSimilarItem.title?.slice(0, 50),
+              daysAgo,
+              rawResponse: text,
+              parsedOriginality: originality,
+              parsedRelevance: relevance,
+              parsedType: typeMatch?.[1] || 'fallback: cross_domain',
+              totalScore,
+              wouldPassThreshold: totalScore >= 12,
+              threshold: 12,
+              diagnosis: totalScore >= 12
+                ? 'Score passes threshold - should create candidate'
+                : `Score ${totalScore} is below threshold 12 - candidate filtered out`,
+            }
+          } catch (scoringError) {
+            debug.scoringTest = {
+              error: scoringError instanceof Error ? scoringError.message : 'Unknown error',
+              diagnosis: 'Claude Haiku API call failed - check ANTHROPIC_API_KEY',
+            }
+          }
+        } else {
+          debug.scoringTest = {
+            error: 'No active synthesis prompt found',
+            diagnosis: 'Missing active prompt in synthesis_prompts table',
+          }
+        }
       }
     }
   }
