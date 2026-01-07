@@ -112,13 +112,14 @@ export async function GET(request: NextRequest) {
   // Check if runAll mode (for daily cron on Hobby plan)
   const { searchParams } = new URL(request.url)
   const runAll = searchParams.get('runAll') === 'true'
+  const forceRun = searchParams.get('force') === 'true' // Bypass hasRunRecently checks
 
   // Use Europe/Berlin timezone (MEZ/MESZ) since admin UI uses MEZ
   const berlinTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }))
   const currentHour = berlinTime.getHours()
   const currentMinute = berlinTime.getMinutes()
 
-  console.log(`[Scheduler] Running at ${currentHour}:${String(currentMinute).padStart(2, '0')} MEZ (${now.getUTCHours()}:${String(now.getUTCMinutes()).padStart(2, '0')} UTC)${runAll ? ' [runAll mode]' : ''}`)
+  console.log(`[Scheduler] Running at ${currentHour}:${String(currentMinute).padStart(2, '0')} MEZ (${now.getUTCHours()}:${String(now.getUTCMinutes()).padStart(2, '0')} UTC)${runAll ? ' [runAll mode]' : ''}${forceRun ? ' [force mode]' : ''}`)
 
   // Get schedule config
   const { data: configData } = await supabase
@@ -137,72 +138,90 @@ export async function GET(request: NextRequest) {
     const fetchHour = config.newsletterFetch.hour ?? config.newsletterFetch.hours?.[0] ?? 6
     const fetchMinute = config.newsletterFetch.minute ?? 0
     const shouldRun = runAll || isTimeMatch(fetchHour, fetchMinute, currentHour, currentMinute)
+    const recentlyRan = !forceRun && await hasRunRecently(supabase, 'newsletter_fetch', 60)
 
-    if (shouldRun && !(await hasRunRecently(supabase, 'newsletter_fetch', 60))) {
+    if (shouldRun && !recentlyRan) {
       console.log('[Scheduler] Triggering newsletter fetch...')
       try {
-        // Call the existing cron endpoint internally
+        // Call the existing cron endpoint internally and wait for completion
         const baseUrl = process.env.VERCEL_URL
           ? `https://${process.env.VERCEL_URL}`
           : 'http://localhost:3000'
 
-        await fetch(`${baseUrl}/api/cron/fetch-newsletters`, {
+        const fetchResponse = await fetch(`${baseUrl}/api/cron/fetch-newsletters`, {
           headers: { 'Authorization': `Bearer ${process.env.CRON_SECRET}` }
         })
+        const fetchResult = await fetchResponse.json()
+        console.log('[Scheduler] Newsletter fetch completed:', fetchResult)
         await markTaskRun(supabase, 'newsletter_fetch')
-        results.newsletterFetch = 'triggered'
+        results.newsletterFetch = fetchResponse.ok ? 'completed' : 'error'
+        if (fetchResult.fetched !== undefined) {
+          results.newslettersFetched = fetchResult.fetched.toString()
+        }
       } catch (error) {
         console.error('[Scheduler] Newsletter fetch error:', error)
         results.newsletterFetch = 'error'
       }
     } else {
-      results.newsletterFetch = 'skipped'
+      results.newsletterFetch = recentlyRan ? 'already_ran' : 'skipped'
     }
   }
 
   // Check Daily Analysis (News & Synthese Erstellung)
+  // Only run if newsletter fetch completed successfully or was skipped
   if (config.dailyAnalysis.enabled) {
-    if (runAll || isTimeMatch(config.dailyAnalysis.hour, config.dailyAnalysis.minute, currentHour, currentMinute)) {
-      if (!(await hasRunRecently(supabase, 'daily_analysis', 60))) {
-        console.log('[Scheduler] Triggering daily analysis and synthesis...')
-        try {
-          const digestResult = await runDailyAnalysisAndSynthesis(supabase)
-          await markTaskRun(supabase, 'daily_analysis')
-          results.dailyAnalysis = digestResult.success ? 'completed' : 'error'
-          if (digestResult.digestId) {
-            results.digestId = digestResult.digestId
-          }
-          if (digestResult.synthesesCreated !== undefined) {
-            results.synthesesCreated = digestResult.synthesesCreated.toString()
-          }
-        } catch (error) {
-          console.error('[Scheduler] Daily analysis error:', error)
-          results.dailyAnalysis = 'error'
-        }
-      } else {
-        results.dailyAnalysis = 'already_ran'
+    const shouldRunAnalysis = runAll || isTimeMatch(config.dailyAnalysis.hour, config.dailyAnalysis.minute, currentHour, currentMinute)
+    const analysisRecentlyRan = !forceRun && await hasRunRecently(supabase, 'daily_analysis', 60)
+
+    if (shouldRunAnalysis && !analysisRecentlyRan) {
+      // Wait for newsletter fetch if it was triggered
+      if (results.newsletterFetch === 'completed') {
+        console.log('[Scheduler] Newsletter fetch completed, proceeding with daily analysis...')
       }
+      console.log('[Scheduler] Triggering daily analysis and synthesis...')
+      try {
+        const digestResult = await runDailyAnalysisAndSynthesis(supabase)
+        await markTaskRun(supabase, 'daily_analysis')
+        results.dailyAnalysis = digestResult.success ? 'completed' : 'error'
+        if (digestResult.digestId) {
+          results.digestId = digestResult.digestId
+        }
+        if (digestResult.synthesesCreated !== undefined) {
+          results.synthesesCreated = digestResult.synthesesCreated.toString()
+        }
+      } catch (error) {
+        console.error('[Scheduler] Daily analysis error:', error)
+        results.dailyAnalysis = 'error'
+      }
+    } else if (analysisRecentlyRan) {
+      results.dailyAnalysis = 'already_ran'
     } else {
       results.dailyAnalysis = 'not_scheduled'
     }
   }
 
   // Check Post Generation
+  // Only run if daily analysis completed successfully
   if (config.postGeneration.enabled) {
-    if (runAll || isTimeMatch(config.postGeneration.hour, config.postGeneration.minute, currentHour, currentMinute)) {
-      if (!(await hasRunRecently(supabase, 'post_generation', 60))) {
-        console.log('[Scheduler] Triggering post generation...')
-        try {
-          await generateDailyPost(supabase)
-          await markTaskRun(supabase, 'post_generation')
-          results.postGeneration = 'triggered'
-        } catch (error) {
-          console.error('[Scheduler] Post generation error:', error)
-          results.postGeneration = 'error'
-        }
-      } else {
-        results.postGeneration = 'already_ran'
+    const shouldRunPostGen = runAll || isTimeMatch(config.postGeneration.hour, config.postGeneration.minute, currentHour, currentMinute)
+    const postGenRecentlyRan = !forceRun && await hasRunRecently(supabase, 'post_generation', 60)
+
+    if (shouldRunPostGen && !postGenRecentlyRan) {
+      // Wait for daily analysis if it was triggered
+      if (results.dailyAnalysis === 'completed') {
+        console.log('[Scheduler] Daily analysis completed, proceeding with post generation...')
       }
+      console.log('[Scheduler] Triggering post generation...')
+      try {
+        await generateDailyPost(supabase)
+        await markTaskRun(supabase, 'post_generation')
+        results.postGeneration = 'completed'
+      } catch (error) {
+        console.error('[Scheduler] Post generation error:', error)
+        results.postGeneration = 'error'
+      }
+    } else if (postGenRecentlyRan) {
+      results.postGeneration = 'already_ran'
     } else {
       results.postGeneration = 'not_scheduled'
     }
@@ -210,44 +229,45 @@ export async function GET(request: NextRequest) {
 
   // Check Newsletter Send
   if (config.newsletterSend?.enabled) {
-    if (runAll || isTimeMatch(config.newsletterSend.hour, config.newsletterSend.minute, currentHour, currentMinute)) {
-      if (!(await hasRunRecently(supabase, 'newsletter_send', 60))) {
-        console.log('[Scheduler] Triggering newsletter send...')
-        try {
-          const baseUrl = process.env.VERCEL_URL
-            ? `https://${process.env.VERCEL_URL}`
-            : 'http://localhost:3000'
+    const shouldRunSend = runAll || isTimeMatch(config.newsletterSend.hour, config.newsletterSend.minute, currentHour, currentMinute)
+    const sendRecentlyRan = !forceRun && await hasRunRecently(supabase, 'newsletter_send', 60)
 
-          // Get latest published post
-          const { data: latestPost } = await supabase
-            .from('generated_posts')
-            .select('id')
-            .eq('status', 'published')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single()
+    if (shouldRunSend && !sendRecentlyRan) {
+      console.log('[Scheduler] Triggering newsletter send...')
+      try {
+        const baseUrl = process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : 'http://localhost:3000'
 
-          if (latestPost) {
-            await fetch(`${baseUrl}/api/admin/newsletter-send`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-              },
-              body: JSON.stringify({ postId: latestPost.id }),
-            })
-            await markTaskRun(supabase, 'newsletter_send')
-            results.newsletterSend = 'triggered'
-          } else {
-            results.newsletterSend = 'no_post'
-          }
-        } catch (error) {
-          console.error('[Scheduler] Newsletter send error:', error)
-          results.newsletterSend = 'error'
+        // Get latest published post
+        const { data: latestPost } = await supabase
+          .from('generated_posts')
+          .select('id')
+          .eq('status', 'published')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (latestPost) {
+          await fetch(`${baseUrl}/api/admin/newsletter-send`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+            },
+            body: JSON.stringify({ postId: latestPost.id }),
+          })
+          await markTaskRun(supabase, 'newsletter_send')
+          results.newsletterSend = 'completed'
+        } else {
+          results.newsletterSend = 'no_post'
         }
-      } else {
-        results.newsletterSend = 'already_ran'
+      } catch (error) {
+        console.error('[Scheduler] Newsletter send error:', error)
+        results.newsletterSend = 'error'
       }
+    } else if (sendRecentlyRan) {
+      results.newsletterSend = 'already_ran'
     } else {
       results.newsletterSend = 'not_scheduled'
     }

@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   const baseUrl = `${protocol}://${host}`
 
   try {
-    const response = await fetch(`${baseUrl}/api/cron/scheduled-tasks?runAll=true`, {
+    const response = await fetch(`${baseUrl}/api/cron/scheduled-tasks?runAll=true&force=true`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${process.env.CRON_SECRET}`,
