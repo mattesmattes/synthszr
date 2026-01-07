@@ -61,6 +61,99 @@ function extractSubstackInfo(email: string | null): { name: string; url: string 
   }
 }
 
+// Extract newsletter name from email format like "Newsletter Name <email@domain.com>"
+// or "\"Newsletter Name\" <email@domain.com>"
+function extractNewsletterName(email: string | null): string | null {
+  if (!email) return null
+
+  // Try to extract name from quotes or before <
+  // Format: "Name" <email> or Name <email>
+  const nameMatch = email.match(/^"?([^"<]+)"?\s*</)
+  if (nameMatch) {
+    const name = nameMatch[1].trim()
+    // Skip if name is just an email address
+    if (!name.includes('@') && name.length > 0) {
+      return name
+    }
+  }
+
+  return null
+}
+
+// Map of known email domains/addresses to canonical newsletter names
+const EMAIL_TO_NEWSLETTER: Record<string, string> = {
+  // Substack newsletters (name extracted automatically, but some need overrides)
+  'thepragmaticengineer': 'The Pragmatic Engineer',
+  'lenny': 'Lenny\'s Newsletter',
+  'refactoring': 'Refactoring',
+  'exponentialview': 'Exponential View',
+  'stratechery': 'Stratechery',
+  'noahpinion': 'Noahpinion',
+  'astralcodexten': 'Astral Codex Ten',
+
+  // Other newsletters (by domain or full email)
+  'connie@strictlyvc.com': 'StrictlyVC',
+  'casey@platformer.news': 'Platformer',
+  'newsletter@techmeme.com': 'Techmeme',
+  'info@theinformation.com': 'The Information',
+  'hello@theinformation.com': 'The Information',
+  'hi@mail.theresanaiforthat.com': 'There\'s An AI For That',
+  'futurism@mail.beehiiv.com': 'Futurism',
+  'yo@dev.to': 'DEV Community',
+  'nytdirect@nytimes.com': 'The New York Times',
+  'wallstreetjournal@mail.dowjones.com': 'The Wall Street Journal',
+  'morning.briefing.plus@redaktion.handelsblatt.com': 'Handelsblatt',
+  'crew@morningbrew.com': 'Morning Brew',
+  'dan@tldrnewsletter.com': 'TLDR',
+  'theneuron@newsletter.theneurondaily.com': 'The Neuron',
+  'news@daily.therundown.ai': 'The Rundown AI',
+  'newsletters@technologyreview.com': 'MIT Technology Review',
+  'mattes.schrader@oh-so.com': 'Autopreneur',
+
+  // Platform domains (used if specific email not found)
+  'mail.beehiiv.com': 'Beehiiv Newsletter',
+  'substack.com': 'Substack',
+}
+
+// Get newsletter name from source_email using multiple strategies
+function getNewsletterName(sourceEmail: string | null): string | null {
+  if (!sourceEmail) return null
+
+  // 1. Try to extract full email address and look up in map
+  const emailMatch = sourceEmail.match(/<([^>]+)>/)
+  const emailAddress = emailMatch ? emailMatch[1].toLowerCase() : sourceEmail.toLowerCase().trim()
+
+  if (EMAIL_TO_NEWSLETTER[emailAddress]) {
+    return EMAIL_TO_NEWSLETTER[emailAddress]
+  }
+
+  // 2. For Substack, extract subdomain and look up
+  const substackMatch = emailAddress.match(/([a-z0-9_+-]+)@substack\.com/i)
+  if (substackMatch) {
+    const subdomain = substackMatch[1].split('+')[0]
+    if (EMAIL_TO_NEWSLETTER[subdomain]) {
+      return EMAIL_TO_NEWSLETTER[subdomain]
+    }
+  }
+
+  // 3. Try to match by domain
+  const domainMatch = emailAddress.match(/@([^@]+)$/)
+  if (domainMatch) {
+    const domain = domainMatch[1]
+    if (EMAIL_TO_NEWSLETTER[domain]) {
+      return EMAIL_TO_NEWSLETTER[domain]
+    }
+  }
+
+  // 4. Fall back to extracting name from email format
+  const extractedName = extractNewsletterName(sourceEmail)
+  if (extractedName) {
+    return extractedName
+  }
+
+  return null
+}
+
 export async function POST(request: NextRequest) {
   // Allow authentication via session OR cron secret (for scheduled tasks on Vercel)
   const session = await getSession()
@@ -173,36 +266,70 @@ export async function POST(request: NextRequest) {
       }
 
       const sourcesWithUrls = sources.map(s => {
-        // If source has a valid URL, use it
+        // Always try to get the newsletter name first
+        const newsletterName = getNewsletterName(s.source_email)
+
+        // If source has a valid article URL, use it
         if (s.source_url && s.source_url.startsWith('http')) {
-          return { title: s.title, url: s.source_url, sourceName: null }
+          // Skip tracking URLs that haven't been resolved
+          const isTrackingUrl = s.source_url.includes('customeriomail.com') ||
+                                s.source_url.includes('mail.beehiiv.com') ||
+                                s.source_url.includes('list-manage.com') ||
+                                s.source_url.includes('substack.com/redirect')
+
+          if (!isTrackingUrl) {
+            return {
+              title: s.title,
+              url: s.source_url,
+              sourceName: newsletterName || extractNewsletterName(s.source_email)
+            }
+          }
         }
 
-        // First check for Substack (extract specific newsletter URL)
+        // For Substack newsletters, extract specific newsletter URL
         const substackInfo = extractSubstackInfo(s.source_email)
         if (substackInfo) {
-          return { title: s.title, url: substackInfo.url, sourceName: substackInfo.name }
+          return {
+            title: s.title,
+            url: substackInfo.url,
+            sourceName: newsletterName || substackInfo.name
+          }
         }
 
-        // Otherwise, try to find a canonical URL based on title or email
+        // Try to find a canonical URL based on title or email
         const titleLower = s.title?.toLowerCase() || ''
         const emailLower = s.source_email?.toLowerCase() || ''
 
         for (const [key, canonicalUrl] of Object.entries(NEWSLETTER_CANONICAL_URLS)) {
           if (titleLower.includes(key) || emailLower.includes(key)) {
-            const sourceName = s.source_email?.split('<')[0].trim() || key
-            return { title: s.title, url: canonicalUrl, sourceName }
+            return {
+              title: s.title,
+              url: canonicalUrl,
+              sourceName: newsletterName || key
+            }
           }
         }
+
+        // Last resort: return with newsletter name but no URL
+        if (newsletterName) {
+          return { title: s.title, url: null as string | null, sourceName: newsletterName as string | null }
+        }
+
         return null
-      }).filter((s): s is { title: string; url: string; sourceName: string | null } => s !== null)
+      }).filter((s): s is { title: string; url: string | null; sourceName: string | null } => s !== null)
 
       if (sourcesWithUrls.length > 0) {
-        sourceReference = '\n\n---\n\nVERFÜGBARE QUELLEN MIT LINKS (nutze NUR diese URLs):\n'
-        sourceReference += sourcesWithUrls.map((s, i) => {
-          const sourceInfo = s.sourceName ? ` [via: ${s.sourceName}]` : ''
-          return `${i + 1}. [${s.title}](${s.url})${sourceInfo}`
-        }).join('\n')
+        sourceReference = '\n\n---\n\nVERFÜGBARE QUELLEN (nutze den Quellennamen, NICHT den Artikeltitel als Quellenangabe):\n'
+        sourceReference += '**WICHTIG:** Wenn du eine News-Quelle nennst, verwende den NEWSLETTER-NAMEN (z.B. "StrictlyVC", "Platformer"), NICHT den Artikeltitel!\n\n'
+        sourceReference += sourcesWithUrls.map((item, i) => {
+          if (!item) return ''
+          const sourceInfo = item.sourceName ? ` [QUELLE: ${item.sourceName}]` : ''
+          if (item.url) {
+            return `${i + 1}. "${item.title}" → ${item.url}${sourceInfo}`
+          } else {
+            return `${i + 1}. "${item.title}"${sourceInfo}`
+          }
+        }).filter(Boolean).join('\n')
       }
     }
 
