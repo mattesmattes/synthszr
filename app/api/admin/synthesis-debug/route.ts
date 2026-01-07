@@ -49,14 +49,33 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const supabase = getSupabase()
   const { searchParams } = new URL(request.url)
   const digestId = searchParams.get('digestId')
 
+  // If no digestId provided, list recent digests
   if (!digestId) {
-    return NextResponse.json({ error: 'digestId required' }, { status: 400 })
+    const { data: recentDigests, error } = await supabase
+      .from('daily_digests')
+      .select('id, digest_date, created_at')
+      .order('digest_date', { ascending: false })
+      .limit(10)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      message: 'Provide ?digestId=<uuid> to debug a specific digest',
+      recentDigests: recentDigests?.map(d => ({
+        id: d.id,
+        date: d.digest_date,
+        created: d.created_at,
+        debugUrl: `/api/admin/synthesis-debug?digestId=${d.id}`,
+      })),
+    })
   }
 
-  const supabase = getSupabase()
   const debug: Record<string, unknown> = {}
 
   // 1. Get the digest
