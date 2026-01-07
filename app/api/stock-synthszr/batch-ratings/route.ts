@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+
+// Standard rate limiter for read operations (30 requests per minute per IP)
+const standardLimiter = rateLimiters.standard()
 
 // Supabase client for reading cache
 function getSupabase() {
@@ -29,6 +33,14 @@ export interface StockRatingResult {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit check - 30 requests per minute per IP for read operations
+    const clientIP = getClientIP(request)
+    const rateLimitResult = await checkRateLimit(`batch-ratings:${clientIP}`, standardLimiter ?? undefined)
+
+    if (!rateLimitResult.success) {
+      return rateLimitResponse(rateLimitResult)
+    }
+
     const payload = await request.json().catch(() => ({}))
     const companies = Array.isArray(payload?.companies) ? payload.companies : []
 

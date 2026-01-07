@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { SignJWT, jwtVerify } from 'jose'
+import { timingSafeEqual } from 'crypto'
 
 const SESSION_COOKIE_NAME = 'synthszr_session'
 const SESSION_DURATION = 60 * 60 * 24 * 7 // 7 days in seconds
@@ -83,5 +84,17 @@ export function validatePassword(password: string): boolean {
     return false
   }
 
-  return password === adminPassword
+  // Use timing-safe comparison to prevent timing attacks
+  const passwordBuffer = Buffer.from(password)
+  const adminBuffer = Buffer.from(adminPassword)
+
+  // If lengths differ, still do a comparison to maintain constant time
+  // but always return false
+  if (passwordBuffer.length !== adminBuffer.length) {
+    // Compare against itself to maintain constant time
+    timingSafeEqual(adminBuffer, adminBuffer)
+    return false
+  }
+
+  return timingSafeEqual(passwordBuffer, adminBuffer)
 }

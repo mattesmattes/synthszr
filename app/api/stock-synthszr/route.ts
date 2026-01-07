@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { fetchStockSynthszr } from '@/lib/stock-synthszr/fetch-synthesis'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 
 // Allow longer timeout for AI generation
 export const maxDuration = 120
+
+// Strict rate limiter for expensive AI operations (5 requests per minute per IP)
+const strictLimiter = rateLimiters.strict()
 
 // Supabase client for caching (uses service role for writes)
 function getSupabase() {
@@ -26,6 +30,14 @@ interface CacheRow {
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit check - 5 requests per minute per IP for expensive AI operations
+    const clientIP = getClientIP(request)
+    const rateLimitResult = await checkRateLimit(`stock-synthszr:${clientIP}`, strictLimiter ?? undefined)
+
+    if (!rateLimitResult.success) {
+      return rateLimitResponse(rateLimitResult)
+    }
+
     const payload = await request.json().catch(() => ({}))
     const company = typeof payload?.company === 'string' ? payload.company.trim() : ''
 
