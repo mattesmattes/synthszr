@@ -12,7 +12,7 @@ if (!apiKey) {
   process.exit(1)
 }
 
-console.log('🔑 API Key found:', apiKey.slice(0, 10) + '...')
+console.log('🔑 API Key found')
 
 const genAI = new GoogleGenerativeAI(apiKey)
 
