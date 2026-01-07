@@ -239,10 +239,60 @@ function isLikelyArticleUrl(url: string): boolean {
     '/cart', '/checkout', '/shop',
     '/about', '/contact', '/privacy', '/terms',
     '/unsubscribe', '/preferences',
+    '/subscribe', '/subscription',
+    '/app', '/app-link',
+    '/survey', '/form',
+    '/introducing-the-substack-app',
   ]
 
   for (const path of nonArticlePaths) {
     if (lowerUrl.includes(path)) {
+      return false
+    }
+  }
+
+  // Skip non-article domains entirely
+  const nonArticleDomains = [
+    'typeform.com',      // Surveys
+    'forms.gle',         // Google Forms
+    'surveymonkey.com',  // Surveys
+    'docs.google.com',   // Google Docs
+    'drive.google.com',  // Google Drive
+    'calendly.com',      // Scheduling
+    'zoom.us',           // Video calls
+    'teams.microsoft.com',
+    'slack.com',
+    'discord.com',
+    'apps.apple.com',    // App Store
+    'play.google.com',   // Play Store
+    'wsj.com/subscribe', // Subscription pages
+    'nytimes.com/subscription',
+  ]
+
+  try {
+    const hostname = new URL(url).hostname.toLowerCase()
+    for (const domain of nonArticleDomains) {
+      if (hostname.includes(domain) || lowerUrl.includes(domain)) {
+        return false
+      }
+    }
+  } catch {
+    return false
+  }
+
+  // Skip URLs with subscription/survey keywords
+  const skipKeywords = [
+    'subscribe?',
+    'subscription?',
+    'survey',
+    'form.typeform',
+    'win-$',
+    'win $',
+    'annual-survey',
+  ]
+
+  for (const keyword of skipKeywords) {
+    if (lowerUrl.includes(keyword)) {
       return false
     }
   }
