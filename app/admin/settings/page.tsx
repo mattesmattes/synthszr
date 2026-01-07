@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Settings, Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles } from 'lucide-react'
+import { Settings, Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -98,6 +98,8 @@ export default function SettingsPage() {
   const [scheduleLoading, setScheduleLoading] = useState(true)
   const [savingSchedule, setSavingSchedule] = useState(false)
   const [scheduleSuccess, setScheduleSuccess] = useState(false)
+  const [triggeringSchedule, setTriggeringSchedule] = useState(false)
+  const [triggerResult, setTriggerResult] = useState<{ success: boolean; message: string } | null>(null)
 
   const success = searchParams.get('success')
   const error = searchParams.get('error')
@@ -199,6 +201,40 @@ export default function SettingsPage() {
 
   function handleConnectGmail() {
     window.location.href = '/api/gmail/authorize'
+  }
+
+  async function triggerScheduledTasks() {
+    setTriggeringSchedule(true)
+    setTriggerResult(null)
+    try {
+      const response = await fetch('/api/admin/trigger-schedule', { method: 'POST' })
+      const data = await response.json()
+      if (response.ok && data.success) {
+        const results = data.results || {}
+        const completedTasks = Object.entries(results)
+          .filter(([_, status]) => status === 'completed' || status === 'triggered')
+          .map(([task]) => task)
+        setTriggerResult({
+          success: true,
+          message: completedTasks.length > 0
+            ? `Erfolgreich: ${completedTasks.join(', ')}`
+            : 'Alle Tasks wurden übersprungen (bereits gelaufen oder nicht geplant)',
+        })
+      } else {
+        setTriggerResult({
+          success: false,
+          message: data.error || 'Fehler beim Ausführen der Tasks',
+        })
+      }
+    } catch (error) {
+      setTriggerResult({
+        success: false,
+        message: 'Netzwerkfehler beim Triggern der Tasks',
+      })
+    } finally {
+      setTriggeringSchedule(false)
+      setTimeout(() => setTriggerResult(null), 10000)
+    }
   }
 
   function formatTime(hour: number, minute: number): string {
@@ -604,6 +640,40 @@ export default function SettingsPage() {
                       <CheckCircle className="h-4 w-4" />
                       Gespeichert
                     </span>
+                  )}
+                </div>
+
+                {/* Manual Trigger */}
+                <div className="mt-6 pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base">Manuell ausführen</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Alle aktivierten Tasks jetzt ausführen (überspringt Zeitplan)
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={triggerScheduledTasks}
+                      disabled={triggeringSchedule}
+                    >
+                      {triggeringSchedule ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="mr-2 h-4 w-4" />
+                      )}
+                      Jetzt ausführen
+                    </Button>
+                  </div>
+                  {triggerResult && (
+                    <div className={`mt-3 flex items-center gap-2 text-sm ${triggerResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                      {triggerResult.success ? (
+                        <CheckCircle className="h-4 w-4" />
+                      ) : (
+                        <XCircle className="h-4 w-4" />
+                      )}
+                      {triggerResult.message}
+                    </div>
                   )}
                 </div>
 
