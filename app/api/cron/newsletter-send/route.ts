@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { NewsletterEmail } from '@/lib/resend/templates/newsletter'
 import { render } from '@react-email/components'
+import { generateEmailContent } from '@/lib/email/tiptap-to-html'
 
 // Verify cron secret (Vercel cron jobs send this header)
 function verifyCronAuth(request: NextRequest): boolean {
@@ -186,88 +187,4 @@ export async function GET(request: NextRequest) {
     console.error('Cron newsletter send error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-}
-
-// Convert post content to email-friendly HTML
-function generateEmailContent(post: { content?: unknown; excerpt?: string }): string {
-  // If content is TipTap JSON, convert to basic HTML
-  if (post.content && typeof post.content === 'object') {
-    return convertTiptapToHtml(post.content as TiptapDoc)
-  }
-
-  // If it's already a string, use it
-  if (typeof post.content === 'string') {
-    return post.content
-  }
-
-  // Fallback to excerpt
-  return post.excerpt || ''
-}
-
-interface TiptapNode {
-  type: string
-  content?: TiptapNode[]
-  text?: string
-  marks?: Array<{ type: string; attrs?: Record<string, string> }>
-  attrs?: Record<string, string>
-}
-
-interface TiptapDoc {
-  type: string
-  content?: TiptapNode[]
-}
-
-function convertTiptapToHtml(doc: TiptapDoc): string {
-  if (!doc.content) return ''
-
-  return doc.content.map((node: TiptapNode) => {
-    switch (node.type) {
-      case 'paragraph':
-        return `<p>${renderContent(node.content)}</p>`
-      case 'heading':
-        const level = node.attrs?.level || 2
-        return `<h${level}>${renderContent(node.content)}</h${level}>`
-      case 'bulletList':
-        return `<ul>${node.content?.map(li => `<li>${renderContent(li.content?.[0]?.content)}</li>`).join('')}</ul>`
-      case 'orderedList':
-        return `<ol>${node.content?.map(li => `<li>${renderContent(li.content?.[0]?.content)}</li>`).join('')}</ol>`
-      case 'blockquote':
-        return `<blockquote>${renderContent(node.content)}</blockquote>`
-      case 'horizontalRule':
-        return '<hr />'
-      default:
-        return renderContent(node.content)
-    }
-  }).join('\n')
-}
-
-function renderContent(content?: TiptapNode[]): string {
-  if (!content) return ''
-
-  return content.map(node => {
-    if (node.type === 'text') {
-      let text = node.text || ''
-
-      // Apply marks
-      if (node.marks) {
-        for (const mark of node.marks) {
-          switch (mark.type) {
-            case 'bold':
-              text = `<strong>${text}</strong>`
-              break
-            case 'italic':
-              text = `<em>${text}</em>`
-              break
-            case 'link':
-              text = `<a href="${mark.attrs?.href || '#'}">${text}</a>`
-              break
-          }
-        }
-      }
-
-      return text
-    }
-
-    return ''
-  }).join('')
 }
