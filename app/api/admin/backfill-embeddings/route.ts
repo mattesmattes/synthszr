@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { generateEmbedding, prepareTextForEmbedding } from '@/lib/embeddings/generator'
 import { jwtVerify } from 'jose'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes max
-
-// Supabase client for admin operations
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
 
 const SESSION_COOKIE_NAME = 'synthszr_session'
 
@@ -49,7 +41,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const supabase = getSupabase()
+  const supabase = createAdminClient()
 
   // Count items without embeddings
   const { count: missingCount, error: countError } = await supabase
@@ -99,7 +91,7 @@ export async function POST(request: NextRequest) {
   const batchSize = Math.min(parseInt(searchParams.get('batchSize') || '50'), 100)
   const dryRun = searchParams.get('dryRun') === 'true'
 
-  const supabase = getSupabase()
+  const supabase = createAdminClient()
 
   // Get items without embeddings
   const { data: items, error: fetchError } = await supabase

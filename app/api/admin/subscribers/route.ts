@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
-
-// Lazy initialization to avoid build-time errors
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
 
 // GET: List all subscribers
 export async function GET(request: NextRequest) {
@@ -25,7 +17,7 @@ export async function GET(request: NextRequest) {
   const offset = (page - 1) * limit
 
   try {
-    const supabase = getSupabase()
+    const supabase = createAdminClient()
 
     let query = supabase
       .from('subscribers')
@@ -89,7 +81,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    const supabase = getSupabase()
+    const supabase = createAdminClient()
 
     const { error } = await supabase
       .from('subscribers')

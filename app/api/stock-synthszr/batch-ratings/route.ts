@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAnonClient } from '@/lib/supabase/admin'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 
 // Standard rate limiter for read operations (30 requests per minute per IP)
 const standardLimiter = rateLimiters.standard()
-
-// Supabase client for reading cache
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
 
 interface CacheRow {
   company: string
@@ -56,7 +48,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabase()
+    const supabase = createAnonClient()
     const results: StockRatingResult[] = []
 
     // Query cache for each company (any currency - rating is the same)

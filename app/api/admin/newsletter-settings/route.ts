@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
-
-// Lazy initialization to avoid build-time errors
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
 
 // GET: Get newsletter settings
 export async function GET(request: NextRequest) {
@@ -21,7 +13,7 @@ export async function GET(request: NextRequest) {
   const key = searchParams.get('key')
 
   try {
-    const supabase = getSupabase()
+    const supabase = createAdminClient()
 
     if (key) {
       // Get specific setting
@@ -63,7 +55,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const supabase = getSupabase()
+    const supabase = createAdminClient()
     const body = await request.json()
     const { key, value } = body
 

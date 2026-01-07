@@ -1,17 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { runSynthesisPipeline } from '@/lib/synthesis/pipeline'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes max
-
-// Supabase client for cron jobs (no cookies needed)
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
 
 interface ScheduleConfig {
   newsletterFetch: {
@@ -71,7 +63,7 @@ function isTimeMatch(hour: number, minute: number, currentHour: number, currentM
 }
 
 // Helper to check if we already ran this task today/this hour
-async function hasRunRecently(supabase: ReturnType<typeof getSupabase>, taskKey: string, withinMinutes: number): Promise<boolean> {
+async function hasRunRecently(supabase: ReturnType<typeof createAdminClient>, taskKey: string, withinMinutes: number): Promise<boolean> {
   const { data } = await supabase
     .from('settings')
     .select('value')
@@ -87,7 +79,7 @@ async function hasRunRecently(supabase: ReturnType<typeof getSupabase>, taskKey:
   return diffMinutes < withinMinutes
 }
 
-async function markTaskRun(supabase: ReturnType<typeof getSupabase>, taskKey: string) {
+async function markTaskRun(supabase: ReturnType<typeof createAdminClient>, taskKey: string) {
   await supabase
     .from('settings')
     .upsert({
@@ -106,7 +98,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const supabase = getSupabase()
+  const supabase = createAdminClient()
   const now = new Date()
 
   // Check if runAll mode (for daily cron on Hobby plan)
@@ -282,7 +274,7 @@ export async function GET(request: NextRequest) {
 }
 
 // Generate a blog post from the latest digest
-async function generateDailyPost(supabase: ReturnType<typeof getSupabase>) {
+async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>) {
   // Get the latest digest that doesn't have a generated post yet
   const { data: digest } = await supabase
     .from('daily_digests')
@@ -455,7 +447,7 @@ async function generateDailyPost(supabase: ReturnType<typeof getSupabase>) {
 }
 
 // Run daily analysis, save digest, and trigger synthesis
-async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof getSupabase>): Promise<{
+async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAdminClient>): Promise<{
   success: boolean
   digestId?: string
   synthesesCreated?: number

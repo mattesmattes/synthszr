@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchStockSynthszr } from './fetch-synthesis'
 import type { StockSynthszrResult } from './types'
 
@@ -10,14 +10,6 @@ interface TipTapNode {
     currency?: string
   }
   content?: TipTapNode[]
-}
-
-// Supabase client for cache operations
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
 }
 
 /**
@@ -67,7 +59,7 @@ export async function getStocksNeedingGeneration(
 ): Promise<Array<{ symbol: string; name: string; currency: string }>> {
   if (tickers.length === 0) return []
 
-  const supabase = getSupabase()
+  const supabase = createAdminClient()
   const needsGeneration: Array<{ symbol: string; name: string; currency: string }> = []
 
   for (const ticker of tickers) {
@@ -110,7 +102,7 @@ export async function pregenerateStockSynthszr(
 
   let generated = 0
   let errors = 0
-  const supabase = getSupabase()
+  const supabase = createAdminClient()
 
   for (const ticker of needsGeneration) {
     try {

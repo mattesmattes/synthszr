@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchStockSynthszr } from '@/lib/stock-synthszr/fetch-synthesis'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
@@ -9,14 +9,6 @@ export const maxDuration = 120
 
 // Strict rate limiter for expensive AI operations (5 requests per minute per IP)
 const strictLimiter = rateLimiters.strict()
-
-// Supabase client for caching (uses service role for writes)
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
 
 interface CacheRow {
   id: string
@@ -52,7 +44,7 @@ export async function POST(request: NextRequest) {
     const currency = typeof payload?.currency === 'string' ? payload.currency : 'EUR'
     const price = typeof payload?.price === 'number' ? payload.price : null
 
-    const supabase = getSupabase()
+    const supabase = createAdminClient()
 
     // Check database cache unless force refresh
     if (!force) {

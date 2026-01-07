@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { NewsletterEmail } from '@/lib/resend/templates/newsletter'
 import { render } from '@react-email/components'
-
-// Lazy initialization to avoid build-time errors
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
 
 // Verify cron secret (Vercel cron jobs send this header)
 function verifyCronAuth(request: NextRequest): boolean {
@@ -42,7 +34,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = getSupabase()
+    const supabase = createAdminClient()
 
     // Check if cron is enabled
     const { data: cronSettings } = await supabase
