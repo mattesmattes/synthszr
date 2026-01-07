@@ -1,8 +1,9 @@
 import { cookies } from 'next/headers'
 import { SignJWT, jwtVerify } from 'jose'
 import { timingSafeEqual } from 'crypto'
+import { NextRequest } from 'next/server'
 
-const SESSION_COOKIE_NAME = 'synthszr_session'
+export const SESSION_COOKIE_NAME = 'synthszr_session'
 const SESSION_DURATION = 60 * 60 * 24 * 7 // 7 days in seconds
 
 function getSecretKey() {
@@ -97,4 +98,21 @@ export function validatePassword(password: string): boolean {
   }
 
   return timingSafeEqual(passwordBuffer, adminBuffer)
+}
+
+/**
+ * Check if request has valid admin session (for API routes using NextRequest)
+ * Use this instead of duplicating isAdminSession() in each route
+ */
+export async function isAdminRequest(request: NextRequest): Promise<boolean> {
+  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  if (!sessionToken) return false
+
+  try {
+    const secretKey = getSecretKey()
+    await jwtVerify(sessionToken, secretKey)
+    return true
+  } catch {
+    return false
+  }
 }

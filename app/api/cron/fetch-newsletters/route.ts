@@ -3,35 +3,13 @@ import { GmailClient } from '@/lib/gmail/client'
 import { parseNewsletterHtml } from '@/lib/email/parser'
 import { extractArticleContent } from '@/lib/scraper/article-extractor'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { jwtVerify } from 'jose'
+import { isAdminRequest } from '@/lib/auth/session'
 
 // Node.js runtime for jsdom compatibility
 export const runtime = 'nodejs'
 
 // Vercel Cron protection
 const CRON_SECRET = process.env.CRON_SECRET
-const SESSION_COOKIE_NAME = 'synthszr_session'
-
-function getSecretKey() {
-  const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
-  if (!secret) return null
-  return new TextEncoder().encode(secret)
-}
-
-async function isAdminSession(request: NextRequest): Promise<boolean> {
-  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
-  if (!sessionToken) return false
-
-  const secretKey = getSecretKey()
-  if (!secretKey) return false
-
-  try {
-    await jwtVerify(sessionToken, secretKey)
-    return true
-  } catch {
-    return false
-  }
-}
 
 // Shared newsletter processing logic
 async function processNewsletters() {
@@ -316,7 +294,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   // Check if user is authenticated as admin
   if (process.env.NODE_ENV === 'production') {
-    const isAdmin = await isAdminSession(request)
+    const isAdmin = await isAdminRequest(request)
     if (!isAdmin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

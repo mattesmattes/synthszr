@@ -3,12 +3,10 @@ import { GmailClient } from '@/lib/gmail/client'
 import { parseNewsletterHtml } from '@/lib/email/parser'
 import { extractArticleContent, isArticleTooOld, isLikelyArticleUrl, isNonArticleLinkText } from '@/lib/scraper/article-extractor'
 import { createClient } from '@/lib/supabase/server'
-import { jwtVerify } from 'jose'
+import { isAdminRequest } from '@/lib/auth/session'
 
 // Node.js runtime for jsdom compatibility
 export const runtime = 'nodejs'
-
-const SESSION_COOKIE_NAME = 'synthszr_session'
 
 /**
  * Extract specific Substack newsletter URL from email address
@@ -21,25 +19,6 @@ function getSubstackNewsletterUrl(email: string | null): string | null {
   // Remove + variants (e.g., "getfivethings+tech" → "getfivethings")
   const subdomain = match[1].split('+')[0]
   return `https://${subdomain}.substack.com`
-}
-
-function getSecretKey() {
-  const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
-  if (!secret) return null
-  return new TextEncoder().encode(secret)
-}
-
-async function isAdminSession(request: NextRequest): Promise<boolean> {
-  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
-  if (!sessionToken) return false
-  const secretKey = getSecretKey()
-  if (!secretKey) return false
-  try {
-    await jwtVerify(sessionToken, secretKey)
-    return true
-  } catch {
-    return false
-  }
 }
 
 // Configuration for +dailyrepo email imports
@@ -104,7 +83,7 @@ interface ProgressEvent {
 
 export async function POST(request: NextRequest) {
   // Check admin session
-  if (!(await isAdminSession(request))) {
+  if (!(await isAdminRequest(request))) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' }

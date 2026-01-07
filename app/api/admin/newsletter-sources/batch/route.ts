@@ -1,34 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { jwtVerify } from 'jose'
-
-const SESSION_COOKIE_NAME = 'synthszr_session'
-
-function getSecretKey() {
-  const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
-  if (!secret) return null
-  return new TextEncoder().encode(secret)
-}
-
-async function isAdminSession(request: NextRequest): Promise<boolean> {
-  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
-  if (!sessionToken) return false
-
-  const secretKey = getSecretKey()
-  if (!secretKey) return false
-
-  try {
-    await jwtVerify(sessionToken, secretKey)
-    return true
-  } catch {
-    return false
-  }
-}
+import { isAdminRequest } from '@/lib/auth/session'
 
 export async function POST(request: NextRequest) {
   // Check admin auth in production
   if (process.env.NODE_ENV === 'production') {
-    const isAdmin = await isAdminSession(request)
+    const isAdmin = await isAdminRequest(request)
     if (!isAdmin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
