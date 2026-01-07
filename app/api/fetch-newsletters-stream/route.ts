@@ -4,6 +4,7 @@ import { parseNewsletterHtml } from '@/lib/email/parser'
 import { extractArticleContent, isArticleTooOld, isLikelyArticleUrl, isNonArticleLinkText } from '@/lib/scraper/article-extractor'
 import { createClient } from '@/lib/supabase/server'
 import { isAdminRequest } from '@/lib/auth/session'
+import { DEFAULT_NEWSLETTER_FETCH_MS } from '@/lib/config/constants'
 
 // Node.js runtime for jsdom compatibility
 export const runtime = 'nodejs'
@@ -152,7 +153,7 @@ export async function POST(request: NextRequest) {
           beforeDate = new Date(targetDate + 'T23:59:59')
           console.log(`[Newsletter Fetch] Searching for date range: ${afterDate.toISOString()} to ${beforeDate.toISOString()}`)
         } else {
-          afterDate = new Date(Date.now() - 36 * 60 * 60 * 1000)
+          afterDate = new Date(Date.now() - DEFAULT_NEWSLETTER_FETCH_MS)
         }
 
         const senderEmails = sources.map(s => s.email)

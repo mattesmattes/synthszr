@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchStockSynthszr } from '@/lib/stock-synthszr/fetch-synthesis'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+import { STOCK_SYNTHSZR_CACHE_MS } from '@/lib/config/constants'
 
 // Allow longer timeout for AI generation
 export const maxDuration = 120
@@ -77,9 +78,9 @@ export async function POST(request: NextRequest) {
       recencyDays: 90,
     })
 
-    // Store in database cache (14-day TTL)
+    // Store in database cache
     const now = new Date()
-    const expiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000) // 14 days
+    const expiresAt = new Date(now.getTime() + STOCK_SYNTHSZR_CACHE_MS)
 
     const { error: insertError } = await supabase
       .from('stock_synthszr_cache')

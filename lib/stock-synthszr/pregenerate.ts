@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { STOCK_SYNTHSZR_CACHE_MS } from '@/lib/config/constants'
 import { fetchStockSynthszr } from './fetch-synthesis'
 import type { StockSynthszrResult } from './types'
 
@@ -116,7 +117,7 @@ export async function pregenerateStockSynthszr(
 
       // Store in cache with explicit timestamps
       const now = new Date()
-      const expiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000) // 14 days
+      const expiresAt = new Date(now.getTime() + STOCK_SYNTHSZR_CACHE_MS)
 
       const { error: insertError } = await supabase
         .from('stock_synthszr_cache')

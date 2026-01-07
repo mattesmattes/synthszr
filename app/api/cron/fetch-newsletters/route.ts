@@ -4,6 +4,7 @@ import { parseNewsletterHtml } from '@/lib/email/parser'
 import { extractArticleContent } from '@/lib/scraper/article-extractor'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isAdminRequest } from '@/lib/auth/session'
+import { DEFAULT_NEWSLETTER_FETCH_MS, MS_PER_HOUR } from '@/lib/config/constants'
 
 // Node.js runtime for jsdom compatibility
 export const runtime = 'nodejs'
@@ -52,10 +53,10 @@ async function processNewsletters() {
     .eq('key', 'last_newsletter_fetch')
     .single()
 
-  // For first fetch or missing timestamp, search last 36 hours
+  // For first fetch or missing timestamp, use default window
   const lastFetch = settings?.value?.timestamp
     ? new Date(settings.value.timestamp)
-    : new Date(Date.now() - 36 * 60 * 60 * 1000) // Default: last 36 hours
+    : new Date(Date.now() - DEFAULT_NEWSLETTER_FETCH_MS)
 
   console.log('[Fetch] Last fetch timestamp:', lastFetch.toISOString())
 
@@ -65,7 +66,7 @@ async function processNewsletters() {
   const emails = await gmailClient.fetchEmailsFromSenders(senderEmails, 50, lastFetch)
 
   // Also fetch emails with "+dailyrepo" subject tag (user-tagged emails for import)
-  const hoursBack = Math.ceil((Date.now() - lastFetch.getTime()) / (1000 * 60 * 60)) || 36
+  const hoursBack = Math.ceil((Date.now() - lastFetch.getTime()) / MS_PER_HOUR) || 36
   const taggedEmails = await gmailClient.fetchEmailsBySubject(null, '+dailyrepo', 20, hoursBack)
   console.log(`[Fetch] Found ${taggedEmails.length} emails with +dailyrepo tag`)
 
