@@ -18,10 +18,25 @@ import {
   Lightbulb,
   Users,
   Send,
-  HelpCircle
+  HelpCircle,
+  FileCode
 } from 'lucide-react'
+import { LucideIcon } from 'lucide-react'
 
-const navGroups = [
+interface NavItem {
+  label: string
+  href: string
+  icon: LucideIcon
+  exact?: boolean
+  external?: boolean
+}
+
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
+const navGroups: NavGroup[] = [
   {
     label: 'Content',
     items: [
@@ -125,6 +140,12 @@ const navGroups = [
         label: 'Einstellungen',
         href: '/admin/settings',
         icon: Settings
+      },
+      {
+        label: 'Architecture Docs',
+        href: '/docs/architecture',
+        icon: FileCode,
+        external: true
       }
     ]
   }
@@ -142,14 +163,19 @@ export function AdminNav() {
           </h3>
           <ul className="space-y-1">
             {group.items.map((item) => {
-              const isActive = item.exact
-                ? pathname === item.href
-                : pathname.startsWith(item.href)
+              const isExternal = item.external === true
+              const isActive = isExternal
+                ? false
+                : item.exact === true
+                  ? pathname === item.href
+                  : pathname.startsWith(item.href)
 
               return (
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    target={isExternal ? '_blank' : undefined}
+                    rel={isExternal ? 'noopener noreferrer' : undefined}
                     className={cn(
                       'flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors',
                       isActive
@@ -159,6 +185,9 @@ export function AdminNav() {
                   >
                     <item.icon className="h-4 w-4" />
                     {item.label}
+                    {isExternal && (
+                      <span className="ml-auto text-xs text-muted-foreground">↗</span>
+                    )}
                   </Link>
                 </li>
               )
