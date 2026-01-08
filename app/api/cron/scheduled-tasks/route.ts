@@ -157,30 +157,38 @@ export async function GET(request: NextRequest) {
   }
 
   // Check Daily Analysis (News & Synthese Erstellung)
-  // Only run if newsletter fetch completed successfully or was skipped
+  // Only run if newsletter fetch completed successfully, was skipped, or already ran
   if (config.dailyAnalysis.enabled) {
     const shouldRunAnalysis = runAll || isTimeMatch(config.dailyAnalysis.hour, config.dailyAnalysis.minute, currentHour, currentMinute)
     const analysisRecentlyRan = !forceRun && await hasRunRecently(supabase, 'daily_analysis', 60)
 
+    // Check newsletter fetch dependency - must have succeeded, already ran, or been skipped
+    const newsletterFetchOk = ['completed', 'already_ran', 'skipped'].includes(results.newsletterFetch || '')
+    const newsletterFetchDisabled = !config.newsletterFetch.enabled
+
     if (shouldRunAnalysis && !analysisRecentlyRan) {
-      // Wait for newsletter fetch if it was triggered
-      if (results.newsletterFetch === 'completed') {
-        console.log('[Scheduler] Newsletter fetch completed, proceeding with daily analysis...')
-      }
-      console.log('[Scheduler] Triggering daily analysis and synthesis...')
-      try {
-        const digestResult = await runDailyAnalysisAndSynthesis(supabase)
-        await markTaskRun(supabase, 'daily_analysis')
-        results.dailyAnalysis = digestResult.success ? 'completed' : 'error'
-        if (digestResult.digestId) {
-          results.digestId = digestResult.digestId
+      if (!newsletterFetchOk && !newsletterFetchDisabled) {
+        console.log('[Scheduler] Skipping daily analysis - newsletter fetch failed')
+        results.dailyAnalysis = 'skipped_dependency_failed'
+      } else {
+        if (results.newsletterFetch === 'completed') {
+          console.log('[Scheduler] Newsletter fetch completed, proceeding with daily analysis...')
         }
-        if (digestResult.synthesesCreated !== undefined) {
-          results.synthesesCreated = digestResult.synthesesCreated.toString()
+        console.log('[Scheduler] Triggering daily analysis and synthesis...')
+        try {
+          const digestResult = await runDailyAnalysisAndSynthesis(supabase)
+          await markTaskRun(supabase, 'daily_analysis')
+          results.dailyAnalysis = digestResult.success ? 'completed' : 'error'
+          if (digestResult.digestId) {
+            results.digestId = digestResult.digestId
+          }
+          if (digestResult.synthesesCreated !== undefined) {
+            results.synthesesCreated = digestResult.synthesesCreated.toString()
+          }
+        } catch (error) {
+          console.error('[Scheduler] Daily analysis error:', error)
+          results.dailyAnalysis = 'error'
         }
-      } catch (error) {
-        console.error('[Scheduler] Daily analysis error:', error)
-        results.dailyAnalysis = 'error'
       }
     } else if (analysisRecentlyRan) {
       results.dailyAnalysis = 'already_ran'
@@ -190,24 +198,32 @@ export async function GET(request: NextRequest) {
   }
 
   // Check Post Generation
-  // Only run if daily analysis completed successfully
+  // Only run if daily analysis completed successfully or already ran
   if (config.postGeneration.enabled) {
     const shouldRunPostGen = runAll || isTimeMatch(config.postGeneration.hour, config.postGeneration.minute, currentHour, currentMinute)
     const postGenRecentlyRan = !forceRun && await hasRunRecently(supabase, 'post_generation', 60)
 
+    // Check daily analysis dependency - must have succeeded or already ran
+    const dailyAnalysisOk = ['completed', 'already_ran'].includes(results.dailyAnalysis || '')
+    const dailyAnalysisDisabled = !config.dailyAnalysis.enabled
+
     if (shouldRunPostGen && !postGenRecentlyRan) {
-      // Wait for daily analysis if it was triggered
-      if (results.dailyAnalysis === 'completed') {
-        console.log('[Scheduler] Daily analysis completed, proceeding with post generation...')
-      }
-      console.log('[Scheduler] Triggering post generation...')
-      try {
-        await generateDailyPost(supabase)
-        await markTaskRun(supabase, 'post_generation')
-        results.postGeneration = 'completed'
-      } catch (error) {
-        console.error('[Scheduler] Post generation error:', error)
-        results.postGeneration = 'error'
+      if (!dailyAnalysisOk && !dailyAnalysisDisabled) {
+        console.log('[Scheduler] Skipping post generation - daily analysis failed')
+        results.postGeneration = 'skipped_dependency_failed'
+      } else {
+        if (results.dailyAnalysis === 'completed') {
+          console.log('[Scheduler] Daily analysis completed, proceeding with post generation...')
+        }
+        console.log('[Scheduler] Triggering post generation...')
+        try {
+          await generateDailyPost(supabase)
+          await markTaskRun(supabase, 'post_generation')
+          results.postGeneration = 'completed'
+        } catch (error) {
+          console.error('[Scheduler] Post generation error:', error)
+          results.postGeneration = 'error'
+        }
       }
     } else if (postGenRecentlyRan) {
       results.postGeneration = 'already_ran'
