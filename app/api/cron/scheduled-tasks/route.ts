@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runSynthesisPipeline } from '@/lib/synthesis/pipeline'
+import { processNewsletters } from '@/lib/newsletter/processor'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes max
@@ -133,22 +134,18 @@ export async function GET(request: NextRequest) {
     const recentlyRan = !forceRun && await hasRunRecently(supabase, 'newsletter_fetch', 60)
 
     if (shouldRun && !recentlyRan) {
-      console.log('[Scheduler] Triggering newsletter fetch...')
+      console.log('[Scheduler] Running newsletter fetch directly...')
       try {
-        // Call the existing cron endpoint internally and wait for completion
-        const baseUrl = process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : 'http://localhost:3000'
-
-        const fetchResponse = await fetch(`${baseUrl}/api/cron/fetch-newsletters`, {
-          headers: { 'Authorization': `Bearer ${process.env.CRON_SECRET}` }
-        })
-        const fetchResult = await fetchResponse.json()
-        console.log('[Scheduler] Newsletter fetch completed:', fetchResult)
+        // Call processNewsletters directly (no HTTP call = no timeout issues)
+        const fetchResult = await processNewsletters()
+        console.log('[Scheduler] Newsletter fetch completed:', fetchResult.message)
         await markTaskRun(supabase, 'newsletter_fetch')
-        results.newsletterFetch = fetchResponse.ok ? 'completed' : 'error'
-        if (fetchResult.fetched !== undefined) {
-          results.newslettersFetched = fetchResult.fetched.toString()
+        results.newsletterFetch = fetchResult.success ? 'completed' : 'error'
+        if (fetchResult.processed !== undefined) {
+          results.newslettersFetched = fetchResult.processed.toString()
+        }
+        if (fetchResult.articles !== undefined) {
+          results.articlesExtracted = fetchResult.articles.toString()
         }
       } catch (error) {
         console.error('[Scheduler] Newsletter fetch error:', error)
