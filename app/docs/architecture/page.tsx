@@ -425,7 +425,7 @@ export default function ArchitecturePage() {
                   <Arrow />
                   <FlowBox className="w-full">
                     <div className="font-semibold">Ticker Mapping</div>
-                    <div className="text-xs">100+ companies → symbols</div>
+                    <div className="text-xs">50 companies → symbols</div>
                   </FlowBox>
                   <Arrow />
                   <FlowBox variant="primary" className="w-full">
