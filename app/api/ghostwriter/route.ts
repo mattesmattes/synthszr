@@ -523,6 +523,16 @@ export async function POST(request: NextRequest) {
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 
+4. **COMPANY TAGGING:** Wenn eine News eine bekannte Public oder Premarket Company erwähnt, füge einmalig "{Company}" nach dem Unternehmensnamen ein.
+
+   **PUBLIC COMPANIES:** Apple, Microsoft, Google, Alphabet, Amazon, Meta, Nvidia, Tesla, Netflix, Salesforce, Snowflake, Palantir, CrowdStrike, Cloudflare, Intel, AMD, Qualcomm, Broadcom, TSMC, ASML, ARM, Snap, Pinterest, Spotify, Disney, Shopify, PayPal, Block, Oracle, SAP, IBM, Adobe, ServiceNow, Workday, Zoom, Atlassian, Twilio, DocuSign, Uber, Airbnb, Coinbase, Robinhood, Roblox, Unity, Samsung
+
+   **PREMARKET COMPANIES:** Anthropic, OpenAI, Mistral AI, Perplexity, Cohere, xAI, Safe Superintelligence, Hugging Face, Scale AI, Databricks, Stripe, SpaceX, ByteDance, Canva, Discord, Figma, Notion, Vercel, Supabase, Replit, Waymo, Runway, ElevenLabs, Midjourney, Stability AI, Character.AI, Pika, Suno, Groq, Cerebras, Together AI, Fireworks AI, Anyscale, Klarna, Revolut, Plaid, Chime, Rippling, Deel, Flexport
+
+   **FORMAT:** Schreibe den Firmennamen gefolgt von {Company} in geschweiften Klammern.
+   **BEISPIEL:** "Anthropic {Anthropic} hat heute..." oder "Microsoft {Microsoft} kündigte an..."
+   **WICHTIG:** Pro Unternehmen nur EINMAL taggen (beim ersten Vorkommen in der jeweiligen News).
+
 **WICHTIG:** Diese Regeln haben Priorität. Halte dich strikt daran.
 `
 
