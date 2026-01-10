@@ -286,11 +286,22 @@ export default function CreateArticlePage() {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
+              if (data.clear) {
+                // Clear content for new version (deduplication phase)
+                setArticleContent('')
+              }
+              if (data.phase === 'deduplication') {
+                // Show deduplication message briefly
+                console.log('[Ghostwriter] Deduplication:', data.message)
+              }
               if (data.text) {
                 setArticleContent(prev => prev + data.text)
               }
               if (data.model) {
                 setUsedModel(data.model)
+              }
+              if (data.done && data.deduplicationApplied) {
+                console.log('[Ghostwriter] Deduplication applied:', data.duplicatesFound)
               }
               if (data.error) {
                 throw new Error(data.error)

@@ -611,9 +611,20 @@ export default function DigestsPage() {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
+              if (data.clear) {
+                // Clear content for new version (deduplication phase)
+                finalContent = ''
+                setBlogContent('')
+              }
+              if (data.phase === 'deduplication') {
+                console.log('[Ghostwriter] Deduplication:', data.message)
+              }
               if (data.text) {
                 finalContent += data.text
                 setBlogContent(prev => prev + data.text)
+              }
+              if (data.done && data.deduplicationApplied) {
+                console.log('[Ghostwriter] Deduplication applied:', data.duplicatesFound)
               }
               if (data.error) throw new Error(data.error)
             } catch (e) {

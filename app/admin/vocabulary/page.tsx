@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { BookOpen, Plus, Trash2, Edit2, Loader2, Tag, CheckCircle, XCircle } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { BookOpen, Plus, Trash2, Edit2, Loader2, Tag, CheckCircle, XCircle, Upload, FileText, Sparkles, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,13 @@ interface VocabularyEntry {
   category: string
   created_at: string
   updated_at: string
+}
+
+interface ExtractedVocabulary {
+  term: string
+  category: string
+  preferred_usage: string
+  context: string
 }
 
 const categories = [
@@ -112,6 +120,14 @@ export default function VocabularyPage() {
   const [editingEntry, setEditingEntry] = useState<VocabularyEntry | null>(null)
   const [deletingEntry, setDeletingEntry] = useState<VocabularyEntry | null>(null)
   const [filterCategory, setFilterCategory] = useState<string>('all')
+
+  // Extraction state
+  const [isDragging, setIsDragging] = useState(false)
+  const [extracting, setExtracting] = useState(false)
+  const [extractedVocabulary, setExtractedVocabulary] = useState<ExtractedVocabulary[]>([])
+  const [styleSummary, setStyleSummary] = useState<string | null>(null)
+  const [selectedExtracted, setSelectedExtracted] = useState<Set<number>>(new Set())
+  const [addingExtracted, setAddingExtracted] = useState(false)
 
   const [formData, setFormData] = useState({
     term: '',
@@ -224,6 +240,134 @@ export default function VocabularyPage() {
     }
   }
 
+  // Drag & Drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }, [])
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const files = e.dataTransfer.files
+    if (files.length === 0) return
+
+    await extractVocabularyFromFile(files[0])
+  }, [])
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    await extractVocabularyFromFile(files[0])
+    e.target.value = '' // Reset input
+  }, [])
+
+  async function extractVocabularyFromFile(file: File) {
+    setExtracting(true)
+    setExtractedVocabulary([])
+    setStyleSummary(null)
+    setSelectedExtracted(new Set())
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch('/api/admin/vocabulary/extract', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.ok) {
+        alert(data.error || 'Fehler bei der Analyse')
+        return
+      }
+
+      setExtractedVocabulary(data.vocabulary || [])
+      setStyleSummary(data.styleSummary || null)
+      // Select all by default
+      setSelectedExtracted(new Set(data.vocabulary?.map((_: ExtractedVocabulary, i: number) => i) || []))
+    } catch (error) {
+      console.error('Error extracting vocabulary:', error)
+      alert('Fehler bei der Analyse')
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  function toggleExtractedSelection(index: number) {
+    setSelectedExtracted(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return next
+    })
+  }
+
+  function selectAllExtracted() {
+    setSelectedExtracted(new Set(extractedVocabulary.map((_, i) => i)))
+  }
+
+  function deselectAllExtracted() {
+    setSelectedExtracted(new Set())
+  }
+
+  async function addSelectedVocabulary() {
+    if (selectedExtracted.size === 0) return
+
+    setAddingExtracted(true)
+
+    try {
+      const itemsToAdd = Array.from(selectedExtracted).map(i => extractedVocabulary[i])
+
+      // Add each item
+      for (const item of itemsToAdd) {
+        await fetch('/api/admin/vocabulary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            term: item.term,
+            preferred_usage: item.preferred_usage,
+            avoid_alternatives: '',
+            context: item.context,
+            category: item.category,
+          }),
+          credentials: 'include',
+        })
+      }
+
+      // Refresh entries
+      await fetchEntries()
+
+      // Clear extraction results
+      setExtractedVocabulary([])
+      setStyleSummary(null)
+      setSelectedExtracted(new Set())
+
+      alert(`${itemsToAdd.length} Einträge hinzugefügt!`)
+    } catch (error) {
+      console.error('Error adding vocabulary:', error)
+      alert('Fehler beim Hinzufügen')
+    } finally {
+      setAddingExtracted(false)
+    }
+  }
+
   const filteredEntries = filterCategory === 'all'
     ? entries
     : entries.filter(e => e.category === filterCategory)
@@ -249,6 +393,146 @@ export default function VocabularyPage() {
           Neuer Eintrag
         </Button>
       </div>
+
+      {/* Drag & Drop Upload Area */}
+      <Card
+        className={`mb-6 border-2 border-dashed transition-colors ${
+          isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
+        }`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <CardContent className="py-6">
+          <div className="flex flex-col items-center justify-center gap-3 text-center">
+            {extracting ? (
+              <>
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Analysiere Dokument und extrahiere Vokabular...</p>
+                <Progress value={undefined} className="w-48" />
+              </>
+            ) : (
+              <>
+                <Upload className="h-8 w-8 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">Datei hochladen für Stilanalyse</p>
+                  <p className="text-sm text-muted-foreground">
+                    PDF, HTML, MD, TXT oder RTF hierher ziehen
+                  </p>
+                </div>
+                <label>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.html,.htm,.md,.txt,.rtf"
+                    onChange={handleFileSelect}
+                  />
+                  <Button variant="outline" size="sm" className="cursor-pointer" asChild>
+                    <span><FileText className="h-4 w-4 mr-2" />Datei auswählen</span>
+                  </Button>
+                </label>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Extracted Vocabulary Results */}
+      {extractedVocabulary.length > 0 && (
+        <Card className="mb-6 border-primary/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Extrahiertes Vokabular
+              <Badge variant="secondary">{extractedVocabulary.length} Begriffe</Badge>
+            </CardTitle>
+            {styleSummary && (
+              <CardDescription className="italic">
+                &quot;{styleSummary}&quot;
+              </CardDescription>
+            )}
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={selectAllExtracted}>
+                  Alle auswählen
+                </Button>
+                <Button variant="outline" size="sm" onClick={deselectAllExtracted}>
+                  Keine auswählen
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  {selectedExtracted.size} ausgewählt
+                </span>
+              </div>
+              <Button
+                onClick={addSelectedVocabulary}
+                disabled={selectedExtracted.size === 0 || addingExtracted}
+                className="gap-2"
+              >
+                {addingExtracted ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                Ausgewählte übernehmen
+              </Button>
+            </div>
+
+            <div className="grid gap-2 max-h-96 overflow-y-auto">
+              {extractedVocabulary.map((item, index) => (
+                <div
+                  key={index}
+                  onClick={() => toggleExtractedSelection(index)}
+                  className={`cursor-pointer rounded-lg border p-3 transition-colors ${
+                    selectedExtracted.has(index)
+                      ? 'border-primary bg-primary/5'
+                      : 'border-muted hover:border-muted-foreground/50'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded-full border ${
+                      selectedExtracted.has(index)
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-muted-foreground/50'
+                    }`}>
+                      {selectedExtracted.has(index) && <Check className="h-3 w-3" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono font-bold">{item.term}</span>
+                        <Badge className={categoryColors[item.category] || categoryColors.general}>
+                          {categories.find(c => c.value === item.category)?.label || item.category}
+                        </Badge>
+                      </div>
+                      {item.preferred_usage && (
+                        <p className="text-sm text-muted-foreground">{item.preferred_usage}</p>
+                      )}
+                      {item.context && (
+                        <p className="text-xs text-muted-foreground/75 italic mt-1">{item.context}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setExtractedVocabulary([])
+                  setStyleSummary(null)
+                  setSelectedExtracted(new Set())
+                }}
+              >
+                Verwerfen
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filter */}
       <div className="mb-6 flex items-center gap-4">
