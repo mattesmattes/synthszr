@@ -46,19 +46,61 @@ interface VocabularyEntry {
 }
 
 const categories = [
+  // Core categories
   { value: 'general', label: 'Allgemein' },
   { value: 'tech', label: 'Technologie' },
   { value: 'business', label: 'Business' },
   { value: 'brand', label: 'Brand/Marke' },
   { value: 'style', label: 'Schreibstil' },
+  // Extended stylistic categories
+  { value: 'fachbegriff', label: 'Fachbegriff' },
+  { value: 'eigener_fachbegriff', label: 'Eigener Fachbegriff' },
+  { value: 'anglizismus', label: 'Anglizismus' },
+  { value: 'metapher', label: 'Metapher' },
+  { value: 'neologismus', label: 'Neologismus' },
+  { value: 'business_jargon', label: 'Business-Jargon' },
+  { value: 'startup_jargon', label: 'Startup-Jargon' },
+  { value: 'akronym', label: 'Akronym' },
+  { value: 'bildliche_sprache', label: 'Bildliche Sprache' },
+  { value: 'phrase', label: 'Phrase/Redewendung' },
+  { value: 'satzkonstruktion', label: 'Satzkonstruktion' },
+  { value: 'redewendung', label: 'Redewendung' },
+  { value: 'umgangssprache', label: 'Umgangssprache' },
+  { value: 'fremdwort', label: 'Fremdwort' },
+  { value: 'mantra', label: 'Mantra' },
+  { value: 'zitat', label: 'Zitat' },
+  { value: 'lieblingswort', label: 'Lieblingswort' },
+  { value: 'wortbildung', label: 'Wortbildung' },
+  { value: 'praefixbildung', label: 'Präfixbildung' },
 ]
 
 const categoryColors: Record<string, string> = {
+  // Core categories
   general: 'bg-gray-100 text-gray-800',
   tech: 'bg-blue-100 text-blue-800',
   business: 'bg-green-100 text-green-800',
   brand: 'bg-purple-100 text-purple-800',
   style: 'bg-orange-100 text-orange-800',
+  // Extended stylistic categories
+  fachbegriff: 'bg-indigo-100 text-indigo-800',
+  eigener_fachbegriff: 'bg-violet-100 text-violet-800',
+  anglizismus: 'bg-cyan-100 text-cyan-800',
+  metapher: 'bg-amber-100 text-amber-800',
+  neologismus: 'bg-lime-100 text-lime-800',
+  business_jargon: 'bg-emerald-100 text-emerald-800',
+  startup_jargon: 'bg-teal-100 text-teal-800',
+  akronym: 'bg-sky-100 text-sky-800',
+  bildliche_sprache: 'bg-rose-100 text-rose-800',
+  phrase: 'bg-fuchsia-100 text-fuchsia-800',
+  satzkonstruktion: 'bg-pink-100 text-pink-800',
+  redewendung: 'bg-red-100 text-red-800',
+  umgangssprache: 'bg-yellow-100 text-yellow-800',
+  fremdwort: 'bg-stone-100 text-stone-800',
+  mantra: 'bg-zinc-100 text-zinc-800',
+  zitat: 'bg-slate-100 text-slate-800',
+  lieblingswort: 'bg-orange-200 text-orange-900',
+  wortbildung: 'bg-green-200 text-green-900',
+  praefixbildung: 'bg-blue-200 text-blue-900',
 }
 
 export default function VocabularyPage() {

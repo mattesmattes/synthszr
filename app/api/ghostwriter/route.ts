@@ -355,8 +355,15 @@ export async function POST(request: NextRequest) {
     // Get vocabulary dictionary
     const { data: vocabulary } = await supabase
       .from('vocabulary_dictionary')
-      .select('term, preferred_usage, avoid_alternatives, context')
+      .select('term, preferred_usage, avoid_alternatives, context, category')
       .order('category')
+
+    // Get stylistic rules
+    const { data: stylisticRules } = await supabase
+      .from('stylistic_rules')
+      .select('rule_type, name, description, examples, priority')
+      .eq('is_active', true)
+      .order('priority', { ascending: false })
 
     // Get developed syntheses for this digest (if available)
     let synthesisContext = ''
@@ -410,17 +417,91 @@ export async function POST(request: NextRequest) {
       }
 
       vocabularyContext = `\n\nVOKABULAR-RICHTLINIEN (Intensität: ${intensity}%):\n${intensityInstruction}\n\nBegriffe:\n`
-      vocabularyContext += vocabulary.map(v => {
-        let entry = `- "${v.term}"`
-        if (v.preferred_usage) entry += `: ${v.preferred_usage}`
-        if (v.avoid_alternatives) entry += ` | Vermeide: ${v.avoid_alternatives}`
-        if (v.context) entry += ` (${v.context})`
-        return entry
-      }).join('\n')
+      // Group vocabulary by category for better organization
+      const vocabByCategory = vocabulary.reduce((acc, v) => {
+        const cat = v.category || 'general'
+        if (!acc[cat]) acc[cat] = []
+        acc[cat].push(v)
+        return acc
+      }, {} as Record<string, typeof vocabulary>)
+
+      // Prioritize important categories
+      const categoryOrder = ['eigener_fachbegriff', 'metapher', 'anglizismus', 'phrase', 'satzkonstruktion', 'fachbegriff']
+      const sortedCategories = Object.keys(vocabByCategory).sort((a, b) => {
+        const aIdx = categoryOrder.indexOf(a)
+        const bIdx = categoryOrder.indexOf(b)
+        if (aIdx === -1 && bIdx === -1) return 0
+        if (aIdx === -1) return 1
+        if (bIdx === -1) return -1
+        return aIdx - bIdx
+      })
+
+      for (const category of sortedCategories) {
+        const items = vocabByCategory[category]
+        if (items && items.length > 0) {
+          vocabularyContext += `\n**${category.replace(/_/g, ' ').toUpperCase()}:**\n`
+          vocabularyContext += items.map(v => {
+            let entry = `- "${v.term}"`
+            if (v.preferred_usage) entry += `: ${v.preferred_usage}`
+            if (v.avoid_alternatives) entry += ` | Vermeide: ${v.avoid_alternatives}`
+            return entry
+          }).join('\n')
+        }
+      }
     }
 
-    // Combine prompt with vocabulary
-    const fullPrompt = promptText + vocabularyContext
+    // Build stylistic rules context
+    let stylisticContext = ''
+    if (stylisticRules && stylisticRules.length > 0) {
+      stylisticContext = '\n\n---\n\nSTILISTISCHE RICHTLINIEN (Matthias Schrader Stil):\n'
+
+      // Group rules by type
+      const rulesByType = stylisticRules.reduce((acc, r) => {
+        if (!acc[r.rule_type]) acc[r.rule_type] = []
+        acc[r.rule_type].push(r)
+        return acc
+      }, {} as Record<string, typeof stylisticRules>)
+
+      // Sprachregister and core style
+      if (rulesByType['sprachregister']) {
+        stylisticContext += `\n**SPRACHREGISTER:** ${rulesByType['sprachregister'][0].description}\n`
+      }
+
+      // Personal pronouns preference
+      if (rulesByType['personalpronomina']) {
+        stylisticContext += `\n**PERSPEKTIVE:** ${rulesByType['personalpronomina'][0].description}\n`
+      }
+
+      // Punctuation style
+      if (rulesByType['interpunktion']) {
+        stylisticContext += `\n**INTERPUNKTION:** ${rulesByType['interpunktion'][0].description}\n`
+      }
+
+      // Text length preference
+      if (rulesByType['textlaenge']) {
+        stylisticContext += `\n**SATZSTRUKTUR:** ${rulesByType['textlaenge'][0].description}\n`
+      }
+
+      // Metaphor types
+      if (rulesByType['metapherntyp'] && rulesByType['metapherntyp'].length > 0) {
+        stylisticContext += `\n**BEVORZUGTE METAPHERN-BEREICHE:**\n`
+        stylisticContext += rulesByType['metapherntyp'].map(r => `- ${r.description}`).join('\n')
+      }
+
+      // Frequently cited authors
+      if (rulesByType['autorenzitat'] && rulesByType['autorenzitat'].length > 0) {
+        stylisticContext += `\n\n**HÄUFIG ZITIERTE AUTOREN:** ${rulesByType['autorenzitat'].map(r => r.name).join(', ')}\n`
+      }
+
+      // General style rules
+      if (rulesByType['stilregel']) {
+        stylisticContext += `\n**WEITERE STILREGELN:**\n`
+        stylisticContext += rulesByType['stilregel'].map(r => `- ${r.description}`).join('\n')
+      }
+    }
+
+    // Combine prompt with vocabulary and stylistic rules
+    const fullPrompt = promptText + vocabularyContext + stylisticContext
 
     // Add explicit enforcement rules that appear at the end of the digest content
     // These are harder for the AI to ignore since they're the last thing it sees before generating
