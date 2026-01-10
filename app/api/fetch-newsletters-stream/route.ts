@@ -229,6 +229,11 @@ export async function POST(request: NextRequest) {
             const articleTypeLinks = parsed.links.filter(l => l.type === 'article')
             console.log(`[Newsletter Fetch] "${email.subject}" - ${articleTypeLinks.length} links with type='article'`)
 
+            // Debug: log first 3 article links for visibility
+            if (articleTypeLinks.length > 0) {
+              console.log(`[Newsletter Fetch] Sample article links:`, articleTypeLinks.slice(0, 3).map(l => ({ url: l.url.slice(0, 80), text: l.text.slice(0, 30) })))
+            }
+
             // Extract article links - filter out non-article URLs and subscribe links
             const links = parsed.links.filter(link => {
               if (link.type !== 'article') return false
