@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash, Eye, Clock, Trash2, Plus, RefreshCw, StickyNote } from 'lucide-react'
+import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash, Eye, Clock, Trash2, Plus, RefreshCw, StickyNote, Download } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -160,6 +160,78 @@ export default function DailyRepoPage() {
   // Check if date has a repo (for date picker styling)
   const hasRepoForDate = (dateStr: string) => repoDates.has(dateStr)
 
+  // Download all content as markdown file
+  function downloadRepoAsMarkdown() {
+    if (items.length === 0) return
+
+    const dateFormatted = new Date(selectedDate).toLocaleDateString('de-DE', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })
+
+    // Group items by source_type
+    const newsletters = items.filter(i => i.source_type === 'newsletter')
+    const articles = items.filter(i => i.source_type === 'article')
+    const emailNotes = items.filter(i => i.source_type === 'email_note')
+
+    // Build markdown content
+    let markdown = `# Daily Repo - ${dateFormatted}\n\n`
+    markdown += `**Gesamt:** ${items.length} Einträge | ${newsletters.length} Newsletter | ${articles.length} Artikel | ${emailNotes.length} Notizen\n`
+    markdown += `**Zeichen:** ${items.reduce((s, i) => s + (i.content?.length || 0), 0).toLocaleString('de-DE')}\n\n`
+    markdown += `---\n\n`
+
+    // Newsletters section
+    if (newsletters.length > 0) {
+      markdown += `## 📧 Newsletter (${newsletters.length})\n\n`
+      for (const item of newsletters) {
+        markdown += `### ${item.title}\n\n`
+        markdown += `**Quelle:** ${item.source_email || 'Unbekannt'}\n`
+        if (item.source_url) markdown += `**URL:** ${item.source_url}\n`
+        markdown += `**Gesammelt:** ${new Date(item.collected_at).toLocaleString('de-DE')}\n\n`
+        markdown += `${item.content || '*Kein Inhalt*'}\n\n`
+        markdown += `---\n\n`
+      }
+    }
+
+    // Articles section
+    if (articles.length > 0) {
+      markdown += `## 📄 Artikel (${articles.length})\n\n`
+      for (const item of articles) {
+        markdown += `### ${item.title}\n\n`
+        if (item.source_email) markdown += `**Aus Newsletter:** ${item.source_email}\n`
+        if (item.source_url) markdown += `**URL:** ${item.source_url}\n`
+        markdown += `**Gesammelt:** ${new Date(item.collected_at).toLocaleString('de-DE')}\n\n`
+        markdown += `${item.content || '*Kein Inhalt*'}\n\n`
+        markdown += `---\n\n`
+      }
+    }
+
+    // Email notes section
+    if (emailNotes.length > 0) {
+      markdown += `## 📝 E-Mail Notizen (${emailNotes.length})\n\n`
+      for (const item of emailNotes) {
+        markdown += `### ${item.title}\n\n`
+        markdown += `**Von:** ${item.source_email || 'Unbekannt'}\n`
+        markdown += `**Gesammelt:** ${new Date(item.collected_at).toLocaleString('de-DE')}\n\n`
+        markdown += `${item.content || '*Kein Inhalt*'}\n\n`
+        markdown += `---\n\n`
+      }
+    }
+
+    // Create and trigger download
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `daily-repo-${selectedDate}.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="p-4 md:p-6 max-w-full">
       <div className="mb-4">
@@ -273,15 +345,26 @@ export default function DailyRepoPage() {
               })}
             </div>
             {items.length > 0 && (
-              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Database className="h-3 w-3" />
-                  {items.length}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Hash className="h-3 w-3" />
-                  {(items.reduce((s, i) => s + (i.content?.length || 0), 0) / 1000).toFixed(0)}k
-                </span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Database className="h-3 w-3" />
+                    {items.length}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Hash className="h-3 w-3" />
+                    {(items.reduce((s, i) => s + (i.content?.length || 0), 0) / 1000).toFixed(0)}k
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={downloadRepoAsMarkdown}
+                  className="h-6 px-2 text-[10px] gap-1"
+                >
+                  <Download className="h-3 w-3" />
+                  .md
+                </Button>
               </div>
             )}
           </div>
@@ -317,8 +400,12 @@ export default function DailyRepoPage() {
                     const faviconUrl = getFaviconUrl(item.source_url)
                     return (
                     <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 transition-colors text-xs">
-                      <div className="shrink-0 text-muted-foreground">
-                        {faviconUrl ? (
+                      <div className="shrink-0 flex items-center gap-1">
+                        {/* Always show source type icon for clarity */}
+                        <span className={item.source_type === 'newsletter' ? 'text-blue-500' : item.source_type === 'article' ? 'text-green-500' : 'text-orange-500'}>
+                          {sourceTypeIcon(item.source_type)}
+                        </span>
+                        {faviconUrl && (
                           <img
                             src={faviconUrl}
                             alt=""
@@ -326,15 +413,10 @@ export default function DailyRepoPage() {
                             height={14}
                             className="rounded-sm"
                             onError={(e) => {
-                              // Fallback to source type icon on error
                               e.currentTarget.style.display = 'none'
-                              e.currentTarget.nextElementSibling?.classList.remove('hidden')
                             }}
                           />
-                        ) : null}
-                        <span className={faviconUrl ? 'hidden' : ''}>
-                          {sourceTypeIcon(item.source_type)}
-                        </span>
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="font-medium truncate text-xs">{item.title}</div>

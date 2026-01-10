@@ -148,10 +148,13 @@ export async function POST(request: NextRequest) {
         let beforeDate: Date | undefined
 
         if (targetDate) {
-          // For specific date: search for emails from that day (midnight to midnight)
-          afterDate = new Date(targetDate + 'T00:00:00')
-          beforeDate = new Date(targetDate + 'T23:59:59')
-          console.log(`[Newsletter Fetch] Searching for date range: ${afterDate.toISOString()} to ${beforeDate.toISOString()}`)
+          // For specific date: search for emails from that day
+          // Use UTC dates to avoid timezone issues with Gmail's date query
+          // Gmail's after/before uses the date in the user's Gmail timezone,
+          // but we query using the date string directly to be consistent
+          afterDate = new Date(targetDate + 'T00:00:00Z')  // Force UTC
+          beforeDate = new Date(targetDate + 'T23:59:59Z')  // Force UTC
+          console.log(`[Newsletter Fetch] Searching for date range: ${targetDate} (UTC: ${afterDate.toISOString()} to ${beforeDate.toISOString()})`)
         } else {
           afterDate = new Date(Date.now() - DEFAULT_NEWSLETTER_FETCH_MS)
         }
@@ -160,14 +163,19 @@ export async function POST(request: NextRequest) {
 
         send({ type: 'newsletter', phase: 'fetching', item: { title: 'Emails werden abgerufen...', status: 'processing' } })
 
-        console.log('[Newsletter Fetch] Fetching emails from senders:', senderEmails)
+        console.log('[Newsletter Fetch] Fetching emails from', senderEmails.length, 'sources:', senderEmails.slice(0, 5), senderEmails.length > 5 ? '...' : '')
         const emails = await gmailClient.fetchEmailsFromSenders(senderEmails, 50, afterDate, beforeDate)
-        console.log('[Newsletter Fetch] Fetched', emails.length, 'emails')
+        console.log('[Newsletter Fetch] Fetched', emails.length, 'emails from Gmail')
 
-        send({ type: 'newsletter', phase: 'processing', current: 0, total: emails.length, item: { title: `${emails.length} Emails gefunden`, status: 'success' } })
+        // Log unique senders found
+        const uniqueSenders = new Set(emails.map(e => e.from))
+        console.log('[Newsletter Fetch] Unique senders in fetch:', uniqueSenders.size, Array.from(uniqueSenders).slice(0, 5))
+
+        send({ type: 'newsletter', phase: 'processing', current: 0, total: emails.length, item: { title: `${emails.length} Emails gefunden (${uniqueSenders.size} Quellen)`, status: 'success' } })
 
         let processedNewsletters = 0
         let processedArticles = 0
+        let skippedNewsletters = 0
         let errors = 0
         let totalCharacters = 0
         const articleUrls: Array<{ url: string; title: string; newsletterTitle: string; newsletterEmail: string }> = []
@@ -185,12 +193,14 @@ export async function POST(request: NextRequest) {
           })
 
           try {
-            // Check if already exists
+            // Check if already exists for THIS date (allow same title on different days)
+            const newsletterDate = targetDate || email.date.toISOString().split('T')[0]
             const { data: existing } = await supabase
               .from('daily_repo')
               .select('id')
               .eq('source_email', email.from)
               .eq('title', email.subject)
+              .eq('newsletter_date', newsletterDate)
               .single()
 
             if (existing) {
@@ -198,6 +208,8 @@ export async function POST(request: NextRequest) {
                 // Delete existing entry to allow re-processing
                 await supabase.from('daily_repo').delete().eq('id', existing.id)
               } else {
+                skippedNewsletters++
+                console.log(`[Newsletter Fetch] Skipping duplicate: "${email.subject}" from ${email.from} (date: ${newsletterDate})`)
                 send({
                   type: 'newsletter',
                   phase: 'processing',
@@ -231,7 +243,7 @@ export async function POST(request: NextRequest) {
             // Store newsletter - use targetDate if provided, otherwise use email date
             // For Substack newsletters: use specific newsletter URL (for proper favicon)
             // For others: use first article URL as source_url
-            const newsletterDate = targetDate || email.date.toISOString().split('T')[0]
+            // newsletterDate is already defined above for deduplication
             const substackUrl = getSubstackNewsletterUrl(email.from)
             const primaryArticleUrl = links.length > 0 ? links[0].url : null
             // Prefer Substack-specific URL for proper favicon display
@@ -574,6 +586,9 @@ export async function POST(request: NextRequest) {
             key: 'last_newsletter_fetch',
             value: { timestamp: new Date().toISOString() },
           }, { onConflict: 'key' })
+
+        // Log final stats
+        console.log(`[Newsletter Fetch] Complete: ${processedNewsletters} newsletters, ${processedArticles} articles, ${processedEmailNotes} notes, ${skippedNewsletters} skipped, ${errors} errors`)
 
         // Send completion
         send({

@@ -166,7 +166,26 @@ export async function extractArticleContent(url: string): Promise<ExtractedArtic
       return null
     }
 
+    // Check Content-Type - reject non-HTML content (PDFs, images, etc.)
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
+      console.warn(`[ArticleExtractor] Skipping non-HTML content: ${url} (Content-Type: ${contentType})`)
+      return null
+    }
+
     const html = await response.text()
+
+    // Additional safety check: reject suspiciously large responses (likely binary/PDF)
+    if (html.length > 500000) {
+      console.warn(`[ArticleExtractor] Skipping oversized content: ${url} (${(html.length / 1000).toFixed(0)}k chars)`)
+      return null
+    }
+
+    // Check for binary content that slipped through (PDF starts with %PDF-)
+    if (html.startsWith('%PDF-') || html.startsWith('PK') /* ZIP */ || html.includes('\x00')) {
+      console.warn(`[ArticleExtractor] Skipping binary content: ${url}`)
+      return null
+    }
 
     // Parse with JSDOM - use the actual fetched URL for proper relative link resolution
     const dom = new JSDOM(html, { url: urlToFetch })
@@ -227,8 +246,8 @@ export function isLikelyArticleUrl(url: string): boolean {
 
   // Skip non-article URLs
   const skipPatterns = [
-    // File types
-    /\.(pdf|jpg|jpeg|png|gif|mp4|mp3|zip|exe)$/i,
+    // File types (check before query params too)
+    /\.(pdf|jpg|jpeg|png|gif|mp4|mp3|zip|exe)(\?|$)/i,
 
     // Social media (not articles)
     /youtube\.com/,

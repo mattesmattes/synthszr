@@ -27,6 +27,7 @@ interface ProgressItem {
   url?: string
   status: 'pending' | 'processing' | 'success' | 'error' | 'skipped'
   error?: string
+  type?: 'newsletter' | 'article' | 'email_note'
 }
 
 interface ProgressEvent {
@@ -126,17 +127,25 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
               }
 
               if (event.item) {
+                // Add type from event to the item
+                const itemWithType: ProgressItem = {
+                  ...event.item,
+                  type: event.type === 'newsletter' || event.type === 'article' || event.type === 'email_note'
+                    ? event.type
+                    : undefined
+                }
+
                 setItems(prev => {
                   // Update existing item or add new one
                   const existing = prev.findIndex(
-                    i => i.title === event.item!.title && i.from === event.item!.from && i.url === event.item!.url
+                    i => i.title === itemWithType.title && i.from === itemWithType.from && i.url === itemWithType.url
                   )
                   if (existing >= 0) {
                     const updated = [...prev]
-                    updated[existing] = event.item!
+                    updated[existing] = itemWithType
                     return updated
                   }
-                  return [...prev, event.item!]
+                  return [...prev, itemWithType]
                 })
 
                 // Update live stats when item succeeds
@@ -338,6 +347,14 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
                   item.status === 'skipped' && "bg-yellow-50/50"
                 )}
               >
+                {/* Type icon */}
+                <div className="shrink-0 mt-0.5">
+                  {item.type === 'newsletter' && <Mail className="h-4 w-4 text-blue-500" />}
+                  {item.type === 'article' && <FileText className="h-4 w-4 text-green-500" />}
+                  {item.type === 'email_note' && <StickyNote className="h-4 w-4 text-orange-500" />}
+                  {!item.type && <div className="w-4" />}
+                </div>
+                {/* Status icon */}
                 {statusIcons[item.status]}
                 <div className="flex-1 min-w-0">
                   <div className="font-medium truncate">{item.title}</div>
