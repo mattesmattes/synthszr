@@ -289,6 +289,20 @@ export function isLikelyArticleUrl(url: string): boolean {
 
     // Generic homepage patterns (often not specific articles)
     /^https?:\/\/[^\/]+\/?$/,  // Just domain with no path
+    /^https?:\/\/[^\/]+\/\?/,  // Domain with only query params (e.g., theinformation.com/?utm=...)
+
+    // Newsletter metadata/utility pages
+    /zendesk\.com/i,           // Help centers
+    /\/newsletters\/?(\?|$)/i, // Newsletter listing pages (with or without query params)
+    /\/newsletter\/manage/i,   // Newsletter management pages (newyorker.com)
+    /\/subscribe\?/i,          // Subscribe pages with params
+    /\/deep-research\/?$/i,    // Tool pages
+    /\/titv\/?$/i,             // Video hub pages (but allow /titv/specific-video)
+
+    // Help centers and support pages
+    /help\.[^\/]+\.[a-z]+\//i, // help.*.com/* subdomains (help.nytimes.com, etc.)
+    /\/v2\/offers\//i,         // Subscription offer pages (newyorker.com/v2/offers/)
+    /\/about\/?(\?|$)/i,       // About pages (e.g., wirecutter/about/)
   ]
 
   for (const pattern of skipPatterns) {

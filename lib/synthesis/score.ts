@@ -51,11 +51,21 @@ async function scoreCandidate(
     .replace('{historical_news}', historicalNews.slice(0, 2000))
     .replace('{days_ago}', String(daysAgo))
 
-  const response = await anthropic.messages.create({
-    model: 'claude-3-5-haiku-20241022',
-    max_tokens: 256,
-    messages: [{ role: 'user', content: prompt }],
+  // Create a timeout promise (30 seconds)
+  const timeoutMs = 30000
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(`Scoring timeout after ${timeoutMs}ms`)), timeoutMs)
   })
+
+  // Race between API call and timeout
+  const response = await Promise.race([
+    anthropic.messages.create({
+      model: 'claude-3-5-haiku-20241022',
+      max_tokens: 256,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+    timeoutPromise,
+  ])
 
   const text =
     response.content[0].type === 'text' ? response.content[0].text : ''
