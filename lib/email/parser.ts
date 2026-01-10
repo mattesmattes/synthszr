@@ -243,6 +243,11 @@ function isLikelyArticleUrl(url: string): boolean {
     '/app', '/app-link',
     '/survey', '/form',
     '/introducing-the-substack-app',
+    // Additional metadata/help pages
+    '/help/', '/help-center', '/knowledge-base',
+    '/privacy-policy', '/cookie-policy',
+    '/email-newsletters', '/newsletters-and-alerts',
+    '/company/', '/corporate/',
   ]
 
   for (const path of nonArticlePaths) {
