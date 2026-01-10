@@ -313,11 +313,16 @@ function isLikelyArticleUrl(url: string): boolean {
     /link\.mail\.beehiiv\.com\//, // Beehiiv newsletter tracking
     /click\.convertkit-mail/, // ConvertKit tracking
     // Additional newsletter tracking URL patterns
-    /\.cmail\d+\.com\/t\//, // Campaign Monitor (10point.cmail19.com/t/...)
+    /cmail\d+\.com\/t\//, // Campaign Monitor (10point.cmail19.com/t/...)
     /klclick\d*\.com\/l\//, // Klaviyo (ctrk.klclick1.com/l/...)
     /list-manage\.com\/track\/click/, // Mailchimp (*.list-manage.com/track/click)
     /\/ss\/c\/u001\./, // Sendgrid-style tracking (/ss/c/u001....)
     /\.com\/s\/c\/[A-Za-z0-9]/, // Business Insider style (l.businessinsider.com/s/c/...)
+    // Additional patterns for common newsletter services
+    /trk\.wsj\.com/, // WSJ tracking links
+    /nl\.nytimes\.com/, // NYT tracking links
+    /strictlyvc\.com\/ss\/c\//, // StrictlyVC tracking (custom domain)
+    /theresanaiforthat\.com/, // TAAFT newsletter links
   ]
 
   for (const pattern of articlePatterns) {
