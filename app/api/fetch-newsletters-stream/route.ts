@@ -22,6 +22,62 @@ function getSubstackNewsletterUrl(email: string | null): string | null {
   return `https://${subdomain}.substack.com`
 }
 
+/**
+ * Detect if a newsletter contains full article content vs. being a digest with teasers.
+ * Full-content newsletters don't need article extraction - the newsletter IS the article.
+ *
+ * Detection heuristics:
+ * - Content length > 3000 chars suggests full article
+ * - Few article links (< 3) suggests not a digest/curated newsletter
+ * - High content-to-links ratio suggests full content
+ *
+ * Returns true if this newsletter likely contains full content and doesn't need article extraction.
+ */
+function isFullContentNewsletter(
+  plainText: string,
+  articleLinkCount: number,
+  senderEmail: string | null
+): boolean {
+  const contentLength = plainText?.length || 0
+
+  // Very short content is never "full content"
+  if (contentLength < 1500) return false
+
+  // Many article links (5+) suggests a digest/curated newsletter
+  if (articleLinkCount >= 5) return false
+
+  // Substantial content (3000+ chars) with few links (0-2) = likely full content
+  if (contentLength > 3000 && articleLinkCount <= 2) {
+    console.log(`[Newsletter Fetch] Detected as FULL CONTENT newsletter (${contentLength} chars, ${articleLinkCount} links)`)
+    return true
+  }
+
+  // Very substantial content (6000+ chars) with moderate links = likely full content
+  if (contentLength > 6000 && articleLinkCount <= 4) {
+    console.log(`[Newsletter Fetch] Detected as FULL CONTENT newsletter (${contentLength} chars, ${articleLinkCount} links)`)
+    return true
+  }
+
+  // Known full-content newsletter patterns (personal Substacks tend to have full content)
+  // Exception: "Five Things Tech" and similar digest Substacks
+  const digestSubstackPatterns = [
+    /getfivethings/i,      // Five Things Tech - digest format
+    /morningbrew/i,        // Morning Brew - digest format
+    /techmeme/i,           // Techmeme - digest format
+  ]
+
+  const isSubstack = senderEmail?.includes('@substack.com')
+  const isDigestSubstack = digestSubstackPatterns.some(p => p.test(senderEmail || ''))
+
+  // Substack newsletters (non-digest) with decent content are usually full articles
+  if (isSubstack && !isDigestSubstack && contentLength > 2500 && articleLinkCount <= 3) {
+    console.log(`[Newsletter Fetch] Detected as FULL CONTENT Substack newsletter (${contentLength} chars)`)
+    return true
+  }
+
+  return false
+}
+
 // Configuration for +dailyrepo email imports
 const EMAIL_NOTE_CONFIG = {
   senderEmail: null, // No sender filter - any email with +dailyrepo in subject
@@ -248,13 +304,24 @@ export async function POST(request: NextRequest) {
               return true
             })
             console.log(`[Newsletter Fetch] "${email.subject}" - ${links.length} links after all filters`)
-            for (const link of links) {
-              articleUrls.push({
-                url: link.url,
-                title: link.text || 'Unbekannter Artikel',
-                newsletterTitle: email.subject,
-                newsletterEmail: email.from  // Track source newsletter for article
-              })
+
+            // Check if this is a full-content newsletter (already contains the full article)
+            // vs. a digest/curated newsletter (teasers with links to external articles)
+            const hasFullContent = isFullContentNewsletter(parsed.plainText, links.length, email.from)
+
+            // Only extract article links if this is NOT a full-content newsletter
+            // Full-content newsletters don't need external article extraction
+            if (!hasFullContent) {
+              for (const link of links) {
+                articleUrls.push({
+                  url: link.url,
+                  title: link.text || 'Unbekannter Artikel',
+                  newsletterTitle: email.subject,
+                  newsletterEmail: email.from  // Track source newsletter for article
+                })
+              }
+            } else {
+              console.log(`[Newsletter Fetch] Skipping article extraction - newsletter "${email.subject}" has full content`)
             }
 
             // Store newsletter - use targetDate if provided, otherwise use email date
