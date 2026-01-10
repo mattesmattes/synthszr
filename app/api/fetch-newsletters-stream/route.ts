@@ -26,52 +26,63 @@ function getSubstackNewsletterUrl(email: string | null): string | null {
  * Detect if a newsletter contains full article content vs. being a digest with teasers.
  * Full-content newsletters don't need article extraction - the newsletter IS the article.
  *
- * Detection heuristics:
- * - Content length > 3000 chars suggests full article
- * - Few article links (< 3) suggests not a digest/curated newsletter
- * - High content-to-links ratio suggests full content
+ * CONSERVATIVE approach: Only skip article extraction when we're VERY sure it's full content.
+ * It's better to try crawling and fail than to miss articles.
  *
- * Returns true if this newsletter likely contains full content and doesn't need article extraction.
+ * @param plainText - The newsletter's plain text content
+ * @param totalArticleLinks - Number of links categorized as 'article' type (BEFORE URL filtering)
+ * @param senderEmail - The sender's email address
  */
 function isFullContentNewsletter(
   plainText: string,
-  articleLinkCount: number,
+  totalArticleLinks: number,
   senderEmail: string | null
 ): boolean {
   const contentLength = plainText?.length || 0
 
-  // Very short content is never "full content"
-  if (contentLength < 1500) return false
-
-  // Many article links (5+) suggests a digest/curated newsletter
-  if (articleLinkCount >= 5) return false
-
-  // Substantial content (3000+ chars) with few links (0-2) = likely full content
-  if (contentLength > 3000 && articleLinkCount <= 2) {
-    console.log(`[Newsletter Fetch] Detected as FULL CONTENT newsletter (${contentLength} chars, ${articleLinkCount} links)`)
-    return true
-  }
-
-  // Very substantial content (6000+ chars) with moderate links = likely full content
-  if (contentLength > 6000 && articleLinkCount <= 4) {
-    console.log(`[Newsletter Fetch] Detected as FULL CONTENT newsletter (${contentLength} chars, ${articleLinkCount} links)`)
-    return true
-  }
-
-  // Known full-content newsletter patterns (personal Substacks tend to have full content)
-  // Exception: "Five Things Tech" and similar digest Substacks
-  const digestSubstackPatterns = [
-    /getfivethings/i,      // Five Things Tech - digest format
-    /morningbrew/i,        // Morning Brew - digest format
-    /techmeme/i,           // Techmeme - digest format
+  // Known DIGEST newsletter patterns - NEVER skip these, always try to extract articles
+  const knownDigestPatterns = [
+    /getfivethings/i,           // Five Things Tech
+    /morningbrew/i,             // Morning Brew
+    /techmeme/i,                // Techmeme
+    /theinformation/i,          // The Information
+    /strictlyvc/i,              // StrictlyVC
+    /businessinsider/i,         // Business Insider
+    /washingtonpost/i,          // Washington Post
+    /nytimes/i,                 // New York Times
+    /wsj\.com/i,                // Wall Street Journal
+    /newyorker/i,               // New Yorker
+    /theatlantic/i,             // The Atlantic
+    /beehiiv/i,                 // Beehiiv newsletters (often digests)
+    /handelsblatt/i,            // Handelsblatt
   ]
 
-  const isSubstack = senderEmail?.includes('@substack.com')
-  const isDigestSubstack = digestSubstackPatterns.some(p => p.test(senderEmail || ''))
+  const isKnownDigest = knownDigestPatterns.some(p => p.test(senderEmail || ''))
+  if (isKnownDigest) {
+    return false  // Always try to extract articles from known digests
+  }
 
-  // Substack newsletters (non-digest) with decent content are usually full articles
-  if (isSubstack && !isDigestSubstack && contentLength > 2500 && articleLinkCount <= 3) {
-    console.log(`[Newsletter Fetch] Detected as FULL CONTENT Substack newsletter (${contentLength} chars)`)
+  // If there are many article-type links (3+), it's likely a digest
+  if (totalArticleLinks >= 3) {
+    return false
+  }
+
+  // Very short content is never "full content"
+  if (contentLength < 2000) return false
+
+  // Only consider "full content" if:
+  // 1. Very substantial content (10000+ chars) AND
+  // 2. Very few article links (0-1)
+  // This is a VERY conservative threshold
+  if (contentLength > 10000 && totalArticleLinks <= 1) {
+    console.log(`[Newsletter Fetch] Detected as FULL CONTENT newsletter (${contentLength} chars, ${totalArticleLinks} article links)`)
+    return true
+  }
+
+  // Personal Substack with substantial content and NO article links = likely full content
+  const isSubstack = senderEmail?.includes('@substack.com')
+  if (isSubstack && contentLength > 5000 && totalArticleLinks === 0) {
+    console.log(`[Newsletter Fetch] Detected as FULL CONTENT Substack (${contentLength} chars, 0 article links)`)
     return true
   }
 
@@ -307,7 +318,8 @@ export async function POST(request: NextRequest) {
 
             // Check if this is a full-content newsletter (already contains the full article)
             // vs. a digest/curated newsletter (teasers with links to external articles)
-            const hasFullContent = isFullContentNewsletter(parsed.plainText, links.length, email.from)
+            // Use articleTypeLinks.length (BEFORE filtering) to detect digests correctly
+            const hasFullContent = isFullContentNewsletter(parsed.plainText, articleTypeLinks.length, email.from)
 
             // Only extract article links if this is NOT a full-content newsletter
             // Full-content newsletters don't need external article extraction
