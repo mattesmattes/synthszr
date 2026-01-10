@@ -244,29 +244,6 @@ export async function extractArticleContent(url: string): Promise<ExtractedArtic
 export function isLikelyArticleUrl(url: string): boolean {
   const urlLower = url.toLowerCase()
 
-  // FIRST: Check for known tracking/redirect URLs - these ARE articles
-  // Must be checked BEFORE skip patterns to avoid blocking valid article links
-  const trackingPatterns = [
-    /substack\.com\/redirect\//, // Substack tracking redirects
-    /substack\.com\/app-link\/post/, // Substack app deep links to posts
-    /customeriomail\.com\/e\/c\//, // Customer.io tracking
-    /links\.morningbrew\.com\//, // Morning Brew tracking
-    /link\.mail\.beehiiv\.com\//, // Beehiiv tracking
-    /click\.convertkit-mail/, // ConvertKit tracking
-    /trk\.klclick/, // Klaviyo tracking
-    /sendgrid\.net\/ls\/click/, // SendGrid tracking
-    /mandrillapp\.com\/track\/click/, // Mandrill tracking
-    /list-manage\.com\/track\/click/, // Mailchimp tracking
-    /links\.\w+\.com\/e\//, // Generic email tracking
-    /click\.\w+\.com\//, // Generic click tracking
-  ]
-
-  for (const pattern of trackingPatterns) {
-    if (pattern.test(urlLower)) {
-      return true  // Tracking URLs are valid article links
-    }
-  }
-
   // Skip non-article URLs
   const skipPatterns = [
     // File types (check before query params too)
@@ -305,6 +282,7 @@ export function isLikelyArticleUrl(url: string): boolean {
     // App store links
     /apps\.apple\.com/,
     /play\.google\.com/,
+    /app-link\/post\?/,  // Substack app deep links (often don't resolve well)
 
     // Tracking/redirect pages that aren't articles
     /\/introducing-the-substack-app/i,
