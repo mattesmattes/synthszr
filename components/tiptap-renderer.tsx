@@ -1079,13 +1079,17 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     if (editor) {
       // Wait for DOM to update
       const timeoutId = setTimeout(() => {
-        hideExplicitCompanyTags() // Hide {Company} syntax first
         processNewsHeadings() // Process news headings (adds favicons, removes source links)
         processCompanyNames()
         processMattesSyntheseText()
-        // Process Synthszr rating links after text is styled
+        // Process Synthszr rating links BEFORE hiding {Company} tags
+        // so the company detection can find explicit tags
         setTimeout(() => {
           processSynthszrRatingLinks()
+          // Hide {Company} syntax AFTER company detection
+          setTimeout(() => {
+            hideExplicitCompanyTags()
+          }, 50)
         }, 50)
       }, 100)
       return () => clearTimeout(timeoutId)
