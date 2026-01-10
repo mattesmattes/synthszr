@@ -289,19 +289,6 @@ export function isLikelyArticleUrl(url: string): boolean {
 
     // Generic homepage patterns (often not specific articles)
     /^https?:\/\/[^\/]+\/?$/,  // Just domain with no path
-
-    // Metadata/help/corporate pages (not articles)
-    /\/help\//i,
-    /\/help-center/i,
-    /\/knowledge-base/i,
-    /\/privacy-policy/i,
-    /\/cookie-policy/i,
-    /\/contact\//i,
-    /\/about-us/i,
-    /\/company\//i,
-    /\/corporate\//i,
-    /\/email-newsletters/i,
-    /\/newsletters-and-alerts/i,
   ]
 
   for (const pattern of skipPatterns) {
