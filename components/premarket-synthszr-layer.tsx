@@ -51,8 +51,8 @@ export function PremarketSynthszrLayer({
         params.set('withSynthesis', 'true')
         params.set('limit', '1')
 
-        const response = await fetch(`/api/premarket?${params}`, {
-          credentials: 'include',
+        // Use public endpoint (no auth required) for viewing premarket data
+        const response = await fetch(`/api/premarket/view?${params}`, {
           signal: controller.signal,
         })
         const json = await response.json()
