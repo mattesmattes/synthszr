@@ -19,7 +19,8 @@ import {
   Users,
   Send,
   HelpCircle,
-  FileCode
+  FileCode,
+  TrendingUp
 } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
@@ -95,6 +96,16 @@ const navGroups: NavGroup[] = [
         label: 'Synthese-Prompts',
         href: '/admin/synthesis',
         icon: Lightbulb
+      }
+    ]
+  },
+  {
+    label: 'Premarket',
+    items: [
+      {
+        label: 'AI Synthesen',
+        href: '/admin/premarket',
+        icon: TrendingUp
       }
     ]
   },

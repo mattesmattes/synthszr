@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { TrendingUp, TrendingDown, Minus, Sparkles } from "lucide-react"
 import { StockSynthszrLayer } from "./stock-synthszr-layer"
+import { PremarketSynthszrLayer } from "./premarket-synthszr-layer"
 import { Button } from "./ui/button"
 
 // Known public companies that we want to show stock tickers for
@@ -83,6 +84,81 @@ const KNOWN_COMPANIES: Record<string, string> = {
   'Samsung': 'samsung',
 }
 
+// Known premarket companies (pre-IPO / private markets from Forge Global)
+const KNOWN_PREMARKET_COMPANIES: Record<string, string> = {
+  // AI Companies
+  'OpenAI': 'OpenAI',
+  'Anthropic': 'Anthropic',
+  'Databricks': 'Databricks',
+  'Scale AI': 'Scale AI',
+  'Cohere': 'Cohere',
+  'Hugging Face': 'Hugging Face',
+  'Anduril': 'Anduril',
+  // Developer Tools
+  'Stripe': 'Stripe',
+  'Canva': 'Canva',
+  'Figma': 'Figma',
+  'Notion': 'Notion',
+  'Airtable': 'Airtable',
+  'Miro': 'Miro',
+  'GitLab': 'GitLab',
+  'Vercel': 'Vercel',
+  // Fintech
+  'Klarna': 'Klarna',
+  'Plaid': 'Plaid',
+  'Chime': 'Chime',
+  'Checkout.com': 'Checkout.com',
+  'Revolut': 'Revolut',
+  'Brex': 'Brex',
+  // Space & Transport
+  'SpaceX': 'SpaceX',
+  'Relativity Space': 'Relativity Space',
+  'Rocket Lab': 'Rocket Lab',
+  // Social & Media
+  'Reddit': 'Reddit',
+  'Discord': 'Discord',
+  'Substack': 'Substack',
+  'Instacart': 'Instacart',
+  // Health & Biotech
+  'Tempus': 'Tempus',
+  'Cerebras': 'Cerebras',
+  // Other notable
+  'Epic Games': 'Epic Games',
+  'Flexport': 'Flexport',
+  'Rippling': 'Rippling',
+  'Gusto': 'Gusto',
+  'Deel': 'Deel',
+  'Faire': 'Faire',
+  'Zipline': 'Zipline',
+  'Impossible Foods': 'Impossible Foods',
+  'Bolt': 'Bolt',
+  'Getir': 'Getir',
+  'Rappi': 'Rappi',
+  'Waymo': 'Waymo',
+  'Cruise': 'Cruise',
+  'Aurora': 'Aurora',
+  'Nuro': 'Nuro',
+  // Crypto/Web3
+  'Circle': 'Circle',
+  'Fireblocks': 'Fireblocks',
+  'Alchemy': 'Alchemy',
+  // Added from common AI coverage
+  'Lovable': 'Lovable',
+  'Cursor': 'Cursor',
+  'Perplexity': 'Perplexity',
+  'Midjourney': 'Midjourney',
+  'Stability AI': 'Stability AI',
+  'Runway': 'Runway',
+  'Character.AI': 'Character.AI',
+  'Jasper': 'Jasper',
+  'Inflection AI': 'Inflection AI',
+  'Mistral': 'Mistral',
+  'Mistral AI': 'Mistral AI',
+  'xAI': 'xAI',
+  'Groq': 'Groq',
+  'Together AI': 'Together AI',
+}
+
 interface StockData {
   symbol: string
   exchange: string
@@ -114,6 +190,14 @@ interface SynthszrRatingLinkProps {
   displayName: string
   rating: 'BUY' | 'HOLD' | 'SELL'
   isFirst: boolean
+}
+
+interface PremarketRatingLinkProps {
+  company: string
+  displayName: string
+  rating: 'BUY' | 'HOLD' | 'SELL'
+  isFirst: boolean
+  isin?: string
 }
 
 function SynthszrRatingLink({ company, displayName, rating, isFirst }: SynthszrRatingLinkProps) {
@@ -151,6 +235,48 @@ function SynthszrRatingLink({ company, displayName, rating, isFirst }: SynthszrR
         <StockSynthszrLayer
           company={company}
           onClose={() => setShowSynthszr(false)}
+        />
+      )}
+    </>
+  )
+}
+
+function PremarketRatingLink({ company, displayName, rating, isFirst, isin }: PremarketRatingLinkProps) {
+  const [showPremarket, setShowPremarket] = useState(false)
+
+  // Neon colors matching stock performance badges - slightly different shade for premarket
+  const ratingBadgeStyles = {
+    BUY: 'bg-[#39FF14] text-black',      // Neon Green
+    HOLD: 'bg-gray-300 dark:bg-gray-500 text-black dark:text-white',  // Gray
+    SELL: 'bg-[#FF6600] text-black',     // Neon Orange
+  }
+
+  const ratingLabels = {
+    BUY: 'Buy',
+    HOLD: 'Hold',
+    SELL: 'Sell',
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setShowPremarket(true)}
+        className="inline-flex items-center gap-1 font-medium hover:underline cursor-pointer text-foreground"
+      >
+        {isFirst ? (
+          <span>Premarket: {displayName}</span>
+        ) : (
+          <span>, {displayName}</span>
+        )}
+        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold ${ratingBadgeStyles[rating]}`}>
+          {ratingLabels[rating]}
+        </span>
+      </button>
+      {showPremarket && (
+        <PremarketSynthszrLayer
+          company={company}
+          isin={isin}
+          onClose={() => setShowPremarket(false)}
         />
       )}
     </>
@@ -322,6 +448,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [tickerPortals, setTickerPortals] = useState<Array<{ element: HTMLElement; company: string }>>([])
   const [ratingPortals, setRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean }>>([])
+  const [premarketRatingPortals, setPremarketRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean; isin?: string }>>([])
 
   const editor = useEditor({
     extensions: [
@@ -582,6 +709,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     const sectionsToProcess: Array<{
       element: Element
       companies: Array<{ apiName: string; displayName: string }>
+      premarketCompanies: Array<{ apiName: string; displayName: string }>
     }> = []
 
     syntheszrMarkers.forEach((marker) => {
@@ -615,7 +743,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       // Also include the Synthszr Take paragraph itself
       textToSearch += ' ' + (container.textContent || '')
 
-      // Find all mentioned companies in the combined text
+      // Find all mentioned public companies in the combined text
       // Matches: "Meta", "Metas" (possessive), "Google-Aktien" (compound)
       const companies: Array<{ apiName: string; displayName: string }> = []
       for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
@@ -625,52 +753,92 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         }
       }
 
-      if (companies.length > 0) {
-        sectionsToProcess.push({ element: container, companies })
+      // Find all mentioned premarket companies in the combined text
+      const premarketCompanies: Array<{ apiName: string; displayName: string }> = []
+      for (const [displayName, apiName] of Object.entries(KNOWN_PREMARKET_COMPANIES)) {
+        // Escape special regex characters in company names (e.g., "Character.AI")
+        const escapedName = displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const regex = new RegExp(`\\b${escapedName}s?\\b`, 'gi')
+        if (regex.test(textToSearch)) {
+          premarketCompanies.push({ apiName, displayName })
+        }
+      }
+
+      if (companies.length > 0 || premarketCompanies.length > 0) {
+        sectionsToProcess.push({ element: container, companies, premarketCompanies })
       }
     })
 
-    console.log('[SynthszrRatings] Sections to process:', sectionsToProcess.length, sectionsToProcess.map(s => s.companies))
+    console.log('[SynthszrRatings] Sections to process:', sectionsToProcess.length)
     if (sectionsToProcess.length === 0) return
 
-    // Collect all unique companies for batch API call
-    const allCompanies = [...new Set(sectionsToProcess.flatMap(s => s.companies.map(c => c.apiName)))]
-    console.log('[SynthszrRatings] Companies to fetch:', allCompanies)
+    // Collect all unique companies for batch API calls
+    const allPublicCompanies = [...new Set(sectionsToProcess.flatMap(s => s.companies.map(c => c.apiName)))]
+    const allPremarketCompanies = [...new Set(sectionsToProcess.flatMap(s => s.premarketCompanies.map(c => c.apiName)))]
+    console.log('[SynthszrRatings] Public companies to fetch:', allPublicCompanies)
+    console.log('[SynthszrRatings] Premarket companies to fetch:', allPremarketCompanies)
 
-    // Fetch ratings from cache
+    // Fetch ratings from both APIs in parallel
     try {
-      const response = await fetch('/api/stock-synthszr/batch-ratings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companies: allCompanies }),
-      })
-      const json = await response.json()
-      console.log('[SynthszrRatings] API response:', json)
+      const [publicResponse, premarketResponse] = await Promise.all([
+        allPublicCompanies.length > 0
+          ? fetch('/api/stock-synthszr/batch-ratings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ companies: allPublicCompanies }),
+            }).then(r => r.json())
+          : Promise.resolve({ ok: true, ratings: [] }),
+        allPremarketCompanies.length > 0
+          ? fetch('/api/premarket/batch-ratings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ companies: allPremarketCompanies }),
+            }).then(r => r.json())
+          : Promise.resolve({ ok: true, ratings: [] }),
+      ])
 
-      if (!json.ok || !json.ratings) return
+      console.log('[SynthszrRatings] Public API response:', publicResponse)
+      console.log('[SynthszrRatings] Premarket API response:', premarketResponse)
 
-      const ratingsMap = new Map<string, 'BUY' | 'HOLD' | 'SELL'>(
-        json.ratings
+      // Build ratings maps
+      const publicRatingsMap = new Map<string, 'BUY' | 'HOLD' | 'SELL'>(
+        (publicResponse.ok && publicResponse.ratings || [])
           .filter((r: StockRatingResult) => r.rating !== null)
           .map((r: StockRatingResult) => [r.company.toLowerCase(), r.rating as 'BUY' | 'HOLD' | 'SELL'])
       )
 
-      const portals: Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean }> = []
+      interface PremarketRatingResult {
+        company: string
+        rating: 'BUY' | 'HOLD' | 'SELL' | null
+        isin?: string
+      }
+      const premarketRatingsMap = new Map<string, { rating: 'BUY' | 'HOLD' | 'SELL'; isin?: string }>(
+        (premarketResponse.ok && premarketResponse.ratings || [])
+          .filter((r: PremarketRatingResult) => r.rating !== null)
+          .map((r: PremarketRatingResult) => [r.company.toLowerCase(), { rating: r.rating as 'BUY' | 'HOLD' | 'SELL', isin: r.isin }])
+      )
+
+      const publicPortals: Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean }> = []
+      const premarketPortals: Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean; isin?: string }> = []
 
       // Add rating links to each section
       for (const section of sectionsToProcess) {
-        const companiesWithRatings = section.companies.filter(c =>
-          ratingsMap.has(c.apiName.toLowerCase())
+        const publicCompaniesWithRatings = section.companies.filter(c =>
+          publicRatingsMap.has(c.apiName.toLowerCase())
+        )
+        const premarketCompaniesWithRatings = section.premarketCompanies.filter(c =>
+          premarketRatingsMap.has(c.apiName.toLowerCase())
         )
 
-        if (companiesWithRatings.length === 0) continue
+        if (publicCompaniesWithRatings.length === 0 && premarketCompaniesWithRatings.length === 0) continue
 
         // Create a span container for the rating links
         const ratingsContainer = document.createElement('span')
         ratingsContainer.className = 'synthszr-ratings-container ml-2'
 
-        companiesWithRatings.forEach((company, idx) => {
-          const rating = ratingsMap.get(company.apiName.toLowerCase())
+        // Add public company ratings
+        publicCompaniesWithRatings.forEach((company, idx) => {
+          const rating = publicRatingsMap.get(company.apiName.toLowerCase())
           if (!rating) return
 
           const placeholder = document.createElement('span')
@@ -680,7 +848,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
           placeholder.dataset.rating = rating
 
           ratingsContainer.appendChild(placeholder)
-          portals.push({
+          publicPortals.push({
             element: placeholder,
             company: company.apiName,
             displayName: company.displayName,
@@ -689,12 +857,36 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
           })
         })
 
+        // Add premarket company ratings
+        premarketCompaniesWithRatings.forEach((company, idx) => {
+          const ratingData = premarketRatingsMap.get(company.apiName.toLowerCase())
+          if (!ratingData) return
+
+          const placeholder = document.createElement('span')
+          placeholder.className = 'premarket-rating-placeholder inline-block'
+          placeholder.dataset.company = company.apiName
+          placeholder.dataset.displayName = company.displayName
+          placeholder.dataset.rating = ratingData.rating
+          if (ratingData.isin) placeholder.dataset.isin = ratingData.isin
+
+          ratingsContainer.appendChild(placeholder)
+          premarketPortals.push({
+            element: placeholder,
+            company: company.apiName,
+            displayName: company.displayName,
+            rating: ratingData.rating,
+            isFirst: publicCompaniesWithRatings.length === 0 && idx === 0,
+            isin: ratingData.isin,
+          })
+        })
+
         // Append to end of paragraph
         section.element.appendChild(ratingsContainer)
         section.element.classList.add('synthszr-ratings-processed')
       }
 
-      setRatingPortals(portals)
+      setRatingPortals(publicPortals)
+      setPremarketRatingPortals(premarketPortals)
     } catch (error) {
       console.error('[TiptapRenderer] Failed to fetch Synthszr ratings:', error)
     }
@@ -843,6 +1035,13 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
           <SynthszrRatingLink company={company} displayName={displayName} rating={rating} isFirst={isFirst} />,
           element,
           `rating-${index}`
+        )
+      )}
+      {premarketRatingPortals.map(({ element, company, displayName, rating, isFirst, isin }, index) =>
+        createPortal(
+          <PremarketRatingLink company={company} displayName={displayName} rating={rating} isFirst={isFirst} isin={isin} />,
+          element,
+          `premarket-rating-${index}`
         )
       )}
     </div>
