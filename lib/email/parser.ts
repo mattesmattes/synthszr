@@ -307,6 +307,11 @@ function isLikelyArticleUrl(url: string): boolean {
     /\/story\//,
     /\/p\/[a-z0-9-]+/i, // Medium-style paths
     /-[a-z0-9]{6,}$/i, // URLs ending with slug-hash
+    /substack\.com\/redirect\//, // Substack tracking redirects (contain encoded article URLs)
+    /customeriomail\.com\/e\/c\//, // Customer.io tracking redirects (The Information, etc.)
+    /links\.morningbrew\.com\//, // Morning Brew tracking links
+    /link\.mail\.beehiiv\.com\//, // Beehiiv newsletter tracking
+    /click\.convertkit-mail/, // ConvertKit tracking
   ]
 
   for (const pattern of articlePatterns) {

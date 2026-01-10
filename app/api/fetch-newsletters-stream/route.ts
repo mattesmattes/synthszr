@@ -224,13 +224,25 @@ export async function POST(request: NextRequest) {
             const htmlContent = email.htmlBody || email.textBody || ''
             const parsed = parseNewsletterHtml(htmlContent, email.subject, email.from, email.date)
 
+            // Log all extracted links for debugging
+            console.log(`[Newsletter Fetch] "${email.subject}" - Found ${parsed.links.length} total links`)
+            const articleTypeLinks = parsed.links.filter(l => l.type === 'article')
+            console.log(`[Newsletter Fetch] "${email.subject}" - ${articleTypeLinks.length} links with type='article'`)
+
             // Extract article links - filter out non-article URLs and subscribe links
             const links = parsed.links.filter(link => {
               if (link.type !== 'article') return false
-              if (!isLikelyArticleUrl(link.url)) return false
-              if (isNonArticleLinkText(link.text)) return false
+              if (!isLikelyArticleUrl(link.url)) {
+                console.log(`[Newsletter Fetch] Filtered out by isLikelyArticleUrl: ${link.url.slice(0, 80)}`)
+                return false
+              }
+              if (isNonArticleLinkText(link.text)) {
+                console.log(`[Newsletter Fetch] Filtered out by isNonArticleLinkText: "${link.text.slice(0, 50)}"`)
+                return false
+              }
               return true
             })
+            console.log(`[Newsletter Fetch] "${email.subject}" - ${links.length} links after all filters`)
             for (const link of links) {
               articleUrls.push({
                 url: link.url,
