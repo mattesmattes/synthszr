@@ -222,14 +222,14 @@ function SynthszrRatingLink({ company, displayName, rating, isFirst }: SynthszrR
     <>
       <button
         onClick={() => setShowSynthszr(true)}
-        className="inline-flex items-center gap-1 font-medium hover:underline cursor-pointer text-foreground"
+        className="inline-flex items-center gap-1 italic hover:underline cursor-pointer text-foreground"
       >
         {isFirst ? (
           <span>Synthszr Vote: {displayName}</span>
         ) : (
           <span>, {displayName}</span>
         )}
-        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold ${ratingBadgeStyles[rating]}`}>
+        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold not-italic ${ratingBadgeStyles[rating]}`}>
           {ratingLabels[rating]}
         </span>
       </button>
@@ -246,7 +246,7 @@ function SynthszrRatingLink({ company, displayName, rating, isFirst }: SynthszrR
 function PremarketRatingLink({ company, displayName, rating, isFirst, isin }: PremarketRatingLinkProps) {
   const [showPremarket, setShowPremarket] = useState(false)
 
-  // Neon colors matching stock performance badges - slightly different shade for premarket
+  // Neon colors matching stock performance badges
   const ratingBadgeStyles = {
     BUY: 'bg-[#39FF14] text-black',      // Neon Green
     HOLD: 'bg-gray-300 dark:bg-gray-500 text-black dark:text-white',  // Gray
@@ -263,14 +263,14 @@ function PremarketRatingLink({ company, displayName, rating, isFirst, isin }: Pr
     <>
       <button
         onClick={() => setShowPremarket(true)}
-        className="inline-flex items-center gap-1 font-medium hover:underline cursor-pointer text-foreground"
+        className="inline-flex items-center gap-1 italic hover:underline cursor-pointer text-foreground"
       >
         {isFirst ? (
-          <span>Premarket: {displayName}</span>
+          <span>Synthszr Vote: {displayName}</span>
         ) : (
           <span>, {displayName}</span>
         )}
-        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold ${ratingBadgeStyles[rating]}`}>
+        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold not-italic ${ratingBadgeStyles[rating]}`}>
           {ratingLabels[rating]}
         </span>
       </button>
@@ -777,11 +777,12 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       textToSearch += ' ' + (container.textContent || '')
 
       // Find all mentioned public companies in the combined text
-      // Matches: "Meta", "Metas" (possessive), "Google-Aktien" (compound)
+      // Matches: "Meta", "Metas" (possessive), "Google-Aktien" (compound), or {Meta} (explicit)
       const companies: Array<{ apiName: string; displayName: string }> = []
       for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
         const regex = new RegExp(`\\b${displayName}s?(-[\\wäöüÄÖÜß]+)*\\b`, 'gi')
-        if (regex.test(textToSearch)) {
+        const explicitRegex = new RegExp(`\\{${displayName}\\}`, 'gi')
+        if (regex.test(textToSearch) || explicitRegex.test(textToSearch)) {
           companies.push({ apiName, displayName })
         }
       }
@@ -792,7 +793,8 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         // Escape special regex characters in company names (e.g., "Character.AI")
         const escapedName = displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const regex = new RegExp(`\\b${escapedName}s?\\b`, 'gi')
-        if (regex.test(textToSearch)) {
+        const explicitRegex = new RegExp(`\\{${escapedName}\\}`, 'gi')
+        if (regex.test(textToSearch) || explicitRegex.test(textToSearch)) {
           premarketCompanies.push({ apiName, displayName })
         }
       }
@@ -1036,12 +1038,49 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     })
   }, [])
 
+  // Hide {Company} syntax from rendered content (used for explicit company tagging)
+  const hideExplicitCompanyTags = useCallback(() => {
+    if (!containerRef.current) return
+
+    const walker = document.createTreeWalker(
+      containerRef.current,
+      NodeFilter.SHOW_TEXT,
+      null
+    )
+
+    const nodesToProcess: { node: Text; matches: RegExpMatchArray[] }[] = []
+    let textNode: Text | null
+
+    // Pattern matches {CompanyName} - we'll remove these from display
+    const pattern = /\{([^}]+)\}/g
+
+    while ((textNode = walker.nextNode() as Text | null)) {
+      const text = textNode.textContent || ''
+      const matches = [...text.matchAll(pattern)]
+      if (matches.length > 0) {
+        nodesToProcess.push({ node: textNode, matches })
+      }
+    }
+
+    // Process nodes - remove {Company} patterns
+    for (const { node, matches } of nodesToProcess) {
+      let text = node.textContent || ''
+      for (const match of matches) {
+        text = text.replace(match[0], '')
+      }
+      // Clean up extra spaces
+      text = text.replace(/\s+/g, ' ').trim()
+      node.textContent = text
+    }
+  }, [])
+
   // Process company names and news headings after editor renders
   useEffect(() => {
     if (editor) {
       // Wait for DOM to update
       const timeoutId = setTimeout(() => {
-        processNewsHeadings() // Process news headings first (adds favicons, removes source links)
+        hideExplicitCompanyTags() // Hide {Company} syntax first
+        processNewsHeadings() // Process news headings (adds favicons, removes source links)
         processCompanyNames()
         processMattesSyntheseText()
         // Process Synthszr rating links after text is styled
@@ -1051,7 +1090,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       }, 100)
       return () => clearTimeout(timeoutId)
     }
-  }, [editor, content, processCompanyNames, processMattesSyntheseText, processNewsHeadings, processSynthszrRatingLinks])
+  }, [editor, content, hideExplicitCompanyTags, processCompanyNames, processMattesSyntheseText, processNewsHeadings, processSynthszrRatingLinks])
 
   if (!editor) {
     return null

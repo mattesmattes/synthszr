@@ -213,24 +213,27 @@ async function fetchRatings(
 
 /**
  * Find companies mentioned in text
+ * Supports: natural mentions, possessive forms, compound words, and explicit {Company} tags
  */
 function findCompaniesInText(text: string): { public: Array<{ apiName: string; displayName: string }>; premarket: Array<{ apiName: string; displayName: string }> } {
   const publicCompanies: Array<{ apiName: string; displayName: string }> = []
   const premarketCompanies: Array<{ apiName: string; displayName: string }> = []
 
-  // Find public companies
+  // Find public companies (natural mentions or {Company} explicit tags)
   for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
     const regex = new RegExp(`\\b${displayName}s?(-[\\wäöüÄÖÜß]+)*\\b`, 'gi')
-    if (regex.test(text)) {
+    const explicitRegex = new RegExp(`\\{${displayName}\\}`, 'gi')
+    if (regex.test(text) || explicitRegex.test(text)) {
       publicCompanies.push({ apiName, displayName })
     }
   }
 
-  // Find premarket companies
+  // Find premarket companies (natural mentions or {Company} explicit tags)
   for (const [displayName, apiName] of Object.entries(KNOWN_PREMARKET_COMPANIES)) {
     const escapedName = displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const regex = new RegExp(`\\b${escapedName}s?\\b`, 'gi')
-    if (regex.test(text)) {
+    const explicitRegex = new RegExp(`\\{${escapedName}\\}`, 'gi')
+    if (regex.test(text) || explicitRegex.test(text)) {
       premarketCompanies.push({ apiName, displayName })
     }
   }
@@ -239,7 +242,15 @@ function findCompaniesInText(text: string): { public: Array<{ apiName: string; d
 }
 
 /**
+ * Remove {Company} explicit tags from text
+ */
+function stripExplicitCompanyTags(text: string): string {
+  return text.replace(/\{([^}]+)\}/g, '').replace(/\s+/g, ' ').trim()
+}
+
+/**
  * Generate HTML for vote badges
+ * Uses italic style for the text, regular (not-italic) for badges
  */
 function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug?: string): string {
   if (ratings.length === 0) return ''
@@ -257,7 +268,7 @@ function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug
     return `${prefix}<a href="${href}" style="color: inherit; text-decoration: none;">${r.displayName}</a> <a href="${href}" style="${style}">${label}</a>`
   }).join('')
 
-  return `<span style="margin-left: 8px; white-space: nowrap;">${badges}</span>`
+  return `<span style="margin-left: 8px; white-space: nowrap; font-style: italic;"><em>${badges}</em></span>`
 }
 
 /**
@@ -465,6 +476,9 @@ function renderContent(content?: TiptapNode[]): string {
   return content.map(node => {
     if (node.type === 'text') {
       let text = node.text || ''
+
+      // Remove {Company} explicit tags from display
+      text = stripExplicitCompanyTags(text)
 
       // Check if text contains "Synthszr Take:" and style it
       const synthszrPattern = /(Synthszr Take:?)/gi
