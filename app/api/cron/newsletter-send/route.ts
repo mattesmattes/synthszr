@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { NewsletterEmail } from '@/lib/resend/templates/newsletter'
 import { render } from '@react-email/components'
-import { generateEmailContent } from '@/lib/email/tiptap-to-html'
+import { generateEmailContentWithVotes } from '@/lib/email/tiptap-to-html'
 
 // Verify cron secret (Vercel cron jobs send this header)
 function verifyCronAuth(request: NextRequest): boolean {
@@ -141,6 +141,12 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Generate email content with Synthszr Vote badges (once for all subscribers)
+    const emailContent = await generateEmailContentWithVotes(
+      { content: post.content, excerpt: post.excerpt, slug: post.slug },
+      BASE_URL
+    )
+
     // Send to all subscribers
     const emailPromises = subscribers.map(async (subscriber) => {
       const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
@@ -148,7 +154,7 @@ export async function GET(request: NextRequest) {
         NewsletterEmail({
           subject,
           previewText,
-          content: generateEmailContent(post),
+          content: emailContent,
           postUrl,
           unsubscribeUrl,
           footerText,
