@@ -232,7 +232,33 @@ function categorizeLink(url: string, text: string): ExtractedLink['type'] {
 function isLikelyArticleUrl(url: string): boolean {
   const lowerUrl = url.toLowerCase()
 
-  // Skip common non-article paths
+  // FIRST: Check for known tracking/redirect URLs - these ARE articles
+  // Must be checked BEFORE exclusion patterns to avoid blocking valid article links
+  const trackingPatterns = [
+    /substack\.com\/redirect\//, // Substack tracking redirects (contain encoded article URLs)
+    /substack\.com\/app-link\/post/, // Substack app deep links to posts
+    /customeriomail\.com\/e\/c\//, // Customer.io tracking redirects (The Information, etc.)
+    /links\.morningbrew\.com\//, // Morning Brew tracking links
+    /link\.mail\.beehiiv\.com\//, // Beehiiv newsletter tracking
+    /click\.convertkit-mail/, // ConvertKit tracking
+    /trk\.klclick/, // Klaviyo tracking
+    /url\d*\.mailanyone\.net/, // MailAnyone tracking
+    /sendgrid\.net\/ls\/click/, // SendGrid tracking
+    /mandrillapp\.com\/track\/click/, // Mandrill/Mailchimp tracking
+    /list-manage\.com\/track\/click/, // Mailchimp tracking
+    /email\.mg\.\w+\.com/, // Mailgun tracking
+    /enews\.email/, // E-news tracking
+    /links\.\w+\.com\/e\//, // Generic email tracking pattern
+    /click\.\w+\.com\//, // Generic click tracking
+  ]
+
+  for (const pattern of trackingPatterns) {
+    if (pattern.test(lowerUrl)) {
+      return true
+    }
+  }
+
+  // Skip common non-article paths (but be specific to avoid false positives)
   const nonArticlePaths = [
     '/login', '/signup', '/register',
     '/account', '/profile', '/settings',
@@ -240,7 +266,6 @@ function isLikelyArticleUrl(url: string): boolean {
     '/about', '/contact', '/privacy', '/terms',
     '/unsubscribe', '/preferences',
     '/subscribe', '/subscription',
-    '/app', '/app-link',
     '/survey', '/form',
     '/introducing-the-substack-app',
   ]
@@ -297,7 +322,7 @@ function isLikelyArticleUrl(url: string): boolean {
     }
   }
 
-  // Common article URL patterns
+  // Common article URL patterns (structural patterns)
   const articlePatterns = [
     /\/\d{4}\/\d{2}\//, // Date-based paths like /2024/01/
     /\/articles?\//,
@@ -305,13 +330,8 @@ function isLikelyArticleUrl(url: string): boolean {
     /\/blog\//,
     /\/news\//,
     /\/story\//,
-    /\/p\/[a-z0-9-]+/i, // Medium-style paths
+    /\/p\/[a-z0-9-]+/i, // Substack/Medium-style paths like /p/article-title
     /-[a-z0-9]{6,}$/i, // URLs ending with slug-hash
-    /substack\.com\/redirect\//, // Substack tracking redirects (contain encoded article URLs)
-    /customeriomail\.com\/e\/c\//, // Customer.io tracking redirects (The Information, etc.)
-    /links\.morningbrew\.com\//, // Morning Brew tracking links
-    /link\.mail\.beehiiv\.com\//, // Beehiiv newsletter tracking
-    /click\.convertkit-mail/, // ConvertKit tracking
   ]
 
   for (const pattern of articlePatterns) {
