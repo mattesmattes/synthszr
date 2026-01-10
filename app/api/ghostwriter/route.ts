@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
-import { streamGhostwriter, type AIModel } from '@/lib/claude/ghostwriter'
+import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
 import { getSynthesesForDigest } from '@/lib/synthesis/pipeline'
 
 const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview']
@@ -529,7 +529,7 @@ export async function POST(request: NextRequest) {
     // Combine digest content with source reference, syntheses, and enforcement rules
     const fullDigestContent = digest.analysis_content + diversityWarning + sourceReference + synthesisContext + enforcementRules
 
-    // Stream the response
+    // Stream the response with post-processing for duplicate metaphors
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       async start(controller) {
@@ -537,10 +537,43 @@ export async function POST(request: NextRequest) {
           // Send initial event with model info
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model, started: true })}\n\n`))
 
+          // Phase 1: Generate the initial text and collect it
+          let generatedText = ''
           for await (const chunk of streamGhostwriter(fullDigestContent, fullPrompt, model)) {
+            generatedText += chunk
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk })}\n\n`))
           }
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, model })}\n\n`))
+
+          // Phase 2: Check for duplicate metaphors
+          const duplicates = findDuplicateMetaphors(generatedText, vocabulary || undefined)
+
+          if (duplicates.size > 0) {
+            // Notify client that deduplication is starting
+            const duplicateList = Array.from(duplicates.entries())
+              .map(([m, p]) => `${m} (${p.length}x)`)
+              .join(', ')
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              phase: 'deduplication',
+              message: `Prüfe auf wiederholte Metaphern: ${duplicateList}...`
+            })}\n\n`))
+
+            // Clear for new content
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ clear: true })}\n\n`))
+
+            // Phase 3: Stream the deduplicated version
+            for await (const chunk of streamMetaphorDeduplication(generatedText, duplicates, model)) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk })}\n\n`))
+            }
+
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              done: true,
+              model,
+              deduplicationApplied: true,
+              duplicatesFound: duplicateList
+            })}\n\n`))
+          } else {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, model })}\n\n`))
+          }
         } catch (error) {
           controller.enqueue(
             encoder.encode(
