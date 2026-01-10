@@ -479,40 +479,31 @@ export default function VocabularyPage() {
               </Button>
             </div>
 
-            <div className="grid gap-2 max-h-96 overflow-y-auto">
+            <div className="max-h-96 overflow-y-auto space-y-1">
               {extractedVocabulary.map((item, index) => (
                 <div
                   key={index}
                   onClick={() => toggleExtractedSelection(index)}
-                  className={`cursor-pointer rounded-lg border p-3 transition-colors ${
+                  className={`cursor-pointer rounded px-2 py-1.5 transition-colors flex items-center gap-2 ${
                     selectedExtracted.has(index)
-                      ? 'border-primary bg-primary/5'
-                      : 'border-muted hover:border-muted-foreground/50'
+                      ? 'bg-primary/10'
+                      : 'hover:bg-muted/50'
                   }`}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded-full border ${
-                      selectedExtracted.has(index)
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-muted-foreground/50'
-                    }`}>
-                      {selectedExtracted.has(index) && <Check className="h-3 w-3" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-mono font-bold">{item.term}</span>
-                        <Badge className={categoryColors[item.category] || categoryColors.general}>
-                          {categories.find(c => c.value === item.category)?.label || item.category}
-                        </Badge>
-                      </div>
-                      {item.preferred_usage && (
-                        <p className="text-sm text-muted-foreground">{item.preferred_usage}</p>
-                      )}
-                      {item.context && (
-                        <p className="text-xs text-muted-foreground/75 italic mt-1">{item.context}</p>
-                      )}
-                    </div>
+                  <div className={`flex h-4 w-4 items-center justify-center rounded border shrink-0 ${
+                    selectedExtracted.has(index)
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-muted-foreground/50'
+                  }`}>
+                    {selectedExtracted.has(index) && <Check className="h-2.5 w-2.5" />}
                   </div>
+                  <span className="font-mono font-medium text-sm">{item.term}</span>
+                  <Badge variant="outline" className={`text-xs px-1.5 py-0 ${categoryColors[item.category] || categoryColors.general}`}>
+                    {categories.find(c => c.value === item.category)?.label || item.category}
+                  </Badge>
+                  {item.preferred_usage && (
+                    <span className="text-xs text-muted-foreground truncate">{item.preferred_usage}</span>
+                  )}
                 </div>
               ))}
             </div>
