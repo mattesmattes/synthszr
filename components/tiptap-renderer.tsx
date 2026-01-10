@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
@@ -447,9 +448,40 @@ interface TiptapRendererProps {
 
 export function TiptapRenderer({ content }: TiptapRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const searchParams = useSearchParams()
   const [tickerPortals, setTickerPortals] = useState<Array<{ element: HTMLElement; company: string }>>([])
   const [ratingPortals, setRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean }>>([])
   const [premarketRatingPortals, setPremarketRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean; isin?: string }>>([])
+
+  // Auto-open dialog state from URL params (for newsletter links)
+  const [autoOpenStock, setAutoOpenStock] = useState<string | null>(null)
+  const [autoOpenPremarket, setAutoOpenPremarket] = useState<string | null>(null)
+
+  // Read URL params to auto-open dialogs (from newsletter email links)
+  useEffect(() => {
+    const stockParam = searchParams.get('stock')
+    const premarketParam = searchParams.get('premarket')
+
+    if (stockParam) {
+      // Find the matching company API name from display name
+      const matchedCompany = Object.entries(KNOWN_COMPANIES).find(
+        ([displayName]) => displayName.toLowerCase() === stockParam.toLowerCase()
+      )
+      if (matchedCompany) {
+        setAutoOpenStock(matchedCompany[1]) // API name
+      }
+    }
+
+    if (premarketParam) {
+      // For premarket, the company name is the API name directly
+      const matchedCompany = Object.entries(KNOWN_PREMARKET_COMPANIES).find(
+        ([displayName]) => displayName.toLowerCase() === premarketParam.toLowerCase()
+      )
+      if (matchedCompany) {
+        setAutoOpenPremarket(matchedCompany[1]) // API name
+      }
+    }
+  }, [searchParams])
 
   const editor = useEditor({
     extensions: [
@@ -1044,6 +1076,20 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
           element,
           `premarket-rating-${index}`
         )
+      )}
+
+      {/* Auto-open dialogs from URL params (newsletter email links) */}
+      {autoOpenStock && (
+        <StockSynthszrLayer
+          company={autoOpenStock}
+          onClose={() => setAutoOpenStock(null)}
+        />
+      )}
+      {autoOpenPremarket && (
+        <PremarketSynthszrLayer
+          company={autoOpenPremarket}
+          onClose={() => setAutoOpenPremarket(null)}
+        />
       )}
     </div>
   )

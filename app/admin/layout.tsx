@@ -11,7 +11,9 @@ export default async function AdminLayout({
 }) {
   const session = await getSession()
 
-  if (!session) {
+  // Check for valid admin session (both existence and isAdmin flag)
+  // This ensures consistency with API route checks
+  if (!session?.isAdmin) {
     redirect('/login')
   }
 
