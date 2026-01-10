@@ -824,6 +824,12 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       // Also include the Synthszr Take paragraph itself
       textToSearch += ' ' + (container.textContent || '')
 
+      // Debug: Check for explicit {Company} tags
+      const explicitTagMatches = textToSearch.match(/\{[A-Za-z0-9\s.]+\}/g)
+      if (explicitTagMatches) {
+        console.log('[SynthszrRatings] Found explicit tags in text:', explicitTagMatches)
+      }
+
       // Find all mentioned public companies in the combined text
       // Matches: "Meta", "Metas" (possessive), "Google-Aktien" (compound), or {Meta} (explicit)
       const companies: Array<{ apiName: string; displayName: string }> = []
@@ -842,7 +848,10 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         const escapedName = displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const regex = new RegExp(`\\b${escapedName}s?\\b`, 'gi')
         const explicitRegex = new RegExp(`\\{${escapedName}\\}`, 'gi')
-        if (regex.test(textToSearch) || explicitRegex.test(textToSearch)) {
+        const matchesNormal = regex.test(textToSearch)
+        const matchesExplicit = explicitRegex.test(textToSearch)
+        if (matchesNormal || matchesExplicit) {
+          console.log(`[SynthszrRatings] Found premarket company: ${displayName} (normal: ${matchesNormal}, explicit: ${matchesExplicit})`)
           premarketCompanies.push({ apiName, displayName })
         }
       }
