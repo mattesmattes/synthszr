@@ -783,7 +783,6 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
 
     // Find all Synthszr Take / Mattes Synthese markers
     const syntheszrMarkers = containerRef.current.querySelectorAll('.mattes-synthese, .mattes-synthese-heading')
-    console.log('[SynthszrRatings] Found markers:', syntheszrMarkers.length)
     if (syntheszrMarkers.length === 0) return
 
     // For each marker, find the containing paragraph/section and extract companies
@@ -824,12 +823,6 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       // Also include the Synthszr Take paragraph itself
       textToSearch += ' ' + (container.textContent || '')
 
-      // Debug: Check for explicit {Company} tags
-      const explicitTagMatches = textToSearch.match(/\{[A-Za-z0-9\s.]+\}/g)
-      if (explicitTagMatches) {
-        console.log('[SynthszrRatings] Found explicit tags in text:', explicitTagMatches)
-      }
-
       // Find all mentioned public companies in the combined text
       // Matches: "Meta", "Metas" (possessive), "Google-Aktien" (compound), or {Meta} (explicit)
       const companies: Array<{ apiName: string; displayName: string }> = []
@@ -848,10 +841,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         const escapedName = displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const regex = new RegExp(`\\b${escapedName}s?\\b`, 'gi')
         const explicitRegex = new RegExp(`\\{${escapedName}\\}`, 'gi')
-        const matchesNormal = regex.test(textToSearch)
-        const matchesExplicit = explicitRegex.test(textToSearch)
-        if (matchesNormal || matchesExplicit) {
-          console.log(`[SynthszrRatings] Found premarket company: ${displayName} (normal: ${matchesNormal}, explicit: ${matchesExplicit})`)
+        if (regex.test(textToSearch) || explicitRegex.test(textToSearch)) {
           premarketCompanies.push({ apiName, displayName })
         }
       }
@@ -861,14 +851,11 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       }
     })
 
-    console.log('[SynthszrRatings] Sections to process:', sectionsToProcess.length)
     if (sectionsToProcess.length === 0) return
 
     // Collect all unique companies for batch API calls
     const allPublicCompanies = [...new Set(sectionsToProcess.flatMap(s => s.companies.map(c => c.apiName)))]
     const allPremarketCompanies = [...new Set(sectionsToProcess.flatMap(s => s.premarketCompanies.map(c => c.apiName)))]
-    console.log('[SynthszrRatings] Public companies to fetch:', allPublicCompanies)
-    console.log('[SynthszrRatings] Premarket companies to fetch:', allPremarketCompanies)
 
     // Fetch ratings from both APIs in parallel
     try {
@@ -888,9 +875,6 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
             }).then(r => r.json())
           : Promise.resolve({ ok: true, ratings: [] }),
       ])
-
-      console.log('[SynthszrRatings] Public API response:', publicResponse)
-      console.log('[SynthszrRatings] Premarket API response:', premarketResponse)
 
       // Build ratings maps
       const publicRatingsMap = new Map<string, 'BUY' | 'HOLD' | 'SELL'>(
