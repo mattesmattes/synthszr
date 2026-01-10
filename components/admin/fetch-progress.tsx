@@ -335,12 +335,12 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
 
         {/* Item list */}
         {items.length > 0 && (
-          <div className="max-h-64 overflow-y-auto space-y-1 border rounded-lg p-2">
+          <div className="max-h-64 overflow-y-auto overflow-x-hidden space-y-1 border rounded-lg p-2">
             {items.slice(-15).map((item, i) => (
               <div
                 key={`${item.title}-${i}`}
                 className={cn(
-                  "flex items-start gap-2 p-2 rounded text-sm",
+                  "flex items-start gap-2 p-2 rounded text-sm overflow-hidden",
                   item.status === 'processing' && "bg-blue-50",
                   item.status === 'error' && "bg-red-50",
                   item.status === 'success' && "bg-green-50/50",
@@ -356,16 +356,16 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
                 </div>
                 {/* Status icon */}
                 {statusIcons[item.status]}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 overflow-hidden">
                   <div className="font-medium truncate">{item.title}</div>
                   {item.from && (
                     <div className="text-xs text-muted-foreground truncate">{item.from}</div>
                   )}
                   {item.url && (
-                    <div className="text-xs text-muted-foreground truncate">{item.url}</div>
+                    <div className="text-xs text-muted-foreground truncate max-w-full">{item.url}</div>
                   )}
                   {item.error && (
-                    <div className="text-xs text-red-600">{item.error}</div>
+                    <div className="text-xs text-red-600 truncate">{item.error}</div>
                   )}
                 </div>
               </div>

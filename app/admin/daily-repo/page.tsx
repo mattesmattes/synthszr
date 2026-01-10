@@ -463,7 +463,7 @@ export default function DailyRepoPage() {
 
       {/* Fetch Dialog */}
       <Dialog open={showFetchDialog} onOpenChange={setShowFetchDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <RefreshCw className="h-4 w-4" />
