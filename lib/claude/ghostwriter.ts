@@ -199,9 +199,7 @@ export async function* streamMetaphorDeduplication(
     .map(([metaphor, positions]) => `- "${metaphor}" erscheint ${positions.length}x`)
     .join('\n')
 
-  const deduplicationPrompt = `Du bist ein Experte für Tech-Journalismus im Stil von Benedict Evans.
-
-Der folgende Text enthält WIEDERHOLTE Metaphern/Fachbegriffe, die jeweils nur EINMAL vorkommen sollten:
+  const deduplicationPrompt = `Der folgende Text enthält WIEDERHOLTE Metaphern/Fachbegriffe, die jeweils nur EINMAL vorkommen sollten:
 
 ${duplicateList}
 
@@ -213,14 +211,19 @@ AUFGABE:
    - Halte den gleichen Bedeutungsinhalt
    - Achte auf natürlichen Lesefluss
 
-STIL-BEISPIELE für Benedict Evans:
+STIL-BEISPIELE:
 - Statt "Burgraben" → "struktureller Vorteil", "Wettbewerbsbarriere", "Lock-in-Effekt"
 - Statt "Disruption" → "Marktverschiebung", "Technologiebruch", "Paradigmenwechsel"
 - Statt "Flywheel" → "selbstverstärkender Kreislauf", "positive Feedback-Schleife"
 - Statt "Network Effects" → "Skalenvorteile", "Plattformdynamik", "Gravitationseffekt"
 - Statt "Cargo Kult" → "Oberflächenimitation", "Form ohne Substanz", "rituelles Nachahmen"
 
-Gib den KOMPLETTEN überarbeiteten Text aus, mit allen Ersetzungen. Behalte das exakte Format (Markdown, Struktur) bei.
+KRITISCH - OUTPUT-FORMAT:
+- Gib NUR den überarbeiteten Text aus, NICHTS anderes
+- KEINE Einleitung wie "Hier ist..." oder "Absolut..."
+- KEINE Erklärungen oder Kommentare
+- Starte DIREKT mit "---" (dem Metadaten-Block des Artikels)
+- Der Text beginnt mit "---" und endet mit dem Artikel-Content
 
 ORIGINALTEXT:
 ${originalText}`
@@ -230,7 +233,7 @@ ${originalText}`
   if (model === 'gemini-2.5-pro' || model === 'gemini-3-pro-preview') {
     const geminiModel = genAI.getGenerativeModel({
       model: model,
-      systemInstruction: 'Du überarbeitest Texte und ersetzt wiederholte Metaphern durch Alternativen.',
+      systemInstruction: 'Du überarbeitest Texte. Gib NUR den überarbeiteten Text aus - KEINE Einleitung, KEINE Kommentare, KEINE Erklärungen. Starte direkt mit dem Text.',
     })
 
     const result = await geminiModel.generateContentStream(deduplicationPrompt)
@@ -253,7 +256,7 @@ ${originalText}`
     const stream = anthropic.messages.stream({
       model: modelId,
       max_tokens: 8192,
-      system: 'Du überarbeitest Texte und ersetzt wiederholte Metaphern durch Alternativen.',
+      system: 'Du überarbeitest Texte. Gib NUR den überarbeiteten Text aus - KEINE Einleitung, KEINE Kommentare, KEINE Erklärungen. Starte direkt mit dem Text.',
       messages: [{ role: 'user', content: deduplicationPrompt }],
     })
 
