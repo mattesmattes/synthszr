@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Globe, CheckCircle, XCircle, Loader2, Play, Settings2 } from 'lucide-react'
+import { Globe, CheckCircle, XCircle, Loader2, Play, Settings2, AlertTriangle, RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -19,12 +19,25 @@ const MODEL_LABELS: Record<string, string> = {
   'gemini-2.5-pro': 'Gemini 2.5 Pro',
 }
 
+interface ApiKeyTestResult {
+  valid: boolean
+  error?: string
+  lastChars?: string
+}
+
+interface ApiKeyTestResults {
+  anthropic: ApiKeyTestResult
+  google: ApiKeyTestResult
+}
+
 export default function LanguagesPage() {
   const [languages, setLanguages] = useState<Language[]>([])
   const [availableModels, setAvailableModels] = useState<TranslationModel[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [backfilling, setBackfilling] = useState<string | null>(null)
+  const [testingKeys, setTestingKeys] = useState(false)
+  const [keyTestResults, setKeyTestResults] = useState<ApiKeyTestResults | null>(null)
 
   useEffect(() => {
     fetchLanguages()
@@ -40,6 +53,21 @@ export default function LanguagesPage() {
       console.error('Error fetching languages:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function testApiKeys() {
+    setTestingKeys(true)
+    try {
+      const res = await fetch('/api/admin/languages/test-keys', {
+        method: 'POST',
+      })
+      const data = await res.json()
+      setKeyTestResults(data)
+    } catch (error) {
+      console.error('Error testing API keys:', error)
+    } finally {
+      setTestingKeys(false)
     }
   }
 
@@ -130,12 +158,82 @@ export default function LanguagesPage() {
       {/* Available Models Info */}
       <Card className="mb-6">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Settings2 className="h-4 w-4" />
-            Verfügbare Übersetzungsmodelle
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Settings2 className="h-4 w-4" />
+              Verfügbare Übersetzungsmodelle
+            </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={testApiKeys}
+              disabled={testingKeys}
+            >
+              {testingKeys ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Keys testen
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
+          {/* API Key Test Results */}
+          {keyTestResults && (
+            <div className="mb-4 p-3 rounded-lg bg-muted/50 space-y-2">
+              <p className="text-xs font-medium mb-2">API Key Validierung:</p>
+
+              {/* Anthropic */}
+              <div className="flex items-center gap-2">
+                {keyTestResults.anthropic.valid ? (
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                ) : keyTestResults.anthropic.error === 'API key not configured' ? (
+                  <XCircle className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                )}
+                <span className="text-sm">Anthropic (Claude)</span>
+                {keyTestResults.anthropic.valid ? (
+                  <Badge variant="outline" className="text-green-600 border-green-300">OK</Badge>
+                ) : keyTestResults.anthropic.lastChars ? (
+                  <Badge variant="destructive" className="text-xs">
+                    Fehler (Key ...{keyTestResults.anthropic.lastChars})
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-xs">Nicht konfiguriert</Badge>
+                )}
+              </div>
+              {keyTestResults.anthropic.error && keyTestResults.anthropic.error !== 'API key not configured' && (
+                <p className="text-xs text-destructive ml-6">{keyTestResults.anthropic.error}</p>
+              )}
+
+              {/* Google */}
+              <div className="flex items-center gap-2">
+                {keyTestResults.google.valid ? (
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                ) : keyTestResults.google.error === 'API key not configured' ? (
+                  <XCircle className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                )}
+                <span className="text-sm">Google (Gemini)</span>
+                {keyTestResults.google.valid ? (
+                  <Badge variant="outline" className="text-green-600 border-green-300">OK</Badge>
+                ) : keyTestResults.google.lastChars ? (
+                  <Badge variant="destructive" className="text-xs">
+                    Fehler (Key ...{keyTestResults.google.lastChars})
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-xs">Nicht konfiguriert</Badge>
+                )}
+              </div>
+              {keyTestResults.google.error && keyTestResults.google.error !== 'API key not configured' && (
+                <p className="text-xs text-destructive ml-6">{keyTestResults.google.error}</p>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
             {availableModels.length > 0 ? (
               availableModels.map(model => (
@@ -152,7 +250,7 @@ export default function LanguagesPage() {
           </div>
           {availableModels.length > 0 && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Modelle werden basierend auf konfigurierten API-Keys erkannt (ANTHROPIC_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY)
+              Modelle werden basierend auf konfigurierten API-Keys erkannt. Klicke "Keys testen" um zu prüfen, ob sie funktionieren.
             </p>
           )}
         </CardContent>

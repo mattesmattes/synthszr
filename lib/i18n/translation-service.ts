@@ -18,7 +18,7 @@ export const TRANSLATION_MODEL_LABELS: Record<TranslationModel, string> = {
   'gemini-2.5-pro': 'Gemini 2.5 Pro',
 }
 
-/** Check which models have valid API keys */
+/** Check which models have API keys configured (does not validate) */
 export function getAvailableModels(): TranslationModel[] {
   const available: TranslationModel[] = []
 
@@ -31,6 +31,53 @@ export function getAvailableModels(): TranslationModel[] {
   }
 
   return available
+}
+
+/** Test if API keys are actually working by making minimal test calls */
+export async function testApiKeys(): Promise<{
+  anthropic: { valid: boolean; error?: string; lastChars?: string }
+  google: { valid: boolean; error?: string; lastChars?: string }
+}> {
+  const results = {
+    anthropic: { valid: false, error: undefined as string | undefined, lastChars: undefined as string | undefined },
+    google: { valid: false, error: undefined as string | undefined, lastChars: undefined as string | undefined },
+  }
+
+  // Test Anthropic
+  const anthropicKey = process.env.ANTHROPIC_API_KEY
+  if (anthropicKey) {
+    results.anthropic.lastChars = anthropicKey.slice(-4)
+    try {
+      const anthropic = new Anthropic()
+      await anthropic.messages.create({
+        model: 'claude-3-5-haiku-20241022',
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'Say "ok"' }],
+      })
+      results.anthropic.valid = true
+    } catch (error) {
+      results.anthropic.error = error instanceof Error ? error.message : String(error)
+    }
+  } else {
+    results.anthropic.error = 'API key not configured'
+  }
+
+  // Test Google
+  const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (googleKey) {
+    results.google.lastChars = googleKey.slice(-4)
+    try {
+      const gemini = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+      await gemini.generateContent('Say "ok"')
+      results.google.valid = true
+    } catch (error) {
+      results.google.error = error instanceof Error ? error.message : String(error)
+    }
+  } else {
+    results.google.error = 'API key not configured'
+  }
+
+  return results
 }
 
 const LANGUAGE_NAMES: Record<LanguageCode, string> = {
