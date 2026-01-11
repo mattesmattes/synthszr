@@ -43,6 +43,7 @@ interface GeneratedPost {
   category: string | null
   content: Record<string, unknown>
   status: 'draft' | 'published' | 'archived'
+  pending_queue_item_ids: string[] | null
 }
 
 export default function EditGeneratedArticlePage({ params }: { params: Promise<{ id: string }> }) {
@@ -100,23 +101,59 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     e.preventDefault()
     setSaving(true)
 
+    const wasPublished = post?.status === 'published'
+    const isNowPublished = published
+    const pendingQueueItems = post?.pending_queue_item_ids || []
+
+    // Update the post
+    const updateData: Record<string, unknown> = {
+      title,
+      slug,
+      excerpt: excerpt || null,
+      category,
+      content: JSON.stringify(content),
+      status: published ? 'published' : 'draft',
+      updated_at: new Date().toISOString(),
+    }
+
+    // Clear pending_queue_item_ids when publishing (they'll be marked as used)
+    if (!wasPublished && isNowPublished && pendingQueueItems.length > 0) {
+      updateData.pending_queue_item_ids = []
+    }
+
     const { error } = await supabase
       .from('generated_posts')
-      .update({
-        title,
-        slug,
-        excerpt: excerpt || null,
-        category,
-        content: JSON.stringify(content),
-        status: published ? 'published' : 'draft',
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', id)
 
     if (error) {
       alert(`Fehler beim Speichern: ${error.message}`)
       setSaving(false)
       return
+    }
+
+    // Mark queue items as "used" when publishing for the first time
+    if (!wasPublished && isNowPublished && pendingQueueItems.length > 0) {
+      console.log(`[Queue] Publishing post - marking ${pendingQueueItems.length} items as used`)
+      try {
+        const response = await fetch('/api/admin/news-queue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            action: 'use',
+            itemIds: pendingQueueItems,
+            postId: id
+          }),
+        })
+        if (response.ok) {
+          console.log('[Queue] Items marked as used successfully')
+        } else {
+          console.error('[Queue] Failed to mark items as used')
+        }
+      } catch (err) {
+        console.error('[Queue] Error marking items as used:', err)
+      }
     }
 
     setSaving(false)

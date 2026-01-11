@@ -209,25 +209,17 @@ export async function getBalancedSelection(
 /**
  * Select items for article generation
  * Marks items as 'selected' and returns them
+ * Note: Source limit validation is handled by getBalancedSelection() algorithm
  */
 export async function selectItemsForArticle(
   itemIds: string[]
 ): Promise<{ items: NewsQueueItem[]; error?: string }> {
   const supabase = createAdminClient()
 
-  // Verify source distribution before selection
-  const { data: selectable } = await supabase
-    .from('news_queue_selectable')
-    .select('id, source_identifier, within_source_limit')
-    .in('id', itemIds)
-
-  const violations = selectable?.filter(item => !item.within_source_limit) || []
-  if (violations.length > 0) {
-    return {
-      items: [],
-      error: `Source limit violation: ${violations.map(v => v.source_identifier).join(', ')} would exceed 30%`
-    }
-  }
+  // Note: We no longer validate source limits here because:
+  // 1. getBalancedSelection() already handles this intelligently (30% rule after 4 items)
+  // 2. Manual selection explicitly chooses items regardless of source
+  // The previous check against news_queue_selectable was too restrictive for small queues
 
   // Mark items as selected
   const { data, error } = await supabase

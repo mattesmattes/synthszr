@@ -585,33 +585,17 @@ export default function CreateArticlePage() {
         status: 'draft',
         created_at: new Date().toISOString().split('T')[0], // Use today as publish date
         ai_model: usedModel || selectedModel, // Store the model used for generation
+        // Store queue item IDs - will be marked as "used" when post is published
+        pending_queue_item_ids: usedQueueItemIds.length > 0 ? usedQueueItemIds : [],
       }).select('id').single()
 
       if (error) throw error
 
-      // Mark queue items as used (with the new post ID)
-      if (newPost?.id && usedQueueItemIds.length > 0) {
-        console.log(`[Queue] Marking ${usedQueueItemIds.length} items as used for post ${newPost.id}`)
-        fetch('/api/admin/news-queue', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            action: 'use',
-            itemIds: usedQueueItemIds,
-            postId: newPost.id
-          }),
-        })
-          .then(res => {
-            if (res.ok) {
-              console.log('[Queue] Items marked as used successfully')
-              // Refresh queue stats
-              loadData()
-            } else {
-              console.error('[Queue] Failed to mark items as used')
-            }
-          })
-          .catch(err => console.error('[Queue] Error marking items as used:', err))
+      // Note: Queue items stay as "selected" until post is published
+      // They will be marked as "used" in the edit page when status changes to "published"
+      if (usedQueueItemIds.length > 0) {
+        console.log(`[Queue] Stored ${usedQueueItemIds.length} pending queue items with draft post ${newPost?.id}`)
+        console.log('[Queue] Items will be marked as "used" when post is published')
       }
 
       // Trigger background image generation using digest content if available
