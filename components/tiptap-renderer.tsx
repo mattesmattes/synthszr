@@ -435,6 +435,13 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         const regex = new RegExp(`\\b${displayName}s?(-[\\wäöüÄÖÜß]+)*\\b(?!\\s*\\([↑↓→])`, 'g')
         const match = regex.exec(text)
         if (match) {
+          // Skip if inside curly braces {Company} - these are directive tags, not display text
+          const charBefore = match.index > 0 ? text[match.index - 1] : ''
+          const charAfter = text[match.index + match[0].length] || ''
+          if (charBefore === '{' || charAfter === '}') {
+            continue
+          }
+
           matches.push({
             company: apiName,
             index: match.index,
