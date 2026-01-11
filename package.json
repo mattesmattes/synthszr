@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "prebuild": "npx tsx scripts/sync-premarket-companies.ts",
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "sync-companies": "npx tsx scripts/sync-premarket-companies.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.46",

@@ -1,0 +1,261 @@
+#!/usr/bin/env npx tsx
+/**
+ * Sync Premarket Companies from glitch.green API
+ *
+ * This script fetches all premarket companies from the glitch.green API
+ * and generates a TypeScript file with company dictionaries.
+ *
+ * Run manually: npx tsx scripts/sync-premarket-companies.ts
+ * Or automatically via: npm run prebuild
+ */
+
+import * as fs from 'fs'
+import * as path from 'path'
+
+const STOCKS_API_BASE = process.env.STOCKS_API_BASE_URL || 'https://glitch.green'
+const STOCKS_PREMARKET_API_KEY = process.env.STOCKS_PREMARKET_API_KEY || ''
+const OUTPUT_FILE = path.join(__dirname, '..', 'lib', 'data', 'companies.ts')
+
+// Public companies (manually curated) - these have stock tickers
+const KNOWN_COMPANIES: Record<string, string> = {
+  'Apple': 'apple',
+  'Microsoft': 'microsoft',
+  'Google': 'google',
+  'Alphabet': 'alphabet',
+  'Amazon': 'amazon',
+  'Meta': 'meta',
+  'Facebook': 'facebook',
+  'Nvidia': 'nvidia',
+  'Tesla': 'tesla',
+  'Netflix': 'netflix',
+  'Salesforce': 'salesforce',
+  'Snowflake': 'snowflake',
+  'Palantir': 'palantir',
+  'CrowdStrike': 'crowdstrike',
+  'Cloudflare': 'cloudflare',
+  'Intel': 'intel',
+  'AMD': 'amd',
+  'Qualcomm': 'qualcomm',
+  'Broadcom': 'broadcom',
+  'TSMC': 'tsmc',
+  'ASML': 'asml',
+  'ARM': 'arm',
+  'Snap': 'snap',
+  'Pinterest': 'pinterest',
+  'Spotify': 'spotify',
+  'Disney': 'disney',
+  'Shopify': 'shopify',
+  'PayPal': 'paypal',
+  'Square': 'square',
+  'Block': 'block',
+  'Oracle': 'oracle',
+  'SAP': 'sap',
+  'IBM': 'ibm',
+  'Adobe': 'adobe',
+  'ServiceNow': 'servicenow',
+  'Workday': 'workday',
+  'Zoom': 'zoom',
+  'Atlassian': 'atlassian',
+  'Twilio': 'twilio',
+  'DocuSign': 'docusign',
+  'Volkswagen': 'volkswagen',
+  'BMW': 'bmw',
+  'Mercedes': 'mercedes',
+  'Porsche': 'porsche',
+  'Ford': 'ford',
+  'Rivian': 'rivian',
+  'Lucid': 'lucid',
+  'JPMorgan': 'jpmorgan',
+  'Visa': 'visa',
+  'Mastercard': 'mastercard',
+  'Coinbase': 'coinbase',
+  'Siemens': 'siemens',
+  'Schneider Electric': 'schneider-electric',
+  'Allianz': 'allianz',
+  'Bayer': 'bayer',
+  'BASF': 'basf',
+  'Adidas': 'adidas',
+  'Zalando': 'zalando',
+  'Uber': 'uber',
+  'Airbnb': 'airbnb',
+  'DoorDash': 'doordash',
+  'Roblox': 'roblox',
+  'Unity': 'unity',
+  'Robinhood': 'robinhood',
+  'Samsung': 'samsung',
+  'GitLab': 'gitlab',
+  'GitHub': 'github',
+  'Stripe': 'stripe',
+  'SpaceX': 'spacex',
+  'Databricks': 'databricks',
+}
+
+interface PremarketItem {
+  instrument: {
+    name: string | null
+  }
+}
+
+interface PremarketApiResponse {
+  ok: boolean
+  data?: PremarketItem[]
+  pagination?: {
+    total: number
+    hasMore: boolean
+  }
+}
+
+async function fetchPremarketCompanies(): Promise<string[]> {
+  console.log('Fetching premarket companies from glitch.green API...')
+
+  if (!STOCKS_PREMARKET_API_KEY) {
+    console.warn('Warning: STOCKS_PREMARKET_API_KEY not set, using empty list')
+    return []
+  }
+
+  const allCompanies: string[] = []
+  let offset = 0
+  const limit = 500
+
+  // Paginate through all results
+  while (true) {
+    const url = `${STOCKS_API_BASE}/api/public/premarket-syntheses?limit=${limit}&offset=${offset}`
+    console.log(`Fetching from: ${url}`)
+
+    const response = await fetch(url, {
+      headers: {
+        'X-API-Key': STOCKS_PREMARKET_API_KEY,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+    }
+
+    const result = await response.json() as PremarketApiResponse
+
+    if (!result.ok || !result.data) {
+      throw new Error('API returned error or no data')
+    }
+
+    const companies = result.data
+      .map(item => item.instrument?.name)
+      .filter((name): name is string => Boolean(name))
+
+    allCompanies.push(...companies)
+    console.log(`  Fetched ${companies.length} companies (total: ${allCompanies.length})`)
+
+    if (!result.pagination?.hasMore) {
+      break
+    }
+    offset += limit
+  }
+
+  // Sort and deduplicate
+  const uniqueCompanies = [...new Set(allCompanies)].sort()
+  console.log(`Total: ${uniqueCompanies.length} unique premarket companies`)
+
+  return uniqueCompanies
+}
+
+function generateTypeScriptFile(premarketCompanies: string[]): string {
+  const premarketEntries = premarketCompanies
+    .map(name => `  '${name.replace(/'/g, "\\'")}': '${name.replace(/'/g, "\\'")}'`)
+    .join(',\n')
+
+  const publicEntries = Object.entries(KNOWN_COMPANIES)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, slug]) => `  '${name}': '${slug}'`)
+    .join(',\n')
+
+  // Handle empty entries (no trailing comma when empty)
+  const premarketBlock = premarketEntries ? `${premarketEntries},` : ''
+  const publicBlock = publicEntries ? `${publicEntries},` : ''
+
+  const timestamp = new Date().toISOString()
+
+  return `/**
+ * Company Data - Auto-generated file
+ *
+ * DO NOT EDIT MANUALLY!
+ * This file is generated by scripts/sync-premarket-companies.ts
+ *
+ * To update, run: npx tsx scripts/sync-premarket-companies.ts
+ * Last synced: ${timestamp}
+ */
+
+/**
+ * Known public companies with stock tickers
+ * Format: { 'Display Name': 'slug-for-api' }
+ */
+export const KNOWN_COMPANIES: Record<string, string> = {
+${publicBlock}
+}
+
+/**
+ * Known premarket companies from glitch.green API
+ * Format: { 'Company Name': 'API Name' }
+ * Total: ${premarketCompanies.length} companies
+ */
+export const KNOWN_PREMARKET_COMPANIES: Record<string, string> = {
+${premarketBlock}
+}
+
+/**
+ * Check if a company name is a known public company
+ */
+export function isPublicCompany(name: string): boolean {
+  return name in KNOWN_COMPANIES
+}
+
+/**
+ * Check if a company name is a known premarket company
+ */
+export function isPremarketCompany(name: string): boolean {
+  return name in KNOWN_PREMARKET_COMPANIES
+}
+
+/**
+ * Get the slug/API name for a company
+ */
+export function getCompanySlug(name: string): string | undefined {
+  return KNOWN_COMPANIES[name] || KNOWN_PREMARKET_COMPANIES[name]
+}
+
+/**
+ * Check if a company name is known (public or premarket)
+ */
+export function isKnownCompany(name: string): boolean {
+  return isPublicCompany(name) || isPremarketCompany(name)
+}
+`
+}
+
+async function main() {
+  try {
+    // Fetch from API
+    const premarketCompanies = await fetchPremarketCompanies()
+
+    // Generate TypeScript file
+    const content = generateTypeScriptFile(premarketCompanies)
+
+    // Ensure output directory exists
+    const outputDir = path.dirname(OUTPUT_FILE)
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true })
+    }
+
+    // Write file
+    fs.writeFileSync(OUTPUT_FILE, content, 'utf-8')
+    console.log(`Generated ${OUTPUT_FILE}`)
+    console.log(`  - ${Object.keys(KNOWN_COMPANIES).length} public companies`)
+    console.log(`  - ${premarketCompanies.length} premarket companies`)
+
+  } catch (error) {
+    console.error('Error syncing companies:', error)
+    process.exit(1)
+  }
+}
+
+main()
