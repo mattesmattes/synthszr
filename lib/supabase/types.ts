@@ -70,12 +70,62 @@ export interface GmailToken {
   updated_at: string
 }
 
+// News Queue types
+export type NewsQueueStatus = 'pending' | 'selected' | 'used' | 'expired' | 'skipped'
+
+export interface NewsQueueItem {
+  id: string
+  daily_repo_id: string | null
+  title: string
+  excerpt: string | null
+  content: string | null
+  source_identifier: string
+  source_display_name: string | null
+  source_url: string | null
+  synthesis_score: number
+  relevance_score: number
+  uniqueness_score: number
+  total_score: number
+  status: NewsQueueStatus
+  selected_at: string | null
+  used_in_post_id: string | null
+  skip_reason: string | null
+  queued_at: string
+  expires_at: string
+  metadata: Record<string, unknown>
+}
+
+export interface NewsQueueSourceDistribution {
+  source_identifier: string
+  source_display_name: string | null
+  item_count: number
+  pending_count: number
+  used_count: number
+  percentage_of_total: number
+}
+
+export interface NewsQueueSelectableItem extends NewsQueueItem {
+  source_committed_count: number
+  total_committed: number
+  within_source_limit: boolean
+}
+
+export interface BalancedQueueSelection {
+  id: string
+  title: string
+  source_identifier: string
+  source_display_name: string | null
+  total_score: number
+  selection_rank: number
+}
+
 // Insert types (without auto-generated fields)
 export type NewsletterSourceInsert = Omit<NewsletterSource, 'id' | 'created_at'>
 export type DailyRepoItemInsert = Omit<DailyRepoItem, 'id' | 'collected_at'>
 export type PaywallCredentialInsert = Omit<PaywallCredential, 'id' | 'created_at' | 'updated_at' | 'last_used_at'>
 export type AnalysisPromptInsert = Omit<AnalysisPrompt, 'id' | 'created_at' | 'updated_at'>
 export type DailyDigestInsert = Omit<DailyDigest, 'id' | 'created_at'>
+export type NewsQueueItemInsert = Omit<NewsQueueItem, 'id' | 'total_score' | 'queued_at' | 'expires_at' | 'status' | 'selected_at' | 'used_in_post_id' | 'skip_reason'>
 
 // Database schema type for Supabase client
 export interface Database {
@@ -116,6 +166,11 @@ export interface Database {
         Insert: Omit<GmailToken, 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Omit<GmailToken, 'id' | 'created_at'>>
       }
+      news_queue: {
+        Row: NewsQueueItem
+        Insert: NewsQueueItemInsert
+        Update: Partial<NewsQueueItemInsert>
+      }
     }
     Views: {
       todays_unprocessed: {
@@ -123,6 +178,12 @@ export interface Database {
       }
       active_sources: {
         Row: NewsletterSource
+      }
+      news_queue_source_distribution: {
+        Row: NewsQueueSourceDistribution
+      }
+      news_queue_selectable: {
+        Row: NewsQueueSelectableItem
       }
     }
   }

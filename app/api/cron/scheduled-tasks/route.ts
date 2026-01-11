@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runSynthesisPipeline } from '@/lib/synthesis/pipeline'
 import { processNewsletters } from '@/lib/newsletter/processor'
+import { expireOldItems as expireOldQueueItems } from '@/lib/news-queue/service'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes max
@@ -276,6 +277,18 @@ export async function GET(request: NextRequest) {
     } else {
       results.newsletterSend = 'not_scheduled'
     }
+  }
+
+  // Queue Maintenance: Expire old items (runs every time cron is called)
+  try {
+    const expiredCount = await expireOldQueueItems()
+    if (expiredCount > 0) {
+      console.log(`[Scheduler] Expired ${expiredCount} old queue items`)
+    }
+    results.queueMaintenance = expiredCount > 0 ? `expired_${expiredCount}` : 'ok'
+  } catch (error) {
+    console.error('[Scheduler] Queue maintenance error:', error)
+    results.queueMaintenance = 'error'
   }
 
   return NextResponse.json({
