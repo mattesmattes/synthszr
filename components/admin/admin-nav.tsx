@@ -20,7 +20,8 @@ import {
   Send,
   HelpCircle,
   FileCode,
-  TrendingUp
+  TrendingUp,
+  ListTodo
 } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
@@ -86,6 +87,11 @@ const navGroups: NavGroup[] = [
         label: 'News',
         href: '/admin/digests',
         icon: Sparkles
+      },
+      {
+        label: 'News Queue',
+        href: '/admin/news-queue',
+        icon: ListTodo
       },
       {
         label: 'Analyse-Prompts',
