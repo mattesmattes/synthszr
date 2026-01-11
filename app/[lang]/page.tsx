@@ -59,6 +59,31 @@ export default async function Page({ params }: PageProps) {
     .eq("status", "published")
     .order("created_at", { ascending: false })
 
+  // Fetch translations if not default locale
+  let translationsMap = new Map<string, { title: string; excerpt: string | null; content: Record<string, unknown> }>()
+
+  if (locale !== 'de' && aiPosts && aiPosts.length > 0) {
+    const postIds = aiPosts.map(p => p.id)
+    const { data: translations } = await supabase
+      .from('content_translations')
+      .select('generated_post_id, title, excerpt, content')
+      .eq('language_code', locale)
+      .eq('translation_status', 'completed')
+      .in('generated_post_id', postIds)
+
+    if (translations) {
+      for (const t of translations) {
+        if (t.generated_post_id) {
+          translationsMap.set(t.generated_post_id, {
+            title: t.title || '',
+            excerpt: t.excerpt,
+            content: t.content as Record<string, unknown>
+          })
+        }
+      }
+    }
+  }
+
   // Fetch cover images for AI posts
   const coverImageIds = (aiPosts || [])
     .map(p => p.cover_image_id)
@@ -75,14 +100,21 @@ export default async function Page({ params }: PageProps) {
     (coverImages || []).map(img => [img.id, img.image_url])
   )
 
-  // Parse AI posts content from JSON string if needed
-  const parsedAiPosts: CombinedPost[] = (aiPosts || []).map(post => ({
-    ...post,
-    slug: post.slug || post.id,
-    category: post.category || 'AI & Tech',
-    content: typeof post.content === 'string' ? JSON.parse(post.content) : post.content,
-    cover_image_url: post.cover_image_id ? coverImageMap.get(post.cover_image_id) : null
-  }))
+  // Parse AI posts content from JSON string if needed, apply translations
+  const parsedAiPosts: CombinedPost[] = (aiPosts || []).map(post => {
+    const translation = translationsMap.get(post.id)
+    const originalContent = typeof post.content === 'string' ? JSON.parse(post.content) : post.content
+
+    return {
+      ...post,
+      title: translation?.title || post.title,
+      excerpt: translation?.excerpt ?? post.excerpt,
+      content: translation?.content || originalContent,
+      slug: post.slug || post.id,
+      category: post.category || 'AI & Tech',
+      cover_image_url: post.cover_image_id ? coverImageMap.get(post.cover_image_id) : null
+    }
+  })
 
   // Combine and sort all posts
   const posts: CombinedPost[] = [

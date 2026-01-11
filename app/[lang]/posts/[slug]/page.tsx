@@ -107,10 +107,33 @@ export default async function PostPage({ params }: PageProps) {
         coverImageUrl = coverImage?.image_url || null
       }
 
+      // Fetch translation if not default locale
+      let translatedTitle = aiPost.title
+      let translatedExcerpt = aiPost.excerpt
+      let translatedContent = typeof aiPost.content === 'string' ? JSON.parse(aiPost.content) : aiPost.content
+
+      if (locale !== 'de') {
+        const { data: translation } = await supabase
+          .from('content_translations')
+          .select('title, excerpt, content')
+          .eq('generated_post_id', aiPost.id)
+          .eq('language_code', locale)
+          .eq('translation_status', 'completed')
+          .single()
+
+        if (translation) {
+          translatedTitle = translation.title || aiPost.title
+          translatedExcerpt = translation.excerpt ?? aiPost.excerpt
+          translatedContent = translation.content as Record<string, unknown> || translatedContent
+        }
+      }
+
       post = {
         ...aiPost,
+        title: translatedTitle,
+        excerpt: translatedExcerpt,
         category: aiPost.category || 'AI & Tech',
-        content: typeof aiPost.content === 'string' ? JSON.parse(aiPost.content) : aiPost.content,
+        content: translatedContent,
         cover_image_url: coverImageUrl
       } as PostData
     }
