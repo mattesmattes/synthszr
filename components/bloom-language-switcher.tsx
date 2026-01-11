@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { Menu } from 'bloom-menu'
 import Image from 'next/image'
 import type { LanguageCode, Language } from '@/lib/types'
-import { removeLocaleFromPathname } from '@/lib/i18n/config'
+import { addLocaleToPathname } from '@/lib/i18n/config'
 
 interface BloomLanguageSwitcherProps {
   currentLocale: LanguageCode
@@ -13,7 +13,6 @@ interface BloomLanguageSwitcherProps {
 
 export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherProps) {
   const pathname = usePathname()
-  const router = useRouter()
   const [activeLanguages, setActiveLanguages] = useState<Language[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -34,11 +33,11 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
     fetchLanguages()
   }, [])
 
-  const pathWithoutLocale = removeLocaleFromPathname(pathname)
-
   const handleLanguageSelect = (langCode: string) => {
-    const newPath = `/${langCode}${pathWithoutLocale === '/' ? '' : pathWithoutLocale}`
-    router.push(newPath)
+    // Compute fresh path inside handler to avoid stale closure issues
+    const newPath = addLocaleToPathname(pathname, langCode as LanguageCode)
+    // Use window.location for reliable navigation
+    window.location.href = newPath
   }
 
   // Don't render if loading or only one language
