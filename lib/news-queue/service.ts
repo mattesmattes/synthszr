@@ -417,3 +417,28 @@ export async function clearPendingQueue(): Promise<number> {
   console.log(`[NewsQueue] Cleared ${data?.length || 0} pending items`)
   return data?.length || 0
 }
+
+/**
+ * Reset selected items back to pending
+ * Use this when generated articles were not saved/published
+ */
+export async function resetSelectedToPending(): Promise<number> {
+  const supabase = createAdminClient()
+
+  const { data, error } = await supabase
+    .from('news_queue')
+    .update({
+      status: 'pending',
+      selected_at: null
+    })
+    .eq('status', 'selected')
+    .select('id')
+
+  if (error) {
+    console.error('[NewsQueue] Failed to reset selected items:', error)
+    return 0
+  }
+
+  console.log(`[NewsQueue] Reset ${data?.length || 0} selected items to pending`)
+  return data?.length || 0
+}

@@ -19,7 +19,8 @@ import {
   getQueueStats,
   updateScores,
   queueFromDailyRepo,
-  clearPendingQueue
+  clearPendingQueue,
+  resetSelectedToPending
 } from '@/lib/news-queue/service'
 import { createClient } from '@/lib/supabase/server'
 
@@ -224,6 +225,12 @@ export async function POST(request: NextRequest) {
         // Clear all pending items from queue
         const cleared = await clearPendingQueue()
         return NextResponse.json({ cleared })
+      }
+
+      case 'reset-selected': {
+        // Reset selected items back to pending (for unused article generations)
+        const reset = await resetSelectedToPending()
+        return NextResponse.json({ reset })
       }
 
       default:

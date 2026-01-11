@@ -19,6 +19,7 @@ export {
   getItemsBySource,
   wouldViolateSourceLimit,
   clearPendingQueue,
+  resetSelectedToPending,
   // Helper functions
   normalizeSourceIdentifier,
   extractSourceDisplayName,
