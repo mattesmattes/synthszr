@@ -71,6 +71,7 @@ const KNOWN_COMPANIES: Record<string, string> = {
   'Mastercard': 'mastercard',
   'Coinbase': 'coinbase',
   'Siemens': 'siemens',
+  'Schneider Electric': 'schneider-electric',
   'Allianz': 'allianz',
   'Bayer': 'bayer',
   'BASF': 'basf',
@@ -1462,19 +1463,16 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
   useEffect(() => {
     if (editor) {
       // Wait for DOM to update
-      const timeoutId = setTimeout(() => {
+      const timeoutId = setTimeout(async () => {
         processNewsHeadings() // Process news headings (adds favicons, removes source links)
         processCompanyNames()
         processMattesSyntheseText()
         // Process Synthszr rating links BEFORE hiding {Company} tags
         // so the company detection can find explicit tags
-        setTimeout(() => {
-          processSynthszrRatingLinks()
-          // Hide {Company} syntax AFTER company detection
-          setTimeout(() => {
-            hideExplicitCompanyTags()
-          }, 50)
-        }, 50)
+        // IMPORTANT: Wait for async processSynthszrRatingLinks to complete before hiding tags
+        await processSynthszrRatingLinks()
+        // Hide {Company} syntax AFTER company detection and badge placement
+        hideExplicitCompanyTags()
       }, 100)
       return () => clearTimeout(timeoutId)
     }
