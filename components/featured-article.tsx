@@ -46,6 +46,7 @@ export function FeaturedArticle({
               backgroundImage: `url(${coverImageUrl})`,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
+              imageRendering: 'pixelated',
             }}
           >
             <img

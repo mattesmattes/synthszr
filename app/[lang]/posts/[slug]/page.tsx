@@ -269,6 +269,7 @@ export default async function PostPage({ params }: PageProps) {
                   backgroundImage: `url(${post.cover_image_url})`,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
+                  imageRendering: 'pixelated',
                 }}
               >
                 <img
