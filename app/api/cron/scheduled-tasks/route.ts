@@ -466,10 +466,9 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
   synthesesCreated?: number
   error?: string
 }> {
-  // Use yesterday's date for analysis
-  const yesterday = new Date()
-  yesterday.setDate(yesterday.getDate() - 1)
-  const dateStr = yesterday.toISOString().split('T')[0]
+  // Use today's date for analysis (we analyze newsletters collected earlier today)
+  const today = new Date()
+  const dateStr = today.toISOString().split('T')[0]
 
   console.log(`[DailyAnalysis] Starting analysis for ${dateStr}`)
 
