@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
     // Get queue items - either specified or balanced selection
     let selectedItems: Array<{
       id: string
+      daily_repo_id: string | null
       title: string
       content: string | null
       source_display_name: string | null
@@ -83,7 +84,30 @@ export async function POST(request: NextRequest) {
       selectedItems = result.items
     }
 
-    console.log(`[Ghostwriter-Queue] Selected ${selectedItems.length} items`)
+    console.log(`[Ghostwriter-Queue] Selected ${selectedItems.length} items from queue`)
+
+    // Fetch full content from daily_repo for items that have daily_repo_id
+    // Queue items may not have content stored, so we fetch from source
+    const itemsWithDailyRepoId = selectedItems.filter(i => i.daily_repo_id)
+    if (itemsWithDailyRepoId.length > 0) {
+      const dailyRepoIds = itemsWithDailyRepoId.map(i => i.daily_repo_id as string)
+      const { data: repoContent } = await supabase
+        .from('daily_repo')
+        .select('id, content')
+        .in('id', dailyRepoIds)
+
+      if (repoContent) {
+        const contentMap = new Map(repoContent.map(r => [r.id, r.content]))
+        selectedItems = selectedItems.map(item => {
+          if (item.daily_repo_id && contentMap.has(item.daily_repo_id)) {
+            return { ...item, content: contentMap.get(item.daily_repo_id) || item.content }
+          }
+          return item
+        })
+      }
+    }
+
+    console.log(`[Ghostwriter-Queue] Enriched ${selectedItems.length} items with content`)
 
     // Analyze source distribution for the selected items
     const sourceCount: Record<string, number> = {}
