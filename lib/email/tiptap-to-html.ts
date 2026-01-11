@@ -124,7 +124,7 @@ function stripExplicitCompanyTags(text: string): string {
 
 /**
  * Generate HTML for vote badges
- * Uses italic style for the text, regular (not-italic) for badges
+ * Uses bold uppercase for "Synthszr Vote:" prefix
  */
 function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug?: string): string {
   if (ratings.length === 0) return ''
@@ -132,7 +132,7 @@ function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug
   const badges = ratings.map((r, idx) => {
     const style = RATING_STYLES[r.rating]
     const label = r.rating === 'BUY' ? 'Buy' : r.rating === 'HOLD' ? 'Hold' : 'Sell'
-    const prefix = idx === 0 ? 'Synthszr Vote: ' : ', '
+    const prefix = idx === 0 ? '<span style="font-weight: bold; text-transform: uppercase;">Synthszr Vote:</span> ' : ', '
 
     // Link to analysis dialog on the blog post
     const href = postSlug
@@ -142,7 +142,7 @@ function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug
     return `${prefix}<a href="${href}" style="color: inherit; text-decoration: none;">${r.displayName}</a> <a href="${href}" style="${style}">${label}</a>`
   }).join('')
 
-  return `<span style="margin-left: 8px; white-space: nowrap; font-style: italic;"><em>${badges}</em></span>`
+  return `<span style="margin-left: 8px; white-space: nowrap;">${badges}</span>`
 }
 
 /**
