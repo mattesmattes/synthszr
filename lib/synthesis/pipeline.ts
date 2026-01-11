@@ -697,6 +697,7 @@ export async function runSynthesisPipelineWithProgress(
   }
 
   // Get ALL candidates from DB for Phase 2 (includes previous runs)
+  // Include source_email and source_url for queue population
   const { data: dbCandidates } = await supabase
     .from('synthesis_candidates')
     .select(`
@@ -708,7 +709,7 @@ export async function runSynthesisPipelineWithProgress(
       originality_score,
       relevance_score,
       reasoning,
-      daily_repo!synthesis_candidates_source_item_id_fkey(id, title, content),
+      daily_repo!synthesis_candidates_source_item_id_fkey(id, title, content, source_email, source_url),
       related:daily_repo!synthesis_candidates_related_item_id_fkey(id, title, content, collected_at, source_type, source_email)
     `)
     .eq('digest_id', digestId)
@@ -726,7 +727,7 @@ export async function runSynthesisPipelineWithProgress(
   }
 
   // Convert DB candidates to ScoredCandidate format
-  type DbRecord = { id?: string; title?: string; content?: string; collected_at?: string; source_type?: string; source_email?: string | null }
+  type DbRecord = { id?: string; title?: string; content?: string; collected_at?: string; source_type?: string; source_email?: string | null; source_url?: string | null }
   const allDbCandidates: ScoredCandidate[] = dbCandidates.map(c => {
     // Supabase returns single object for !inner joins
     const sourceData = c.daily_repo as DbRecord | null
@@ -753,10 +754,31 @@ export async function runSynthesisPipelineWithProgress(
       reasoning: c.reasoning || '',
       daysAgo: 0,
       totalScore: c.originality_score + c.relevance_score,
+      // Store source info for queue population
+      _sourceEmail: sourceData?.source_email || null,
+      _sourceUrl: sourceData?.source_url || null,
     }
-  })
+  }) as (ScoredCandidate & { _sourceEmail?: string | null; _sourceUrl?: string | null })[]
 
   console.log(`[Pipeline] Found ${allDbCandidates.length} total candidates in database`)
+
+  // Auto-queue ALL candidates from DB for article generation (source-diversified)
+  // This ensures queue is populated even when re-running synthesis
+  if (allDbCandidates.length > 0) {
+    const queueItems = allDbCandidates.map(c => ({
+      dailyRepoId: c.sourceItem.id,
+      title: c.sourceItem.title,
+      sourceEmail: (c as { _sourceEmail?: string | null })._sourceEmail || undefined,
+      sourceUrl: (c as { _sourceUrl?: string | null })._sourceUrl || undefined,
+      synthesisScore: c.originalityScore,
+      relevanceScore: c.relevanceScore,
+      uniquenessScore: 5
+    }))
+
+    console.log(`[Pipeline] Queuing ${queueItems.length} candidates to news_queue...`)
+    const queueResult = await addToQueue(queueItems)
+    console.log(`[Pipeline] Queue result: ${queueResult.added} added, ${queueResult.skipped} skipped (duplicates)`)
+  }
 
   // Direct import, no dynamic import
   const { developSynthesis } = await import('./develop')
