@@ -59,19 +59,20 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
           buttonSize={40}
           menuWidth={180}
           menuRadius={16}
+          className="bg-background shadow-lg border border-border"
         >
           <Menu.Trigger className="flex items-center justify-center w-full h-full rounded-full bg-secondary hover:bg-secondary/80 transition-colors cursor-pointer ring-1 ring-black/5 dark:ring-white/10">
             <Globe className="h-5 w-5 text-foreground" />
           </Menu.Trigger>
-          <Menu.Content className="py-2">
+          <Menu.Content className="py-2 bg-background">
             {activeLanguages.map((lang) => (
               <Menu.Item
                 key={lang.code}
                 onSelect={() => handleLanguageSelect(lang.code)}
                 className={`flex items-center gap-3 px-4 py-2.5 text-sm cursor-pointer transition-colors ${
                   lang.code === currentLocale
-                    ? 'font-semibold text-foreground bg-secondary/50'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/30'
+                    ? 'font-semibold text-foreground bg-secondary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
                 }`}
               >
                 <span className="font-mono text-xs w-8 uppercase">
