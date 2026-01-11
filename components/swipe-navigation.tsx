@@ -5,14 +5,19 @@ import { useEffect, useRef, useCallback } from 'react'
 
 interface SwipeNavigationProps {
   children: React.ReactNode
+  /** Full URL path to older post (e.g., "/de/posts/slug") */
   olderPostSlug?: string | null
+  /** Full URL path to newer post (e.g., "/de/posts/slug") */
   newerPostSlug?: string | null
+  /** Home URL (defaults to "/") */
+  homeUrl?: string
 }
 
 export function SwipeNavigation({
   children,
   olderPostSlug,
-  newerPostSlug
+  newerPostSlug,
+  homeUrl = '/'
 }: SwipeNavigationProps) {
   const router = useRouter()
   const debugRef = useRef<HTMLDivElement>(null)
@@ -27,16 +32,18 @@ export function SwipeNavigation({
   const navigate = useCallback((direction: 'left' | 'right') => {
     if (direction === 'right') {
       if (newerPostSlug) {
-        router.push(`/posts/${newerPostSlug}`)
+        // newerPostSlug is now expected to be a full URL path
+        router.push(newerPostSlug)
       } else {
-        router.push('/')
+        router.push(homeUrl)
       }
     } else {
       if (olderPostSlug) {
-        router.push(`/posts/${olderPostSlug}`)
+        // olderPostSlug is now expected to be a full URL path
+        router.push(olderPostSlug)
       }
     }
-  }, [olderPostSlug, newerPostSlug, router])
+  }, [olderPostSlug, newerPostSlug, homeUrl, router])
 
   useEffect(() => {
     // Only enable swipe navigation on mobile (viewport < 768px)

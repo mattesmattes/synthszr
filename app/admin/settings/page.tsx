@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Settings, Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, Database, RefreshCw } from 'lucide-react'
+import { Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, Database, RefreshCw, Globe, Languages, ArrowRight } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 
 interface GmailStatus {
   connected: boolean
@@ -308,10 +309,6 @@ export default function SettingsPage() {
       setTriggeringSchedule(false)
       setTimeout(() => setTriggerResult(null), 15000)
     }
-  }
-
-  function formatTime(hour: number, minute: number): string {
-    return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} UTC`
   }
 
   return (
@@ -856,6 +853,51 @@ export default function SettingsPage() {
             ) : (
               <p className="text-sm text-muted-foreground">Status nicht verfügbar</p>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Internationalisierung */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5" />
+              Internationalisierung
+            </CardTitle>
+            <CardDescription>
+              Mehrsprachige Inhalte und automatische Übersetzungen verwalten
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Link
+              href="/admin/languages"
+              className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Languages className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">Sprachen</p>
+                  <p className="text-sm text-muted-foreground">
+                    Zielsprachen aktivieren und Übersetzungsmodelle konfigurieren
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground" />
+            </Link>
+            <Link
+              href="/admin/translations"
+              className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <RefreshCw className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">Übersetzungs-Queue</p>
+                  <p className="text-sm text-muted-foreground">
+                    Ausstehende, laufende und abgeschlossene Übersetzungen verwalten
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground" />
+            </Link>
           </CardContent>
         </Card>
 

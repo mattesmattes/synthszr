@@ -3,10 +3,15 @@
 import type React from "react"
 import { useState } from "react"
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react"
+import type { LanguageCode } from "@/lib/types"
 
 type SubscribeStatus = 'idle' | 'loading' | 'success' | 'error'
 
-export function Newsletter() {
+interface NewsletterProps {
+  locale?: LanguageCode
+}
+
+export function Newsletter({ locale = 'de' }: NewsletterProps) {
   const [email, setEmail] = useState("")
   const [status, setStatus] = useState<SubscribeStatus>('idle')
   const [message, setMessage] = useState("")
@@ -23,7 +28,7 @@ export function Newsletter() {
       const res = await fetch('/api/newsletter/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, language: locale }),
       })
 
       const data = await res.json()

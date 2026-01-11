@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
+import { createClient } from '@supabase/supabase-js'
 
 const SESSION_COOKIE_NAME = 'synthszr_session'
+const LOCALE_COOKIE_NAME = 'synthszr_locale'
+
+// All potentially supported locales
+const ALL_LOCALES = ['de', 'en', 'fr', 'es', 'it', 'pt', 'nl', 'pl'] as const
+type LocaleType = (typeof ALL_LOCALES)[number]
+
+const DEFAULT_LOCALE: LocaleType = 'de'
 
 // Routes that require authentication
 const protectedRoutes = ['/admin']
@@ -10,8 +18,15 @@ const protectedRoutes = ['/admin']
 // Routes that should redirect to admin if already logged in
 const authRoutes = ['/login']
 
+// Routes that should NOT have locale prefix (static, api, admin, etc.)
+const NON_LOCALIZED_PREFIXES = ['/api', '/admin', '/login', '/_next', '/favicon', '/docs']
+
+// Cache for active languages (refreshed every 5 minutes)
+let activeLanguagesCache: Set<string> | null = null
+let cacheTimestamp = 0
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
 function getSecretKey() {
-  // Use JWT_SECRET if available, fallback to ADMIN_PASSWORD for backwards compatibility
   const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
   if (!secret) {
     throw new Error('JWT_SECRET or ADMIN_PASSWORD environment variable is not set')
@@ -28,42 +43,136 @@ async function verifyToken(token: string): Promise<boolean> {
   }
 }
 
+/**
+ * Fetches active languages from database
+ */
+async function getActiveLanguages(): Promise<Set<string>> {
+  const now = Date.now()
+
+  // Return cached if still valid
+  if (activeLanguagesCache && now - cacheTimestamp < CACHE_TTL) {
+    return activeLanguagesCache
+  }
+
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    if (!supabaseUrl || !supabaseKey) {
+      // Fallback: only default locale
+      return new Set([DEFAULT_LOCALE])
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    const { data, error } = await supabase
+      .from('languages')
+      .select('code')
+      .eq('is_active', true)
+
+    if (error || !data) {
+      console.error('Error fetching active languages:', error)
+      return new Set([DEFAULT_LOCALE])
+    }
+
+    activeLanguagesCache = new Set(data.map(l => l.code))
+    cacheTimestamp = now
+
+    return activeLanguagesCache
+  } catch (error) {
+    console.error('Error in getActiveLanguages:', error)
+    return new Set([DEFAULT_LOCALE])
+  }
+}
+
+/**
+ * Extract locale from pathname
+ */
+function getLocaleFromPathname(pathname: string): LocaleType | null {
+  const segments = pathname.split('/')
+  const potentialLocale = segments[1]
+
+  if (ALL_LOCALES.includes(potentialLocale as LocaleType)) {
+    return potentialLocale as LocaleType
+  }
+
+  return null
+}
+
+/**
+ * Check if path should be localized
+ */
+function shouldLocalize(pathname: string): boolean {
+  return !NON_LOCALIZED_PREFIXES.some(prefix => pathname.startsWith(prefix))
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
 
-  const isAuthenticated = sessionToken ? await verifyToken(sessionToken) : false
+  // ========================================
+  // AUTH HANDLING (admin routes)
+  // ========================================
+  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
+  const isAuthRoute = authRoutes.some(route => pathname.startsWith(route))
 
-  // Check if trying to access protected route
-  const isProtectedRoute = protectedRoutes.some(route =>
-    pathname.startsWith(route)
-  )
+  if (isProtectedRoute || isAuthRoute) {
+    const isAuthenticated = sessionToken ? await verifyToken(sessionToken) : false
 
-  // Check if trying to access auth route (login)
-  const isAuthRoute = authRoutes.some(route =>
-    pathname.startsWith(route)
-  )
+    if (isProtectedRoute && !isAuthenticated) {
+      const loginUrl = new URL('/login', request.url)
+      loginUrl.searchParams.set('redirect', pathname)
+      return NextResponse.redirect(loginUrl)
+    }
 
-  // Redirect to login if accessing protected route without auth
-  if (isProtectedRoute && !isAuthenticated) {
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(loginUrl)
+    if (isAuthRoute && isAuthenticated) {
+      return NextResponse.redirect(new URL('/admin', request.url))
+    }
+
+    return NextResponse.next()
   }
 
-  // Redirect to admin if accessing login while already authenticated
-  if (isAuthRoute && isAuthenticated) {
-    return NextResponse.redirect(new URL('/admin', request.url))
+  // ========================================
+  // i18n HANDLING (public routes)
+  // ========================================
+  if (!shouldLocalize(pathname)) {
+    return NextResponse.next()
   }
 
-  return NextResponse.next()
+  const activeLanguages = await getActiveLanguages()
+  const urlLocale = getLocaleFromPathname(pathname)
+
+  // Case 1: URL has a locale prefix
+  if (urlLocale) {
+    // Check if locale is active
+    if (!activeLanguages.has(urlLocale)) {
+      // Redirect to default locale (301 permanent)
+      const pathWithoutLocale = pathname.replace(`/${urlLocale}`, '') || '/'
+      const redirectUrl = new URL(`/${DEFAULT_LOCALE}${pathWithoutLocale}`, request.url)
+      return NextResponse.redirect(redirectUrl, 301)
+    }
+
+    // Locale is active - continue with locale header
+    const response = NextResponse.next()
+    response.headers.set('x-locale', urlLocale)
+    return response
+  }
+
+  // Case 2: URL has no locale prefix - redirect to default
+  // Check cookie for preferred locale
+  const cookieLocale = request.cookies.get(LOCALE_COOKIE_NAME)?.value as LocaleType | undefined
+  const preferredLocale = cookieLocale && activeLanguages.has(cookieLocale) ? cookieLocale : DEFAULT_LOCALE
+
+  // Redirect to localized URL (307 temporary)
+  const localizedUrl = new URL(`/${preferredLocale}${pathname === '/' ? '' : pathname}`, request.url)
+  const response = NextResponse.redirect(localizedUrl, 307)
+  response.headers.set('x-locale', preferredLocale)
+  return response
 }
 
 export const config = {
   matcher: [
-    // Match all admin routes
-    '/admin/:path*',
-    // Match login route
-    '/login'
-  ]
+    // Match all paths except static files
+    '/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)',
+  ],
 }

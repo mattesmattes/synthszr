@@ -7,7 +7,7 @@ import { render } from '@react-email/components'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, name } = body
+    const { email, name, language = 'de' } = body
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json(
@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
             confirmation_sent_at: new Date().toISOString(),
             unsubscribed_at: null,
             updated_at: new Date().toISOString(),
+            preferences: { language },
           })
           .eq('id', existing.id)
 
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
         status: 'pending',
         confirmation_token: confirmationToken,
         confirmation_sent_at: new Date().toISOString(),
+        preferences: { language },
       })
 
     if (insertError) {

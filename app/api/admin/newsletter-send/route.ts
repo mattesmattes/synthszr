@@ -131,10 +131,10 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Get all active subscribers
+    // Get all active subscribers with their language preference
     const { data: subscribers, error: subError } = await supabase
       .from('subscribers')
-      .select('id, email')
+      .select('id, email, preferences')
       .eq('status', 'active')
 
     if (subError || !subscribers || subscribers.length === 0) {
@@ -143,48 +143,90 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Generate email content with Synthszr Vote badges (once for all subscribers)
-    const emailContent = await generateEmailContentWithVotes(
-      { content: post.content, excerpt: post.excerpt, slug: post.slug },
-      BASE_URL
-    )
+    // Group subscribers by language
+    const subscribersByLanguage: Record<string, typeof subscribers> = {}
+    for (const subscriber of subscribers) {
+      const lang = (subscriber.preferences as { language?: string } | null)?.language || 'de'
+      if (!subscribersByLanguage[lang]) {
+        subscribersByLanguage[lang] = []
+      }
+      subscribersByLanguage[lang].push(subscriber)
+    }
+
+    // Fetch translations for non-German languages
+    const translations: Record<string, { title: string; excerpt: string | null; content: unknown } | null> = { de: null }
+    const languages = Object.keys(subscribersByLanguage).filter(l => l !== 'de')
+
+    if (languages.length > 0) {
+      const { data: translationData } = await supabase
+        .from('content_translations')
+        .select('language_code, title, excerpt, content')
+        .eq('generated_post_id', postId)
+        .eq('translation_status', 'completed')
+        .in('language_code', languages)
+
+      for (const t of translationData || []) {
+        translations[t.language_code] = {
+          title: t.title || post.title,
+          excerpt: t.excerpt || post.excerpt,
+          content: t.content || post.content,
+        }
+      }
+    }
+
     let successCount = 0
     let failCount = 0
 
-    for (let i = 0; i < subscribers.length; i++) {
-      const subscriber = subscribers[i]
-      const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
+    // Send to each language group
+    for (const [lang, langSubscribers] of Object.entries(subscribersByLanguage)) {
+      // Get translated content or fall back to German
+      const translatedContent = translations[lang]
+      const contentToUse = translatedContent?.content || post.content
+      const excerptToUse = translatedContent?.excerpt || post.excerpt
+      const titleToUse = translatedContent?.title || post.title
+      const subjectToUse = subjectTemplate.replace(/\{\{title\}\}/g, titleToUse)
 
-      try {
-        const html = await render(
-          NewsletterEmail({
-            subject,
-            previewText,
-            content: emailContent,
-            postUrl,
-            unsubscribeUrl,
-            footerText,
-            coverImageUrl,
-            postDate,
-            baseUrl: BASE_URL,
+      // Generate email content with Synthszr Vote badges (once per language)
+      const emailContent = await generateEmailContentWithVotes(
+        { content: contentToUse, excerpt: excerptToUse, slug: post.slug },
+        BASE_URL
+      )
+
+      for (let i = 0; i < langSubscribers.length; i++) {
+        const subscriber = langSubscribers[i]
+        const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
+
+        try {
+          const html = await render(
+            NewsletterEmail({
+              subject: subjectToUse,
+              previewText: excerptToUse || '',
+              content: emailContent,
+              postUrl,
+              unsubscribeUrl,
+              footerText,
+              coverImageUrl,
+              postDate,
+              baseUrl: BASE_URL,
+            })
+          )
+
+          await getResend().emails.send({
+            from: FROM_EMAIL,
+            to: subscriber.email,
+            subject: subjectToUse,
+            html,
           })
-        )
+          successCount++
+        } catch (error) {
+          console.error(`Failed to send to ${subscriber.email}:`, error)
+          failCount++
+        }
 
-        await getResend().emails.send({
-          from: FROM_EMAIL,
-          to: subscriber.email,
-          subject,
-          html,
-        })
-        successCount++
-      } catch (error) {
-        console.error(`Failed to send to ${subscriber.email}:`, error)
-        failCount++
-      }
-
-      // 500ms delay between each email to stay under rate limit
-      if (i < subscribers.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500))
+        // 500ms delay between each email to stay under rate limit
+        if (i < langSubscribers.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
       }
     }
 

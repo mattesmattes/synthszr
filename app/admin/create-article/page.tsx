@@ -41,6 +41,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
 import ReactMarkdown from 'react-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
+import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 
 interface Digest {
   id: string
@@ -390,6 +391,111 @@ export default function CreateArticlePage() {
     }
   }
 
+  // Extract {Company} tags from TipTap JSON content
+  function extractCompanyTags(content: string): { public: string[]; premarket: string[] } {
+    const publicCompanies: string[] = []
+    const premarketCompanies: string[] = []
+
+    // Match {Company} patterns in the content
+    const tagRegex = /\{([^}]+)\}/g
+    let match
+
+    while ((match = tagRegex.exec(content)) !== null) {
+      const companyName = match[1].trim()
+
+      // Check if it's a known public company
+      if (companyName in KNOWN_COMPANIES) {
+        const apiName = KNOWN_COMPANIES[companyName]
+        if (!publicCompanies.includes(apiName)) {
+          publicCompanies.push(apiName)
+        }
+      }
+      // Check if it's a known premarket company
+      else if (companyName in KNOWN_PREMARKET_COMPANIES) {
+        const apiName = KNOWN_PREMARKET_COMPANIES[companyName]
+        if (!premarketCompanies.includes(apiName)) {
+          premarketCompanies.push(apiName)
+        }
+      }
+    }
+
+    return { public: publicCompanies, premarket: premarketCompanies }
+  }
+
+  // Trigger Synthszr rating generation for companies mentioned in the article
+  async function triggerSynthszrRatings(tiptapContent: object) {
+    const contentString = JSON.stringify(tiptapContent)
+    const companies = extractCompanyTags(contentString)
+
+    const totalCompanies = companies.public.length + companies.premarket.length
+    if (totalCompanies === 0) {
+      console.log('[Synthszr] No company tags found in article')
+      return
+    }
+
+    console.log(`[Synthszr] Found ${companies.public.length} public and ${companies.premarket.length} premarket companies`)
+
+    // Trigger rating generation for public companies (fire and forget)
+    for (const company of companies.public) {
+      console.log(`[Synthszr] Triggering analysis for public company: ${company}`)
+      fetch('/api/stock-synthszr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ company }),
+      })
+        .then(res => {
+          if (res.ok) {
+            console.log(`[Synthszr] Analysis started for ${company}`)
+          } else {
+            res.json().then(data => console.error(`[Synthszr] Failed for ${company}:`, data))
+          }
+        })
+        .catch(err => console.error(`[Synthszr] Error for ${company}:`, err))
+    }
+
+    // For premarket companies, fetch from glitch.green API to ensure data is available
+    // The premarket syntheses are generated externally, so we just trigger a cache refresh
+    for (const company of companies.premarket) {
+      console.log(`[Synthszr] Checking premarket company: ${company}`)
+      fetch(`/api/premarket?search=${encodeURIComponent(company)}&limit=1`, {
+        method: 'GET',
+        credentials: 'include',
+      })
+        .then(res => {
+          if (res.ok) {
+            console.log(`[Synthszr] Premarket data fetched for ${company}`)
+          }
+        })
+        .catch(err => console.error(`[Synthszr] Premarket error for ${company}:`, err))
+    }
+  }
+
+  // Trigger translations for all active languages
+  async function triggerTranslations(postId: string) {
+    console.log(`[i18n] Triggering translations for post ${postId}`)
+
+    fetch('/api/admin/translations/queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        content_type: 'generated_post',
+        content_id: postId,
+        priority: 10, // High priority for new articles
+      }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.queued > 0) {
+          console.log(`[i18n] Queued ${data.queued} translation jobs for languages: ${data.languages?.join(', ')}`)
+        } else {
+          console.log('[i18n] No translations queued:', data.message)
+        }
+      })
+      .catch(err => console.error('[i18n] Error queuing translations:', err))
+  }
+
   async function saveAsDraft() {
     if (!articleContent || !selectedDigest) return
 
@@ -426,7 +532,15 @@ export default function CreateArticlePage() {
         triggerImageGeneration(newPost.id, selectedDigest.analysis_content)
       }
 
-      alert('Artikel als Entwurf gespeichert! Bilder werden im Hintergrund generiert.')
+      // Trigger Synthszr ratings for companies with {Company} tags
+      triggerSynthszrRatings(tiptapContent)
+
+      // Trigger translations for all active languages
+      if (newPost?.id) {
+        triggerTranslations(newPost.id)
+      }
+
+      alert('Artikel als Entwurf gespeichert! Bilder, Synthszr-Analysen und Übersetzungen werden im Hintergrund generiert.')
 
       // Reset form after successful save
       setArticleContent('')

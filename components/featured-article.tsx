@@ -1,4 +1,5 @@
 import { TiptapRenderer } from "./tiptap-renderer"
+import type { LanguageCode } from "@/lib/types"
 
 interface FeaturedArticleProps {
   slug: string
@@ -10,22 +11,34 @@ interface FeaturedArticleProps {
   readTime: string
   category: string
   coverImageUrl?: string | null
+  locale?: LanguageCode
 }
 
-function formatDateWithWeekday(dateString: string): string {
+function formatDateWithWeekday(dateString: string, locale: LanguageCode = 'de'): string {
   const d = new Date(dateString)
-  const weekday = d.toLocaleDateString("de-DE", { weekday: "long" })
+  const localeStr = locale === 'de' ? 'de-DE' : locale
+  const weekday = d.toLocaleDateString(localeStr, { weekday: "long" })
   const day = d.getDate().toString().padStart(2, '0')
   const month = (d.getMonth() + 1).toString().padStart(2, '0')
   const year = d.getFullYear()
   return `${weekday}, der ${day}.${month}.${year}`
 }
 
-export function FeaturedArticle({ slug, title, excerpt, content, date, createdAt, readTime, category, coverImageUrl }: FeaturedArticleProps) {
+export function FeaturedArticle({
+  slug,
+  title,
+  excerpt,
+  content,
+  createdAt,
+  coverImageUrl,
+  locale = 'de'
+}: FeaturedArticleProps) {
+  const postUrl = `/${locale}/posts/${slug}`
+
   return (
     <article className="mb-16 border-b border-border pb-16">
       {coverImageUrl && (
-        <a href={`/posts/${slug}`} className="block mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
+        <a href={postUrl} className="block mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
           <div
             className="relative aspect-[4/3] md:aspect-[21/9] flex items-center justify-center"
             style={{
@@ -46,11 +59,11 @@ export function FeaturedArticle({ slug, title, excerpt, content, date, createdAt
 
       <div className="mb-4">
         <span className="inline-block px-2 py-1 font-mono text-xs font-medium text-black" style={{ backgroundColor: '#CCFF00' }}>
-          {formatDateWithWeekday(createdAt)}
+          {formatDateWithWeekday(createdAt, locale)}
         </span>
       </div>
 
-      <a href={`/posts/${slug}`} className="group">
+      <a href={postUrl} className="group">
         <h2 className="mb-3 text-3xl font-bold tracking-tight transition-colors group-hover:text-accent md:text-xl lg:text-2xl">
           {title}
         </h2>
@@ -66,7 +79,7 @@ export function FeaturedArticle({ slug, title, excerpt, content, date, createdAt
         <TiptapRenderer content={content} />
       </div>
 
-      <a href={`/posts/${slug}`} className="mt-8 inline-block font-mono text-xs text-accent hover:underline">
+      <a href={postUrl} className="mt-8 inline-block font-mono text-xs text-accent hover:underline">
         Permalink →
       </a>
     </article>
