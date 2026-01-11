@@ -1,6 +1,9 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
+import { createClient } from '@/lib/supabase/server'
+import { TiptapRenderer } from '@/components/tiptap-renderer'
+import { LanguageSwitcher } from '@/components/language-switcher'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import type { LanguageCode } from '@/lib/types'
@@ -26,102 +29,89 @@ export default async function ImpressumPage({ params }: PageProps) {
   const { lang } = await params
   const locale = lang as LanguageCode
   const t = await getTranslations(locale)
+  const supabase = await createClient()
+
+  // Fetch original page
+  const { data: page } = await supabase
+    .from('static_pages')
+    .select('*')
+    .eq('slug', 'impressum')
+    .single()
+
+  // Try to get translation if not default locale
+  let translatedTitle: string | null = null
+  let translatedContent: Record<string, unknown> | null = null
+
+  if (page && locale !== 'de') {
+    const { data: translation } = await supabase
+      .from('content_translations')
+      .select('title, content')
+      .eq('static_page_id', page.id)
+      .eq('language_code', locale)
+      .eq('translation_status', 'completed')
+      .single()
+
+    if (translation) {
+      translatedTitle = translation.title
+      translatedContent = translation.content as Record<string, unknown>
+    }
+  }
+
+  // Use translation if available, otherwise fall back to original
+  const title = translatedTitle || page?.title || 'Impressum'
+  const content = translatedContent || page?.content || {
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Impressum wird geladen...' }] }]
+  }
 
   return (
-    <main className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8 max-w-3xl">
-        <Link
-          href={`/${locale}`}
-          className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors mb-6"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          {t['common.back_home'] || 'Zurück zur Startseite'}
-        </Link>
+    <div className="min-h-screen bg-background text-foreground">
+      <main className="mx-auto max-w-3xl px-6 py-12 md:py-20">
+        <article>
+          <header className="mb-8 border-b border-border pb-6">
+            <Link
+              href={`/${locale}`}
+              className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors mb-6"
+            >
+              <ArrowLeft className="h-3 w-3" />
+              {t['common.back_home'] || 'Zurück zur Startseite'}
+            </Link>
+            <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          </header>
 
-        <h1 className="text-2xl font-bold tracking-tight mb-6">
-          {t['imprint.heading'] || 'Impressum'}
-        </h1>
+          <div className="prose prose-sm dark:prose-invert max-w-none">
+            <TiptapRenderer content={content} />
+          </div>
 
-        <div className="prose prose-sm dark:prose-invert max-w-none space-y-6">
-          <section>
-            <h2 className="text-lg font-semibold mb-2">Angaben gemäß § 5 TMG</h2>
-            <p className="text-sm">
-              <strong>OH–SO Digital GmbH</strong><br />
-              Kaiser-Wilhelm-Straße 83<br />
-              20355 Hamburg<br />
-              Deutschland
-            </p>
-          </section>
+          <div className="mt-8 pt-6 border-t text-xs text-muted-foreground">
+            <p>Stand: Januar 2026</p>
+          </div>
+        </article>
+      </main>
 
-          <section>
-            <h2 className="text-lg font-semibold mb-2">Vertreten durch</h2>
-            <p className="text-sm">
-              Geschäftsführer:{' '}
-              <a href="https://www.linkedin.com/in/axelaverdung/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Axel Averdung</a>,{' '}
-              <a href="https://www.linkedin.com/in/florian-langmack-b8849b83/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Florian Langmack</a>,{' '}
-              <a href="https://www.linkedin.com/in/holgerblank/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Holger Blank</a>,{' '}
-              <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Matthias Schrader</a>,{' '}
-              <a href="https://www.linkedin.com/in/philipp-kafkoulas/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Philipp Kafkoulas</a>,{' '}
-              <a href="https://www.linkedin.com/in/pia-schott-47309ab/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Pia Schott</a>
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-semibold mb-2">Kontakt</h2>
-            <p className="text-sm">
-              E-Mail: <a href="mailto:hi@oh-so.com" className="text-primary hover:underline">hi@oh-so.com</a>
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-semibold mb-2">Registereintrag</h2>
-            <p className="text-sm">
-              Registergericht: Amtsgericht Hamburg<br />
-              Registernummer: HRB 18 1942
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-semibold mb-2">Umsatzsteuer-ID</h2>
-            <p className="text-sm">
-              Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:<br />
-              DE364225367
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-semibold mb-2">Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV</h2>
-            <p className="text-sm">
-              <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Matthias &apos;Mattes&apos; Schrader</a><br />
-              Kaiser-Wilhelm-Straße 83<br />
-              20355 Hamburg
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-semibold mb-2">Haftungsausschluss</h2>
-
-            <h3 className="text-sm font-semibold mt-4 mb-1">Haftung für Inhalte</h3>
-            <p className="text-xs text-muted-foreground">
-              Die Inhalte unserer Seiten wurden mit größter Sorgfalt erstellt. Für die Richtigkeit, Vollständigkeit und Aktualität der Inhalte können wir jedoch keine Gewähr übernehmen.
-            </p>
-
-            <h3 className="text-sm font-semibold mt-4 mb-1">Haftung für Links</h3>
-            <p className="text-xs text-muted-foreground">
-              Unser Angebot enthält Links zu externen Webseiten Dritter, auf deren Inhalte wir keinen Einfluss haben. Deshalb können wir für diese fremden Inhalte auch keine Gewähr übernehmen. Für die Inhalte der verlinkten Seiten ist stets der jeweilige Anbieter oder Betreiber der Seiten verantwortlich.
-            </p>
-
-            <h3 className="text-sm font-semibold mt-4 mb-1">Urheberrecht</h3>
-            <p className="text-xs text-muted-foreground">
-              Die durch die Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen dem deutschen Urheberrecht. Die Vervielfältigung, Bearbeitung, Verbreitung und jede Art der Verwertung außerhalb der Grenzen des Urheberrechtes bedürfen der schriftlichen Zustimmung des jeweiligen Autors bzw. Erstellers.
-            </p>
-          </section>
+      <footer className="border-t border-border">
+        <div className="mx-auto max-w-5xl px-6 py-12">
+          <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-6">
+              <a href="https://oh-so.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
+                <img src="/oh-so-logo.svg" alt="OH-SO" className="h-9" />
+              </a>
+              <LanguageSwitcher currentLocale={locale} />
+            </div>
+            <div className="flex gap-6 text-xs">
+              <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
+                LinkedIn
+              </a>
+              <Link href={`/${locale}/impressum`} className="font-bold">
+                {t['footer.imprint'] || 'Impressum'}
+              </Link>
+              <Link href={`/${locale}/datenschutz`} className="hover:text-accent transition-colors">
+                {t['footer.privacy'] || 'Datenschutz'}
+              </Link>
+            </div>
+          </div>
         </div>
-
-        <div className="mt-8 pt-6 border-t text-xs text-muted-foreground">
-          <p>Stand: Januar 2025</p>
-        </div>
-      </div>
-    </main>
+      </footer>
+    </div>
   )
 }
