@@ -64,12 +64,14 @@ export default async function Page({ params }: PageProps) {
 
   if (locale !== 'de' && aiPosts && aiPosts.length > 0) {
     const postIds = aiPosts.map(p => p.id)
-    const { data: translations } = await supabase
+    const { data: translations, error: translationError } = await supabase
       .from('content_translations')
       .select('generated_post_id, title, excerpt, content')
       .eq('language_code', locale)
       .eq('translation_status', 'completed')
       .in('generated_post_id', postIds)
+
+    console.log(`[i18n] Locale: ${locale}, Posts: ${postIds.length}, Translations found: ${translations?.length || 0}, Error: ${translationError?.message || 'none'}`)
 
     if (translations) {
       for (const t of translations) {
