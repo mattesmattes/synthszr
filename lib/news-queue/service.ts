@@ -3,7 +3,7 @@
  * Handles queue management with source diversification
  */
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type {
   NewsQueueItem,
   NewsQueueItemInsert,
@@ -74,7 +74,7 @@ export async function addToQueue(
     metadata?: Record<string, unknown>
   }>
 ): Promise<{ added: number; skipped: number; errors: string[] }> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const errors: string[] = []
   let added = 0
   let skipped = 0
@@ -124,7 +124,7 @@ export async function addToQueue(
 export async function queueFromDailyRepo(
   repoItemIds: string[]
 ): Promise<{ added: number; skipped: number; errors: string[] }> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Fetch the items
   const { data: repoItems, error } = await supabase
@@ -151,7 +151,7 @@ export async function queueFromDailyRepo(
  * Get source distribution statistics
  */
 export async function getSourceDistribution(): Promise<NewsQueueSourceDistribution[]> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase
     .from('news_queue_source_distribution')
@@ -169,7 +169,7 @@ export async function getSourceDistribution(): Promise<NewsQueueSourceDistributi
  * Get selectable items (respecting 30% source limit)
  */
 export async function getSelectableItems(): Promise<NewsQueueSelectableItem[]> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase
     .from('news_queue_selectable')
@@ -190,7 +190,7 @@ export async function getSelectableItems(): Promise<NewsQueueSelectableItem[]> {
 export async function getBalancedSelection(
   maxItems: number = 10
 ): Promise<BalancedQueueSelection[]> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase
     .rpc('get_balanced_queue_selection', {
@@ -213,7 +213,7 @@ export async function getBalancedSelection(
 export async function selectItemsForArticle(
   itemIds: string[]
 ): Promise<{ items: NewsQueueItem[]; error?: string }> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Verify source distribution before selection
   const { data: selectable } = await supabase
@@ -254,7 +254,7 @@ export async function markItemsAsUsed(
   itemIds: string[],
   postId: string
 ): Promise<void> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   await supabase
     .from('news_queue')
@@ -272,7 +272,7 @@ export async function skipItems(
   itemIds: string[],
   reason: string
 ): Promise<void> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   await supabase
     .from('news_queue')
@@ -287,7 +287,7 @@ export async function skipItems(
  * Expire old queue items (called by cron)
  */
 export async function expireOldItems(): Promise<number> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase.rpc('expire_old_queue_items')
 
@@ -310,7 +310,7 @@ export async function getQueueStats(): Promise<{
   skipped: number
   total: number
 }> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase
     .from('news_queue')
@@ -351,7 +351,7 @@ export async function updateScores(
     uniquenessScore?: number
   }
 ): Promise<void> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   await supabase
     .from('news_queue')
@@ -369,7 +369,7 @@ export async function updateScores(
 export async function getItemsBySource(
   sourceIdentifier: string
 ): Promise<NewsQueueItem[]> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase
     .from('news_queue')
