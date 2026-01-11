@@ -71,6 +71,18 @@ interface ArticleMetadata {
   slug: string
 }
 
+interface QueueStats {
+  pending: number
+  selected: number
+  used: number
+}
+
+interface SourceDistribution {
+  source: string
+  count: number
+  percentage: number
+}
+
 type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro' | 'gemini-3-pro-preview'
 
 const AI_MODELS: { value: AIModel; label: string; description: string }[] = [
@@ -135,8 +147,16 @@ function parseArticleContent(content: string): { metadata: ArticleMetadata; body
 const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese']
 
 export default function CreateArticlePage() {
+  // Queue-based state (replaces digest selection)
+  const [queueStats, setQueueStats] = useState<QueueStats>({ pending: 0, selected: 0, used: 0 })
+  const [sourceDistribution, setSourceDistribution] = useState<SourceDistribution[]>([])
+  const [usedQueueItemIds, setUsedQueueItemIds] = useState<string[]>([])
+  const [maxQueueItems, setMaxQueueItems] = useState(10)
+
+  // Keep digests for reference (image generation uses digest content)
   const [digests, setDigests] = useState<Digest[]>([])
   const [selectedDigestId, setSelectedDigestId] = useState<string>('')
+
   const [activePrompt, setActivePrompt] = useState<GhostwriterPrompt | null>(null)
   const [vocabulary, setVocabulary] = useState<VocabularyEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -205,12 +225,36 @@ export default function CreateArticlePage() {
   async function loadData() {
     setLoading(true)
     try {
-      // Load digests
+      // Load queue stats
+      const statsRes = await fetch('/api/admin/news-queue?action=stats')
+      if (statsRes.ok) {
+        const stats = await statsRes.json()
+        setQueueStats({
+          pending: stats.pending || 0,
+          selected: stats.selected || 0,
+          used: stats.used || 0
+        })
+      }
+
+      // Load source distribution
+      const distRes = await fetch('/api/admin/news-queue?action=distribution')
+      if (distRes.ok) {
+        const dist = await distRes.json()
+        setSourceDistribution(
+          (dist || []).map((d: { source_identifier: string; source_display_name: string | null; item_count: number; percentage_of_total: number }) => ({
+            source: d.source_display_name || d.source_identifier,
+            count: d.item_count,
+            percentage: d.percentage_of_total
+          }))
+        )
+      }
+
+      // Load digests (still needed for image generation reference)
       const { data: digestsData } = await supabase
         .from('daily_digests')
         .select('id, digest_date, analysis_content, word_count')
         .order('digest_date', { ascending: false })
-        .limit(20)
+        .limit(5)
 
       if (digestsData) {
         setDigests(digestsData)
@@ -250,17 +294,26 @@ export default function CreateArticlePage() {
   const selectedDigest = digests.find(d => d.id === selectedDigestId)
 
   const generateArticle = useCallback(async () => {
-    if (!selectedDigestId) return
+    if (queueStats.pending === 0) {
+      alert('Keine Items in der Queue. Bitte zuerst die Synthese-Pipeline ausführen.')
+      return
+    }
 
     setGenerating(true)
     setArticleContent('')
     setUsedModel(null)
+    setUsedQueueItemIds([])
 
     try {
-      const response = await fetch('/api/ghostwriter', {
+      // Use Queue-based Ghostwriter API
+      const response = await fetch('/api/ghostwriter-queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ digestId: selectedDigestId, vocabularyIntensity, model: selectedModel }),
+        body: JSON.stringify({
+          maxItems: maxQueueItems,
+          vocabularyIntensity,
+          model: selectedModel
+        }),
         credentials: 'include',
       })
 
@@ -292,8 +345,13 @@ export default function CreateArticlePage() {
                 setArticleContent('')
               }
               if (data.phase === 'deduplication') {
-                // Show deduplication message briefly
-                console.log('[Ghostwriter] Deduplication:', data.message)
+                console.log('[Ghostwriter-Queue] Deduplication:', data.message)
+              }
+              if (data.started) {
+                console.log(`[Ghostwriter-Queue] Started with ${data.itemCount} items from queue`)
+                if (data.sourceDistribution) {
+                  console.log('[Ghostwriter-Queue] Source distribution:', data.sourceDistribution)
+                }
               }
               if (data.text) {
                 setArticleContent(prev => prev + data.text)
@@ -301,8 +359,12 @@ export default function CreateArticlePage() {
               if (data.model) {
                 setUsedModel(data.model)
               }
-              if (data.done && data.deduplicationApplied) {
-                console.log('[Ghostwriter] Deduplication applied:', data.duplicatesFound)
+              if (data.done) {
+                // Store the queue item IDs for marking as used after save
+                if (data.queueItemIds) {
+                  setUsedQueueItemIds(data.queueItemIds)
+                  console.log(`[Ghostwriter-Queue] Will mark ${data.queueItemIds.length} items as used after save`)
+                }
               }
               if (data.error) {
                 throw new Error(data.error)
@@ -320,7 +382,7 @@ export default function CreateArticlePage() {
     } finally {
       setGenerating(false)
     }
-  }, [selectedDigestId, vocabularyIntensity, selectedModel])
+  }, [queueStats.pending, maxQueueItems, vocabularyIntensity, selectedModel])
 
   function copyToClipboard() {
     navigator.clipboard.writeText(articleContent)
@@ -497,7 +559,7 @@ export default function CreateArticlePage() {
   }
 
   async function saveAsDraft() {
-    if (!articleContent || !selectedDigest) return
+    if (!articleContent) return
 
     setSaving(true)
     try {
@@ -505,14 +567,14 @@ export default function CreateArticlePage() {
       const bodyContent = parsedContent.body || articleContent
 
       // Use metadata from state (which can be edited) or fallback
-      const title = metadata.title || `Artikel vom ${new Date(selectedDigest.digest_date).toLocaleDateString('de-DE')}`
+      const title = metadata.title || `Artikel vom ${new Date().toLocaleDateString('de-DE')}`
       const slug = metadata.slug || generateSlug(title)
 
       // Convert markdown to TipTap JSON and stringify for TEXT column
       const tiptapContent = markdownToTiptap(bodyContent)
 
       const { data: newPost, error } = await supabase.from('generated_posts').insert({
-        digest_id: selectedDigestId,
+        digest_id: selectedDigestId || null,
         prompt_id: activePrompt?.id,
         title,
         slug,
@@ -521,14 +583,39 @@ export default function CreateArticlePage() {
         content: JSON.stringify(tiptapContent),
         word_count: bodyContent.split(/\s+/).length,
         status: 'draft',
-        created_at: selectedDigest.digest_date, // Use digest date as publish date
+        created_at: new Date().toISOString().split('T')[0], // Use today as publish date
         ai_model: usedModel || selectedModel, // Store the model used for generation
       }).select('id').single()
 
       if (error) throw error
 
-      // Trigger background image generation using the digest content
-      if (newPost?.id && selectedDigest.analysis_content) {
+      // Mark queue items as used (with the new post ID)
+      if (newPost?.id && usedQueueItemIds.length > 0) {
+        console.log(`[Queue] Marking ${usedQueueItemIds.length} items as used for post ${newPost.id}`)
+        fetch('/api/admin/news-queue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            action: 'use',
+            itemIds: usedQueueItemIds,
+            postId: newPost.id
+          }),
+        })
+          .then(res => {
+            if (res.ok) {
+              console.log('[Queue] Items marked as used successfully')
+              // Refresh queue stats
+              loadData()
+            } else {
+              console.error('[Queue] Failed to mark items as used')
+            }
+          })
+          .catch(err => console.error('[Queue] Error marking items as used:', err))
+      }
+
+      // Trigger background image generation using digest content if available
+      if (newPost?.id && selectedDigest?.analysis_content) {
         triggerImageGeneration(newPost.id, selectedDigest.analysis_content)
       }
 
@@ -540,11 +627,12 @@ export default function CreateArticlePage() {
         triggerTranslations(newPost.id)
       }
 
-      alert('Artikel als Entwurf gespeichert! Bilder, Synthszr-Analysen und Übersetzungen werden im Hintergrund generiert.')
+      alert('Artikel als Entwurf gespeichert! Queue-Items markiert, Bilder und Übersetzungen werden im Hintergrund generiert.')
 
       // Reset form after successful save
       setArticleContent('')
       setMetadata({ title: '', excerpt: '', category: 'AI & Tech', slug: '' })
+      setUsedQueueItemIds([])
     } catch (error) {
       console.error('Save error:', error)
       alert('Fehler beim Speichern')
@@ -575,49 +663,76 @@ export default function CreateArticlePage() {
           AI Artikel erstellen
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Generiere einen Blogartikel aus einem Digest mit dem Ghostwriter
+          Generiere einen Blogartikel aus der News-Queue (max 30% pro Quelle)
         </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left Column: Settings */}
         <div className="space-y-6">
-          {/* Digest Selection */}
+          {/* Queue Status */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Sparkles className="h-4 w-4" />
-                Digest auswählen
+                News-Queue
               </CardTitle>
+              <CardDescription className="text-xs">
+                Wird automatisch durch Synthese-Pipeline befüllt
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <Select value={selectedDigestId} onValueChange={setSelectedDigestId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Digest wählen..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {digests.map(digest => (
-                    <SelectItem key={digest.id} value={digest.id}>
-                      {new Date(digest.digest_date).toLocaleDateString('de-DE', {
-                        weekday: 'short',
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                      {digest.word_count && (
-                        <span className="text-muted-foreground ml-2">
-                          ({digest.word_count} Wörter)
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="p-2 bg-muted/50 rounded text-center">
+                  <div className="text-lg font-bold text-yellow-600">{queueStats.pending}</div>
+                  <div className="text-[10px] text-muted-foreground">Pending</div>
+                </div>
+                <div className="p-2 bg-muted/50 rounded text-center">
+                  <div className="text-lg font-bold text-blue-600">{queueStats.selected}</div>
+                  <div className="text-[10px] text-muted-foreground">Selected</div>
+                </div>
+                <div className="p-2 bg-muted/50 rounded text-center">
+                  <div className="text-lg font-bold text-green-600">{queueStats.used}</div>
+                  <div className="text-[10px] text-muted-foreground">Used</div>
+                </div>
+              </div>
+
+              {/* Max Items Slider */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Max. News-Items</Label>
+                  <span className="text-xs font-mono text-muted-foreground">{maxQueueItems}</span>
+                </div>
+                <Slider
+                  value={[maxQueueItems]}
+                  onValueChange={([v]) => setMaxQueueItems(v)}
+                  min={5}
+                  max={20}
+                  step={1}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Source Distribution */}
+              {sourceDistribution.length > 0 && (
+                <div className="mt-4 pt-3 border-t">
+                  <div className="text-xs font-medium mb-2">Quellen-Verteilung</div>
+                  <div className="space-y-1.5">
+                    {sourceDistribution.slice(0, 4).map((d, i) => (
+                      <div key={i} className="flex items-center justify-between text-[10px]">
+                        <span className="truncate max-w-[140px]">{d.source}</span>
+                        <span className={`font-mono ${d.percentage > 30 ? 'text-red-500 font-bold' : 'text-muted-foreground'}`}>
+                          {d.percentage}%
                         </span>
-                      )}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedDigest && (
-                <div className="mt-3 p-3 bg-muted/50 rounded-lg">
-                  <p className="text-sm text-muted-foreground line-clamp-4">
-                    {selectedDigest.analysis_content.slice(0, 300)}...
-                  </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {queueStats.pending === 0 && (
+                <div className="mt-4 p-2 bg-yellow-500/10 rounded text-xs text-yellow-700">
+                  Queue ist leer. Bitte Synthese-Pipeline für einen Digest ausführen.
                 </div>
               )}
             </CardContent>

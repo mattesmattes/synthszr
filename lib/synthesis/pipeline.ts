@@ -8,6 +8,7 @@ import { generateEmbedding, prepareTextForEmbedding } from '@/lib/embeddings/gen
 import { findSimilarItems, getItemEmbedding, SimilarItem } from './search'
 import { scoreSynthesisCandidates, getTopCandidates, ScoredCandidate, SynthesisType } from './score'
 import { developSyntheses, DevelopedSynthesis } from './develop'
+import { addToQueue } from '@/lib/news-queue'
 
 export interface SynthesisPipelineResult {
   success: boolean
@@ -195,6 +196,62 @@ async function storeCandidates(
 }
 
 /**
+ * Auto-queue synthesis candidates for article generation
+ * This adds scored candidates to the news_queue for source-diversified selection
+ */
+async function queueCandidatesForArticle(
+  candidates: ScoredCandidate[]
+): Promise<{ added: number; skipped: number }> {
+  if (candidates.length === 0) {
+    return { added: 0, skipped: 0 }
+  }
+
+  const supabase = await createClient()
+
+  // Get source info from daily_repo for each candidate
+  const sourceItemIds = candidates.map(c => c.sourceItem.id)
+  const { data: sourceItems } = await supabase
+    .from('daily_repo')
+    .select('id, source_email, source_url')
+    .in('id', sourceItemIds)
+
+  const sourceMap = new Map<string, { source_email: string | null; source_url: string | null }>()
+  if (sourceItems) {
+    for (const item of sourceItems) {
+      sourceMap.set(item.id, {
+        source_email: item.source_email,
+        source_url: item.source_url
+      })
+    }
+  }
+
+  // Map candidates to queue items
+  const queueItems = candidates.map(c => {
+    const source = sourceMap.get(c.sourceItem.id)
+    return {
+      dailyRepoId: c.sourceItem.id,
+      title: c.sourceItem.title,
+      sourceEmail: source?.source_email || undefined,
+      sourceUrl: source?.source_url || undefined,
+      synthesisScore: c.originalityScore,
+      relevanceScore: c.relevanceScore,
+      uniquenessScore: 5 // Default, will be recalculated by queue service
+    }
+  })
+
+  console.log(`[Pipeline] Auto-queuing ${queueItems.length} candidates for article generation`)
+
+  try {
+    const result = await addToQueue(queueItems)
+    console.log(`[Pipeline] Queued ${result.added} items, skipped ${result.skipped}`)
+    return result
+  } catch (error) {
+    console.error('[Pipeline] Failed to queue candidates:', error)
+    return { added: 0, skipped: candidates.length }
+  }
+}
+
+/**
  * Store developed syntheses in the database
  */
 async function storeSyntheses(
@@ -342,6 +399,9 @@ export async function runSynthesisPipeline(
 
   // Store all candidates
   await storeCandidates(digestId, allCandidates)
+
+  // Auto-queue candidates for article generation (source-diversified)
+  await queueCandidatesForArticle(allCandidates)
 
   // allCandidates now contains exactly 1 candidate per item (the best one)
   if (allCandidates.length === 0) {
@@ -610,6 +670,8 @@ export async function runSynthesisPipelineWithProgress(
   // Store new candidates (if any)
   if (allCandidates.length > 0) {
     await storeCandidates(digestId, allCandidates)
+    // Auto-queue candidates for article generation (source-diversified)
+    await queueCandidatesForArticle(allCandidates)
   }
 
   // Phase 2: Develop syntheses ONE BY ONE - no parallelization

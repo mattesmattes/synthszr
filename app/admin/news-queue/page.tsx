@@ -75,13 +75,19 @@ interface BalancedSelection {
   selection_rank: number
 }
 
-interface DailyRepoItem {
+interface SynthesisCandidateItem {
   id: string
+  source_item_id: string
   title: string
   source_email: string | null
   source_url: string | null
-  newsletter_date: string
-  collected_at: string
+  newsletter_date: string | null
+  originality_score: number
+  relevance_score: number
+  synthesis_type: string
+  reasoning: string | null
+  digest_id: string
+  created_at: string
 }
 
 export default function NewsQueuePage() {
@@ -97,9 +103,9 @@ export default function NewsQueuePage() {
   const [showBalancedDialog, setShowBalancedDialog] = useState(false)
   const [showImportDialog, setShowImportDialog] = useState(false)
   const [importDate, setImportDate] = useState<string>(new Date().toISOString().split('T')[0])
-  const [repoItems, setRepoItems] = useState<DailyRepoItem[]>([])
-  const [selectedRepoItems, setSelectedRepoItems] = useState<Set<string>>(new Set())
-  const [loadingRepo, setLoadingRepo] = useState(false)
+  const [candidateItems, setCandidateItems] = useState<SynthesisCandidateItem[]>([])
+  const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set())
+  const [loadingCandidates, setLoadingCandidates] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -139,41 +145,50 @@ export default function NewsQueuePage() {
     }
   }
 
-  const fetchRepoItems = async (date: string) => {
-    setLoadingRepo(true)
-    setSelectedRepoItems(new Set())
+  const fetchCandidates = async (date: string) => {
+    setLoadingCandidates(true)
+    setSelectedCandidates(new Set())
     try {
-      const res = await fetch(`/api/admin/daily-repo?date=${date}`)
+      const res = await fetch(`/api/admin/synthesis-candidates?date=${date}`)
       if (res.ok) {
         const data = await res.json()
-        setRepoItems(data.items || [])
+        setCandidateItems(data.items || [])
       } else {
-        setRepoItems([])
+        setCandidateItems([])
       }
     } catch (error) {
-      console.error('Failed to fetch repo items:', error)
-      setRepoItems([])
+      console.error('Failed to fetch synthesis candidates:', error)
+      setCandidateItems([])
     }
-    setLoadingRepo(false)
+    setLoadingCandidates(false)
   }
 
   const handleImportToQueue = async () => {
-    if (selectedRepoItems.size === 0) return
+    if (selectedCandidates.size === 0) return
     setActionLoading('import')
     try {
+      // Get selected candidates with their scores
+      const selected = candidateItems.filter(c => selectedCandidates.has(c.id))
       const res = await fetch('/api/admin/news-queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'add-from-repo',
-          itemIds: Array.from(selectedRepoItems)
+          action: 'add-from-synthesis',
+          candidates: selected.map(c => ({
+            source_item_id: c.source_item_id,
+            title: c.title,
+            source_identifier: c.source_email || c.source_url || 'unknown',
+            source_url: c.source_url,
+            originality_score: c.originality_score,
+            relevance_score: c.relevance_score
+          }))
         })
       })
       if (res.ok) {
         const data = await res.json()
         alert(`${data.added} Items hinzugefügt, ${data.skipped} übersprungen`)
         setShowImportDialog(false)
-        setSelectedRepoItems(new Set())
+        setSelectedCandidates(new Set())
         fetchData()
       }
     } catch (error) {
@@ -182,21 +197,21 @@ export default function NewsQueuePage() {
     setActionLoading(null)
   }
 
-  const toggleRepoSelect = (id: string) => {
-    const newSelected = new Set(selectedRepoItems)
+  const toggleCandidateSelect = (id: string) => {
+    const newSelected = new Set(selectedCandidates)
     if (newSelected.has(id)) {
       newSelected.delete(id)
     } else {
       newSelected.add(id)
     }
-    setSelectedRepoItems(newSelected)
+    setSelectedCandidates(newSelected)
   }
 
-  const selectAllRepo = () => {
-    if (selectedRepoItems.size === repoItems.length) {
-      setSelectedRepoItems(new Set())
+  const selectAllCandidates = () => {
+    if (selectedCandidates.size === candidateItems.length) {
+      setSelectedCandidates(new Set())
     } else {
-      setSelectedRepoItems(new Set(repoItems.map(i => i.id)))
+      setSelectedCandidates(new Set(candidateItems.map(i => i.id)))
     }
   }
 
@@ -326,7 +341,7 @@ export default function NewsQueuePage() {
           News Queue
         </h1>
         <p className="text-xs text-muted-foreground">
-          Quellen-diversifizierte News-Auswahl (max 30% pro Quelle)
+          Quellen-diversifizierte News-Auswahl (max 30% pro Quelle) • Wird automatisch durch Synthese-Pipeline befüllt
         </p>
       </div>
 
@@ -438,15 +453,15 @@ export default function NewsQueuePage() {
             <CardContent className="p-3 pt-0 space-y-2">
               <Button
                 size="sm"
-                variant="default"
+                variant="outline"
                 className="w-full justify-start text-xs"
                 onClick={() => {
                   setShowImportDialog(true)
-                  fetchRepoItems(importDate)
+                  fetchCandidates(importDate)
                 }}
               >
                 <Plus className="h-3 w-3 mr-2" />
-                Aus Daily Repo importieren
+                Manuell nachimportieren
               </Button>
               <Button
                 size="sm"
@@ -720,16 +735,17 @@ export default function NewsQueuePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Import from Daily Repo Dialog */}
+      {/* Import from Synthesis Candidates Dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-sm flex items-center gap-2">
               <Database className="h-4 w-4" />
-              Aus Daily Repo importieren
+              Manuell nachimportieren
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Wähle Items aus dem Daily Repo, die zur Queue hinzugefügt werden sollen
+              Items werden automatisch durch die Synthese-Pipeline zur Queue hinzugefügt.
+              Hier kannst du ältere Synthesen nachträglich importieren.
             </DialogDescription>
           </DialogHeader>
 
@@ -740,64 +756,72 @@ export default function NewsQueuePage() {
               value={importDate}
               onChange={(e) => {
                 setImportDate(e.target.value)
-                fetchRepoItems(e.target.value)
+                fetchCandidates(e.target.value)
               }}
               className="rounded border px-2 py-1 text-xs"
             />
             <span className="text-xs text-muted-foreground">
-              {repoItems.length} Items gefunden
+              {candidateItems.length} Kandidaten gefunden
             </span>
           </div>
 
           <div className="flex-1 overflow-y-auto border rounded">
-            {loadingRepo ? (
+            {loadingCandidates ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            ) : repoItems.length === 0 ? (
+            ) : candidateItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <Database className="h-8 w-8 mb-2 opacity-50" />
-                <p className="text-xs">Keine Items für dieses Datum</p>
+                <p className="text-xs">Keine Synthese-Kandidaten für dieses Datum</p>
+                <p className="text-[10px] mt-1">Wurde die Synthese-Pipeline für diesen Tag ausgeführt?</p>
               </div>
             ) : (
               <>
                 <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30 sticky top-0">
                   <input
                     type="checkbox"
-                    checked={selectedRepoItems.size === repoItems.length && repoItems.length > 0}
-                    onChange={selectAllRepo}
+                    checked={selectedCandidates.size === candidateItems.length && candidateItems.length > 0}
+                    onChange={selectAllCandidates}
                     className="rounded"
                   />
                   <span className="text-xs text-muted-foreground">
-                    Alle auswählen ({selectedRepoItems.size}/{repoItems.length})
+                    Alle auswählen ({selectedCandidates.size}/{candidateItems.length})
                   </span>
                 </div>
                 <div className="divide-y">
-                  {repoItems.map((item) => (
+                  {candidateItems.map((item) => (
                     <div
                       key={item.id}
                       className={`flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors text-xs ${
-                        selectedRepoItems.has(item.id) ? 'bg-primary/5' : ''
+                        selectedCandidates.has(item.id) ? 'bg-primary/5' : ''
                       }`}
                     >
                       <input
                         type="checkbox"
-                        checked={selectedRepoItems.has(item.id)}
-                        onChange={() => toggleRepoSelect(item.id)}
+                        checked={selectedCandidates.has(item.id)}
+                        onChange={() => toggleCandidateSelect(item.id)}
                         className="rounded shrink-0"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="font-medium truncate">{item.title}</div>
-                        <div className="text-[10px] text-muted-foreground truncate">
-                          {item.source_email || item.source_url || 'Unbekannte Quelle'}
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                          <span className="truncate max-w-[150px]">
+                            {item.source_email || item.source_url || 'Unbekannte Quelle'}
+                          </span>
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
+                            {item.synthesis_type}
+                          </Badge>
                         </div>
                       </div>
-                      <span className="text-[10px] text-muted-foreground shrink-0">
-                        {new Date(item.collected_at).toLocaleTimeString('de-DE', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 font-mono" title="Originalität">
+                          O:{item.originality_score}
+                        </Badge>
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 font-mono" title="Relevanz">
+                          R:{item.relevance_score}
+                        </Badge>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -816,14 +840,14 @@ export default function NewsQueuePage() {
             <Button
               size="sm"
               onClick={handleImportToQueue}
-              disabled={selectedRepoItems.size === 0 || actionLoading === 'import'}
+              disabled={selectedCandidates.size === 0 || actionLoading === 'import'}
             >
               {actionLoading === 'import' ? (
                 <Loader2 className="h-3 w-3 mr-2 animate-spin" />
               ) : (
                 <Plus className="h-3 w-3 mr-2" />
               )}
-              {selectedRepoItems.size} Items importieren
+              {selectedCandidates.size} Items importieren
             </Button>
           </DialogFooter>
         </DialogContent>

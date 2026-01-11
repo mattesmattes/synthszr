@@ -138,6 +138,41 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(result)
       }
 
+      case 'add-from-synthesis': {
+        // Add items from synthesis_candidates with pre-calculated scores
+        const { candidates } = body as {
+          candidates: Array<{
+            source_item_id: string
+            title: string
+            source_identifier: string
+            source_url: string | null
+            originality_score: number
+            relevance_score: number
+          }>
+        }
+
+        if (!candidates || !Array.isArray(candidates)) {
+          return NextResponse.json({ error: 'candidates array required' }, { status: 400 })
+        }
+
+        // Map synthesis scores to queue scores
+        // originality_score (0-10) -> synthesis_score (0-10)
+        // relevance_score (0-10) -> relevance_score (0-10)
+        // uniqueness_score calculated separately (default 5)
+        const items = candidates.map(c => ({
+          dailyRepoId: c.source_item_id,
+          title: c.title,
+          sourceEmail: c.source_identifier,
+          sourceUrl: c.source_url,
+          synthesisScore: c.originality_score,
+          relevanceScore: c.relevance_score,
+          uniquenessScore: 5 // Default, can be calculated later
+        }))
+
+        const result = await addToQueue(items)
+        return NextResponse.json(result)
+      }
+
       case 'select': {
         // Select items for article generation
         const { itemIds } = body as { itemIds: string[] }
