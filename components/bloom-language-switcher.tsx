@@ -45,13 +45,12 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
   if (loading || activeLanguages.length <= 1) {
     return (
       <div className="flex justify-center mb-6">
-        <div className="w-10 h-10 rounded-full bg-foreground flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full overflow-hidden">
           <Image
             src="/oh-so-icon.svg"
             alt="OH-SO"
-            width={28}
-            height={28}
-            className="invert dark:invert-0"
+            width={40}
+            height={40}
           />
         </div>
       </div>
@@ -67,13 +66,12 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
           menuRadius={16}
           className="bg-background shadow-lg border border-border"
         >
-          <Menu.Trigger className="flex items-center justify-center w-full h-full rounded-full bg-foreground hover:bg-foreground/90 transition-colors cursor-pointer ring-1 ring-black/5 dark:ring-white/10">
+          <Menu.Trigger className="flex items-center justify-center w-full h-full rounded-full overflow-hidden cursor-pointer hover:opacity-90 transition-opacity">
             <Image
               src="/oh-so-icon.svg"
               alt="OH-SO"
-              width={28}
-              height={28}
-              className="invert dark:invert-0"
+              width={40}
+              height={40}
             />
           </Menu.Trigger>
           <Menu.Content className="py-2 bg-background">
