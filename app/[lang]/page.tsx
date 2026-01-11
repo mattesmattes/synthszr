@@ -2,6 +2,7 @@ import Link from "next/link"
 import { FeaturedArticle } from "@/components/featured-article"
 import { Newsletter } from "@/components/newsletter"
 import { LanguageSwitcher } from "@/components/language-switcher"
+import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 import { createClient } from "@/lib/supabase/server"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
@@ -122,6 +123,9 @@ export default async function Page({ params }: PageProps) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <main className="mx-auto max-w-5xl px-6 py-12 md:py-20">
+
+        {/* Bloom Language Switcher */}
+        <BloomLanguageSwitcher currentLocale={locale} />
 
         {featuredPost ? (
           <>
