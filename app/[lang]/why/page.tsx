@@ -32,15 +32,35 @@ export default async function WhyPage({ params }: PageProps) {
   const t = await getTranslations(locale)
   const supabase = await createClient()
 
+  // Fetch original page
   const { data: page } = await supabase
     .from("static_pages")
     .select("*")
     .eq("slug", "why")
     .single()
 
-  // Default content if page doesn't exist yet
-  const title = page?.title || "Feed the Soul. Run the System."
-  const content = page?.content || {
+  // Try to get translation if not default locale
+  let translatedTitle: string | null = null
+  let translatedContent: Record<string, unknown> | null = null
+
+  if (page && locale !== 'de') {
+    const { data: translation } = await supabase
+      .from("content_translations")
+      .select("title, content")
+      .eq("static_page_id", page.id)
+      .eq("language_code", locale)
+      .eq("translation_status", "completed")
+      .single()
+
+    if (translation) {
+      translatedTitle = translation.title
+      translatedContent = translation.content as Record<string, unknown>
+    }
+  }
+
+  // Use translation if available, otherwise fall back to original
+  const title = translatedTitle || page?.title || "Feed the Soul. Run the System."
+  const content = translatedContent || page?.content || {
     type: "doc",
     content: [
       {

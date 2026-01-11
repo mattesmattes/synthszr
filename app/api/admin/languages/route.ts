@@ -93,7 +93,7 @@ export async function PUT(request: NextRequest) {
 
 /**
  * POST /api/admin/languages/backfill
- * Triggers backfill translations for a language
+ * Triggers backfill translations for a language (posts + static pages)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -105,8 +105,15 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createClient()
+    const queueEntries: Array<{
+      content_type: string
+      content_id: string
+      target_language: string
+      priority: number
+      status: string
+    }> = []
 
-    // Get all published posts (optionally filtered by date)
+    // ========== POSTS ==========
     let query = supabase
       .from('generated_posts')
       .select('id')
@@ -116,50 +123,71 @@ export async function POST(request: NextRequest) {
       query = query.gte('created_at', from_date)
     }
 
-    const { data: posts, error: postsError } = await query
+    const { data: posts } = await query
 
-    if (postsError) {
-      return NextResponse.json({ error: 'Failed to fetch posts' }, { status: 500 })
-    }
-
-    if (!posts || posts.length === 0) {
-      return NextResponse.json({
-        message: 'No posts to backfill',
-        queued: 0,
-      })
-    }
-
-    // Get existing translations to skip manually edited ones
-    const { data: existingTranslations } = await supabase
+    // Get existing post translations to skip manually edited ones
+    const { data: existingPostTranslations } = await supabase
       .from('content_translations')
       .select('generated_post_id, is_manually_edited')
       .eq('language_code', code)
+      .not('generated_post_id', 'is', null)
 
-    const manuallyEditedIds = new Set(
-      existingTranslations
+    const manuallyEditedPostIds = new Set(
+      existingPostTranslations
         ?.filter(t => t.is_manually_edited)
         .map(t => t.generated_post_id) || []
     )
 
-    // Filter out already manually edited
-    const postsToTranslate = posts.filter(p => !manuallyEditedIds.has(p.id))
-
-    if (postsToTranslate.length === 0) {
-      return NextResponse.json({
-        message: 'All posts already have manual translations',
-        queued: 0,
-        skipped: posts.length,
+    // Add posts to queue
+    const postsToTranslate = (posts || []).filter(p => !manuallyEditedPostIds.has(p.id))
+    for (const post of postsToTranslate) {
+      queueEntries.push({
+        content_type: 'generated_post',
+        content_id: post.id,
+        target_language: code,
+        priority: 1,
+        status: 'pending',
       })
     }
 
-    // Create queue entries
-    const queueEntries = postsToTranslate.map(post => ({
-      content_type: 'generated_post',
-      content_id: post.id,
-      target_language: code,
-      priority: 1, // Low priority for backfill
-      status: 'pending',
-    }))
+    // ========== STATIC PAGES ==========
+    const { data: staticPages } = await supabase
+      .from('static_pages')
+      .select('id')
+
+    // Get existing static page translations to skip manually edited ones
+    const { data: existingPageTranslations } = await supabase
+      .from('content_translations')
+      .select('static_page_id, is_manually_edited')
+      .eq('language_code', code)
+      .not('static_page_id', 'is', null)
+
+    const manuallyEditedPageIds = new Set(
+      existingPageTranslations
+        ?.filter(t => t.is_manually_edited)
+        .map(t => t.static_page_id) || []
+    )
+
+    // Add static pages to queue (higher priority)
+    const pagesToTranslate = (staticPages || []).filter(p => !manuallyEditedPageIds.has(p.id))
+    for (const page of pagesToTranslate) {
+      queueEntries.push({
+        content_type: 'static_page',
+        content_id: page.id,
+        target_language: code,
+        priority: 5, // Higher priority for static pages
+        status: 'pending',
+      })
+    }
+
+    if (queueEntries.length === 0) {
+      return NextResponse.json({
+        message: 'Nothing to backfill',
+        queued: 0,
+        skippedPosts: manuallyEditedPostIds.size,
+        skippedPages: manuallyEditedPageIds.size,
+      })
+    }
 
     // Insert in batches of 100
     const batchSize = 100
@@ -176,12 +204,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`[Backfill] Queued ${totalQueued} translations for language ${code}`)
+    console.log(`[Backfill] Queued ${totalQueued} translations for language ${code} (${postsToTranslate.length} posts, ${pagesToTranslate.length} pages)`)
 
     return NextResponse.json({
-      message: `Queued ${totalQueued} posts for translation`,
+      message: `Queued ${postsToTranslate.length} posts and ${pagesToTranslate.length} static pages for translation`,
       queued: totalQueued,
-      skipped: manuallyEditedIds.size,
+      posts: postsToTranslate.length,
+      pages: pagesToTranslate.length,
+      skippedPosts: manuallyEditedPostIds.size,
+      skippedPages: manuallyEditedPageIds.size,
     })
   } catch (error) {
     return NextResponse.json(
