@@ -193,15 +193,15 @@ export default function LanguagesPage() {
                 <div className="grid gap-2">
                   <Label htmlFor={`model-${language.code}`}>Übersetzungsmodell</Label>
                   <Select
-                    value={language.llm_model || ''}
-                    onValueChange={(value) => updateLanguage(language.code, { llm_model: value || null })}
+                    value={language.llm_model || 'default'}
+                    onValueChange={(value) => updateLanguage(language.code, { llm_model: value === 'default' ? null : value })}
                     disabled={saving === language.code || availableModels.length === 0}
                   >
                     <SelectTrigger id={`model-${language.code}`}>
                       <SelectValue placeholder="Standard (Gemini 2.0 Flash)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Standard (Gemini 2.0 Flash)</SelectItem>
+                      <SelectItem value="default">Standard (Gemini 2.0 Flash)</SelectItem>
                       {availableModels.map(model => (
                         <SelectItem key={model} value={model}>
                           {MODEL_LABELS[model] || model}
