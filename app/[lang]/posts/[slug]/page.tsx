@@ -41,7 +41,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const supabase = await createClient()
 
   // Try to find post
-  let post = null
+  let post: { title: string; excerpt: string | null } | null = null
+  let postId: string | null = null
+
   const { data: manualPost } = await supabase
     .from("posts")
     .select("title, excerpt")
@@ -52,13 +54,53 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   if (manualPost) {
     post = manualPost
   } else {
+    // Try by original slug
     const { data: aiPost } = await supabase
       .from("generated_posts")
-      .select("title, excerpt")
+      .select("id, title, excerpt")
       .eq("slug", slug)
       .eq("status", "published")
       .single()
-    post = aiPost
+
+    if (aiPost) {
+      post = aiPost
+      postId = aiPost.id
+    } else if (locale !== 'de') {
+      // Try by translated slug
+      const { data: translationBySlug } = await supabase
+        .from('content_translations')
+        .select('generated_post_id, title, excerpt')
+        .eq('slug', slug)
+        .eq('language_code', locale)
+        .eq('translation_status', 'completed')
+        .single()
+
+      if (translationBySlug) {
+        post = {
+          title: translationBySlug.title || '',
+          excerpt: translationBySlug.excerpt
+        }
+        postId = translationBySlug.generated_post_id
+      }
+    }
+  }
+
+  // If we found a post by original slug and locale is not German, get translated metadata
+  if (post && postId && locale !== 'de') {
+    const { data: translation } = await supabase
+      .from('content_translations')
+      .select('title, excerpt')
+      .eq('generated_post_id', postId)
+      .eq('language_code', locale)
+      .eq('translation_status', 'completed')
+      .single()
+
+    if (translation) {
+      post = {
+        title: translation.title || post.title,
+        excerpt: translation.excerpt ?? post.excerpt
+      }
+    }
   }
 
   if (!post) {
@@ -88,12 +130,34 @@ export default async function PostPage({ params }: PageProps) {
 
   // If not found, try AI-generated posts
   if (!post) {
-    const { data: aiPost } = await supabase
+    // First try by original slug
+    let { data: aiPost } = await supabase
       .from("generated_posts")
       .select("id, title, slug, excerpt, content, category, created_at, cover_image_id")
       .eq("slug", slug)
       .eq("status", "published")
       .single()
+
+    // If not found and locale is not German, try finding by translated slug
+    if (!aiPost && locale !== 'de') {
+      const { data: translationBySlug } = await supabase
+        .from('content_translations')
+        .select('generated_post_id')
+        .eq('slug', slug)
+        .eq('language_code', locale)
+        .eq('translation_status', 'completed')
+        .single()
+
+      if (translationBySlug?.generated_post_id) {
+        const { data: postByTranslatedSlug } = await supabase
+          .from("generated_posts")
+          .select("id, title, slug, excerpt, content, category, created_at, cover_image_id")
+          .eq("id", translationBySlug.generated_post_id)
+          .eq("status", "published")
+          .single()
+        aiPost = postByTranslatedSlug
+      }
+    }
 
     if (aiPost) {
       // Fetch cover image if exists
@@ -279,10 +343,10 @@ export default async function PostPage({ params }: PageProps) {
                 LinkedIn
               </a>
               <Link href={`/${locale}/impressum`} className="hover:text-accent transition-colors">
-                {t['footer.imprint'] || 'Impressum'}
+                Imprint
               </Link>
               <Link href={`/${locale}/datenschutz`} className="hover:text-accent transition-colors">
-                {t['footer.privacy'] || 'Datenschutz'}
+                Privacy
               </Link>
             </div>
           </div>

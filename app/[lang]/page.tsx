@@ -60,13 +60,13 @@ export default async function Page({ params }: PageProps) {
     .order("created_at", { ascending: false })
 
   // Fetch translations if not default locale
-  let translationsMap = new Map<string, { title: string; excerpt: string | null; content: Record<string, unknown> }>()
+  let translationsMap = new Map<string, { title: string; slug: string | null; excerpt: string | null; content: Record<string, unknown> }>()
 
   if (locale !== 'de' && aiPosts && aiPosts.length > 0) {
     const postIds = aiPosts.map(p => p.id)
     const { data: translations, error: translationError } = await supabase
       .from('content_translations')
-      .select('generated_post_id, title, excerpt, content')
+      .select('generated_post_id, title, slug, excerpt, content')
       .eq('language_code', locale)
       .eq('translation_status', 'completed')
       .in('generated_post_id', postIds)
@@ -78,6 +78,7 @@ export default async function Page({ params }: PageProps) {
         if (t.generated_post_id) {
           translationsMap.set(t.generated_post_id, {
             title: t.title || '',
+            slug: t.slug,
             excerpt: t.excerpt,
             content: t.content as Record<string, unknown>
           })
@@ -112,7 +113,7 @@ export default async function Page({ params }: PageProps) {
       title: translation?.title || post.title,
       excerpt: translation?.excerpt ?? post.excerpt,
       content: translation?.content || originalContent,
-      slug: post.slug || post.id,
+      slug: translation?.slug || post.slug || post.id,
       category: post.category || 'AI & Tech',
       cover_image_url: post.cover_image_id ? coverImageMap.get(post.cover_image_id) : null
     }
@@ -173,7 +174,7 @@ export default async function Page({ params }: PageProps) {
               </span>
               <br />
               <span className="text-sm text-muted-foreground">
-                {t['home.tagline'] || 'Die News Synthese zum Start in den Tag.'}
+                The morning news synthesis to start your day.
               </span>
             </Link>
 
@@ -194,7 +195,7 @@ export default async function Page({ params }: PageProps) {
             {recentPosts.length > 0 && (
               <section className="mt-12">
                 <h3 className="mb-4 font-mono text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  {t['home.last_7_days'] || 'Letzte 7 Tage'}
+                  Last 7 Days
                 </h3>
                 <div className="space-y-2 border-l-2 border-border pl-4">
                   {recentPosts.map((post) => (
@@ -221,7 +222,7 @@ export default async function Page({ params }: PageProps) {
                 href={`/${locale}/archive`}
                 className="inline-flex items-center gap-2 rounded border border-border px-4 py-2 font-mono text-xs transition-colors hover:bg-secondary"
               >
-                {t['home.all_articles'] || 'Alle Artikel'} →
+                All Articles →
               </Link>
             </div>
           </>
@@ -251,10 +252,10 @@ export default async function Page({ params }: PageProps) {
                 LinkedIn
               </a>
               <Link href={`/${locale}/impressum`} className="hover:text-accent transition-colors">
-                {t['footer.imprint'] || 'Impressum'}
+                Imprint
               </Link>
               <Link href={`/${locale}/datenschutz`} className="hover:text-accent transition-colors">
-                {t['footer.privacy'] || 'Datenschutz'}
+                Privacy
               </Link>
             </div>
           </div>

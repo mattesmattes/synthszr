@@ -35,15 +35,15 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
 
       if (res.ok) {
         setStatus('success')
-        setMessage(data.message || 'Bestätigungs-E-Mail wurde gesendet!')
+        setMessage(data.message || 'Confirmation email sent!')
         setEmail("")
       } else {
         setStatus('error')
-        setMessage(data.error || 'Ein Fehler ist aufgetreten')
+        setMessage(data.error || 'An error occurred')
       }
     } catch {
       setStatus('error')
-      setMessage('Netzwerkfehler. Bitte versuche es erneut.')
+      setMessage('Network error. Please try again.')
     }
   }
 
@@ -52,7 +52,7 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
       <div className="mx-auto max-w-2xl">
         <h2 className="font-mono text-2xl font-bold md:text-lg">Stay Updated</h2>
         <p className="mt-4 text-muted-foreground">
-          Die morgendliche Tagessynthese per Mail.
+          The morning synthesis delivered to your inbox.
         </p>
 
         {status === 'success' ? (
@@ -66,7 +66,7 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="deine@email.com"
+              placeholder="your@email.com"
               required
               disabled={status === 'loading'}
               className="flex-1 rounded-sm border border-border bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
@@ -79,10 +79,10 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
               {status === 'loading' ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Wird gesendet...
+                  Sending...
                 </>
               ) : (
-                'Anmelden'
+                'Subscribe'
               )}
             </button>
           </form>
