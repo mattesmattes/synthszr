@@ -13,7 +13,10 @@ import {
   RefreshCw,
   AlertTriangle,
   Eye,
-  PieChart
+  PieChart,
+  Plus,
+  Calendar,
+  Database
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -72,6 +75,15 @@ interface BalancedSelection {
   selection_rank: number
 }
 
+interface DailyRepoItem {
+  id: string
+  title: string
+  source_email: string | null
+  source_url: string | null
+  newsletter_date: string
+  collected_at: string
+}
+
 export default function NewsQueuePage() {
   const [stats, setStats] = useState<QueueStats | null>(null)
   const [distribution, setDistribution] = useState<SourceDistribution[]>([])
@@ -83,6 +95,11 @@ export default function NewsQueuePage() {
   const [viewingItem, setViewingItem] = useState<QueueItem | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showBalancedDialog, setShowBalancedDialog] = useState(false)
+  const [showImportDialog, setShowImportDialog] = useState(false)
+  const [importDate, setImportDate] = useState<string>(new Date().toISOString().split('T')[0])
+  const [repoItems, setRepoItems] = useState<DailyRepoItem[]>([])
+  const [selectedRepoItems, setSelectedRepoItems] = useState<Set<string>>(new Set())
+  const [loadingRepo, setLoadingRepo] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -119,6 +136,67 @@ export default function NewsQueuePage() {
       }
     } catch (error) {
       console.error('Failed to fetch balanced selection:', error)
+    }
+  }
+
+  const fetchRepoItems = async (date: string) => {
+    setLoadingRepo(true)
+    setSelectedRepoItems(new Set())
+    try {
+      const res = await fetch(`/api/admin/daily-repo?date=${date}`)
+      if (res.ok) {
+        const data = await res.json()
+        setRepoItems(data.items || [])
+      } else {
+        setRepoItems([])
+      }
+    } catch (error) {
+      console.error('Failed to fetch repo items:', error)
+      setRepoItems([])
+    }
+    setLoadingRepo(false)
+  }
+
+  const handleImportToQueue = async () => {
+    if (selectedRepoItems.size === 0) return
+    setActionLoading('import')
+    try {
+      const res = await fetch('/api/admin/news-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add-from-repo',
+          itemIds: Array.from(selectedRepoItems)
+        })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        alert(`${data.added} Items hinzugefügt, ${data.skipped} übersprungen`)
+        setShowImportDialog(false)
+        setSelectedRepoItems(new Set())
+        fetchData()
+      }
+    } catch (error) {
+      console.error('Import failed:', error)
+    }
+    setActionLoading(null)
+  }
+
+  const toggleRepoSelect = (id: string) => {
+    const newSelected = new Set(selectedRepoItems)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+    setSelectedRepoItems(newSelected)
+  }
+
+  const selectAllRepo = () => {
+    if (selectedRepoItems.size === repoItems.length) {
+      setSelectedRepoItems(new Set())
+    } else {
+      setSelectedRepoItems(new Set(repoItems.map(i => i.id)))
     }
   }
 
@@ -358,6 +436,18 @@ export default function NewsQueuePage() {
               <CardTitle className="text-sm">Aktionen</CardTitle>
             </CardHeader>
             <CardContent className="p-3 pt-0 space-y-2">
+              <Button
+                size="sm"
+                variant="default"
+                className="w-full justify-start text-xs"
+                onClick={() => {
+                  setShowImportDialog(true)
+                  fetchRepoItems(importDate)
+                }}
+              >
+                <Plus className="h-3 w-3 mr-2" />
+                Aus Daily Repo importieren
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -625,6 +715,115 @@ export default function NewsQueuePage() {
               }}
             >
               Alle auswählen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import from Daily Repo Dialog */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <Database className="h-4 w-4" />
+              Aus Daily Repo importieren
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Wähle Items aus dem Daily Repo, die zur Queue hinzugefügt werden sollen
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center gap-2 py-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <input
+              type="date"
+              value={importDate}
+              onChange={(e) => {
+                setImportDate(e.target.value)
+                fetchRepoItems(e.target.value)
+              }}
+              className="rounded border px-2 py-1 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">
+              {repoItems.length} Items gefunden
+            </span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto border rounded">
+            {loadingRepo ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : repoItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Database className="h-8 w-8 mb-2 opacity-50" />
+                <p className="text-xs">Keine Items für dieses Datum</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30 sticky top-0">
+                  <input
+                    type="checkbox"
+                    checked={selectedRepoItems.size === repoItems.length && repoItems.length > 0}
+                    onChange={selectAllRepo}
+                    className="rounded"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    Alle auswählen ({selectedRepoItems.size}/{repoItems.length})
+                  </span>
+                </div>
+                <div className="divide-y">
+                  {repoItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors text-xs ${
+                        selectedRepoItems.has(item.id) ? 'bg-primary/5' : ''
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedRepoItems.has(item.id)}
+                        onChange={() => toggleRepoSelect(item.id)}
+                        className="rounded shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate">{item.title}</div>
+                        <div className="text-[10px] text-muted-foreground truncate">
+                          {item.source_email || item.source_url || 'Unbekannte Quelle'}
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {new Date(item.collected_at).toLocaleTimeString('de-DE', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowImportDialog(false)}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleImportToQueue}
+              disabled={selectedRepoItems.size === 0 || actionLoading === 'import'}
+            >
+              {actionLoading === 'import' ? (
+                <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+              ) : (
+                <Plus className="h-3 w-3 mr-2" />
+              )}
+              {selectedRepoItems.size} Items importieren
             </Button>
           </DialogFooter>
         </DialogContent>
