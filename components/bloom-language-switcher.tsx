@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Menu } from 'bloom-menu'
-import { Globe } from 'lucide-react'
+import Image from 'next/image'
 import type { LanguageCode, Language } from '@/lib/types'
 import { removeLocaleFromPathname } from '@/lib/i18n/config'
 
@@ -45,8 +45,14 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
   if (loading || activeLanguages.length <= 1) {
     return (
       <div className="flex justify-center mb-6">
-        <div className="w-10 h-10 rounded-full bg-secondary/50 flex items-center justify-center">
-          <Globe className="h-5 w-5 text-muted-foreground" />
+        <div className="w-10 h-10 rounded-full bg-foreground flex items-center justify-center">
+          <Image
+            src="/oh-so-icon.svg"
+            alt="OH-SO"
+            width={28}
+            height={28}
+            className="invert dark:invert-0"
+          />
         </div>
       </div>
     )
@@ -61,8 +67,14 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
           menuRadius={16}
           className="bg-background shadow-lg border border-border"
         >
-          <Menu.Trigger className="flex items-center justify-center w-full h-full rounded-full bg-secondary hover:bg-secondary/80 transition-colors cursor-pointer ring-1 ring-black/5 dark:ring-white/10">
-            <Globe className="h-5 w-5 text-foreground" />
+          <Menu.Trigger className="flex items-center justify-center w-full h-full rounded-full bg-foreground hover:bg-foreground/90 transition-colors cursor-pointer ring-1 ring-black/5 dark:ring-white/10">
+            <Image
+              src="/oh-so-icon.svg"
+              alt="OH-SO"
+              width={28}
+              height={28}
+              className="invert dark:invert-0"
+            />
           </Menu.Trigger>
           <Menu.Content className="py-2 bg-background">
             {activeLanguages.map((lang) => (
