@@ -51,14 +51,8 @@ export async function GET(request: NextRequest) {
     // Get queue items with filters
     let query = supabase
       .from('translation_queue')
-      .select(`
-        *,
-        generated_posts:content_id (
-          id,
-          title,
-          slug
-        )
-      `)
+      .select('*')
+      .order('priority', { ascending: false })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -76,6 +70,28 @@ export async function GET(request: NextRequest) {
       console.error('[Translations] Queue fetch error:', queueError)
     }
 
+    // Enrich queue items with content titles
+    const enrichedItems = await Promise.all(
+      (queueItems || []).map(async (item) => {
+        if (item.content_type === 'generated_post' && item.content_id) {
+          const { data: post } = await supabase
+            .from('generated_posts')
+            .select('id, title, slug')
+            .eq('id', item.content_id)
+            .single()
+          return { ...item, generated_posts: post }
+        } else if (item.content_type === 'static_page' && item.content_id) {
+          const { data: page } = await supabase
+            .from('static_pages')
+            .select('id, title, slug')
+            .eq('id', item.content_id)
+            .single()
+          return { ...item, static_pages: page }
+        }
+        return item
+      })
+    )
+
     // Get completed translations count
     const { count: translationsCount } = await supabase
       .from('content_translations')
@@ -90,7 +106,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       stats,
-      queueItems: queueItems || [],
+      queueItems: enrichedItems,
       translationsCount: translationsCount || 0,
       manuallyEditedCount: manualCount || 0,
     })
@@ -155,6 +171,27 @@ export async function POST(request: NextRequest) {
       })
       const data = await res.json()
       return NextResponse.json(data)
+    }
+
+    if (action === 'retry-all-failed') {
+      // Reset all failed items to pending
+      const { data, error } = await supabase
+        .from('translation_queue')
+        .update({
+          status: 'pending',
+          attempts: 0,
+          last_error: null,
+          started_at: null,
+          completed_at: null,
+        })
+        .eq('status', 'failed')
+        .select('id')
+
+      if (error) {
+        return NextResponse.json({ error: 'Failed to retry items' }, { status: 500 })
+      }
+
+      return NextResponse.json({ message: `${data?.length || 0} items queued for retry`, count: data?.length || 0 })
     }
 
     if (action === 'toggle_manual' && translation_id) {

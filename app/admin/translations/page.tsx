@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Languages, Loader2, RefreshCw, Play, RotateCcw, X, CheckCircle, Clock, AlertCircle, PenLine } from 'lucide-react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { Languages, Loader2, RefreshCw, Play, RotateCcw, X, CheckCircle, Clock, AlertCircle, PenLine, Square } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Progress } from '@/components/ui/progress'
 
 interface QueueItem {
   id: string
@@ -21,6 +21,11 @@ interface QueueItem {
   started_at: string | null
   completed_at: string | null
   generated_posts?: {
+    id: string
+    title: string
+    slug: string
+  } | null
+  static_pages?: {
     id: string
     title: string
     slug: string
@@ -41,6 +46,14 @@ interface TranslationsData {
   queueItems: QueueItem[]
   translationsCount: number
   manuallyEditedCount: number
+}
+
+interface ProcessResult {
+  processed: number
+  success: number
+  failed: number
+  skipped: number
+  details: Array<{ id: string; status: string; error?: string }>
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -65,12 +78,12 @@ export default function TranslationsPage() {
   const [processing, setProcessing] = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
   const [languageFilter, setLanguageFilter] = useState('all')
+  const [processLog, setProcessLog] = useState<string[]>([])
+  const [currentItem, setCurrentItem] = useState<string | null>(null)
+  const [progress, setProgress] = useState({ current: 0, total: 0 })
+  const abortRef = useRef(false)
 
-  useEffect(() => {
-    fetchData()
-  }, [statusFilter, languageFilter])
-
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     try {
       const params = new URLSearchParams()
       if (statusFilter !== 'all') params.set('status', statusFilter)
@@ -84,25 +97,100 @@ export default function TranslationsPage() {
     } finally {
       setLoading(false)
     }
+  }, [statusFilter, languageFilter])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  // Auto-refresh when processing
+  useEffect(() => {
+    if (processing) {
+      const interval = setInterval(fetchData, 2000)
+      return () => clearInterval(interval)
+    }
+  }, [processing, fetchData])
+
+  async function processQueueContinuously() {
+    if (processing) return
+
+    setProcessing(true)
+    setProcessLog([])
+    abortRef.current = false
+
+    const totalPending = data?.stats?.pending || 0
+    setProgress({ current: 0, total: totalPending })
+
+    let processed = 0
+    let successCount = 0
+    let failCount = 0
+
+    while (!abortRef.current) {
+      // Fetch current queue status
+      const statsRes = await fetch('/api/admin/translations/process-queue')
+      const stats = await statsRes.json()
+
+      if (stats.stats?.pending === 0) {
+        setProcessLog(prev => [...prev, '✅ Alle Items verarbeitet!'])
+        break
+      }
+
+      setProcessLog(prev => [...prev, `🔄 Verarbeite nächstes Item...`])
+
+      try {
+        const res = await fetch('/api/admin/translations/process-queue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        })
+        const result: ProcessResult = await res.json()
+
+        processed += result.processed
+        successCount += result.success
+        failCount += result.failed
+
+        for (const detail of result.details) {
+          if (detail.status === 'success') {
+            setProcessLog(prev => [...prev, `✅ Erfolgreich übersetzt: ${detail.id.slice(0, 8)}...`])
+          } else if (detail.status === 'skipped') {
+            setProcessLog(prev => [...prev, `⏭️ Übersprungen (manuell bearbeitet)`])
+          } else {
+            setProcessLog(prev => [...prev, `❌ Fehlgeschlagen: ${detail.error || 'Unbekannter Fehler'}`])
+          }
+        }
+
+        setProgress(prev => ({ ...prev, current: prev.current + result.processed }))
+
+        // Refresh data
+        await fetchData()
+
+        // Delay between batches to avoid rate limiting
+        if (!abortRef.current && stats.stats?.pending > 0) {
+          setProcessLog(prev => [...prev, `⏳ Warte 2 Sekunden (Rate Limit)...`])
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        setProcessLog(prev => [...prev, `❌ Fehler: ${errorMsg}`])
+
+        // Wait longer on error
+        setProcessLog(prev => [...prev, `⏳ Warte 5 Sekunden nach Fehler...`])
+        await new Promise(resolve => setTimeout(resolve, 5000))
+      }
+    }
+
+    if (abortRef.current) {
+      setProcessLog(prev => [...prev, '🛑 Verarbeitung abgebrochen'])
+    }
+
+    setProcessLog(prev => [...prev, `📊 Ergebnis: ${successCount} erfolgreich, ${failCount} fehlgeschlagen`])
+    setProcessing(false)
+    setCurrentItem(null)
+    fetchData()
   }
 
-  async function processQueue() {
-    setProcessing(true)
-    try {
-      const res = await fetch('/api/admin/translations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'process' }),
-      })
-      const result = await res.json()
-      alert(`Verarbeitet: ${result.processed || 0} Items (${result.success || 0} erfolgreich, ${result.failed || 0} fehlgeschlagen)`)
-      fetchData()
-    } catch (error) {
-      console.error('Error processing queue:', error)
-      alert('Fehler bei der Verarbeitung')
-    } finally {
-      setProcessing(false)
-    }
+  function stopProcessing() {
+    abortRef.current = true
+    setProcessLog(prev => [...prev, '🛑 Stoppe Verarbeitung...'])
   }
 
   async function retryItem(id: string) {
@@ -131,6 +219,19 @@ export default function TranslationsPage() {
     }
   }
 
+  async function retryAllFailed() {
+    try {
+      await fetch('/api/admin/translations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'retry-all-failed' }),
+      })
+      fetchData()
+    } catch (error) {
+      console.error('Error retrying all failed:', error)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -155,20 +256,50 @@ export default function TranslationsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchData}>
+          <Button variant="outline" onClick={fetchData} disabled={processing}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Aktualisieren
           </Button>
-          <Button onClick={processQueue} disabled={processing || !stats?.pending}>
-            {processing ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
+          {processing ? (
+            <Button variant="destructive" onClick={stopProcessing}>
+              <Square className="h-4 w-4 mr-2" />
+              Stoppen
+            </Button>
+          ) : (
+            <Button onClick={processQueueContinuously} disabled={!stats?.pending}>
               <Play className="h-4 w-4 mr-2" />
-            )}
-            Queue verarbeiten
-          </Button>
+              Queue verarbeiten ({stats?.pending || 0})
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Processing Progress */}
+      {processing && (
+        <Card className="mb-6 border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Verarbeitung läuft...
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {progress.total > 0 && (
+              <div className="mb-3">
+                <Progress value={(progress.current / progress.total) * 100} className="h-2" />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {progress.current} / {progress.total} Items
+                </p>
+              </div>
+            )}
+            <div className="bg-black/10 dark:bg-white/10 rounded p-3 max-h-40 overflow-y-auto font-mono text-xs">
+              {processLog.slice(-10).map((log, i) => (
+                <div key={i} className="py-0.5">{log}</div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-5 mb-6">
@@ -190,10 +321,15 @@ export default function TranslationsPage() {
             <CardTitle className="text-2xl text-green-600">{stats?.completed || 0}</CardTitle>
           </CardHeader>
         </Card>
-        <Card>
+        <Card className="cursor-pointer hover:border-red-300" onClick={() => stats?.failed && retryAllFailed()}>
           <CardHeader className="pb-2">
             <CardDescription>Fehlgeschlagen</CardDescription>
-            <CardTitle className="text-2xl text-red-600">{stats?.failed || 0}</CardTitle>
+            <CardTitle className="text-2xl text-red-600 flex items-center gap-2">
+              {stats?.failed || 0}
+              {(stats?.failed || 0) > 0 && (
+                <RotateCcw className="h-4 w-4 opacity-50" />
+              )}
+            </CardTitle>
           </CardHeader>
         </Card>
         <Card>
@@ -279,7 +415,9 @@ export default function TranslationsPage() {
               {data.queueItems.map(item => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-3 border rounded-lg"
+                  className={`flex items-center justify-between p-3 border rounded-lg ${
+                    currentItem === item.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' : ''
+                  }`}
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
@@ -288,12 +426,13 @@ export default function TranslationsPage() {
                         <span className="ml-1">{item.status}</span>
                       </Badge>
                       <Badge variant="outline">{item.target_language.toUpperCase()}</Badge>
-                      {item.priority > 0 && (
+                      <Badge variant="secondary">{item.content_type}</Badge>
+                      {item.priority > 1 && (
                         <Badge variant="secondary">P{item.priority}</Badge>
                       )}
                     </div>
                     <p className="text-sm font-medium">
-                      {item.generated_posts?.title || `${item.content_type}: ${item.content_id}`}
+                      {item.generated_posts?.title || item.static_pages?.title || `${item.content_type}: ${item.content_id?.slice(0, 8)}...`}
                     </p>
                     {item.last_error && (
                       <p className="text-xs text-red-600 mt-1 truncate max-w-md">
