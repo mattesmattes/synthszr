@@ -435,20 +435,22 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         const regex = new RegExp(`\\b${displayName}s?(-[\\wäöüÄÖÜß]+)*\\b(?!\\s*\\([↑↓→])`, 'g')
         const match = regex.exec(text)
         if (match) {
-          // Skip if inside curly braces {Company} - these are directive tags, not display text
+          // Check if inside curly braces {Company} - these are directive tags for Synthszr Vote only
           const charBefore = match.index > 0 ? text[match.index - 1] : ''
           const charAfter = text[match.index + match[0].length] || ''
-          if (charBefore === '{' || charAfter === '}') {
-            continue
-          }
+          const isDirectiveTag = charBefore === '{' || charAfter === '}'
 
-          matches.push({
-            company: apiName,
-            index: match.index,
-            length: match[0].length,  // Use actual matched length including compound parts
-          })
-          // Mark as shown for this section (only first occurrence)
+          // Always add to sectionCompanies for Synthszr Vote badges
           sectionCompanies.add(apiName)
+
+          // Only add to matches for inline ticker if NOT a directive tag
+          if (!isDirectiveTag) {
+            matches.push({
+              company: apiName,
+              index: match.index,
+              length: match[0].length,  // Use actual matched length including compound parts
+            })
+          }
         }
       }
 
