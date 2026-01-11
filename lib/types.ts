@@ -15,7 +15,7 @@ export interface Post {
 // ============================================
 
 /** Supported language codes */
-export type LanguageCode = 'de' | 'en' | 'fr' | 'es' | 'it' | 'pt' | 'nl' | 'pl'
+export type LanguageCode = 'de' | 'en' | 'fr' | 'es' | 'it' | 'pt' | 'nl' | 'pl' | 'cs' | 'nds'
 
 /** Language configuration */
 export interface Language {

@@ -1,7 +1,7 @@
 import type { LanguageCode } from '@/lib/types'
 
 /** All potentially supported locales (must match database) */
-export const ALL_LOCALES: LanguageCode[] = ['de', 'en', 'fr', 'es', 'it', 'pt', 'nl', 'pl']
+export const ALL_LOCALES: LanguageCode[] = ['de', 'en', 'fr', 'es', 'it', 'pt', 'nl', 'pl', 'cs', 'nds']
 
 /** Default locale (fallback) */
 export const DEFAULT_LOCALE: LanguageCode = 'de'
@@ -43,4 +43,6 @@ export const LANGUAGE_NAMES: Record<LanguageCode, { name: string; native: string
   pt: { name: 'Portuguese', native: 'Português' },
   nl: { name: 'Dutch', native: 'Nederlands' },
   pl: { name: 'Polish', native: 'Polski' },
+  cs: { name: 'Czech', native: 'Čeština' },
+  nds: { name: 'Low German', native: 'Plattdüütsch' },
 }

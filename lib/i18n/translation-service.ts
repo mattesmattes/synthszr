@@ -42,6 +42,8 @@ const LANGUAGE_NAMES: Record<LanguageCode, string> = {
   pt: 'Portuguese',
   nl: 'Dutch',
   pl: 'Polish',
+  cs: 'Czech',
+  nds: 'Low German (Plattdeutsch)',
 }
 
 interface TranslationInput {
