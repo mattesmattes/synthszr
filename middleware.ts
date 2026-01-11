@@ -7,7 +7,7 @@ const SESSION_COOKIE_NAME = 'synthszr_session'
 const LOCALE_COOKIE_NAME = 'synthszr_locale'
 
 // All potentially supported locales
-const ALL_LOCALES = ['de', 'en', 'fr', 'es', 'it', 'pt', 'nl', 'pl'] as const
+const ALL_LOCALES = ['de', 'en', 'fr', 'es', 'it', 'pt', 'nl', 'pl', 'cs', 'nds'] as const
 type LocaleType = (typeof ALL_LOCALES)[number]
 
 const DEFAULT_LOCALE: LocaleType = 'de'
