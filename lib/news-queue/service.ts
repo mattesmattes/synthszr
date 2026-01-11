@@ -404,3 +404,24 @@ export async function wouldViolateSourceLimit(
 
   return newPercentage > SOURCE_LIMIT_PERCENTAGE
 }
+
+/**
+ * Clear all pending items from the queue
+ */
+export async function clearPendingQueue(): Promise<number> {
+  const supabase = createAdminClient()
+
+  const { data, error } = await supabase
+    .from('news_queue')
+    .delete()
+    .eq('status', 'pending')
+    .select('id')
+
+  if (error) {
+    console.error('[NewsQueue] Failed to clear queue:', error)
+    return 0
+  }
+
+  console.log(`[NewsQueue] Cleared ${data?.length || 0} pending items`)
+  return data?.length || 0
+}

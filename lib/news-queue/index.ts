@@ -18,6 +18,7 @@ export {
   updateScores,
   getItemsBySource,
   wouldViolateSourceLimit,
+  clearPendingQueue,
   // Helper functions
   normalizeSourceIdentifier,
   extractSourceDisplayName,

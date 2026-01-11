@@ -18,7 +18,8 @@ import {
   expireOldItems,
   getQueueStats,
   updateScores,
-  queueFromDailyRepo
+  queueFromDailyRepo,
+  clearPendingQueue
 } from '@/lib/news-queue/service'
 import { createClient } from '@/lib/supabase/server'
 
@@ -217,6 +218,12 @@ export async function POST(request: NextRequest) {
         // Manually trigger expiration
         const expired = await expireOldItems()
         return NextResponse.json({ expired })
+      }
+
+      case 'clear': {
+        // Clear all pending items from queue
+        const cleared = await clearPendingQueue()
+        return NextResponse.json({ cleared })
       }
 
       default:
