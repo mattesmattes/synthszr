@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
 import { getBalancedSelection, selectItemsForArticle } from '@/lib/news-queue/service'
@@ -88,13 +89,22 @@ export async function POST(request: NextRequest) {
 
     // Fetch full content from daily_repo for items that have daily_repo_id
     // Queue items may not have content stored, so we fetch from source
+    // Use admin client to bypass RLS
+    const adminSupabase = createAdminClient()
     const itemsWithDailyRepoId = selectedItems.filter(i => i.daily_repo_id)
     if (itemsWithDailyRepoId.length > 0) {
       const dailyRepoIds = itemsWithDailyRepoId.map(i => i.daily_repo_id as string)
-      const { data: repoContent } = await supabase
+      console.log(`[Ghostwriter-Queue] Fetching content for ${dailyRepoIds.length} items from daily_repo`)
+      const { data: repoContent, error: repoError } = await adminSupabase
         .from('daily_repo')
-        .select('id, content')
+        .select('id, content, title')
         .in('id', dailyRepoIds)
+
+      if (repoError) {
+        console.error(`[Ghostwriter-Queue] Error fetching content:`, repoError)
+      } else {
+        console.log(`[Ghostwriter-Queue] Fetched content for ${repoContent?.length || 0} items`)
+      }
 
       if (repoContent) {
         const contentMap = new Map(repoContent.map(r => [r.id, r.content]))
@@ -105,6 +115,13 @@ export async function POST(request: NextRequest) {
           return item
         })
       }
+    }
+
+    // Log content status for each item
+    for (const item of selectedItems) {
+      const contentLength = item.content?.length || 0
+      const preview = item.content?.slice(0, 50)?.replace(/\n/g, ' ') || 'NO CONTENT'
+      console.log(`[Ghostwriter-Queue] Item "${item.title.slice(0, 30)}...": ${contentLength} chars, preview: "${preview}..."`)
     }
 
     console.log(`[Ghostwriter-Queue] Enriched ${selectedItems.length} items with content`)
@@ -193,6 +210,9 @@ export async function POST(request: NextRequest) {
 
     const fullPrompt = promptText + vocabularyContext
     const fullContent = digestContent + sourceReference
+
+    console.log(`[Ghostwriter-Queue] Full content length: ${fullContent.length} chars`)
+    console.log(`[Ghostwriter-Queue] Content preview (first 500 chars):`, fullContent.slice(0, 500))
 
     // Track item IDs for marking as used
     const usedItemIds = selectedItems.map(i => i.id)
