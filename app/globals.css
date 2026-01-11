@@ -258,13 +258,15 @@
   opacity: 0.7;
 }
 
-/* Mattes Synthese styling - neon yellow background */
+/* Synthszr Take / Mattes Synthese styling - neon yellow background */
 .mattes-synthese {
   background-color: #CCFF00;
   color: #000;
   padding: 0.25em 0.5em;
   border-radius: 0.25em;
-  font-weight: 600;
+  font-weight: 700;
+  font-style: normal;
+  text-transform: uppercase;
 }
 
 /* Style headings containing "Mattes Synthese" with neon yellow background */
