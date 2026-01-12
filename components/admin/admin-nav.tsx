@@ -21,7 +21,8 @@ import {
   HelpCircle,
   FileCode,
   TrendingUp,
-  ListTodo
+  ListTodo,
+  Globe
 } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
@@ -77,6 +78,11 @@ const navGroups: NavGroup[] = [
         label: 'Why',
         href: '/admin/why',
         icon: HelpCircle
+      },
+      {
+        label: 'Internationalisierung',
+        href: '/admin/languages',
+        icon: Globe
       }
     ]
   },
