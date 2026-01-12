@@ -76,8 +76,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
 
-    // Extract cover image URL
-    const coverImageUrl = (post.post_images as { image_url?: string } | null)?.image_url || null
+    // Extract cover image URL and create 1:1 cropped version for newsletter
+    const originalCoverUrl = (post.post_images as { image_url?: string } | null)?.image_url || null
+    const coverImageUrl = originalCoverUrl
+      ? `${BASE_URL}/api/newsletter/cover-image?url=${encodeURIComponent(originalCoverUrl)}&size=600`
+      : null
 
     // Fetch email template settings
     const { data: templateSettings } = await supabase

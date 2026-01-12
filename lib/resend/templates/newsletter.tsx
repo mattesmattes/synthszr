@@ -129,21 +129,16 @@ export function NewsletterEmail({
             />
           </Section>
 
-          {/* Cover Image - 1:1 square crop */}
+          {/* Cover Image - 1:1 square (server-side cropped) */}
           {coverImageUrl && (
             <Section style={coverSection}>
-              <table cellPadding="0" cellSpacing="0" border={0} width="100%" style={{ backgroundColor: '#CCFF00' }}>
-                <tr>
-                  <td style={{ width: '600px', height: '600px', overflow: 'hidden', textAlign: 'center', verticalAlign: 'middle' }}>
-                    <Img
-                      src={coverImageUrl}
-                      alt={subject}
-                      width="600"
-                      style={coverImage}
-                    />
-                  </td>
-                </tr>
-              </table>
+              <Img
+                src={coverImageUrl}
+                alt={subject}
+                width="600"
+                height="600"
+                style={coverImage}
+              />
             </Section>
           )}
 
