@@ -80,8 +80,13 @@ const navGroups: NavGroup[] = [
         icon: HelpCircle
       },
       {
-        label: 'Internationalisierung',
+        label: 'Sprachen',
         href: '/admin/languages',
+        icon: Globe
+      },
+      {
+        label: 'Übersetzungen',
+        href: '/admin/translations',
         icon: Globe
       }
     ]
