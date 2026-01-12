@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getSession } from '@/lib/auth/session'
 import { translateContent, type TranslationModel } from '@/lib/i18n/translation-service'
 import type { LanguageCode, TranslationQueueItem } from '@/lib/types'
 
@@ -9,10 +11,21 @@ const MAX_ATTEMPTS = 3
 /**
  * POST /api/admin/translations/process-queue
  * Processes pending translation queue items
+ * Supports both session auth (admin UI) and cron auth (scheduled tasks)
  */
 export async function POST(request: NextRequest) {
+  // Check auth: either session or cron secret
+  const session = await getSession()
+  const authHeader = request.headers.get('authorization')
+  const cronSecretValid = authHeader === `Bearer ${process.env.CRON_SECRET}`
+
+  if (!session && !cronSecretValid) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
-    const supabase = await createClient()
+    // Use admin client for cron, regular client for session
+    const supabase = cronSecretValid ? createAdminClient() : await createClient()
 
     // Get pending queue items (ordered by priority and age)
     const { data: queueItems, error: fetchError } = await supabase

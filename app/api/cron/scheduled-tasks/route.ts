@@ -291,6 +291,51 @@ export async function GET(request: NextRequest) {
     results.queueMaintenance = 'error'
   }
 
+  // Translation Queue Processing: Process pending translations (runs every time cron is called)
+  try {
+    const baseUrl = process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3000'
+
+    // Process up to 3 batches (15 translations total) per cron run
+    let totalProcessed = 0
+    let totalSuccess = 0
+    let totalFailed = 0
+
+    for (let batch = 0; batch < 3; batch++) {
+      const response = await fetch(`${baseUrl}/api/admin/translations/process-queue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        totalProcessed += data.processed || 0
+        totalSuccess += data.success || 0
+        totalFailed += data.failed || 0
+
+        // Stop if no more pending items
+        if (!data.processed || data.processed === 0) break
+      } else {
+        console.error('[Scheduler] Translation queue processing failed:', response.status)
+        break
+      }
+    }
+
+    if (totalProcessed > 0) {
+      console.log(`[Scheduler] Processed ${totalProcessed} translations (${totalSuccess} success, ${totalFailed} failed)`)
+      results.translationQueue = `processed_${totalProcessed}_success_${totalSuccess}`
+    } else {
+      results.translationQueue = 'empty'
+    }
+  } catch (error) {
+    console.error('[Scheduler] Translation queue error:', error)
+    results.translationQueue = 'error'
+  }
+
   return NextResponse.json({
     success: true,
     timestamp: now.toISOString(),
