@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Languages, Loader2, RefreshCw, Play, RotateCcw, X, CheckCircle, Clock, AlertCircle, PenLine, Square } from 'lucide-react'
+import { Languages, Loader2, RefreshCw, Play, RotateCcw, X, CheckCircle, Clock, AlertCircle, PenLine, Square, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -232,6 +232,23 @@ export default function TranslationsPage() {
     }
   }
 
+  async function cleanupOrphans() {
+    try {
+      const res = await fetch('/api/admin/translations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cleanup-orphans' }),
+      })
+      const result = await res.json()
+      if (result.count > 0) {
+        setProcessLog(prev => [...prev, `🧹 ${result.count} verwaiste Einträge gelöscht`])
+      }
+      fetchData()
+    } catch (error) {
+      console.error('Error cleaning up orphans:', error)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -256,6 +273,10 @@ export default function TranslationsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={cleanupOrphans} disabled={processing}>
+            <Trash2 className="h-4 w-4 mr-2" />
+            Bereinigen
+          </Button>
           <Button variant="outline" onClick={fetchData} disabled={processing}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Aktualisieren

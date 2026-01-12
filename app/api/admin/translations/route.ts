@@ -204,6 +204,74 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: `${data?.length || 0} items queued for retry`, count: data?.length || 0 })
     }
 
+    if (action === 'cleanup-orphans') {
+      // Find and delete queue items that reference non-existent posts/pages
+      let deletedCount = 0
+
+      // Get all queue items with generated_post references
+      const { data: postItems } = await supabase
+        .from('translation_queue')
+        .select('id, content_id')
+        .eq('content_type', 'generated_post')
+        .not('content_id', 'is', null)
+
+      if (postItems && postItems.length > 0) {
+        // Get all existing post IDs
+        const { data: existingPosts } = await supabase
+          .from('generated_posts')
+          .select('id')
+
+        const existingPostIds = new Set(existingPosts?.map(p => p.id) || [])
+
+        // Find orphaned items
+        const orphanedPostItemIds = postItems
+          .filter(item => !existingPostIds.has(item.content_id))
+          .map(item => item.id)
+
+        if (orphanedPostItemIds.length > 0) {
+          await supabase
+            .from('translation_queue')
+            .delete()
+            .in('id', orphanedPostItemIds)
+          deletedCount += orphanedPostItemIds.length
+        }
+      }
+
+      // Get all queue items with static_page references
+      const { data: pageItems } = await supabase
+        .from('translation_queue')
+        .select('id, content_id')
+        .eq('content_type', 'static_page')
+        .not('content_id', 'is', null)
+
+      if (pageItems && pageItems.length > 0) {
+        // Get all existing page IDs
+        const { data: existingPages } = await supabase
+          .from('static_pages')
+          .select('id')
+
+        const existingPageIds = new Set(existingPages?.map(p => p.id) || [])
+
+        // Find orphaned items
+        const orphanedPageItemIds = pageItems
+          .filter(item => !existingPageIds.has(item.content_id))
+          .map(item => item.id)
+
+        if (orphanedPageItemIds.length > 0) {
+          await supabase
+            .from('translation_queue')
+            .delete()
+            .in('id', orphanedPageItemIds)
+          deletedCount += orphanedPageItemIds.length
+        }
+      }
+
+      return NextResponse.json({
+        message: `${deletedCount} orphaned queue items deleted`,
+        count: deletedCount,
+      })
+    }
+
     if (action === 'toggle_manual' && translation_id) {
       // Toggle is_manually_edited flag
       const { data: current } = await supabase
