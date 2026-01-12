@@ -33,19 +33,20 @@ const TICKER_STYLES = {
 }
 
 // Inline styles for email HTML (email clients ignore <style> tags)
-// Using 40px base font to match website mobile view
+// Gmail-optimized: Using !important and 18px base (Gmail renders at ~1x)
+// Gmail scales emails based on container width - we use 600px which is standard
 const EMAIL_STYLES = {
-  p: 'font-family: Georgia, serif; font-size: 40px; line-height: 1.45; color: #374151; margin-bottom: 24px;',
-  h2: 'font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 48px; font-weight: 600; color: #1a1a1a; margin-top: 48px; margin-bottom: 20px; line-height: 1.15;',
-  h3: 'font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 44px; font-weight: 600; color: #1a1a1a; margin-top: 40px; margin-bottom: 16px; line-height: 1.2;',
-  ul: 'font-family: Georgia, serif; font-size: 40px; line-height: 1.45; color: #374151; margin-bottom: 24px; padding-left: 40px;',
-  ol: 'font-family: Georgia, serif; font-size: 40px; line-height: 1.45; color: #374151; margin-bottom: 24px; padding-left: 40px;',
-  li: 'margin-bottom: 16px;',
-  blockquote: 'border-left: 5px solid #CCFF00; padding-left: 24px; margin: 40px 0; font-style: italic; color: #4b5563; font-size: 40px;',
+  p: 'font-family: Georgia, serif !important; font-size: 18px !important; line-height: 1.6 !important; color: #374151 !important; margin: 0 0 16px 0 !important;',
+  h2: 'font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; font-size: 24px !important; font-weight: 600 !important; color: #1a1a1a !important; margin: 32px 0 12px 0 !important; line-height: 1.3 !important;',
+  h3: 'font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; font-size: 20px !important; font-weight: 600 !important; color: #1a1a1a !important; margin: 24px 0 10px 0 !important; line-height: 1.3 !important;',
+  ul: 'font-family: Georgia, serif !important; font-size: 18px !important; line-height: 1.6 !important; color: #374151 !important; margin: 0 0 16px 0 !important; padding-left: 24px !important;',
+  ol: 'font-family: Georgia, serif !important; font-size: 18px !important; line-height: 1.6 !important; color: #374151 !important; margin: 0 0 16px 0 !important; padding-left: 24px !important;',
+  li: 'margin: 0 0 8px 0 !important; font-size: 18px !important;',
+  blockquote: 'border-left: 4px solid #CCFF00 !important; padding-left: 16px !important; margin: 24px 0 !important; font-style: italic !important; color: #4b5563 !important; font-size: 18px !important;',
 }
 
 // Wrapper styles for Gmail compatibility (Gmail strips <style> tags)
-const WRAPPER_STYLE = 'font-family: Georgia, serif; font-size: 40px; line-height: 1.45; color: #374151;'
+const WRAPPER_STYLE = 'font-family: Georgia, serif !important; font-size: 18px !important; line-height: 1.6 !important; color: #374151 !important;'
 
 /**
  * Wrap content in a styled div for Gmail compatibility

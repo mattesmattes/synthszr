@@ -64,53 +64,53 @@ export function NewsletterEmail({
             }
 
             .content-area h2 {
-              font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-              font-size: 48px !important;
+              font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+              font-size: 24px !important;
               font-weight: 600;
               color: #1a1a1a;
-              margin-top: 48px;
-              margin-bottom: 20px;
-              line-height: 1.15;
+              margin-top: 32px;
+              margin-bottom: 12px;
+              line-height: 1.3;
             }
 
             .content-area h3 {
-              font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-              font-size: 44px !important;
+              font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+              font-size: 20px !important;
               font-weight: 600;
               color: #1a1a1a;
-              margin-top: 40px;
-              margin-bottom: 16px;
-              line-height: 1.2;
+              margin-top: 24px;
+              margin-bottom: 10px;
+              line-height: 1.3;
             }
 
             .content-area p {
-              font-family: 'Source Serif 4', Georgia, serif;
-              font-size: 40px !important;
-              line-height: 1.45;
+              font-family: Georgia, serif;
+              font-size: 18px !important;
+              line-height: 1.6;
               color: #374151;
-              margin-bottom: 24px;
-            }
-
-            .content-area ul, .content-area ol {
-              font-family: 'Source Serif 4', Georgia, serif;
-              font-size: 40px !important;
-              line-height: 1.45;
-              color: #374151;
-              margin-bottom: 24px;
-              padding-left: 40px;
-            }
-
-            .content-area li {
               margin-bottom: 16px;
             }
 
-            .content-area blockquote {
-              border-left: 5px solid #CCFF00;
+            .content-area ul, .content-area ol {
+              font-family: Georgia, serif;
+              font-size: 18px !important;
+              line-height: 1.6;
+              color: #374151;
+              margin-bottom: 16px;
               padding-left: 24px;
-              margin: 40px 0;
+            }
+
+            .content-area li {
+              margin-bottom: 8px;
+            }
+
+            .content-area blockquote {
+              border-left: 4px solid #CCFF00;
+              padding-left: 16px;
+              margin: 24px 0;
               font-style: italic;
               color: #4b5563;
-              font-size: 40px !important;
+              font-size: 18px !important;
             }
 
             .content-area a {
@@ -139,14 +139,14 @@ export function NewsletterEmail({
             />
           </Section>
 
-          {/* Cover Image - 1:1 square, same width as text column */}
+          {/* Cover Image - 1:1 square, same width as text column (600px - 48px padding = 552px) */}
           {coverImageUrl && (
             <Section style={coverSection}>
               <Img
                 src={coverImageUrl}
                 alt={subject}
-                width="327"
-                height="327"
+                width="552"
+                height="552"
                 style={coverImage}
               />
             </Section>
@@ -234,7 +234,7 @@ const main = {
 const container = {
   backgroundColor: '#ffffff',
   margin: '0 auto',
-  maxWidth: '375px',
+  maxWidth: '600px',
 }
 
 const headerSection = {
@@ -273,31 +273,28 @@ const dateTag = {
 }
 
 const heading = {
-  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '52px',
+  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  fontSize: '28px',
   fontWeight: '700',
   color: '#1a1a1a',
-  lineHeight: '1.1',
-  margin: '0 0 20px',
+  lineHeight: '1.2',
+  margin: '0 0 16px',
 }
 
 const excerpt = {
-  fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '36px',
-  lineHeight: '1.4',
+  fontFamily: 'Georgia, serif',
+  fontSize: '18px',
+  lineHeight: '1.5',
   color: '#6b7280',
   fontStyle: 'italic',
-  margin: '0 0 28px',
+  margin: '0 0 20px',
 }
 
 const contentStyle = {
-  fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '40px',
-  lineHeight: '1.45',
+  fontFamily: 'Georgia, serif',
+  fontSize: '18px',
+  lineHeight: '1.6',
   color: '#374151',
-  WebkitTextSizeAdjust: 'none' as const,
-  MozTextSizeAdjust: 'none' as const,
-  msTextSizeAdjust: 'none' as const,
 }
 
 const button = {
