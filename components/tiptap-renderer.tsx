@@ -461,35 +461,56 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       }
     }
 
-    // Process nodes
+    // Process nodes - handle multiple matches per node in one pass
     for (const { node, matches } of nodesToProcess) {
-      for (const match of matches) {
-        const text = node.textContent || ''
-        const before = text.slice(0, match.index + match.length)
-        const after = text.slice(match.index + match.length)
+      const text = node.textContent || ''
+      const parent = node.parentNode
+      if (!parent) continue
 
-        // Create text node for content before and including company name
-        const beforeNode = document.createTextNode(before)
+      // Sort by index ascending to build fragments in order
+      const sortedMatches = [...matches].sort((a, b) => a.index - b.index)
 
-        // Create placeholder span for stock ticker
-        const tickerSpan = document.createElement('span')
-        tickerSpan.className = 'stock-ticker-placeholder'
-        tickerSpan.dataset.company = match.company
+      // Build fragments: alternating text and company markers
+      const fragments: Array<{ type: 'text'; content: string } | { type: 'company'; company: string; name: string }> = []
+      let lastEnd = 0
 
-        // Create text node for content after
-        const afterNode = document.createTextNode(after)
+      for (const match of sortedMatches) {
+        // Add text before this match
+        if (match.index > lastEnd) {
+          fragments.push({ type: 'text', content: text.slice(lastEnd, match.index) })
+        }
+        // Add the company name and ticker marker
+        fragments.push({
+          type: 'company',
+          company: match.company,
+          name: text.slice(match.index, match.index + match.length)
+        })
+        lastEnd = match.index + match.length
+      }
 
-        // Replace original node
-        const parent = node.parentNode
-        if (parent) {
-          parent.insertBefore(beforeNode, node)
+      // Add remaining text after last match
+      if (lastEnd < text.length) {
+        fragments.push({ type: 'text', content: text.slice(lastEnd) })
+      }
+
+      // Create DOM nodes from fragments
+      for (const fragment of fragments) {
+        if (fragment.type === 'text') {
+          parent.insertBefore(document.createTextNode(fragment.content), node)
+        } else {
+          // Add company name text
+          parent.insertBefore(document.createTextNode(fragment.name), node)
+          // Add ticker placeholder span
+          const tickerSpan = document.createElement('span')
+          tickerSpan.className = 'stock-ticker-placeholder'
+          tickerSpan.dataset.company = fragment.company
           parent.insertBefore(tickerSpan, node)
-          parent.insertBefore(afterNode, node)
-          parent.removeChild(node)
-
-          portals.push({ element: tickerSpan, company: match.company })
+          portals.push({ element: tickerSpan, company: fragment.company })
         }
       }
+
+      // Remove original node only after all new nodes are inserted
+      parent.removeChild(node)
     }
 
     setTickerPortals(portals)
