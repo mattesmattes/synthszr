@@ -108,6 +108,22 @@ export default function NewsQueuePage() {
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set())
   const [loadingCandidates, setLoadingCandidates] = useState(false)
 
+  // Embedding status
+  const [embeddingStatus, setEmbeddingStatus] = useState<{
+    total: number
+    withEmbeddings: number
+    missingEmbeddings: number
+    percentComplete: number
+  } | null>(null)
+  const [embeddingLoading, setEmbeddingLoading] = useState(true)
+  const [backfillRunning, setBackfillRunning] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<{
+    success: boolean
+    message: string
+    processed?: number
+    remaining?: number
+  } | null>(null)
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
@@ -131,7 +147,47 @@ export default function NewsQueuePage() {
 
   useEffect(() => {
     fetchData()
+    fetchEmbeddingStatus()
   }, [fetchData])
+
+  async function fetchEmbeddingStatus() {
+    setEmbeddingLoading(true)
+    try {
+      const response = await fetch('/api/admin/backfill-embeddings')
+      if (response.ok) {
+        const data = await response.json()
+        setEmbeddingStatus(data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch embedding status:', error)
+    } finally {
+      setEmbeddingLoading(false)
+    }
+  }
+
+  async function runBackfill() {
+    setBackfillRunning(true)
+    setBackfillResult(null)
+    try {
+      const response = await fetch('/api/admin/backfill-embeddings?batchSize=50', { method: 'POST' })
+      const data = await response.json()
+      setBackfillResult({
+        success: data.success,
+        message: data.message,
+        processed: data.processed,
+        remaining: data.remaining,
+      })
+      // Refresh status after backfill
+      fetchEmbeddingStatus()
+    } catch (error) {
+      setBackfillResult({
+        success: false,
+        message: 'Netzwerkfehler beim Backfill',
+      })
+    } finally {
+      setBackfillRunning(false)
+    }
+  }
 
   const fetchBalancedSelection = async () => {
     try {
@@ -344,6 +400,53 @@ export default function NewsQueuePage() {
         <p className="text-xs text-muted-foreground">
           Quellen-diversifizierte News-Auswahl (max 30% pro Quelle) • Wird automatisch durch Synthese-Pipeline befüllt
         </p>
+        {/* Action Buttons - horizontal row */}
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs"
+            onClick={() => {
+              setShowImportDialog(true)
+              fetchCandidates(importDate)
+            }}
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            Manuell nachimportieren
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs"
+            onClick={fetchBalancedSelection}
+          >
+            <Play className="h-3 w-3 mr-1" />
+            Balancierte Auswahl anzeigen
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs"
+            onClick={handleExpire}
+            disabled={actionLoading === 'expire'}
+          >
+            {actionLoading === 'expire' ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <Trash2 className="h-3 w-3 mr-1" />
+            )}
+            Abgelaufene Items entfernen
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs"
+            onClick={fetchData}
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Aktualisieren
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -447,58 +550,6 @@ export default function NewsQueuePage() {
             </CardContent>
           </Card>
 
-          {/* Actions */}
-          <Card className="mt-4">
-            <CardHeader className="p-3 pb-2">
-              <CardTitle className="text-sm">Aktionen</CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 pt-0 space-y-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full justify-start text-xs"
-                onClick={() => {
-                  setShowImportDialog(true)
-                  fetchCandidates(importDate)
-                }}
-              >
-                <Plus className="h-3 w-3 mr-2" />
-                Manuell nachimportieren
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full justify-start text-xs"
-                onClick={fetchBalancedSelection}
-              >
-                <Play className="h-3 w-3 mr-2" />
-                Balancierte Auswahl anzeigen
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full justify-start text-xs"
-                onClick={handleExpire}
-                disabled={actionLoading === 'expire'}
-              >
-                {actionLoading === 'expire' ? (
-                  <Loader2 className="h-3 w-3 mr-2 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3 w-3 mr-2" />
-                )}
-                Abgelaufene Items entfernen
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full justify-start text-xs"
-                onClick={fetchData}
-              >
-                <RefreshCw className="h-3 w-3 mr-2" />
-                Aktualisieren
-              </Button>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Right: Queue Items */}
@@ -619,6 +670,92 @@ export default function NewsQueuePage() {
           )}
         </div>
       </div>
+
+      {/* Synthese-Embeddings Card */}
+      <Card className="mt-6">
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Synthese-Embeddings
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Embeddings werden für die Synthese-Pipeline benötigt, um ähnliche historische Artikel zu finden
+          </p>
+        </CardHeader>
+        <CardContent className="p-4 pt-2">
+          {embeddingLoading ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-xs text-muted-foreground">Lade Status...</span>
+            </div>
+          ) : embeddingStatus ? (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Embeddings vorhanden</span>
+                  <span className="font-medium">{embeddingStatus.withEmbeddings} / {embeddingStatus.total}</span>
+                </div>
+                <Progress value={embeddingStatus.percentComplete} className="h-2" />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>{embeddingStatus.percentComplete}% vollständig</span>
+                  <span>{embeddingStatus.missingEmbeddings} fehlend</span>
+                </div>
+              </div>
+
+              {embeddingStatus.missingEmbeddings > 0 && (
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <div>
+                    <p className="text-xs font-medium">Embeddings generieren</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Fehlende Embeddings für historische Artikel erzeugen
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs"
+                    onClick={runBackfill}
+                    disabled={backfillRunning}
+                  >
+                    {backfillRunning ? (
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                    )}
+                    Backfill starten
+                  </Button>
+                </div>
+              )}
+
+              {backfillResult && (
+                <div className={`flex items-center gap-2 text-xs ${backfillResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                  {backfillResult.success ? (
+                    <CheckCircle2 className="h-3 w-3" />
+                  ) : (
+                    <XCircle className="h-3 w-3" />
+                  )}
+                  {backfillResult.message}
+                </div>
+              )}
+
+              {embeddingStatus.missingEmbeddings === 0 && (
+                <div className="flex items-center gap-2 text-xs text-green-600">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Alle Items haben Embeddings
+                </div>
+              )}
+
+              {embeddingStatus.missingEmbeddings > 0 && (
+                <p className="text-[10px] text-muted-foreground">
+                  Hinweis: Verarbeitet 50 Items pro Durchlauf. Bei vielen fehlenden Embeddings mehrmals ausführen.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Status nicht verfügbar</p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* View Item Dialog */}
       <Dialog open={!!viewingItem} onOpenChange={() => setViewingItem(null)}>
