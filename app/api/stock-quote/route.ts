@@ -51,6 +51,12 @@ const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string }> = {
   'ebay': { symbol: 'EBAY', exchange: 'US' },
   'etsy': { symbol: 'ETSY', exchange: 'US' },
 
+  // Consulting & IT Services
+  'accenture': { symbol: 'ACN', exchange: 'US' },
+
+  // DevOps & Developer Tools
+  'gitlab': { symbol: 'GTLB', exchange: 'US' },
+
   // Enterprise & SaaS
   'oracle': { symbol: 'ORCL', exchange: 'US' },
   'sap': { symbol: 'SAP', exchange: 'US' },
@@ -86,8 +92,10 @@ const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string }> = {
   'mastercard': { symbol: 'MA', exchange: 'US' },
   'coinbase': { symbol: 'COIN', exchange: 'US' },
 
-  // German
+  // German & European Industrial
   'siemens': { symbol: 'SIE', exchange: 'XETRA' },
+  'schneider electric': { symbol: 'SU', exchange: 'PA' },
+  'schneider': { symbol: 'SU', exchange: 'PA' },
   'allianz': { symbol: 'ALV', exchange: 'XETRA' },
   'deutsche bank': { symbol: 'DBK', exchange: 'XETRA' },
   'bayer': { symbol: 'BAYN', exchange: 'XETRA' },
