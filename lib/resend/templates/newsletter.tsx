@@ -57,50 +57,52 @@ export function NewsletterEmail({
 
             .content-area h2 {
               font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-              font-size: 22px;
+              font-size: 28px !important;
               font-weight: 600;
               color: #1a1a1a;
-              margin-top: 32px;
-              margin-bottom: 12px;
-              line-height: 1.3;
+              margin-top: 36px;
+              margin-bottom: 14px;
+              line-height: 1.2;
             }
 
             .content-area h3 {
               font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-              font-size: 19px;
+              font-size: 24px !important;
               font-weight: 600;
               color: #1a1a1a;
-              margin-top: 24px;
-              margin-bottom: 8px;
+              margin-top: 28px;
+              margin-bottom: 10px;
+              line-height: 1.3;
             }
 
             .content-area p {
               font-family: 'Source Serif 4', Georgia, serif;
-              font-size: 18px;
-              line-height: 1.7;
+              font-size: 22px !important;
+              line-height: 1.6;
               color: #374151;
-              margin-bottom: 16px;
+              margin-bottom: 18px;
             }
 
             .content-area ul, .content-area ol {
               font-family: 'Source Serif 4', Georgia, serif;
-              font-size: 18px;
-              line-height: 1.7;
+              font-size: 22px !important;
+              line-height: 1.6;
               color: #374151;
-              margin-bottom: 16px;
-              padding-left: 24px;
+              margin-bottom: 18px;
+              padding-left: 28px;
             }
 
             .content-area li {
-              margin-bottom: 8px;
+              margin-bottom: 10px;
             }
 
             .content-area blockquote {
-              border-left: 3px solid #CCFF00;
-              padding-left: 16px;
-              margin: 24px 0;
+              border-left: 4px solid #CCFF00;
+              padding-left: 18px;
+              margin: 28px 0;
               font-style: italic;
               color: #4b5563;
+              font-size: 22px !important;
             }
 
             .content-area a {
