@@ -74,6 +74,7 @@ const KNOWN_COMPANIES: Record<string, string> = {
   'Allianz': 'allianz',
   'Bayer': 'bayer',
   'BASF': 'basf',
+  'Accenture': 'accenture',
   'Adidas': 'adidas',
   'Zalando': 'zalando',
   'Uber': 'uber',
