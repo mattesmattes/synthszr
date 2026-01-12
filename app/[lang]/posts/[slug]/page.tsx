@@ -260,23 +260,28 @@ export default async function PostPage({ params }: PageProps) {
         <main className="mx-auto max-w-3xl px-6 py-12 md:py-20">
         <article>
           {/* Cover Image with centered Logo overlay - links to home */}
+          {/* Fixed widths for moiré-free dithering: 352px mobile (1:4), 704px desktop (1:2) */}
           {post.cover_image_url && (
             <Link href={`/${locale}`} className="block mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
               <div
-                className="relative aspect-[4/3] md:aspect-[21/9] flex items-center justify-center"
-                style={{ backgroundColor: '#CCFF00' }}
+                className="relative flex items-center justify-center mx-auto w-[352px] md:w-[704px]"
+                style={{
+                  backgroundColor: '#CCFF00',
+                  aspectRatio: '11/6'
+                }}
               >
-                {/* Dithered PNG with transparent pixels - yellow background shows through */}
+                {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
                 <img
                   src={post.cover_image_url}
                   alt=""
-                  className="absolute inset-0 w-full h-full object-cover"
+                  className="absolute inset-0 w-full h-full"
+                  style={{ imageRendering: 'pixelated' }}
                 />
                 {/* Logo centered on top */}
                 <img
                   src="/synthszr-logo.svg"
                   alt="Synthszr"
-                  className="relative z-10 h-24 md:h-32 w-auto"
+                  className="relative z-10 h-16 md:h-24 w-auto"
                 />
               </div>
             </Link>

@@ -39,21 +39,26 @@ export function FeaturedArticle({
     <article className="mb-16 border-b border-border pb-16">
       {coverImageUrl && (
         <a href={postUrl} className="block mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
+          {/* Fixed widths for moiré-free dithering: 352px mobile (1:4), 704px desktop (1:2) */}
           <div
-            className="relative aspect-[4/3] md:aspect-[21/9] flex items-center justify-center"
-            style={{ backgroundColor: '#CCFF00' }}
+            className="relative flex items-center justify-center mx-auto w-[352px] md:w-[704px]"
+            style={{
+              backgroundColor: '#CCFF00',
+              aspectRatio: '11/6' // Matches 1408:768 image ratio
+            }}
           >
-            {/* Dithered PNG with transparent pixels - yellow background shows through */}
+            {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
             <img
               src={coverImageUrl}
               alt=""
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full"
+              style={{ imageRendering: 'pixelated' }}
             />
             {/* Logo centered on top */}
             <img
               src="/synthszr-logo.svg"
               alt="Synthszr"
-              className="relative z-10 h-24 md:h-32 w-auto"
+              className="relative z-10 h-16 md:h-24 w-auto"
             />
           </div>
         </a>
