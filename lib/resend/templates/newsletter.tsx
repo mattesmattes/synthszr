@@ -251,35 +251,35 @@ const dateTag = {
   backgroundColor: '#CCFF00',
   color: '#000000',
   fontFamily: "'SF Mono', Monaco, monospace",
-  fontSize: '11px',
+  fontSize: '16px',
   fontWeight: '500',
   letterSpacing: '0.5px',
-  padding: '6px 10px',
-  marginBottom: '16px',
+  padding: '8px 14px',
+  marginBottom: '20px',
 }
 
 const heading = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '32px',
+  fontSize: '42px',
   fontWeight: '700',
   color: '#1a1a1a',
-  lineHeight: '1.2',
-  margin: '0 0 16px',
+  lineHeight: '1.15',
+  margin: '0 0 20px',
 }
 
 const excerpt = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '20px',
-  lineHeight: '1.6',
+  fontSize: '26px',
+  lineHeight: '1.5',
   color: '#6b7280',
   fontStyle: 'italic',
-  margin: '0 0 24px',
+  margin: '0 0 28px',
 }
 
 const contentStyle = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '20px',
-  lineHeight: '1.7',
+  fontSize: '28px',
+  lineHeight: '1.6',
   color: '#374151',
 }
 
@@ -288,14 +288,14 @@ const button = {
   borderRadius: '0',
   color: '#ffffff',
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '14px',
+  fontSize: '20px',
   fontWeight: '600',
   textDecoration: 'none',
   textAlign: 'center' as const,
   display: 'block',
   width: '100%',
-  padding: '16px 0',
-  marginTop: '24px',
+  padding: '20px 0',
+  marginTop: '28px',
 }
 
 const hr = {
@@ -317,15 +317,15 @@ const footerLogo = {
 
 const footer = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '12px',
+  fontSize: '18px',
   color: '#9ca3af',
   lineHeight: '1.5',
-  margin: '0 0 8px',
+  margin: '0 0 12px',
 }
 
 const footerLinks = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '12px',
+  fontSize: '18px',
   color: '#9ca3af',
   margin: '0',
 }
