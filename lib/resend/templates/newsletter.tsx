@@ -20,7 +20,6 @@ interface NewsletterEmailProps {
   content: string
   postUrl: string
   unsubscribeUrl: string
-  preferencesUrl?: string
   footerText?: string
   coverImageUrl?: string | null
   postDate?: string
@@ -33,7 +32,6 @@ export function NewsletterEmail({
   content,
   postUrl,
   unsubscribeUrl,
-  preferencesUrl,
   footerText = 'Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.',
   coverImageUrl,
   postDate,
@@ -51,21 +49,13 @@ export function NewsletterEmail({
   return (
     <Html>
       <Head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta name="x-apple-disable-message-reformatting" />
         <style>
           {`
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap');
 
-            * {
-              -webkit-text-size-adjust: 100% !important;
-              -moz-text-size-adjust: 100% !important;
-              -ms-text-size-adjust: 100% !important;
-            }
-
             .content-area h2 {
-              font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-              font-size: 24px !important;
+              font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+              font-size: 18px;
               font-weight: 600;
               color: #1a1a1a;
               margin-top: 32px;
@@ -74,27 +64,26 @@ export function NewsletterEmail({
             }
 
             .content-area h3 {
-              font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-              font-size: 20px !important;
+              font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+              font-size: 16px;
               font-weight: 600;
               color: #1a1a1a;
               margin-top: 24px;
-              margin-bottom: 10px;
-              line-height: 1.3;
+              margin-bottom: 8px;
             }
 
             .content-area p {
-              font-family: Georgia, serif;
-              font-size: 18px !important;
-              line-height: 1.6;
+              font-family: 'Source Serif 4', Georgia, serif;
+              font-size: 16px;
+              line-height: 1.7;
               color: #374151;
               margin-bottom: 16px;
             }
 
             .content-area ul, .content-area ol {
-              font-family: Georgia, serif;
-              font-size: 18px !important;
-              line-height: 1.6;
+              font-family: 'Source Serif 4', Georgia, serif;
+              font-size: 16px;
+              line-height: 1.7;
               color: #374151;
               margin-bottom: 16px;
               padding-left: 24px;
@@ -105,12 +94,11 @@ export function NewsletterEmail({
             }
 
             .content-area blockquote {
-              border-left: 4px solid #CCFF00;
+              border-left: 3px solid #CCFF00;
               padding-left: 16px;
               margin: 24px 0;
               font-style: italic;
               color: #4b5563;
-              font-size: 18px !important;
             }
 
             .content-area a {
@@ -139,16 +127,17 @@ export function NewsletterEmail({
             />
           </Section>
 
-          {/* Cover Image - 1:1 square, same width as text column (600px - 48px padding = 552px) */}
+          {/* Cover Image with centered logo overlay */}
           {coverImageUrl && (
             <Section style={coverSection}>
-              <Img
-                src={coverImageUrl}
-                alt={subject}
-                width="552"
-                height="552"
-                style={coverImage}
-              />
+              <div style={coverImageContainer}>
+                <Img
+                  src={coverImageUrl}
+                  alt={subject}
+                  width="600"
+                  style={coverImage}
+                />
+              </div>
             </Section>
           )}
 
@@ -198,23 +187,9 @@ export function NewsletterEmail({
             <Text style={footer}>
               {footerText}
             </Text>
-            <Text style={footerLinks}>
-              <Link href={unsubscribeUrl} style={footerLink}>
-                Abmelden
-              </Link>
-              {preferencesUrl && (
-                <>
-                  <span style={footerDivider}>•</span>
-                  <Link href={preferencesUrl} style={footerLink}>
-                    Sprache ändern
-                  </Link>
-                </>
-              )}
-              <span style={footerDivider}>•</span>
-              <Link href={`${baseUrl}/impressum`} style={footerLink}>
-                Impressum
-              </Link>
-            </Text>
+            <Link href={unsubscribeUrl} style={unsubscribeLink}>
+              Newsletter abbestellen
+            </Link>
           </Section>
         </Container>
       </Body>
@@ -226,9 +201,6 @@ export function NewsletterEmail({
 const main = {
   backgroundColor: '#f8f9fa',
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-  WebkitTextSizeAdjust: '100%' as const,
-  MozTextSizeAdjust: '100%' as const,
-  msTextSizeAdjust: '100%' as const,
 }
 
 const container = {
@@ -238,7 +210,7 @@ const container = {
 }
 
 const headerSection = {
-  padding: '24px 24px 20px',
+  padding: '32px 32px 24px',
   textAlign: 'center' as const,
 }
 
@@ -247,17 +219,22 @@ const logo = {
 }
 
 const coverSection = {
-  padding: '0 24px', // Same horizontal padding as content section
+  padding: '0',
+}
+
+const coverImageContainer = {
+  backgroundColor: '#CCFF00',
+  width: '100%',
 }
 
 const coverImage = {
-  display: 'block',
   width: '100%',
   height: 'auto',
+  display: 'block',
 }
 
 const contentSection = {
-  padding: '24px',
+  padding: '32px',
 }
 
 const dateTag = {
@@ -265,15 +242,15 @@ const dateTag = {
   backgroundColor: '#CCFF00',
   color: '#000000',
   fontFamily: "'SF Mono', Monaco, monospace",
-  fontSize: '13px',
+  fontSize: '11px',
   fontWeight: '500',
   letterSpacing: '0.5px',
-  padding: '6px 12px',
+  padding: '6px 10px',
   marginBottom: '16px',
 }
 
 const heading = {
-  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
   fontSize: '28px',
   fontWeight: '700',
   color: '#1a1a1a',
@@ -282,18 +259,18 @@ const heading = {
 }
 
 const excerpt = {
-  fontFamily: 'Georgia, serif',
+  fontFamily: "'Source Serif 4', Georgia, serif",
   fontSize: '18px',
-  lineHeight: '1.5',
+  lineHeight: '1.6',
   color: '#6b7280',
   fontStyle: 'italic',
-  margin: '0 0 20px',
+  margin: '0 0 24px',
 }
 
 const contentStyle = {
-  fontFamily: 'Georgia, serif',
-  fontSize: '18px',
-  lineHeight: '1.6',
+  fontFamily: "'Source Serif 4', Georgia, serif",
+  fontSize: '16px',
+  lineHeight: '1.7',
   color: '#374151',
 }
 
@@ -302,7 +279,7 @@ const button = {
   borderRadius: '0',
   color: '#ffffff',
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '16px',
+  fontSize: '14px',
   fontWeight: '600',
   textDecoration: 'none',
   textAlign: 'center' as const,
@@ -331,27 +308,17 @@ const footerLogo = {
 
 const footer = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '14px',
+  fontSize: '12px',
   color: '#9ca3af',
   lineHeight: '1.5',
   margin: '0 0 8px',
 }
 
-const footerLinks = {
+const unsubscribeLink = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '14px',
-  color: '#9ca3af',
-  margin: '0',
-}
-
-const footerLink = {
+  fontSize: '12px',
   color: '#9ca3af',
   textDecoration: 'underline',
-}
-
-const footerDivider = {
-  margin: '0 8px',
-  color: '#d1d5db',
 }
 
 export default NewsletterEmail
