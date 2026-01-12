@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth/session'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { NewsletterEmail } from '@/lib/resend/templates/newsletter'
 import { render } from '@react-email/components'
-import { generateEmailContent } from '@/lib/email/tiptap-to-html'
+import { generateEmailContentWithVotes } from '@/lib/email/tiptap-to-html'
 
 // Check admin auth (via session or cron secret header for Vercel cron jobs)
 async function isAuthenticated(request?: NextRequest): Promise<boolean> {
@@ -98,8 +98,11 @@ export async function POST(request: NextRequest) {
 
     // If testEmail, send only to that address
     if (testEmail) {
-      // Generate email content (simple version for testing)
-      const emailContent = generateEmailContent(post)
+      // Generate email content with Synthszr Vote badges and stock tickers
+      const emailContent = await generateEmailContentWithVotes(
+        { content: post.content, excerpt: post.excerpt, slug: post.slug },
+        BASE_URL
+      )
 
       const html = await render(
         NewsletterEmail({
@@ -141,8 +144,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Send emails sequentially with delay to avoid rate limits
-    // Generate email content (simple version for testing)
-    const emailContent = generateEmailContent(post)
+    // Generate email content with Synthszr Vote badges and stock tickers
+    const emailContent = await generateEmailContentWithVotes(
+      { content: post.content, excerpt: post.excerpt, slug: post.slug },
+      BASE_URL
+    )
     let successCount = 0
     let failCount = 0
 

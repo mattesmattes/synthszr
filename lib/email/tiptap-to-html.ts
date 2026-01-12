@@ -25,11 +25,11 @@ const RATING_STYLES = {
   SELL: 'background-color: #FF6600; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
 }
 
-// Stock ticker badge styles
+// Stock ticker badge styles (no white-space: nowrap to allow wrapping)
 const TICKER_STYLES = {
-  up: 'background-color: #39FF14; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: 600; font-size: 11px; font-family: monospace; white-space: nowrap;',
-  down: 'background-color: #FF6600; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: 600; font-size: 11px; font-family: monospace; white-space: nowrap;',
-  neutral: 'background-color: #9CA3AF; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: 600; font-size: 11px; font-family: monospace; white-space: nowrap;',
+  up: 'background-color: #39FF14; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: 600; font-size: 11px; font-family: monospace;',
+  down: 'background-color: #FF6600; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: 600; font-size: 11px; font-family: monospace;',
+  neutral: 'background-color: #9CA3AF; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: 600; font-size: 11px; font-family: monospace;',
 }
 
 interface StockQuoteData {
@@ -191,7 +191,8 @@ function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug
     return `${prefix}<a href="${href}" style="color: inherit; text-decoration: none;">${r.displayName}</a> <a href="${href}" style="${style}">${label}</a>`
   }).join('')
 
-  return `<span style="margin-left: 8px; white-space: nowrap;">${badges}</span>`
+  // Vote badges on new line to avoid forcing wide content
+  return `<br/><span style="display: inline-block; margin-top: 8px;">${badges}</span>`
 }
 
 /**
