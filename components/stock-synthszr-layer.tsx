@@ -212,6 +212,20 @@ export function StockSynthszrLayer({
 function SynthesisContent({ data }: { data: StockSynthszrResult }) {
   return (
     <div className="flex flex-col gap-6">
+      {/* Executive Summary */}
+      {data.executive_summary && (
+        <section>
+          <header className="mb-3">
+            <h3 className="text-base font-semibold">Executive Summary</h3>
+          </header>
+          <div className="rounded-lg border border-border bg-background p-4 shadow-sm">
+            <p className="text-sm leading-relaxed whitespace-pre-line">
+              {parseInlineCitations(data.executive_summary)}
+            </p>
+          </div>
+        </section>
+      )}
+
       {/* Key Takeaways */}
       <section>
         <header className="mb-3">

@@ -8,6 +8,7 @@ export interface StockActionIdea {
 }
 
 export interface StockSynthszrResult {
+  executive_summary: string
   key_takeaways: string[]
   action_ideas: StockActionIdea[]
   contrarian_insights: string[]

@@ -6,6 +6,10 @@ const STOCK_SYNTHSZR_SCHEMA = {
   schema: {
     type: 'object',
     properties: {
+      executive_summary: {
+        type: 'string',
+        description: 'Ausführliche Executive Summary (300-500 Wörter) mit Geschäftsmodell, Marktposition, aktuellen Entwicklungen, Finanzkennzahlen und Ausblick.',
+      },
       key_takeaways: {
         type: 'array',
         minItems: 5,
@@ -48,7 +52,7 @@ const STOCK_SYNTHSZR_SCHEMA = {
         additionalProperties: false,
       },
     },
-    required: ['key_takeaways', 'action_ideas', 'contrarian_insights', 'sources', 'final_recommendation'],
+    required: ['executive_summary', 'key_takeaways', 'action_ideas', 'contrarian_insights', 'sources', 'final_recommendation'],
     additionalProperties: false,
   },
   strict: true,
@@ -108,14 +112,23 @@ export async function fetchStockSynthszr({
           {
             role: 'user',
             content:
-              `Erzeuge eine Stock-Synthszr Analyse zu "${trimmedCompany}" in ${currency}:\n` +
-              '- 5 Key Takeaways\n' +
-              '- 3 Action-Ideen (BUY/HOLD/SELL; Risiken; Zeithorizont in Monaten)\n' +
-              '- 2 Contrarian Insights\n' +
-              '- Abschließende Gesamtempfehlung (BUY/HOLD/SELL) mit kurzer Begründung\n' +
+              `Erzeuge eine umfassende Stock-Synthszr Analyse zu "${trimmedCompany}" in ${currency}:\n\n` +
+              '1. **Executive Summary** (300-500 Wörter): Ausführliche Zusammenfassung mit:\n' +
+              '   - Geschäftsmodell und Kernkompetenzen\n' +
+              '   - Aktuelle Marktposition und Wettbewerbsvorteile\n' +
+              '   - Wichtigste Entwicklungen der letzten Monate (Earnings, News, Guidance)\n' +
+              '   - Relevante Finanzkennzahlen (KGV, Umsatzwachstum, Margen)\n' +
+              '   - Kurz- und mittelfristiger Ausblick\n\n' +
+              '2. **5 Key Takeaways**: Die wichtigsten Punkte für Investoren\n\n' +
+              '3. **3 Action-Ideen**: Konkrete Handlungsoptionen (BUY/HOLD/SELL) mit:\n' +
+              '   - Detaillierter Begründung (These)\n' +
+              '   - Zeithorizont in Monaten\n' +
+              '   - Spezifische Risikofaktoren\n\n' +
+              '4. **2 Contrarian Insights**: Perspektiven die vom Marktkonsens abweichen\n\n' +
+              '5. **Gesamtempfehlung**: BUY/HOLD/SELL mit fundierter Begründung\n\n' +
               `${priceSnippet}\n` +
               `Nutze verlässliche Quellen der letzten ${recencyDays} Tage und füge 5–8 Links in 'sources' an. ` +
-              'Arbeite datenbasiert (Bewertungen/Guidance/Newsflow), keine Halluzinationen. Antworte auf Deutsch.',
+              'Arbeite streng datenbasiert (Bewertungen, Guidance, Newsflow, Analystenmeinungen), keine Spekulationen. Antworte auf Deutsch.',
           },
         ],
         text: {
