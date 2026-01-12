@@ -161,8 +161,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Company name required' }, { status: 400 })
   }
 
-  // Find ticker for company
-  const tickerInfo = COMPANY_TICKERS[company]
+  // Normalize company name: convert hyphens to spaces for lookup
+  // (KNOWN_COMPANIES uses hyphens like 'schneider-electric', COMPANY_TICKERS uses spaces)
+  const normalizedCompany = company.replace(/-/g, ' ')
+
+  // Find ticker for company (try both original and normalized)
+  const tickerInfo = COMPANY_TICKERS[company] || COMPANY_TICKERS[normalizedCompany]
   if (!tickerInfo) {
     return NextResponse.json({ error: 'Company not found', company }, { status: 404 })
   }
