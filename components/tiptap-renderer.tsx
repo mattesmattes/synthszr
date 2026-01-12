@@ -759,6 +759,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
 
           const placeholder = document.createElement('span')
           placeholder.className = 'synthszr-rating-placeholder inline-block'
+          placeholder.style.fontSize = '13px'
           placeholder.dataset.company = company.apiName
           placeholder.dataset.displayName = company.displayName
           placeholder.dataset.rating = rating
@@ -780,6 +781,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
 
           const placeholder = document.createElement('span')
           placeholder.className = 'premarket-rating-placeholder inline-block'
+          placeholder.style.fontSize = '13px'
           placeholder.dataset.company = company.apiName
           placeholder.dataset.displayName = company.displayName
           placeholder.dataset.rating = ratingData.rating
