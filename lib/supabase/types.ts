@@ -100,6 +100,7 @@ export interface NewsQueueSourceDistribution {
   source_display_name: string | null
   item_count: number
   pending_count: number
+  selected_count: number
   used_count: number
   percentage_of_total: number
 }

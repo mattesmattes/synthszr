@@ -45,6 +45,7 @@ interface SourceDistribution {
   source_display_name: string | null
   item_count: number
   pending_count: number
+  selected_count: number
   used_count: number
   percentage_of_total: number
 }
@@ -429,7 +430,8 @@ export default function NewsQueuePage() {
                       />
                       <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
                         <span>{source.pending_count} pending</span>
-                        <span>{source.used_count} used</span>
+                        <span className="text-blue-500">{source.selected_count} selected</span>
+                        <span className="text-green-500">{source.used_count} used</span>
                       </div>
                     </div>
                   ))}
