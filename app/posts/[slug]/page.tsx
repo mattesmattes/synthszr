@@ -129,17 +129,19 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
             <Link href="/" className="block mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
               <div
                 className="relative aspect-[4/3] md:aspect-[21/9] flex items-center justify-center"
-                style={{
-                  backgroundColor: '#CCFF00',
-                  backgroundImage: `url(${post.cover_image_url})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                }}
+                style={{ backgroundColor: '#CCFF00' }}
               >
+                {/* Dithered PNG with transparent pixels - yellow background shows through */}
+                <img
+                  src={post.cover_image_url}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+                {/* Logo centered on top */}
                 <img
                   src="/synthszr-logo.svg"
                   alt="Synthszr"
-                  className="h-24 md:h-32 w-auto"
+                  className="relative z-10 h-24 md:h-32 w-auto"
                 />
               </div>
             </Link>
