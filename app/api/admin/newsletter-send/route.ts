@@ -77,10 +77,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Extract cover image URL and create 1:1 cropped version for newsletter
-    // Size 400 for narrow email layout (94% scaling on iPhone = almost no shrinking)
+    // Size 327px = exact display size (375px container - 48px padding) to avoid dithering artifacts
     const originalCoverUrl = (post.post_images as { image_url?: string } | null)?.image_url || null
     const coverImageUrl = originalCoverUrl
-      ? `${BASE_URL}/api/newsletter/cover-image?url=${encodeURIComponent(originalCoverUrl)}&size=400`
+      ? `${BASE_URL}/api/newsletter/cover-image?url=${encodeURIComponent(originalCoverUrl)}&size=327`
       : null
 
     // Fetch email template settings

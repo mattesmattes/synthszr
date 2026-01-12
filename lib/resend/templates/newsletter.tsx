@@ -133,14 +133,14 @@ export function NewsletterEmail({
             />
           </Section>
 
-          {/* Cover Image - 1:1 square (server-side processed with yellow BG) */}
+          {/* Cover Image - 1:1 square, same width as text column */}
           {coverImageUrl && (
             <Section style={coverSection}>
               <Img
                 src={coverImageUrl}
                 alt={subject}
-                width="400"
-                height="400"
+                width="327"
+                height="327"
                 style={coverImage}
               />
             </Section>
@@ -225,7 +225,7 @@ const main = {
 const container = {
   backgroundColor: '#ffffff',
   margin: '0 auto',
-  maxWidth: '400px',
+  maxWidth: '375px',
 }
 
 const headerSection = {
@@ -238,12 +238,13 @@ const logo = {
 }
 
 const coverSection = {
-  padding: '0',
+  padding: '0 24px', // Same horizontal padding as content section
 }
 
 const coverImage = {
   display: 'block',
-  margin: '0 auto',
+  width: '100%',
+  height: 'auto',
 }
 
 const contentSection = {
