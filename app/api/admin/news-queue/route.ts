@@ -233,6 +233,31 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ reset })
       }
 
+      case 'reset-item': {
+        // Reset a single item back to pending (when user removes it from a draft post)
+        const { itemId } = body as { itemId: string }
+
+        if (!itemId) {
+          return NextResponse.json({ error: 'itemId required' }, { status: 400 })
+        }
+
+        const supabase = await createClient()
+        const { error } = await supabase
+          .from('news_queue')
+          .update({
+            status: 'pending',
+            selected_at: null
+          })
+          .eq('id', itemId)
+          .in('status', ['selected', 'pending']) // Only reset if selected or pending
+
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 })
+        }
+
+        return NextResponse.json({ success: true })
+      }
+
       default:
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     }

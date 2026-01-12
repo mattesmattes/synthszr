@@ -1,5 +1,7 @@
 -- Fix: Balanced selection algorithm with hard source limit
 -- The 30% rule is an absolute cap: no source can have more than 30% of max_items
+-- Previously, items 1-4 were selected without any source limit check, which allowed
+-- a single source to dominate the selection (e.g., 5 Benedict Evans = 40%)
 
 CREATE OR REPLACE FUNCTION get_balanced_queue_selection(
   max_items INTEGER DEFAULT 10,

@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        console.log('[Newsletter Fetch] Starting...', targetDate ? `for date ${targetDate}` : 'last 36 hours')
+        console.log('[Newsletter Fetch] Starting...', targetDate ? `for date ${targetDate}` : 'since last crawl')
         const supabase = await createClient()
 
         // Get Gmail tokens
@@ -209,21 +209,33 @@ export async function POST(request: NextRequest) {
 
         send({ type: 'start', phase: 'fetching', total: sources.length })
 
-        // Fetch emails - use targetDate if provided, otherwise last 36 hours
+        // Fetch emails - use targetDate if provided, otherwise since last crawl
         const gmailClient = new GmailClient(tokenData.refresh_token)
         let afterDate: Date
         let beforeDate: Date | undefined
 
         if (targetDate) {
-          // For specific date: search for emails from that day
+          // For specific date: search for emails from that day (historical re-import)
           // Use UTC dates to avoid timezone issues with Gmail's date query
-          // Gmail's after/before uses the date in the user's Gmail timezone,
-          // but we query using the date string directly to be consistent
           afterDate = new Date(targetDate + 'T00:00:00Z')  // Force UTC
           beforeDate = new Date(targetDate + 'T23:59:59Z')  // Force UTC
-          console.log(`[Newsletter Fetch] Searching for date range: ${targetDate} (UTC: ${afterDate.toISOString()} to ${beforeDate.toISOString()})`)
+          console.log(`[Newsletter Fetch] Historical import for date range: ${targetDate} (UTC: ${afterDate.toISOString()} to ${beforeDate.toISOString()})`)
         } else {
-          afterDate = new Date(Date.now() - DEFAULT_NEWSLETTER_FETCH_MS)
+          // No targetDate: fetch all emails since last successful crawl
+          // Fall back to DEFAULT_NEWSLETTER_FETCH_MS (36h) if no last crawl timestamp
+          const { data: lastFetchSetting } = await supabase
+            .from('settings')
+            .select('value')
+            .eq('key', 'last_newsletter_fetch')
+            .single()
+
+          if (lastFetchSetting?.value?.timestamp) {
+            afterDate = new Date(lastFetchSetting.value.timestamp)
+            console.log(`[Newsletter Fetch] Fetching since last crawl: ${afterDate.toISOString()}`)
+          } else {
+            afterDate = new Date(Date.now() - DEFAULT_NEWSLETTER_FETCH_MS)
+            console.log(`[Newsletter Fetch] No last crawl found, using fallback: last ${DEFAULT_NEWSLETTER_FETCH_MS / (1000 * 60 * 60)} hours`)
+          }
         }
 
         const senderEmails = sources.map(s => s.email)

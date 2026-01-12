@@ -20,6 +20,7 @@ interface NewsletterEmailProps {
   content: string
   postUrl: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   footerText?: string
   coverImageUrl?: string | null
   postDate?: string
@@ -32,6 +33,7 @@ export function NewsletterEmail({
   content,
   postUrl,
   unsubscribeUrl,
+  preferencesUrl,
   footerText = 'Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.',
   coverImageUrl,
   postDate,
@@ -187,9 +189,23 @@ export function NewsletterEmail({
             <Text style={footer}>
               {footerText}
             </Text>
-            <Link href={unsubscribeUrl} style={unsubscribeLink}>
-              Newsletter abbestellen
-            </Link>
+            <Text style={footerLinks}>
+              <Link href={unsubscribeUrl} style={footerLink}>
+                Abmelden
+              </Link>
+              {preferencesUrl && (
+                <>
+                  <span style={footerDivider}>•</span>
+                  <Link href={preferencesUrl} style={footerLink}>
+                    Sprache ändern
+                  </Link>
+                </>
+              )}
+              <span style={footerDivider}>•</span>
+              <Link href={`${baseUrl}/impressum`} style={footerLink}>
+                Impressum
+              </Link>
+            </Text>
           </Section>
         </Container>
       </Body>
@@ -314,11 +330,21 @@ const footer = {
   margin: '0 0 8px',
 }
 
-const unsubscribeLink = {
+const footerLinks = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
   fontSize: '12px',
   color: '#9ca3af',
+  margin: '0',
+}
+
+const footerLink = {
+  color: '#9ca3af',
   textDecoration: 'underline',
+}
+
+const footerDivider = {
+  margin: '0 8px',
+  color: '#d1d5db',
 }
 
 export default NewsletterEmail

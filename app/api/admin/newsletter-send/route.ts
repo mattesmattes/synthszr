@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
           content: emailContent,
           postUrl,
           unsubscribeUrl: `${BASE_URL}/newsletter/unsubscribe?id=test`,
+          preferencesUrl: `${BASE_URL}/de/newsletter/preferences?token=test`,
           footerText,
           coverImageUrl,
           postDate,
@@ -197,6 +198,26 @@ export async function POST(request: NextRequest) {
         const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
 
         try {
+          // Generate preference token for this subscriber
+          const prefToken = crypto.randomUUID()
+          const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+
+          // Clean up old tokens and create new one
+          await supabase
+            .from('subscriber_preference_tokens')
+            .delete()
+            .eq('subscriber_id', subscriber.id)
+
+          await supabase
+            .from('subscriber_preference_tokens')
+            .insert({
+              subscriber_id: subscriber.id,
+              token: prefToken,
+              expires_at: expiresAt.toISOString(),
+            })
+
+          const preferencesUrl = `${BASE_URL}/${lang}/newsletter/preferences?token=${prefToken}`
+
           const html = await render(
             NewsletterEmail({
               subject: subjectToUse,
@@ -204,6 +225,7 @@ export async function POST(request: NextRequest) {
               content: emailContent,
               postUrl,
               unsubscribeUrl,
+              preferencesUrl,
               footerText,
               coverImageUrl,
               postDate,

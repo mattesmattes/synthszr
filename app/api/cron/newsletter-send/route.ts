@@ -147,31 +147,61 @@ export async function GET(request: NextRequest) {
       BASE_URL
     )
 
-    // Send to all subscribers
-    const emailPromises = subscribers.map(async (subscriber) => {
-      const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
-      const html = await render(
-        NewsletterEmail({
+    // Send to all subscribers (sequentially with preference tokens)
+    let successCount = 0
+    let failCount = 0
+
+    for (const subscriber of subscribers) {
+      try {
+        const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
+
+        // Generate preference token for this subscriber
+        const prefToken = crypto.randomUUID()
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+
+        await supabase
+          .from('subscriber_preference_tokens')
+          .delete()
+          .eq('subscriber_id', subscriber.id)
+
+        await supabase
+          .from('subscriber_preference_tokens')
+          .insert({
+            subscriber_id: subscriber.id,
+            token: prefToken,
+            expires_at: expiresAt.toISOString(),
+          })
+
+        const preferencesUrl = `${BASE_URL}/de/newsletter/preferences?token=${prefToken}`
+
+        const html = await render(
+          NewsletterEmail({
+            subject,
+            previewText,
+            content: emailContent,
+            postUrl,
+            unsubscribeUrl,
+            preferencesUrl,
+            footerText,
+            baseUrl: BASE_URL,
+          })
+        )
+
+        await getResend().emails.send({
+          from: FROM_EMAIL,
+          to: subscriber.email,
           subject,
-          previewText,
-          content: emailContent,
-          postUrl,
-          unsubscribeUrl,
-          footerText,
+          html,
         })
-      )
+        successCount++
 
-      return getResend().emails.send({
-        from: FROM_EMAIL,
-        to: subscriber.email,
-        subject,
-        html,
-      })
-    })
-
-    const results = await Promise.allSettled(emailPromises)
-    const successCount = results.filter(r => r.status === 'fulfilled').length
-    const failCount = results.filter(r => r.status === 'rejected').length
+        // 500ms delay between emails to stay under rate limit
+        await new Promise(resolve => setTimeout(resolve, 500))
+      } catch (error) {
+        console.error(`Failed to send to ${subscriber.email}:`, error)
+        failCount++
+      }
+    }
 
     // Log the send
     await supabase.from('newsletter_sends').insert({

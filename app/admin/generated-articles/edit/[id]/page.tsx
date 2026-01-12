@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2, ImageIcon } from 'lucide-react'
+import { ArrowLeft, Loader2, ImageIcon, Newspaper, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,8 +18,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/client'
 import { use } from 'react'
+
+interface QueueItem {
+  id: string
+  title: string
+  source_display_name: string | null
+  source_identifier: string
+}
 
 const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese']
 
@@ -62,6 +70,67 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   const [published, setPublished] = useState(false)
   const [content, setContent] = useState<Record<string, unknown>>({})
 
+  // Queue items management
+  const [queueItems, setQueueItems] = useState<QueueItem[]>([])
+  const [queueItemIds, setQueueItemIds] = useState<string[]>([])
+  const [removingItemId, setRemovingItemId] = useState<string | null>(null)
+
+  // Fetch queue item details
+  const fetchQueueItems = useCallback(async (itemIds: string[]) => {
+    if (itemIds.length === 0) {
+      setQueueItems([])
+      return
+    }
+
+    const { data } = await supabase
+      .from('news_queue')
+      .select('id, title, source_display_name, source_identifier')
+      .in('id', itemIds)
+
+    if (data) {
+      setQueueItems(data)
+    }
+  }, [supabase])
+
+  // Remove a queue item (reset to pending)
+  const removeQueueItem = async (itemId: string) => {
+    setRemovingItemId(itemId)
+
+    try {
+      // Reset the item to pending in the queue
+      const response = await fetch('/api/admin/news-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'reset-item',
+          itemId,
+        }),
+      })
+
+      if (response.ok) {
+        // Update local state
+        const newIds = queueItemIds.filter(id => id !== itemId)
+        setQueueItemIds(newIds)
+        setQueueItems(prev => prev.filter(item => item.id !== itemId))
+
+        // Update the post's pending_queue_item_ids in database
+        await supabase
+          .from('generated_posts')
+          .update({ pending_queue_item_ids: newIds })
+          .eq('id', id)
+
+        console.log(`[Queue] Item ${itemId} removed and reset to pending`)
+      } else {
+        console.error('[Queue] Failed to reset item')
+      }
+    } catch (err) {
+      console.error('[Queue] Error removing item:', err)
+    } finally {
+      setRemovingItemId(null)
+    }
+  }
+
   useEffect(() => {
     async function loadPost() {
       const { data } = await supabase
@@ -82,13 +151,20 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         setCategory(data.category || 'AI & Tech')
         setPublished(data.status === 'published')
         setContent(parsedContent)
+
+        // Load queue items
+        const itemIds = data.pending_queue_item_ids || []
+        setQueueItemIds(itemIds)
+        if (itemIds.length > 0) {
+          fetchQueueItems(itemIds)
+        }
       }
 
       setLoading(false)
     }
 
     loadPost()
-  }, [id, supabase])
+  }, [id, supabase, fetchQueueItems])
 
   const handleTitleChange = (value: string) => {
     setTitle(value)
@@ -103,7 +179,8 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
     const wasPublished = post?.status === 'published'
     const isNowPublished = published
-    const pendingQueueItems = post?.pending_queue_item_ids || []
+    // Use current queueItemIds (may have been modified by user removing items)
+    const currentQueueItems = queueItemIds
 
     // Update the post
     const updateData: Record<string, unknown> = {
@@ -114,11 +191,8 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       content: JSON.stringify(content),
       status: published ? 'published' : 'draft',
       updated_at: new Date().toISOString(),
-    }
-
-    // Clear pending_queue_item_ids when publishing (they'll be marked as used)
-    if (!wasPublished && isNowPublished && pendingQueueItems.length > 0) {
-      updateData.pending_queue_item_ids = []
+      // Always update with current queue item IDs
+      pending_queue_item_ids: isNowPublished ? [] : currentQueueItems,
     }
 
     const { error } = await supabase
@@ -132,9 +206,9 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       return
     }
 
-    // Mark queue items as "used" when publishing for the first time
-    if (!wasPublished && isNowPublished && pendingQueueItems.length > 0) {
-      console.log(`[Queue] Publishing post - marking ${pendingQueueItems.length} items as used`)
+    // Mark only the REMAINING queue items as "used" when publishing for the first time
+    if (!wasPublished && isNowPublished && currentQueueItems.length > 0) {
+      console.log(`[Queue] Publishing post - marking ${currentQueueItems.length} items as used`)
       try {
         const response = await fetch('/api/admin/news-queue', {
           method: 'POST',
@@ -142,7 +216,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
           credentials: 'include',
           body: JSON.stringify({
             action: 'use',
-            itemIds: pendingQueueItems,
+            itemIds: currentQueueItems,
             postId: id
           }),
         })
@@ -273,6 +347,15 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                 <ImageIcon className="h-4 w-4" />
                 Bilder
               </TabsTrigger>
+              {queueItems.length > 0 && (
+                <TabsTrigger value="sources" className="flex items-center gap-2">
+                  <Newspaper className="h-4 w-4" />
+                  Quellen
+                  <Badge variant="secondary" className="ml-1 text-xs">
+                    {queueItems.length}
+                  </Badge>
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="content">
@@ -285,6 +368,57 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
             <TabsContent value="images">
               <div className="border rounded-lg p-4">
                 <PostImageGallery postId={id} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="sources">
+              <div className="border rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium">Verknüpfte News-Quellen</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Diese News-Artikel wurden für die Generierung verwendet.
+                      Entfernte Items werden zurück in die Queue gestellt.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {queueItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-start justify-between gap-4 p-3 bg-muted/50 rounded-lg"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{item.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.source_display_name || item.source_identifier}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeQueueItem(item.id)}
+                        disabled={removingItemId === item.id || published}
+                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                        title={published ? 'Bereits veröffentlicht' : 'Entfernen und zurück in Queue'}
+                      >
+                        {removingItemId === item.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <X className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                {published && (
+                  <p className="text-xs text-muted-foreground italic">
+                    Der Artikel ist bereits veröffentlicht. Quellen können nicht mehr entfernt werden.
+                  </p>
+                )}
               </div>
             </TabsContent>
           </Tabs>
