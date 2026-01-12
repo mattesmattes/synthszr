@@ -82,9 +82,9 @@ function SynthszrRatingLink({ company, displayName, rating, isFirst }: SynthszrR
         className="inline-flex items-center gap-1 hover:underline cursor-pointer text-foreground"
       >
         {isFirst ? (
-          <span><span className="font-bold uppercase text-sm">Synthszr Vote:</span> {displayName}</span>
+          <span className="text-sm"><span className="font-bold uppercase">Synthszr Vote:</span> {displayName}</span>
         ) : (
-          <span>, {displayName}</span>
+          <span className="text-sm">, {displayName}</span>
         )}
         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold not-italic ${ratingBadgeStyles[rating]}`}>
           {ratingLabels[rating]}
@@ -123,9 +123,9 @@ function PremarketRatingLink({ company, displayName, rating, isFirst, isin }: Pr
         className="inline-flex items-center gap-1 hover:underline cursor-pointer text-foreground"
       >
         {isFirst ? (
-          <span><span className="font-bold uppercase text-sm">Synthszr Vote:</span> {displayName}</span>
+          <span className="text-sm"><span className="font-bold uppercase">Synthszr Vote:</span> {displayName}</span>
         ) : (
-          <span>, {displayName}</span>
+          <span className="text-sm">, {displayName}</span>
         )}
         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold not-italic ${ratingBadgeStyles[rating]}`}>
           {ratingLabels[rating]}
