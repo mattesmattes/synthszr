@@ -147,10 +147,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to retry item' }, { status: 500 })
       }
 
-      // Trigger queue processing immediately
+      // Trigger queue processing immediately (forward cookies for session auth)
       try {
         await fetch(new URL('/api/admin/translations/process-queue', request.url).toString(), {
           method: 'POST',
+          headers: {
+            cookie: request.headers.get('cookie') || '',
+          },
         })
       } catch (e) {
         // Processing trigger failed, but item is queued - don't fail the request
