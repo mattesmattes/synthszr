@@ -82,7 +82,7 @@ function SynthszrRatingLink({ company, displayName, rating, isFirst }: SynthszrR
         className="inline-flex items-center gap-1 hover:underline cursor-pointer text-foreground text-[13px]"
       >
         {isFirst ? (
-          <span><span className="font-bold uppercase text-[13px]">Synthszr Vote:</span> {displayName}</span>
+          <span><span className="font-bold uppercase text-[0.8125em]">Synthszr Vote:</span> {displayName}</span>
         ) : (
           <span>, {displayName}</span>
         )}
@@ -123,7 +123,7 @@ function PremarketRatingLink({ company, displayName, rating, isFirst, isin }: Pr
         className="inline-flex items-center gap-1 hover:underline cursor-pointer text-foreground text-[13px]"
       >
         {isFirst ? (
-          <span><span className="font-bold uppercase text-[13px]">Synthszr Vote:</span> {displayName}</span>
+          <span><span className="font-bold uppercase text-[0.8125em]">Synthszr Vote:</span> {displayName}</span>
         ) : (
           <span>, {displayName}</span>
         )}
