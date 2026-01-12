@@ -274,7 +274,7 @@ const dateTag = {
 
 const heading = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '80px', // TEST: very large to confirm styles work
+  fontSize: '52px',
   fontWeight: '700',
   color: '#1a1a1a',
   lineHeight: '1.1',
