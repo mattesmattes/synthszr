@@ -127,8 +127,8 @@ export function NewsletterEmail({
             />
           </Section>
 
-          {/* Cover Image with centered logo overlay */}
-          {coverImageUrl && (
+          {/* Cover Image temporarily disabled for testing */}
+          {/* {coverImageUrl && (
             <Section style={coverSection}>
               <div style={coverImageContainer}>
                 <Img
@@ -139,7 +139,7 @@ export function NewsletterEmail({
                 />
               </div>
             </Section>
-          )}
+          )} */}
 
           {/* Main Content */}
           <Section style={contentSection}>
