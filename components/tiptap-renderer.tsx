@@ -750,6 +750,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         // Create a span container for the rating links
         const ratingsContainer = document.createElement('span')
         ratingsContainer.className = 'synthszr-ratings-container ml-2'
+        ratingsContainer.style.fontSize = '13px'
 
         // Add public company ratings
         publicCompaniesWithRatings.forEach((company, idx) => {
