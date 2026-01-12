@@ -51,6 +51,8 @@ export function NewsletterEmail({
   return (
     <Html>
       <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="x-apple-disable-message-reformatting" />
         <style>
           {`
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap');
@@ -137,8 +139,8 @@ export function NewsletterEmail({
               <Img
                 src={coverImageUrl}
                 alt={subject}
-                width="500"
-                height="500"
+                width="400"
+                height="400"
                 style={coverImage}
               />
             </Section>
@@ -223,11 +225,11 @@ const main = {
 const container = {
   backgroundColor: '#ffffff',
   margin: '0 auto',
-  maxWidth: '500px',
+  maxWidth: '400px',
 }
 
 const headerSection = {
-  padding: '32px 32px 24px',
+  padding: '24px 24px 20px',
   textAlign: 'center' as const,
 }
 
@@ -245,7 +247,7 @@ const coverImage = {
 }
 
 const contentSection = {
-  padding: '32px',
+  padding: '24px',
 }
 
 const dateTag = {
