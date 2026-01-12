@@ -77,10 +77,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Extract cover image URL and create 1:1 cropped version for newsletter
-    // Size 704 matches frontend display and prevents font scaling issues
+    // Size 500 for narrower email layout (better mobile scaling: 75% vs 53%)
     const originalCoverUrl = (post.post_images as { image_url?: string } | null)?.image_url || null
     const coverImageUrl = originalCoverUrl
-      ? `${BASE_URL}/api/newsletter/cover-image?url=${encodeURIComponent(originalCoverUrl)}&size=704`
+      ? `${BASE_URL}/api/newsletter/cover-image?url=${encodeURIComponent(originalCoverUrl)}&size=500`
       : null
 
     // Fetch email template settings

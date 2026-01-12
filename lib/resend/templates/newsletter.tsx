@@ -135,8 +135,8 @@ export function NewsletterEmail({
               <Img
                 src={coverImageUrl}
                 alt={subject}
-                width="704"
-                height="704"
+                width="500"
+                height="500"
                 style={coverImage}
               />
             </Section>
@@ -221,7 +221,7 @@ const main = {
 const container = {
   backgroundColor: '#ffffff',
   margin: '0 auto',
-  maxWidth: '704px',
+  maxWidth: '500px',
 }
 
 const headerSection = {
@@ -251,34 +251,34 @@ const dateTag = {
   backgroundColor: '#CCFF00',
   color: '#000000',
   fontFamily: "'SF Mono', Monaco, monospace",
-  fontSize: '16px',
+  fontSize: '13px',
   fontWeight: '500',
   letterSpacing: '0.5px',
-  padding: '8px 14px',
-  marginBottom: '20px',
+  padding: '6px 12px',
+  marginBottom: '16px',
 }
 
 const heading = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '42px',
+  fontSize: '32px',
   fontWeight: '700',
   color: '#1a1a1a',
   lineHeight: '1.15',
-  margin: '0 0 20px',
+  margin: '0 0 16px',
 }
 
 const excerpt = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '26px',
+  fontSize: '20px',
   lineHeight: '1.5',
   color: '#6b7280',
   fontStyle: 'italic',
-  margin: '0 0 28px',
+  margin: '0 0 24px',
 }
 
 const contentStyle = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '28px',
+  fontSize: '22px',
   lineHeight: '1.6',
   color: '#374151',
 }
@@ -288,14 +288,14 @@ const button = {
   borderRadius: '0',
   color: '#ffffff',
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '20px',
+  fontSize: '16px',
   fontWeight: '600',
   textDecoration: 'none',
   textAlign: 'center' as const,
   display: 'block',
   width: '100%',
-  padding: '20px 0',
-  marginTop: '28px',
+  padding: '16px 0',
+  marginTop: '24px',
 }
 
 const hr = {
@@ -317,15 +317,15 @@ const footerLogo = {
 
 const footer = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '18px',
+  fontSize: '14px',
   color: '#9ca3af',
   lineHeight: '1.5',
-  margin: '0 0 12px',
+  margin: '0 0 8px',
 }
 
 const footerLinks = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '18px',
+  fontSize: '14px',
   color: '#9ca3af',
   margin: '0',
 }
