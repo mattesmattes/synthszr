@@ -173,8 +173,8 @@ export function NewsletterEmail({
             </Button>
           </Section>
 
-          {/* Footer */}
-          <Section style={footerSection}>
+          {/* Footer temporarily disabled for testing */}
+          {/* <Section style={footerSection}>
             <Link href="https://oh-so.com">
               <Img
                 src={`${baseUrl}/oh-so-logo.png`}
@@ -190,7 +190,7 @@ export function NewsletterEmail({
             <Link href={unsubscribeUrl} style={unsubscribeLink}>
               Newsletter abbestellen
             </Link>
-          </Section>
+          </Section> */}
         </Container>
       </Body>
     </Html>
