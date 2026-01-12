@@ -127,8 +127,8 @@ export function NewsletterEmail({
             />
           </Section>
 
-          {/* Cover Image temporarily disabled for testing */}
-          {/* {coverImageUrl && (
+          {/* Cover Image with centered logo overlay */}
+          {coverImageUrl && (
             <Section style={coverSection}>
               <div style={coverImageContainer}>
                 <Img
@@ -139,7 +139,7 @@ export function NewsletterEmail({
                 />
               </div>
             </Section>
-          )} */}
+          )}
 
           {/* Main Content */}
           <Section style={contentSection}>
@@ -173,8 +173,8 @@ export function NewsletterEmail({
             </Button>
           </Section>
 
-          {/* Footer temporarily disabled for testing */}
-          {/* <Section style={footerSection}>
+          {/* Footer */}
+          <Section style={footerSection}>
             <Link href="https://oh-so.com">
               <Img
                 src={`${baseUrl}/oh-so-logo.png`}
@@ -190,7 +190,7 @@ export function NewsletterEmail({
             <Link href={unsubscribeUrl} style={unsubscribeLink}>
               Newsletter abbestellen
             </Link>
-          </Section> */}
+          </Section>
         </Container>
       </Body>
     </Html>
