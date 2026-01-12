@@ -385,6 +385,7 @@ export default function TranslationsPage() {
             <SelectItem value="processing">In Bearbeitung</SelectItem>
             <SelectItem value="completed">Abgeschlossen</SelectItem>
             <SelectItem value="failed">Fehlgeschlagen</SelectItem>
+            <SelectItem value="cancelled">Abgebrochen</SelectItem>
           </SelectContent>
         </Select>
 
@@ -445,7 +446,7 @@ export default function TranslationsPage() {
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    {item.status === 'failed' && (
+                    {(item.status === 'failed' || item.status === 'cancelled') && (
                       <Button
                         size="sm"
                         variant="outline"
