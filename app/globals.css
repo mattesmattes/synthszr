@@ -267,6 +267,7 @@
   font-weight: 700;
   font-style: normal;
   text-transform: uppercase;
+  font-size: 0.8125em; /* ~13px when base is 16px */
 }
 
 /* Style headings containing "Mattes Synthese" with neon yellow background */
