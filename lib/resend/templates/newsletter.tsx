@@ -218,7 +218,7 @@ export function NewsletterEmail({
 
 // Styles matching the blog design
 const main = {
-  backgroundColor: '#FF0000', // TEMP: RED to test if changes propagate
+  backgroundColor: '#f8f9fa',
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 }
 
