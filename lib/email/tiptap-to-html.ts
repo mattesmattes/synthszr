@@ -469,7 +469,7 @@ function renderContentWithTickers(
 
       // If "Synthszr Take:" is not already bold, wrap it with styling
       if (!hasBoldMark && synthszrPattern.test(text)) {
-        text = text.replace(synthszrPattern, '<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px;">$1</strong>')
+        text = text.replace(synthszrPattern, '<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">$1</strong>')
       }
 
       // Apply marks
@@ -479,7 +479,7 @@ function renderContentWithTickers(
             case 'bold':
               // Check if this is "Synthszr Take:" - add background styling
               if (/synthszr take:?/i.test(text)) {
-                text = `<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px;">${text}</strong>`
+                text = `<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">${text}</strong>`
               } else {
                 text = `<strong>${text}</strong>`
               }
@@ -529,7 +529,7 @@ function renderContent(content?: TiptapNode[]): string {
 
       // If "Synthszr Take:" is not already bold, wrap it with styling
       if (!hasBoldMark && synthszrPattern.test(text)) {
-        text = text.replace(synthszrPattern, '<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px;">$1</strong>')
+        text = text.replace(synthszrPattern, '<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">$1</strong>')
       }
 
       // Apply marks
@@ -539,7 +539,7 @@ function renderContent(content?: TiptapNode[]): string {
             case 'bold':
               // Check if this is "Synthszr Take:" - add background styling
               if (/synthszr take:?/i.test(text)) {
-                text = `<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px;">${text}</strong>`
+                text = `<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">${text}</strong>`
               } else {
                 text = `<strong>${text}</strong>`
               }
