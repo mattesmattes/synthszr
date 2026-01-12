@@ -11,13 +11,13 @@ const NEON_YELLOW = { r: 204, g: 255, b: 0 }
  *
  * Query params:
  * - url: The original image URL
- * - size: Output size in pixels (default: 327 = 375px container - 48px padding)
+ * - size: Output size in pixels (default: 654 = 2x display size for sharp dithering)
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const imageUrl = searchParams.get('url')
-    const size = parseInt(searchParams.get('size') || '327')
+    const size = parseInt(searchParams.get('size') || '654')
 
     if (!imageUrl) {
       return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 })

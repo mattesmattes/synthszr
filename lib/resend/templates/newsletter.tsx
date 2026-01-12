@@ -57,6 +57,12 @@ export function NewsletterEmail({
           {`
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap');
 
+            * {
+              -webkit-text-size-adjust: 100% !important;
+              -moz-text-size-adjust: 100% !important;
+              -ms-text-size-adjust: 100% !important;
+            }
+
             .content-area h2 {
               font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
               font-size: 48px !important;
@@ -220,6 +226,9 @@ export function NewsletterEmail({
 const main = {
   backgroundColor: '#f8f9fa',
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  WebkitTextSizeAdjust: '100%' as const,
+  MozTextSizeAdjust: '100%' as const,
+  msTextSizeAdjust: '100%' as const,
 }
 
 const container = {
@@ -286,6 +295,9 @@ const contentStyle = {
   fontSize: '40px',
   lineHeight: '1.45',
   color: '#374151',
+  WebkitTextSizeAdjust: 'none' as const,
+  MozTextSizeAdjust: 'none' as const,
+  msTextSizeAdjust: 'none' as const,
 }
 
 const button = {
