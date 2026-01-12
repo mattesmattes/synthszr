@@ -298,7 +298,7 @@ export async function whiteToTransparent(
     .raw()
     .toBuffer({ resolveWithObject: true })
 
-  // Process pixels: make white/near-white pixels transparent
+  // Process pixels: white → transparent, everything else → fully opaque
   const pixels = new Uint8Array(data)
   for (let i = 0; i < pixels.length; i += 4) {
     const r = pixels[i]
@@ -308,6 +308,8 @@ export async function whiteToTransparent(
     // Check if pixel is white/near-white
     if (r >= threshold && g >= threshold && b >= threshold) {
       pixels[i + 3] = 0 // Set alpha to 0 (transparent)
+    } else {
+      pixels[i + 3] = 255 // Set alpha to 255 (fully opaque) - no color mixing with background
     }
   }
 
