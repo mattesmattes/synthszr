@@ -285,7 +285,7 @@ export async function generateSatiricalImage(newsText: string): Promise<Generate
  */
 export async function whiteToTransparent(
   imageBase64: string,
-  threshold: number = 240
+  threshold: number = 128
 ): Promise<{ base64: string; mimeType: string }> {
   const buffer = Buffer.from(imageBase64, 'base64')
 
@@ -298,18 +298,30 @@ export async function whiteToTransparent(
     .raw()
     .toBuffer({ resolveWithObject: true })
 
-  // Process pixels: white → transparent, everything else → fully opaque
+  // Hard threshold: convert to pure black (opaque) or transparent
+  // This ensures dithered images have ONLY black pixels and transparent pixels
+  // No grayscale, no semi-transparency, no color mixing with background
   const pixels = new Uint8Array(data)
   for (let i = 0; i < pixels.length; i += 4) {
     const r = pixels[i]
     const g = pixels[i + 1]
     const b = pixels[i + 2]
 
-    // Check if pixel is white/near-white
-    if (r >= threshold && g >= threshold && b >= threshold) {
-      pixels[i + 3] = 0 // Set alpha to 0 (transparent)
+    // Calculate luminance (grayscale value)
+    const luminance = (r + g + b) / 3
+
+    if (luminance >= threshold) {
+      // White/bright → fully transparent
+      pixels[i] = 0       // R
+      pixels[i + 1] = 0   // G
+      pixels[i + 2] = 0   // B
+      pixels[i + 3] = 0   // A (transparent)
     } else {
-      pixels[i + 3] = 255 // Set alpha to 255 (fully opaque) - no color mixing with background
+      // Dark → pure black, fully opaque
+      pixels[i] = 0       // R
+      pixels[i + 1] = 0   // G
+      pixels[i + 2] = 0   // B
+      pixels[i + 3] = 255 // A (opaque)
     }
   }
 
