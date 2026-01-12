@@ -79,12 +79,12 @@ function SynthszrRatingLink({ company, displayName, rating, isFirst }: SynthszrR
     <>
       <button
         onClick={() => setShowSynthszr(true)}
-        className="inline-flex items-center gap-1 hover:underline cursor-pointer text-foreground"
+        className="inline-flex items-center gap-1 hover:underline cursor-pointer text-foreground text-[13px]"
       >
         {isFirst ? (
-          <span className="!text-[13px]"><span className="font-bold uppercase">Synthszr Vote:</span> {displayName}</span>
+          <span><span className="font-bold uppercase text-[13px]">Synthszr Vote:</span> {displayName}</span>
         ) : (
-          <span className="!text-[13px]">, {displayName}</span>
+          <span>, {displayName}</span>
         )}
         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold not-italic ${ratingBadgeStyles[rating]}`}>
           {ratingLabels[rating]}
@@ -120,12 +120,12 @@ function PremarketRatingLink({ company, displayName, rating, isFirst, isin }: Pr
     <>
       <button
         onClick={() => setShowPremarket(true)}
-        className="inline-flex items-center gap-1 hover:underline cursor-pointer text-foreground"
+        className="inline-flex items-center gap-1 hover:underline cursor-pointer text-foreground text-[13px]"
       >
         {isFirst ? (
-          <span className="!text-[13px]"><span className="font-bold uppercase">Synthszr Vote:</span> {displayName}</span>
+          <span><span className="font-bold uppercase text-[13px]">Synthszr Vote:</span> {displayName}</span>
         ) : (
-          <span className="!text-[13px]">, {displayName}</span>
+          <span>, {displayName}</span>
         )}
         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold not-italic ${ratingBadgeStyles[rating]}`}>
           {ratingLabels[rating]}
@@ -535,13 +535,15 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       /mattes synthese:?/gi,
       /mattes' synthese:?/gi,
       /synthszr take:?/gi,
+      /synthszr vote:?/gi,
     ]
 
     const isSyntheseText = (text: string) => {
       const lower = text.toLowerCase()
       return lower.includes('mattes synthese') ||
              lower.includes("mattes' synthese") ||
-             lower.includes('synthszr take')
+             lower.includes('synthszr take') ||
+             lower.includes('synthszr vote')
     }
 
     // First check headings
@@ -593,7 +595,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       }
     }
 
-    // Process nodes (wrap "Synthszr Take:" in styled span)
+    // Process nodes (wrap "Synthszr Take:" or "Synthszr Vote:" in styled span)
     for (const { node, match } of nodesToProcess) {
       const text = node.textContent || ''
       const before = text.slice(0, match.index)
