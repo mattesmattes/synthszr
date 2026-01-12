@@ -125,28 +125,26 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
         <main className="mx-auto max-w-3xl px-6 py-12 md:py-20">
         <article>
           {/* Cover Image with centered Logo overlay - links to home */}
-          {/* Fixed widths for moiré-free dithering: 352px mobile (1:4), 704px desktop (1:2) */}
+          {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
+          {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
           {post.cover_image_url && (
-            <Link href="/" className="block mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
+            <Link href="/" className="block mb-8 rounded-lg overflow-hidden">
               <div
-                className="relative flex items-center justify-center mx-auto w-[352px] md:w-[704px]"
-                style={{
-                  backgroundColor: '#CCFF00',
-                  aspectRatio: '11/6'
-                }}
+                className="relative flex items-center justify-center mx-auto w-[704px] max-w-full aspect-square md:aspect-[11/6]"
+                style={{ backgroundColor: '#CCFF00' }}
               >
                 {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
                 <img
                   src={post.cover_image_url}
                   alt=""
-                  className="absolute inset-0 w-full h-full"
+                  className="absolute inset-0 w-full h-full object-cover"
                   style={{ imageRendering: 'pixelated' }}
                 />
                 {/* Logo centered on top */}
                 <img
                   src="/synthszr-logo.svg"
                   alt="Synthszr"
-                  className="relative z-10 h-16 md:h-24 w-auto"
+                  className="relative z-10 h-20 md:h-24 w-auto"
                 />
               </div>
             </Link>

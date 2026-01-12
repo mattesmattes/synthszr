@@ -38,27 +38,25 @@ export function FeaturedArticle({
   return (
     <article className="mb-16 border-b border-border pb-16">
       {coverImageUrl && (
-        <a href={postUrl} className="block mb-8 -mx-6 md:mx-0 md:rounded-lg overflow-hidden">
-          {/* Fixed widths for moiré-free dithering: 352px mobile (1:4), 704px desktop (1:2) */}
+        <a href={postUrl} className="block mb-8 rounded-lg overflow-hidden">
+          {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
+          {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
           <div
-            className="relative flex items-center justify-center mx-auto w-[352px] md:w-[704px]"
-            style={{
-              backgroundColor: '#CCFF00',
-              aspectRatio: '11/6' // Matches 1408:768 image ratio
-            }}
+            className="relative flex items-center justify-center mx-auto w-[704px] max-w-full aspect-square md:aspect-[11/6]"
+            style={{ backgroundColor: '#CCFF00' }}
           >
             {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
             <img
               src={coverImageUrl}
               alt=""
-              className="absolute inset-0 w-full h-full"
+              className="absolute inset-0 w-full h-full object-cover"
               style={{ imageRendering: 'pixelated' }}
             />
             {/* Logo centered on top */}
             <img
               src="/synthszr-logo.svg"
               alt="Synthszr"
-              className="relative z-10 h-16 md:h-24 w-auto"
+              className="relative z-10 h-20 md:h-24 w-auto"
             />
           </div>
         </a>

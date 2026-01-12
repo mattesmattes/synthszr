@@ -157,7 +157,8 @@ export default async function Page({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <main className="mx-auto max-w-5xl px-6 py-12 md:py-20">
+      {/* 704px max-width to match cover image and post pages */}
+      <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
 
         {/* Bloom Language Switcher */}
         <BloomLanguageSwitcher currentLocale={locale} />
@@ -239,7 +240,7 @@ export default async function Page({ params }: PageProps) {
       </main>
 
       <footer className="border-t border-border">
-        <div className="mx-auto max-w-5xl px-6 py-12">
+        <div className="mx-auto w-[704px] max-w-full px-6 py-12">
           <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-6">
               <a href="https://oh-so.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
