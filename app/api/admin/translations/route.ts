@@ -147,7 +147,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to retry item' }, { status: 500 })
       }
 
-      return NextResponse.json({ message: 'Item queued for retry' })
+      // Trigger queue processing immediately
+      try {
+        await fetch(new URL('/api/admin/translations/process-queue', request.url).toString(), {
+          method: 'POST',
+        })
+      } catch (e) {
+        // Processing trigger failed, but item is queued - don't fail the request
+        console.error('[Translations] Failed to trigger processing:', e)
+      }
+
+      return NextResponse.json({ message: 'Item queued for retry and processing started' })
     }
 
     if (action === 'cancel' && queue_item_id) {
