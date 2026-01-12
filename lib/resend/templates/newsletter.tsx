@@ -79,19 +79,19 @@ export function NewsletterEmail({
 
             .content-area p {
               font-family: 'Source Serif 4', Georgia, serif;
-              font-size: 22px !important;
-              line-height: 1.6;
+              font-size: 28px !important;
+              line-height: 1.5;
               color: #374151;
-              margin-bottom: 18px;
+              margin-bottom: 20px;
             }
 
             .content-area ul, .content-area ol {
               font-family: 'Source Serif 4', Georgia, serif;
-              font-size: 22px !important;
-              line-height: 1.6;
+              font-size: 28px !important;
+              line-height: 1.5;
               color: #374151;
-              margin-bottom: 18px;
-              padding-left: 28px;
+              margin-bottom: 20px;
+              padding-left: 32px;
             }
 
             .content-area li {
@@ -264,7 +264,7 @@ const dateTag = {
 
 const heading = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '32px',
+  fontSize: '36px',
   fontWeight: '700',
   color: '#1a1a1a',
   lineHeight: '1.15',
@@ -273,7 +273,7 @@ const heading = {
 
 const excerpt = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '20px',
+  fontSize: '24px',
   lineHeight: '1.5',
   color: '#6b7280',
   fontStyle: 'italic',
@@ -282,8 +282,8 @@ const excerpt = {
 
 const contentStyle = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '22px',
-  lineHeight: '1.6',
+  fontSize: '28px',
+  lineHeight: '1.5',
   color: '#374151',
 }
 

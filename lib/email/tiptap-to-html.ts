@@ -33,16 +33,16 @@ const TICKER_STYLES = {
 }
 
 // Inline styles for email HTML (email clients ignore <style> tags)
-// 500px email gets scaled to ~75% on mobile (375px viewport)
-// Target: 16px readable on mobile → need ~22px base font (16 / 0.75 ≈ 21)
+// 400px email on 375px mobile = 94% scaling, but Apple Mail may still shrink
+// Using 28px base font to ensure readability
 const EMAIL_STYLES = {
-  p: 'font-family: Georgia, serif; font-size: 22px; line-height: 1.6; color: #374151; margin-bottom: 18px;',
-  h2: 'font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 28px; font-weight: 600; color: #1a1a1a; margin-top: 36px; margin-bottom: 14px; line-height: 1.2;',
-  h3: 'font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 24px; font-weight: 600; color: #1a1a1a; margin-top: 28px; margin-bottom: 10px; line-height: 1.3;',
-  ul: 'font-family: Georgia, serif; font-size: 22px; line-height: 1.6; color: #374151; margin-bottom: 18px; padding-left: 28px;',
-  ol: 'font-family: Georgia, serif; font-size: 22px; line-height: 1.6; color: #374151; margin-bottom: 18px; padding-left: 28px;',
-  li: 'margin-bottom: 10px;',
-  blockquote: 'border-left: 4px solid #CCFF00; padding-left: 18px; margin: 28px 0; font-style: italic; color: #4b5563; font-size: 22px;',
+  p: 'font-family: Georgia, serif; font-size: 28px; line-height: 1.5; color: #374151; margin-bottom: 20px;',
+  h2: 'font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 34px; font-weight: 600; color: #1a1a1a; margin-top: 40px; margin-bottom: 16px; line-height: 1.2;',
+  h3: 'font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 30px; font-weight: 600; color: #1a1a1a; margin-top: 32px; margin-bottom: 12px; line-height: 1.3;',
+  ul: 'font-family: Georgia, serif; font-size: 28px; line-height: 1.5; color: #374151; margin-bottom: 20px; padding-left: 32px;',
+  ol: 'font-family: Georgia, serif; font-size: 28px; line-height: 1.5; color: #374151; margin-bottom: 20px; padding-left: 32px;',
+  li: 'margin-bottom: 12px;',
+  blockquote: 'border-left: 4px solid #CCFF00; padding-left: 20px; margin: 32px 0; font-style: italic; color: #4b5563; font-size: 28px;',
 }
 
 interface StockQuoteData {
