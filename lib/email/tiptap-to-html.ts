@@ -181,7 +181,7 @@ function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug
   const badges = ratings.map((r, idx) => {
     const style = RATING_STYLES[r.rating]
     const label = r.rating === 'BUY' ? 'Buy' : r.rating === 'HOLD' ? 'Hold' : 'Sell'
-    const prefix = idx === 0 ? '<span style="font-weight: bold; text-transform: uppercase;">Synthszr Vote:</span> ' : ', '
+    const prefix = idx === 0 ? '<span style="font-weight: bold; text-transform: uppercase; font-size: 13px;">Synthszr Vote:</span> ' : ', '
 
     // Link to analysis dialog on the blog post
     const href = postSlug
@@ -469,7 +469,7 @@ function renderContentWithTickers(
 
       // If "Synthszr Take:" is not already bold, wrap it with styling
       if (!hasBoldMark && synthszrPattern.test(text)) {
-        text = text.replace(synthszrPattern, '<strong style="background-color: #CCFF00; padding: 2px 6px;">$1</strong>')
+        text = text.replace(synthszrPattern, '<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px;">$1</strong>')
       }
 
       // Apply marks
@@ -479,7 +479,7 @@ function renderContentWithTickers(
             case 'bold':
               // Check if this is "Synthszr Take:" - add background styling
               if (/synthszr take:?/i.test(text)) {
-                text = `<strong style="background-color: #CCFF00; padding: 2px 6px;">${text}</strong>`
+                text = `<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px;">${text}</strong>`
               } else {
                 text = `<strong>${text}</strong>`
               }
@@ -529,7 +529,7 @@ function renderContent(content?: TiptapNode[]): string {
 
       // If "Synthszr Take:" is not already bold, wrap it with styling
       if (!hasBoldMark && synthszrPattern.test(text)) {
-        text = text.replace(synthszrPattern, '<strong style="background-color: #CCFF00; padding: 2px 6px;">$1</strong>')
+        text = text.replace(synthszrPattern, '<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px;">$1</strong>')
       }
 
       // Apply marks
@@ -539,7 +539,7 @@ function renderContent(content?: TiptapNode[]): string {
             case 'bold':
               // Check if this is "Synthszr Take:" - add background styling
               if (/synthszr take:?/i.test(text)) {
-                text = `<strong style="background-color: #CCFF00; padding: 2px 6px;">${text}</strong>`
+                text = `<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px;">${text}</strong>`
               } else {
                 text = `<strong>${text}</strong>`
               }
