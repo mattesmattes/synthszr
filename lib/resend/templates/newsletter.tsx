@@ -221,7 +221,7 @@ const main = {
 const container = {
   backgroundColor: '#ffffff',
   margin: '0 auto',
-  maxWidth: '600px',
+  maxWidth: '704px',
 }
 
 const headerSection = {
@@ -260,7 +260,7 @@ const dateTag = {
 
 const heading = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '28px',
+  fontSize: '32px',
   fontWeight: '700',
   color: '#1a1a1a',
   lineHeight: '1.2',
@@ -269,7 +269,7 @@ const heading = {
 
 const excerpt = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '18px',
+  fontSize: '20px',
   lineHeight: '1.6',
   color: '#6b7280',
   fontStyle: 'italic',
@@ -278,7 +278,7 @@ const excerpt = {
 
 const contentStyle = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '18px',
+  fontSize: '20px',
   lineHeight: '1.7',
   color: '#374151',
 }
