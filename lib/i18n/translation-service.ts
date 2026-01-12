@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import type { LanguageCode } from '@/lib/types'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
@@ -37,10 +38,12 @@ export function getAvailableModels(): TranslationModel[] {
 export async function testApiKeys(): Promise<{
   anthropic: { valid: boolean; error?: string; lastChars?: string }
   google: { valid: boolean; error?: string; lastChars?: string }
+  openai: { valid: boolean; error?: string; lastChars?: string }
 }> {
   const results = {
     anthropic: { valid: false, error: undefined as string | undefined, lastChars: undefined as string | undefined },
     google: { valid: false, error: undefined as string | undefined, lastChars: undefined as string | undefined },
+    openai: { valid: false, error: undefined as string | undefined, lastChars: undefined as string | undefined },
   }
 
   // Test Anthropic
@@ -75,6 +78,25 @@ export async function testApiKeys(): Promise<{
     }
   } else {
     results.google.error = 'API key not configured'
+  }
+
+  // Test OpenAI
+  const openaiKey = process.env.OPENAI_API_KEY
+  if (openaiKey) {
+    results.openai.lastChars = openaiKey.slice(-4)
+    try {
+      const openai = new OpenAI()
+      await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'Say "ok"' }],
+      })
+      results.openai.valid = true
+    } catch (error) {
+      results.openai.error = error instanceof Error ? error.message : String(error)
+    }
+  } else {
+    results.openai.error = 'API key not configured'
   }
 
   return results

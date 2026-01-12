@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient()
 
     if (action === 'retry' && queue_item_id) {
-      // Reset failed item to pending
+      // Reset failed or cancelled item to pending
       const { error } = await supabase
         .from('translation_queue')
         .update({
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
           completed_at: null,
         })
         .eq('id', queue_item_id)
-        .eq('status', 'failed')
+        .in('status', ['failed', 'cancelled'])
 
       if (error) {
         return NextResponse.json({ error: 'Failed to retry item' }, { status: 500 })

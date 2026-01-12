@@ -1,7 +1,28 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, Database, RefreshCw, Globe, Languages, ArrowRight } from 'lucide-react'
+import { Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, Database, RefreshCw, Globe, Languages, ArrowRight, Settings2, AlertTriangle } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import type { TranslationModel } from '@/lib/i18n/translation-service'
+
+const MODEL_LABELS: Record<string, string> = {
+  'claude-sonnet-4': 'Claude Sonnet 4',
+  'claude-haiku-3.5': 'Claude Haiku 3.5',
+  'gemini-2.0-flash': 'Gemini 2.0 Flash',
+  'gemini-2.5-pro': 'Gemini 2.5 Pro',
+}
+
+interface ApiKeyTestResult {
+  valid: boolean
+  error?: string
+  lastChars?: string
+}
+
+interface ApiKeyTestResults {
+  anthropic: ApiKeyTestResult
+  google: ApiKeyTestResult
+  openai: ApiKeyTestResult
+}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -102,6 +123,11 @@ export default function SettingsPage() {
   const [triggeringSchedule, setTriggeringSchedule] = useState(false)
   const [triggerResult, setTriggerResult] = useState<{ success: boolean; message: string; details?: Record<string, string> } | null>(null)
 
+  // Translation models status
+  const [availableModels, setAvailableModels] = useState<TranslationModel[]>([])
+  const [testingKeys, setTestingKeys] = useState(false)
+  const [keyTestResults, setKeyTestResults] = useState<ApiKeyTestResults | null>(null)
+
   // Embedding status
   const [embeddingStatus, setEmbeddingStatus] = useState<{
     total: number
@@ -125,7 +151,33 @@ export default function SettingsPage() {
     fetchGmailStatus()
     fetchSchedule()
     fetchEmbeddingStatus()
+    fetchAvailableModels()
   }, [])
+
+  async function fetchAvailableModels() {
+    try {
+      const res = await fetch('/api/admin/languages')
+      const data = await res.json()
+      setAvailableModels(data.availableModels || [])
+    } catch (error) {
+      console.error('Error fetching available models:', error)
+    }
+  }
+
+  async function testApiKeys() {
+    setTestingKeys(true)
+    try {
+      const res = await fetch('/api/admin/languages/test-keys', {
+        method: 'POST',
+      })
+      const data = await res.json()
+      setKeyTestResults(data)
+    } catch (error) {
+      console.error('Error testing API keys:', error)
+    } finally {
+      setTestingKeys(false)
+    }
+  }
 
   async function fetchEmbeddingStatus() {
     setEmbeddingLoading(true)
@@ -344,6 +396,131 @@ export default function SettingsPage() {
       )}
 
       <div className="space-y-6">
+        {/* Available Translation Models */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Settings2 className="h-5 w-5" />
+                Verfügbare Übersetzungsmodelle
+              </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={testApiKeys}
+                disabled={testingKeys}
+              >
+                {testingKeys ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Keys testen
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* API Key Test Results */}
+            {keyTestResults && (
+              <div className="mb-4 p-3 rounded-lg bg-muted/50 space-y-2">
+                <p className="text-xs font-medium mb-2">API Key Validierung:</p>
+
+                {/* Anthropic */}
+                <div className="flex items-center gap-2">
+                  {keyTestResults.anthropic.valid ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : keyTestResults.anthropic.error === 'API key not configured' ? (
+                    <XCircle className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                  )}
+                  <span className="text-sm">Anthropic (Claude)</span>
+                  {keyTestResults.anthropic.valid ? (
+                    <Badge variant="outline" className="text-green-600 border-green-300">OK</Badge>
+                  ) : keyTestResults.anthropic.lastChars ? (
+                    <Badge variant="destructive" className="text-xs">
+                      Fehler (Key ...{keyTestResults.anthropic.lastChars})
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">Nicht konfiguriert</Badge>
+                  )}
+                </div>
+                {keyTestResults.anthropic.error && keyTestResults.anthropic.error !== 'API key not configured' && (
+                  <p className="text-xs text-destructive ml-6">{keyTestResults.anthropic.error}</p>
+                )}
+
+                {/* Google */}
+                <div className="flex items-center gap-2">
+                  {keyTestResults.google.valid ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : keyTestResults.google.error === 'API key not configured' ? (
+                    <XCircle className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                  )}
+                  <span className="text-sm">Google (Gemini)</span>
+                  {keyTestResults.google.valid ? (
+                    <Badge variant="outline" className="text-green-600 border-green-300">OK</Badge>
+                  ) : keyTestResults.google.lastChars ? (
+                    <Badge variant="destructive" className="text-xs">
+                      Fehler (Key ...{keyTestResults.google.lastChars})
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">Nicht konfiguriert</Badge>
+                  )}
+                </div>
+                {keyTestResults.google.error && keyTestResults.google.error !== 'API key not configured' && (
+                  <p className="text-xs text-destructive ml-6">{keyTestResults.google.error}</p>
+                )}
+
+                {/* OpenAI */}
+                <div className="flex items-center gap-2">
+                  {keyTestResults.openai.valid ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : keyTestResults.openai.error === 'API key not configured' ? (
+                    <XCircle className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                  )}
+                  <span className="text-sm">OpenAI (GPT)</span>
+                  {keyTestResults.openai.valid ? (
+                    <Badge variant="outline" className="text-green-600 border-green-300">OK</Badge>
+                  ) : keyTestResults.openai.lastChars ? (
+                    <Badge variant="destructive" className="text-xs">
+                      Fehler (Key ...{keyTestResults.openai.lastChars})
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">Nicht konfiguriert</Badge>
+                  )}
+                </div>
+                {keyTestResults.openai.error && keyTestResults.openai.error !== 'API key not configured' && (
+                  <p className="text-xs text-destructive ml-6">{keyTestResults.openai.error}</p>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              {availableModels.length > 0 ? (
+                availableModels.map(model => (
+                  <Badge key={model} variant="outline" className="flex items-center gap-1">
+                    <CheckCircle className="h-3 w-3 text-green-500" />
+                    {MODEL_LABELS[model] || model}
+                  </Badge>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Keine Modelle verfügbar. Bitte API-Keys in .env.local konfigurieren.
+                </p>
+              )}
+            </div>
+            {availableModels.length > 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Modelle werden basierend auf konfigurierten API-Keys erkannt. Klicke &quot;Keys testen&quot; um zu prüfen, ob sie funktionieren.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Gmail Connection */}
         <Card>
           <CardHeader>
