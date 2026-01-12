@@ -44,6 +44,17 @@ const EMAIL_STYLES = {
   blockquote: 'border-left: 5px solid #CCFF00; padding-left: 24px; margin: 40px 0; font-style: italic; color: #4b5563; font-size: 40px;',
 }
 
+// Wrapper styles for Gmail compatibility (Gmail strips <style> tags)
+const WRAPPER_STYLE = 'font-family: Georgia, serif; font-size: 40px; line-height: 1.45; color: #374151;'
+
+/**
+ * Wrap content in a styled div for Gmail compatibility
+ * Gmail strips <style> tags so we need inline styles
+ */
+function wrapContentWithStyles(content: string): string {
+  return `<div style="${WRAPPER_STYLE}">${content}</div>`
+}
+
 interface StockQuoteData {
   company: string
   changePercent: number
@@ -255,17 +266,19 @@ export async function generateEmailContentWithVotes(
       if (parsed && typeof parsed === 'object' && parsed.type === 'doc') {
         doc = parsed as TiptapDoc
       } else {
-        return rawContent
+        // Return HTML wrapped in styled container for Gmail compatibility
+        return wrapContentWithStyles(rawContent)
       }
     } catch {
-      return rawContent
+      // Content is likely already HTML - wrap in styled container
+      return wrapContentWithStyles(rawContent)
     }
   } else if (rawContent && typeof rawContent === 'object') {
     doc = rawContent as TiptapDoc
   }
 
   if (!doc || !doc.content) {
-    return post.excerpt || ''
+    return wrapContentWithStyles(post.excerpt || '')
   }
 
   // Extract full text to find ALL companies
