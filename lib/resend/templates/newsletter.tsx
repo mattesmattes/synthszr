@@ -59,52 +59,52 @@ export function NewsletterEmail({
 
             .content-area h2 {
               font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-              font-size: 28px !important;
+              font-size: 48px !important;
               font-weight: 600;
               color: #1a1a1a;
-              margin-top: 36px;
-              margin-bottom: 14px;
-              line-height: 1.2;
+              margin-top: 48px;
+              margin-bottom: 20px;
+              line-height: 1.15;
             }
 
             .content-area h3 {
               font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-              font-size: 24px !important;
+              font-size: 44px !important;
               font-weight: 600;
               color: #1a1a1a;
-              margin-top: 28px;
-              margin-bottom: 10px;
-              line-height: 1.3;
+              margin-top: 40px;
+              margin-bottom: 16px;
+              line-height: 1.2;
             }
 
             .content-area p {
               font-family: 'Source Serif 4', Georgia, serif;
-              font-size: 28px !important;
-              line-height: 1.5;
+              font-size: 40px !important;
+              line-height: 1.45;
               color: #374151;
-              margin-bottom: 20px;
+              margin-bottom: 24px;
             }
 
             .content-area ul, .content-area ol {
               font-family: 'Source Serif 4', Georgia, serif;
-              font-size: 28px !important;
-              line-height: 1.5;
+              font-size: 40px !important;
+              line-height: 1.45;
               color: #374151;
-              margin-bottom: 20px;
-              padding-left: 32px;
+              margin-bottom: 24px;
+              padding-left: 40px;
             }
 
             .content-area li {
-              margin-bottom: 10px;
+              margin-bottom: 16px;
             }
 
             .content-area blockquote {
-              border-left: 4px solid #CCFF00;
-              padding-left: 18px;
-              margin: 28px 0;
+              border-left: 5px solid #CCFF00;
+              padding-left: 24px;
+              margin: 40px 0;
               font-style: italic;
               color: #4b5563;
-              font-size: 22px !important;
+              font-size: 40px !important;
             }
 
             .content-area a {
@@ -264,26 +264,26 @@ const dateTag = {
 
 const heading = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '36px',
+  fontSize: '52px',
   fontWeight: '700',
   color: '#1a1a1a',
-  lineHeight: '1.15',
-  margin: '0 0 16px',
+  lineHeight: '1.1',
+  margin: '0 0 20px',
 }
 
 const excerpt = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '24px',
-  lineHeight: '1.5',
+  fontSize: '36px',
+  lineHeight: '1.4',
   color: '#6b7280',
   fontStyle: 'italic',
-  margin: '0 0 24px',
+  margin: '0 0 28px',
 }
 
 const contentStyle = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '28px',
-  lineHeight: '1.5',
+  fontSize: '40px',
+  lineHeight: '1.45',
   color: '#374151',
 }
 
