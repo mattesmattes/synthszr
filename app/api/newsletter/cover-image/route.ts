@@ -40,29 +40,12 @@ export async function GET(request: NextRequest) {
     const left = Math.floor((width - cropSize) / 2)
     const top = Math.floor((height - cropSize) / 2)
 
-    // Create neon yellow background for transparent pixels (#CCFF00)
-    const yellowBg = await sharp({
-      create: {
-        width: size,
-        height: size,
-        channels: 3,
-        background: { r: 204, g: 255, b: 0 },
-      },
-    })
-      .png()
-      .toBuffer()
-
-    // Crop to square and resize
-    const croppedImage = await sharp(imageBuffer)
+    // Crop to square and resize, then flatten with yellow background
+    const finalImage = await sharp(imageBuffer)
       .extract({ left, top, width: cropSize, height: cropSize })
       .resize(size, size, { fit: 'fill' })
+      .flatten({ background: { r: 204, g: 255, b: 0 } }) // #CCFF00 neon yellow
       .png()
-      .toBuffer()
-
-    // Composite cropped image over yellow background
-    const finalImage = await sharp(yellowBg)
-      .composite([{ input: croppedImage, blend: 'over' }])
-      .png({ quality: 90 })
       .toBuffer()
 
     // Return the final image with caching headers

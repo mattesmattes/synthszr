@@ -32,6 +32,17 @@ const TICKER_STYLES = {
   neutral: 'background-color: #9CA3AF; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: 600; font-size: 11px; font-family: monospace; white-space: nowrap;',
 }
 
+// Inline styles for email HTML (email clients ignore <style> tags)
+const EMAIL_STYLES = {
+  p: 'font-family: Georgia, serif; font-size: 18px; line-height: 1.7; color: #374151; margin-bottom: 16px;',
+  h2: 'font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 22px; font-weight: 600; color: #1a1a1a; margin-top: 32px; margin-bottom: 12px; line-height: 1.3;',
+  h3: 'font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 19px; font-weight: 600; color: #1a1a1a; margin-top: 24px; margin-bottom: 8px;',
+  ul: 'font-family: Georgia, serif; font-size: 18px; line-height: 1.7; color: #374151; margin-bottom: 16px; padding-left: 24px;',
+  ol: 'font-family: Georgia, serif; font-size: 18px; line-height: 1.7; color: #374151; margin-bottom: 16px; padding-left: 24px;',
+  li: 'margin-bottom: 8px;',
+  blockquote: 'border-left: 3px solid #CCFF00; padding-left: 16px; margin: 24px 0; font-style: italic; color: #4b5563;',
+}
+
 interface StockQuoteData {
   company: string
   changePercent: number
@@ -393,7 +404,7 @@ function convertNodeToHtml(node: TiptapNode): string {
 }
 
 /**
- * Convert a single TipTap node to HTML with inline stock tickers
+ * Convert a single TipTap node to HTML with inline stock tickers AND inline styles
  */
 function convertNodeToHtmlWithTickers(
   node: TiptapNode,
@@ -402,18 +413,19 @@ function convertNodeToHtmlWithTickers(
 ): string {
   switch (node.type) {
     case 'paragraph':
-      return `<p>${renderContentWithTickers(node.content, stockQuotesMap, companyDisplayNames)}</p>`
+      return `<p style="${EMAIL_STYLES.p}">${renderContentWithTickers(node.content, stockQuotesMap, companyDisplayNames)}</p>`
     case 'heading': {
       const level = node.attrs?.level || 2
+      const style = level === 2 ? EMAIL_STYLES.h2 : EMAIL_STYLES.h3
       // No tickers in headings
-      return `<h${level}>${renderContent(node.content)}</h${level}>`
+      return `<h${level} style="${style}">${renderContent(node.content)}</h${level}>`
     }
     case 'bulletList':
-      return `<ul>${node.content?.map(li => `<li>${renderContentWithTickers(li.content?.[0]?.content, stockQuotesMap, companyDisplayNames)}</li>`).join('')}</ul>`
+      return `<ul style="${EMAIL_STYLES.ul}">${node.content?.map(li => `<li style="${EMAIL_STYLES.li}">${renderContentWithTickers(li.content?.[0]?.content, stockQuotesMap, companyDisplayNames)}</li>`).join('')}</ul>`
     case 'orderedList':
-      return `<ol>${node.content?.map(li => `<li>${renderContentWithTickers(li.content?.[0]?.content, stockQuotesMap, companyDisplayNames)}</li>`).join('')}</ol>`
+      return `<ol style="${EMAIL_STYLES.ol}">${node.content?.map(li => `<li style="${EMAIL_STYLES.li}">${renderContentWithTickers(li.content?.[0]?.content, stockQuotesMap, companyDisplayNames)}</li>`).join('')}</ol>`
     case 'blockquote':
-      return `<blockquote>${renderContentWithTickers(node.content, stockQuotesMap, companyDisplayNames)}</blockquote>`
+      return `<blockquote style="${EMAIL_STYLES.blockquote}">${renderContentWithTickers(node.content, stockQuotesMap, companyDisplayNames)}</blockquote>`
     case 'horizontalRule':
       return '<hr />'
     default:
