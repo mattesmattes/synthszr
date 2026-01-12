@@ -25,12 +25,61 @@ const RATING_STYLES = {
   SELL: 'background-color: #FF6600; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
 }
 
+// Stock ticker badge styles
+const TICKER_STYLES = {
+  up: 'background-color: #39FF14; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: 600; font-size: 11px; font-family: monospace; white-space: nowrap;',
+  down: 'background-color: #FF6600; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: 600; font-size: 11px; font-family: monospace; white-space: nowrap;',
+  neutral: 'background-color: #9CA3AF; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: 600; font-size: 11px; font-family: monospace; white-space: nowrap;',
+}
+
+interface StockQuoteData {
+  company: string
+  changePercent: number
+  direction: 'up' | 'down' | 'neutral'
+}
+
 interface RatingData {
   company: string
   displayName: string
   rating: 'BUY' | 'HOLD' | 'SELL'
   type: 'public' | 'premarket'
   isin?: string
+}
+
+/**
+ * Fetch stock quotes for companies
+ */
+async function fetchStockQuotes(
+  companies: string[],
+  baseUrl: string
+): Promise<Map<string, StockQuoteData>> {
+  const quotesMap = new Map<string, StockQuoteData>()
+
+  try {
+    await Promise.all(
+      companies.map(async (company) => {
+        try {
+          const res = await fetch(`${baseUrl}/api/stock-quote?company=${encodeURIComponent(company)}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (data.changePercent !== undefined) {
+              quotesMap.set(company.toLowerCase(), {
+                company,
+                changePercent: data.changePercent,
+                direction: data.direction || 'neutral',
+              })
+            }
+          }
+        } catch {
+          // Silently fail for individual quotes
+        }
+      })
+    )
+  } catch (error) {
+    console.error('[tiptap-to-html] Failed to fetch stock quotes:', error)
+  }
+
+  return quotesMap
 }
 
 /**
@@ -177,8 +226,8 @@ export function generateEmailContent(post: { content?: unknown; excerpt?: string
 }
 
 /**
- * Convert post content to email-friendly HTML with Synthszr Vote badges
- * Async version that fetches ratings from APIs
+ * Convert post content to email-friendly HTML with Synthszr Vote badges AND stock ticker badges
+ * Async version that fetches ratings and quotes from APIs
  */
 export async function generateEmailContentWithVotes(
   post: { content?: unknown; excerpt?: string; slug?: string },
@@ -207,7 +256,18 @@ export async function generateEmailContentWithVotes(
     return post.excerpt || ''
   }
 
-  // First pass: find all Synthszr Take paragraphs and collect companies
+  // Extract full text to find ALL companies
+  const fullText = doc.content.map(node => extractTextFromNode(node)).join(' ')
+  const allCompaniesInDoc = findCompaniesInText(fullText)
+
+  // Collect all public companies for stock quotes AND ratings
+  const allPublicCompanies = new Set<string>()
+  const allPremarketCompanies = new Set<string>()
+
+  allCompaniesInDoc.public.forEach(c => allPublicCompanies.add(c.apiName))
+  allCompaniesInDoc.premarket.forEach(c => allPremarketCompanies.add(c.apiName))
+
+  // First pass: find all Synthszr Take paragraphs for vote badges
   const synthszrTakeParagraphs: { index: number; text: string }[] = []
 
   doc.content.forEach((node, index) => {
@@ -225,31 +285,31 @@ export async function generateEmailContentWithVotes(
     }
   })
 
-  // Collect all companies mentioned
-  const allPublicCompanies = new Set<string>()
-  const allPremarketCompanies = new Set<string>()
+  // Collect companies for Synthszr Take vote badges
   const paragraphCompanies = new Map<number, { public: Array<{ apiName: string; displayName: string }>; premarket: Array<{ apiName: string; displayName: string }> }>()
 
   for (const para of synthszrTakeParagraphs) {
     const companies = findCompaniesInText(para.text)
     paragraphCompanies.set(para.index, companies)
-    companies.public.forEach(c => allPublicCompanies.add(c.apiName))
-    companies.premarket.forEach(c => allPremarketCompanies.add(c.apiName))
   }
 
-  // Fetch ratings if any companies found
-  let ratingsMap = new Map<string, { rating: 'BUY' | 'HOLD' | 'SELL'; type: 'public' | 'premarket'; isin?: string }>()
-  if (allPublicCompanies.size > 0 || allPremarketCompanies.size > 0) {
-    ratingsMap = await fetchRatings(
-      Array.from(allPublicCompanies),
-      Array.from(allPremarketCompanies),
-      baseUrl
-    )
-  }
+  // Fetch both stock quotes AND ratings in parallel
+  const [stockQuotesMap, ratingsMap] = await Promise.all([
+    allPublicCompanies.size > 0
+      ? fetchStockQuotes(Array.from(allPublicCompanies), baseUrl)
+      : Promise.resolve(new Map<string, StockQuoteData>()),
+    (allPublicCompanies.size > 0 || allPremarketCompanies.size > 0)
+      ? fetchRatings(Array.from(allPublicCompanies), Array.from(allPremarketCompanies), baseUrl)
+      : Promise.resolve(new Map<string, { rating: 'BUY' | 'HOLD' | 'SELL'; type: 'public' | 'premarket'; isin?: string }>()),
+  ])
 
-  // Convert to HTML with vote badges
+  // Build a set of company display names for ticker insertion
+  const companyDisplayNames = new Map<string, { apiName: string; displayName: string }>()
+  allCompaniesInDoc.public.forEach(c => companyDisplayNames.set(c.displayName.toLowerCase(), c))
+
+  // Convert to HTML with vote badges and stock tickers
   const htmlParts = doc.content.map((node, index) => {
-    const baseHtml = convertNodeToHtml(node)
+    const baseHtml = convertNodeToHtmlWithTickers(node, stockQuotesMap, companyDisplayNames)
 
     // Check if this is a Synthszr Take paragraph
     const companies = paragraphCompanies.get(index)
@@ -330,6 +390,114 @@ function convertNodeToHtml(node: TiptapNode): string {
     default:
       return renderContent(node.content)
   }
+}
+
+/**
+ * Convert a single TipTap node to HTML with inline stock tickers
+ */
+function convertNodeToHtmlWithTickers(
+  node: TiptapNode,
+  stockQuotesMap: Map<string, StockQuoteData>,
+  companyDisplayNames: Map<string, { apiName: string; displayName: string }>
+): string {
+  switch (node.type) {
+    case 'paragraph':
+      return `<p>${renderContentWithTickers(node.content, stockQuotesMap, companyDisplayNames)}</p>`
+    case 'heading': {
+      const level = node.attrs?.level || 2
+      // No tickers in headings
+      return `<h${level}>${renderContent(node.content)}</h${level}>`
+    }
+    case 'bulletList':
+      return `<ul>${node.content?.map(li => `<li>${renderContentWithTickers(li.content?.[0]?.content, stockQuotesMap, companyDisplayNames)}</li>`).join('')}</ul>`
+    case 'orderedList':
+      return `<ol>${node.content?.map(li => `<li>${renderContentWithTickers(li.content?.[0]?.content, stockQuotesMap, companyDisplayNames)}</li>`).join('')}</ol>`
+    case 'blockquote':
+      return `<blockquote>${renderContentWithTickers(node.content, stockQuotesMap, companyDisplayNames)}</blockquote>`
+    case 'horizontalRule':
+      return '<hr />'
+    default:
+      return renderContentWithTickers(node.content, stockQuotesMap, companyDisplayNames)
+  }
+}
+
+/**
+ * Render TipTap node content with marks AND inline stock ticker badges
+ */
+function renderContentWithTickers(
+  content: TiptapNode[] | undefined,
+  stockQuotesMap: Map<string, StockQuoteData>,
+  companyDisplayNames: Map<string, { apiName: string; displayName: string }>,
+  usedCompanies: Set<string> = new Set()
+): string {
+  if (!content) return ''
+
+  return content.map(node => {
+    if (node.type === 'text') {
+      let text = node.text || ''
+
+      // Remove {Company} explicit tags from display
+      text = stripExplicitCompanyTags(text)
+
+      // Insert stock ticker badges after company names (first occurrence only)
+      for (const [displayNameLower, companyInfo] of companyDisplayNames) {
+        if (usedCompanies.has(displayNameLower)) continue
+
+        const quote = stockQuotesMap.get(companyInfo.apiName.toLowerCase())
+        if (!quote) continue
+
+        // Match company name (case insensitive)
+        const regex = new RegExp(`\\b(${companyInfo.displayName})\\b`, 'i')
+        if (regex.test(text)) {
+          usedCompanies.add(displayNameLower)
+
+          const arrow = quote.direction === 'up' ? '↑' : quote.direction === 'down' ? '↓' : '→'
+          const sign = quote.changePercent >= 0 ? '+' : ''
+          const percentStr = `${sign}${quote.changePercent.toFixed(1)}%`
+          const style = TICKER_STYLES[quote.direction]
+
+          const tickerBadge = ` <span style="${style}">${arrow} ${percentStr}</span>`
+
+          text = text.replace(regex, `$1${tickerBadge}`)
+        }
+      }
+
+      // Check if text contains "Synthszr Take:" and style it
+      const synthszrPattern = /(Synthszr Take:?)/gi
+      const hasBoldMark = node.marks?.some(m => m.type === 'bold')
+
+      // If "Synthszr Take:" is not already bold, wrap it with styling
+      if (!hasBoldMark && synthszrPattern.test(text)) {
+        text = text.replace(synthszrPattern, '<strong style="background-color: #CCFF00; padding: 2px 6px;">$1</strong>')
+      }
+
+      // Apply marks
+      if (node.marks) {
+        for (const mark of node.marks) {
+          switch (mark.type) {
+            case 'bold':
+              // Check if this is "Synthszr Take:" - add background styling
+              if (/synthszr take:?/i.test(text)) {
+                text = `<strong style="background-color: #CCFF00; padding: 2px 6px;">${text}</strong>`
+              } else {
+                text = `<strong>${text}</strong>`
+              }
+              break
+            case 'italic':
+              text = `<em>${text}</em>`
+              break
+            case 'link':
+              text = `<a href="${mark.attrs?.href || '#'}">${text}</a>`
+              break
+          }
+        }
+      }
+
+      return text
+    }
+
+    return ''
+  }).join('')
 }
 
 /**
