@@ -17,6 +17,7 @@ import { StockSynthszrLayer } from "./stock-synthszr-layer"
 import { PremarketSynthszrLayer } from "./premarket-synthszr-layer"
 import { Button } from "./ui/button"
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies"
+import { isExcludedCompanyName } from "@/lib/data/company-exclusions"
 
 interface StockData {
   symbol: string
@@ -425,6 +426,9 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       const matches: Array<{ company: string; index: number; length: number }> = []
 
       for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
+        // Skip excluded words (common nouns that aren't companies)
+        if (isExcludedCompanyName(displayName)) continue
+
         // Skip if already shown in this section
         if (sectionCompanies.has(apiName)) continue
 
@@ -668,6 +672,9 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       // Matches: "Meta", "Metas" (possessive), "Google-Aktien" (compound), or {Meta} (explicit)
       const companies: Array<{ apiName: string; displayName: string }> = []
       for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
+        // Skip excluded words (common nouns that aren't companies)
+        if (isExcludedCompanyName(displayName)) continue
+
         const regex = new RegExp(`\\b${displayName}s?(-[\\wäöüÄÖÜß]+)*\\b`, 'gi')
         const explicitRegex = new RegExp(`\\{${displayName}\\}`, 'gi')
         if (regex.test(textToSearch) || explicitRegex.test(textToSearch)) {
@@ -678,6 +685,9 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       // Find all mentioned premarket companies in the combined text
       const premarketCompanies: Array<{ apiName: string; displayName: string }> = []
       for (const [displayName, apiName] of Object.entries(KNOWN_PREMARKET_COMPANIES)) {
+        // Skip excluded words (common nouns that aren't companies)
+        if (isExcludedCompanyName(displayName)) continue
+
         // Escape special regex characters in company names (e.g., "Character.AI")
         const escapedName = displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const regex = new RegExp(`\\b${escapedName}s?\\b`, 'gi')

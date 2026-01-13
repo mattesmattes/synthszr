@@ -4,6 +4,7 @@
  */
 
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
+import { isExcludedCompanyName } from '@/lib/data/company-exclusions'
 
 export interface TiptapNode {
   type: string
@@ -144,6 +145,9 @@ function findCompaniesInText(text: string): { public: Array<{ apiName: string; d
 
   // Find public companies (natural mentions or {Company} explicit tags)
   for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
+    // Skip excluded words (common nouns that aren't companies)
+    if (isExcludedCompanyName(displayName)) continue
+
     const regex = new RegExp(`\\b${displayName}s?(-[\\wäöüÄÖÜß]+)*\\b`, 'gi')
     const explicitRegex = new RegExp(`\\{${displayName}\\}`, 'gi')
     if (regex.test(text) || explicitRegex.test(text)) {
@@ -153,6 +157,9 @@ function findCompaniesInText(text: string): { public: Array<{ apiName: string; d
 
   // Find premarket companies (natural mentions or {Company} explicit tags)
   for (const [displayName, apiName] of Object.entries(KNOWN_PREMARKET_COMPANIES)) {
+    // Skip excluded words (common nouns that aren't companies)
+    if (isExcludedCompanyName(displayName)) continue
+
     const escapedName = displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const regex = new RegExp(`\\b${escapedName}s?\\b`, 'gi')
     const explicitRegex = new RegExp(`\\{${escapedName}\\}`, 'gi')
