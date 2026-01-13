@@ -13,6 +13,7 @@ A Next.js 16 application for AI-powered financial analysis and newsletter genera
 - Natural mentions in text (e.g., "Nvidia reported...")
 - Explicit `{Company}` directive tags (e.g., `{Palantir}`)
 - Tags are hidden in rendered output but trigger rating display
+- Exclusion list prevents false positives (e.g., "Insider", "Experte" are common nouns, not companies)
 
 ### Ghostwriter
 - AI-powered blog post generation from daily digests
@@ -25,6 +26,7 @@ A Next.js 16 application for AI-powered financial analysis and newsletter genera
 - `lib/data/companies.ts` - Auto-generated company dictionaries
 - `KNOWN_COMPANIES` - Public companies with stock tickers
 - `KNOWN_PREMARKET_COMPANIES` - Premarket companies from glitch.green
+- `lib/data/company-exclusions.ts` - Words excluded from company detection
 - Sync via: `npx tsx scripts/sync-premarket-companies.ts`
 
 ### TipTap Editor
@@ -36,6 +38,15 @@ A Next.js 16 application for AI-powered financial analysis and newsletter genera
 - `/api/stock-synthszr` - Generate/cache public company analysis
 - `/api/stock-synthszr/batch-ratings` - Batch read ratings (read-only)
 - `/api/premarket/batch-ratings` - Batch read premarket ratings
+
+## Recent Changes (2026-01-13)
+
+### Company Exclusion List
+Prevents false positive Synthszr Vote badges for common German/English nouns:
+- `lib/data/company-exclusions.ts` - Centralized exclusion Set
+- Words like "Insider", "Experte", "Analyst", "Manager", "Partner" are excluded
+- Applied in both `tiptap-renderer.tsx` (frontend) and `tiptap-to-html.ts` (email)
+- To add exclusions: Edit `EXCLUDED_COMPANY_NAMES` Set in `company-exclusions.ts`
 
 ## Recent Changes (2026-01-11)
 
