@@ -500,6 +500,72 @@ export default function ArchitecturePage() {
               </ul>
             </div>
           </div>
+
+          <h3 className="mb-3 mt-6 text-lg font-semibold">Ghostwriter Integration</h3>
+          <DiagramContainer title="Pattern Application Flow">
+            <div className="flex flex-col items-center gap-2">
+              <FlowBox variant="muted" className="w-72">
+                <div className="font-semibold">streamGhostwriter()</div>
+                <div className="text-xs">lib/claude/ghostwriter.ts</div>
+              </FlowBox>
+              <Arrow />
+              <div className="grid grid-cols-2 gap-4 w-full max-w-lg">
+                <FlowBox>
+                  <div className="font-semibold text-sm">getActiveLearnedPatterns()</div>
+                  <div className="text-xs">min confidence 0.4, limit 20</div>
+                </FlowBox>
+                <FlowBox>
+                  <div className="font-semibold text-sm">findSimilarEditExamples()</div>
+                  <div className="text-xs">Embedding similarity search</div>
+                </FlowBox>
+              </div>
+              <Arrow />
+              <FlowBox variant="primary" className="w-72">
+                <div className="font-semibold">buildPromptEnhancement()</div>
+                <div className="text-xs">Adds GELERNTE STILPRÄFERENZEN section</div>
+              </FlowBox>
+              <Arrow />
+              <FlowBox variant="success" className="w-72">
+                <div className="font-semibold">Enhanced AI Prompt</div>
+                <div className="text-xs">Patterns + Examples → Claude/Gemini</div>
+              </FlowBox>
+            </div>
+          </DiagramContainer>
+
+          <h3 className="mb-3 mt-6 text-lg font-semibold">Editor Pattern Highlighting</h3>
+          <DiagramContainer title="Highlight & Feedback Flow">
+            <div className="flex flex-col items-center gap-2">
+              <FlowBox variant="muted" className="w-64">
+                <div className="font-semibold">applied_patterns</div>
+                <div className="text-xs">Tracked during generation</div>
+              </FlowBox>
+              <Arrow />
+              <FlowBox className="w-64">
+                <div className="font-semibold">TiptapEditorWithPatterns</div>
+                <div className="text-xs">PatternHighlightMark extension</div>
+              </FlowBox>
+              <Arrow />
+              <FlowBox variant="warning" className="w-64">
+                <div className="font-semibold">Yellow Highlight</div>
+                <div className="text-xs">Clickable text segments</div>
+              </FlowBox>
+              <Arrow />
+              <div className="grid grid-cols-3 gap-2 w-full max-w-md">
+                <FlowBox variant="success">
+                  <div className="text-xs">Behalten</div>
+                  <div className="text-xs text-emerald-400">+0.1</div>
+                </FlowBox>
+                <FlowBox variant="default">
+                  <div className="text-xs">Ablehnen</div>
+                  <div className="text-xs text-red-400">-0.1</div>
+                </FlowBox>
+                <FlowBox variant="muted">
+                  <div className="text-xs">Deaktivieren</div>
+                  <div className="text-xs text-zinc-500">is_active=false</div>
+                </FlowBox>
+              </div>
+            </div>
+          </DiagramContainer>
         </section>
 
         {/* Section 8: Stock-Synthszr */}
@@ -585,6 +651,81 @@ export default function ArchitecturePage() {
                 <li>• <span className="text-zinc-200">KS</span> — Korea (Samsung)</li>
               </ul>
             </div>
+          </div>
+
+          <h3 className="mb-4 mt-8 text-lg font-semibold">Premarket Company Ratings</h3>
+          <p className="mb-6 text-zinc-400">
+            For pre-IPO and private companies, ratings are fetched from the glitch.green external API.
+            These companies are tracked separately from public stocks and displayed with the same
+            BUY/HOLD/SELL badge system.
+          </p>
+
+          <DiagramContainer title="Premarket Data Flow">
+            <div className="grid grid-cols-3 gap-4 items-center">
+              {/* Source */}
+              <div className="flex flex-col items-center gap-2">
+                <div className="text-xs text-zinc-500 uppercase font-semibold">External API</div>
+                <FlowBox variant="muted">
+                  <div className="font-semibold">glitch.green</div>
+                  <div className="text-xs">/api/public/premarket-syntheses</div>
+                </FlowBox>
+                <FlowBox variant="muted">
+                  <div className="text-xs">X-API-Key auth</div>
+                </FlowBox>
+              </div>
+
+              <div className="flex justify-center">
+                <Arrow direction="right" />
+              </div>
+
+              {/* Processing */}
+              <div className="flex flex-col items-center gap-2">
+                <div className="text-xs text-zinc-500 uppercase font-semibold">Local APIs</div>
+                <FlowBox variant="primary">
+                  <div className="font-semibold">/api/premarket</div>
+                  <div className="text-xs">Single company lookup</div>
+                </FlowBox>
+                <FlowBox variant="primary">
+                  <div className="font-semibold">/api/premarket/batch-ratings</div>
+                  <div className="text-xs">Multiple companies</div>
+                </FlowBox>
+              </div>
+            </div>
+          </DiagramContainer>
+
+          <div className="grid grid-cols-2 gap-6">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+              <h4 className="font-semibold mb-3">Premarket Data Structure</h4>
+              <ul className="space-y-2 text-sm text-zinc-400">
+                <li>• <span className="text-zinc-200">instrument</span> — ISIN, name, currency</li>
+                <li>• <span className="text-zinc-200">synthesis.rating</span> — BUY/HOLD/SELL</li>
+                <li>• <span className="text-zinc-200">synthesis.rationale</span> — Analysis text</li>
+                <li>• <span className="text-zinc-200">synthesis.keyTakeaways</span> — Bullet points</li>
+                <li>• <span className="text-zinc-200">synthesis.actionIdeas</span> — Strategies</li>
+                <li>• <span className="text-zinc-200">latestPrice</span> — Current valuation</li>
+              </ul>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+              <h4 className="font-semibold mb-3">Company Detection</h4>
+              <ul className="space-y-2 text-sm text-zinc-400">
+                <li>• <span className="text-zinc-200">KNOWN_PREMARKET_COMPANIES</span> — Map in companies.ts</li>
+                <li>• <span className="text-zinc-200">Natural mentions</span> — &quot;OpenAI reported...&quot;</li>
+                <li>• <span className="text-zinc-200">Explicit tags</span> — &#123;Company&#125; directives</li>
+                <li>• <span className="text-zinc-200">Exclusion list</span> — Filters false positives</li>
+                <li>• <span className="text-zinc-200">Sync script</span> — sync-premarket-companies.ts</li>
+              </ul>
+            </div>
+          </div>
+
+          <h4 className="font-semibold mt-6 mb-3">Display Flow (tiptap-renderer.tsx)</h4>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+            <ol className="space-y-2 text-sm text-zinc-400">
+              <li><span className="text-zinc-200">1.</span> Find all &quot;Synthszr Take&quot; sections in rendered content</li>
+              <li><span className="text-zinc-200">2.</span> Extract company mentions using KNOWN_PREMARKET_COMPANIES regex</li>
+              <li><span className="text-zinc-200">3.</span> Batch fetch ratings via <code className="bg-zinc-800 px-1 rounded">/api/premarket/batch-ratings</code></li>
+              <li><span className="text-zinc-200">4.</span> Inject clickable rating badges (BUY/HOLD/SELL) after section</li>
+              <li><span className="text-zinc-200">5.</span> Click opens <code className="bg-zinc-800 px-1 rounded">PremarketSynthszrLayer</code> dialog with full analysis</li>
+            </ol>
           </div>
         </section>
 

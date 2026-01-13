@@ -55,6 +55,29 @@ A Next.js 16 application for AI-powered financial analysis and newsletter genera
 - `app/api/cron/extract-patterns/route.ts` - Extract patterns from clustered diffs
 - Database tables: `edit_history`, `edit_diffs`, `learned_patterns`, `applied_patterns`
 
+**Ghostwriter Integration:**
+- `streamGhostwriter()` calls `getActiveLearnedPatterns()` and `findSimilarEditExamples()`
+- `buildPromptEnhancement()` adds "GELERNTE STILPRÄFERENZEN" section to prompt
+- Patterns with confidence ≥ 0.4 are included (max 20)
+- Similar examples found via pgvector embedding search
+
+**Editor Highlighting:**
+- `components/tiptap-editor-with-patterns.tsx` - Editor with pattern highlights
+- `lib/tiptap/pattern-highlight-mark.ts` - TipTap Mark extension for yellow highlighting
+- Click on highlight → Popover with "Behalten/Ablehnen/Deaktivieren" options
+- Feedback updates confidence via `/api/admin/pattern-feedback`
+
+### Premarket Data
+- `lib/premarket/client.ts` - Fetches from glitch.green API
+- `lib/premarket/types.ts` - PremarketItem, PremarketSynthesis types
+- `app/api/premarket/route.ts` - Single company lookup
+- `app/api/premarket/batch-ratings/route.ts` - Batch fetch for multiple companies
+- `components/premarket-synthszr-layer.tsx` - Dialog showing full analysis
+- Source: External API at `https://glitch.green/api/public/premarket-syntheses`
+- Auth: `STOCKS_PREMARKET_API_KEY` via X-API-Key header
+- Company mapping: `KNOWN_PREMARKET_COMPANIES` in `lib/data/companies.ts`
+- Sync: `npx tsx scripts/sync-premarket-companies.ts`
+
 ## Recent Changes (2026-01-13)
 
 ### Edit Learning System
