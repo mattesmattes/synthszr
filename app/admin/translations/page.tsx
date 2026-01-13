@@ -195,14 +195,31 @@ export default function TranslationsPage() {
 
   async function retryItem(id: string) {
     try {
-      await fetch('/api/admin/translations', {
+      const res = await fetch('/api/admin/translations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'retry', queue_item_id: id }),
       })
-      fetchData()
+      const result = await res.json()
+
+      if (!res.ok) {
+        console.error('Retry failed:', result)
+        setProcessLog(prev => [...prev, `❌ Retry fehlgeschlagen: ${result.error || 'Unbekannter Fehler'}`])
+        return
+      }
+
+      console.log('Retry successful:', result)
+      setProcessLog(prev => [...prev, `✅ Item zurück in Queue gestellt`])
+      await fetchData()
+
+      // Auto-start processing if not already running
+      if (!processing) {
+        setProcessLog(prev => [...prev, `🚀 Starte Verarbeitung...`])
+        processQueueContinuously()
+      }
     } catch (error) {
       console.error('Error retrying item:', error)
+      setProcessLog(prev => [...prev, `❌ Netzwerkfehler beim Retry`])
     }
   }
 
@@ -221,14 +238,57 @@ export default function TranslationsPage() {
 
   async function retryAllFailed() {
     try {
-      await fetch('/api/admin/translations', {
+      const res = await fetch('/api/admin/translations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'retry-all-failed' }),
       })
-      fetchData()
+      const result = await res.json()
+
+      if (!res.ok) {
+        setProcessLog(prev => [...prev, `❌ Retry fehlgeschlagen: ${result.error || 'Unbekannter Fehler'}`])
+        return
+      }
+
+      setProcessLog(prev => [...prev, `✅ ${result.count || 0} Items zurück in Queue gestellt`])
+      await fetchData()
+
+      // Auto-start processing if not already running and there are items
+      if (!processing && result.count > 0) {
+        setProcessLog(prev => [...prev, `🚀 Starte Verarbeitung...`])
+        processQueueContinuously()
+      }
     } catch (error) {
       console.error('Error retrying all failed:', error)
+      setProcessLog(prev => [...prev, `❌ Netzwerkfehler beim Retry`])
+    }
+  }
+
+  async function retryAllCancelled() {
+    try {
+      const res = await fetch('/api/admin/translations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'retry-all-cancelled' }),
+      })
+      const result = await res.json()
+
+      if (!res.ok) {
+        setProcessLog(prev => [...prev, `❌ Retry fehlgeschlagen: ${result.error || 'Unbekannter Fehler'}`])
+        return
+      }
+
+      setProcessLog(prev => [...prev, `✅ ${result.count || 0} abgebrochene Items zurück in Queue gestellt`])
+      await fetchData()
+
+      // Auto-start processing if not already running and there are items
+      if (!processing && result.count > 0) {
+        setProcessLog(prev => [...prev, `🚀 Starte Verarbeitung...`])
+        processQueueContinuously()
+      }
+    } catch (error) {
+      console.error('Error retrying all cancelled:', error)
+      setProcessLog(prev => [...prev, `❌ Netzwerkfehler beim Retry`])
     }
   }
 
@@ -323,7 +383,7 @@ export default function TranslationsPage() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-5 mb-6">
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6 mb-6">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Ausstehend</CardDescription>
@@ -348,6 +408,17 @@ export default function TranslationsPage() {
             <CardTitle className="text-2xl text-red-600 flex items-center gap-2">
               {stats?.failed || 0}
               {(stats?.failed || 0) > 0 && (
+                <RotateCcw className="h-4 w-4 opacity-50" />
+              )}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card className="cursor-pointer hover:border-gray-400" onClick={() => stats?.cancelled && retryAllCancelled()}>
+          <CardHeader className="pb-2">
+            <CardDescription>Abgebrochen</CardDescription>
+            <CardTitle className="text-2xl text-gray-600 flex items-center gap-2">
+              {stats?.cancelled || 0}
+              {(stats?.cancelled || 0) > 0 && (
                 <RotateCcw className="h-4 w-4 opacity-50" />
               )}
             </CardTitle>

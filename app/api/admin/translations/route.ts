@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'retry' && queue_item_id) {
       // Reset failed or cancelled item to pending
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('translation_queue')
         .update({
           status: 'pending',
@@ -142,25 +142,19 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', queue_item_id)
         .in('status', ['failed', 'cancelled'])
+        .select('id')
 
       if (error) {
-        return NextResponse.json({ error: 'Failed to retry item' }, { status: 500 })
+        console.error('[Translations] Retry error:', error)
+        return NextResponse.json({ error: 'Failed to retry item', details: error.message }, { status: 500 })
       }
 
-      // Trigger queue processing immediately (forward cookies for session auth)
-      try {
-        await fetch(new URL('/api/admin/translations/process-queue', request.url).toString(), {
-          method: 'POST',
-          headers: {
-            cookie: request.headers.get('cookie') || '',
-          },
-        })
-      } catch (e) {
-        // Processing trigger failed, but item is queued - don't fail the request
-        console.error('[Translations] Failed to trigger processing:', e)
+      if (!data || data.length === 0) {
+        return NextResponse.json({ error: 'Item not found or not in retryable status' }, { status: 404 })
       }
 
-      return NextResponse.json({ message: 'Item queued for retry and processing started' })
+      console.log(`[Translations] Item ${queue_item_id} reset to pending`)
+      return NextResponse.json({ message: 'Item queued for retry', updated: true })
     }
 
     if (action === 'cancel' && queue_item_id) {
@@ -205,6 +199,28 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json({ message: `${data?.length || 0} items queued for retry`, count: data?.length || 0 })
+    }
+
+    if (action === 'retry-all-cancelled') {
+      // Reset all cancelled items to pending
+      const { data, error } = await supabase
+        .from('translation_queue')
+        .update({
+          status: 'pending',
+          attempts: 0,
+          last_error: null,
+          started_at: null,
+          completed_at: null,
+        })
+        .eq('status', 'cancelled')
+        .select('id')
+
+      if (error) {
+        return NextResponse.json({ error: 'Failed to retry cancelled items' }, { status: 500 })
+      }
+
+      console.log(`[Translations] Reset ${data?.length || 0} cancelled items to pending`)
+      return NextResponse.json({ message: `${data?.length || 0} cancelled items queued for retry`, count: data?.length || 0 })
     }
 
     if (action === 'cleanup-orphans') {

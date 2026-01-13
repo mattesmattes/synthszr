@@ -230,6 +230,28 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       }
     }
 
+    // Trigger translations when publishing for the first time
+    if (!wasPublished && isNowPublished) {
+      console.log(`[i18n] Triggering translations for post ${id}`)
+      fetch('/api/admin/translations/queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          content_type: 'generated_post',
+          content_id: id,
+          priority: 10,
+        }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.queued > 0) {
+            console.log(`[i18n] Queued ${data.queued} translations`)
+          }
+        })
+        .catch(err => console.error('[i18n] Translation queue error:', err))
+    }
+
     setSaving(false)
     router.push('/admin/generated-articles')
     router.refresh()

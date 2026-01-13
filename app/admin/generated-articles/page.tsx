@@ -214,6 +214,27 @@ export default function GeneratedArticlesPage() {
       })
 
       if (res.ok) {
+        // Trigger translations when publishing
+        if (newStatus === 'published') {
+          console.log(`[i18n] Triggering translations for post ${postId}`)
+          fetch('/api/admin/translations/queue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              content_type: 'generated_post',
+              content_id: postId,
+              priority: 10,
+            }),
+          })
+            .then(res => res.json())
+            .then(data => {
+              if (data.queued > 0) {
+                console.log(`[i18n] Queued ${data.queued} translations`)
+              }
+            })
+            .catch(err => console.error('[i18n] Translation queue error:', err))
+        }
         fetchPosts()
       } else {
         const error = await res.json()
