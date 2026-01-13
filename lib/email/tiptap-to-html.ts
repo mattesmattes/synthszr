@@ -26,11 +26,11 @@ const RATING_STYLES = {
   SELL: 'background-color: #FF6600; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
 }
 
-// Percentage change styles for vote badges
+// Percentage change styles for vote badges (black text on colored background)
 const PERCENT_STYLES = {
-  up: 'color: #39FF14;',
-  down: 'color: #FF6600;',
-  neutral: 'color: #9CA3AF;',
+  up: 'background-color: #39FF14; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px;',
+  down: 'background-color: #FF6600; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px;',
+  neutral: 'background-color: #9CA3AF; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px;',
 }
 
 interface RatingData {

@@ -54,11 +54,11 @@ function SynthszrRatingLink({ company, displayName, rating, ticker, changePercen
     SELL: 'Sell',
   }
 
-  // Percentage direction styling
+  // Percentage direction styling (black text on colored background)
   const directionStyles = {
-    up: 'text-[#39FF14]',     // Neon Green
-    down: 'text-[#FF6600]',   // Neon Orange
-    neutral: 'text-gray-400', // Gray
+    up: 'bg-[#39FF14] text-black',      // Neon Green
+    down: 'bg-[#FF6600] text-black',    // Neon Orange
+    neutral: 'bg-gray-300 text-black',  // Gray
   }
 
   const directionArrows = {
@@ -79,7 +79,7 @@ function SynthszrRatingLink({ company, displayName, rating, ticker, changePercen
           {displayName}
           {ticker && <span className="text-muted-foreground"> ({ticker})</span>}
           {typeof changePercent === 'number' && direction && (
-            <span className={`ml-1 ${directionStyles[direction]}`}>
+            <span className={`ml-1 px-1 py-0.5 rounded text-xs font-bold ${directionStyles[direction]}`}>
               {directionArrows[direction]}{Math.abs(changePercent).toFixed(1)}%
             </span>
           )}
