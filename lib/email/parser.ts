@@ -69,8 +69,20 @@ export function parseNewsletterHtml(
   }
 }
 
+// Patterns that indicate the start of forwarded email content
+const FORWARDED_MESSAGE_PATTERNS = [
+  /---------- Forwarded message ---------/i,  // Gmail
+  /-------- Original Message --------/i,
+  /Begin forwarded message:/i,
+  /Anfang der weitergeleiteten Nachricht:/i,  // German
+  /Weitergeleitete Nachricht:/i,
+  /-----Original Message-----/i,
+  />>> Original Message >>>/i,
+]
+
 /**
  * Extract clean plain text from HTML
+ * For forwarded emails, extracts the forwarded content (after the forwarding markers)
  */
 function extractPlainText($: cheerio.CheerioAPI): string {
   // Remove script, style, and other non-content elements
@@ -85,7 +97,71 @@ function extractPlainText($: cheerio.CheerioAPI): string {
     .replace(/\n\s*\n/g, '\n\n')
     .trim()
 
+  // Check if this is a forwarded email and extract the forwarded content
+  text = extractForwardedContent(text)
+
   return text
+}
+
+/**
+ * Extract the forwarded content from an email if it contains forwarding markers.
+ * This handles the case where users forward newsletters with "+dailyrepo" tag -
+ * the actual content is AFTER the user's signature and forwarding headers.
+ */
+function extractForwardedContent(text: string): string {
+  for (const pattern of FORWARDED_MESSAGE_PATTERNS) {
+    const match = text.match(pattern)
+    if (match && match.index !== undefined) {
+      // Found a forwarding marker - extract content after it
+      const afterMarker = text.substring(match.index + match[0].length)
+
+      // Skip the forwarding headers (From:, To:, Date:, Subject:) that come after the marker
+      // These typically appear in the first few lines after the forwarding marker
+      const contentAfterHeaders = skipForwardingHeaders(afterMarker)
+
+      if (contentAfterHeaders.trim().length > 100) {
+        // Only use the forwarded content if it's substantial
+        return contentAfterHeaders.trim()
+      }
+    }
+  }
+
+  return text
+}
+
+/**
+ * Skip the email headers that appear after a forwarding marker.
+ * Headers like "Von:", "From:", "Date:", "Subject:", "An:", "To:" etc.
+ */
+function skipForwardingHeaders(text: string): string {
+  const lines = text.split('\n')
+  let contentStartIndex = 0
+
+  // Headers to skip (in various languages)
+  const headerPatterns = [
+    /^(Von|From|De):/i,
+    /^(An|To|À):/i,
+    /^(Datum|Date):/i,
+    /^(Betreff|Subject|Objet):/i,
+    /^(Gesendet|Sent|Envoyé):/i,
+    /^(Cc|Kopie):/i,
+    /^\s*$/,  // Empty lines
+  ]
+
+  // Skip consecutive header lines at the start
+  for (let i = 0; i < lines.length && i < 15; i++) {
+    const line = lines[i].trim()
+    const isHeader = headerPatterns.some(p => p.test(line))
+
+    if (!isHeader && line.length > 0) {
+      // Found first non-header, non-empty line
+      contentStartIndex = i
+      break
+    }
+    contentStartIndex = i + 1
+  }
+
+  return lines.slice(contentStartIndex).join('\n')
 }
 
 /**

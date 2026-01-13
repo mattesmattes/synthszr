@@ -67,10 +67,28 @@ export async function processNewsletters(): Promise<NewsletterProcessResult> {
     .eq('key', 'last_newsletter_fetch')
     .single()
 
-  // For first fetch or missing timestamp, use default window
-  const lastFetch = settings?.value?.timestamp
-    ? new Date(settings.value.timestamp)
-    : new Date(Date.now() - DEFAULT_NEWSLETTER_FETCH_MS)
+  // Check if there are already entries in daily_repo for today
+  // If not, this might be a re-run after deletion, so use a longer lookback
+  const today = new Date().toISOString().split('T')[0]
+  const { count: todayEntriesCount } = await supabase
+    .from('daily_repo')
+    .select('id', { count: 'exact', head: true })
+    .eq('newsletter_date', today)
+
+  // Determine fetch window:
+  // - If entries exist for today: use last_newsletter_fetch (incremental update)
+  // - If no entries for today: use 36h lookback (fresh start / re-run after deletion)
+  let lastFetch: Date
+  if (todayEntriesCount && todayEntriesCount > 0) {
+    // Incremental: fetch since last run
+    lastFetch = settings?.value?.timestamp
+      ? new Date(settings.value.timestamp)
+      : new Date(Date.now() - DEFAULT_NEWSLETTER_FETCH_MS)
+  } else {
+    // Fresh start for today: use 36h lookback to catch all from previous day
+    lastFetch = new Date(Date.now() - DEFAULT_NEWSLETTER_FETCH_MS)
+    console.log('[Newsletter] No entries for today - using 36h lookback for fresh fetch')
+  }
 
   console.log('[Newsletter] Last fetch timestamp:', lastFetch.toISOString())
 
