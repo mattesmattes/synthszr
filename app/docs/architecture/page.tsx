@@ -75,10 +75,11 @@ export default function ArchitecturePage() {
             <li><a href="#newsletter-fetch" className="text-zinc-300 hover:text-white">4. Newsletter Fetching</a></li>
             <li><a href="#analysis" className="text-zinc-300 hover:text-white">5. Daily Analysis & Synthesis</a></li>
             <li><a href="#post-generation" className="text-zinc-300 hover:text-white">6. AI Post Generation</a></li>
-            <li><a href="#stock-synthszr" className="text-zinc-300 hover:text-white">7. Stock Values & Stock-Synthszr</a></li>
-            <li><a href="#data-model" className="text-zinc-300 hover:text-white">8. Data Model</a></li>
-            <li><a href="#security" className="text-zinc-300 hover:text-white">9. Security & Tech Debt</a></li>
-            <li><a href="#api-routes" className="text-zinc-300 hover:text-white">10. API Routes</a></li>
+            <li><a href="#edit-learning" className="text-zinc-300 hover:text-white">7. Edit Learning System</a></li>
+            <li><a href="#stock-synthszr" className="text-zinc-300 hover:text-white">8. Stock Values & Stock-Synthszr</a></li>
+            <li><a href="#data-model" className="text-zinc-300 hover:text-white">9. Data Model</a></li>
+            <li><a href="#security" className="text-zinc-300 hover:text-white">10. Security & Tech Debt</a></li>
+            <li><a href="#api-routes" className="text-zinc-300 hover:text-white">11. API Routes</a></li>
           </ul>
         </nav>
 
@@ -403,9 +404,107 @@ export default function ArchitecturePage() {
           </div>
         </section>
 
-        {/* Section 7: Stock-Synthszr */}
+        {/* Section 7: Edit Learning System */}
+        <section id="edit-learning" className="mb-16">
+          <h2 className="mb-6 text-2xl font-bold">7. Edit Learning System</h2>
+          <p className="mb-6 text-zinc-400">
+            The Edit Learning System enables the Ghostwriter to improve over time by learning from
+            manual edits made to AI-generated blog posts. It tracks all changes, extracts patterns,
+            and applies learned rules to future content generation.
+          </p>
+
+          <DiagramContainer title="Edit Learning Flow">
+            <div className="flex flex-col items-center gap-2">
+              <FlowBox variant="muted" className="w-64">
+                <div className="font-semibold">AI Generated Post</div>
+                <div className="text-xs">Ghostwriter output</div>
+              </FlowBox>
+              <Arrow />
+              <FlowBox variant="primary" className="w-64">
+                <div className="font-semibold">Manual Editing</div>
+                <div className="text-xs">TipTap Editor in /admin</div>
+              </FlowBox>
+              <Arrow />
+              <FlowBox className="w-64">
+                <div className="font-semibold">edit_history</div>
+                <div className="text-xs">content_before / content_after</div>
+              </FlowBox>
+              <Arrow />
+              <div className="grid grid-cols-2 gap-4 w-full max-w-md">
+                <FlowBox variant="warning">
+                  <div className="font-semibold">Diff Extraction</div>
+                  <div className="text-xs">Sentence-level</div>
+                </FlowBox>
+                <FlowBox variant="warning">
+                  <div className="font-semibold">AI Classification</div>
+                  <div className="text-xs">Claude API</div>
+                </FlowBox>
+              </div>
+              <Arrow />
+              <FlowBox variant="success" className="w-64">
+                <div className="font-semibold">learned_patterns</div>
+                <div className="text-xs">Rules for future generation</div>
+              </FlowBox>
+            </div>
+          </DiagramContainer>
+
+          <h3 className="mb-3 text-lg font-semibold">Edit Classification Types</h3>
+          <div className="grid grid-cols-4 gap-3 text-sm mb-6">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center">
+              <div className="font-mono text-blue-400">factual</div>
+              <div className="text-xs text-zinc-500 mt-1">Content corrections</div>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center">
+              <div className="font-mono text-purple-400">stylistic</div>
+              <div className="text-xs text-zinc-500 mt-1">Tone & voice changes</div>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center">
+              <div className="font-mono text-amber-400">vocabulary</div>
+              <div className="text-xs text-zinc-500 mt-1">Word replacements</div>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center">
+              <div className="font-mono text-emerald-400">grammar</div>
+              <div className="text-xs text-zinc-500 mt-1">Punctuation & syntax</div>
+            </div>
+          </div>
+
+          <h3 className="mb-3 text-lg font-semibold">Pattern Learning Cycle</h3>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+            <ol className="space-y-2 text-sm text-zinc-400">
+              <li><span className="text-zinc-200">1.</span> Edit history is recorded when posts are saved (content_before → content_after)</li>
+              <li><span className="text-zinc-200">2.</span> <code className="bg-zinc-800 px-1 rounded">/api/admin/analyze-edits</code> extracts sentence-level diffs and classifies them via Claude</li>
+              <li><span className="text-zinc-200">3.</span> <code className="bg-zinc-800 px-1 rounded">/api/cron/extract-patterns</code> clusters similar edits (embedding similarity &gt; 0.85)</li>
+              <li><span className="text-zinc-200">4.</span> Patterns with 3+ similar edits become <code className="bg-zinc-800 px-1 rounded">learned_patterns</code></li>
+              <li><span className="text-zinc-200">5.</span> Ghostwriter retrieves active patterns and applies them during generation</li>
+            </ol>
+          </div>
+
+          <h3 className="mb-3 mt-6 text-lg font-semibold">Confidence & Decay</h3>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+              <div className="font-semibold text-zinc-200 mb-2">Confidence Score</div>
+              <ul className="space-y-1 text-zinc-400">
+                <li>• New patterns start at 0.5</li>
+                <li>• User keeps edit → +0.1</li>
+                <li>• User reverts edit → -0.1</li>
+                <li>• Patterns &lt; 0.3 auto-deactivate</li>
+              </ul>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+              <div className="font-semibold text-zinc-200 mb-2">Time Decay</div>
+              <ul className="space-y-1 text-zinc-400">
+                <li>• 0.95 decay factor per week</li>
+                <li>• Halves every ~14 weeks</li>
+                <li>• Keeps patterns current</li>
+                <li>• Old unused patterns fade</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        {/* Section 8: Stock-Synthszr */}
         <section id="stock-synthszr" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">7. Stock Values & Stock-Synthszr</h2>
+          <h2 className="mb-6 text-2xl font-bold">8. Stock Values & Stock-Synthszr</h2>
           <p className="mb-6 text-zinc-400">
             The Stock-Synthszr system provides real-time stock quotes and AI-generated
             investment analysis. It combines market data with GPT-5&apos;s web search capabilities
@@ -489,9 +588,9 @@ export default function ArchitecturePage() {
           </div>
         </section>
 
-        {/* Section 8: Data Model */}
+        {/* Section 9: Data Model */}
         <section id="data-model" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">8. Data Model</h2>
+          <h2 className="mb-6 text-2xl font-bold">9. Data Model</h2>
           <p className="mb-6 text-zinc-400">
             The system uses Supabase (PostgreSQL) with the following core tables
             for content management.
@@ -580,11 +679,31 @@ export default function ArchitecturePage() {
               <span className="text-zinc-500 ml-2">— Runtime config (schedule, timestamps)</span>
             </div>
           </div>
+
+          <h4 className="font-semibold mb-3 mt-6">Edit Learning Tables</h4>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="rounded border border-purple-800/50 bg-purple-950/20 px-3 py-2">
+              <span className="text-purple-300">edit_history</span>
+              <span className="text-zinc-500 ml-2">— Content versions (before/after)</span>
+            </div>
+            <div className="rounded border border-purple-800/50 bg-purple-950/20 px-3 py-2">
+              <span className="text-purple-300">edit_diffs</span>
+              <span className="text-zinc-500 ml-2">— Sentence-level changes + embeddings</span>
+            </div>
+            <div className="rounded border border-purple-800/50 bg-purple-950/20 px-3 py-2">
+              <span className="text-purple-300">learned_patterns</span>
+              <span className="text-zinc-500 ml-2">— Extracted rules with confidence</span>
+            </div>
+            <div className="rounded border border-purple-800/50 bg-purple-950/20 px-3 py-2">
+              <span className="text-purple-300">applied_patterns</span>
+              <span className="text-zinc-500 ml-2">— Pattern usage tracking</span>
+            </div>
+          </div>
         </section>
 
-        {/* Section 9: Security & Tech Debt */}
+        {/* Section 10: Security & Tech Debt */}
         <section id="security" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">9. Security & Tech Debt</h2>
+          <h2 className="mb-6 text-2xl font-bold">10. Security & Tech Debt</h2>
 
           <h3 className="mb-4 text-xl font-semibold">Security Measures</h3>
           <p className="mb-6 text-zinc-400">
@@ -703,9 +822,9 @@ export default function ArchitecturePage() {
           </div>
         </section>
 
-        {/* Section 10: API Routes */}
+        {/* Section 11: API Routes */}
         <section id="api-routes" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">10. API Routes</h2>
+          <h2 className="mb-6 text-2xl font-bold">11. API Routes</h2>
           <p className="mb-6 text-zinc-400">
             Key API endpoints for the content pipeline. All cron routes require
             CRON_SECRET authentication in production.
@@ -736,6 +855,16 @@ export default function ArchitecturePage() {
                 <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/stock-quote</span><span className="text-zinc-600 ml-auto">Real-time quotes (EODHD)</span></div>
                 <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/stock-synthszr</span><span className="text-zinc-600 ml-auto">AI stock analysis (GPT-5)</span></div>
                 <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/stock-synthszr/batch-ratings</span><span className="text-zinc-600 ml-auto">Batch ratings</span></div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+              <h4 className="font-semibold text-zinc-200 mb-3">Edit Learning</h4>
+              <div className="space-y-2 text-sm font-mono">
+                <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/admin/analyze-edits</span><span className="text-zinc-600 ml-auto">View edit stats</span></div>
+                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/admin/analyze-edits</span><span className="text-zinc-600 ml-auto">Analyze pending edits</span></div>
+                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/admin/pattern-feedback</span><span className="text-zinc-600 ml-auto">Update pattern confidence</span></div>
+                <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/cron/extract-patterns</span><span className="text-zinc-600 ml-auto">Extract patterns from diffs</span></div>
               </div>
             </div>
 

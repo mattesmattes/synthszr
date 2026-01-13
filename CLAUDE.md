@@ -20,6 +20,13 @@ A Next.js 16 application for AI-powered financial analysis and newsletter genera
 - Automatically adds `{Company}` tags for thematically relevant companies
 - Supports multiple AI models (Claude, Gemini)
 
+### Edit Learning System
+- Learns from manual edits made to AI-generated blog posts
+- Tracks all changes at sentence-level (edit_history → edit_diffs)
+- Extracts patterns from recurring edits (learned_patterns)
+- Classifies edits: factual, stylistic, vocabulary, grammar
+- Confidence-based pattern activation with time decay
+
 ## Architecture
 
 ### Company Data
@@ -39,7 +46,29 @@ A Next.js 16 application for AI-powered financial analysis and newsletter genera
 - `/api/stock-synthszr/batch-ratings` - Batch read ratings (read-only)
 - `/api/premarket/batch-ratings` - Batch read premarket ratings
 
+### Edit Learning
+- `lib/edit-learning/history.ts` - Edit history tracking (ensureInitialEditHistory, recordEditVersion)
+- `lib/edit-learning/diff-extractor.ts` - Sentence-level diff extraction
+- `lib/edit-learning/retrieval.ts` - Pattern/example retrieval for Ghostwriter
+- `app/api/admin/analyze-edits/route.ts` - Analyze pending edits (GET: stats, POST: run analysis)
+- `app/api/admin/pattern-feedback/route.ts` - Update pattern confidence (keep/revert)
+- `app/api/cron/extract-patterns/route.ts` - Extract patterns from clustered diffs
+- Database tables: `edit_history`, `edit_diffs`, `learned_patterns`, `applied_patterns`
+
 ## Recent Changes (2026-01-13)
+
+### Edit Learning System
+Enables the Ghostwriter to learn from manual edits:
+1. **Edit Capture**: When posts are saved, content_before/content_after stored in `edit_history`
+2. **Diff Analysis**: `/api/admin/analyze-edits` extracts sentence-level diffs and classifies via Claude
+3. **Pattern Extraction**: `/api/cron/extract-patterns` clusters similar edits (embedding > 0.85)
+4. **Ghostwriter Integration**: Active patterns retrieved and applied during generation
+
+**Edit Types:** factual, stylistic, vocabulary, grammar, structural
+**Confidence:** Starts at 0.5, +0.1 when kept, -0.1 when reverted, auto-deactivate < 0.3
+**Decay:** 0.95/week factor keeps patterns current
+
+**Admin UI:** Links on Blog Posts page (`/admin`) for Analyze Edits | Extract Patterns
 
 ### Company Exclusion List
 Prevents false positive Synthszr Vote badges for common German/English nouns:
