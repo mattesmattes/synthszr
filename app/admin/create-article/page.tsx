@@ -18,9 +18,6 @@ import {
   Type,
   AlignLeft,
   Bot,
-  Brain,
-  FlaskConical,
-  ExternalLink,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -916,31 +913,6 @@ export default function CreateArticlePage() {
               </>
             )}
           </Button>
-
-          {/* Edit Learning Links */}
-          <div className="flex items-center justify-center gap-3 pt-2">
-            <a
-              href="/api/admin/analyze-edits"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Brain className="h-3 w-3" />
-              Analyze Edits
-              <ExternalLink className="h-2.5 w-2.5" />
-            </a>
-            <span className="text-muted-foreground/30">|</span>
-            <a
-              href="/api/cron/extract-patterns"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <FlaskConical className="h-3 w-3" />
-              Extract Patterns
-              <ExternalLink className="h-2.5 w-2.5" />
-            </a>
-          </div>
         </div>
 
         {/* Right Column: Output */}

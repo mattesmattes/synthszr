@@ -23,6 +23,8 @@ import {
   ExternalLink,
   ImageIcon,
   Bot,
+  Brain,
+  FlaskConical,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -357,9 +359,29 @@ export default function AdminPage() {
             <FileText className="h-8 w-8" />
             Blog Posts
           </h1>
-          <p className="mt-1 text-muted-foreground">
-            Alle Blog-Artikel (manuell & AI-generiert)
-          </p>
+          <div className="mt-1 flex items-center gap-3">
+            <a
+              href="/api/admin/analyze-edits"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Brain className="h-3 w-3" />
+              Analyze Edits
+              <ExternalLink className="h-2.5 w-2.5" />
+            </a>
+            <span className="text-muted-foreground/30">|</span>
+            <a
+              href="/api/cron/extract-patterns"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <FlaskConical className="h-3 w-3" />
+              Extract Patterns
+              <ExternalLink className="h-2.5 w-2.5" />
+            </a>
+          </div>
         </div>
         <Button asChild>
           <Link href="/admin/new" className="gap-2">
