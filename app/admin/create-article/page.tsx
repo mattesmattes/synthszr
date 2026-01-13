@@ -42,6 +42,7 @@ import { createClient } from '@/lib/supabase/client'
 import ReactMarkdown from 'react-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
+import { ensureInitialEditHistory } from '@/lib/edit-learning/history'
 
 interface Digest {
   id: string
@@ -609,6 +610,27 @@ export default function CreateArticlePage() {
       // Trigger translations for all active languages
       if (newPost?.id) {
         triggerTranslations(newPost.id)
+      }
+
+      // Initialize edit history with original AI content (for learning from edits)
+      if (newPost?.id) {
+        ensureInitialEditHistory(newPost.id, tiptapContent, usedModel || selectedModel, supabase)
+          .then(() => console.log('[EditLearning] Initialized edit history for new post'))
+          .catch(err => console.error('[EditLearning] Failed to init history:', err))
+
+        // Detect and store applied patterns for inline highlighting
+        fetch('/api/admin/store-applied-patterns', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ postId: newPost.id, content: tiptapContent }),
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.matchesStored > 0) {
+              console.log(`[EditLearning] Stored ${data.matchesStored} applied patterns for highlighting`)
+            }
+          })
+          .catch(err => console.error('[EditLearning] Failed to store applied patterns:', err))
       }
 
       alert('Artikel als Entwurf gespeichert! Queue-Items markiert, Bilder und Übersetzungen werden im Hintergrund generiert.')

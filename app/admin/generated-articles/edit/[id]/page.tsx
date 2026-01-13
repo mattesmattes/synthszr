@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { TiptapEditor } from '@/components/tiptap-editor'
+import { TiptapEditorWithPatterns } from '@/components/tiptap-editor-with-patterns'
 import { PostImageGallery } from '@/components/post-image-gallery'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -21,12 +21,23 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/client'
 import { use } from 'react'
+import { ensureInitialEditHistory, recordEditVersion } from '@/lib/edit-learning/history'
+import type { LearnedPattern } from '@/lib/edit-learning/retrieval'
 
 interface QueueItem {
   id: string
   title: string
   source_display_name: string | null
   source_identifier: string
+}
+
+interface AppliedPatternData {
+  id: string
+  patternId: string
+  from: number
+  to: number
+  pattern: LearnedPattern
+  userAccepted: boolean | null
 }
 
 const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese']
@@ -52,6 +63,7 @@ interface GeneratedPost {
   content: Record<string, unknown>
   status: 'draft' | 'published' | 'archived'
   pending_queue_item_ids: string[] | null
+  ai_model: string | null
 }
 
 export default function EditGeneratedArticlePage({ params }: { params: Promise<{ id: string }> }) {
@@ -74,6 +86,58 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   const [queueItems, setQueueItems] = useState<QueueItem[]>([])
   const [queueItemIds, setQueueItemIds] = useState<string[]>([])
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
+
+  // Pattern highlighting
+  const [appliedPatterns, setAppliedPatterns] = useState<AppliedPatternData[]>([])
+
+  // Fetch applied patterns for highlighting
+  const fetchAppliedPatterns = useCallback(async () => {
+    const res = await fetch(`/api/admin/pattern-feedback?postId=${id}`)
+    if (res.ok) {
+      const data = await res.json()
+      const patterns: AppliedPatternData[] = (data.appliedPatterns || []).map(
+        (ap: {
+          id: string
+          pattern_id: string
+          char_start: number
+          char_end: number
+          user_accepted: boolean | null
+          pattern: LearnedPattern | null
+        }) => ({
+          id: ap.id,
+          patternId: ap.pattern_id,
+          from: ap.char_start || 0,
+          to: ap.char_end || 0,
+          pattern: ap.pattern,
+          userAccepted: ap.user_accepted,
+        })
+      ).filter((ap: AppliedPatternData) => ap.pattern !== null)
+      setAppliedPatterns(patterns)
+    }
+  }, [id])
+
+  // Handle pattern feedback
+  const handlePatternFeedback = useCallback(
+    async (appliedPatternId: string, action: 'accept' | 'reject' | 'deactivate') => {
+      const res = await fetch('/api/admin/pattern-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appliedPatternId, action }),
+      })
+
+      if (res.ok) {
+        // Update local state
+        setAppliedPatterns((prev) =>
+          prev.map((ap) =>
+            ap.id === appliedPatternId
+              ? { ...ap, userAccepted: action === 'accept' }
+              : ap
+          )
+        )
+      }
+    },
+    []
+  )
 
   // Fetch queue item details
   const fetchQueueItems = useCallback(async (itemIds: string[]) => {
@@ -158,13 +222,26 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         if (itemIds.length > 0) {
           fetchQueueItems(itemIds)
         }
+
+        // Load applied patterns for highlighting
+        fetchAppliedPatterns()
+
+        // Initialize edit history if this is the first edit
+        // This preserves the original AI-generated content for learning
+        ensureInitialEditHistory(id, parsedContent, data.ai_model, supabase)
+          .then(({ version, isNew }) => {
+            if (isNew) {
+              console.log('[EditLearning] Initialized edit history, version:', version)
+            }
+          })
+          .catch(err => console.error('[EditLearning] Failed to init history:', err))
       }
 
       setLoading(false)
     }
 
     loadPost()
-  }, [id, supabase, fetchQueueItems])
+  }, [id, supabase, fetchQueueItems, fetchAppliedPatterns])
 
   const handleTitleChange = (value: string) => {
     setTitle(value)
@@ -181,6 +258,17 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     const isNowPublished = published
     // Use current queueItemIds (may have been modified by user removing items)
     const currentQueueItems = queueItemIds
+
+    // Record edit version for learning (before saving)
+    // This captures the before/after diff for pattern extraction
+    try {
+      const result = await recordEditVersion(id, content, supabase)
+      if (result?.hasChanges) {
+        console.log('[EditLearning] Recorded edit version:', result.version)
+      }
+    } catch (err) {
+      console.error('[EditLearning] Failed to record edit:', err)
+    }
 
     // Update the post
     const updateData: Record<string, unknown> = {
@@ -383,7 +471,12 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
             <TabsContent value="content">
               <div className="space-y-2">
                 <Label className="font-mono text-xs">Inhalt</Label>
-                <TiptapEditor content={content} onChange={setContent} />
+                <TiptapEditorWithPatterns
+                  content={content}
+                  onChange={setContent}
+                  appliedPatterns={appliedPatterns}
+                  onPatternFeedback={handlePatternFeedback}
+                />
               </div>
             </TabsContent>
 

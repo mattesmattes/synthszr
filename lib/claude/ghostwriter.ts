@@ -1,5 +1,13 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import Anthropic from '@anthropic-ai/sdk'
+import {
+  getActiveLearnedPatterns,
+  findSimilarEditExamples,
+  buildPromptEnhancement,
+  trackPatternUsage,
+  type LearnedPattern,
+  type EditExample,
+} from '@/lib/edit-learning/retrieval'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
@@ -68,13 +76,56 @@ Danach folgt der Artikel-Content in Markdown.`
 
 /**
  * Stream ghostwriter blog post generation using the specified AI model
+ * Now enhanced with learned patterns and examples from edit history
  */
 export async function* streamGhostwriter(
   digestContent: string,
   prompt: string,
-  model: AIModel = 'gemini-2.5-pro'
+  model: AIModel = 'gemini-2.5-pro',
+  options: {
+    enableLearning?: boolean
+    onPatternsLoaded?: (patterns: LearnedPattern[], examples: EditExample[]) => void
+  } = {}
 ): AsyncGenerator<string, void, unknown> {
-  const userMessage = `${prompt}\n\n---\n\nHier ist der Digest, aus dem du einen Blogartikel erstellen sollst:\n\n${digestContent}`
+  const { enableLearning = true, onPatternsLoaded } = options
+
+  let enhancedPrompt = prompt
+  let loadedPatterns: LearnedPattern[] = []
+
+  // Load learned patterns and examples if learning is enabled
+  if (enableLearning) {
+    try {
+      console.log('[Ghostwriter] Loading learned patterns and examples...')
+
+      // Load patterns and examples in parallel
+      const [patterns, examples] = await Promise.all([
+        getActiveLearnedPatterns(0.4, 20),
+        findSimilarEditExamples(digestContent.slice(0, 2000), 3, 7),
+      ])
+
+      loadedPatterns = patterns
+
+      // Notify caller about loaded patterns (for tracking)
+      if (onPatternsLoaded) {
+        onPatternsLoaded(patterns, examples)
+      }
+
+      if (patterns.length > 0 || examples.length > 0) {
+        const enhancement = buildPromptEnhancement(patterns, examples)
+        if (enhancement) {
+          enhancedPrompt = `${prompt}\n\n---\n\n${enhancement}`
+          console.log(`[Ghostwriter] Enhanced prompt with ${patterns.length} patterns and ${examples.length} examples`)
+        }
+      } else {
+        console.log('[Ghostwriter] No patterns or examples found')
+      }
+    } catch (err) {
+      console.error('[Ghostwriter] Failed to load patterns:', err)
+      // Continue without enhancement
+    }
+  }
+
+  const userMessage = `${enhancedPrompt}\n\n---\n\nHier ist der Digest, aus dem du einen Blogartikel erstellen sollst:\n\n${digestContent}`
 
   console.log(`[Ghostwriter] Using model: ${model}`)
 
@@ -82,6 +133,14 @@ export async function* streamGhostwriter(
     yield* streamGemini(userMessage, model)
   } else {
     yield* streamClaude(userMessage, model)
+  }
+
+  // Track pattern usage after generation
+  if (loadedPatterns.length > 0) {
+    const patternIds = loadedPatterns.map((p) => p.id)
+    trackPatternUsage(patternIds).catch((err) => {
+      console.error('[Ghostwriter] Failed to track pattern usage:', err)
+    })
   }
 }
 
