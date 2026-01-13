@@ -6,49 +6,27 @@ import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import { createPortal } from "react-dom"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { TrendingUp, TrendingDown, Minus, Sparkles } from "lucide-react"
 import { StockSynthszrLayer } from "./stock-synthszr-layer"
 import { PremarketSynthszrLayer } from "./premarket-synthszr-layer"
-import { Button } from "./ui/button"
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies"
 import { isExcludedCompanyName } from "@/lib/data/company-exclusions"
 
-interface StockData {
-  symbol: string
-  exchange: string
+interface BatchQuoteResult {
+  company: string
   displayName: string
-  price: number
-  previousClose: number
-  open: number
-  high: number
-  low: number
-  change: number
-  changePercent: number
-  direction: 'up' | 'down' | 'neutral'
-  currency: string
-  timestamp: number
-}
-
-interface StockRatingResult {
-  company: string
+  ticker: string | null
+  changePercent: number | null
+  direction: 'up' | 'down' | 'neutral' | null
   rating: 'BUY' | 'HOLD' | 'SELL' | null
-  cached: boolean
-}
-
-interface StockTickerInlineProps {
-  company: string
 }
 
 interface SynthszrRatingLinkProps {
   company: string
   displayName: string
   rating: 'BUY' | 'HOLD' | 'SELL'
+  ticker?: string
+  changePercent?: number
+  direction?: 'up' | 'down' | 'neutral'
   isFirst: boolean
 }
 
@@ -60,7 +38,7 @@ interface PremarketRatingLinkProps {
   isin?: string
 }
 
-function SynthszrRatingLink({ company, displayName, rating, isFirst }: SynthszrRatingLinkProps) {
+function SynthszrRatingLink({ company, displayName, rating, ticker, changePercent, direction, isFirst }: SynthszrRatingLinkProps) {
   const [showSynthszr, setShowSynthszr] = useState(false)
 
   // Neon colors matching stock performance badges
@@ -76,17 +54,36 @@ function SynthszrRatingLink({ company, displayName, rating, isFirst }: SynthszrR
     SELL: 'Sell',
   }
 
+  // Percentage direction styling
+  const directionStyles = {
+    up: 'text-[#39FF14]',     // Neon Green
+    down: 'text-[#FF6600]',   // Neon Orange
+    neutral: 'text-gray-400', // Gray
+  }
+
+  const directionArrows = {
+    up: '↑',
+    down: '↓',
+    neutral: '→',
+  }
+
   return (
     <>
       <button
         onClick={() => setShowSynthszr(true)}
         className="inline-flex items-center gap-1 hover:underline cursor-pointer text-foreground text-[13px]"
       >
-        {isFirst ? (
-          <span><span className="font-bold uppercase text-[0.8125em]">Synthszr Vote:</span> {displayName}</span>
-        ) : (
-          <span>, {displayName}</span>
-        )}
+        {isFirst && <span className="font-bold uppercase text-[0.8125em]">Synthszr Vote:</span>}
+        {!isFirst && <span>,</span>}
+        <span className="ml-1">
+          {displayName}
+          {ticker && <span className="text-muted-foreground"> ({ticker})</span>}
+          {typeof changePercent === 'number' && direction && (
+            <span className={`ml-1 ${directionStyles[direction]}`}>
+              {directionArrows[direction]}{Math.abs(changePercent).toFixed(1)}%
+            </span>
+          )}
+        </span>
         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold not-italic ${ratingBadgeStyles[rating]}`}>
           {ratingLabels[rating]}
         </span>
@@ -143,163 +140,6 @@ function PremarketRatingLink({ company, displayName, rating, isFirst, isin }: Pr
   )
 }
 
-function StockTickerInline({ company }: StockTickerInlineProps) {
-  const [data, setData] = useState<StockData | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [showSynthszr, setShowSynthszr] = useState(false)
-
-  useEffect(() => {
-    async function fetchQuote() {
-      try {
-        const res = await fetch(`/api/stock-quote?company=${encodeURIComponent(company)}`)
-        if (res.ok) {
-          const json = await res.json()
-          setData(json)
-        }
-      } catch {
-        // Silently fail
-      }
-    }
-    fetchQuote()
-  }, [company])
-
-  if (!data) return null
-
-  const arrow = data.direction === 'up' ? '↑' : data.direction === 'down' ? '↓' : '→'
-
-  // Background colors: Positive=Neon Green, Neutral=Gray, Negative=Neon Orange
-  const bgClass = data.direction === 'up'
-    ? 'bg-[#39FF14]'  // Neon Green
-    : data.direction === 'down'
-    ? 'bg-[#FF6600]'  // Neon Orange
-    : 'bg-gray-300 dark:bg-gray-600'  // Gray
-
-  // Text colors for dialog (keep original styling there)
-  const colorClass = data.direction === 'up'
-    ? 'text-green-600 dark:text-green-400'
-    : data.direction === 'down'
-    ? 'text-red-600 dark:text-red-400'
-    : 'text-foreground'
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('de-DE', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(price)
-  }
-
-  const formatTime = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleString('de-DE', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
-  return (
-    <>
-      <button
-        onClick={() => setDialogOpen(true)}
-        className={`text-xs font-medium text-black px-1.5 py-0.5 rounded ${bgClass} hover:opacity-80 cursor-pointer ml-1`}
-      >
-        {arrow}{Math.abs(data.changePercent).toFixed(1)}%
-      </button>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <span>{data.displayName}</span>
-              <span className="text-sm font-normal text-muted-foreground">
-                {data.symbol}.{data.exchange}
-              </span>
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {/* Current Price */}
-            <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-bold">
-                {formatPrice(data.price)} {data.currency}
-              </span>
-              <span className={`flex items-center gap-1 text-lg font-medium ${colorClass}`}>
-                {data.direction === 'up' ? (
-                  <TrendingUp className="h-5 w-5" />
-                ) : data.direction === 'down' ? (
-                  <TrendingDown className="h-5 w-5" />
-                ) : (
-                  <Minus className="h-5 w-5" />
-                )}
-                {data.change > 0 ? '+' : ''}{formatPrice(data.change)} ({data.changePercent > 0 ? '+' : ''}{data.changePercent.toFixed(2)}%)
-              </span>
-            </div>
-
-            {/* Details Grid */}
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-              <div>
-                <p className="text-xs text-muted-foreground">Eröffnung</p>
-                <p className="font-medium">{formatPrice(data.open)} {data.currency}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Vortag</p>
-                <p className="font-medium">{formatPrice(data.previousClose)} {data.currency}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Tageshoch</p>
-                <p className="font-medium">{formatPrice(data.high)} {data.currency}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Tagestief</p>
-                <p className="font-medium">{formatPrice(data.low)} {data.currency}</p>
-              </div>
-            </div>
-
-            {/* Stock-Synthszr Button */}
-            <Button
-              onClick={() => {
-                setDialogOpen(false)
-                setShowSynthszr(true)
-              }}
-              className="w-full bg-[#CCFF00] text-black hover:bg-[#CCFF00]/80"
-            >
-              <Sparkles className="h-4 w-4 mr-2" />
-              Stock-Synthszr generieren
-            </Button>
-
-            {/* Timestamp & Source */}
-            <div className="flex items-center justify-between pt-2 border-t">
-              <p className="text-xs text-muted-foreground">
-                Stand: {formatTime(data.timestamp)}
-              </p>
-              <a
-                href="https://eodhd.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Quelle: EODHD
-              </a>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Stock-Synthszr Layer */}
-      {showSynthszr && (
-        <StockSynthszrLayer
-          company={company}
-          symbol={data.symbol}
-          currency={data.currency}
-          price={data.price}
-          changePercent={data.changePercent}
-          onClose={() => setShowSynthszr(false)}
-        />
-      )}
-    </>
-  )
-}
-
 interface TiptapRendererProps {
   content: Record<string, unknown>
 }
@@ -307,8 +147,7 @@ interface TiptapRendererProps {
 export function TiptapRenderer({ content }: TiptapRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const searchParams = useSearchParams()
-  const [tickerPortals, setTickerPortals] = useState<Array<{ element: HTMLElement; company: string }>>([])
-  const [ratingPortals, setRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean }>>([])
+  const [ratingPortals, setRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isFirst: boolean }>>([])
   const [premarketRatingPortals, setPremarketRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean; isin?: string }>>([])
 
   // Auto-open dialog state from URL params (for newsletter links)
@@ -377,148 +216,6 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     }
     return false
   }
-
-  // Get the current section (H2) for a node
-  const getCurrentSection = (node: Node): Element | null => {
-    let current: Node | null = node
-    while (current && current !== containerRef.current) {
-      // Walk backwards through siblings to find preceding H2
-      let sibling: Node | null = current
-      while (sibling) {
-        if (sibling instanceof HTMLElement && sibling.tagName === 'H2') {
-          return sibling
-        }
-        sibling = sibling.previousSibling
-      }
-      current = current.parentNode
-    }
-    return null
-  }
-
-  // Find and mark company names after render (once per news section)
-  const processCompanyNames = useCallback(() => {
-    if (!containerRef.current) return
-
-    const portals: Array<{ element: HTMLElement; company: string }> = []
-    const walker = document.createTreeWalker(
-      containerRef.current,
-      NodeFilter.SHOW_TEXT,
-      null
-    )
-
-    // Track which companies already have a ticker in each section
-    const shownInSection = new Map<Element | null, Set<string>>()
-
-    const nodesToProcess: { node: Text; matches: Array<{ company: string; index: number; length: number }> }[] = []
-
-    let node: Text | null
-    while ((node = walker.nextNode() as Text | null)) {
-      // Skip nodes inside headings - stock tickers only in body text
-      if (isInsideHeading(node)) continue
-
-      const section = getCurrentSection(node)
-      if (!shownInSection.has(section)) {
-        shownInSection.set(section, new Set())
-      }
-      const sectionCompanies = shownInSection.get(section)!
-
-      const text = node.textContent || ''
-      const matches: Array<{ company: string; index: number; length: number }> = []
-
-      for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
-        // Skip excluded words (common nouns that aren't companies)
-        if (isExcludedCompanyName(displayName)) continue
-
-        // Skip if already shown in this section
-        if (sectionCompanies.has(apiName)) continue
-
-        // Match company name optionally followed by:
-        // - German possessive "s" (e.g., "Metas", "Googles")
-        // - Compound word parts with hyphen (e.g., "Google-Aktien")
-        // Not already followed by stock ticker indicator
-        const regex = new RegExp(`\\b${displayName}s?(-[\\wäöüÄÖÜß]+)*\\b(?!\\s*\\([↑↓→])`, 'g')
-        const match = regex.exec(text)
-        if (match) {
-          // Check if inside curly braces {Company} - these are directive tags for Synthszr Vote only
-          const charBefore = match.index > 0 ? text[match.index - 1] : ''
-          const charAfter = text[match.index + match[0].length] || ''
-          const isDirectiveTag = charBefore === '{' || charAfter === '}'
-
-          // Always add to sectionCompanies for Synthszr Vote badges
-          sectionCompanies.add(apiName)
-
-          // Only add to matches for inline ticker if NOT a directive tag
-          if (!isDirectiveTag) {
-            matches.push({
-              company: apiName,
-              index: match.index,
-              length: match[0].length,  // Use actual matched length including compound parts
-            })
-          }
-        }
-      }
-
-      if (matches.length > 0) {
-        // Sort by index descending to process from end to start
-        matches.sort((a, b) => b.index - a.index)
-        nodesToProcess.push({ node, matches })
-      }
-    }
-
-    // Process nodes - handle multiple matches per node in one pass
-    for (const { node, matches } of nodesToProcess) {
-      const text = node.textContent || ''
-      const parent = node.parentNode
-      if (!parent) continue
-
-      // Sort by index ascending to build fragments in order
-      const sortedMatches = [...matches].sort((a, b) => a.index - b.index)
-
-      // Build fragments: alternating text and company markers
-      const fragments: Array<{ type: 'text'; content: string } | { type: 'company'; company: string; name: string }> = []
-      let lastEnd = 0
-
-      for (const match of sortedMatches) {
-        // Add text before this match
-        if (match.index > lastEnd) {
-          fragments.push({ type: 'text', content: text.slice(lastEnd, match.index) })
-        }
-        // Add the company name and ticker marker
-        fragments.push({
-          type: 'company',
-          company: match.company,
-          name: text.slice(match.index, match.index + match.length)
-        })
-        lastEnd = match.index + match.length
-      }
-
-      // Add remaining text after last match
-      if (lastEnd < text.length) {
-        fragments.push({ type: 'text', content: text.slice(lastEnd) })
-      }
-
-      // Create DOM nodes from fragments
-      for (const fragment of fragments) {
-        if (fragment.type === 'text') {
-          parent.insertBefore(document.createTextNode(fragment.content), node)
-        } else {
-          // Add company name text
-          parent.insertBefore(document.createTextNode(fragment.name), node)
-          // Add ticker placeholder span
-          const tickerSpan = document.createElement('span')
-          tickerSpan.className = 'stock-ticker-placeholder'
-          tickerSpan.dataset.company = fragment.company
-          parent.insertBefore(tickerSpan, node)
-          portals.push({ element: tickerSpan, company: fragment.company })
-        }
-      }
-
-      // Remove original node only after all new nodes are inserted
-      parent.removeChild(node)
-    }
-
-    setTickerPortals(portals)
-  }, [])
 
   // Update content when prop changes
   useEffect(() => {
@@ -712,12 +409,12 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     try {
       const [publicResponse, premarketResponse] = await Promise.all([
         allPublicCompanies.length > 0
-          ? fetch('/api/stock-synthszr/batch-ratings', {
+          ? fetch('/api/stock-synthszr/batch-quotes', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ companies: allPublicCompanies }),
             }).then(r => r.json())
-          : Promise.resolve({ ok: true, ratings: [] }),
+          : Promise.resolve({ ok: true, quotes: [] }),
         allPremarketCompanies.length > 0
           ? fetch('/api/premarket/batch-ratings', {
               method: 'POST',
@@ -727,11 +424,11 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
           : Promise.resolve({ ok: true, ratings: [] }),
       ])
 
-      // Build ratings maps
-      const publicRatingsMap = new Map<string, 'BUY' | 'HOLD' | 'SELL'>(
-        (publicResponse.ok && publicResponse.ratings || [])
-          .filter((r: StockRatingResult) => r.rating !== null)
-          .map((r: StockRatingResult) => [r.company.toLowerCase(), r.rating as 'BUY' | 'HOLD' | 'SELL'])
+      // Build quotes map for public companies (includes ticker, %, direction, and rating)
+      const publicQuotesMap = new Map<string, BatchQuoteResult>(
+        (publicResponse.ok && publicResponse.quotes || [])
+          .filter((r: BatchQuoteResult) => r.rating !== null)
+          .map((r: BatchQuoteResult) => [r.company.toLowerCase(), r])
       )
 
       interface PremarketRatingResult {
@@ -745,13 +442,13 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
           .map((r: PremarketRatingResult) => [r.company.toLowerCase(), { rating: r.rating as 'BUY' | 'HOLD' | 'SELL', isin: r.isin }])
       )
 
-      const publicPortals: Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean }> = []
+      const publicPortals: Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isFirst: boolean }> = []
       const premarketPortals: Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean; isin?: string }> = []
 
       // Add rating links to each section
       for (const section of sectionsToProcess) {
         const publicCompaniesWithRatings = section.companies.filter(c =>
-          publicRatingsMap.has(c.apiName.toLowerCase())
+          publicQuotesMap.has(c.apiName.toLowerCase())
         )
         const premarketCompaniesWithRatings = section.premarketCompanies.filter(c =>
           premarketRatingsMap.has(c.apiName.toLowerCase())
@@ -764,24 +461,27 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         ratingsContainer.className = 'synthszr-ratings-container ml-2'
         ratingsContainer.style.fontSize = '13px'
 
-        // Add public company ratings
+        // Add public company ratings with ticker and percentage
         publicCompaniesWithRatings.forEach((company, idx) => {
-          const rating = publicRatingsMap.get(company.apiName.toLowerCase())
-          if (!rating) return
+          const quoteData = publicQuotesMap.get(company.apiName.toLowerCase())
+          if (!quoteData || !quoteData.rating) return
 
           const placeholder = document.createElement('span')
           placeholder.className = 'synthszr-rating-placeholder inline-block'
           placeholder.style.fontSize = '13px'
           placeholder.dataset.company = company.apiName
           placeholder.dataset.displayName = company.displayName
-          placeholder.dataset.rating = rating
+          placeholder.dataset.rating = quoteData.rating
 
           ratingsContainer.appendChild(placeholder)
           publicPortals.push({
             element: placeholder,
             company: company.apiName,
             displayName: company.displayName,
-            rating,
+            rating: quoteData.rating,
+            ticker: quoteData.ticker ?? undefined,
+            changePercent: quoteData.changePercent ?? undefined,
+            direction: quoteData.direction ?? undefined,
             isFirst: idx === 0,
           })
         })
@@ -969,13 +669,12 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     }
   }, [])
 
-  // Process company names and news headings after editor renders
+  // Process news headings and rating links after editor renders
   useEffect(() => {
     if (editor) {
       // Wait for DOM to update
       const timeoutId = setTimeout(async () => {
         processNewsHeadings() // Process news headings (adds favicons, removes source links)
-        processCompanyNames()
         processMattesSyntheseText()
         // Process Synthszr rating links BEFORE hiding {Company} tags
         // so the company detection can find explicit tags
@@ -986,7 +685,7 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       }, 100)
       return () => clearTimeout(timeoutId)
     }
-  }, [editor, content, hideExplicitCompanyTags, processCompanyNames, processMattesSyntheseText, processNewsHeadings, processSynthszrRatingLinks])
+  }, [editor, content, hideExplicitCompanyTags, processMattesSyntheseText, processNewsHeadings, processSynthszrRatingLinks])
 
   if (!editor) {
     return null
@@ -995,12 +694,9 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
   return (
     <div ref={containerRef}>
       <EditorContent editor={editor} />
-      {tickerPortals.map(({ element, company }, index) =>
-        createPortal(<StockTickerInline company={company} />, element, `ticker-${index}`)
-      )}
-      {ratingPortals.map(({ element, company, displayName, rating, isFirst }, index) =>
+      {ratingPortals.map(({ element, company, displayName, rating, ticker, changePercent, direction, isFirst }, index) =>
         createPortal(
-          <SynthszrRatingLink company={company} displayName={displayName} rating={rating} isFirst={isFirst} />,
+          <SynthszrRatingLink company={company} displayName={displayName} rating={rating} ticker={ticker} changePercent={changePercent} direction={direction} isFirst={isFirst} />,
           element,
           `rating-${index}`
         )
