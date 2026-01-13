@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2, ImageIcon, Newspaper, X } from 'lucide-react'
+import { ArrowLeft, Loader2, ImageIcon, Newspaper, X, ChevronDown, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,6 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/client'
 import { use } from 'react'
@@ -89,6 +94,9 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
   // Pattern highlighting
   const [appliedPatterns, setAppliedPatterns] = useState<AppliedPatternData[]>([])
+
+  // Metadata section collapsed state
+  const [metadataOpen, setMetadataOpen] = useState(false)
 
   // Fetch applied patterns for highlighting
   const fetchAppliedPatterns = useCallback(async () => {
@@ -363,19 +371,30 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
   return (
     <div className="min-h-screen bg-background">
-      <main className="mx-auto max-w-4xl px-4 py-8">
-        <form onSubmit={handleSubmit} className="space-y-8">
+      <main className="mx-auto max-w-6xl px-4 py-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Header - compact */}
           <div className="flex items-center justify-between">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => router.push('/admin/generated-articles')}
-              className="gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Zurück
-            </Button>
             <div className="flex items-center gap-4">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/admin/generated-articles')}
+                className="gap-1"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Zurück
+              </Button>
+              {/* Inline title editing */}
+              <Input
+                value={title}
+                onChange={(e) => handleTitleChange(e.target.value)}
+                placeholder="Artikeltitel..."
+                className="text-lg font-medium border-0 bg-transparent px-0 focus-visible:ring-0 w-[400px]"
+              />
+            </div>
+            <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <Switch
                   id="published"
@@ -386,123 +405,118 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                   {published ? 'Veröffentlicht' : 'Entwurf'}
                 </Label>
               </div>
-              <Button type="submit" disabled={saving || !title || !slug}>
+              <Button type="submit" size="sm" disabled={saving || !title || !slug}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Speichern
               </Button>
             </div>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="title" className="font-mono text-xs">
-                Titel
-              </Label>
-              <Input
-                id="title"
-                value={title}
-                onChange={(e) => handleTitleChange(e.target.value)}
-                placeholder="Artikeltitel"
-                className="text-lg"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="slug" className="font-mono text-xs">
-                Slug (URL)
-              </Label>
-              <Input
-                id="slug"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="artikel-slug"
-                className="font-mono"
-              />
-            </div>
-          </div>
+          {/* Collapsible Metadata Section */}
+          <Collapsible open={metadataOpen} onOpenChange={setMetadataOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
+                <Settings2 className="h-4 w-4" />
+                <span>Metadaten</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${metadataOpen ? 'rotate-180' : ''}`} />
+                {!metadataOpen && (
+                  <span className="text-xs ml-2">
+                    {category} · /{slug}
+                  </span>
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="grid gap-4 md:grid-cols-3 pt-3 pb-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="slug" className="font-mono text-xs">Slug (URL)</Label>
+                  <Input
+                    id="slug"
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value)}
+                    placeholder="artikel-slug"
+                    className="font-mono text-sm h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="font-mono text-xs">Kategorie</Label>
+                  <Select value={category} onValueChange={setCategory}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((cat) => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="excerpt" className="font-mono text-xs">
+                    Excerpt <span className="text-muted-foreground">({excerpt.length}/200)</span>
+                  </Label>
+                  <Textarea
+                    id="excerpt"
+                    value={excerpt}
+                    onChange={(e) => setExcerpt(e.target.value)}
+                    placeholder="Kurze Zusammenfassung..."
+                    rows={2}
+                    maxLength={200}
+                    className="text-sm resize-none"
+                  />
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="excerpt" className="font-mono text-xs">
-                Excerpt (SEO-Beschreibung)
-              </Label>
-              <Textarea
-                id="excerpt"
-                value={excerpt}
-                onChange={(e) => setExcerpt(e.target.value)}
-                placeholder="Kurze Zusammenfassung..."
-                rows={3}
-                maxLength={200}
-              />
-              <p className="text-xs text-muted-foreground">{excerpt.length}/200</p>
-            </div>
-            <div className="space-y-2">
-              <Label className="font-mono text-xs">Kategorie</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <Tabs defaultValue="content" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="content">Inhalt</TabsTrigger>
-              <TabsTrigger value="images" className="flex items-center gap-2">
-                <ImageIcon className="h-4 w-4" />
+          {/* Main Content Area - Full Height */}
+          <Tabs defaultValue="content" className="space-y-2">
+            <TabsList className="h-9">
+              <TabsTrigger value="content" className="text-sm">Inhalt</TabsTrigger>
+              <TabsTrigger value="images" className="flex items-center gap-1.5 text-sm">
+                <ImageIcon className="h-3.5 w-3.5" />
                 Bilder
               </TabsTrigger>
               {queueItems.length > 0 && (
-                <TabsTrigger value="sources" className="flex items-center gap-2">
-                  <Newspaper className="h-4 w-4" />
+                <TabsTrigger value="sources" className="flex items-center gap-1.5 text-sm">
+                  <Newspaper className="h-3.5 w-3.5" />
                   Quellen
-                  <Badge variant="secondary" className="ml-1 text-xs">
+                  <Badge variant="secondary" className="ml-1 text-[10px] px-1.5">
                     {queueItems.length}
                   </Badge>
                 </TabsTrigger>
               )}
             </TabsList>
 
-            <TabsContent value="content">
-              <div className="space-y-2">
-                <Label className="font-mono text-xs">Inhalt</Label>
-                <TiptapEditorWithPatterns
-                  content={content}
-                  onChange={setContent}
-                  appliedPatterns={appliedPatterns}
-                  onPatternFeedback={handlePatternFeedback}
-                />
-              </div>
+            <TabsContent value="content" className="mt-2">
+              <TiptapEditorWithPatterns
+                content={content}
+                onChange={setContent}
+                appliedPatterns={appliedPatterns}
+                onPatternFeedback={handlePatternFeedback}
+              />
             </TabsContent>
 
-            <TabsContent value="images">
+            <TabsContent value="images" className="mt-2">
               <div className="border rounded-lg p-4">
                 <PostImageGallery postId={id} />
               </div>
             </TabsContent>
 
-            <TabsContent value="sources">
-              <div className="border rounded-lg p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium">Verknüpfte News-Quellen</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Diese News-Artikel wurden für die Generierung verwendet.
-                      Entfernte Items werden zurück in die Queue gestellt.
-                    </p>
-                  </div>
+            <TabsContent value="sources" className="mt-2">
+              <div className="border rounded-lg p-4 space-y-3">
+                <div>
+                  <h3 className="font-medium text-sm">Verknüpfte News-Quellen</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Entfernte Items werden zurück in die Queue gestellt.
+                  </p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
                   {queueItems.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-start justify-between gap-4 p-3 bg-muted/50 rounded-lg"
+                      className="flex items-start justify-between gap-3 p-2 bg-muted/50 rounded"
                     >
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{item.title}</p>
@@ -516,13 +530,13 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                         size="sm"
                         onClick={() => removeQueueItem(item.id)}
                         disabled={removingItemId === item.id || published}
-                        className="shrink-0 text-muted-foreground hover:text-destructive"
-                        title={published ? 'Bereits veröffentlicht' : 'Entfernen und zurück in Queue'}
+                        className="shrink-0 h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        title={published ? 'Bereits veröffentlicht' : 'Entfernen'}
                       >
                         {removingItemId === item.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
-                          <X className="h-4 w-4" />
+                          <X className="h-3.5 w-3.5" />
                         )}
                       </Button>
                     </div>
@@ -531,7 +545,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
                 {published && (
                   <p className="text-xs text-muted-foreground italic">
-                    Der Artikel ist bereits veröffentlicht. Quellen können nicht mehr entfernt werden.
+                    Bereits veröffentlicht – Quellen können nicht entfernt werden.
                   </p>
                 )}
               </div>

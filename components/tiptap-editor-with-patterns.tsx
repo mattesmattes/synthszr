@@ -93,7 +93,7 @@ export function TiptapEditorWithPatterns({
     editorProps: {
       attributes: {
         class:
-          "prose prose-neutral min-h-[400px] max-w-none p-4 focus:outline-none font-serif",
+          "prose prose-neutral min-h-[60vh] max-w-none p-4 focus:outline-none font-serif",
       },
     },
   })
