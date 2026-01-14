@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { X, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { X, TrendingUp, TrendingDown, Minus, BarChart3 } from 'lucide-react'
+import { StockSynthszrLayer } from './stock-synthszr-layer'
 
 interface StockQuoteData {
   symbol: string
@@ -27,6 +28,7 @@ export function StockQuotePopover({ company, onClose }: StockQuotePopoverProps) 
   const [data, setData] = useState<StockQuoteData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showAnalysis, setShowAnalysis] = useState(false)
 
   useEffect(() => {
     async function fetchQuote() {
@@ -108,9 +110,43 @@ export function StockQuotePopover({ company, onClose }: StockQuotePopoverProps) 
                 <p className="font-medium">{data.low?.toFixed(2)}</p>
               </div>
             </div>
+
+            {/* Synthszr Vote Link */}
+            <button
+              onClick={() => setShowAnalysis(true)}
+              className="mt-6 w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-[#CCFF00] text-black font-semibold text-sm hover:opacity-90 transition-opacity"
+            >
+              <BarChart3 className="w-4 h-4" />
+              Synthszr Vote anzeigen
+            </button>
+
+            {/* Source */}
+            <p className="mt-4 text-[10px] text-center text-muted-foreground">
+              Kursdaten von{' '}
+              <a
+                href="https://eodhd.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                EODHD
+              </a>
+            </p>
           </>
         ) : null}
       </div>
+
+      {/* Synthszr Analysis Modal */}
+      {showAnalysis && (
+        <StockSynthszrLayer
+          company={company}
+          symbol={data?.symbol}
+          currency={data?.currency}
+          price={data?.price}
+          changePercent={data?.changePercent}
+          onClose={() => setShowAnalysis(false)}
+        />
+      )}
     </div>
   )
 }

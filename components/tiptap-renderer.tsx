@@ -9,7 +9,7 @@ import { createPortal } from "react-dom"
 import { StockSynthszrLayer } from "./stock-synthszr-layer"
 import { StockQuotePopover } from "./stock-quote-popover"
 import { PremarketSynthszrLayer } from "./premarket-synthszr-layer"
-import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies"
+import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES, COMPANY_ALIASES } from "@/lib/data/companies"
 import { isExcludedCompanyName } from "@/lib/data/company-exclusions"
 
 interface BatchQuoteResult {
@@ -498,6 +498,25 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         }
       }
 
+      // Check for company aliases (e.g., "Cursor" -> "Anysphere")
+      for (const [aliasName, aliasInfo] of Object.entries(COMPANY_ALIASES)) {
+        const escapedAlias = aliasName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const regex = new RegExp(`\\b${escapedAlias}s?\\b`, 'gi')
+        const explicitRegex = new RegExp(`\\{${escapedAlias}\\}`, 'gi')
+        if (regex.test(textToSearch) || explicitRegex.test(textToSearch)) {
+          const apiName = aliasInfo.canonical.toLowerCase()
+          if (aliasInfo.type === 'public') {
+            if (!companies.find(c => c.apiName === apiName)) {
+              companies.push({ apiName, displayName: aliasInfo.canonical })
+            }
+          } else {
+            if (!premarketCompanies.find(c => c.apiName === apiName)) {
+              premarketCompanies.push({ apiName, displayName: aliasInfo.canonical })
+            }
+          }
+        }
+      }
+
       if (companies.length > 0 || premarketCompanies.length > 0) {
         sectionsToProcess.push({ element: container, companies, premarketCompanies })
       }
@@ -531,6 +550,23 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
           if (displayName.toLowerCase() === taggedName.toLowerCase()) {
             if (!explicitPremarketCompanies.find(c => c.apiName === apiName)) {
               explicitPremarketCompanies.push({ apiName, displayName })
+            }
+            break
+          }
+        }
+
+        // Check against COMPANY_ALIASES (case-insensitive)
+        for (const [aliasName, aliasInfo] of Object.entries(COMPANY_ALIASES)) {
+          if (aliasName.toLowerCase() === taggedName.toLowerCase()) {
+            const apiName = aliasInfo.canonical.toLowerCase()
+            if (aliasInfo.type === 'public') {
+              if (!explicitCompanies.find(c => c.apiName === apiName)) {
+                explicitCompanies.push({ apiName, displayName: aliasInfo.canonical })
+              }
+            } else {
+              if (!explicitPremarketCompanies.find(c => c.apiName === apiName)) {
+                explicitPremarketCompanies.push({ apiName, displayName: aliasInfo.canonical })
+              }
             }
             break
           }

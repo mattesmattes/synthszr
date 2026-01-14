@@ -103,28 +103,57 @@ export const KNOWN_PREMARKET_COMPANIES: Record<string, string> = {
 }
 
 /**
- * Check if a company name is a known public company
+ * Company name aliases - maps alternative names to canonical company names
+ * Format: { 'Alias': 'Canonical Name' }
+ * These are NOT auto-generated and can be edited manually
+ */
+export const COMPANY_ALIASES: Record<string, { canonical: string; type: 'public' | 'premarket' }> = {
+  'Cursor': { canonical: 'Anysphere', type: 'premarket' },
+}
+
+/**
+ * Resolve an alias to its canonical company name and type
+ */
+export function resolveAlias(name: string): { canonical: string; type: 'public' | 'premarket' } | undefined {
+  return COMPANY_ALIASES[name]
+}
+
+/**
+ * Check if a company name is a known public company (including aliases)
  */
 export function isPublicCompany(name: string): boolean {
-  return name in KNOWN_COMPANIES
+  if (name in KNOWN_COMPANIES) return true
+  const alias = COMPANY_ALIASES[name]
+  return alias?.type === 'public'
 }
 
 /**
- * Check if a company name is a known premarket company
+ * Check if a company name is a known premarket company (including aliases)
  */
 export function isPremarketCompany(name: string): boolean {
-  return name in KNOWN_PREMARKET_COMPANIES
+  if (name in KNOWN_PREMARKET_COMPANIES) return true
+  const alias = COMPANY_ALIASES[name]
+  return alias?.type === 'premarket'
 }
 
 /**
- * Get the slug/API name for a company
+ * Get the slug/API name for a company (resolves aliases)
  */
 export function getCompanySlug(name: string): string | undefined {
-  return KNOWN_COMPANIES[name] || KNOWN_PREMARKET_COMPANIES[name]
+  if (KNOWN_COMPANIES[name]) return KNOWN_COMPANIES[name]
+  if (KNOWN_PREMARKET_COMPANIES[name]) return KNOWN_PREMARKET_COMPANIES[name]
+
+  // Check aliases
+  const alias = COMPANY_ALIASES[name]
+  if (alias) {
+    if (alias.type === 'public') return KNOWN_COMPANIES[alias.canonical]
+    if (alias.type === 'premarket') return KNOWN_PREMARKET_COMPANIES[alias.canonical] || alias.canonical.toLowerCase()
+  }
+  return undefined
 }
 
 /**
- * Check if a company name is known (public or premarket)
+ * Check if a company name is known (public or premarket, including aliases)
  */
 export function isKnownCompany(name: string): boolean {
   return isPublicCompany(name) || isPremarketCompany(name)
