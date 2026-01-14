@@ -78,6 +78,45 @@ A Next.js 16 application for AI-powered financial analysis and newsletter genera
 - Company mapping: `KNOWN_PREMARKET_COMPANIES` in `lib/data/companies.ts`
 - Sync: `npx tsx scripts/sync-premarket-companies.ts`
 
+### News Queue & Article Selection
+The news queue system manages article selection for Ghostwriter blog post generation:
+
+**Flow:**
+1. Articles arrive in `daily_repo` from newsletter ingestion
+2. Synthesis pipeline scores articles (originality + relevance)
+3. Articles added to `news_queue` with status `pending`
+4. User manually selects articles → status becomes `selected`
+5. Ghostwriter uses selected items for blog generation
+
+**Key Files:**
+- `lib/news-queue/service.ts` - Queue management with source diversity (30% limit)
+- `app/api/ghostwriter-queue/route.ts` - Article generation from queue items
+- `app/admin/news-queue/page.tsx` - Queue management UI with rankings
+- `app/admin/create-article/page.tsx` - Blog creation using queue items
+
+**Item Selection Priority (ghostwriter-queue API):**
+1. Specific `queueItemIds` if provided
+2. Manually selected items (status='selected') - DEFAULT
+3. Balanced selection from pending items (30% source diversity)
+
+**Database:**
+- `news_queue` table with status: pending → selected → used
+- `get_balanced_queue_selection()` PostgreSQL function for fair source distribution
+- Score formula: `total_score = 0.4×synthesis + 0.3×relevance + 0.3×uniqueness`
+
+## Recent Changes (2026-01-14)
+
+### Ghostwriter Queue Fix
+Fixed critical issue where manually selected news queue items were being ignored:
+
+**Problem:** `get_balanced_queue_selection()` only fetched `status='pending'` items,
+so items the user selected (status='selected') were never used by the Ghostwriter.
+
+**Solution:**
+- Added `getSelectedItems()` function to fetch status='selected' items
+- Updated ghostwriter-queue API to use selected items by default
+- Create-article page now shows count of selected items
+
 ## Recent Changes (2026-01-13)
 
 ### Edit Learning System

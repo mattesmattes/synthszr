@@ -74,12 +74,13 @@ export default function ArchitecturePage() {
             <li><a href="#scheduler" className="text-zinc-300 hover:text-white">3. Scheduler & Cron Jobs</a></li>
             <li><a href="#newsletter-fetch" className="text-zinc-300 hover:text-white">4. Newsletter Fetching</a></li>
             <li><a href="#analysis" className="text-zinc-300 hover:text-white">5. Daily Analysis & Synthesis</a></li>
-            <li><a href="#post-generation" className="text-zinc-300 hover:text-white">6. AI Post Generation</a></li>
-            <li><a href="#edit-learning" className="text-zinc-300 hover:text-white">7. Edit Learning System</a></li>
-            <li><a href="#stock-synthszr" className="text-zinc-300 hover:text-white">8. Stock Values & Stock-Synthszr</a></li>
-            <li><a href="#data-model" className="text-zinc-300 hover:text-white">9. Data Model</a></li>
-            <li><a href="#security" className="text-zinc-300 hover:text-white">10. Security & Tech Debt</a></li>
-            <li><a href="#api-routes" className="text-zinc-300 hover:text-white">11. API Routes</a></li>
+            <li><a href="#news-queue" className="text-zinc-300 hover:text-white">6. News Queue & Article Selection</a></li>
+            <li><a href="#post-generation" className="text-zinc-300 hover:text-white">7. AI Post Generation</a></li>
+            <li><a href="#edit-learning" className="text-zinc-300 hover:text-white">8. Edit Learning System</a></li>
+            <li><a href="#stock-synthszr" className="text-zinc-300 hover:text-white">9. Stock Values & Stock-Synthszr</a></li>
+            <li><a href="#data-model" className="text-zinc-300 hover:text-white">10. Data Model</a></li>
+            <li><a href="#security" className="text-zinc-300 hover:text-white">11. Security & Tech Debt</a></li>
+            <li><a href="#api-routes" className="text-zinc-300 hover:text-white">12. API Routes</a></li>
           </ul>
         </nav>
 
@@ -351,9 +352,128 @@ export default function ArchitecturePage() {
           </DiagramContainer>
         </section>
 
-        {/* Section 6: Post Generation */}
+        {/* Section 6: News Queue & Article Selection */}
+        <section id="news-queue" className="mb-16">
+          <h2 className="mb-6 text-2xl font-bold">6. News Queue & Article Selection</h2>
+          <p className="mb-6 text-zinc-400">
+            The News Queue system manages article selection for AI blog post generation.
+            It provides scoring, source diversification, and manual curation capabilities
+            to ensure high-quality content selection.
+          </p>
+
+          <DiagramContainer title="News Queue Flow">
+            <div className="flex flex-col items-center gap-2">
+              <FlowBox variant="muted" className="w-64">
+                <div className="font-semibold">daily_repo</div>
+                <div className="text-xs">Raw newsletters & articles</div>
+              </FlowBox>
+              <Arrow />
+              <FlowBox variant="primary" className="w-64">
+                <div className="font-semibold">Add to Queue</div>
+                <div className="text-xs">queueFromDailyRepo()</div>
+              </FlowBox>
+              <Arrow />
+              <FlowBox className="w-64">
+                <div className="font-semibold">news_queue</div>
+                <div className="text-xs">status: pending</div>
+              </FlowBox>
+              <Arrow />
+              <div className="grid grid-cols-2 gap-4 w-full max-w-md">
+                <FlowBox variant="warning">
+                  <div className="font-semibold">Manual Selection</div>
+                  <div className="text-xs">Admin UI ranking</div>
+                </FlowBox>
+                <FlowBox variant="muted">
+                  <div className="font-semibold">Auto Selection</div>
+                  <div className="text-xs">getBalancedSelection()</div>
+                </FlowBox>
+              </div>
+              <Arrow />
+              <FlowBox variant="success" className="w-64">
+                <div className="font-semibold">status: selected</div>
+                <div className="text-xs">Ready for Ghostwriter</div>
+              </FlowBox>
+            </div>
+          </DiagramContainer>
+
+          <h3 className="mb-3 text-lg font-semibold">Item Selection Priority</h3>
+          <p className="mb-4 text-zinc-400 text-sm">
+            The <code className="bg-zinc-800 px-1 rounded">/api/ghostwriter-queue</code> endpoint
+            uses the following priority order to select items for blog post generation:
+          </p>
+          <div className="grid grid-cols-3 gap-3 text-sm mb-6">
+            <div className="rounded-lg border border-emerald-600 bg-emerald-950/30 p-3 text-center">
+              <div className="font-mono text-emerald-400 font-semibold">1st</div>
+              <div className="text-xs text-zinc-300 mt-1">Specific IDs</div>
+              <div className="text-xs text-zinc-500">queueItemIds param</div>
+            </div>
+            <div className="rounded-lg border border-blue-600 bg-blue-950/30 p-3 text-center">
+              <div className="font-mono text-blue-400 font-semibold">2nd</div>
+              <div className="text-xs text-zinc-300 mt-1">Manual Selection</div>
+              <div className="text-xs text-zinc-500">status=&apos;selected&apos;</div>
+            </div>
+            <div className="rounded-lg border border-zinc-600 bg-zinc-800/30 p-3 text-center">
+              <div className="font-mono text-zinc-400 font-semibold">3rd</div>
+              <div className="text-xs text-zinc-300 mt-1">Balanced Selection</div>
+              <div className="text-xs text-zinc-500">30% source diversity</div>
+            </div>
+          </div>
+
+          <h3 className="mb-3 text-lg font-semibold">Scoring System</h3>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 mb-6">
+            <div className="font-mono text-sm text-zinc-200 mb-3">
+              total_score = 0.4 × synthesis_score + 0.3 × relevance_score + 0.3 × uniqueness_score
+            </div>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <div className="text-amber-400 font-semibold">Synthesis (40%)</div>
+                <div className="text-xs text-zinc-500">How well content can be synthesized</div>
+              </div>
+              <div>
+                <div className="text-blue-400 font-semibold">Relevance (30%)</div>
+                <div className="text-xs text-zinc-500">Topic relevance to audience</div>
+              </div>
+              <div>
+                <div className="text-emerald-400 font-semibold">Uniqueness (30%)</div>
+                <div className="text-xs text-zinc-500">Novel perspective or insight</div>
+              </div>
+            </div>
+          </div>
+
+          <h3 className="mb-3 text-lg font-semibold">Source Diversification</h3>
+          <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-4">
+            <p className="text-sm text-zinc-400 mb-3">
+              The <code className="bg-zinc-800 px-1 rounded">get_balanced_queue_selection()</code> SQL function
+              enforces a <strong className="text-amber-400">30% maximum</strong> from any single source
+              after the first 4 items are selected. This prevents newsletter bias.
+            </p>
+            <div className="text-xs text-zinc-500">
+              Example: For 10 items, max 3 can be from the same newsletter source.
+            </div>
+          </div>
+
+          <h4 className="font-semibold mb-2 mt-6">Queue Status Flow</h4>
+          <div className="grid grid-cols-5 gap-2 text-sm">
+            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2 text-center">
+              <div className="font-mono text-amber-400">pending</div>
+              <div className="text-xs text-zinc-500">In queue</div>
+            </div>
+            <div className="text-zinc-500 flex items-center justify-center">→</div>
+            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2 text-center">
+              <div className="font-mono text-blue-400">selected</div>
+              <div className="text-xs text-zinc-500">Chosen for article</div>
+            </div>
+            <div className="text-zinc-500 flex items-center justify-center">→</div>
+            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2 text-center">
+              <div className="font-mono text-emerald-400">used</div>
+              <div className="text-xs text-zinc-500">In published post</div>
+            </div>
+          </div>
+        </section>
+
+        {/* Section 7: Post Generation */}
         <section id="post-generation" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">6. AI Post Generation</h2>
+          <h2 className="mb-6 text-2xl font-bold">7. AI Post Generation</h2>
           <p className="mb-6 text-zinc-400">
             The Ghostwriter transforms the daily digest into a polished blog post,
             applying vocabulary replacements and generating accompanying images.
@@ -404,9 +524,9 @@ export default function ArchitecturePage() {
           </div>
         </section>
 
-        {/* Section 7: Edit Learning System */}
+        {/* Section 8: Edit Learning System */}
         <section id="edit-learning" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">7. Edit Learning System</h2>
+          <h2 className="mb-6 text-2xl font-bold">8. Edit Learning System</h2>
           <p className="mb-6 text-zinc-400">
             The Edit Learning System enables the Ghostwriter to improve over time by learning from
             manual edits made to AI-generated blog posts. It tracks all changes, extracts patterns,
@@ -568,9 +688,9 @@ export default function ArchitecturePage() {
           </DiagramContainer>
         </section>
 
-        {/* Section 8: Stock-Synthszr */}
+        {/* Section 9: Stock-Synthszr */}
         <section id="stock-synthszr" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">8. Stock Values & Stock-Synthszr</h2>
+          <h2 className="mb-6 text-2xl font-bold">9. Stock Values & Stock-Synthszr</h2>
           <p className="mb-6 text-zinc-400">
             The Stock-Synthszr system provides real-time stock quotes and AI-generated
             investment analysis. It combines market data with GPT-5&apos;s web search capabilities
@@ -729,9 +849,9 @@ export default function ArchitecturePage() {
           </div>
         </section>
 
-        {/* Section 9: Data Model */}
+        {/* Section 10: Data Model */}
         <section id="data-model" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">9. Data Model</h2>
+          <h2 className="mb-6 text-2xl font-bold">10. Data Model</h2>
           <p className="mb-6 text-zinc-400">
             The system uses Supabase (PostgreSQL) with the following core tables
             for content management.
@@ -793,6 +913,26 @@ export default function ArchitecturePage() {
             </div>
           </DiagramContainer>
 
+          <h4 className="font-semibold mb-3">News Queue Tables</h4>
+          <div className="grid grid-cols-2 gap-2 text-sm mb-6">
+            <div className="rounded border border-amber-800/50 bg-amber-950/20 px-3 py-2">
+              <span className="text-amber-300">news_queue</span>
+              <span className="text-zinc-500 ml-2">— Article selection queue with scores</span>
+            </div>
+            <div className="rounded border border-amber-800/50 bg-amber-950/20 px-3 py-2">
+              <span className="text-amber-300">news_queue_source_distribution</span>
+              <span className="text-zinc-500 ml-2">— Source stats view</span>
+            </div>
+            <div className="rounded border border-amber-800/50 bg-amber-950/20 px-3 py-2">
+              <span className="text-amber-300">news_queue_selectable</span>
+              <span className="text-zinc-500 ml-2">— Items respecting 30% limit</span>
+            </div>
+            <div className="rounded border border-amber-800/50 bg-amber-950/20 px-3 py-2">
+              <span className="text-amber-300">get_balanced_queue_selection()</span>
+              <span className="text-zinc-500 ml-2">— SQL function for selection</span>
+            </div>
+          </div>
+
           <h4 className="font-semibold mb-3">Supporting Tables</h4>
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="rounded border border-zinc-800 bg-zinc-900/50 px-3 py-2">
@@ -842,9 +982,9 @@ export default function ArchitecturePage() {
           </div>
         </section>
 
-        {/* Section 10: Security & Tech Debt */}
+        {/* Section 11: Security & Tech Debt */}
         <section id="security" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">10. Security & Tech Debt</h2>
+          <h2 className="mb-6 text-2xl font-bold">11. Security & Tech Debt</h2>
 
           <h3 className="mb-4 text-xl font-semibold">Security Measures</h3>
           <p className="mb-6 text-zinc-400">
@@ -963,9 +1103,9 @@ export default function ArchitecturePage() {
           </div>
         </section>
 
-        {/* Section 11: API Routes */}
+        {/* Section 12: API Routes */}
         <section id="api-routes" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">11. API Routes</h2>
+          <h2 className="mb-6 text-2xl font-bold">12. API Routes</h2>
           <p className="mb-6 text-zinc-400">
             Key API endpoints for the content pipeline. All cron routes require
             CRON_SECRET authentication in production.
@@ -985,8 +1125,18 @@ export default function ArchitecturePage() {
               <h4 className="font-semibold text-zinc-200 mb-3">Content Generation</h4>
               <div className="space-y-2 text-sm font-mono">
                 <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/analyze</span><span className="text-zinc-600 ml-auto">AI analysis (SSE)</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/ghostwriter</span><span className="text-zinc-600 ml-auto">Blog post (SSE)</span></div>
+                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/ghostwriter</span><span className="text-zinc-600 ml-auto">Blog post from digest (SSE)</span></div>
+                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/ghostwriter-queue</span><span className="text-zinc-600 ml-auto">Blog post from queue (SSE)</span></div>
                 <div className="flex gap-4"><span className="text-blue-400 w-12">PUT</span><span className="text-zinc-400">/api/generate-image</span><span className="text-zinc-600 ml-auto">Image generation</span></div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+              <h4 className="font-semibold text-zinc-200 mb-3">News Queue</h4>
+              <div className="space-y-2 text-sm font-mono">
+                <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/news-queue</span><span className="text-zinc-600 ml-auto">Queue items & stats</span></div>
+                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/news-queue</span><span className="text-zinc-600 ml-auto">Add items to queue</span></div>
+                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/news-queue/select</span><span className="text-zinc-600 ml-auto">Select items (status change)</span></div>
               </div>
             </div>
 
@@ -995,7 +1145,8 @@ export default function ArchitecturePage() {
               <div className="space-y-2 text-sm font-mono">
                 <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/stock-quote</span><span className="text-zinc-600 ml-auto">Real-time quotes (EODHD)</span></div>
                 <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/stock-synthszr</span><span className="text-zinc-600 ml-auto">AI stock analysis (GPT-5)</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/stock-synthszr/batch-ratings</span><span className="text-zinc-600 ml-auto">Batch ratings</span></div>
+                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/stock-synthszr/batch-ratings</span><span className="text-zinc-600 ml-auto">Batch ratings (read-only)</span></div>
+                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/stock-synthszr/batch-quotes</span><span className="text-zinc-600 ml-auto">Quotes + ratings combined</span></div>
               </div>
             </div>
 
