@@ -297,6 +297,71 @@ export async function generateEmailContentWithVotes(
     paragraphCompanies.set(para.index, companies)
   }
 
+  // ALSO scan for explicit {Company} tags in the ENTIRE document
+  // This catches companies tagged anywhere, not just near "Synthszr Take" sections
+  const explicitTagPattern = /\{([^}]+)\}/g
+  const explicitMatches = [...fullText.matchAll(explicitTagPattern)]
+
+  if (explicitMatches.length > 0) {
+    const explicitCompanies: Array<{ apiName: string; displayName: string }> = []
+    const explicitPremarketCompanies: Array<{ apiName: string; displayName: string }> = []
+
+    for (const match of explicitMatches) {
+      const taggedName = match[1].trim()
+
+      // Check against KNOWN_COMPANIES (case-insensitive)
+      for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
+        if (displayName.toLowerCase() === taggedName.toLowerCase()) {
+          if (!explicitCompanies.find(c => c.apiName === apiName)) {
+            explicitCompanies.push({ apiName, displayName })
+          }
+          break
+        }
+      }
+
+      // Check against KNOWN_PREMARKET_COMPANIES (case-insensitive)
+      for (const [displayName, apiName] of Object.entries(KNOWN_PREMARKET_COMPANIES)) {
+        if (displayName.toLowerCase() === taggedName.toLowerCase()) {
+          if (!explicitPremarketCompanies.find(c => c.apiName === apiName)) {
+            explicitPremarketCompanies.push({ apiName, displayName })
+          }
+          break
+        }
+      }
+    }
+
+    // If we found explicit companies not covered by Synthszr Take sections,
+    // add them to the last paragraph
+    if (explicitCompanies.length > 0 || explicitPremarketCompanies.length > 0) {
+      // Find companies already covered by Synthszr Take paragraphs
+      const existingApiNames = new Set<string>()
+      paragraphCompanies.forEach(pc => {
+        pc.public.forEach(c => existingApiNames.add(c.apiName))
+        pc.premarket.forEach(c => existingApiNames.add(c.apiName))
+      })
+
+      const newCompanies = explicitCompanies.filter(c => !existingApiNames.has(c.apiName))
+      const newPremarketCompanies = explicitPremarketCompanies.filter(c => !existingApiNames.has(c.apiName))
+
+      if (newCompanies.length > 0 || newPremarketCompanies.length > 0) {
+        // Find the last paragraph index
+        let lastParagraphIndex = -1
+        doc.content.forEach((node, index) => {
+          if (node.type === 'paragraph') {
+            lastParagraphIndex = index
+          }
+        })
+
+        if (lastParagraphIndex >= 0 && !paragraphCompanies.has(lastParagraphIndex)) {
+          paragraphCompanies.set(lastParagraphIndex, {
+            public: newCompanies,
+            premarket: newPremarketCompanies
+          })
+        }
+      }
+    }
+  }
+
   // Fetch ratings (includes ticker/percent for public companies)
   const ratingsMap = (allPublicCompanies.size > 0 || allPremarketCompanies.size > 0)
     ? await fetchRatings(Array.from(allPublicCompanies), Array.from(allPremarketCompanies), baseUrl)

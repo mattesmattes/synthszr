@@ -399,6 +399,64 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       }
     })
 
+    // ALSO scan the ENTIRE document for explicit {Company} tags
+    // This catches companies tagged anywhere, not just near "Synthszr Take" sections
+    const explicitTagPattern = /\{([^}]+)\}/g
+    const fullText = containerRef.current.textContent || ''
+    const explicitMatches = [...fullText.matchAll(explicitTagPattern)]
+
+    if (explicitMatches.length > 0) {
+      const explicitCompanies: Array<{ apiName: string; displayName: string }> = []
+      const explicitPremarketCompanies: Array<{ apiName: string; displayName: string }> = []
+
+      for (const match of explicitMatches) {
+        const taggedName = match[1].trim()
+
+        // Check against KNOWN_COMPANIES (case-insensitive)
+        for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
+          if (displayName.toLowerCase() === taggedName.toLowerCase()) {
+            if (!explicitCompanies.find(c => c.apiName === apiName)) {
+              explicitCompanies.push({ apiName, displayName })
+            }
+            break
+          }
+        }
+
+        // Check against KNOWN_PREMARKET_COMPANIES (case-insensitive)
+        for (const [displayName, apiName] of Object.entries(KNOWN_PREMARKET_COMPANIES)) {
+          if (displayName.toLowerCase() === taggedName.toLowerCase()) {
+            if (!explicitPremarketCompanies.find(c => c.apiName === apiName)) {
+              explicitPremarketCompanies.push({ apiName, displayName })
+            }
+            break
+          }
+        }
+      }
+
+      // If we found explicit companies, add them to a section
+      // Use the last Synthszr Take section, or create a new container at the end
+      if (explicitCompanies.length > 0 || explicitPremarketCompanies.length > 0) {
+        // Find the last paragraph in the document for placing the badges
+        const lastParagraph = containerRef.current.querySelector('p:last-of-type')
+        if (lastParagraph && !lastParagraph.classList.contains('synthszr-ratings-processed')) {
+          // Filter out companies already added to other sections
+          const existingApiNames = new Set(sectionsToProcess.flatMap(s =>
+            [...s.companies.map(c => c.apiName), ...s.premarketCompanies.map(c => c.apiName)]
+          ))
+          const newCompanies = explicitCompanies.filter(c => !existingApiNames.has(c.apiName))
+          const newPremarketCompanies = explicitPremarketCompanies.filter(c => !existingApiNames.has(c.apiName))
+
+          if (newCompanies.length > 0 || newPremarketCompanies.length > 0) {
+            sectionsToProcess.push({
+              element: lastParagraph,
+              companies: newCompanies,
+              premarketCompanies: newPremarketCompanies
+            })
+          }
+        }
+      }
+    }
+
     if (sectionsToProcess.length === 0) return
 
     // Collect all unique companies for batch API calls
