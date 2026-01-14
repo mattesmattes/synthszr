@@ -100,7 +100,7 @@ export default async function Page() {
     <div className="min-h-screen bg-background text-foreground">
       {/* <BlogHeader /> */}
 
-      <main className="mx-auto max-w-5xl px-6 py-12 md:py-20">
+      <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
 
         {featuredPost ? (
           <>

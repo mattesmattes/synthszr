@@ -122,7 +122,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
     <div className="min-h-screen bg-background text-foreground">
       {/* <BlogHeader /> */}
 
-        <main className="mx-auto max-w-3xl px-6 py-12 md:py-20">
+        <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
         <article>
           {/* Cover Image with centered Logo overlay - links to home */}
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
