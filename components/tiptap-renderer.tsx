@@ -272,19 +272,90 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       }
     })
 
+    // Helper to highlight last sentence in a paragraph
+    const highlightLastSentence = (paragraph: Element) => {
+      if (paragraph.classList.contains('synthszr-last-sentence-processed')) return
+      paragraph.classList.add('synthszr-last-sentence-processed')
+
+      // Get all text content, find last sentence boundary
+      const fullText = paragraph.textContent || ''
+      // Find last ". " that's followed by a capital letter (start of new sentence)
+      const sentenceEndRegex = /\.\s+(?=[A-ZÄÖÜ])/g
+      let lastSentenceStart = 0
+      let match
+      while ((match = sentenceEndRegex.exec(fullText)) !== null) {
+        lastSentenceStart = match.index + match[0].length
+      }
+
+      if (lastSentenceStart === 0) return // No sentence boundary found
+
+      // Walk through text nodes to find and wrap the last sentence
+      const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT, null)
+      let charCount = 0
+      const nodesToWrap: Array<{ node: Text; start: number; end: number }> = []
+
+      let textNode: Text | null
+      while ((textNode = walker.nextNode() as Text | null)) {
+        const nodeText = textNode.textContent || ''
+        const nodeStart = charCount
+        const nodeEnd = charCount + nodeText.length
+
+        if (nodeEnd > lastSentenceStart && nodeStart < fullText.length) {
+          const wrapStart = Math.max(0, lastSentenceStart - nodeStart)
+          const wrapEnd = nodeText.length
+          if (wrapStart < wrapEnd) {
+            nodesToWrap.push({ node: textNode, start: wrapStart, end: wrapEnd })
+          }
+        }
+        charCount = nodeEnd
+      }
+
+      // Wrap the text nodes
+      for (const { node, start, end } of nodesToWrap) {
+        const text = node.textContent || ''
+        if (start === 0 && end === text.length) {
+          // Wrap entire node
+          const wrapper = document.createElement('span')
+          wrapper.className = 'synthszr-last-sentence'
+          node.parentNode?.insertBefore(wrapper, node)
+          wrapper.appendChild(node)
+        } else {
+          // Split and wrap partial
+          const before = text.slice(0, start)
+          const toWrap = text.slice(start, end)
+          const after = text.slice(end)
+
+          const parent = node.parentNode
+          if (parent) {
+            if (before) {
+              parent.insertBefore(document.createTextNode(before), node)
+            }
+            const wrapper = document.createElement('span')
+            wrapper.className = 'synthszr-last-sentence'
+            wrapper.textContent = toWrap
+            parent.insertBefore(wrapper, node)
+            if (after) {
+              parent.insertBefore(document.createTextNode(after), node)
+            }
+            parent.removeChild(node)
+          }
+        }
+      }
+    }
+
     // Then check bold/strong elements
     const strongElements = containerRef.current.querySelectorAll('strong, b')
     strongElements.forEach((strong) => {
       const text = strong.textContent || ''
       if (isSyntheseText(text)) {
         strong.classList.add('mattes-synthese')
-        // Add background to entire parent paragraph
+        // Find parent paragraph and highlight last sentence
         let parent: Element | null = strong.parentElement
         while (parent && parent.tagName !== 'P' && parent !== containerRef.current) {
           parent = parent.parentElement
         }
         if (parent && parent.tagName === 'P') {
-          parent.classList.add('synthszr-take-paragraph')
+          highlightLastSentence(parent)
         }
       }
     })
@@ -340,13 +411,13 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         parent.insertBefore(afterNode, node)
         parent.removeChild(node)
 
-        // Add background to entire parent paragraph
+        // Find parent paragraph and highlight last sentence
         let paragraph: Element | null = parent as Element
         while (paragraph && paragraph.tagName !== 'P' && paragraph !== containerRef.current) {
           paragraph = paragraph.parentElement
         }
         if (paragraph && paragraph.tagName === 'P') {
-          paragraph.classList.add('synthszr-take-paragraph')
+          highlightLastSentence(paragraph)
         }
       }
     }
