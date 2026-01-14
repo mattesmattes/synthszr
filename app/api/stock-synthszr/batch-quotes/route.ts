@@ -44,6 +44,9 @@ const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string }> = {
   'disney': { symbol: 'DIS', exchange: 'US' },
   'warner bros': { symbol: 'WBD', exchange: 'US' },
   'paramount': { symbol: 'PARA', exchange: 'US' },
+  'comcast': { symbol: 'CMCSA', exchange: 'US' },
+  'charter communications': { symbol: 'CHTR', exchange: 'US' },
+  'charter-communications': { symbol: 'CHTR', exchange: 'US' },
 
   // E-commerce & Payments
   'shopify': { symbol: 'SHOP', exchange: 'US' },
@@ -85,7 +88,7 @@ const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string }> = {
   'rivian': { symbol: 'RIVN', exchange: 'US' },
   'lucid': { symbol: 'LCID', exchange: 'US' },
 
-  // Finance
+  // Finance & Payments
   'jpmorgan': { symbol: 'JPM', exchange: 'US' },
   'goldman sachs': { symbol: 'GS', exchange: 'US' },
   'morgan stanley': { symbol: 'MS', exchange: 'US' },
@@ -93,6 +96,8 @@ const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string }> = {
   'visa': { symbol: 'V', exchange: 'US' },
   'mastercard': { symbol: 'MA', exchange: 'US' },
   'coinbase': { symbol: 'COIN', exchange: 'US' },
+  'global payments': { symbol: 'GPN', exchange: 'US' },
+  'global-payments': { symbol: 'GPN', exchange: 'US' },
 
   // German & European Industrial
   'siemens': { symbol: 'SIE', exchange: 'XETRA' },
@@ -140,6 +145,11 @@ const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string }> = {
   'roblox': { symbol: 'RBLX', exchange: 'US' },
   'unity': { symbol: 'U', exchange: 'US' },
   'robinhood': { symbol: 'HOOD', exchange: 'US' },
+  'aes': { symbol: 'AES', exchange: 'US' },
+  'hp': { symbol: 'HPQ', exchange: 'US' },
+  'viatris': { symbol: 'VTRS', exchange: 'US' },
+  'everest group': { symbol: 'EG', exchange: 'US' },
+  'everest-group': { symbol: 'EG', exchange: 'US' },
 }
 
 interface CacheRow {
