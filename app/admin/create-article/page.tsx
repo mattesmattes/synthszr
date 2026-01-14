@@ -469,18 +469,27 @@ export default function CreateArticlePage() {
     while ((match = tagRegex.exec(content)) !== null) {
       const companyName = match[1].trim()
 
-      // Check if it's a known public company
-      if (companyName in KNOWN_COMPANIES) {
-        const apiName = KNOWN_COMPANIES[companyName]
-        if (!publicCompanies.includes(apiName)) {
-          publicCompanies.push(apiName)
+      // Check if it's a known public company (case-insensitive)
+      let foundPublic = false
+      for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
+        if (displayName.toLowerCase() === companyName.toLowerCase()) {
+          if (!publicCompanies.includes(apiName)) {
+            publicCompanies.push(apiName)
+          }
+          foundPublic = true
+          break
         }
       }
-      // Check if it's a known premarket company
-      else if (companyName in KNOWN_PREMARKET_COMPANIES) {
-        const apiName = KNOWN_PREMARKET_COMPANIES[companyName]
-        if (!premarketCompanies.includes(apiName)) {
-          premarketCompanies.push(apiName)
+
+      // Check if it's a known premarket company (case-insensitive)
+      if (!foundPublic) {
+        for (const [displayName, apiName] of Object.entries(KNOWN_PREMARKET_COMPANIES)) {
+          if (displayName.toLowerCase() === companyName.toLowerCase()) {
+            if (!premarketCompanies.includes(apiName)) {
+              premarketCompanies.push(apiName)
+            }
+            break
+          }
         }
       }
     }
