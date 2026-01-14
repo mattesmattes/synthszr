@@ -9,7 +9,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
-import { getBalancedSelection, selectItemsForArticle } from '@/lib/news-queue/service'
+import { getBalancedSelection, getSelectedItems, selectItemsForArticle } from '@/lib/news-queue/service'
 
 const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview']
 
@@ -29,18 +29,22 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       queueItemIds,        // Specific items to use (optional)
-      maxItems = 10,       // Max items if using balanced selection
+      useSelected = true,  // Use manually selected items (status='selected') - NEW DEFAULT
+      maxItems = 10,       // Max items if using balanced selection (fallback)
       promptId,
       vocabularyIntensity = 50,
       model: requestedModel
     } = body
 
     const model: AIModel = VALID_MODELS.includes(requestedModel) ? requestedModel : 'gemini-2.5-pro'
-    console.log(`[Ghostwriter-Queue] Model: ${model}, Items: ${queueItemIds?.length || 'auto-select'}`)
+    console.log(`[Ghostwriter-Queue] Model: ${model}, Items: ${queueItemIds?.length || 'auto-select'}, useSelected: ${useSelected}`)
 
     const supabase = await createClient()
 
-    // Get queue items - either specified or balanced selection
+    // Get queue items - priority order:
+    // 1. Specific IDs if provided
+    // 2. Manually selected items (status='selected') if useSelected=true
+    // 3. Balanced selection from pending items (fallback)
     let selectedItems: Array<{
       id: string
       daily_repo_id: string | null
@@ -61,8 +65,39 @@ export async function POST(request: NextRequest) {
         })
       }
       selectedItems = result.items
+    } else if (useSelected) {
+      // Use manually selected items (status='selected')
+      const manuallySelected = await getSelectedItems()
+
+      if (manuallySelected.length > 0) {
+        console.log(`[Ghostwriter-Queue] Using ${manuallySelected.length} manually selected items`)
+        selectedItems = manuallySelected
+      } else {
+        // Fallback to balanced selection if no items manually selected
+        console.log(`[Ghostwriter-Queue] No manually selected items, falling back to balanced selection`)
+        const balancedSelection = await getBalancedSelection(maxItems)
+
+        if (balancedSelection.length === 0) {
+          return new Response(JSON.stringify({ error: 'No items available in queue. Select items first or add items to the pending queue.' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+
+        const itemIds = balancedSelection.map(s => s.id)
+        const result = await selectItemsForArticle(itemIds)
+
+        if (result.error) {
+          return new Response(JSON.stringify({ error: result.error }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+
+        selectedItems = result.items
+      }
     } else {
-      // Use balanced selection
+      // Use balanced selection from pending items
       const balancedSelection = await getBalancedSelection(maxItems)
 
       if (balancedSelection.length === 0) {

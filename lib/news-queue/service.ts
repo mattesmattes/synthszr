@@ -207,6 +207,27 @@ export async function getBalancedSelection(
 }
 
 /**
+ * Get items that have been manually selected (status='selected')
+ * These are items the user explicitly chose for article generation
+ */
+export async function getSelectedItems(): Promise<NewsQueueItem[]> {
+  const supabase = createAdminClient()
+
+  const { data, error } = await supabase
+    .from('news_queue')
+    .select('*')
+    .eq('status', 'selected')
+    .order('total_score', { ascending: false })
+
+  if (error) {
+    console.error('[NewsQueue] Failed to get selected items:', error)
+    return []
+  }
+
+  return data || []
+}
+
+/**
  * Select items for article generation
  * Marks items as 'selected' and returns them
  * Note: Source limit validation is handled by getBalancedSelection() algorithm

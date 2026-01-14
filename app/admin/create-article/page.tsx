@@ -295,8 +295,9 @@ export default function CreateArticlePage() {
   const selectedDigest = digests.find(d => d.id === selectedDigestId)
 
   const generateArticle = useCallback(async () => {
-    if (queueStats.pending === 0) {
-      alert('Keine Items in der Queue. Bitte zuerst die Synthese-Pipeline ausführen.')
+    // Check for selected items first (priority), then pending items (fallback)
+    if (queueStats.selected === 0 && queueStats.pending === 0) {
+      alert('Keine Items in der Queue. Bitte zuerst Items auswählen (News Queue → Selected) oder die Synthese-Pipeline ausführen.')
       return
     }
 
@@ -307,11 +308,13 @@ export default function CreateArticlePage() {
 
     try {
       // Use Queue-based Ghostwriter API
+      // Priority: 1. Selected items, 2. Pending items (balanced selection)
       const response = await fetch('/api/ghostwriter-queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          maxItems: maxQueueItems,
+          useSelected: true,  // Use manually selected items first
+          maxItems: maxQueueItems,  // Fallback to balanced selection if no selected items
           vocabularyIntensity,
           model: selectedModel
         }),
@@ -383,7 +386,7 @@ export default function CreateArticlePage() {
     } finally {
       setGenerating(false)
     }
-  }, [queueStats.pending, maxQueueItems, vocabularyIntensity, selectedModel])
+  }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity, selectedModel])
 
   function copyToClipboard() {
     navigator.clipboard.writeText(articleContent)
@@ -736,9 +739,14 @@ export default function CreateArticlePage() {
                 </div>
               )}
 
-              {queueStats.pending === 0 && (
+              {queueStats.selected > 0 && (
+                <div className="mt-4 p-2 bg-blue-500/10 rounded text-xs text-blue-700">
+                  ✓ {queueStats.selected} manuell ausgewählte Items werden verwendet.
+                </div>
+              )}
+              {queueStats.selected === 0 && queueStats.pending === 0 && (
                 <div className="mt-4 p-2 bg-yellow-500/10 rounded text-xs text-yellow-700">
-                  Queue ist leer. Bitte Synthese-Pipeline für einen Digest ausführen.
+                  Queue ist leer. Bitte Items in der News Queue auswählen oder Synthese-Pipeline ausführen.
                 </div>
               )}
             </CardContent>
