@@ -38,11 +38,12 @@ export function FeaturedArticle({
   return (
     <article className="mb-16 border-b border-border pb-16">
       {coverImageUrl && (
-        <a href={postUrl} className="block mb-8 rounded-lg overflow-hidden">
+        <a href={postUrl} className="block mb-8 rounded-lg overflow-hidden -mx-6">
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
+          {/* -mx-6 compensates for parent padding to allow full 704px width */}
           {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
           <div
-            className="relative flex items-center justify-center mx-auto w-[704px] max-w-full aspect-square md:aspect-[11/6]"
+            className="relative flex items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6]"
             style={{ backgroundColor: '#CCFF00' }}
           >
             {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}

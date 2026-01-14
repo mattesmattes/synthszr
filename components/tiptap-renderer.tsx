@@ -7,6 +7,7 @@ import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import { createPortal } from "react-dom"
 import { StockSynthszrLayer } from "./stock-synthszr-layer"
+import { StockQuotePopover } from "./stock-quote-popover"
 import { PremarketSynthszrLayer } from "./premarket-synthszr-layer"
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies"
 import { isExcludedCompanyName } from "@/lib/data/company-exclusions"
@@ -40,6 +41,7 @@ interface PremarketRatingLinkProps {
 
 function SynthszrRatingLink({ company, displayName, rating, ticker, changePercent, direction, isFirst }: SynthszrRatingLinkProps) {
   const [showSynthszr, setShowSynthszr] = useState(false)
+  const [showQuote, setShowQuote] = useState(false)
 
   // Neon colors matching stock performance badges
   const ratingBadgeStyles = {
@@ -67,15 +69,19 @@ function SynthszrRatingLink({ company, displayName, rating, ticker, changePercen
     neutral: '→',
   }
 
+  // Only show stock quote for companies with ticker data
+  const hasQuoteData = ticker && typeof changePercent === 'number'
+
   return (
     <>
-      <button
-        onClick={() => setShowSynthszr(true)}
-        className="inline-flex items-baseline gap-1 hover:underline cursor-pointer text-foreground text-[13px]"
-      >
+      <span className="inline-flex items-baseline gap-1 text-foreground text-[13px]">
         {isFirst && <span className="font-bold uppercase text-[0.8125em]">Synthszr Vote:</span>}
         {!isFirst && <span>,</span>}
-        <span className="ml-1">
+        {/* Company name, ticker, percentage - clickable for stock quote (if available) */}
+        <span
+          onClick={hasQuoteData ? () => setShowQuote(true) : undefined}
+          className={`ml-1 ${hasQuoteData ? 'hover:underline cursor-pointer' : ''}`}
+        >
           {displayName}
           {ticker && <span className="text-muted-foreground"> ({ticker})</span>}
           {typeof changePercent === 'number' && direction && (
@@ -84,14 +90,24 @@ function SynthszrRatingLink({ company, displayName, rating, ticker, changePercen
             </span>
           )}
         </span>
-        <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold not-italic ${ratingBadgeStyles[rating]}`}>
+        {/* Rating badge - clickable for Synthszr analysis */}
+        <span
+          onClick={() => setShowSynthszr(true)}
+          className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold not-italic cursor-pointer hover:opacity-80 ${ratingBadgeStyles[rating]}`}
+        >
           {ratingLabels[rating]}
         </span>
-      </button>
+      </span>
       {showSynthszr && (
         <StockSynthszrLayer
           company={company}
           onClose={() => setShowSynthszr(false)}
+        />
+      )}
+      {showQuote && (
+        <StockQuotePopover
+          company={company}
+          onClose={() => setShowQuote(false)}
         />
       )}
     </>
@@ -262,6 +278,14 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
       const text = strong.textContent || ''
       if (isSyntheseText(text)) {
         strong.classList.add('mattes-synthese')
+        // Add background to entire parent paragraph
+        let parent: Element | null = strong.parentElement
+        while (parent && parent.tagName !== 'P' && parent !== containerRef.current) {
+          parent = parent.parentElement
+        }
+        if (parent && parent.tagName === 'P') {
+          parent.classList.add('synthszr-take-paragraph')
+        }
       }
     })
 
@@ -315,6 +339,15 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         parent.insertBefore(styledSpan, node)
         parent.insertBefore(afterNode, node)
         parent.removeChild(node)
+
+        // Add background to entire parent paragraph
+        let paragraph: Element | null = parent as Element
+        while (paragraph && paragraph.tagName !== 'P' && paragraph !== containerRef.current) {
+          paragraph = paragraph.parentElement
+        }
+        if (paragraph && paragraph.tagName === 'P') {
+          paragraph.classList.add('synthszr-take-paragraph')
+        }
       }
     }
   }, [])
@@ -567,6 +600,10 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
             isin: ratingData.isin,
           })
         })
+
+        // Add a space before the ratings container
+        const space = document.createTextNode(' ')
+        section.element.appendChild(space)
 
         // Append to end of paragraph
         section.element.appendChild(ratingsContainer)

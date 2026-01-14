@@ -290,6 +290,22 @@
   border-radius: 2px;
 }
 
+/* TEST: Entire Synthszr Take paragraph with neon yellow background */
+.synthszr-take-paragraph {
+  background-color: #CCFF00;
+  color: #000;
+  padding: 0.75em 1em;
+  border-radius: 0.25em;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+/* Override mattes-synthese styles inside full paragraph (no double background) */
+.synthszr-take-paragraph .mattes-synthese {
+  background-color: transparent;
+  padding: 0;
+}
+
 /* News headline links with favicon - no underline, inherit heading color */
 .tiptap-content h2.news-heading-processed a,
 .prose h2.news-heading-processed a,
