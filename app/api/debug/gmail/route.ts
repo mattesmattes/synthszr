@@ -87,6 +87,66 @@ export async function GET() {
       }
     }
 
+    // 6. DIAGNOSTIC: Test each source individually to find mismatches
+    if (debug.gmailConnected && sources && sources.length > 0) {
+      const gmailClient = new GmailClient(tokenData.refresh_token)
+      const afterDate = new Date(Date.now() - 48 * 60 * 60 * 1000) // 48h lookback
+      const sourceResults: Array<{
+        email: string
+        name: string
+        found: number
+        actualFromAddresses: string[]
+      }> = []
+
+      for (const source of sources) {
+        try {
+          const emails = await gmailClient.fetchEmailsFromSenders([source.email], 3, afterDate)
+          sourceResults.push({
+            email: source.email,
+            name: source.name || '',
+            found: emails.length,
+            actualFromAddresses: emails.map(e => e.from)
+          })
+        } catch {
+          sourceResults.push({
+            email: source.email,
+            name: source.name || '',
+            found: -1,
+            actualFromAddresses: ['ERROR']
+          })
+        }
+      }
+
+      debug.sourceDiagnostic = sourceResults
+      debug.sourcesWithNoEmails = sourceResults.filter(s => s.found === 0).map(s => s.email)
+
+      // 7. Get actual recent emails without sender filter to see real addresses
+      try {
+        const recentEmails = await gmailClient.scanUniqueSenders(2, 100) // Last 2 days, 100 emails
+        // Find senders that look like newsletters but aren't in sources
+        const sourceEmailSet = new Set(sources.map(s => s.email.toLowerCase()))
+        const missingNewsletters = recentEmails
+          .filter(sender => {
+            const isNewsletter = sender.email.includes('substack') ||
+              sender.email.includes('beehiiv') ||
+              sender.email.includes('buttondown') ||
+              sender.email.includes('newsletter') ||
+              sender.count >= 2
+            return isNewsletter && !sourceEmailSet.has(sender.email.toLowerCase())
+          })
+          .slice(0, 10)
+
+        debug.potentialMissingSources = missingNewsletters.map(s => ({
+          email: s.email,
+          name: s.name,
+          count: s.count,
+          subjects: s.subjects.slice(0, 2)
+        }))
+      } catch {
+        debug.potentialMissingSources = 'ERROR scanning'
+      }
+    }
+
     return NextResponse.json({
       success: true,
       debug

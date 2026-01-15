@@ -3,6 +3,7 @@ import { parseNewsletterHtml } from '@/lib/email/parser'
 import { extractArticleContent } from '@/lib/scraper/article-extractor'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { DEFAULT_NEWSLETTER_FETCH_MS, MS_PER_HOUR } from '@/lib/config/constants'
+import { generateEmbedding, prepareTextForEmbedding } from '@/lib/embeddings/generator'
 
 export interface NewsletterProcessResult {
   success: boolean
@@ -25,6 +26,9 @@ export interface NewsletterProcessResult {
   debug?: {
     latestEntryAt?: string
     fetchingSince?: string
+    skippedDuplicates?: number
+    enabledSources?: number
+    gmailQuery?: string
   }
 }
 
@@ -115,7 +119,20 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
   // Fetch emails from Gmail (up to 50 newsletters per run)
   const gmailClient = new GmailClient(tokenData.refresh_token)
   const senderEmails = sources.map(s => s.email)
+
+  // Build the query for debug output
+  const fromQuery = senderEmails.map(email => `from:${email}`).join(' OR ')
+  const dateStr = lastFetch.toISOString().split('T')[0].replace(/-/g, '/')
+  const debugGmailQuery = `(${fromQuery}) after:${dateStr}`
+
+  console.log('[Newsletter] Enabled sources:', senderEmails.length, 'emails:', senderEmails.join(', '))
+  console.log('[Newsletter] Gmail query:', debugGmailQuery.slice(0, 200) + '...')
+
   const emails = await gmailClient.fetchEmailsFromSenders(senderEmails, 50, lastFetch)
+  console.log('[Newsletter] Gmail returned:', emails.length, 'emails')
+  for (const email of emails) {
+    console.log(`[Newsletter] - From: ${email.from} | Subject: ${email.subject.slice(0, 50)}...`)
+  }
 
   // Also fetch emails with "+dailyrepo" subject tag (user-tagged emails for import)
   const hoursBack = Math.ceil((Date.now() - lastFetch.getTime()) / MS_PER_HOUR) || 36
@@ -133,6 +150,7 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
 
   let processedNewsletters = 0
   let processedArticles = 0
+  let skippedDuplicates = 0
   let errors = 0
   const processedItems: Array<{ type: string; title: string; from?: string; url?: string; links?: number }> = []
   const errorDetails: Array<{ subject: string; error: string }> = []
@@ -150,6 +168,8 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
         .single()
 
       if (existing) {
+        console.log(`[Newsletter] SKIPPED (duplicate): ${email.subject.slice(0, 50)}... from ${email.from}`)
+        skippedDuplicates++
         continue // Already processed
       }
 
@@ -175,7 +195,7 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
       // Store newsletter in daily_repo (full content, no truncation)
       // Also store the first article URL as source_url so newsletters have linkable sources
       const primaryArticleUrl = articleLinks.length > 0 ? articleLinks[0].url : null
-      const { error: insertError } = await supabase
+      const { data: insertedNewsletter, error: insertError } = await supabase
         .from('daily_repo')
         .insert({
           source_type: 'newsletter',
@@ -186,6 +206,8 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
           raw_html: htmlContent,
           newsletter_date: email.date.toISOString().split('T')[0],
         })
+        .select('id')
+        .single()
 
       if (insertError) {
         console.error('[Newsletter] Error inserting:', insertError)
@@ -199,6 +221,22 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
           from: email.from,
           links: articleLinks.length
         })
+
+        // Generate embedding for the newsletter
+        try {
+          const text = prepareTextForEmbedding(email.subject, parsed.plainText)
+          if (text.length >= 10) {
+            const embedding = await generateEmbedding(text)
+            const embeddingString = `[${embedding.join(',')}]`
+            await supabase
+              .from('daily_repo')
+              .update({ embedding: embeddingString })
+              .eq('id', insertedNewsletter.id)
+          }
+        } catch (embeddingError) {
+          console.error('[Newsletter] Error generating embedding:', embeddingError)
+          // Don't fail the whole process for embedding errors
+        }
       }
     } catch (err) {
       console.error('[Newsletter] Error processing email:', err)
@@ -275,6 +313,33 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
           title: extracted.title || article.title,
           url: sourceUrl
         })
+
+        // Generate embedding for the article
+        try {
+          const { data: insertedArticle } = await supabase
+            .from('daily_repo')
+            .select('id')
+            .eq('source_url', sourceUrl)
+            .single()
+
+          if (insertedArticle) {
+            const articleText = prepareTextForEmbedding(
+              extracted.title || article.title,
+              extracted.content
+            )
+            if (articleText.length >= 10) {
+              const articleEmbedding = await generateEmbedding(articleText)
+              const articleEmbeddingString = `[${articleEmbedding.join(',')}]`
+              await supabase
+                .from('daily_repo')
+                .update({ embedding: articleEmbeddingString })
+                .eq('id', insertedArticle.id)
+            }
+          }
+        } catch (embeddingError) {
+          console.error('[Newsletter] Error generating article embedding:', embeddingError)
+          // Don't fail the whole process for embedding errors
+        }
       } else {
         console.error(`[Newsletter] Insert error for ${sourceUrl}:`, articleInsertError.message)
       }
@@ -316,6 +381,9 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
     debug: {
       latestEntryAt: debugLatestEntryAt,
       fetchingSince: debugFetchingSince,
+      skippedDuplicates,
+      enabledSources: senderEmails.length,
+      gmailQuery: debugGmailQuery.length > 500 ? debugGmailQuery.slice(0, 500) + '...' : debugGmailQuery,
     },
   }
 }
