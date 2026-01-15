@@ -50,7 +50,14 @@ function isLikelyNewsletter(sender: EmailSender): boolean {
   return sender.count >= 3
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  // Temporary bypass with secret (remove after use)
+  const url = new URL(request.url)
+  const secret = url.searchParams.get('secret')
+  if (secret !== 'fix-nl-2025') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     const supabase = createAdminClient()
 
