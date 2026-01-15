@@ -22,12 +22,22 @@ export interface NewsletterProcessResult {
   totalEmails?: number
   processedItems?: Array<{ type: string; title: string; from?: string; url?: string; links?: number }>
   errorDetails?: Array<{ subject: string; error: string }>
+  debug?: {
+    latestEntryAt?: string
+    fetchingSince?: string
+  }
+}
+
+export interface NewsletterProcessOptions {
+  /** Force fetch since a specific date (ISO string or Date) */
+  forceSince?: string | Date
 }
 
 /**
  * Process newsletters from Gmail - shared logic for both cron and manual triggers
+ * @param options.forceSince - Force fetch since a specific date (bypasses auto-detection)
  */
-export async function processNewsletters(): Promise<NewsletterProcessResult> {
+export async function processNewsletters(options?: NewsletterProcessOptions): Promise<NewsletterProcessResult> {
   const supabase = createAdminClient()
 
   // Get Gmail tokens (single-user setup)
@@ -64,7 +74,7 @@ export async function processNewsletters(): Promise<NewsletterProcessResult> {
   // This ensures we don't miss newsletters if today's entries were deleted
   const { data: latestEntry } = await supabase
     .from('daily_repo')
-    .select('collected_at')
+    .select('collected_at, newsletter_date')
     .order('collected_at', { ascending: false })
     .limit(1)
     .single()
@@ -76,12 +86,19 @@ export async function processNewsletters(): Promise<NewsletterProcessResult> {
     .eq('key', 'last_newsletter_fetch')
     .single()
 
-  // Use the latest entry's collected_at timestamp, falling back to settings or 36h default
+  // Use forceSince if provided, otherwise auto-detect
   let lastFetch: Date
-  if (latestEntry?.collected_at) {
+  let debugLatestEntryAt: string | undefined
+
+  if (options?.forceSince) {
+    // Manual override - use the provided date
+    lastFetch = new Date(options.forceSince)
+    console.log('[Newsletter] FORCED fetch since:', lastFetch.toISOString())
+  } else if (latestEntry?.collected_at) {
     // Use the timestamp of the most recent entry still in the database
     lastFetch = new Date(latestEntry.collected_at)
-    console.log('[Newsletter] Using last existing entry timestamp:', lastFetch.toISOString())
+    debugLatestEntryAt = `${latestEntry.collected_at} (date: ${latestEntry.newsletter_date})`
+    console.log('[Newsletter] Using last existing entry timestamp:', lastFetch.toISOString(), 'newsletter_date:', latestEntry.newsletter_date)
   } else if (settings?.value?.timestamp) {
     // Fallback to settings if no entries exist
     lastFetch = new Date(settings.value.timestamp)
@@ -93,6 +110,7 @@ export async function processNewsletters(): Promise<NewsletterProcessResult> {
   }
 
   console.log('[Newsletter] Fetching newsletters since:', lastFetch.toISOString())
+  const debugFetchingSince = lastFetch.toISOString()
 
   // Fetch emails from Gmail (up to 50 newsletters per run)
   const gmailClient = new GmailClient(tokenData.refresh_token)
@@ -295,5 +313,9 @@ export async function processNewsletters(): Promise<NewsletterProcessResult> {
     totalEmails: emails.length,
     processedItems,
     errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
+    debug: {
+      latestEntryAt: debugLatestEntryAt,
+      fetchingSince: debugFetchingSince,
+    },
   }
 }

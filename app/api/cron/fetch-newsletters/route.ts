@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
 }
 
 // POST for manual triggers from admin panel (requires admin session)
+// Body: { forceSince?: string } - optional ISO date to force fetch from
 export async function POST(request: NextRequest) {
   // Check if user is authenticated as admin
   if (process.env.NODE_ENV === 'production') {
@@ -46,7 +47,16 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await processNewsletters()
+    // Parse optional forceSince from request body
+    let forceSince: string | undefined
+    try {
+      const body = await request.json()
+      forceSince = body?.forceSince
+    } catch {
+      // No body or invalid JSON - that's fine, use defaults
+    }
+
+    const result = await processNewsletters({ forceSince })
 
     if ('status' in result && result.status) {
       return NextResponse.json(result, { status: result.status })
