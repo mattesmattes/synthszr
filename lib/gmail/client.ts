@@ -93,6 +93,14 @@ export class GmailClient {
 
     console.log('[Gmail] Total unique messages found:', allMessages.length)
 
+    // Sort by internalDate (most recent first) to ensure fair distribution across batches
+    // Gmail's internalDate is a string timestamp in milliseconds
+    allMessages.sort((a, b) => {
+      const dateA = parseInt(a.internalDate || '0', 10)
+      const dateB = parseInt(b.internalDate || '0', 10)
+      return dateB - dateA // Most recent first
+    })
+
     // Limit to maxResults and fetch full message details
     const messagesToFetch = allMessages.slice(0, maxResults)
     const emails: EmailMessage[] = []
