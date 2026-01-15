@@ -164,9 +164,7 @@ export async function GET(request: Request) {
       const sourceEmailUser = sourceEmail.split('@')[0].replace(/[^a-z0-9]/g, '')
       const sourceEmailDomain = sourceEmail.split('@')[1] || ''
 
-      // Extract core domain (e.g., "aisecret" from "aisecret.us", "a16z" from "substack.com")
-      const sourceDomainParts = sourceEmailDomain.split('.')
-      const sourceCoreDomain = sourceDomainParts[0]
+      // Note: sourceEmailDomain is the full domain like "aisecret.us" or "substack.com"
 
       for (const sender of recentSenders) {
         const senderName = sender.name.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -174,7 +172,6 @@ export async function GET(request: Request) {
         const senderEmailUser = senderEmail.split('@')[0].replace(/[^a-z0-9]/g, '')
         const senderEmailUserRaw = senderEmail.split('@')[0]
         const senderEmailDomain = senderEmail.split('@')[1] || ''
-        const senderDomainParts = senderEmailDomain.split('.')
 
         // Skip if this email is already a source
         if (sourcesByEmail.has(senderEmail)) continue
