@@ -50,12 +50,17 @@ export async function GET(request: Request) {
       .select('email')
       .eq('enabled', true)
 
-    // Test batch fetch with all sources
+    // Test batch fetch with all sources (same params as processor)
     const allEmails = sources?.map(s => s.email) || []
     const batchResult = await gmail.fetchEmailsFromSenders(
       allEmails,
-      10,
-      new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24h
+      50, // Same as processor
+      new Date(Date.now() - 36 * 60 * 60 * 1000) // Last 36h (same as processor default)
+    )
+
+    // Check if test emails are in batch results
+    const testEmailsInBatch = batchResult.filter(e =>
+      testEmails.some(te => e.from.toLowerCase().includes(te.split('@')[0]))
     )
 
     return NextResponse.json({
@@ -63,7 +68,12 @@ export async function GET(request: Request) {
       batchTest: {
         sourcesCount: allEmails.length,
         emailsFound: batchResult.length,
-        sampleSubjects: batchResult.slice(0, 5).map(e => ({
+        testEmailsFoundInBatch: testEmailsInBatch.length,
+        testEmailsSubjects: testEmailsInBatch.map(e => ({
+          from: e.from,
+          subject: e.subject.slice(0, 50)
+        })),
+        sampleSubjects: batchResult.slice(0, 10).map(e => ({
           from: e.from,
           subject: e.subject.slice(0, 50)
         }))
