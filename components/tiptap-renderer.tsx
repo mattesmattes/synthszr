@@ -9,7 +9,8 @@ import { createPortal } from "react-dom"
 import { StockSynthszrLayer } from "./stock-synthszr-layer"
 import { StockQuotePopover } from "./stock-quote-popover"
 import { PremarketSynthszrLayer } from "./premarket-synthszr-layer"
-import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES, COMPANY_ALIASES } from "@/lib/data/companies"
+import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies"
+import { COMPANY_ALIASES } from "@/lib/data/company-aliases"
 import { isExcludedCompanyName } from "@/lib/data/company-exclusions"
 
 interface BatchQuoteResult {
