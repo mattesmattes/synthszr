@@ -24,6 +24,34 @@ const NEWSLETTER_PATTERNS = [
   'newsletter',
 ]
 
+// Generic newsletter platform domains - skip "same domain" matching for these
+const GENERIC_NEWSLETTER_DOMAINS = new Set([
+  'substack.com',
+  'beehiiv.com',
+  'buttondown.email',
+  'mailchimp.com',
+  'convertkit.com',
+  'ghost.io',
+  'getrevue.co',
+  'medium.com',
+  'mail.beehiiv.com',
+])
+
+// Generic sender prefixes that should not be matched
+const GENERIC_SENDER_PREFIXES = new Set([
+  'noreply',
+  'no-reply',
+  'newsletter',
+  'notifications',
+  'hello',
+  'info',
+  'support',
+  'team',
+  'news',
+  'updates',
+  'farfetch', // definitely wrong match
+])
+
 interface EmailSender {
   email: string
   name: string
@@ -139,55 +167,41 @@ export async function GET(request: Request) {
         const senderName = sender.name.toLowerCase().replace(/[^a-z0-9]/g, '')
         const senderEmail = sender.email.toLowerCase()
         const senderEmailUser = senderEmail.split('@')[0].replace(/[^a-z0-9]/g, '')
+        const senderEmailUserRaw = senderEmail.split('@')[0]
         const senderEmailDomain = senderEmail.split('@')[1] || ''
         const senderDomainParts = senderEmailDomain.split('.')
 
         // Skip if this email is already a source
         if (sourcesByEmail.has(senderEmail)) continue
 
+        // Skip generic senders (noreply, newsletter, etc.)
+        if (GENERIC_SENDER_PREFIXES.has(senderEmailUserRaw.replace(/-/g, ''))) continue
+
         let confidence = ''
         let reason = ''
 
         // 1. Same domain (different user) - HIGH confidence
         // e.g., newsletter@aisecret.us -> hello@aisecret.us
-        if (sourceEmailDomain === senderEmailDomain && sourceEmailUser !== senderEmailUser) {
+        // BUT: Skip if it's a generic newsletter platform domain
+        if (sourceEmailDomain === senderEmailDomain &&
+            sourceEmailUser !== senderEmailUser &&
+            !GENERIC_NEWSLETTER_DOMAINS.has(sourceEmailDomain)) {
           confidence = 'HIGH'
           reason = 'same domain, different user'
         }
-        // 2. Domain contains source identifier
+        // 2. Domain contains source identifier (the unique part before @)
         // e.g., a16z@substack.com -> noreply@email.a16z.com (a16z in domain)
-        else if (senderEmailDomain.includes(sourceEmailUser) && sourceEmailUser.length > 3) {
+        // Only if sourceEmailUser is specific enough (not generic like "newsletter")
+        else if (senderEmailDomain.includes(sourceEmailUser) &&
+                 sourceEmailUser.length > 3 &&
+                 !GENERIC_SENDER_PREFIXES.has(sourceEmailUser)) {
           confidence = 'HIGH'
           reason = `sender domain contains "${sourceEmailUser}"`
         }
-        // 3. Sender email user contains source name
-        // e.g., "A16Z" source -> anything@a16z.whatever
-        else if (senderEmailUser.includes(sourceName) && sourceName.length > 3) {
-          confidence = 'HIGH'
-          reason = `sender user contains source name "${sourceName}"`
-        }
-        // 4. Exact name match
-        else if (sourceName === senderName && sourceName.length > 3) {
-          confidence = 'HIGH'
+        // 3. Exact name match (strict - names must be meaningful)
+        else if (sourceName === senderName && sourceName.length > 5) {
+          confidence = 'MEDIUM'  // Downgrade to MEDIUM - names can be ambiguous
           reason = 'exact name match'
-        }
-        // 5. Similar domain (subdomain relationship)
-        // e.g., domain.com vs email.domain.com
-        else if (senderDomainParts.some(part => part === sourceCoreDomain && sourceCoreDomain.length > 3)) {
-          confidence = 'MEDIUM'
-          reason = `domain contains "${sourceCoreDomain}"`
-        }
-        // 6. Name contains match
-        else if ((sourceName.includes(senderName) || senderName.includes(sourceName)) &&
-                 Math.min(sourceName.length, senderName.length) > 4) {
-          confidence = 'MEDIUM'
-          reason = 'name similarity'
-        }
-        // 7. Email prefix match
-        else if ((sourceEmailUser.includes(senderEmailUser) || senderEmailUser.includes(sourceEmailUser)) &&
-                 Math.min(sourceEmailUser.length, senderEmailUser.length) > 4) {
-          confidence = 'MEDIUM'
-          reason = 'email prefix similarity'
         }
 
         if (confidence) {
@@ -205,20 +219,11 @@ export async function GET(request: Request) {
       }
     }
 
-    // 6. Apply HIGH confidence corrections automatically
+    // 6. DON'T auto-apply - just report for manual review
     const applied: string[] = []
-    const highConfidence = corrections.filter(c => c.confidence === 'HIGH')
-
-    for (const c of highConfidence) {
-      const { error } = await supabase
-        .from('newsletter_sources')
-        .update({ email: c.newEmail })
-        .eq('id', c.sourceId)
-
-      if (!error) {
-        applied.push(`${c.sourceName}: ${c.oldEmail} -> ${c.newEmail}`)
-      }
-    }
+    // Disabled auto-apply after wrong corrections
+    // const highConfidence = corrections.filter(c => c.confidence === 'HIGH')
+    // for (const c of highConfidence) { ... }
 
     return NextResponse.json({
       success: true,
@@ -259,30 +264,44 @@ export async function GET(request: Request) {
   }
 }
 
-// POST to apply specific corrections
+// POST to revert wrong corrections
 export async function POST(request: Request) {
+  const url = new URL(request.url)
+  const secret = url.searchParams.get('secret')
+  if (secret !== 'fix-nl-2025') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
-    const { corrections } = await request.json()
-
-    if (!corrections || !Array.isArray(corrections)) {
-      return NextResponse.json({ error: 'corrections array required' }, { status: 400 })
-    }
-
     const supabase = createAdminClient()
     const results: string[] = []
 
-    for (const c of corrections) {
-      if (!c.sourceId || !c.newEmail) continue
+    // Revert the wrong auto-applied corrections
+    const reversions = [
+      { name: 'AI Supremacy (Michael Spencer)', correctEmail: 'aisupremacy+siphon@substack.com' },
+      { name: 'Machine Learning Pills', correctEmail: 'mlpills@substack.com' },
+      { name: 'Azeem Azhar, Exponential View', correctEmail: 'exponentialview@substack.com' },
+      { name: 'Five Things', correctEmail: 'getfivethings+tech@substack.com' },
+      { name: 'Internal Tech Emails', correctEmail: 'techemails@substack.com' },
+      { name: 'Sairam from The Art of Saience', correctEmail: 'artofsaience@substack.com' },
+      { name: 'Ben Thompson', correctEmail: 'email@stratechery.com' },
+      { name: 'Exponential View', correctEmail: 'exponentialview@substack.com' },
+      { name: 'Michael Spencer and Hodman Murad from AI Supremacy', correctEmail: 'aisupremacy+guides@substack.com' },
+      { name: 'Newcomer', correctEmail: 'newcomer@substack.com' },
+      { name: 'The Neuron', correctEmail: 'team@theneurondaily.com' },
+      { name: 'Scarlet Ink', correctEmail: 'scarletink@substack.com' },
+    ]
 
+    for (const r of reversions) {
       const { error } = await supabase
         .from('newsletter_sources')
-        .update({ email: c.newEmail })
-        .eq('id', c.sourceId)
+        .update({ email: r.correctEmail })
+        .eq('name', r.name)
 
       if (error) {
-        results.push(`ERROR ${c.sourceId}: ${error.message}`)
+        results.push(`ERROR ${r.name}: ${error.message}`)
       } else {
-        results.push(`UPDATED: ${c.sourceId} -> ${c.newEmail}`)
+        results.push(`REVERTED: ${r.name} -> ${r.correctEmail}`)
       }
     }
 
