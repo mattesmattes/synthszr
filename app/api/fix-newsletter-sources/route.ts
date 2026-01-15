@@ -42,6 +42,7 @@ const GENERIC_SENDER_PREFIXES = new Set([
   'noreply',
   'no-reply',
   'newsletter',
+  'newsletters',
   'notifications',
   'hello',
   'info',
@@ -49,7 +50,11 @@ const GENERIC_SENDER_PREFIXES = new Set([
   'team',
   'news',
   'updates',
-  'farfetch', // definitely wrong match
+  'email',      // too generic
+  'mail',       // too generic
+  'contact',    // too generic
+  'admin',      // too generic
+  'farfetch',   // definitely wrong match
 ])
 
 interface EmailSender {
