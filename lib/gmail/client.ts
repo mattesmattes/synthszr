@@ -22,6 +22,7 @@ export class GmailClient {
 
   /**
    * Fetch emails from specific senders
+   * Note: For large sender lists (>30), queries are batched to avoid Gmail API limits
    */
   async fetchEmailsFromSenders(
     senderEmails: string[],
@@ -29,49 +30,77 @@ export class GmailClient {
     afterDate?: Date,
     beforeDate?: Date
   ): Promise<EmailMessage[]> {
-    // Build query for multiple senders - search everywhere (not just inbox)
-    const fromQuery = senderEmails.map(email => `from:${email}`).join(' OR ')
-    let query = `(${fromQuery})`
+    // Batch size to avoid Gmail query length limits
+    // Gmail has ~2048 char limit, each email adds ~30 chars, so 30 is safe
+    const BATCH_SIZE = 30
 
-    // Add date filter if provided
+    // Build date filter suffix
+    let dateFilter = ''
     if (afterDate) {
       const dateStr = afterDate.toISOString().split('T')[0].replace(/-/g, '/')
-      query += ` after:${dateStr}`
+      dateFilter += ` after:${dateStr}`
     }
-
-    // Add before date filter if provided (for specific date searches)
     if (beforeDate) {
-      // Gmail's before: is exclusive, so add one day
       const nextDay = new Date(beforeDate)
       nextDay.setDate(nextDay.getDate() + 1)
       const dateStr = nextDay.toISOString().split('T')[0].replace(/-/g, '/')
-      query += ` before:${dateStr}`
+      dateFilter += ` before:${dateStr}`
     }
 
-    // Log the query for debugging
-    console.log('[Gmail] Search query:', query)
     console.log('[Gmail] Searching for emails from:', senderEmails.length, 'senders')
 
-    try {
-      // List messages matching the query
-      // Note: By default this searches all mail, but excludes Spam and Trash
-      // Add includeSpamTrash: true if needed
-      const listResponse = await this.gmail.users.messages.list({
-        userId: 'me',
-        q: query,
-        maxResults,
-        includeSpamTrash: false, // Set to true to include spam/trash
-      })
+    // Split into batches if needed
+    const batches: string[][] = []
+    for (let i = 0; i < senderEmails.length; i += BATCH_SIZE) {
+      batches.push(senderEmails.slice(i, i + BATCH_SIZE))
+    }
 
-      console.log('[Gmail] Found messages:', listResponse.data.messages?.length || 0)
+    console.log('[Gmail] Processing in', batches.length, 'batch(es)')
 
-      const messages = listResponse.data.messages || []
-      const emails: EmailMessage[] = []
+    const allMessages: gmail_v1.Schema$Message[] = []
+    const seenIds = new Set<string>()
 
-      // Fetch full message details for each
-      for (const msg of messages) {
-        if (!msg.id) continue
+    // Process each batch
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex]
+      const fromQuery = batch.map(email => `from:${email}`).join(' OR ')
+      const query = `(${fromQuery})${dateFilter}`
 
+      console.log(`[Gmail] Batch ${batchIndex + 1}/${batches.length}: ${batch.length} senders, query length: ${query.length}`)
+
+      try {
+        const listResponse = await this.gmail.users.messages.list({
+          userId: 'me',
+          q: query,
+          maxResults: Math.ceil(maxResults / batches.length) + 10, // Slightly more per batch to account for overlap
+          includeSpamTrash: false,
+        })
+
+        const messages = listResponse.data.messages || []
+        console.log(`[Gmail] Batch ${batchIndex + 1} found:`, messages.length, 'messages')
+
+        for (const msg of messages) {
+          if (msg.id && !seenIds.has(msg.id)) {
+            seenIds.add(msg.id)
+            allMessages.push(msg)
+          }
+        }
+      } catch (error) {
+        console.error(`[Gmail] Error in batch ${batchIndex + 1}:`, error)
+        // Continue with other batches
+      }
+    }
+
+    console.log('[Gmail] Total unique messages found:', allMessages.length)
+
+    // Limit to maxResults and fetch full message details
+    const messagesToFetch = allMessages.slice(0, maxResults)
+    const emails: EmailMessage[] = []
+
+    for (const msg of messagesToFetch) {
+      if (!msg.id) continue
+
+      try {
         const fullMessage = await this.gmail.users.messages.get({
           userId: 'me',
           id: msg.id,
@@ -82,13 +111,12 @@ export class GmailClient {
         if (email) {
           emails.push(email)
         }
+      } catch (error) {
+        console.error('[Gmail] Error fetching message:', msg.id, error)
       }
-
-      return emails
-    } catch (error) {
-      console.error('Error fetching emails:', error)
-      throw error
     }
+
+    return emails
   }
 
   /**
