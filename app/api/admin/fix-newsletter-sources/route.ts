@@ -107,7 +107,7 @@ export async function GET() {
       }
     }
 
-    // 5. Try to match missing sources with actual senders
+    // 5. Try to match missing sources with actual senders using smart matching
     const corrections: Array<{
       sourceId: string
       oldEmail: string
@@ -115,26 +115,72 @@ export async function GET() {
       sourceName: string
       senderName: string
       confidence: string
+      reason: string
     }> = []
 
     for (const source of sourcesWithNoEmails) {
       const sourceName = source.name.toLowerCase().replace(/[^a-z0-9]/g, '')
-      const sourceEmailUser = source.email.toLowerCase().split('@')[0].replace(/[^a-z0-9]/g, '')
+      const sourceEmail = source.email.toLowerCase()
+      const sourceEmailUser = sourceEmail.split('@')[0].replace(/[^a-z0-9]/g, '')
+      const sourceEmailDomain = sourceEmail.split('@')[1] || ''
+
+      // Extract core domain (e.g., "aisecret" from "aisecret.us", "a16z" from "substack.com")
+      const sourceDomainParts = sourceEmailDomain.split('.')
+      const sourceCoreDomain = sourceDomainParts[0]
 
       for (const sender of recentSenders) {
         const senderName = sender.name.toLowerCase().replace(/[^a-z0-9]/g, '')
-        const senderEmailUser = sender.email.toLowerCase().split('@')[0].replace(/[^a-z0-9]/g, '')
+        const senderEmail = sender.email.toLowerCase()
+        const senderEmailUser = senderEmail.split('@')[0].replace(/[^a-z0-9]/g, '')
+        const senderEmailDomain = senderEmail.split('@')[1] || ''
+        const senderDomainParts = senderEmailDomain.split('.')
 
-        if (sourcesByEmail.has(sender.email.toLowerCase())) continue
+        // Skip if this email is already a source
+        if (sourcesByEmail.has(senderEmail)) continue
 
         let confidence = ''
+        let reason = ''
 
-        if (sourceName === senderName && sourceName.length > 3) {
+        // 1. Same domain (different user) - HIGH confidence
+        // e.g., newsletter@aisecret.us -> hello@aisecret.us
+        if (sourceEmailDomain === senderEmailDomain && sourceEmailUser !== senderEmailUser) {
           confidence = 'HIGH'
-        } else if ((sourceName.includes(senderName) || senderName.includes(sourceName)) && Math.min(sourceName.length, senderName.length) > 4) {
+          reason = 'same domain, different user'
+        }
+        // 2. Domain contains source identifier
+        // e.g., a16z@substack.com -> noreply@email.a16z.com (a16z in domain)
+        else if (senderEmailDomain.includes(sourceEmailUser) && sourceEmailUser.length > 3) {
+          confidence = 'HIGH'
+          reason = `sender domain contains "${sourceEmailUser}"`
+        }
+        // 3. Sender email user contains source name
+        // e.g., "A16Z" source -> anything@a16z.whatever
+        else if (senderEmailUser.includes(sourceName) && sourceName.length > 3) {
+          confidence = 'HIGH'
+          reason = `sender user contains source name "${sourceName}"`
+        }
+        // 4. Exact name match
+        else if (sourceName === senderName && sourceName.length > 3) {
+          confidence = 'HIGH'
+          reason = 'exact name match'
+        }
+        // 5. Similar domain (subdomain relationship)
+        // e.g., domain.com vs email.domain.com
+        else if (senderDomainParts.some(part => part === sourceCoreDomain && sourceCoreDomain.length > 3)) {
           confidence = 'MEDIUM'
-        } else if ((sourceEmailUser.includes(senderEmailUser) || senderEmailUser.includes(sourceEmailUser)) && Math.min(sourceEmailUser.length, senderEmailUser.length) > 4) {
+          reason = `domain contains "${sourceCoreDomain}"`
+        }
+        // 6. Name contains match
+        else if ((sourceName.includes(senderName) || senderName.includes(sourceName)) &&
+                 Math.min(sourceName.length, senderName.length) > 4) {
           confidence = 'MEDIUM'
+          reason = 'name similarity'
+        }
+        // 7. Email prefix match
+        else if ((sourceEmailUser.includes(senderEmailUser) || senderEmailUser.includes(sourceEmailUser)) &&
+                 Math.min(sourceEmailUser.length, senderEmailUser.length) > 4) {
+          confidence = 'MEDIUM'
+          reason = 'email prefix similarity'
         }
 
         if (confidence) {
@@ -144,7 +190,8 @@ export async function GET() {
             newEmail: sender.email,
             sourceName: source.name,
             senderName: sender.name,
-            confidence
+            confidence,
+            reason
           })
           break
         }
@@ -183,7 +230,8 @@ export async function GET() {
         oldEmail: c.oldEmail,
         newEmail: c.newEmail,
         senderName: c.senderName,
-        confidence: c.confidence
+        confidence: c.confidence,
+        reason: c.reason
       })),
       applied,
       suggestedAdditions: missingNewsletters
