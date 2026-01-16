@@ -436,8 +436,15 @@ function extractTextFromNode(node: TiptapNode): string {
  */
 function convertNodeToHtml(node: TiptapNode): string {
   switch (node.type) {
-    case 'paragraph':
-      return `<p>${renderContent(node.content)}</p>`
+    case 'paragraph': {
+      const content = renderContent(node.content)
+      // Check if this paragraph contains "Synthszr Take:" - highlight entire paragraph
+      const textContent = extractTextFromNode(node)
+      if (/synthszr take:?/i.test(textContent)) {
+        return `<p style="background-color: #CCFF00; padding: 8px 12px; border-radius: 4px;">${content}</p>`
+      }
+      return `<p>${content}</p>`
+    }
     case 'heading': {
       const level = node.attrs?.level || 2
       return `<h${level}>${renderContent(node.content)}</h${level}>`
