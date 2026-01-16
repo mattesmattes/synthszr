@@ -777,10 +777,21 @@ export async function POST(request: NextRequest) {
           })
 
           // Filter to only unfetched senders (not in sources, not excluded)
+          let filteredOutAsSource = 0
+          let filteredOutAsExcluded = 0
+
           unfetchedEmails = allSenders
             .filter(sender => {
               const emailLower = sender.email.toLowerCase()
-              return !sourceEmailsLower.includes(emailLower) && !excludedEmailsLower.includes(emailLower)
+              if (sourceEmailsLower.includes(emailLower)) {
+                filteredOutAsSource++
+                return false
+              }
+              if (excludedEmailsLower.includes(emailLower)) {
+                filteredOutAsExcluded++
+                return false
+              }
+              return true
             })
             .map(sender => ({
               email: sender.email,
@@ -791,20 +802,20 @@ export async function POST(request: NextRequest) {
             }))
             .sort((a, b) => b.count - a.count)
 
-          console.log(`[Newsletter Fetch] Found ${unfetchedEmails.length} unfetched senders`)
+          console.log(`[Newsletter Fetch] Filtered: ${filteredOutAsSource} sources, ${filteredOutAsExcluded} excluded, ${unfetchedEmails.length} remaining`)
 
-          // Show result in progress list
+          // Show result in progress list with breakdown
           if (unfetchedEmails.length > 0) {
             send({
               type: 'newsletter',
               phase: 'scanning_unfetched',
-              item: { title: `${unfetchedEmails.length} neue Quellen gefunden`, status: 'success' }
+              item: { title: `${unfetchedEmails.length} neue Quellen gefunden (${filteredOutAsSource} bereits Sources, ${filteredOutAsExcluded} excluded)`, status: 'success' }
             })
           } else {
             send({
               type: 'newsletter',
               phase: 'scanning_unfetched',
-              item: { title: 'Keine neuen Quellen gefunden', status: 'skipped' }
+              item: { title: `Keine neuen Quellen (${filteredOutAsSource} bereits Sources, ${filteredOutAsExcluded} excluded)`, status: 'skipped' }
             })
           }
         } catch (err) {
