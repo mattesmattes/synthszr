@@ -182,14 +182,17 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
 
               // Handle unfetched emails event
               if (event.type === 'unfetched_emails' && event.unfetchedEmails) {
+                console.log('[FetchProgress] Received unfetched_emails event:', event.unfetchedEmails.length, 'emails')
                 receivedUnfetchedEmails = event.unfetchedEmails
                 setUnfetchedEmails(event.unfetchedEmails)
               }
 
               if (event.type === 'complete' && event.summary) {
+                console.log('[FetchProgress] Received complete event, unfetched emails:', receivedUnfetchedEmails.length)
                 setSummary(event.summary)
                 // Show unfetched emails dialog if any were received
                 if (receivedUnfetchedEmails.length > 0) {
+                  console.log('[FetchProgress] Opening unfetched emails dialog')
                   setShowUnfetchedDialog(true)
                 }
                 onComplete?.()

@@ -833,12 +833,16 @@ export async function POST(request: NextRequest) {
         console.log(`[Newsletter Fetch] Complete: ${processedNewsletters} newsletters, ${processedArticles} articles, ${processedEmailNotes} notes, ${skippedNewsletters} skipped, ${errors} errors`)
 
         // Send unfetched emails if any found
+        console.log(`[Newsletter Fetch] Sending unfetched_emails event: ${unfetchedEmails.length} emails`)
         if (unfetchedEmails.length > 0) {
           send({
             type: 'unfetched_emails',
             phase: 'done',
             unfetchedEmails
           })
+          console.log(`[Newsletter Fetch] unfetched_emails event sent successfully`)
+        } else {
+          console.log(`[Newsletter Fetch] No unfetched emails to send`)
         }
 
         // Send completion
