@@ -103,7 +103,7 @@ export function UnfetchedEmailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[80vw] max-w-[80vw] p-0">
+      <DialogContent className="!w-[80vw] !max-w-[80vw] p-0">
         <div className="p-6 pb-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
