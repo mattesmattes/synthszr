@@ -739,14 +739,32 @@ export async function POST(request: NextRequest) {
           if (latestFetch?.newsletter_date) {
             scanAfterDate = new Date(latestFetch.newsletter_date)
             console.log(`[Newsletter Fetch] Scanning emails since last fetch: ${latestFetch.newsletter_date}`)
+            send({
+              type: 'newsletter',
+              phase: 'scanning_unfetched',
+              item: { title: `Scanne Mails seit ${latestFetch.newsletter_date}...`, status: 'processing' }
+            })
           } else {
             // Fallback: scan last 7 days if no data exists
             console.log('[Newsletter Fetch] No existing fetches found, scanning last 7 days')
+            send({
+              type: 'newsletter',
+              phase: 'scanning_unfetched',
+              item: { title: 'Scanne Mails der letzten 7 Tage...', status: 'processing' }
+            })
           }
+
+          console.log(`[Newsletter Fetch] Sources count: ${sourceEmailsLower.length}, Excluded count: ${excludedEmailsLower.length}`)
 
           // Scan mail for unique senders since last fetch (or 7 days fallback)
           const allSenders = await gmailClient.scanUniqueSenders(scanAfterDate, 7, 500)
           console.log(`[Newsletter Fetch] Scanned ${allSenders.length} unique senders from mail`)
+
+          send({
+            type: 'newsletter',
+            phase: 'scanning_unfetched',
+            item: { title: `${allSenders.length} Sender gefunden, filtere...`, status: 'processing' }
+          })
 
           // Filter to only unfetched senders (not in sources, not excluded)
           unfetchedEmails = allSenders
@@ -764,8 +782,28 @@ export async function POST(request: NextRequest) {
             .sort((a, b) => b.count - a.count)
 
           console.log(`[Newsletter Fetch] Found ${unfetchedEmails.length} unfetched senders`)
+
+          // Show result in progress list
+          if (unfetchedEmails.length > 0) {
+            send({
+              type: 'newsletter',
+              phase: 'scanning_unfetched',
+              item: { title: `${unfetchedEmails.length} neue Quellen gefunden`, status: 'success' }
+            })
+          } else {
+            send({
+              type: 'newsletter',
+              phase: 'scanning_unfetched',
+              item: { title: 'Keine neuen Quellen gefunden', status: 'skipped' }
+            })
+          }
         } catch (err) {
           console.error('[Newsletter Fetch] Error scanning unfetched emails:', err)
+          send({
+            type: 'newsletter',
+            phase: 'scanning_unfetched',
+            item: { title: 'Scan fehlgeschlagen', status: 'error', error: err instanceof Error ? err.message : 'Unbekannter Fehler' }
+          })
           // Continue - this is optional functionality
         }
 
