@@ -68,7 +68,7 @@ const phaseLabels = {
   processing: 'Newsletter verarbeiten',
   importing_notes: '+dailyrepo importieren',
   extracting: 'Artikel extrahieren',
-  scanning_unfetched: 'Scanne nach neuen Quellen',
+  scanning_unfetched: 'Scanne alle Mails',
   done: 'Abgeschlossen',
   error: 'Fehler aufgetreten',
 }
