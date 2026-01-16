@@ -50,7 +50,8 @@ export async function GET(request: NextRequest) {
     twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
 
     const gmailClient = new GmailClient(tokenData.refresh_token)
-    const allSenders = await gmailClient.scanUniqueSenders(twoDaysAgo, 7, 500)
+    // Reduced to 50 messages to avoid timeout
+    const allSenders = await gmailClient.scanUniqueSenders(twoDaysAgo, 7, 50)
 
     // Categorize senders
     const categorized = allSenders.map(sender => {
