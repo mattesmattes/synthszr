@@ -432,18 +432,64 @@ function extractTextFromNode(node: TiptapNode): string {
 }
 
 /**
+ * Render content with the last sentence highlighted in neon yellow
+ * Used for SYNTHSZR TAKE paragraphs in newsletter emails
+ */
+function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string {
+  if (!content) return ''
+
+  // First, render all content normally
+  const fullHtml = renderContent(content)
+
+  // Get the plain text to find sentence boundaries
+  const plainText = content.map(node => {
+    if (node.type === 'text') return node.text || ''
+    return ''
+  }).join('')
+
+  // Find the last sentence boundary: ". " followed by capital letter
+  const sentenceEndRegex = /\.\s+(?=[A-ZÄÖÜ])/g
+  let lastSentenceStart = 0
+  let match
+  while ((match = sentenceEndRegex.exec(plainText)) !== null) {
+    lastSentenceStart = match.index + match[0].length
+  }
+
+  // If no sentence boundary found, just return normal rendering
+  if (lastSentenceStart === 0) {
+    return fullHtml
+  }
+
+  // Find the last sentence text
+  const lastSentence = plainText.slice(lastSentenceStart)
+
+  // Escape special regex characters in the last sentence
+  const escapedLastSentence = lastSentence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+  // Wrap the last sentence in a highlighted span
+  // Match the last occurrence to handle any repetitions
+  const highlightRegex = new RegExp(`(${escapedLastSentence})(?!.*${escapedLastSentence})`)
+  const highlightedHtml = fullHtml.replace(
+    highlightRegex,
+    '<span style="background-color: #CCFF00; padding: 2px 4px;">$1</span>'
+  )
+
+  return highlightedHtml
+}
+
+/**
  * Convert a single TipTap node to HTML
  */
 function convertNodeToHtml(node: TiptapNode): string {
   switch (node.type) {
     case 'paragraph': {
-      const content = renderContent(node.content)
-      // Check if this paragraph contains "Synthszr Take:" - highlight entire paragraph
       const textContent = extractTextFromNode(node)
+      // Check if this paragraph contains "Synthszr Take:" - highlight the last sentence
       if (/synthszr take:?/i.test(textContent)) {
-        return `<p style="background-color: #CCFF00; padding: 8px 12px; border-radius: 4px;">${content}</p>`
+        const content = renderContentWithLastSentenceHighlight(node.content)
+        return `<p>${content}</p>`
       }
-      return `<p>${content}</p>`
+      return `<p>${renderContent(node.content)}</p>`
     }
     case 'heading': {
       const level = node.attrs?.level || 2
