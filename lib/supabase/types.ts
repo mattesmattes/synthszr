@@ -8,6 +8,14 @@ export interface NewsletterSource {
   created_at: string
 }
 
+export interface ExcludedSender {
+  id: string
+  email: string
+  name: string | null
+  reason: string
+  excluded_at: string
+}
+
 export interface DailyRepoItem {
   id: string
   source_type: 'newsletter' | 'article' | 'pdf'

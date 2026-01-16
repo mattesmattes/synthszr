@@ -128,9 +128,17 @@ function cleanDailyRepoSubject(subject: string): string {
     .trim() || 'E-Mail Notiz'
 }
 
+interface UnfetchedEmail {
+  email: string
+  name: string
+  count: number
+  subjects: string[]
+  latestDate: string
+}
+
 interface ProgressEvent {
-  type: 'start' | 'newsletter' | 'article' | 'email_note' | 'complete' | 'error'
-  phase: 'fetching' | 'processing' | 'extracting' | 'importing_notes' | 'done'
+  type: 'start' | 'newsletter' | 'article' | 'email_note' | 'unfetched_emails' | 'complete' | 'error'
+  phase: 'fetching' | 'processing' | 'extracting' | 'importing_notes' | 'scanning_unfetched' | 'done'
   current?: number
   total?: number
   item?: {
@@ -147,6 +155,7 @@ interface ProgressEvent {
     errors: number
     totalCharacters: number
   }
+  unfetchedEmails?: UnfetchedEmail[]
 }
 
 export async function POST(request: NextRequest) {
@@ -695,8 +704,104 @@ export async function POST(request: NextRequest) {
             value: { timestamp: new Date().toISOString() },
           }, { onConflict: 'key' })
 
+        // ========================================
+        // PHASE 4: Scan for unfetched emails from labels
+        // ========================================
+        let unfetchedEmails: UnfetchedEmail[] = []
+
+        try {
+          send({
+            type: 'newsletter',
+            phase: 'scanning_unfetched',
+            item: { title: 'Scanne nach weiteren Newslettern...', status: 'processing' }
+          })
+
+          // Fetch emails from newsstand labels
+          const labelEmails = await gmailClient.fetchEmailsFromLabels('newsstand', 100, afterDate)
+          console.log(`[Newsletter Fetch] Found ${labelEmails.length} emails from newsstand labels`)
+
+          if (labelEmails.length > 0) {
+            // Get all registered sources (email addresses)
+            const sourceEmailsLower = senderEmails.map(e => e.toLowerCase())
+
+            // Get excluded senders
+            const { data: excludedSenders } = await supabase
+              .from('excluded_senders')
+              .select('email')
+
+            const excludedEmailsLower = (excludedSenders || []).map(e => e.email.toLowerCase())
+
+            // Group emails by sender and find unfetched ones
+            const senderMap = new Map<string, {
+              email: string
+              name: string
+              count: number
+              subjects: string[]
+              latestDate: Date
+            }>()
+
+            for (const email of labelEmails) {
+              // Extract email address from "Name <email@domain.com>" format
+              const emailMatch = email.from.match(/<([^>]+)>/)
+              const senderEmail = emailMatch ? emailMatch[1].toLowerCase() : email.from.toLowerCase().trim()
+
+              // Skip if it's a registered source or excluded
+              if (sourceEmailsLower.includes(senderEmail)) continue
+              if (excludedEmailsLower.includes(senderEmail)) continue
+
+              // Extract display name
+              const nameMatch = email.from.match(/^"?([^"<]+)"?\s*</)
+              const senderName = nameMatch ? nameMatch[1].trim().replace(/^[\"']|[\"']$/g, '') : senderEmail
+
+              const existing = senderMap.get(senderEmail)
+              if (existing) {
+                existing.count++
+                if (existing.subjects.length < 3) {
+                  existing.subjects.push(email.subject.slice(0, 60))
+                }
+                if (email.date > existing.latestDate) {
+                  existing.latestDate = email.date
+                }
+              } else {
+                senderMap.set(senderEmail, {
+                  email: senderEmail,
+                  name: senderName,
+                  count: 1,
+                  subjects: [email.subject.slice(0, 60)],
+                  latestDate: email.date
+                })
+              }
+            }
+
+            // Convert to array and sort by count (most emails first)
+            unfetchedEmails = Array.from(senderMap.values())
+              .map(s => ({
+                email: s.email,
+                name: s.name,
+                count: s.count,
+                subjects: s.subjects,
+                latestDate: s.latestDate.toISOString()
+              }))
+              .sort((a, b) => b.count - a.count)
+
+            console.log(`[Newsletter Fetch] Found ${unfetchedEmails.length} unfetched senders from labels`)
+          }
+        } catch (err) {
+          console.error('[Newsletter Fetch] Error scanning unfetched emails:', err)
+          // Continue - this is optional functionality
+        }
+
         // Log final stats
         console.log(`[Newsletter Fetch] Complete: ${processedNewsletters} newsletters, ${processedArticles} articles, ${processedEmailNotes} notes, ${skippedNewsletters} skipped, ${errors} errors`)
+
+        // Send unfetched emails if any found
+        if (unfetchedEmails.length > 0) {
+          send({
+            type: 'unfetched_emails',
+            phase: 'done',
+            unfetchedEmails
+          })
+        }
 
         // Send completion
         send({

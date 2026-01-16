@@ -20,6 +20,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { UnfetchedEmailsDialog } from './unfetched-emails-dialog'
 
 interface ProgressItem {
   title: string
@@ -30,9 +31,17 @@ interface ProgressItem {
   type?: 'newsletter' | 'article' | 'email_note'
 }
 
+interface UnfetchedEmail {
+  email: string
+  name: string
+  count: number
+  subjects: string[]
+  latestDate: string
+}
+
 interface ProgressEvent {
-  type: 'start' | 'newsletter' | 'article' | 'email_note' | 'complete' | 'error'
-  phase: 'fetching' | 'processing' | 'extracting' | 'importing_notes' | 'done'
+  type: 'start' | 'newsletter' | 'article' | 'email_note' | 'unfetched_emails' | 'complete' | 'error'
+  phase: 'fetching' | 'processing' | 'extracting' | 'importing_notes' | 'scanning_unfetched' | 'done'
   current?: number
   total?: number
   item?: ProgressItem
@@ -43,6 +52,7 @@ interface ProgressEvent {
     errors: number
     totalCharacters: number
   }
+  unfetchedEmails?: UnfetchedEmail[]
 }
 
 const statusIcons = {
@@ -58,6 +68,7 @@ const phaseLabels = {
   processing: 'Newsletter verarbeiten',
   importing_notes: '+dailyrepo importieren',
   extracting: 'Artikel extrahieren',
+  scanning_unfetched: 'Scanne nach neuen Quellen',
   done: 'Abgeschlossen',
   error: 'Fehler aufgetreten',
 }
@@ -75,6 +86,10 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
   const [summary, setSummary] = useState<{ newsletters: number; articles: number; emailNotes: number; errors: number; totalCharacters: number } | null>(null)
   const [forceRefresh, setForceRefresh] = useState(false)
 
+  // Unfetched emails dialog
+  const [unfetchedEmails, setUnfetchedEmails] = useState<UnfetchedEmail[]>([])
+  const [showUnfetchedDialog, setShowUnfetchedDialog] = useState(false)
+
   // Live stats during fetch
   const [liveStats, setLiveStats] = useState({ newsletters: 0, articles: 0, emailNotes: 0, errors: 0, totalCharacters: 0 })
 
@@ -84,6 +99,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
     setProgress({ current: 0, total: 0 })
     setItems([])
     setSummary(null)
+    setUnfetchedEmails([])
     setLiveStats({ newsletters: 0, articles: 0, emailNotes: 0, errors: 0, totalCharacters: 0 })
 
     try {
@@ -104,6 +120,8 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
 
       const decoder = new TextDecoder()
       let buffer = ''
+      // Track unfetched emails locally to avoid React state timing issues
+      let receivedUnfetchedEmails: UnfetchedEmail[] = []
 
       while (true) {
         const { done, value } = await reader.read()
@@ -162,8 +180,18 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
                 }
               }
 
+              // Handle unfetched emails event
+              if (event.type === 'unfetched_emails' && event.unfetchedEmails) {
+                receivedUnfetchedEmails = event.unfetchedEmails
+                setUnfetchedEmails(event.unfetchedEmails)
+              }
+
               if (event.type === 'complete' && event.summary) {
                 setSummary(event.summary)
+                // Show unfetched emails dialog if any were received
+                if (receivedUnfetchedEmails.length > 0) {
+                  setShowUnfetchedDialog(true)
+                }
                 onComplete?.()
               }
             } catch (e) {
@@ -381,6 +409,22 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
           </div>
         )}
       </CardContent>
+
+      {/* Unfetched emails dialog */}
+      <UnfetchedEmailsDialog
+        open={showUnfetchedDialog}
+        onOpenChange={setShowUnfetchedDialog}
+        emails={unfetchedEmails}
+        onComplete={(result) => {
+          console.log('[FetchProgress] Sources managed:', result)
+          // Clear unfetched emails after handling
+          setUnfetchedEmails([])
+          // Trigger refresh if sources were added and newsletters fetched
+          if (result.newslettersFetched > 0) {
+            onComplete?.()
+          }
+        }}
+      />
     </Card>
   )
 }
