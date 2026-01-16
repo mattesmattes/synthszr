@@ -767,7 +767,8 @@ export async function POST(request: NextRequest) {
           console.log(`[Newsletter Fetch] Sources count: ${sourceEmailsLower.length}, Excluded count: ${excludedEmailsLower.length}`)
 
           // Scan mail for unique senders since calculated date
-          const allSenders = await gmailClient.scanUniqueSenders(scanAfterDate, 7, 1000)
+          // Limited to 100 messages to avoid timeout (each message requires individual API call)
+          const allSenders = await gmailClient.scanUniqueSenders(scanAfterDate, 7, 100)
           console.log(`[Newsletter Fetch] Scanned ${allSenders.length} unique senders from mail`)
 
           send({

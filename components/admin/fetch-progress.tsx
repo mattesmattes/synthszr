@@ -237,21 +237,6 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
                 Neu laden
               </Label>
             </div>
-            {/* DEBUG: Test dialog button */}
-            <Button
-              onClick={() => {
-                setUnfetchedEmails([
-                  { email: 'test@example.com', name: 'Test Newsletter', count: 5, subjects: ['Test Subject 1'], latestDate: new Date().toISOString() },
-                  { email: 'demo@newsletter.com', name: 'Demo Daily', count: 3, subjects: ['Demo Subject'], latestDate: new Date().toISOString() },
-                ])
-                setShowUnfetchedDialog(true)
-              }}
-              size="sm"
-              variant="outline"
-              className="text-xs"
-            >
-              Test Dialog
-            </Button>
             <Button
               onClick={startFetch}
               disabled={isRunning}
