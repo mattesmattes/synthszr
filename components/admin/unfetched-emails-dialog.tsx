@@ -11,7 +11,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Mail, Plus, X, Check } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Loader2, Mail, Check, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface UnfetchedEmail {
@@ -52,15 +53,6 @@ export function UnfetchedEmailsDialog({
       }
       return next
     })
-  }
-
-  const toggleDecision = (email: string, targetDecision: EmailDecision) => {
-    const current = getDecision(email)
-    if (current === targetDecision) {
-      setDecision(email, 'undecided')
-    } else {
-      setDecision(email, targetDecision)
-    }
   }
 
   const sourcesToAdd = emails.filter(e => getDecision(e.email) === 'source')
@@ -111,7 +103,7 @@ export function UnfetchedEmailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl p-0">
+      <DialogContent className="w-[80vw] max-w-[80vw] p-0">
         <div className="p-6 pb-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -119,8 +111,7 @@ export function UnfetchedEmailsDialog({
               Weitere Newsletter gefunden
             </DialogTitle>
             <DialogDescription>
-              Diese E-Mails wurden in deinen Newsstand-Labels gefunden, sind aber noch nicht als Quellen registriert.
-              Wähle aus, welche als Newsletter-Quellen hinzugefügt werden sollen.
+              Toggle = als Newsletter-Quelle hinzufügen. Klicke auf das Auge um dauerhaft auszublenden.
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -130,74 +121,82 @@ export function UnfetchedEmailsDialog({
           <p className="text-sm text-muted-foreground">
             {emails.length} gefunden
           </p>
-          <div className="flex gap-2 text-sm">
+          <div className="flex gap-3 text-sm">
             {sourcesToAdd.length > 0 && (
-              <Badge variant="default" className="gap-1">
-                <Plus className="h-3 w-3" />
+              <Badge variant="default" className="gap-1 bg-green-600">
                 {sourcesToAdd.length} hinzufügen
               </Badge>
             )}
             {sendersToExclude.length > 0 && (
               <Badge variant="secondary" className="gap-1">
-                <X className="h-3 w-3" />
+                <EyeOff className="h-3 w-3" />
                 {sendersToExclude.length} ausblenden
               </Badge>
             )}
           </div>
         </div>
 
-        {/* Email list */}
-        <div className="max-h-[50vh] overflow-y-auto px-6 py-3">
-          <div className="space-y-2">
+        {/* Email list - compact grid layout */}
+        <div className="max-h-[60vh] overflow-y-auto px-6 py-3">
+          <div className="grid gap-2">
             {emails.map((email) => {
               const decision = getDecision(email.email)
+              const isSource = decision === 'source'
+              const isExcluded = decision === 'excluded'
+
               return (
                 <div
                   key={email.email}
                   className={cn(
-                    "flex items-start gap-3 rounded-lg border p-3 transition-colors",
-                    decision === 'source' && "border-green-500 bg-green-50",
-                    decision === 'excluded' && "border-muted bg-muted/30 opacity-60"
+                    "flex items-center gap-4 rounded-lg border px-4 py-2 transition-colors",
+                    isSource && "border-green-500 bg-green-50",
+                    isExcluded && "border-muted bg-muted/30 opacity-50"
                   )}
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-sm font-medium">
-                        {email.name || email.email}
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        {email.count}× in Labels
-                      </Badge>
-                    </div>
-                    <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                  {/* Toggle for adding as source */}
+                  <Switch
+                    checked={isSource}
+                    disabled={isExcluded}
+                    onCheckedChange={(checked) => {
+                      setDecision(email.email, checked ? 'source' : 'undecided')
+                    }}
+                    className="data-[state=checked]:bg-green-600"
+                  />
+
+                  {/* Email info - compact */}
+                  <div className="flex-1 min-w-0 flex items-center gap-3">
+                    <span className={cn(
+                      "font-medium text-sm truncate",
+                      isExcluded && "line-through"
+                    )}>
+                      {email.name || email.email}
+                    </span>
+                    <span className="text-xs text-muted-foreground font-mono truncate hidden sm:inline">
                       {email.email}
-                    </p>
-                    {email.subjects.length > 0 && (
-                      <p className="mt-1 truncate text-xs text-muted-foreground">
-                        „{email.subjects[0]}"
-                      </p>
+                    </span>
+                    <Badge variant="outline" className="text-xs shrink-0">
+                      {email.count}×
+                    </Badge>
+                  </div>
+
+                  {/* Subject preview */}
+                  {email.subjects.length > 0 && (
+                    <span className="text-xs text-muted-foreground truncate max-w-[200px] hidden md:inline">
+                      „{email.subjects[0]}"
+                    </span>
+                  )}
+
+                  {/* Exclude button */}
+                  <button
+                    onClick={() => setDecision(email.email, isExcluded ? 'undecided' : 'excluded')}
+                    className={cn(
+                      "p-1.5 rounded hover:bg-muted transition-colors shrink-0",
+                      isExcluded && "text-red-500"
                     )}
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    <Button
-                      variant={decision === 'source' ? 'default' : 'outline'}
-                      size="sm"
-                      className="h-8 w-8 p-0"
-                      onClick={() => toggleDecision(email.email, 'source')}
-                      title="Als Newsletter-Quelle hinzufügen"
-                    >
-                      <Plus className={cn("h-4 w-4", decision === 'source' && "text-white")} />
-                    </Button>
-                    <Button
-                      variant={decision === 'excluded' ? 'secondary' : 'outline'}
-                      size="sm"
-                      className="h-8 w-8 p-0"
-                      onClick={() => toggleDecision(email.email, 'excluded')}
-                      title="Dauerhaft ausblenden"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+                    title={isExcluded ? "Wieder einblenden" : "Dauerhaft ausblenden"}
+                  >
+                    <EyeOff className="h-4 w-4" />
+                  </button>
                 </div>
               )
             })}
