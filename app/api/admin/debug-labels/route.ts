@@ -2,8 +2,29 @@ import { NextRequest, NextResponse } from 'next/server'
 import { GmailClient } from '@/lib/gmail/client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isAdminRequest } from '@/lib/auth/session'
+import { processNewsletters } from '@/lib/newsletter/processor'
 
 export const runtime = 'nodejs'
+
+// POST to trigger a fetch with forceSince
+export async function POST(request: NextRequest) {
+  const url = new URL(request.url)
+  const debugSecret = url.searchParams.get('secret')
+
+  if (process.env.NODE_ENV === 'production' && debugSecret !== 'debug-labels-2026') {
+    const isAdmin = await isAdminRequest(request)
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+  }
+
+  // Force fetch from 2 days ago
+  const forceSince = new Date()
+  forceSince.setDate(forceSince.getDate() - 2)
+
+  const result = await processNewsletters({ forceSince: forceSince.toISOString() })
+  return NextResponse.json(result)
+}
 
 export async function GET(request: NextRequest) {
   // Check admin auth in production (allow temp debug secret)
