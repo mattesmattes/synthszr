@@ -735,17 +735,27 @@ export async function POST(request: NextRequest) {
             .limit(1)
             .single()
 
-          let scanAfterDate: Date | undefined
+          // Scan at least the last 2 days to catch new senders
+          // Even if last fetch was today, we want to find senders from yesterday too
+          const twoDaysAgo = new Date()
+          twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
+          twoDaysAgo.setHours(0, 0, 0, 0)
+
+          let scanAfterDate: Date
           if (latestFetch?.newsletter_date) {
-            scanAfterDate = new Date(latestFetch.newsletter_date)
-            console.log(`[Newsletter Fetch] Scanning emails since last fetch: ${latestFetch.newsletter_date}`)
+            const lastFetchDate = new Date(latestFetch.newsletter_date)
+            // Use the earlier of: last fetch date or 2 days ago
+            scanAfterDate = lastFetchDate < twoDaysAgo ? lastFetchDate : twoDaysAgo
+            console.log(`[Newsletter Fetch] Scanning emails since: ${scanAfterDate.toISOString().split('T')[0]}`)
             send({
               type: 'newsletter',
               phase: 'scanning_unfetched',
-              item: { title: `Scanne Mails seit ${latestFetch.newsletter_date}...`, status: 'processing' }
+              item: { title: `Scanne Mails seit ${scanAfterDate.toISOString().split('T')[0]}...`, status: 'processing' }
             })
           } else {
             // Fallback: scan last 7 days if no data exists
+            scanAfterDate = new Date()
+            scanAfterDate.setDate(scanAfterDate.getDate() - 7)
             console.log('[Newsletter Fetch] No existing fetches found, scanning last 7 days')
             send({
               type: 'newsletter',
@@ -756,8 +766,8 @@ export async function POST(request: NextRequest) {
 
           console.log(`[Newsletter Fetch] Sources count: ${sourceEmailsLower.length}, Excluded count: ${excludedEmailsLower.length}`)
 
-          // Scan mail for unique senders since last fetch (or 7 days fallback)
-          const allSenders = await gmailClient.scanUniqueSenders(scanAfterDate, 7, 500)
+          // Scan mail for unique senders since calculated date
+          const allSenders = await gmailClient.scanUniqueSenders(scanAfterDate, 7, 1000)
           console.log(`[Newsletter Fetch] Scanned ${allSenders.length} unique senders from mail`)
 
           send({
