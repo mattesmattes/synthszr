@@ -28,6 +28,7 @@ export interface NewsletterProcessResult {
     fetchingSince?: string
     skippedDuplicates?: number
     enabledSources?: number
+    labelPattern?: string
     gmailQuery?: string
   }
 }
@@ -35,6 +36,10 @@ export interface NewsletterProcessResult {
 export interface NewsletterProcessOptions {
   /** Force fetch since a specific date (ISO string or Date) */
   forceSince?: string | Date
+  /** Label pattern to fetch from (e.g., "newsstand" matches "newsstand-ai", "newsstand-marketing") */
+  labelPattern?: string
+  /** Skip fetching from registered sources (only fetch from labels) */
+  labelsOnly?: boolean
 }
 
 /**
@@ -125,28 +130,63 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
   const dateStr = lastFetch.toISOString().split('T')[0].replace(/-/g, '/')
   const debugGmailQuery = `(${fromQuery}) after:${dateStr}`
 
-  console.log('[Newsletter] Enabled sources:', senderEmails.length, 'emails:', senderEmails.join(', '))
-  console.log('[Newsletter] Gmail query:', debugGmailQuery.slice(0, 200) + '...')
+  const emails: Awaited<ReturnType<typeof gmailClient.fetchEmailsFromSenders>> = []
+  const emailIds = new Set<string>()
 
-  const emails = await gmailClient.fetchEmailsFromSenders(senderEmails, 50, lastFetch)
-  console.log('[Newsletter] Gmail returned:', emails.length, 'emails')
-  for (const email of emails) {
-    console.log(`[Newsletter] - From: ${email.from} | Subject: ${email.subject.slice(0, 50)}...`)
+  // STEP 1: Fetch from registered sources (unless labelsOnly)
+  if (!options?.labelsOnly) {
+    console.log('[Newsletter] Enabled sources:', senderEmails.length, 'emails:', senderEmails.join(', '))
+    console.log('[Newsletter] Gmail query:', debugGmailQuery.slice(0, 200) + '...')
+
+    const sourceEmails = await gmailClient.fetchEmailsFromSenders(senderEmails, 50, lastFetch)
+    console.log('[Newsletter] Gmail returned:', sourceEmails.length, 'emails from registered sources')
+
+    for (const email of sourceEmails) {
+      if (!emailIds.has(email.id)) {
+        emails.push(email)
+        emailIds.add(email.id)
+        console.log(`[Newsletter] - From: ${email.from} | Subject: ${email.subject.slice(0, 50)}...`)
+      }
+    }
   }
 
-  // Also fetch emails with "+dailyrepo" subject tag (user-tagged emails for import)
+  // STEP 2: Fetch from Gmail labels (newsstand-* by default)
+  // This catches newsletters that are labeled but not registered as sources
+  const labelPattern = options?.labelPattern ?? 'newsstand'
+  console.log(`[Newsletter] Fetching from labels matching: "${labelPattern}"`)
+
+  try {
+    const labelEmails = await gmailClient.fetchEmailsFromLabels(labelPattern, 50, lastFetch)
+    console.log(`[Newsletter] Found ${labelEmails.length} emails from labels`)
+
+    let labelEmailsAdded = 0
+    for (const email of labelEmails) {
+      if (!emailIds.has(email.id)) {
+        emails.push(email)
+        emailIds.add(email.id)
+        labelEmailsAdded++
+        console.log(`[Newsletter] + Label: ${email.from} | ${email.subject.slice(0, 50)}...`)
+      }
+    }
+    console.log(`[Newsletter] Added ${labelEmailsAdded} new emails from labels (${labelEmails.length - labelEmailsAdded} duplicates skipped)`)
+  } catch (labelError) {
+    console.error('[Newsletter] Error fetching from labels:', labelError)
+    // Continue - label fetch is optional
+  }
+
+  // STEP 3: Fetch emails with "+dailyrepo" subject tag (user-tagged emails for import)
   const hoursBack = Math.ceil((Date.now() - lastFetch.getTime()) / MS_PER_HOUR) || 36
   const taggedEmails = await gmailClient.fetchEmailsBySubject(null, '+dailyrepo', 20, hoursBack)
   console.log(`[Newsletter] Found ${taggedEmails.length} emails with +dailyrepo tag`)
 
-  // Merge emails, avoiding duplicates (by message ID)
-  const emailIds = new Set(emails.map(e => e.id))
   for (const taggedEmail of taggedEmails) {
     if (!emailIds.has(taggedEmail.id)) {
       emails.push(taggedEmail)
       emailIds.add(taggedEmail.id)
     }
   }
+
+  console.log(`[Newsletter] Total unique emails to process: ${emails.length}`)
 
   let processedNewsletters = 0
   let processedArticles = 0
@@ -383,6 +423,7 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
       fetchingSince: debugFetchingSince,
       skippedDuplicates,
       enabledSources: senderEmails.length,
+      labelPattern,
       gmailQuery: debugGmailQuery.length > 500 ? debugGmailQuery.slice(0, 500) + '...' : debugGmailQuery,
     },
   }
