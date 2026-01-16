@@ -423,10 +423,14 @@ export class GmailClient {
   }
 
   /**
-   * Scan unique senders from the last N days
+   * Scan unique senders from a specific date or last N days
    * Returns aggregated sender info with email count and sample subjects
+   * @param afterDate - Scan emails after this date (takes precedence over days)
+   * @param days - Fallback: scan last N days if afterDate not provided
+   * @param maxMessages - Maximum messages to scan
    */
   async scanUniqueSenders(
+    afterDate?: Date,
     days: number = 30,
     maxMessages: number = 500
   ): Promise<Array<{
@@ -436,9 +440,8 @@ export class GmailClient {
     subjects: string[]
     latestDate: Date
   }>> {
-    const afterDate = new Date()
-    afterDate.setDate(afterDate.getDate() - days)
-    const dateStr = afterDate.toISOString().split('T')[0].replace(/-/g, '/')
+    const scanAfter = afterDate || new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    const dateStr = scanAfter.toISOString().split('T')[0].replace(/-/g, '/')
 
     // Search for emails that look like newsletters (excluding obvious non-newsletters)
     // category:promotions often catches newsletters, category:updates too

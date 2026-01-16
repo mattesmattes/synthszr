@@ -101,7 +101,7 @@ async function main() {
 
   // 2. Fetch recent email senders using existing method
   console.log('Step 2: Fetching recent emails (last 14 days)...')
-  const recentSenders = await gmail.scanUniqueSenders(14, 500)
+  const recentSenders = await gmail.scanUniqueSenders(undefined, 14, 500)
   console.log(`Found ${recentSenders.length} unique senders\n`)
 
   // 3. Get current newsletter sources

@@ -143,7 +143,7 @@ export async function GET() {
 
     // Scan Gmail for unique senders
     const gmail = new GmailClient(refreshToken)
-    const senders = await gmail.scanUniqueSenders(30, 500)
+    const senders = await gmail.scanUniqueSenders(undefined, 30, 500)
 
     // Filter and score senders
     const filteredSenders = senders

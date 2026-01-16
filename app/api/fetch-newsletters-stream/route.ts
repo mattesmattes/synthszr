@@ -726,9 +726,27 @@ export async function POST(request: NextRequest) {
 
           const excludedEmailsLower = (excludedSenders || []).map(e => e.email.toLowerCase())
 
-          // Scan all mail for unique senders (last 30 days, up to 500 messages)
-          const allSenders = await gmailClient.scanUniqueSenders(30, 500)
-          console.log(`[Newsletter Fetch] Scanned ${allSenders.length} unique senders from all mail`)
+          // Find the most recent newsletter in daily_repo (actual data, not deleted)
+          // This ensures we scan from the newest existing fetch, typically ~24h ago
+          const { data: latestFetch } = await supabase
+            .from('daily_repo')
+            .select('newsletter_date')
+            .order('newsletter_date', { ascending: false })
+            .limit(1)
+            .single()
+
+          let scanAfterDate: Date | undefined
+          if (latestFetch?.newsletter_date) {
+            scanAfterDate = new Date(latestFetch.newsletter_date)
+            console.log(`[Newsletter Fetch] Scanning emails since last fetch: ${latestFetch.newsletter_date}`)
+          } else {
+            // Fallback: scan last 7 days if no data exists
+            console.log('[Newsletter Fetch] No existing fetches found, scanning last 7 days')
+          }
+
+          // Scan mail for unique senders since last fetch (or 7 days fallback)
+          const allSenders = await gmailClient.scanUniqueSenders(scanAfterDate, 7, 500)
+          console.log(`[Newsletter Fetch] Scanned ${allSenders.length} unique senders from mail`)
 
           // Filter to only unfetched senders (not in sources, not excluded)
           unfetchedEmails = allSenders

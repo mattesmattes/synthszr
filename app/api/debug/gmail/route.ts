@@ -122,7 +122,7 @@ export async function GET() {
 
       // 7. Get actual recent emails without sender filter to see real addresses
       try {
-        const recentEmails = await gmailClient.scanUniqueSenders(2, 100) // Last 2 days, 100 emails
+        const recentEmails = await gmailClient.scanUniqueSenders(undefined, 2, 100) // Last 2 days, 100 emails
         // Find senders that look like newsletters but aren't in sources
         const sourceEmailSet = new Set(sources.map(s => s.email.toLowerCase()))
         const missingNewsletters = recentEmails
