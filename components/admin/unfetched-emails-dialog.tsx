@@ -162,6 +162,12 @@ export function UnfetchedEmailsDialog({
                     <Badge variant="outline" className="text-xs shrink-0">
                       {email.count}×
                     </Badge>
+                    {/* Timestamp */}
+                    {email.latestDate && (
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {new Date(email.latestDate).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
                   </div>
 
                   {/* Subject preview */}
