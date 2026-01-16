@@ -353,28 +353,31 @@ export class GmailClient {
     console.log(`[Gmail] Found ${matchingLabels.length} labels matching "${labelPattern}":`,
       matchingLabels.map(l => l.name).join(', '))
 
-    // Build date filter
-    let dateFilter = ''
+    // Build date query filter
+    let dateQuery = ''
     if (afterDate) {
       const dateStr = afterDate.toISOString().split('T')[0].replace(/-/g, '/')
-      dateFilter = ` after:${dateStr}`
+      dateQuery = `after:${dateStr}`
     }
 
-    const allMessages: gmail_v1.Schema$Message[] = []
+    const allMessageIds: string[] = []
     const seenIds = new Set<string>()
 
-    // Fetch messages from each matching label
+    // Fetch message IDs from each matching label using query (supports date filter)
     for (const label of matchingLabels) {
       try {
-        // Use label: query syntax for user labels
-        const query = `label:${label.name.replace(/\s+/g, '-')}${dateFilter}`
+        // Use label: query with date filter - this is more efficient than labelIds + manual date check
+        const labelQuery = label.name.includes('/')
+          ? `label:${label.name.replace(/\//g, '-')}`
+          : `label:${label.name}`
+        const query = dateQuery ? `${labelQuery} ${dateQuery}` : labelQuery
 
         console.log(`[Gmail] Fetching from label "${label.name}" with query: ${query}`)
 
         const listResponse = await this.gmail.users.messages.list({
           userId: 'me',
-          labelIds: [label.id],
-          maxResults: Math.ceil(maxResults / matchingLabels.length) + 5,
+          q: query,
+          maxResults: Math.ceil(maxResults / matchingLabels.length) + 10,
           includeSpamTrash: false,
         })
 
@@ -383,26 +386,8 @@ export class GmailClient {
 
         for (const msg of messages) {
           if (msg.id && !seenIds.has(msg.id)) {
-            // Get internalDate for sorting
-            const msgDetails = await this.gmail.users.messages.get({
-              userId: 'me',
-              id: msg.id,
-              format: 'minimal',
-            })
-
-            // Check date filter manually since labelIds doesn't support date queries
-            if (afterDate && msgDetails.data.internalDate) {
-              const msgDate = new Date(parseInt(msgDetails.data.internalDate, 10))
-              if (msgDate < afterDate) {
-                continue // Skip messages before afterDate
-              }
-            }
-
             seenIds.add(msg.id)
-            allMessages.push({
-              ...msg,
-              internalDate: msgDetails.data.internalDate,
-            })
+            allMessageIds.push(msg.id)
           }
         }
       } catch (error) {
@@ -411,26 +396,17 @@ export class GmailClient {
       }
     }
 
-    console.log(`[Gmail] Total unique messages from labels: ${allMessages.length}`)
+    console.log(`[Gmail] Total unique message IDs from labels: ${allMessageIds.length}`)
 
-    // Sort by date (most recent first)
-    allMessages.sort((a, b) => {
-      const dateA = parseInt(a.internalDate || '0', 10)
-      const dateB = parseInt(b.internalDate || '0', 10)
-      return dateB - dateA
-    })
-
-    // Limit and fetch full message details
-    const messagesToFetch = allMessages.slice(0, maxResults)
+    // Limit to maxResults and fetch full message details
+    const idsToFetch = allMessageIds.slice(0, maxResults)
     const emails: EmailMessage[] = []
 
-    for (const msg of messagesToFetch) {
-      if (!msg.id) continue
-
+    for (const msgId of idsToFetch) {
       try {
         const fullMessage = await this.gmail.users.messages.get({
           userId: 'me',
-          id: msg.id,
+          id: msgId,
           format: 'full',
         })
 
@@ -439,7 +415,7 @@ export class GmailClient {
           emails.push(email)
         }
       } catch (error) {
-        console.error('[Gmail] Error fetching message:', msg.id, error)
+        console.error('[Gmail] Error fetching message:', msgId, error)
       }
     }
 
