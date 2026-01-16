@@ -194,8 +194,11 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
                 if (receivedUnfetchedEmails.length > 0) {
                   console.log('[FetchProgress] Opening unfetched emails dialog')
                   setShowUnfetchedDialog(true)
+                  // Don't call onComplete yet - wait for dialog to be handled
+                } else {
+                  // No unfetched emails, complete immediately
+                  onComplete?.()
                 }
-                onComplete?.()
               }
             } catch (e) {
               console.error('Error parsing SSE:', e)
@@ -416,16 +419,20 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
       {/* Unfetched emails dialog */}
       <UnfetchedEmailsDialog
         open={showUnfetchedDialog}
-        onOpenChange={setShowUnfetchedDialog}
+        onOpenChange={(open) => {
+          setShowUnfetchedDialog(open)
+          // When dialog is closed, call onComplete to close parent dialog
+          if (!open) {
+            console.log('[FetchProgress] Unfetched dialog closed, calling onComplete')
+            onComplete?.()
+          }
+        }}
         emails={unfetchedEmails}
         onComplete={(result) => {
           console.log('[FetchProgress] Sources managed:', result)
           // Clear unfetched emails after handling
           setUnfetchedEmails([])
-          // Trigger refresh if sources were added and newsletters fetched
-          if (result.newslettersFetched > 0) {
-            onComplete?.()
-          }
+          // onComplete will be called by onOpenChange when dialog closes
         }}
       />
     </Card>
