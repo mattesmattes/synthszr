@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runSynthesisPipeline } from '@/lib/synthesis/pipeline'
 import { processNewsletters } from '@/lib/newsletter/processor'
-import { expireOldItems as expireOldQueueItems } from '@/lib/news-queue/service'
+import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPublishedPostsQueueItems } from '@/lib/news-queue/service'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes max
@@ -279,13 +279,25 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Queue Maintenance: Expire old items (runs every time cron is called)
+  // Queue Maintenance: Expire old items + reset stuck items (runs every time cron is called)
   try {
     const expiredCount = await expireOldQueueItems()
     if (expiredCount > 0) {
       console.log(`[Scheduler] Expired ${expiredCount} old queue items`)
     }
-    results.queueMaintenance = expiredCount > 0 ? `expired_${expiredCount}` : 'ok'
+
+    // Reset items stuck in "selected" status for >24 hours (abandoned drafts)
+    const resetCount = await resetStuckSelectedItems(24)
+
+    // Sync any published posts that still have pending_queue_item_ids (one-time cleanup)
+    const syncResult = await syncPublishedPostsQueueItems()
+
+    const maintenanceActions: string[] = []
+    if (expiredCount > 0) maintenanceActions.push(`expired:${expiredCount}`)
+    if (resetCount > 0) maintenanceActions.push(`reset:${resetCount}`)
+    if (syncResult.itemsMarked > 0) maintenanceActions.push(`synced:${syncResult.itemsMarked}`)
+
+    results.queueMaintenance = maintenanceActions.length > 0 ? maintenanceActions.join(',') : 'ok'
   } catch (error) {
     console.error('[Scheduler] Queue maintenance error:', error)
     results.queueMaintenance = 'error'

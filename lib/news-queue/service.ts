@@ -262,20 +262,44 @@ export async function selectItemsForArticle(
 
 /**
  * Mark items as used (after article generation)
+ * Returns the count of items actually updated
  */
 export async function markItemsAsUsed(
   itemIds: string[],
   postId: string
-): Promise<void> {
+): Promise<{ updated: number; error?: string }> {
+  if (!itemIds || itemIds.length === 0) {
+    console.log('[NewsQueue] markItemsAsUsed called with empty itemIds')
+    return { updated: 0 }
+  }
+
+  console.log(`[NewsQueue] Marking ${itemIds.length} items as used for post ${postId}`)
+  console.log('[NewsQueue] Item IDs:', itemIds.slice(0, 5).join(', '), itemIds.length > 5 ? `... and ${itemIds.length - 5} more` : '')
+
   const supabase = createAdminClient()
 
-  await supabase
+  const { data, error } = await supabase
     .from('news_queue')
     .update({
       status: 'used',
       used_in_post_id: postId
     })
     .in('id', itemIds)
+    .select('id')
+
+  if (error) {
+    console.error('[NewsQueue] Error marking items as used:', error)
+    return { updated: 0, error: error.message }
+  }
+
+  const updatedCount = data?.length || 0
+  console.log(`[NewsQueue] Successfully marked ${updatedCount} items as used`)
+
+  if (updatedCount < itemIds.length) {
+    console.warn(`[NewsQueue] Warning: Only ${updatedCount}/${itemIds.length} items were updated. Some IDs may not exist in the queue.`)
+  }
+
+  return { updated: updatedCount }
 }
 
 /**
@@ -462,4 +486,85 @@ export async function resetSelectedToPending(): Promise<number> {
 
   console.log(`[NewsQueue] Reset ${data?.length || 0} selected items to pending`)
   return data?.length || 0
+}
+
+/**
+ * Reset stuck "selected" items back to pending
+ * Items that were selected but not used within maxHours are reset
+ * This prevents items from being stuck forever if a draft is abandoned
+ */
+export async function resetStuckSelectedItems(maxHours: number = 24): Promise<number> {
+  const supabase = createAdminClient()
+
+  const cutoffTime = new Date(Date.now() - maxHours * 60 * 60 * 1000).toISOString()
+
+  const { data, error } = await supabase
+    .from('news_queue')
+    .update({
+      status: 'pending',
+      selected_at: null
+    })
+    .eq('status', 'selected')
+    .lt('selected_at', cutoffTime)
+    .select('id')
+
+  if (error) {
+    console.error('[NewsQueue] Failed to reset stuck selected items:', error)
+    return 0
+  }
+
+  if (data && data.length > 0) {
+    console.log(`[NewsQueue] Reset ${data.length} stuck selected items (older than ${maxHours}h) to pending`)
+  }
+
+  return data?.length || 0
+}
+
+/**
+ * Mark queue items as used based on published posts that still have pending_queue_item_ids
+ * This is a cleanup function for posts that were published before the queue marking was fixed
+ */
+export async function syncPublishedPostsQueueItems(): Promise<{ processed: number; itemsMarked: number }> {
+  const supabase = createAdminClient()
+
+  // Find published posts that still have pending_queue_item_ids
+  const { data: posts, error: postsError } = await supabase
+    .from('generated_posts')
+    .select('id, pending_queue_item_ids')
+    .eq('status', 'published')
+    .not('pending_queue_item_ids', 'is', null)
+
+  if (postsError || !posts) {
+    console.error('[NewsQueue] Failed to fetch published posts:', postsError)
+    return { processed: 0, itemsMarked: 0 }
+  }
+
+  // Filter to posts that actually have queue items
+  const postsWithItems = posts.filter(p =>
+    Array.isArray(p.pending_queue_item_ids) && p.pending_queue_item_ids.length > 0
+  )
+
+  if (postsWithItems.length === 0) {
+    return { processed: 0, itemsMarked: 0 }
+  }
+
+  console.log(`[NewsQueue] Found ${postsWithItems.length} published posts with unprocessed queue items`)
+
+  let totalMarked = 0
+
+  for (const post of postsWithItems) {
+    const itemIds = post.pending_queue_item_ids as string[]
+    const result = await markItemsAsUsed(itemIds, post.id)
+    totalMarked += result.updated
+
+    // Clear the pending_queue_item_ids on the post
+    await supabase
+      .from('generated_posts')
+      .update({ pending_queue_item_ids: [] })
+      .eq('id', post.id)
+  }
+
+  console.log(`[NewsQueue] Synced ${postsWithItems.length} posts, marked ${totalMarked} queue items as used`)
+
+  return { processed: postsWithItems.length, itemsMarked: totalMarked }
 }

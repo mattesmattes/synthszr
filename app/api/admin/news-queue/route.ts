@@ -199,8 +199,11 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'itemIds and postId required' }, { status: 400 })
         }
 
-        await markItemsAsUsed(itemIds, postId)
-        return NextResponse.json({ success: true })
+        const result = await markItemsAsUsed(itemIds, postId)
+        if (result.error) {
+          return NextResponse.json({ error: result.error, updated: result.updated }, { status: 500 })
+        }
+        return NextResponse.json({ success: true, updated: result.updated })
       }
 
       case 'skip': {

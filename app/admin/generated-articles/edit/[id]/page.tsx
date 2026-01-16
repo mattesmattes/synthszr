@@ -304,7 +304,8 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
     // Mark only the REMAINING queue items as "used" when publishing for the first time
     if (!wasPublished && isNowPublished && currentQueueItems.length > 0) {
-      console.log(`[Queue] Publishing post - marking ${currentQueueItems.length} items as used`)
+      console.log(`[Queue] Publishing post ${id} - marking ${currentQueueItems.length} items as used`)
+      console.log('[Queue] Item IDs to mark:', currentQueueItems)
       try {
         const response = await fetch('/api/admin/news-queue', {
           method: 'POST',
@@ -316,14 +317,17 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
             postId: id
           }),
         })
+        const data = await response.json()
         if (response.ok) {
-          console.log('[Queue] Items marked as used successfully')
+          console.log(`[Queue] Items marked as used successfully. Updated: ${data.updated}/${currentQueueItems.length}`)
         } else {
-          console.error('[Queue] Failed to mark items as used')
+          console.error('[Queue] Failed to mark items as used:', data.error)
         }
       } catch (err) {
         console.error('[Queue] Error marking items as used:', err)
       }
+    } else if (!wasPublished && isNowPublished) {
+      console.log('[Queue] No queue items to mark as used (currentQueueItems is empty)')
     }
 
     // Trigger translations when publishing for the first time

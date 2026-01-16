@@ -20,6 +20,8 @@ export {
   wouldViolateSourceLimit,
   clearPendingQueue,
   resetSelectedToPending,
+  resetStuckSelectedItems,
+  syncPublishedPostsQueueItems,
   // Helper functions
   normalizeSourceIdentifier,
   extractSourceDisplayName,
