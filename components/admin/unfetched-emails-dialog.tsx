@@ -23,8 +23,6 @@ interface UnfetchedEmail {
   latestDate: string
 }
 
-type EmailDecision = 'source' | 'excluded' | 'undecided'
-
 interface UnfetchedEmailsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -38,33 +36,27 @@ export function UnfetchedEmailsDialog({
   emails,
   onComplete
 }: UnfetchedEmailsDialogProps) {
-  const [decisions, setDecisions] = useState<Map<string, EmailDecision>>(new Map())
+  // Only track which emails are marked as sources (toggle ON)
+  const [sourcesSet, setSourcesSet] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
 
-  const getDecision = (email: string): EmailDecision => decisions.get(email) || 'undecided'
-
-  const setDecision = (email: string, decision: EmailDecision) => {
-    setDecisions(prev => {
-      const next = new Map(prev)
-      if (decision === 'undecided') {
+  const toggleSource = (email: string) => {
+    setSourcesSet(prev => {
+      const next = new Set(prev)
+      if (next.has(email)) {
         next.delete(email)
       } else {
-        next.set(email, decision)
+        next.add(email)
       }
       return next
     })
   }
 
-  const sourcesToAdd = emails.filter(e => getDecision(e.email) === 'source')
-  const sendersToExclude = emails.filter(e => getDecision(e.email) === 'excluded')
-  const hasChanges = sourcesToAdd.length > 0 || sendersToExclude.length > 0
+  const sourcesToAdd = emails.filter(e => sourcesSet.has(e.email))
+  // All emails NOT toggled as source will be excluded
+  const sendersToExclude = emails.filter(e => !sourcesSet.has(e.email))
 
   async function handleSave() {
-    if (!hasChanges) {
-      onOpenChange(false)
-      return
-    }
-
     setSaving(true)
     try {
       const response = await fetch('/api/admin/manage-sources', {
@@ -82,7 +74,7 @@ export function UnfetchedEmailsDialog({
       if (response.ok) {
         onComplete(result)
         onOpenChange(false)
-        setDecisions(new Map())
+        setSourcesSet(new Set())
       } else {
         alert('Fehler: ' + (result.error || 'Unbekannter Fehler'))
       }
@@ -96,7 +88,7 @@ export function UnfetchedEmailsDialog({
 
   function handleSkip() {
     onOpenChange(false)
-    setDecisions(new Map())
+    setSourcesSet(new Set())
   }
 
   if (emails.length === 0) return null
@@ -111,7 +103,7 @@ export function UnfetchedEmailsDialog({
               Weitere Newsletter gefunden
             </DialogTitle>
             <DialogDescription>
-              Toggle = als Newsletter-Quelle hinzufügen. Klicke auf das Auge um dauerhaft auszublenden.
+              Toggle AN = als Newsletter-Quelle hinzufügen. Nicht getoggelte Mails werden automatisch ausgeblendet.
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -124,15 +116,14 @@ export function UnfetchedEmailsDialog({
           <div className="flex gap-3 text-sm">
             {sourcesToAdd.length > 0 && (
               <Badge variant="default" className="gap-1 bg-green-600">
+                <Check className="h-3 w-3" />
                 {sourcesToAdd.length} hinzufügen
               </Badge>
             )}
-            {sendersToExclude.length > 0 && (
-              <Badge variant="secondary" className="gap-1">
-                <EyeOff className="h-3 w-3" />
-                {sendersToExclude.length} ausblenden
-              </Badge>
-            )}
+            <Badge variant="secondary" className="gap-1">
+              <EyeOff className="h-3 w-3" />
+              {sendersToExclude.length} ausblenden
+            </Badge>
           </div>
         </div>
 
@@ -140,26 +131,20 @@ export function UnfetchedEmailsDialog({
         <div className="max-h-[60vh] overflow-y-auto px-6 py-3">
           <div className="grid gap-2">
             {emails.map((email) => {
-              const decision = getDecision(email.email)
-              const isSource = decision === 'source'
-              const isExcluded = decision === 'excluded'
+              const isSource = sourcesSet.has(email.email)
 
               return (
                 <div
                   key={email.email}
                   className={cn(
                     "flex items-center gap-4 rounded-lg border px-4 py-2 transition-colors",
-                    isSource && "border-green-500 bg-green-50",
-                    isExcluded && "border-muted bg-muted/30 opacity-50"
+                    isSource ? "border-green-500 bg-green-50" : "border-muted bg-muted/20 opacity-60"
                   )}
                 >
                   {/* Toggle for adding as source */}
                   <Switch
                     checked={isSource}
-                    disabled={isExcluded}
-                    onCheckedChange={(checked) => {
-                      setDecision(email.email, checked ? 'source' : 'undecided')
-                    }}
+                    onCheckedChange={() => toggleSource(email.email)}
                     className="data-[state=checked]:bg-green-600"
                   />
 
@@ -167,7 +152,7 @@ export function UnfetchedEmailsDialog({
                   <div className="flex-1 min-w-0 flex items-center gap-3">
                     <span className={cn(
                       "font-medium text-sm truncate",
-                      isExcluded && "line-through"
+                      !isSource && "text-muted-foreground"
                     )}>
                       {email.name || email.email}
                     </span>
@@ -186,17 +171,10 @@ export function UnfetchedEmailsDialog({
                     </span>
                   )}
 
-                  {/* Exclude button */}
-                  <button
-                    onClick={() => setDecision(email.email, isExcluded ? 'undecided' : 'excluded')}
-                    className={cn(
-                      "p-1.5 rounded hover:bg-muted transition-colors shrink-0",
-                      isExcluded && "text-red-500"
-                    )}
-                    title={isExcluded ? "Wieder einblenden" : "Dauerhaft ausblenden"}
-                  >
-                    <EyeOff className="h-4 w-4" />
-                  </button>
+                  {/* Visual indicator for exclusion */}
+                  {!isSource && (
+                    <EyeOff className="h-4 w-4 text-muted-foreground shrink-0" />
+                  )}
                 </div>
               )
             })}
@@ -213,13 +191,11 @@ export function UnfetchedEmailsDialog({
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Speichern...
               </>
-            ) : hasChanges ? (
+            ) : (
               <>
                 <Check className="mr-2 h-4 w-4" />
-                Speichern & Fetchen
+                Speichern
               </>
-            ) : (
-              'Fertig'
             )}
           </Button>
         </DialogFooter>
