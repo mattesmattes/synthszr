@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 import { createClient } from '@/lib/supabase/server'
-import { generateAndProcessImage } from '@/lib/gemini/image-generator'
+import { generateSatiricalImage, applyDithering, whiteToTransparent } from '@/lib/gemini/image-generator'
 import { getSession } from '@/lib/auth/session'
 
 export const maxDuration = 300 // Allow up to 5 minutes for batch thumbnail generation
@@ -31,13 +31,10 @@ interface ArticleThumbnailRequest {
 }
 
 /**
- * Process image into square thumbnail with transparent background
- * Like cover images: black artwork on transparent, no circular clipping
- * The circular clipping is done via CSS (rounded-full overflow-hidden)
+ * Crop image to square and resize to thumbnail size
+ * Returns base64 for further processing (dithering, transparency)
  */
-async function processToSquareThumbnail(
-  imageBase64: string
-): Promise<Buffer> {
+async function cropAndResizeToSquare(imageBase64: string): Promise<string> {
   const imageBuffer = Buffer.from(imageBase64, 'base64')
 
   // Get image metadata
@@ -53,57 +50,14 @@ async function processToSquareThumbnail(
   const left = Math.floor((width - cropSize) / 2)
   const top = Math.floor((height - cropSize) / 2)
 
-  // Crop to square, apply slight blur to reduce moiré from dithering, then resize
-  const croppedBuffer = await sharp(imageBuffer)
+  // Crop to square and resize to fixed thumbnail size
+  const resizedBuffer = await sharp(imageBuffer)
     .extract({ left, top, width: cropSize, height: cropSize })
-    .blur(1.5) // Gentle blur to smooth dithering before resize
     .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true })
-
-  const { data, info } = croppedBuffer
-
-  // Process pixels: white/bright → transparent, dark → black
-  // Same approach as cover images - artwork is black on transparent
-  const pixels = new Uint8Array(data)
-  const threshold = 128
-  for (let i = 0; i < pixels.length; i += 4) {
-    const r = pixels[i]
-    const g = pixels[i + 1]
-    const b = pixels[i + 2]
-    const a = pixels[i + 3]
-
-    // Calculate luminance
-    const luminance = (r + g + b) / 3
-
-    // If pixel is transparent OR bright → make transparent
-    // If pixel is dark → pure black (the artwork)
-    if (a < 128 || luminance >= threshold) {
-      pixels[i] = 0
-      pixels[i + 1] = 0
-      pixels[i + 2] = 0
-      pixels[i + 3] = 0  // Transparent
-    } else {
-      pixels[i] = 0
-      pixels[i + 1] = 0
-      pixels[i + 2] = 0
-      pixels[i + 3] = 255  // Opaque black
-    }
-  }
-
-  // Output as PNG - NO circular clipping, CSS handles that
-  const finalImage = await sharp(Buffer.from(pixels), {
-    raw: {
-      width: info.width,
-      height: info.height,
-      channels: 4,
-    },
-  })
     .png()
     .toBuffer()
 
-  return finalImage
+  return resizedBuffer.toString('base64')
 }
 
 /**
@@ -172,7 +126,8 @@ export async function POST(request: NextRequest) {
 
         // Generate the image (use shorter text for thumbnails)
         const thumbnailText = article.text.slice(0, 500)
-        const result = await generateAndProcessImage(thumbnailText)
+        // Step 1: Generate raw image (no dithering yet)
+        const result = await generateSatiricalImage(thumbnailText)
 
         if (!result.success || !result.imageBase64) {
           await supabase
@@ -187,8 +142,17 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // Process into circular thumbnail (transparent background, color via CSS)
-        const squareThumbnail = await processToSquareThumbnail(result.imageBase64)
+        // Step 2: Crop to square and resize to thumbnail size FIRST
+        const squareBase64 = await cropAndResizeToSquare(result.imageBase64)
+
+        // Step 3: Apply dithering on the final size (prevents moiré)
+        const dithered = await applyDithering(squareBase64, 1.0, 1)
+
+        // Step 4: Convert white to transparent
+        const processed = await whiteToTransparent(dithered.base64)
+
+        // Convert to buffer for upload
+        const squareThumbnail = Buffer.from(processed.base64, 'base64')
 
         // Upload to Vercel Blob
         const fileName = `post-images/${postId}/thumbnail-${article.index}-${imageRecord.id}.png`
