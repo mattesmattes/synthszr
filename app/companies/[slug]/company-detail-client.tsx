@@ -30,6 +30,7 @@ interface CompanyDetailClientProps {
   company: CompanyInfo
   posts: PostInfo[]
   locale?: string
+  translations?: Record<string, string>
 }
 
 /**
@@ -38,7 +39,14 @@ interface CompanyDetailClientProps {
  * Fetches rating data and displays company header with rating badge,
  * followed by list of related posts.
  */
-export function CompanyDetailClient({ company, posts, locale }: CompanyDetailClientProps) {
+const defaultTranslations: Record<string, string> = {
+  'companies.articles_count_singular': '{count} Artikel erwähnt {company}',
+  'companies.articles_count_plural': '{count} Artikel erwähnen {company}',
+  'companies.premarket_label': 'Pre-IPO Unternehmen',
+}
+
+export function CompanyDetailClient({ company, posts, locale, translations }: CompanyDetailClientProps) {
+  const t = translations || defaultTranslations
   const [ratingData, setRatingData] = useState<RatingData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -118,11 +126,14 @@ export function CompanyDetailClient({ company, posts, locale }: CompanyDetailCli
           ) : null}
         </div>
         <p className="mt-2 text-muted-foreground">
-          {posts.length} {posts.length === 1 ? 'Artikel erwähnt' : 'Artikel erwähnen'} {company.name}
+          {posts.length === 1
+            ? t['companies.articles_count_singular'].replace('{count}', '1').replace('{company}', company.name)
+            : t['companies.articles_count_plural'].replace('{count}', String(posts.length)).replace('{company}', company.name)
+          }
         </p>
         {company.type === 'premarket' && (
           <p className="mt-1 text-xs text-muted-foreground">
-            Pre-IPO Unternehmen
+            {t['companies.premarket_label']}
           </p>
         )}
       </div>

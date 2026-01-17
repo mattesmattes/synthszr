@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { CompanyDetailClient } from '@/app/companies/[slug]/company-detail-client'
+import { getTranslations } from '@/lib/i18n/get-translations'
 import type { LanguageCode } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -30,6 +31,7 @@ export default async function CompanyDetailPage({ params }: PageProps) {
   const { lang, slug } = await params
   const locale = lang as LanguageCode
   const supabase = await createClient()
+  const t = await getTranslations(locale)
 
   // Fetch company mentions with posts
   const { data: mentions, error } = await supabase
@@ -97,16 +99,16 @@ export default async function CompanyDetailPage({ params }: PageProps) {
           className="mb-8 inline-flex items-center gap-2 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3 w-3" />
-          Alle Unternehmen
+          {t['companies.all_companies']}
         </Link>
 
-        <CompanyDetailClient company={company} posts={posts} locale={locale} />
+        <CompanyDetailClient company={company} posts={posts} locale={locale} translations={t} />
       </main>
 
       <footer className="border-t border-border">
         <div className="mx-auto max-w-3xl px-6 py-8">
           <Link href={`/${locale}/companies`} className="font-mono text-xs text-muted-foreground transition-colors hover:text-foreground">
-            ← Zurück zu Unternehmen
+            ← {t['companies.back_to_companies']}
           </Link>
         </div>
       </footer>

@@ -26,6 +26,7 @@ export interface CompanyCardData {
 interface CompanyCardProps {
   company: CompanyCardData
   className?: string
+  locale?: string
 }
 
 const directionStyles = {
@@ -40,14 +41,20 @@ const directionArrows = {
   neutral: '→',
 }
 
+const translations: Record<string, Record<string, string>> = {
+  de: { article: 'Artikel', articles: 'Artikel', analyse: 'Analyse', premarket: 'Premarket' },
+  en: { article: 'Article', articles: 'Articles', analyse: 'Analyse', premarket: 'Premarket' },
+}
+
 /**
  * Card component for displaying a company in the companies list
  *
  * Shows: Company name, ticker, percentage change, rating badge, news count link
  */
-export function CompanyCard({ company, className }: CompanyCardProps) {
+export function CompanyCard({ company, className, locale = 'de' }: CompanyCardProps) {
   const [showAnalysis, setShowAnalysis] = useState(false)
   const [showQuote, setShowQuote] = useState(false)
+  const t = translations[locale] || translations.de
 
   const hasRating = company.rating != null
   const hasQuoteData = company.type === 'public' && company.ticker && typeof company.changePercent === 'number'
@@ -106,12 +113,12 @@ export function CompanyCard({ company, className }: CompanyCardProps) {
                 onClick={() => setShowAnalysis(true)}
                 className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
               >
-                Analyse
+                {t.analyse}
               </button>
             )}
 
             {company.type === 'premarket' && (
-              <span className="text-xs text-muted-foreground">(Premarket)</span>
+              <span className="text-xs text-muted-foreground">({t.premarket})</span>
             )}
           </>
         )}
@@ -119,10 +126,10 @@ export function CompanyCard({ company, className }: CompanyCardProps) {
 
       {/* Right side: News count link */}
       <Link
-        href={`/companies/${company.slug}`}
+        href={locale && locale !== 'de' ? `/${locale}/companies/${company.slug}` : `/companies/${company.slug}`}
         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
       >
-        <span>{company.mentionCount} {company.mentionCount === 1 ? 'Artikel' : 'Artikel'}</span>
+        <span>{company.mentionCount} {company.mentionCount === 1 ? t.article : t.articles}</span>
         <ArrowRight className="h-3 w-3" />
       </Link>
 

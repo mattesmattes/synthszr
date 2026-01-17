@@ -80,7 +80,7 @@ export default async function CompaniesPage() {
         </div>
 
         {companies.length > 0 ? (
-          <CompaniesListClient companies={companies} />
+          <CompaniesListClient companies={companies} locale="de" />
         ) : (
           <div className="py-20 text-center">
             <p className="text-muted-foreground">

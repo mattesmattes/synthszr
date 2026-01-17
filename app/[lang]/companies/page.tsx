@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { CompaniesListClient } from '@/app/companies/companies-list-client'
+import { getTranslations } from '@/lib/i18n/get-translations'
 import type { LanguageCode } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -28,6 +29,7 @@ export default async function CompaniesPage({ params }: PageProps) {
   const { lang } = await params
   const locale = lang as LanguageCode
   const supabase = await createClient()
+  const t = await getTranslations(locale)
 
   // Fetch all company mentions from published posts
   const { data: mentions, error } = await supabase
@@ -74,23 +76,22 @@ export default async function CompaniesPage({ params }: PageProps) {
           className="mb-8 inline-flex items-center gap-2 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3 w-3" />
-          Zurück
+          {t['companies.back']}
         </Link>
 
         <div className="mb-12 border-b border-border pb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Unternehmen</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{t['companies.title']}</h1>
           <p className="mt-2 text-muted-foreground">
-            {companies.length} Unternehmen in unseren Artikeln erwähnt.
-            Klicke auf den Badge für die AI-Analyse.
+            {t['companies.description'].replace('{count}', String(companies.length))}
           </p>
         </div>
 
         {companies.length > 0 ? (
-          <CompaniesListClient companies={companies} />
+          <CompaniesListClient companies={companies} locale={locale} />
         ) : (
           <div className="py-20 text-center">
             <p className="text-muted-foreground">
-              Noch keine Unternehmen gefunden. Publiziere Artikel mit Unternehmens-Erwähnungen.
+              {t['companies.empty']}
             </p>
           </div>
         )}
@@ -99,7 +100,7 @@ export default async function CompaniesPage({ params }: PageProps) {
       <footer className="border-t border-border">
         <div className="mx-auto max-w-3xl px-6 py-8">
           <Link href={`/${locale}`} className="font-mono text-xs text-muted-foreground transition-colors hover:text-foreground">
-            ← Zurück zu Synthszr
+            ← {t['companies.back_home']}
           </Link>
         </div>
       </footer>

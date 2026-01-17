@@ -27,6 +27,8 @@ interface PremarketRatingResult {
 
 interface CompaniesListClientProps {
   companies: CompanyData[]
+  locale?: string
+  translations?: Record<string, string>
 }
 
 /**
@@ -35,7 +37,7 @@ interface CompaniesListClientProps {
  * Batch-fetches ratings for all companies on mount, then displays cards
  * with the enriched data.
  */
-export function CompaniesListClient({ companies }: CompaniesListClientProps) {
+export function CompaniesListClient({ companies, locale }: CompaniesListClientProps) {
   const [enrichedCompanies, setEnrichedCompanies] = useState<CompanyCardData[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -153,7 +155,7 @@ export function CompaniesListClient({ companies }: CompaniesListClientProps) {
           </h2>
           <div className="rounded-lg border border-border bg-background p-4">
             {groupedCompanies[letter].map(company => (
-              <CompanyCard key={company.slug} company={company} />
+              <CompanyCard key={company.slug} company={company} locale={locale} />
             ))}
           </div>
         </section>

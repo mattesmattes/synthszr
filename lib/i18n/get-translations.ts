@@ -80,6 +80,22 @@ export const defaultTranslations: Record<string, string> = {
   'archive.empty': 'Noch keine Artikel vorhanden.',
   'archive.back_home': 'Zurück zu Synthszr',
 
+  // Companies
+  'companies.title': 'Unternehmen',
+  'companies.description': '{count} Unternehmen in unseren Artikeln erwähnt. Klicke auf den Badge für die AI-Analyse.',
+  'companies.empty': 'Noch keine Unternehmen gefunden. Publiziere Artikel mit Unternehmens-Erwähnungen.',
+  'companies.back': 'Zurück',
+  'companies.back_home': 'Zurück zu Synthszr',
+  'companies.all_companies': 'Alle Unternehmen',
+  'companies.back_to_companies': 'Zurück zu Unternehmen',
+  'companies.articles_count_singular': '{count} Artikel erwähnt {company}',
+  'companies.articles_count_plural': '{count} Artikel erwähnen {company}',
+  'companies.premarket_label': 'Pre-IPO Unternehmen',
+  'companies.article': 'Artikel',
+  'companies.articles': 'Artikel',
+  'companies.analyse': 'Analyse',
+  'companies.premarket': 'Premarket',
+
   // Common
   'common.loading': 'Laden...',
   'common.error': 'Ein Fehler ist aufgetreten.',
