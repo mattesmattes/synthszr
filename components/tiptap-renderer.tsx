@@ -183,6 +183,13 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
   const [autoOpenStock, setAutoOpenStock] = useState<string | null>(null)
   const [autoOpenPremarket, setAutoOpenPremarket] = useState<string | null>(null)
 
+  // Device pixel ratio for 1:1 thumbnail rendering (Retina optimization)
+  const [devicePixelRatio, setDevicePixelRatio] = useState(1)
+
+  useEffect(() => {
+    setDevicePixelRatio(window.devicePixelRatio || 1)
+  }, [])
+
   // Fetch article thumbnails when postId is provided
   useEffect(() => {
     if (!postId) return
@@ -1004,18 +1011,26 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
 
         const bgColor = bestVote ? voteColors[bestVote] : voteColors['NONE']
 
+        // Calculate display size for 1:1 pixel rendering
+        // On Retina (dpr=2): 302px CSS = 604 physical pixels = 1:1 with our 604px image
+        // On non-Retina (dpr=1): Use 604px CSS for 1:1 (larger but sharp)
+        const displaySize = Math.round(604 / devicePixelRatio)
+
         return createPortal(
           <div
-            className="w-[302px] h-[302px] rounded-full overflow-hidden mx-auto"
-            style={{ backgroundColor: bgColor }}
+            className="rounded-full overflow-hidden mx-auto"
+            style={{
+              backgroundColor: bgColor,
+              width: displaySize,
+              height: displaySize,
+            }}
           >
             <Image
               src={thumbnail.image_url}
               alt={`Article ${thumbnail.article_index + 1} thumbnail`}
-              width={302}
-              height={302}
+              width={displaySize}
+              height={displaySize}
               unoptimized
-              className="w-full h-full object-cover"
               style={{ imageRendering: 'pixelated' }}
             />
           </div>,
