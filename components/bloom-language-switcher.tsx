@@ -62,7 +62,7 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
         <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-center">
           <Image src="/oh-so-icon.svg" alt="OH-SO" width={32} height={32} />
         </div>
-        <Link href="/companies" className={linkStyle}>
+        <Link href={currentLocale === 'de' ? '/companies' : `/${currentLocale}/companies`} className={linkStyle}>
           Show Companies
         </Link>
       </div>
@@ -110,7 +110,7 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
       </div>
 
       {/* Show Companies link */}
-      <Link href="/companies" className={linkStyle}>
+      <Link href={currentLocale === 'de' ? '/companies' : `/${currentLocale}/companies`} className={linkStyle}>
         Show Companies
       </Link>
     </div>
