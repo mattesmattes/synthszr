@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
+import Image from "next/image"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
@@ -1008,16 +1009,14 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
             className="w-[302px] h-[302px] rounded-full overflow-hidden mx-auto"
             style={{ backgroundColor: bgColor }}
           >
-            <img
+            <Image
               src={thumbnail.image_url}
               alt={`Article ${thumbnail.article_index + 1} thumbnail`}
-              width={604}
-              height={604}
-              style={{
-                transform: 'scale(0.5)',
-                transformOrigin: 'top left',
-                imageRendering: 'pixelated',
-              }}
+              width={302}
+              height={302}
+              unoptimized
+              className="w-full h-full object-cover"
+              style={{ imageRendering: 'pixelated' }}
             />
           </div>,
           element,
