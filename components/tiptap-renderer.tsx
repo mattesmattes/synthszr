@@ -1012,6 +1012,7 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
               src={thumbnail.image_url}
               alt={`Article ${thumbnail.article_index + 1} thumbnail`}
               className="w-full h-full object-cover"
+              style={{ imageRendering: 'pixelated' }}
             />
           </div>,
           element,

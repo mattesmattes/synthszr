@@ -953,6 +953,7 @@ export default function AdminPage() {
                                         src={thumbnail.image_url}
                                         alt={`Thumbnail ${idx + 1}`}
                                         className="w-full h-full object-cover"
+                                        style={{ imageRendering: 'pixelated' }}
                                       />
                                     ) : (
                                       <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">

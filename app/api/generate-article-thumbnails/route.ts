@@ -145,8 +145,8 @@ export async function POST(request: NextRequest) {
         // Step 2: Crop to square and resize to thumbnail size FIRST
         const squareBase64 = await cropAndResizeToSquare(result.imageBase64)
 
-        // Step 3: Apply light dithering (0.3 intensity to reduce moiré when scaled)
-        const dithered = await applyDithering(squareBase64, 0.3, 1)
+        // Step 3: Apply dithering at full intensity for strong contrast
+        const dithered = await applyDithering(squareBase64, 1.0, 1)
 
         // Step 4: Convert white to transparent
         const processed = await whiteToTransparent(dithered.base64)
