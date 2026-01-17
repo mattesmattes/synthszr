@@ -17,8 +17,8 @@ const VOTE_COLORS = {
 
 type VoteType = keyof typeof VOTE_COLORS
 
-// Thumbnail size
-const THUMBNAIL_SIZE = 302
+// Thumbnail display size (actual image is full resolution, squared)
+const THUMBNAIL_DISPLAY_SIZE = 302
 
 interface ArticleThumbnailRequest {
   postId: string
@@ -52,10 +52,9 @@ async function processToSquareThumbnail(
   const left = Math.floor((width - cropSize) / 2)
   const top = Math.floor((height - cropSize) / 2)
 
-  // Crop to square and resize
+  // Crop to square (keep full resolution, no downscaling)
   const croppedBuffer = await sharp(imageBuffer)
     .extract({ left, top, width: cropSize, height: cropSize })
-    .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true })

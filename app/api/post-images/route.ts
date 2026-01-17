@@ -21,10 +21,12 @@ export async function GET(request: NextRequest) {
 
   const supabase = await createClient()
 
+  // Only return cover images, not article thumbnails
   const { data: images, error } = await supabase
     .from('post_images')
     .select('*')
     .eq('post_id', postId)
+    .or('image_type.is.null,image_type.eq.cover')
     .order('created_at', { ascending: true })
 
   if (error) {
