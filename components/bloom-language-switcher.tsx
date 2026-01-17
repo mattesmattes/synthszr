@@ -57,9 +57,9 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
   // Don't render language switcher if loading or only one language, but still show companies link
   if (loading || activeLanguages.length <= 1) {
     return (
-      <div className="flex justify-center items-center gap-4 mb-6">
+      <div className="flex justify-center items-baseline gap-4 mb-6">
         <span className={`${linkStyle} opacity-50`}>Switch Language</span>
-        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-center">
           <Image src="/oh-so-icon.svg" alt="OH-SO" width={32} height={32} />
         </div>
         <Link href="/companies" className={linkStyle}>
@@ -70,7 +70,7 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
   }
 
   return (
-    <div className="flex justify-center items-center gap-4 mb-6">
+    <div className="flex justify-center items-baseline gap-4 mb-6">
       {/* Switch Language dropdown */}
       <div className="relative" ref={menuRef}>
         <button
@@ -105,7 +105,7 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
       </div>
 
       {/* OH-SO Logo in the middle */}
-      <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+      <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-center">
         <Image src="/oh-so-icon.svg" alt="OH-SO" width={32} height={32} />
       </div>
 
