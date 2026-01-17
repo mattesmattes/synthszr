@@ -270,15 +270,25 @@ export async function POST(request: NextRequest) {
 
         // Merge and deduplicate by email ID
         const seenIds = new Set<string>()
-        const emails: typeof senderEmails_fetched = []
+        let allEmails: typeof senderEmails_fetched = []
 
         for (const email of [...senderEmails_fetched, ...labelEmails]) {
           if (!seenIds.has(email.id)) {
             seenIds.add(email.id)
-            emails.push(email)
+            allEmails.push(email)
           }
         }
-        console.log('[Newsletter Fetch] Total unique emails after merge:', emails.length)
+        console.log('[Newsletter Fetch] Total unique emails after merge:', allEmails.length)
+
+        // Filter emails that are older than afterDate (Gmail's after: query only uses date, not time)
+        // This ensures we only process emails received AFTER the timestamp, not just on the same day
+        const emails = targetDate
+          ? allEmails // For historical imports, keep all emails of that day
+          : allEmails.filter(email => email.date >= afterDate)
+
+        if (emails.length < allEmails.length) {
+          console.log(`[Newsletter Fetch] Filtered ${allEmails.length - emails.length} emails older than ${afterDate.toISOString()}`)
+        }
 
         // Log unique senders found
         const uniqueSenders = new Set(emails.map(e => e.from))
