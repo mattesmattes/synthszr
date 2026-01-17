@@ -212,13 +212,7 @@ export default function AdminPage() {
     }
 
     try {
-      // Delete existing article thumbnails before regenerating
-      await supabase
-        .from('post_images')
-        .delete()
-        .eq('post_id', postId)
-        .eq('image_type', 'article_thumbnail')
-
+      // API handles deletion of existing thumbnails
       const res = await fetch('/api/generate-article-thumbnails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

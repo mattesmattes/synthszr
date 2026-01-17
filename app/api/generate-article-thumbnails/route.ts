@@ -149,6 +149,19 @@ export async function POST(request: NextRequest) {
       imageUrl?: string
     }> = []
 
+    // Delete existing article thumbnails before regenerating
+    const { error: deleteError } = await supabase
+      .from('post_images')
+      .delete()
+      .eq('post_id', postId)
+      .eq('image_type', 'article_thumbnail')
+
+    if (deleteError) {
+      console.error('[Thumbnail] Failed to delete existing thumbnails:', deleteError)
+    } else {
+      console.log(`[Thumbnail] Deleted existing article thumbnails for post ${postId}`)
+    }
+
     // Process articles sequentially to avoid API rate limits
     for (const article of articles) {
       try {
