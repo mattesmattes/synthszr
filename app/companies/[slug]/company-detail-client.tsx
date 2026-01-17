@@ -29,6 +29,7 @@ interface RatingData {
 interface CompanyDetailClientProps {
   company: CompanyInfo
   posts: PostInfo[]
+  locale?: string
 }
 
 /**
@@ -37,7 +38,7 @@ interface CompanyDetailClientProps {
  * Fetches rating data and displays company header with rating badge,
  * followed by list of related posts.
  */
-export function CompanyDetailClient({ company, posts }: CompanyDetailClientProps) {
+export function CompanyDetailClient({ company, posts, locale }: CompanyDetailClientProps) {
   const [ratingData, setRatingData] = useState<RatingData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -131,7 +132,7 @@ export function CompanyDetailClient({ company, posts }: CompanyDetailClientProps
         {posts.map((post) => (
           <Link
             key={post.id}
-            href={`/posts/${post.slug || post.id}`}
+            href={locale ? `/${locale}/posts/${post.slug || post.id}` : `/posts/${post.slug || post.id}`}
             className="group block py-4 border-b border-border last:border-b-0 transition-colors hover:bg-muted/50 -mx-4 px-4 rounded"
           >
             <span className="font-mono text-xs text-muted-foreground">

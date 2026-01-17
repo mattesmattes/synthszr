@@ -57,10 +57,9 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
     <div className="flex justify-center items-center gap-4 mb-6">
       <Menu.Root direction="bottom" anchor="center">
         <Menu.Container
-          buttonSize={24}
           menuWidth={180}
           menuRadius={16}
-          className="bg-background shadow-lg border border-border"
+          className="bg-background shadow-lg border border-border [&>button]:!w-auto [&>button]:!h-auto [&>button]:!rounded-none"
         >
           <Menu.Trigger className={linkStyle}>
             Switch Language
