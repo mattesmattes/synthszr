@@ -1005,7 +1005,7 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
 
         return createPortal(
           <div
-            className="w-[604px] h-[604px] max-w-full rounded-full overflow-hidden mx-auto"
+            className="w-[302px] h-[302px] rounded-full overflow-hidden mx-auto"
             style={{ backgroundColor: bgColor }}
           >
             <img
