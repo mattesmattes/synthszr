@@ -44,6 +44,8 @@ const directionArrows = {
 const translations: Record<string, Record<string, string>> = {
   de: { article: 'Artikel', articles: 'Artikel', analyse: 'Analyse', premarket: 'Premarket' },
   en: { article: 'Article', articles: 'Articles', analyse: 'Analyse', premarket: 'Premarket' },
+  nds: { article: 'Artikel', articles: 'Artikels', analyse: 'Analyse', premarket: 'Premarket' },
+  cs: { article: 'Článek', articles: 'Článků', analyse: 'Analýza', premarket: 'Premarket' },
 }
 
 /**
