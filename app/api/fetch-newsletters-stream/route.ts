@@ -430,6 +430,7 @@ export async function POST(request: NextRequest) {
                 content: parsed.plainText,
                 raw_html: htmlContent,
                 newsletter_date: newsletterDate,
+                email_received_at: email.date.toISOString(),
               })
 
             if (insertError) {
@@ -553,6 +554,7 @@ export async function POST(request: NextRequest) {
                     title: cleanedTitle,
                     content: content,
                     newsletter_date: noteDate,
+                    email_received_at: note.date.toISOString(),
                   })
 
                 if (insertError) {
@@ -714,6 +716,7 @@ export async function POST(request: NextRequest) {
                     title: extracted.title || article.title,
                     content: extracted.content,
                     newsletter_date: articleDate,
+                    email_received_at: new Date().toISOString(),  // Use extraction time for articles
                   })
 
                 processedArticles++

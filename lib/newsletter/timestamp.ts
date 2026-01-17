@@ -9,8 +9,8 @@ import { SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * Get the timestamp of the last successfully fetched newsletter.
- * This is based on the most recent `collected_at` in daily_repo,
- * ensuring the timestamp always reflects actual data.
+ * This is based on the most recent `email_received_at` in daily_repo,
+ * which represents the actual email receipt time (not when added to DB).
  *
  * @param supabase - Supabase client
  * @param fallbackHours - Hours to go back if no data exists (default: 36)
@@ -20,17 +20,19 @@ export async function getLastFetchTimestamp(
   supabase: SupabaseClient,
   fallbackHours: number = 36
 ): Promise<Date> {
-  // Get the most recent collected_at from daily_repo
+  // Get the most recent email_received_at from daily_repo
+  // This is the actual email date, not when it was added to the database
   const { data: latestItem } = await supabase
     .from('daily_repo')
-    .select('collected_at')
-    .order('collected_at', { ascending: false })
+    .select('email_received_at')
+    .not('email_received_at', 'is', null)
+    .order('email_received_at', { ascending: false })
     .limit(1)
     .single()
 
-  if (latestItem?.collected_at) {
-    const timestamp = new Date(latestItem.collected_at)
-    console.log(`[Newsletter Timestamp] Using collected_at from daily_repo: ${timestamp.toISOString()}`)
+  if (latestItem?.email_received_at) {
+    const timestamp = new Date(latestItem.email_received_at)
+    console.log(`[Newsletter Timestamp] Using email_received_at from daily_repo: ${timestamp.toISOString()}`)
     return timestamp
   }
 
@@ -44,29 +46,30 @@ export async function getLastFetchTimestamp(
  * Update the stored last_newsletter_fetch setting.
  * This should be called after a successful fetch to record the timestamp.
  *
- * Note: The timestamp is derived from daily_repo data, not from the current time,
- * to ensure consistency with actual data.
+ * Note: The timestamp is based on email_received_at (actual email date),
+ * not collected_at (when added to DB), to ensure correct behavior after re-fetches.
  *
  * @param supabase - Supabase client
  */
 export async function updateLastFetchTimestamp(supabase: SupabaseClient): Promise<void> {
-  // Get the most recent collected_at from daily_repo
+  // Get the most recent email_received_at from daily_repo
   const { data: latestItem } = await supabase
     .from('daily_repo')
-    .select('collected_at')
-    .order('collected_at', { ascending: false })
+    .select('email_received_at')
+    .not('email_received_at', 'is', null)
+    .order('email_received_at', { ascending: false })
     .limit(1)
     .single()
 
-  if (latestItem?.collected_at) {
+  if (latestItem?.email_received_at) {
     await supabase
       .from('settings')
       .upsert({
         key: 'last_newsletter_fetch',
-        value: { timestamp: latestItem.collected_at }
+        value: { timestamp: latestItem.email_received_at }
       }, { onConflict: 'key' })
 
-    console.log(`[Newsletter Timestamp] Updated to: ${latestItem.collected_at}`)
+    console.log(`[Newsletter Timestamp] Updated to: ${latestItem.email_received_at}`)
   }
 }
 
