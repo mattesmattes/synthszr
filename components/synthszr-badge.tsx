@@ -117,6 +117,7 @@ export function SynthszrBadge({
             )}
           </span>
         )}
+        <span className="text-muted-foreground text-xs">— Synthszr Vote:</span>
         <button
           onClick={handleBadgeClick}
           className={cn(
