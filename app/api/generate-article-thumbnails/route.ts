@@ -50,10 +50,11 @@ async function cropAndResizeToSquare(imageBase64: string): Promise<string> {
   const left = Math.floor((width - cropSize) / 2)
   const top = Math.floor((height - cropSize) / 2)
 
-  // Crop to square and resize to fixed thumbnail size
+  // Crop to square, resize, and boost contrast for stronger dithering
   const resizedBuffer = await sharp(imageBuffer)
     .extract({ left, top, width: cropSize, height: cropSize })
     .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
+    .linear(1.4, -(255 * 0.2)) // Increase contrast by 40%
     .png()
     .toBuffer()
 
@@ -145,8 +146,8 @@ export async function POST(request: NextRequest) {
         // Step 2: Crop to square and resize to thumbnail size FIRST
         const squareBase64 = await cropAndResizeToSquare(result.imageBase64)
 
-        // Step 3: Apply dithering at full intensity for strong contrast
-        const dithered = await applyDithering(squareBase64, 1.0, 1)
+        // Step 3: Apply dithering with boosted gain for extra strong contrast
+        const dithered = await applyDithering(squareBase64, 1.3, 1)
 
         // Step 4: Convert white to transparent
         const processed = await whiteToTransparent(dithered.base64)
