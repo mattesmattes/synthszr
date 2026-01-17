@@ -17,9 +17,9 @@ const VOTE_COLORS = {
 
 type VoteType = keyof typeof VOTE_COLORS
 
-// Thumbnail size - 302px matches display size (no CSS scaling needed)
-// Test: eliminates browser scaling artifacts on dithered images
-const THUMBNAIL_SIZE = 302
+// Thumbnail size - 604px for Retina displays (302px @ 2x)
+// Higher resolution = sharper dithering pattern
+const THUMBNAIL_SIZE = 604
 
 interface ArticleThumbnailRequest {
   postId: string
