@@ -5,6 +5,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { DEFAULT_NEWSLETTER_FETCH_MS, MS_PER_HOUR } from '@/lib/config/constants'
 import { generateEmbedding, prepareTextForEmbedding } from '@/lib/embeddings/generator'
 
+// Article processing constants
+const MAX_ARTICLES_PER_RUN = 200
+const BATCH_SIZE = 10 // Process 10 articles in parallel per batch
+
 export interface NewsletterProcessResult {
   success: boolean
   message?: string
@@ -285,15 +289,20 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
     }
   }
 
-  // Process article links (up to 25 articles per run)
-  const articlesToProcess = articleUrls.slice(0, 25)
-  console.log(`[Newsletter] Processing ${articlesToProcess.length} articles from ${articleUrls.length} total links`)
+  // Process article links (up to MAX_ARTICLES_PER_RUN articles per run, in batches)
+  const articlesToProcess = articleUrls.slice(0, MAX_ARTICLES_PER_RUN)
+  console.log(`[Newsletter] Processing ${articlesToProcess.length} articles from ${articleUrls.length} total links (batch size: ${BATCH_SIZE})`)
 
   let articlesSkipped = 0
   let articlesFailed = 0
   let articlesNoContent = 0
 
-  for (const article of articlesToProcess) {
+  // Process a single article - returns result for aggregation
+  async function processArticle(article: { url: string; title: string; newsletterDate: string }): Promise<{
+    status: 'stored' | 'skipped' | 'failed' | 'no_content'
+    title?: string
+    url?: string
+  }> {
     try {
       // Check if article already exists (by URL or resolved URL)
       const { data: existingArticle } = await supabase
@@ -303,22 +312,19 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
         .single()
 
       if (existingArticle) {
-        articlesSkipped++
-        continue // Already processed
+        return { status: 'skipped' }
       }
 
       const extracted = await extractArticleContent(article.url)
 
       if (!extracted) {
-        articlesFailed++
         console.log(`[Newsletter] Extraction failed for: ${article.url.slice(0, 60)}...`)
-        continue
+        return { status: 'failed' }
       }
 
       if (!extracted.content) {
-        articlesNoContent++
         console.log(`[Newsletter] No content extracted for: ${article.url.slice(0, 60)}...`)
-        continue
+        return { status: 'no_content' }
       }
 
       // Use the resolved final URL if available, otherwise the original
@@ -332,28 +338,20 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
         .single()
 
       if (existingByFinalUrl) {
-        articlesSkipped++
-        continue
+        return { status: 'skipped' }
       }
 
       const { error: articleInsertError } = await supabase
         .from('daily_repo')
         .insert({
           source_type: 'article',
-          source_url: sourceUrl, // Use resolved URL
+          source_url: sourceUrl,
           title: extracted.title || article.title,
-          content: extracted.content, // Full article content
+          content: extracted.content,
           newsletter_date: article.newsletterDate,
         })
 
       if (!articleInsertError) {
-        processedArticles++
-        processedItems.push({
-          type: 'article',
-          title: extracted.title || article.title,
-          url: sourceUrl
-        })
-
         // Generate embedding for the article
         try {
           const { data: insertedArticle } = await supabase
@@ -378,15 +376,47 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
           }
         } catch (embeddingError) {
           console.error('[Newsletter] Error generating article embedding:', embeddingError)
-          // Don't fail the whole process for embedding errors
         }
+
+        return { status: 'stored', title: extracted.title || article.title, url: sourceUrl }
       } else {
         console.error(`[Newsletter] Insert error for ${sourceUrl}:`, articleInsertError.message)
+        return { status: 'failed' }
       }
     } catch (err) {
-      articlesFailed++
       console.error(`[Newsletter] Error extracting article ${article.url}:`, err)
-      // Don't count article extraction failures as critical errors
+      return { status: 'failed' }
+    }
+  }
+
+  // Process articles in batches of BATCH_SIZE
+  for (let batchStart = 0; batchStart < articlesToProcess.length; batchStart += BATCH_SIZE) {
+    const batch = articlesToProcess.slice(batchStart, batchStart + BATCH_SIZE)
+    const batchNum = Math.floor(batchStart / BATCH_SIZE) + 1
+    const totalBatches = Math.ceil(articlesToProcess.length / BATCH_SIZE)
+
+    console.log(`[Newsletter] Processing batch ${batchNum}/${totalBatches} (${batch.length} articles)`)
+
+    const results = await Promise.all(batch.map(processArticle))
+
+    for (const result of results) {
+      switch (result.status) {
+        case 'stored':
+          processedArticles++
+          if (result.title && result.url) {
+            processedItems.push({ type: 'article', title: result.title, url: result.url })
+          }
+          break
+        case 'skipped':
+          articlesSkipped++
+          break
+        case 'failed':
+          articlesFailed++
+          break
+        case 'no_content':
+          articlesNoContent++
+          break
+      }
     }
   }
 

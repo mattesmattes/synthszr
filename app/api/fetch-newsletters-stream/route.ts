@@ -10,6 +10,10 @@ import { getLastFetchTimestamp, updateLastFetchTimestamp } from '@/lib/newslette
 // Node.js runtime for jsdom compatibility
 export const runtime = 'nodejs'
 
+// Article processing constants
+const MAX_ARTICLES_PER_RUN = 200
+const BATCH_SIZE = 10 // Process 10 articles in parallel per batch
+
 /**
  * Extract specific Substack newsletter URL from email address
  * e.g., "Machine Learning Pills <mlpills@substack.com>" → "https://mlpills.substack.com"
@@ -142,6 +146,10 @@ interface ProgressEvent {
   phase: 'fetching' | 'processing' | 'extracting' | 'importing_notes' | 'scanning_unfetched' | 'done'
   current?: number
   total?: number
+  batch?: {
+    current: number
+    total: number
+  }
   item?: {
     title: string
     from?: string
@@ -609,146 +617,122 @@ export async function POST(request: NextRequest) {
         }
 
         // ========================================
-        // PHASE 3: Extract articles from newsletters
+        // PHASE 3: Extract articles from newsletters (batched processing)
         // ========================================
 
-        // Process article links (limit to first 25 for comprehensive coverage)
-        const articlesToProcess = articleUrls.slice(0, 25)
+        // Process article links (limit to MAX_ARTICLES_PER_RUN, processed in batches of BATCH_SIZE)
+        const articlesToProcess = articleUrls.slice(0, MAX_ARTICLES_PER_RUN)
 
         if (articlesToProcess.length > 0) {
+          const totalBatches = Math.ceil(articlesToProcess.length / BATCH_SIZE)
           send({
             type: 'article',
             phase: 'extracting',
             current: 0,
             total: articlesToProcess.length,
-            item: { title: 'Artikel werden extrahiert...', status: 'processing' }
+            item: { title: `Artikel werden extrahiert (${totalBatches} Batches)...`, status: 'processing' }
           })
 
-          for (let i = 0; i < articlesToProcess.length; i++) {
-            const article = articlesToProcess[i]
+          // Process articles in batches
+          for (let batchStart = 0; batchStart < articlesToProcess.length; batchStart += BATCH_SIZE) {
+            const batch = articlesToProcess.slice(batchStart, batchStart + BATCH_SIZE)
+            const batchNum = Math.floor(batchStart / BATCH_SIZE) + 1
 
-            send({
-              type: 'article',
-              phase: 'extracting',
-              current: i + 1,
-              total: articlesToProcess.length,
-              item: { title: article.title, url: article.url, status: 'processing' }
-            })
+            // Process batch in parallel
+            const batchResults = await Promise.all(batch.map(async (article, batchIndex) => {
+              const globalIndex = batchStart + batchIndex
+              try {
+                // Check if article already exists
+                const { data: existingArticle } = await supabase
+                  .from('daily_repo')
+                  .select('id')
+                  .eq('source_url', article.url)
+                  .single()
 
-            try {
-              // Check if article already exists
-              const { data: existingArticle } = await supabase
-                .from('daily_repo')
-                .select('id')
-                .eq('source_url', article.url)
-                .single()
-
-              if (existingArticle) {
-                if (force) {
-                  // Delete existing entry to allow re-processing
-                  await supabase.from('daily_repo').delete().eq('id', existingArticle.id)
-                } else {
-                  send({
-                    type: 'article',
-                    phase: 'extracting',
-                    current: i + 1,
-                    total: articlesToProcess.length,
-                    item: { title: article.title, url: article.url, status: 'skipped' }
-                  })
-                  continue
-                }
-              }
-
-              const extracted = await extractArticleContent(article.url)
-
-              if (extracted && extracted.content) {
-                // Check if article is too old (max 48 hours for daily newsletter)
-                if (isArticleTooOld(extracted.publishedDate, 48)) {
-                  const ageInfo = extracted.publishedDate
-                    ? ` (${Math.round((Date.now() - extracted.publishedDate.getTime()) / (1000 * 60 * 60 * 24))} Tage alt)`
-                    : ''
-                  send({
-                    type: 'article',
-                    phase: 'extracting',
-                    current: i + 1,
-                    total: articlesToProcess.length,
-                    item: {
-                      title: extracted.title || article.title,
-                      url: article.url,
-                      status: 'skipped',
-                      error: `Artikel zu alt${ageInfo}`
-                    }
-                  })
-                  continue
-                }
-
-                // Use targetDate if provided, otherwise use today
-                const articleDate = fetchDate
-                // Use the resolved final URL if available (resolves tracking redirects)
-                // This ensures we store clean URLs like mlpills.substack.com/p/... instead of substack.com/redirect/...
-                const resolvedUrl = extracted.finalUrl || article.url
-
-                // Check if the RESOLVED URL already exists (prevents duplicates from different tracking URLs)
-                if (extracted.finalUrl) {
-                  const { data: existingResolved } = await supabase
-                    .from('daily_repo')
-                    .select('id')
-                    .eq('source_url', resolvedUrl)
-                    .single()
-
-                  if (existingResolved && !force) {
-                    send({
-                      type: 'article',
-                      phase: 'extracting',
-                      current: i + 1,
-                      total: articlesToProcess.length,
-                      item: { title: extracted.title || article.title, url: resolvedUrl, status: 'skipped' }
-                    })
-                    continue
+                if (existingArticle) {
+                  if (force) {
+                    await supabase.from('daily_repo').delete().eq('id', existingArticle.id)
+                  } else {
+                    return { globalIndex, article, status: 'skipped' as const, title: article.title, url: article.url }
                   }
                 }
 
-                await supabase
-                  .from('daily_repo')
-                  .insert({
-                    source_type: 'article',
-                    source_url: resolvedUrl,
-                    source_email: article.newsletterEmail,  // Track which newsletter this article came from
-                    title: extracted.title || article.title,
-                    content: extracted.content,
-                    newsletter_date: articleDate,
-                    email_received_at: new Date().toISOString(),  // Use extraction time for articles
-                  })
+                const extracted = await extractArticleContent(article.url)
 
-                processedArticles++
-                totalCharacters += extracted.content?.length || 0
-                send({
-                  type: 'article',
-                  phase: 'extracting',
-                  current: i + 1,
-                  total: articlesToProcess.length,
-                  item: { title: extracted.title || article.title, url: resolvedUrl, status: 'success' }
-                })
-              } else {
-                send({
-                  type: 'article',
-                  phase: 'extracting',
-                  current: i + 1,
-                  total: articlesToProcess.length,
-                  item: { title: article.title, url: article.url, status: 'error', error: 'Kein Inhalt extrahiert' }
-                })
+                if (extracted && extracted.content) {
+                  // Check if article is too old (max 48 hours)
+                  if (isArticleTooOld(extracted.publishedDate, 48)) {
+                    const ageInfo = extracted.publishedDate
+                      ? ` (${Math.round((Date.now() - extracted.publishedDate.getTime()) / (1000 * 60 * 60 * 24))} Tage alt)`
+                      : ''
+                    return {
+                      globalIndex, article, status: 'skipped' as const,
+                      title: extracted.title || article.title, url: article.url,
+                      error: `Artikel zu alt${ageInfo}`
+                    }
+                  }
+
+                  const resolvedUrl = extracted.finalUrl || article.url
+
+                  // Check if resolved URL exists
+                  if (extracted.finalUrl) {
+                    const { data: existingResolved } = await supabase
+                      .from('daily_repo')
+                      .select('id')
+                      .eq('source_url', resolvedUrl)
+                      .single()
+
+                    if (existingResolved && !force) {
+                      return { globalIndex, article, status: 'skipped' as const, title: extracted.title || article.title, url: resolvedUrl }
+                    }
+                  }
+
+                  await supabase
+                    .from('daily_repo')
+                    .insert({
+                      source_type: 'article',
+                      source_url: resolvedUrl,
+                      source_email: article.newsletterEmail,
+                      title: extracted.title || article.title,
+                      content: extracted.content,
+                      newsletter_date: fetchDate,
+                      email_received_at: new Date().toISOString(),
+                    })
+
+                  return {
+                    globalIndex, article, status: 'success' as const,
+                    title: extracted.title || article.title, url: resolvedUrl,
+                    contentLength: extracted.content.length
+                  }
+                } else {
+                  return { globalIndex, article, status: 'error' as const, title: article.title, url: article.url, error: 'Kein Inhalt extrahiert' }
+                }
+              } catch (err) {
+                return {
+                  globalIndex, article, status: 'error' as const,
+                  title: article.title, url: article.url,
+                  error: err instanceof Error ? err.message : 'Extraction failed'
+                }
               }
-            } catch (err) {
+            }))
+
+            // Send results for this batch
+            for (const result of batchResults) {
+              if (result.status === 'success') {
+                processedArticles++
+                totalCharacters += result.contentLength || 0
+              }
               send({
                 type: 'article',
                 phase: 'extracting',
-                current: i + 1,
+                current: result.globalIndex + 1,
                 total: articlesToProcess.length,
+                batch: { current: batchNum, total: totalBatches },
                 item: {
-                  title: article.title,
-                  url: article.url,
-                  status: 'error',
-                  error: err instanceof Error ? err.message : 'Extraction failed'
+                  title: result.title,
+                  url: result.url,
+                  status: result.status,
+                  error: result.error
                 }
               })
             }
