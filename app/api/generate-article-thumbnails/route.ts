@@ -278,14 +278,10 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/generate-article-thumbnails
- * Get article thumbnails for a post
+ * Get article thumbnails for a post (public endpoint - read only)
  */
 export async function GET(request: NextRequest) {
-  const session = await getSession()
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
+  // Public endpoint - no auth required for reading thumbnails
   const { searchParams } = new URL(request.url)
   const postId = searchParams.get('postId')
 
