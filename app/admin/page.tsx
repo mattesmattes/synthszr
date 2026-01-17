@@ -140,15 +140,15 @@ export default function AdminPage() {
   }>({ title: '', slug: '', excerpt: '', category: 'AI & Tech', status: 'draft', content: {} })
 
   // Article thumbnails state
-  const [articleThumbnails, setArticleThumbnails] = useState<Array<{ id: string; article_index: number; generation_status: string }>>([])
+  const [articleThumbnails, setArticleThumbnails] = useState<Array<{ id: string; article_index: number; generation_status: string; image_url?: string; source_text?: string }>>([])
   const [articleCount, setArticleCount] = useState(0)
   const [generatingThumbnails, setGeneratingThumbnails] = useState(false)
 
   const supabase = createClient()
 
-  // Count H2 headings (articles) in TipTap content
-  function countArticles(content: Record<string, unknown>): number {
-    let count = 0
+  // Extract H2 headings (articles) from TipTap content
+  function getArticleHeadlines(content: Record<string, unknown>): string[] {
+    const headlines: string[] = []
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const traverse = (node: any) => {
       if (!node) return
@@ -156,7 +156,7 @@ export default function AdminPage() {
         const headingText = node.content?.map((c: { text?: string }) => c.text || '').join('') || ''
         const lowerText = headingText.toLowerCase()
         if (!lowerText.includes('synthszr take') && !lowerText.includes('mattes synthese')) {
-          count++
+          headlines.push(headingText)
         }
       }
       if (node.content && Array.isArray(node.content)) {
@@ -164,7 +164,12 @@ export default function AdminPage() {
       }
     }
     traverse(content)
-    return count
+    return headlines
+  }
+
+  // Count H2 headings (articles) in TipTap content
+  function countArticles(content: Record<string, unknown>): number {
+    return getArticleHeadlines(content).length
   }
 
   // Fetch article thumbnails for a post
@@ -835,33 +840,63 @@ export default function AdminPage() {
                   <div className="space-y-4">
                     {/* Article Thumbnails Section */}
                     {articleCount > 0 && (
-                      <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
-                        <div>
-                          <h3 className="font-medium text-sm">Artikel-Thumbnails</h3>
-                          <p className="text-xs text-muted-foreground">
-                            {articleThumbnails.filter(t => t.generation_status === 'completed').length} von {articleCount} generiert
-                          </p>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-medium text-sm">Artikel-Thumbnails</h3>
+                            <p className="text-xs text-muted-foreground">
+                              {articleThumbnails.filter(t => t.generation_status === 'completed').length} von {articleCount} generiert
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => generateArticleThumbnails(editingPost.id, editForm.content)}
+                            disabled={generatingThumbnails}
+                            className="gap-1.5"
+                          >
+                            {generatingThumbnails ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Generiere...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="h-3.5 w-3.5" />
+                                {articleThumbnails.length > 0 ? 'Neu generieren' : 'Generieren'}
+                              </>
+                            )}
+                          </Button>
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => generateArticleThumbnails(editingPost.id, editForm.content)}
-                          disabled={generatingThumbnails}
-                          className="gap-1.5"
-                        >
-                          {generatingThumbnails ? (
-                            <>
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              Generiere...
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="h-3.5 w-3.5" />
-                              {articleThumbnails.length > 0 ? 'Neu generieren' : 'Generieren'}
-                            </>
-                          )}
-                        </Button>
+                        {/* Thumbnail Grid with Headlines */}
+                        {articleThumbnails.length > 0 && (
+                          <div className="grid grid-cols-3 gap-3">
+                            {getArticleHeadlines(editForm.content).map((headline, idx) => {
+                              const thumbnail = articleThumbnails.find(t => t.article_index === idx)
+                              return (
+                                <div key={idx} className="border rounded-lg p-2 bg-muted/20">
+                                  <div className="aspect-square rounded-full overflow-hidden bg-[#CCFF00] mb-2 mx-auto w-16">
+                                    {thumbnail?.image_url ? (
+                                      <img
+                                        src={thumbnail.image_url}
+                                        alt={`Thumbnail ${idx + 1}`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+                                        {thumbnail?.generation_status === 'generating' ? '...' : '—'}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-center line-clamp-2 text-muted-foreground">
+                                    {headline.slice(0, 60)}{headline.length > 60 ? '...' : ''}
+                                  </p>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
                     <PostImageGallery postId={editingPost.id} />
