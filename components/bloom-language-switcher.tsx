@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import type { LanguageCode, Language } from '@/lib/types'
 import { addLocaleToPathname } from '@/lib/i18n/config'
 
@@ -46,16 +47,21 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
   }, [])
 
   const handleLanguageSelect = (langCode: string) => {
+    setIsOpen(false)
     const newPath = addLocaleToPathname(pathname, langCode as LanguageCode)
     window.location.href = newPath
   }
 
-  const linkStyle = "font-mono text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+  const linkStyle = "font-mono text-xs text-muted-foreground hover:text-foreground transition-colors"
 
   // Don't render language switcher if loading or only one language, but still show companies link
   if (loading || activeLanguages.length <= 1) {
     return (
       <div className="flex justify-center items-center gap-4 mb-6">
+        <span className={`${linkStyle} opacity-50`}>Switch Language</span>
+        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+          <Image src="/oh-so-icon.svg" alt="OH-SO" width={32} height={32} />
+        </div>
         <Link href="/companies" className={linkStyle}>
           Show Companies
         </Link>
@@ -65,20 +71,21 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
 
   return (
     <div className="flex justify-center items-center gap-4 mb-6">
+      {/* Switch Language dropdown */}
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className={linkStyle}
+          className={`${linkStyle} cursor-pointer`}
         >
           Switch Language
         </button>
         {isOpen && (
-          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 py-2 bg-background border border-border rounded-lg shadow-lg min-w-[180px] z-50">
+          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 py-2 bg-background border border-border rounded-2xl shadow-lg min-w-[180px] z-50">
             {activeLanguages.map((lang) => (
               <button
                 key={lang.code}
                 onClick={() => handleLanguageSelect(lang.code)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm cursor-pointer transition-colors ${
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm cursor-pointer transition-colors text-left ${
                   lang.code === currentLocale
                     ? 'font-semibold text-foreground bg-secondary'
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
@@ -96,7 +103,13 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
           </div>
         )}
       </div>
-      <span className="text-muted-foreground">·</span>
+
+      {/* OH-SO Logo in the middle */}
+      <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+        <Image src="/oh-so-icon.svg" alt="OH-SO" width={32} height={32} />
+      </div>
+
+      {/* Show Companies link */}
       <Link href="/companies" className={linkStyle}>
         Show Companies
       </Link>
