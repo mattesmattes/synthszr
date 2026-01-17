@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 import { generateEmbedding, prepareTextForEmbedding } from '@/lib/embeddings/generator'
 import { findSimilarItems, getItemEmbedding, SimilarItem } from './search'
 import { scoreSynthesisCandidates, getTopCandidates, ScoredCandidate, SynthesisType } from './score'
-import { developSyntheses, DevelopedSynthesis } from './develop'
+import { developSyntheses, developContentSynthesis, DevelopedSynthesis } from './develop'
 import { addToQueue } from '@/lib/news-queue'
 
 export interface SynthesisPipelineResult {
@@ -38,6 +38,7 @@ export interface SynthesisPrompt {
   name: string
   scoring_prompt: string
   development_prompt: string
+  content_prompt?: string  // Prompt for content-only syntheses (no historical reference)
   core_thesis: string
 }
 
@@ -252,6 +253,33 @@ async function queueCandidatesForArticle(
 }
 
 /**
+ * Store content-only syntheses (no candidate reference)
+ */
+async function storeContentSyntheses(
+  digestId: string,
+  syntheses: Map<string, DevelopedSynthesis>
+): Promise<void> {
+  if (syntheses.size === 0) return
+
+  const supabase = await createClient()
+
+  const records = Array.from(syntheses.values()).map((synthesis) => ({
+    candidate_id: null,  // Content-only syntheses have no candidate
+    digest_id: digestId,
+    synthesis_content: synthesis.content,
+    synthesis_headline: synthesis.headline,
+    historical_reference: synthesis.historicalReference || null,  // null for content-only
+    core_thesis_alignment: synthesis.coreThesisAlignment,
+  }))
+
+  const { error } = await supabase.from('developed_syntheses').insert(records)
+
+  if (error) {
+    console.error('[Pipeline] Failed to store content syntheses:', error)
+  }
+}
+
+/**
  * Store developed syntheses in the database
  */
 async function storeSyntheses(
@@ -458,18 +486,19 @@ export async function runSynthesisPipeline(
 
 /**
  * Get developed syntheses for a digest, including the source article title
+ * Handles both candidate-based syntheses AND content-only syntheses
  */
 export async function getSynthesesForDigest(
   digestId: string
 ): Promise<DevelopedSynthesis[]> {
   const supabase = await createClient()
 
-  // Join through synthesis_candidates to get source_item_id, then to daily_repo for title
+  // Use left join to include content-only syntheses (where candidate_id is null)
   const { data, error } = await supabase
     .from('developed_syntheses')
     .select(`
       *,
-      synthesis_candidates!inner(
+      synthesis_candidates(
         source_item_id,
         daily_repo!synthesis_candidates_source_item_id_fkey(title)
       )
@@ -488,7 +517,7 @@ export async function getSynthesesForDigest(
     content: s.synthesis_content,
     historicalReference: s.historical_reference,
     coreThesisAlignment: s.core_thesis_alignment,
-    // Extract source article title from the joined data
+    // Extract source article title from the joined data (null for content-only)
     sourceArticleTitle: s.synthesis_candidates?.daily_repo?.title || null,
   }))
 }
@@ -578,6 +607,8 @@ export async function runSynthesisPipelineWithProgress(
   })
 
   const allCandidates: ScoredCandidate[] = []
+  // Track items without similar articles for content-only synthesis
+  const itemsWithoutSimilar: Array<{ id: string; title: string; content: string }> = []
 
   // Phase 1: Search and score for each item
   // Reserve 60s for Phase 2 - stop Phase 1 early if needed
@@ -636,6 +667,9 @@ export async function runSynthesisPipelineWithProgress(
       })
 
       if (similarItems.length === 0) {
+        // No similar items found - queue for content-only synthesis
+        itemsWithoutSimilar.push({ id: item.id, title: item.title, content: item.content })
+        console.log(`[Pipeline] No similar items for "${item.title.slice(0, 40)}..." - queued for content synthesis`)
         continue
       }
 
@@ -875,7 +909,7 @@ export async function runSynthesisPipelineWithProgress(
         synthesis: {
           headline: synthesis.headline,
           content: synthesis.content,
-          historicalReference: synthesis.historicalReference,
+          historicalReference: synthesis.historicalReference || '',
         },
       })
     } catch (error) {
@@ -903,8 +937,101 @@ export async function runSynthesisPipelineWithProgress(
     }
   }
 
-  // Store syntheses
+  // Store syntheses from Phase 2
   await storeSyntheses(digestId, synthesesMap, candidateIdMap)
+
+  // Phase 3: Content-only syntheses for items without similar articles
+  const contentSynthesesMap = new Map<string, DevelopedSynthesis>()
+
+  // Check remaining time budget
+  const phase3StartTime = Date.now()
+  const phase3TimeRemaining = PIPELINE_TIMEOUT_MS - (phase3StartTime - pipelineStartTime)
+
+  if (itemsWithoutSimilar.length > 0 && phase3TimeRemaining > 15000) {
+    console.log(`[Pipeline ${PIPELINE_VERSION}] Phase 3: Processing ${itemsWithoutSimilar.length} content-only items (${Math.round(phase3TimeRemaining / 1000)}s remaining)`)
+
+    // Default content-only prompt (used if no content_prompt in DB)
+    const contentPrompt = prompt.content_prompt || `Erstelle einen originellen Insight aus diesem Artikel:
+
+NEWS: {current_news}
+
+KERNTHESE ZUR ORIENTIERUNG:
+{core_thesis}
+
+Generiere einen prägnanten Synthese-Kommentar (2-4 Sätze), der:
+1. Das Kernthema zusammenfasst
+2. Einen originellen Insight liefert
+3. Zur Kernthese passt (falls relevant)
+
+Format:
+HEADLINE: [Kurze, prägnante Überschrift]
+SYNTHESE: [Der Insight-Text]`
+
+    for (let i = 0; i < itemsWithoutSimilar.length; i++) {
+      const item = itemsWithoutSimilar[i]
+
+      // Check timeout
+      const elapsed = Date.now() - pipelineStartTime
+      if (elapsed > PIPELINE_TIMEOUT_MS) {
+        console.log(`[Pipeline] Phase 3 time limit reached - ${itemsWithoutSimilar.length - i} content items remaining`)
+        break
+      }
+
+      onProgress({
+        type: 'developing',
+        currentItem: skippedCount + remainingCandidates.length + i + 1,
+        totalItems: skippedCount + remainingCandidates.length + itemsWithoutSimilar.length,
+        itemTitle: `[Content] ${item.title.slice(0, 40)}`,
+      })
+
+      try {
+        const synthesis = await developContentSynthesis(
+          item,
+          contentPrompt,
+          prompt.core_thesis
+        )
+
+        // Use item.id as the key (no related item)
+        const key = `content-${item.id}`
+        contentSynthesesMap.set(key, {
+          ...synthesis,
+          candidateId: undefined,  // No candidate for content-only
+          sourceArticleTitle: item.title,
+        })
+        synthesesDeveloped++
+
+        onProgress({
+          type: 'developed',
+          currentItem: skippedCount + remainingCandidates.length + i + 1,
+          totalItems: skippedCount + remainingCandidates.length + itemsWithoutSimilar.length,
+          itemTitle: item.title,
+          synthesis: {
+            headline: synthesis.headline,
+            content: synthesis.content,
+            historicalReference: synthesis.historicalReference || '',
+          },
+        })
+
+        console.log(`[Pipeline] Content synthesis ${i + 1}/${itemsWithoutSimilar.length}: "${synthesis.headline.slice(0, 40)}"`)
+      } catch (error) {
+        console.error(`[Pipeline] Content synthesis failed for "${item.title.slice(0, 40)}":`, error)
+        errors.push(`Content synthesis failed: ${item.title}`)
+      }
+
+      // Small delay between items
+      if (i < itemsWithoutSimilar.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 300))
+      }
+    }
+
+    // Store content-only syntheses (with candidate_id = null)
+    if (contentSynthesesMap.size > 0) {
+      await storeContentSyntheses(digestId, contentSynthesesMap)
+      console.log(`[Pipeline] Stored ${contentSynthesesMap.size} content-only syntheses`)
+    }
+  } else if (itemsWithoutSimilar.length > 0) {
+    console.log(`[Pipeline] Skipping Phase 3 - not enough time remaining (${Math.round(phase3TimeRemaining / 1000)}s)`)
+  }
 
   return {
     success: true,

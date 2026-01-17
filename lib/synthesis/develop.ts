@@ -10,7 +10,7 @@ export interface DevelopedSynthesis {
   candidateId?: string
   headline: string
   content: string
-  historicalReference: string
+  historicalReference: string | null  // null for content-only syntheses
   coreThesisAlignment: number
   sourceArticleTitle?: string | null  // Title of the news article this synthesis belongs to
 }
@@ -216,6 +216,129 @@ async function developSynthesisInternal(
       historicalReference: candidate.relatedItem.title,
       coreThesisAlignment: 0,
     }
+  }
+}
+
+/**
+ * Develop a content-only synthesis (no historical reference)
+ * Used as fallback when no similar historical articles are found
+ */
+export async function developContentSynthesis(
+  article: { id: string; title: string; content: string },
+  developmentPrompt: string,
+  coreThesis: string,
+  timeoutMs: number = 10000
+): Promise<DevelopedSynthesis> {
+  const itemLabel = article.title.slice(0, 30)
+  console.log(`[Synthesis ${SYNTHESIS_VERSION}] START content-only: "${itemLabel}"`)
+
+  const fallbackSynthesis: DevelopedSynthesis = {
+    headline: `Timeout: Content-Synthese`,
+    content: `Timeout bei "${article.title.slice(0, 50)}"`,
+    historicalReference: '',
+    coreThesisAlignment: 0,
+  }
+
+  const result = await withHardTimeout(
+    developContentSynthesisInternal(article, developmentPrompt, coreThesis, timeoutMs),
+    12000,
+    fallbackSynthesis,
+    itemLabel
+  )
+
+  console.log(`[Synthesis ${SYNTHESIS_VERSION}] END content-only: "${itemLabel}" -> ${result.headline.slice(0, 30)}`)
+  return result
+}
+
+/**
+ * Internal implementation of content-only synthesis
+ */
+async function developContentSynthesisInternal(
+  article: { id: string; title: string; content: string },
+  developmentPrompt: string,
+  coreThesis: string,
+  timeoutMs: number
+): Promise<DevelopedSynthesis> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => {
+    console.log(`[Synthesis] Aborting content synthesis after ${timeoutMs}ms timeout`)
+    controller.abort()
+  }, timeoutMs)
+
+  const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    timeout: 11000,
+  })
+
+  const currentNews = `${article.title}\n\n${article.content.slice(0, 2000)}`
+
+  const prompt = developmentPrompt
+    .replace('{current_news}', currentNews)
+    .replace('{core_thesis}', coreThesis)
+
+  console.log(`[Synthesis] >>> CALLING ANTHROPIC API for content synthesis...`)
+
+  try {
+    const response = await anthropic.messages.create(
+      {
+        model: 'claude-opus-4-20250514',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }],
+      },
+      { signal: controller.signal }
+    )
+
+    console.log(`[Synthesis] <<< API RETURNED for content synthesis`)
+    clearTimeout(timeoutId)
+
+    const text =
+      response.content[0].type === 'text' ? response.content[0].text : ''
+
+    const parsed = parseContentSynthesisResponse(text)
+    const alignment = estimateThesisAlignment(parsed.synthese, coreThesis)
+
+    console.log(`[Synthesis] Content synthesis developed: "${parsed.headline.slice(0, 40)}..."`)
+
+    return {
+      headline: parsed.headline,
+      content: parsed.synthese,
+      historicalReference: '', // No historical reference for content-only syntheses
+      coreThesisAlignment: alignment,
+    }
+  } catch (error) {
+    clearTimeout(timeoutId)
+
+    const isAborted = error instanceof Error && error.name === 'AbortError'
+    const errorType = isAborted ? 'Timeout' : 'API error'
+    console.error(`[Synthesis] Content synthesis ${errorType}:`, isAborted ? `Aborted after ${timeoutMs}ms` : error)
+
+    return {
+      headline: `Insight: ${article.title.slice(0, 30)}`,
+      content: `Synthese für "${article.title.slice(0, 50)}" konnte nicht entwickelt werden (${errorType}).`,
+      historicalReference: '',
+      coreThesisAlignment: 0,
+    }
+  }
+}
+
+/**
+ * Parse content synthesis response (simplified - no REFERENZ field expected)
+ */
+function parseContentSynthesisResponse(text: string): { headline: string; synthese: string } {
+  const headlineMatch = text.match(/HEADLINE:\s*(.+?)(?:\n|$)/i)
+  const syntheseMatch = text.match(/SYNTHESE:\s*([\s\S]+?)(?=HEADLINE:|$)/i)
+
+  // Handle case where SYNTHESE comes before HEADLINE
+  let synthese = syntheseMatch?.[1]?.trim()
+  if (!synthese) {
+    // Try matching everything after HEADLINE as the synthesis
+    const afterHeadline = text.match(/HEADLINE:\s*.+?\n([\s\S]+)/i)
+    synthese = afterHeadline?.[1]?.trim() || text
+  }
+
+  return {
+    headline: headlineMatch?.[1]?.trim() || 'Synthese',
+    synthese: synthese || text,
   }
 }
 
