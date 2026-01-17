@@ -965,11 +965,11 @@ export default function AdminPage() {
                                   <p className="text-xs text-center line-clamp-2 text-muted-foreground mb-2">
                                     {headline.slice(0, 80)}{headline.length > 80 ? '...' : ''}
                                   </p>
-                                  {/* Regenerate button */}
+                                  {/* Regenerate button - always visible */}
                                   <Button
-                                    variant="ghost"
+                                    variant="outline"
                                     size="sm"
-                                    className="w-full h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="w-full h-7 text-xs"
                                     disabled={isRegenerating || generatingThumbnails}
                                     onClick={() => regenerateSingleThumbnail(editingPost!.id, idx, headline)}
                                   >
@@ -978,7 +978,7 @@ export default function AdminPage() {
                                     ) : (
                                       <RefreshCw className="h-3 w-3 mr-1" />
                                     )}
-                                    Neu generieren
+                                    {thumbnail?.image_url ? 'Neu' : 'Generieren'}
                                   </Button>
                                 </div>
                               )
