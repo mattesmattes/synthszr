@@ -303,6 +303,31 @@ export async function POST(request: NextRequest) {
         let totalCharacters = 0
         const articleUrls: Array<{ url: string; title: string; newsletterTitle: string; newsletterEmail: string }> = []
 
+        // BATCH DEDUP: Fetch all existing entries for relevant dates in ONE query
+        // This avoids N database queries (one per email) which causes Vercel timeouts
+        const relevantDates = new Set<string>()
+        for (const email of emails) {
+          const date = targetDate || email.date.toISOString().split('T')[0]
+          relevantDates.add(date)
+        }
+        const dateList = Array.from(relevantDates)
+        console.log('[Newsletter Fetch] Checking existing entries for dates:', dateList)
+
+        const { data: existingEntries } = await supabase
+          .from('daily_repo')
+          .select('id, source_email, title, newsletter_date')
+          .in('newsletter_date', dateList)
+
+        // Build in-memory lookup Set with composite keys
+        const existingSet = new Set<string>()
+        const existingIdMap = new Map<string, string>()  // key -> id (for force delete)
+        for (const entry of existingEntries || []) {
+          const key = `${entry.source_email}|${entry.title}|${entry.newsletter_date}`
+          existingSet.add(key)
+          existingIdMap.set(key, entry.id)
+        }
+        console.log(`[Newsletter Fetch] Found ${existingSet.size} existing entries for dedup`)
+
         // Process newsletters
         for (let i = 0; i < emails.length; i++) {
           const email = emails[i]
@@ -316,20 +341,15 @@ export async function POST(request: NextRequest) {
           })
 
           try {
-            // Check if already exists for THIS date (allow same title on different days)
+            // Check if already exists using in-memory lookup (fast!)
             const newsletterDate = targetDate || email.date.toISOString().split('T')[0]
-            const { data: existing } = await supabase
-              .from('daily_repo')
-              .select('id')
-              .eq('source_email', email.from)
-              .eq('title', email.subject)
-              .eq('newsletter_date', newsletterDate)
-              .single()
+            const dedupKey = `${email.from}|${email.subject}|${newsletterDate}`
+            const existingId = existingIdMap.get(dedupKey)
 
-            if (existing) {
+            if (existingId) {
               if (force) {
                 // Delete existing entry to allow re-processing
-                await supabase.from('daily_repo').delete().eq('id', existing.id)
+                await supabase.from('daily_repo').delete().eq('id', existingId)
               } else {
                 skippedNewsletters++
                 console.log(`[Newsletter Fetch] Skipping duplicate: "${email.subject}" from ${email.from} (date: ${newsletterDate})`)
