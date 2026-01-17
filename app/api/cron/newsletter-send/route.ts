@@ -155,6 +155,22 @@ export async function GET(request: NextRequest) {
       try {
         const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
 
+        // Generate preferences token for this subscriber
+        let preferencesUrl: string | undefined
+        try {
+          const prefResponse = await fetch(`${BASE_URL}/api/newsletter/preferences`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subscriberId: subscriber.id }),
+          })
+          if (prefResponse.ok) {
+            const { token } = await prefResponse.json()
+            preferencesUrl = `${BASE_URL}/newsletter/preferences?token=${token}`
+          }
+        } catch (prefError) {
+          console.warn(`Failed to generate preferences token for ${subscriber.email}:`, prefError)
+        }
+
         const html = await render(
           NewsletterEmail({
             subject,
@@ -162,6 +178,7 @@ export async function GET(request: NextRequest) {
             content: emailContent,
             postUrl,
             unsubscribeUrl,
+            preferencesUrl,
             footerText,
             baseUrl: BASE_URL,
           })
