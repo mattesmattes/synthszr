@@ -176,7 +176,7 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
   const [ratingPortals, setRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isFirst: boolean }>>([])
   const [premarketRatingPortals, setPremarketRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean; isin?: string }>>([])
   const [articleThumbnails, setArticleThumbnails] = useState<ArticleThumbnail[]>([])
-  const [thumbnailPortals, setThumbnailPortals] = useState<Array<{ element: HTMLElement; thumbnail: ArticleThumbnail }>>([])
+  const [thumbnailPortals, setThumbnailPortals] = useState<Array<{ element: HTMLElement; thumbnail: ArticleThumbnail; h2Element: HTMLElement }>>([])
 
   // Auto-open dialog state from URL params (for newsletter links)
   const [autoOpenStock, setAutoOpenStock] = useState<string | null>(null)
@@ -761,7 +761,7 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
 
     // Find all H2 headings (news headlines)
     const h2s = containerRef.current.querySelectorAll('h2')
-    const newThumbnailPortals: Array<{ element: HTMLElement; thumbnail: ArticleThumbnail }> = []
+    const newThumbnailPortals: Array<{ element: HTMLElement; thumbnail: ArticleThumbnail; h2Element: HTMLElement }> = []
     let articleIndex = 0
 
     h2s.forEach((h2) => {
@@ -776,7 +776,7 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
         const thumbnailContainer = document.createElement('div')
         thumbnailContainer.className = 'article-thumbnail-container flex justify-center my-4'
         h2.parentNode?.insertBefore(thumbnailContainer, h2)
-        newThumbnailPortals.push({ element: thumbnailContainer, thumbnail })
+        newThumbnailPortals.push({ element: thumbnailContainer, thumbnail, h2Element: h2 as HTMLElement })
       }
       articleIndex++
 
@@ -960,11 +960,47 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
       )}
 
       {/* Article thumbnails (circular with vote-colored backgrounds) */}
-      {thumbnailPortals.map(({ element, thumbnail }, index) =>
-        createPortal(
+      {thumbnailPortals.map(({ element, thumbnail, h2Element }, index) => {
+        // Find the best vote color from ratings in this article section
+        // BUY (#39FF14) > HOLD (#00FFFF) > SELL (#FF6600) > NONE (#CCFF00)
+        const votePriority: Record<string, number> = { 'BUY': 3, 'HOLD': 2, 'SELL': 1 }
+        const voteColors: Record<string, string> = {
+          'BUY': '#39FF14',
+          'HOLD': '#00FFFF',
+          'SELL': '#FF6600',
+          'NONE': '#CCFF00'
+        }
+
+        // Find next H2 to define article section boundary
+        let nextH2: Element | null = h2Element.nextElementSibling
+        while (nextH2 && nextH2.tagName !== 'H2') {
+          nextH2 = nextH2.nextElementSibling
+        }
+
+        // Collect all ratings in this article section
+        const allRatings = [...ratingPortals, ...premarketRatingPortals]
+        let bestVote: 'BUY' | 'HOLD' | 'SELL' | null = null
+
+        for (const ratingPortal of allRatings) {
+          const el = ratingPortal.element
+          // Check if element is after h2Element and before nextH2
+          if (h2Element.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) {
+            if (!nextH2 || nextH2.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING) {
+              // This rating is in our article section
+              const rating = ratingPortal.rating
+              if (!bestVote || votePriority[rating] > votePriority[bestVote]) {
+                bestVote = rating
+              }
+            }
+          }
+        }
+
+        const bgColor = bestVote ? voteColors[bestVote] : voteColors['NONE']
+
+        return createPortal(
           <div
-            className="w-[151px] h-[151px] rounded-full overflow-hidden mx-auto"
-            style={{ backgroundColor: thumbnail.vote_color }}
+            className="w-[302px] h-[302px] rounded-full overflow-hidden mx-auto"
+            style={{ backgroundColor: bgColor }}
           >
             <img
               src={thumbnail.image_url}
@@ -975,7 +1011,7 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
           element,
           `thumbnail-${index}`
         )
-      )}
+      })}
 
       {/* Auto-open dialogs from URL params (newsletter email links) */}
       {autoOpenStock && (
