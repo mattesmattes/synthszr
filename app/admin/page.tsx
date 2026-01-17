@@ -25,6 +25,7 @@ import {
   Bot,
   Brain,
   FlaskConical,
+  RefreshCw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -143,6 +144,7 @@ export default function AdminPage() {
   const [articleThumbnails, setArticleThumbnails] = useState<Array<{ id: string; article_index: number; generation_status: string; image_url?: string; source_text?: string }>>([])
   const [articleCount, setArticleCount] = useState(0)
   const [generatingThumbnails, setGeneratingThumbnails] = useState(false)
+  const [regeneratingThumbnailIndex, setRegeneratingThumbnailIndex] = useState<number | null>(null)
 
   const supabase = createClient()
 
@@ -182,6 +184,39 @@ export default function AdminPage() {
       }
     } catch (err) {
       console.error('[Thumbnails] Failed to fetch:', err)
+    }
+  }
+
+  // Regenerate a single article thumbnail
+  async function regenerateSingleThumbnail(postId: string, articleIndex: number, headline: string) {
+    setRegeneratingThumbnailIndex(articleIndex)
+    try {
+      // Delete existing thumbnail for this index
+      const existing = articleThumbnails.find(t => t.article_index === articleIndex)
+      if (existing) {
+        await fetch(`/api/generate-article-thumbnails?postId=${postId}&articleIndex=${articleIndex}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+      }
+
+      // Generate new thumbnail for this single article
+      const res = await fetch('/api/generate-article-thumbnails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          postId,
+          articles: [{ index: articleIndex, text: headline.slice(0, 300), vote: null }],
+        }),
+      })
+      if (res.ok) {
+        await fetchArticleThumbnails(postId)
+      }
+    } catch (err) {
+      console.error('[Thumbnails] Regenerate single failed:', err)
+    } finally {
+      setRegeneratingThumbnailIndex(null)
     }
   }
 
@@ -909,9 +944,10 @@ export default function AdminPage() {
                           <div className="grid grid-cols-3 gap-4">
                             {getArticleHeadlines(editForm.content).map((headline, idx) => {
                               const thumbnail = articleThumbnails.find(t => t.article_index === idx)
+                              const isRegenerating = regeneratingThumbnailIndex === idx
                               return (
-                                <div key={idx} className="border rounded-lg p-3 bg-background">
-                                  <div className="aspect-square rounded-full overflow-hidden bg-[#CCFF00] mb-3 mx-auto w-24">
+                                <div key={idx} className="border rounded-lg p-3 bg-background group relative">
+                                  <div className="aspect-square rounded-full overflow-hidden bg-[#CCFF00] mb-3 mx-auto w-24 relative">
                                     {thumbnail?.image_url ? (
                                       <img
                                         src={thumbnail.image_url}
@@ -920,13 +956,30 @@ export default function AdminPage() {
                                       />
                                     ) : (
                                       <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
-                                        {thumbnail?.generation_status === 'generating' ? '...' : '—'}
+                                        {thumbnail?.generation_status === 'generating' || isRegenerating ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : '—'}
                                       </div>
                                     )}
                                   </div>
-                                  <p className="text-xs text-center line-clamp-2 text-muted-foreground">
+                                  <p className="text-xs text-center line-clamp-2 text-muted-foreground mb-2">
                                     {headline.slice(0, 80)}{headline.length > 80 ? '...' : ''}
                                   </p>
+                                  {/* Regenerate button */}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                                    disabled={isRegenerating || generatingThumbnails}
+                                    onClick={() => regenerateSingleThumbnail(editingPost!.id, idx, headline)}
+                                  >
+                                    {isRegenerating ? (
+                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="h-3 w-3 mr-1" />
+                                    )}
+                                    Neu generieren
+                                  </Button>
                                 </div>
                               )
                             })}

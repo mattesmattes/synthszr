@@ -251,6 +251,7 @@ export async function GET(request: NextRequest) {
 /**
  * DELETE /api/generate-article-thumbnails
  * Delete article thumbnails for a post (admin only)
+ * Optional: articleIndex param to delete only a single thumbnail
  */
 export async function DELETE(request: NextRequest) {
   const session = await getSession()
@@ -260,6 +261,7 @@ export async function DELETE(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const postId = searchParams.get('postId')
+  const articleIndex = searchParams.get('articleIndex')
 
   if (!postId) {
     return NextResponse.json({ error: 'postId is required' }, { status: 400 })
@@ -267,11 +269,18 @@ export async function DELETE(request: NextRequest) {
 
   const supabase = await createClient()
 
-  const { error, count } = await supabase
+  // Build query - optionally filter by article_index for single deletion
+  let query = supabase
     .from('post_images')
     .delete()
     .eq('post_id', postId)
     .eq('image_type', 'article_thumbnail')
+
+  if (articleIndex !== null) {
+    query = query.eq('article_index', parseInt(articleIndex, 10))
+  }
+
+  const { error, count } = await query
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
