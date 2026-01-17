@@ -17,7 +17,7 @@ const STOCKS_PREMARKET_API_KEY = process.env.STOCKS_PREMARKET_API_KEY || ''
 const OUTPUT_FILE = path.join(__dirname, '..', 'lib', 'data', 'companies.ts')
 
 // Public companies (manually curated) - these have stock tickers
-const KNOWN_COMPANIES: Record<string, string> = {
+const KNOWN_PUBLIC_COMPANIES: Record<string, string> = {
   'Apple': 'apple',
   'Microsoft': 'microsoft',
   'Google': 'google',
@@ -91,6 +91,20 @@ const KNOWN_COMPANIES: Record<string, string> = {
   'Databricks': 'databricks',
 }
 
+// Manually curated private companies (not in glitch.green API but commonly mentioned)
+const KNOWN_PRIVATE_COMPANIES: Record<string, string> = {
+  'Anthropic': 'anthropic',
+  'Anysphere': 'anysphere',
+  'Canva': 'canva',
+  'Discord': 'discord',
+  'Figma': 'figma',
+  'Notion': 'notion',
+  'OpenAI': 'openai',
+  'Perplexity': 'perplexity',
+  'Scale AI': 'scale-ai',
+  'Vercel': 'vercel',
+}
+
 interface PremarketItem {
   instrument: {
     name: string | null
@@ -160,12 +174,23 @@ async function fetchPremarketCompanies(): Promise<string[]> {
   return uniqueCompanies
 }
 
-function generateTypeScriptFile(premarketCompanies: string[]): string {
-  const premarketEntries = premarketCompanies
-    .map(name => `  '${name.replace(/'/g, "\\'")}': '${name.replace(/'/g, "\\'")}'`)
+function generateTypeScriptFile(apiPremarketCompanies: string[]): string {
+  // Merge API premarket companies with manually curated private companies
+  const allPremarketCompanies: Record<string, string> = { ...KNOWN_PRIVATE_COMPANIES }
+
+  // Add API companies (they use their name as slug)
+  for (const name of apiPremarketCompanies) {
+    if (!(name in allPremarketCompanies)) {
+      allPremarketCompanies[name] = name
+    }
+  }
+
+  const premarketEntries = Object.entries(allPremarketCompanies)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, slug]) => `  '${name.replace(/'/g, "\\'")}': '${slug.replace(/'/g, "\\'")}'`)
     .join(',\n')
 
-  const publicEntries = Object.entries(KNOWN_COMPANIES)
+  const publicEntries = Object.entries(KNOWN_PUBLIC_COMPANIES)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, slug]) => `  '${name}': '${slug}'`)
     .join(',\n')
@@ -175,6 +200,9 @@ function generateTypeScriptFile(premarketCompanies: string[]): string {
   const publicBlock = publicEntries ? `${publicEntries},` : ''
 
   const timestamp = new Date().toISOString()
+  const totalPremarket = Object.keys(allPremarketCompanies).length
+  const fromApi = apiPremarketCompanies.length
+  const manuallyAdded = Object.keys(KNOWN_PRIVATE_COMPANIES).length
 
   return `/**
  * Company Data - Auto-generated file
@@ -195,9 +223,9 @@ ${publicBlock}
 }
 
 /**
- * Known premarket companies from glitch.green API
+ * Known premarket companies
  * Format: { 'Company Name': 'API Name' }
- * Total: ${premarketCompanies.length} companies
+ * Total: ${totalPremarket} companies (${fromApi} from API, ${manuallyAdded} manually added)
  */
 export const KNOWN_PREMARKET_COMPANIES: Record<string, string> = {
 ${premarketBlock}
@@ -250,8 +278,9 @@ async function main() {
     // Write file
     fs.writeFileSync(OUTPUT_FILE, content, 'utf-8')
     console.log(`Generated ${OUTPUT_FILE}`)
-    console.log(`  - ${Object.keys(KNOWN_COMPANIES).length} public companies`)
-    console.log(`  - ${premarketCompanies.length} premarket companies`)
+    console.log(`  - ${Object.keys(KNOWN_PUBLIC_COMPANIES).length} public companies`)
+    console.log(`  - ${premarketCompanies.length} premarket companies from API`)
+    console.log(`  - ${Object.keys(KNOWN_PRIVATE_COMPANIES).length} manually added private companies`)
 
   } catch (error) {
     console.error('Error syncing companies:', error)
