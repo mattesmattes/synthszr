@@ -698,7 +698,7 @@ export default function AdminPage() {
             </div>
 
             {/* Content and Images Tabs */}
-            <Tabs defaultValue="content" className="flex-1 flex flex-col min-h-0">
+            <Tabs defaultValue="content">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="content" className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
@@ -710,8 +710,8 @@ export default function AdminPage() {
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="content" className="flex-1 flex flex-col min-h-0 mt-4">
-                <div className="flex-1 min-h-[300px] max-h-[40vh] overflow-y-auto border rounded-md">
+              <TabsContent value="content" className="mt-4">
+                <div className="min-h-[300px] border rounded-md">
                   <TiptapEditor
                     content={editForm.content}
                     onChange={(content) => setEditForm({ ...editForm, content })}
@@ -719,7 +719,7 @@ export default function AdminPage() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="images" className="flex-1 overflow-y-auto mt-4">
+              <TabsContent value="images" className="mt-4">
                 {editingPost?.source === 'ai' ? (
                   <div className="space-y-4">
                     <PostImageGallery postId={editingPost.id} />
