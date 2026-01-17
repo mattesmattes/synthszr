@@ -157,19 +157,49 @@ function PremarketRatingLink({ company, displayName, rating, isFirst, isin }: Pr
   )
 }
 
-interface TiptapRendererProps {
-  content: Record<string, unknown>
+interface ArticleThumbnail {
+  id: string
+  article_index: number
+  image_url: string
+  vote_color: string
+  generation_status: string
 }
 
-export function TiptapRenderer({ content }: TiptapRendererProps) {
+interface TiptapRendererProps {
+  content: Record<string, unknown>
+  postId?: string // Optional: enables article thumbnail display
+}
+
+export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const searchParams = useSearchParams()
   const [ratingPortals, setRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isFirst: boolean }>>([])
   const [premarketRatingPortals, setPremarketRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; isFirst: boolean; isin?: string }>>([])
+  const [articleThumbnails, setArticleThumbnails] = useState<ArticleThumbnail[]>([])
+  const [thumbnailPortals, setThumbnailPortals] = useState<Array<{ element: HTMLElement; thumbnail: ArticleThumbnail }>>([])
 
   // Auto-open dialog state from URL params (for newsletter links)
   const [autoOpenStock, setAutoOpenStock] = useState<string | null>(null)
   const [autoOpenPremarket, setAutoOpenPremarket] = useState<string | null>(null)
+
+  // Fetch article thumbnails when postId is provided
+  useEffect(() => {
+    if (!postId) return
+
+    async function fetchThumbnails() {
+      try {
+        const response = await fetch(`/api/generate-article-thumbnails?postId=${postId}`)
+        if (response.ok) {
+          const data = await response.json()
+          setArticleThumbnails(data.thumbnails || [])
+        }
+      } catch (error) {
+        console.error('[TiptapRenderer] Failed to fetch article thumbnails:', error)
+      }
+    }
+
+    fetchThumbnails()
+  }, [postId])
 
   // Read URL params to auto-open dialogs (from newsletter email links)
   useEffect(() => {
@@ -725,18 +755,30 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
     }
   }, [])
 
-  // Process news headings: add favicon + link, remove source links from paragraphs
+  // Process news headings: add favicon + link, remove source links from paragraphs, insert thumbnails
   const processNewsHeadings = useCallback(() => {
     if (!containerRef.current) return
 
     // Find all H2 headings (news headlines)
     const h2s = containerRef.current.querySelectorAll('h2')
+    const newThumbnailPortals: Array<{ element: HTMLElement; thumbnail: ArticleThumbnail }> = []
+    let articleIndex = 0
 
     h2s.forEach((h2) => {
       // Skip if already processed or is "Mattes Synthese" / "Synthszr Take" heading
       if (h2.classList.contains('news-heading-processed')) return
       const headingText = h2.textContent?.toLowerCase() || ''
       if (headingText.includes('mattes synthese') || headingText.includes("mattes' synthese") || headingText.includes('synthszr take')) return
+
+      // Insert thumbnail placeholder before the H2 if we have one for this article
+      const thumbnail = articleThumbnails.find(t => t.article_index === articleIndex && t.generation_status === 'completed')
+      if (thumbnail && !h2.previousElementSibling?.classList.contains('article-thumbnail-container')) {
+        const thumbnailContainer = document.createElement('div')
+        thumbnailContainer.className = 'article-thumbnail-container flex justify-center my-4'
+        h2.parentNode?.insertBefore(thumbnailContainer, h2)
+        newThumbnailPortals.push({ element: thumbnailContainer, thumbnail })
+      }
+      articleIndex++
 
       // Find the next sibling paragraph that contains a source link
       let nextSibling = h2.nextElementSibling
@@ -834,7 +876,12 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
         }
       }
     })
-  }, [])
+
+    // Update thumbnail portals after processing all headings
+    if (newThumbnailPortals.length > 0) {
+      setThumbnailPortals(newThumbnailPortals)
+    }
+  }, [articleThumbnails])
 
   // Hide {Company} syntax from rendered content (used for explicit company tagging)
   const hideExplicitCompanyTags = useCallback(() => {
@@ -909,6 +956,24 @@ export function TiptapRenderer({ content }: TiptapRendererProps) {
           <PremarketRatingLink company={company} displayName={displayName} rating={rating} isFirst={isFirst} isin={isin} />,
           element,
           `premarket-rating-${index}`
+        )
+      )}
+
+      {/* Article thumbnails (circular with vote-colored backgrounds) */}
+      {thumbnailPortals.map(({ element, thumbnail }, index) =>
+        createPortal(
+          <div
+            className="w-[151px] h-[151px] rounded-full overflow-hidden mx-auto"
+            style={{ backgroundColor: thumbnail.vote_color }}
+          >
+            <img
+              src={thumbnail.image_url}
+              alt={`Article ${thumbnail.article_index + 1} thumbnail`}
+              className="w-full h-full object-cover"
+            />
+          </div>,
+          element,
+          `thumbnail-${index}`
         )
       )}
 

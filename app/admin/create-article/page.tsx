@@ -546,6 +546,80 @@ export default function CreateArticlePage() {
     }
   }
 
+  // Trigger article thumbnail generation for each news section
+  async function triggerArticleThumbnails(postId: string, tiptapContent: object) {
+    const contentString = JSON.stringify(tiptapContent)
+
+    // Extract articles from TipTap content by finding heading nodes
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const extractArticles = (node: any, articles: Array<{ index: number; text: string }>, currentIndex = { value: 0 }) => {
+      if (!node) return
+
+      // Check if this is a heading node (article start)
+      if (node.type === 'heading' && node.attrs?.level === 2) {
+        const headingText = node.content?.map((c: { text?: string }) => c.text || '').join('') || ''
+
+        // Skip "Synthszr Take" or "Mattes Synthese" headings
+        const lowerText = headingText.toLowerCase()
+        if (!lowerText.includes('synthszr take') && !lowerText.includes('mattes synthese')) {
+          articles.push({
+            index: currentIndex.value,
+            text: headingText.slice(0, 300), // Use heading as prompt for thumbnail
+          })
+          currentIndex.value++
+        }
+      }
+
+      // Recursively process children
+      if (node.content && Array.isArray(node.content)) {
+        for (const child of node.content) {
+          extractArticles(child, articles, currentIndex)
+        }
+      }
+    }
+
+    const articles: Array<{ index: number; text: string }> = []
+    const content = typeof tiptapContent === 'string' ? JSON.parse(tiptapContent) : tiptapContent
+    extractArticles(content, articles)
+
+    if (articles.length === 0) {
+      console.log('[Thumbnails] No articles found for thumbnail generation')
+      return
+    }
+
+    console.log(`[Thumbnails] Found ${articles.length} articles for thumbnail generation`)
+
+    // Extract company tags for vote color determination
+    const companies = extractCompanyTags(contentString)
+
+    // For now, set vote to null (will be updated when ratings are available)
+    const articlesWithVotes = articles.map(article => ({
+      ...article,
+      vote: null as 'BUY' | 'HOLD' | 'SELL' | null,
+    }))
+
+    // Trigger thumbnail generation in background
+    fetch('/api/generate-article-thumbnails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        postId,
+        articles: articlesWithVotes,
+      }),
+    })
+      .then(res => {
+        if (res.ok) {
+          res.json().then(data => {
+            console.log(`[Thumbnails] Generated ${data.generated} thumbnails, ${data.failed} failed`)
+          })
+        } else {
+          res.json().then(data => console.error('[Thumbnails] Generation failed:', data))
+        }
+      })
+      .catch(err => console.error('[Thumbnails] Error:', err))
+  }
+
   // Trigger translations for all active languages
   async function triggerTranslations(postId: string) {
     console.log(`[i18n] Triggering translations for post ${postId}`)
@@ -622,6 +696,11 @@ export default function CreateArticlePage() {
       // Trigger translations for all active languages
       if (newPost?.id) {
         triggerTranslations(newPost.id)
+      }
+
+      // Trigger article thumbnail generation for news items
+      if (newPost?.id) {
+        triggerArticleThumbnails(newPost.id, tiptapContent)
       }
 
       // Initialize edit history with original AI content (for learning from edits)

@@ -162,7 +162,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           </header>
 
           <div className="prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-xl prose-h2:text-lg prose-h2:mt-8 prose-h2:mb-3 prose-p:mb-5 prose-blockquote:border-l-2 prose-blockquote:border-accent prose-blockquote:pl-6 prose-blockquote:italic">
-            <TiptapRenderer content={post.content} />
+            <TiptapRenderer content={post.content} postId={post.id} />
           </div>
         </article>
 
