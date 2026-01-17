@@ -773,6 +773,12 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
       // Insert thumbnail placeholder before the H2 if we have one for this article
       const thumbnail = articleThumbnails.find(t => t.article_index === articleIndex && t.generation_status === 'completed')
       if (thumbnail && !h2.previousElementSibling?.classList.contains('article-thumbnail-container')) {
+        // Add separator before thumbnail (except for first article)
+        if (articleIndex > 0) {
+          const separator = document.createElement('div')
+          separator.className = 'article-separator h-8 my-8'
+          h2.parentNode?.insertBefore(separator, h2)
+        }
         const thumbnailContainer = document.createElement('div')
         thumbnailContainer.className = 'article-thumbnail-container flex justify-center my-4'
         h2.parentNode?.insertBefore(thumbnailContainer, h2)
