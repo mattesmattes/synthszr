@@ -199,7 +199,7 @@ export function NewsletterEmail({
                 </>
               )}
               <Link href={unsubscribeUrl} style={unsubscribeLink}>
-                Newsletter abbestellen
+                Abbestellen
               </Link>
               <span style={linkSeparator}>•</span>
               <Link href={`${baseUrl}/impressum`} style={unsubscribeLink}>
