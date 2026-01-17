@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CompanyCard, CompanyCardData, CompanyCardSkeleton } from '@/components/company-card'
+import { CompanyTableRow, CompanyCardData, CompanyTableSkeleton } from '@/components/company-table-row'
 
 interface CompanyData {
   name: string
@@ -29,6 +29,13 @@ interface CompaniesListClientProps {
   companies: CompanyData[]
   locale?: string
   translations?: Record<string, string>
+}
+
+const headerTranslations: Record<string, { company: string; ticker: string; vote: string; articles: string }> = {
+  de: { company: 'Unternehmen', ticker: 'Ticker', vote: 'Synthszr Vote', articles: 'Artikel' },
+  en: { company: 'Company', ticker: 'Ticker', vote: 'Synthszr Vote', articles: 'Articles' },
+  nds: { company: 'Ünnernehmen', ticker: 'Ticker', vote: 'Synthszr Vote', articles: 'Artikels' },
+  cs: { company: 'Společnost', ticker: 'Ticker', vote: 'Synthszr Vote', articles: 'Články' },
 }
 
 /**
@@ -124,42 +131,47 @@ export function CompaniesListClient({ companies, locale }: CompaniesListClientPr
     fetchRatings()
   }, [companies])
 
-  // Group companies alphabetically
-  const groupedCompanies = enrichedCompanies.reduce((acc, company) => {
-    const letter = company.name.charAt(0).toUpperCase()
-    if (!acc[letter]) {
-      acc[letter] = []
-    }
-    acc[letter].push(company)
-    return acc
-  }, {} as Record<string, CompanyCardData[]>)
-
-  const sortedLetters = Object.keys(groupedCompanies).sort((a, b) => a.localeCompare(b, 'de'))
+  const t = headerTranslations[locale || 'de'] || headerTranslations.de
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        {Array.from({ length: 10 }).map((_, i) => (
-          <CompanyCardSkeleton key={i} />
-        ))}
+      <div className="rounded-lg border border-border bg-background overflow-hidden">
+        <table className="w-full">
+          <thead className="sticky top-0 bg-muted/50 backdrop-blur-sm z-10">
+            <tr className="border-b border-border">
+              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.company}</th>
+              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.ticker}</th>
+              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.vote}</th>
+              <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.articles}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 10 }).map((_, i) => (
+              <CompanyTableSkeleton key={i} />
+            ))}
+          </tbody>
+        </table>
       </div>
     )
   }
 
   return (
-    <div className="space-y-8">
-      {sortedLetters.map(letter => (
-        <section key={letter}>
-          <h2 className="mb-3 font-mono text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            {letter}
-          </h2>
-          <div className="rounded-lg border border-border bg-background p-4">
-            {groupedCompanies[letter].map(company => (
-              <CompanyCard key={company.slug} company={company} locale={locale} />
-            ))}
-          </div>
-        </section>
-      ))}
+    <div className="rounded-lg border border-border bg-background overflow-hidden">
+      <table className="w-full">
+        <thead className="sticky top-0 bg-muted/50 backdrop-blur-sm z-10">
+          <tr className="border-b border-border">
+            <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.company}</th>
+            <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.ticker}</th>
+            <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.vote}</th>
+            <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.articles}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {enrichedCompanies.map(company => (
+            <CompanyTableRow key={company.slug} company={company} locale={locale} />
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
