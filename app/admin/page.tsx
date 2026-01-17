@@ -581,20 +581,21 @@ export default function AdminPage() {
       {/* Edit Dialog */}
       <Dialog open={!!editingPost} onOpenChange={() => setEditingPost(null)}>
         <DialogContent className="w-[90vw] max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              Artikel bearbeiten
-              {editingPost?.source === 'ai' && (
-                <Badge variant="secondary" className="text-xs gap-1">
-                  <Sparkles className="h-3 w-3" /> AI
-                </Badge>
-              )}
-            </DialogTitle>
-            <DialogDescription>
-              Bearbeite Metadaten und Inhalt des Artikels
-            </DialogDescription>
-          </DialogHeader>
           <div className="space-y-4 flex-1 overflow-y-auto py-4">
+            {/* Header - scrolls with content */}
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                Artikel bearbeiten
+                {editingPost?.source === 'ai' && (
+                  <Badge variant="secondary" className="text-xs gap-1">
+                    <Sparkles className="h-3 w-3" /> AI
+                  </Badge>
+                )}
+              </DialogTitle>
+              <DialogDescription>
+                Bearbeite Metadaten und Inhalt des Artikels
+              </DialogDescription>
+            </DialogHeader>
             {/* Metadata Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
