@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2, ImageIcon, Newspaper, X, ChevronDown, Settings2 } from 'lucide-react'
+import { ArrowLeft, Loader2, ImageIcon, Newspaper, X, ChevronDown, Settings2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -43,6 +43,13 @@ interface AppliedPatternData {
   to: number
   pattern: LearnedPattern
   userAccepted: boolean | null
+}
+
+interface ArticleThumbnail {
+  id: string
+  article_index: number
+  image_url: string
+  generation_status: string
 }
 
 const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese']
@@ -95,8 +102,101 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   // Pattern highlighting
   const [appliedPatterns, setAppliedPatterns] = useState<AppliedPatternData[]>([])
 
+  // Article thumbnails
+  const [articleThumbnails, setArticleThumbnails] = useState<ArticleThumbnail[]>([])
+  const [articleCount, setArticleCount] = useState(0)
+  const [generatingThumbnails, setGeneratingThumbnails] = useState(false)
+
   // Metadata section collapsed state
   const [metadataOpen, setMetadataOpen] = useState(false)
+
+  // Extract article count from TipTap content
+  const countArticles = useCallback((tiptapContent: Record<string, unknown>): number => {
+    let count = 0
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const traverse = (node: any) => {
+      if (!node) return
+      if (node.type === 'heading' && node.attrs?.level === 2) {
+        const headingText = node.content?.map((c: { text?: string }) => c.text || '').join('') || ''
+        const lowerText = headingText.toLowerCase()
+        if (!lowerText.includes('synthszr take') && !lowerText.includes('mattes synthese')) {
+          count++
+        }
+      }
+      if (node.content && Array.isArray(node.content)) {
+        for (const child of node.content) traverse(child)
+      }
+    }
+    traverse(tiptapContent)
+    return count
+  }, [])
+
+  // Fetch existing article thumbnails
+  const fetchArticleThumbnails = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/generate-article-thumbnails?postId=${id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setArticleThumbnails(data.thumbnails || [])
+      }
+    } catch (err) {
+      console.error('[Thumbnails] Failed to fetch:', err)
+    }
+  }, [id])
+
+  // Generate article thumbnails
+  const generateArticleThumbnails = useCallback(async (tiptapContent: Record<string, unknown>) => {
+    setGeneratingThumbnails(true)
+
+    // Extract articles from TipTap content
+    const articles: Array<{ index: number; text: string; vote: null }> = []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const extractArticles = (node: any, currentIndex = { value: 0 }) => {
+      if (!node) return
+      if (node.type === 'heading' && node.attrs?.level === 2) {
+        const headingText = node.content?.map((c: { text?: string }) => c.text || '').join('') || ''
+        const lowerText = headingText.toLowerCase()
+        if (!lowerText.includes('synthszr take') && !lowerText.includes('mattes synthese')) {
+          articles.push({
+            index: currentIndex.value,
+            text: headingText.slice(0, 300),
+            vote: null,
+          })
+          currentIndex.value++
+        }
+      }
+      if (node.content && Array.isArray(node.content)) {
+        for (const child of node.content) extractArticles(child, currentIndex)
+      }
+    }
+    extractArticles(tiptapContent)
+
+    if (articles.length === 0) {
+      console.log('[Thumbnails] No articles found')
+      setGeneratingThumbnails(false)
+      return
+    }
+
+    console.log(`[Thumbnails] Generating ${articles.length} thumbnails for post ${id}`)
+
+    try {
+      const res = await fetch('/api/generate-article-thumbnails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ postId: id, articles }),
+      })
+      const data = await res.json()
+      console.log(`[Thumbnails] Generated: ${data.generated}, Failed: ${data.failed}`)
+
+      // Refresh thumbnail list
+      await fetchArticleThumbnails()
+    } catch (err) {
+      console.error('[Thumbnails] Generation failed:', err)
+    } finally {
+      setGeneratingThumbnails(false)
+    }
+  }, [id, fetchArticleThumbnails])
 
   // Fetch applied patterns for highlighting
   const fetchAppliedPatterns = useCallback(async () => {
@@ -234,6 +334,10 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         // Load applied patterns for highlighting
         fetchAppliedPatterns()
 
+        // Load article thumbnails and count
+        fetchArticleThumbnails()
+        setArticleCount(countArticles(parsedContent))
+
         // Initialize edit history if this is the first edit
         // This preserves the original AI-generated content for learning
         ensureInitialEditHistory(id, parsedContent, data.ai_model, supabase)
@@ -249,13 +353,18 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     }
 
     loadPost()
-  }, [id, supabase, fetchQueueItems, fetchAppliedPatterns])
+  }, [id, supabase, fetchQueueItems, fetchAppliedPatterns, fetchArticleThumbnails, countArticles])
 
   const handleTitleChange = (value: string) => {
     setTitle(value)
     if (!post?.slug) {
       setSlug(generateSlug(value))
     }
+  }
+
+  const handleContentChange = (newContent: Record<string, unknown>) => {
+    setContent(newContent)
+    setArticleCount(countArticles(newContent))
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -350,6 +459,13 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
           }
         })
         .catch(err => console.error('[i18n] Translation queue error:', err))
+    }
+
+    // Generate article thumbnails if missing
+    const completedThumbnails = articleThumbnails.filter(t => t.generation_status === 'completed').length
+    if (articleCount > 0 && completedThumbnails < articleCount) {
+      console.log(`[Thumbnails] Missing thumbnails: ${completedThumbnails}/${articleCount} - triggering generation`)
+      generateArticleThumbnails(content)
     }
 
     setSaving(false)
@@ -480,6 +596,14 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
               <TabsTrigger value="images" className="flex items-center gap-1.5 text-sm">
                 <ImageIcon className="h-3.5 w-3.5" />
                 Bilder
+                {articleCount > 0 && (
+                  <Badge
+                    variant={articleThumbnails.filter(t => t.generation_status === 'completed').length === articleCount ? 'secondary' : 'outline'}
+                    className="ml-1 text-[10px] px-1.5"
+                  >
+                    {articleThumbnails.filter(t => t.generation_status === 'completed').length}/{articleCount}
+                  </Badge>
+                )}
               </TabsTrigger>
               {queueItems.length > 0 && (
                 <TabsTrigger value="sources" className="flex items-center gap-1.5 text-sm">
@@ -495,14 +619,46 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
             <TabsContent value="content" className="mt-2">
               <TiptapEditorWithPatterns
                 content={content}
-                onChange={setContent}
+                onChange={handleContentChange}
                 appliedPatterns={appliedPatterns}
                 onPatternFeedback={handlePatternFeedback}
               />
             </TabsContent>
 
             <TabsContent value="images" className="mt-2">
-              <div className="border rounded-lg p-4">
+              <div className="border rounded-lg p-4 space-y-4">
+                {/* Article Thumbnails Section */}
+                {articleCount > 0 && (
+                  <div className="flex items-center justify-between pb-3 border-b">
+                    <div>
+                      <h3 className="font-medium text-sm">Artikel-Thumbnails</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {articleThumbnails.filter(t => t.generation_status === 'completed').length} von {articleCount} generiert
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => generateArticleThumbnails(content)}
+                      disabled={generatingThumbnails}
+                      className="gap-1.5"
+                    >
+                      {generatingThumbnails ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Generiere...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3.5 w-3.5" />
+                          {articleThumbnails.length > 0 ? 'Neu generieren' : 'Generieren'}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
                 <PostImageGallery postId={id} />
               </div>
             </TabsContent>
