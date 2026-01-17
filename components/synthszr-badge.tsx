@@ -35,7 +35,7 @@ interface SynthszrBadgeProps {
 
 const ratingStyles = {
   BUY: 'bg-[#39FF14] text-black',      // Neon Green
-  HOLD: 'bg-gray-300 dark:bg-gray-500 text-black dark:text-white',  // Gray
+  HOLD: 'bg-[#00FFFF] text-black',  // Gray
   SELL: 'bg-[#FF6600] text-black',     // Neon Orange
 }
 

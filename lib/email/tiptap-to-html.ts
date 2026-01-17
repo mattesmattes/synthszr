@@ -22,7 +22,7 @@ export interface TiptapDoc {
 // Rating badge styles (email-safe inline styles)
 const RATING_STYLES = {
   BUY: 'background-color: #39FF14; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
-  HOLD: 'background-color: #9CA3AF; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
+  HOLD: 'background-color: #00FFFF; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
   SELL: 'background-color: #FF6600; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
 }
 

@@ -206,7 +206,7 @@ function PremarketSynthesisContent({ synthesis }: { synthesis: PremarketSynthesi
                   'rounded-full px-3 py-1 text-xs font-bold',
                   synthesis.rating === 'BUY' && 'bg-[#39FF14] text-black',
                   synthesis.rating === 'SELL' && 'bg-[#FF6600] text-black',
-                  synthesis.rating === 'HOLD' && 'bg-gray-300 dark:bg-gray-500 text-black dark:text-white'
+                  synthesis.rating === 'HOLD' && 'bg-[#00FFFF] text-black'
                 )}
               >
                 {synthesis.rating}
@@ -256,7 +256,7 @@ function PremarketSynthesisContent({ synthesis }: { synthesis: PremarketSynthesi
                       'rounded-full px-2 py-0.5 text-[11px] font-bold',
                       idea.rating === 'BUY' && 'bg-[#39FF14] text-black',
                       idea.rating === 'SELL' && 'bg-[#FF6600] text-black',
-                      idea.rating === 'HOLD' && 'bg-gray-300 dark:bg-gray-500 text-black dark:text-white'
+                      idea.rating === 'HOLD' && 'bg-[#00FFFF] text-black'
                     )}
                   >
                     {idea.rating}

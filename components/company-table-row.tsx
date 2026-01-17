@@ -28,7 +28,7 @@ interface CompanyTableRowProps {
 
 const ratingStyles = {
   BUY: 'bg-[#39FF14] text-black',
-  HOLD: 'bg-gray-300 dark:bg-gray-500 text-black dark:text-white',
+  HOLD: 'bg-[#00FFFF] text-black',
   SELL: 'bg-[#FF6600] text-black',
 }
 
