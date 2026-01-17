@@ -1,9 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { Menu } from 'bloom-menu'
 import type { LanguageCode, Language } from '@/lib/types'
 import { addLocaleToPathname } from '@/lib/i18n/config'
 
@@ -15,6 +14,8 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
   const pathname = usePathname()
   const [activeLanguages, setActiveLanguages] = useState<Language[]>([])
   const [loading, setLoading] = useState(true)
+  const [isOpen, setIsOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     async function fetchLanguages() {
@@ -33,10 +34,19 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
     fetchLanguages()
   }, [])
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const handleLanguageSelect = (langCode: string) => {
-    // Compute fresh path inside handler to avoid stale closure issues
     const newPath = addLocaleToPathname(pathname, langCode as LanguageCode)
-    // Use window.location for reliable navigation
     window.location.href = newPath
   }
 
@@ -55,21 +65,20 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
 
   return (
     <div className="flex justify-center items-center gap-4 mb-6">
-      <Menu.Root direction="bottom" anchor="center">
-        <Menu.Container
-          menuWidth={180}
-          menuRadius={16}
-          className="bg-background shadow-lg border border-border [&>button]:!w-auto [&>button]:!h-auto [&>button]:!rounded-none"
+      <div className="relative" ref={menuRef}>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className={linkStyle}
         >
-          <Menu.Trigger className={linkStyle}>
-            Switch Language
-          </Menu.Trigger>
-          <Menu.Content className="py-2 bg-background">
+          Switch Language
+        </button>
+        {isOpen && (
+          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 py-2 bg-background border border-border rounded-lg shadow-lg min-w-[180px] z-50">
             {activeLanguages.map((lang) => (
-              <Menu.Item
+              <button
                 key={lang.code}
-                onSelect={() => handleLanguageSelect(lang.code)}
-                className={`flex items-center gap-3 px-4 py-2.5 text-sm cursor-pointer transition-colors ${
+                onClick={() => handleLanguageSelect(lang.code)}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm cursor-pointer transition-colors ${
                   lang.code === currentLocale
                     ? 'font-semibold text-foreground bg-secondary'
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
@@ -82,11 +91,11 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
                 {lang.code === currentLocale && (
                   <span className="ml-auto text-xs">✓</span>
                 )}
-              </Menu.Item>
+              </button>
             ))}
-          </Menu.Content>
-        </Menu.Container>
-      </Menu.Root>
+          </div>
+        )}
+      </div>
       <span className="text-muted-foreground">·</span>
       <Link href="/companies" className={linkStyle}>
         Show Companies

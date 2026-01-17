@@ -46,28 +46,41 @@ export function CompaniesListClient({ companies }: CompaniesListClientProps) {
         const publicCompanies = companies.filter(c => c.type === 'public')
         const premarketCompanies = companies.filter(c => c.type === 'premarket')
 
-        // Batch fetch ratings in parallel
-        const [publicResponse, premarketResponse] = await Promise.all([
-          publicCompanies.length > 0
-            ? fetch('/api/stock-synthszr/batch-quotes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ companies: publicCompanies.map(c => c.slug) }),
-              }).then(r => r.json())
-            : Promise.resolve({ ok: true, quotes: [] }),
-          premarketCompanies.length > 0
-            ? fetch('/api/premarket/batch-ratings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ companies: premarketCompanies.map(c => c.slug) }),
-              }).then(r => r.json())
-            : Promise.resolve({ ok: true, ratings: [] }),
-        ])
+        // Chunk public companies into batches of 20 (API limit)
+        const BATCH_SIZE = 20
+        const publicChunks: string[][] = []
+        for (let i = 0; i < publicCompanies.length; i += BATCH_SIZE) {
+          publicChunks.push(publicCompanies.slice(i, i + BATCH_SIZE).map(c => c.slug))
+        }
+
+        // Fetch all public company chunks in parallel
+        const publicResponses = await Promise.all(
+          publicChunks.map(chunk =>
+            fetch('/api/stock-synthszr/batch-quotes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ companies: chunk }),
+            }).then(r => r.json())
+          )
+        )
+
+        // Fetch premarket ratings
+        const premarketResponse = premarketCompanies.length > 0
+          ? await fetch('/api/premarket/batch-ratings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ companies: premarketCompanies.map(c => c.slug) }),
+            }).then(r => r.json())
+          : { ok: true, ratings: [] }
+
+        // Combine all public quotes from all chunks
+        const allPublicQuotes: BatchQuoteResult[] = publicResponses
+          .filter(r => r.ok)
+          .flatMap(r => r.quotes || [])
 
         // Build lookup maps
         const publicQuotesMap = new Map<string, BatchQuoteResult>(
-          (publicResponse.ok && publicResponse.quotes || [])
-            .map((r: BatchQuoteResult) => [r.company.toLowerCase(), r])
+          allPublicQuotes.map((r: BatchQuoteResult) => [r.company.toLowerCase(), r])
         )
 
         const premarketRatingsMap = new Map<string, PremarketRatingResult>(
