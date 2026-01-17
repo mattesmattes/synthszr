@@ -1171,6 +1171,36 @@ function GenerateImagesButton({ postId }: { postId: string }) {
       })
 
       if (response.ok) {
+        // Also trigger article thumbnail generation
+        const content = typeof post.content === 'string' ? JSON.parse(post.content) : post.content
+        const articles: Array<{ index: number; text: string; vote: null }> = []
+        let articleIndex = 0
+
+        const extractH2Headings = (node: Record<string, unknown>) => {
+          if (node.type === 'heading' && (node.attrs as Record<string, unknown>)?.level === 2) {
+            const headingText = (node.content as Array<{ text?: string }>)
+              ?.map(c => c.text || '').join('') || ''
+            const lowerText = headingText.toLowerCase()
+            if (!lowerText.includes('synthszr take') && !lowerText.includes('mattes synthese')) {
+              articles.push({ index: articleIndex++, text: headingText.slice(0, 300), vote: null })
+            }
+          }
+          if (node.content && Array.isArray(node.content)) {
+            node.content.forEach(extractH2Headings)
+          }
+        }
+        extractH2Headings(content)
+
+        if (articles.length > 0) {
+          console.log(`[ImageGen] Triggering ${articles.length} article thumbnails`)
+          fetch('/api/generate-article-thumbnails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ postId, articles }),
+          }).catch(err => console.error('[Thumbnails] Error:', err))
+        }
+
         alert('Bildgenerierung gestartet! Die Seite wird aktualisiert.')
         window.location.reload()
       } else {
