@@ -157,7 +157,6 @@ export default function AdminPage() {
         const lowerText = headingText.toLowerCase()
         if (!lowerText.includes('synthszr take') && !lowerText.includes('mattes synthese')) {
           count++
-          console.log(`[Thumbnails] Found article H2: "${headingText.slice(0, 50)}..."`)
         }
       }
       if (node.content && Array.isArray(node.content)) {
@@ -165,7 +164,6 @@ export default function AdminPage() {
       }
     }
     traverse(content)
-    console.log(`[Thumbnails] Total article count: ${count}`)
     return count
   }
 
@@ -220,8 +218,7 @@ export default function AdminPage() {
         credentials: 'include',
         body: JSON.stringify({ postId, articles }),
       })
-      const data = await res.json()
-      console.log(`[Thumbnails] Generated: ${data.generated}, Failed: ${data.failed}`)
+      await res.json()
       await fetchArticleThumbnails(postId)
     } catch (err) {
       console.error('[Thumbnails] Generation failed:', err)
@@ -321,10 +318,7 @@ export default function AdminPage() {
     })
     // Fetch article thumbnails and count for AI posts
     if (post.source === 'ai') {
-      console.log('[Thumbnails] Opening AI post, content type:', typeof post.content)
-      console.log('[Thumbnails] Content keys:', Object.keys(post.content || {}))
       const count = countArticles(post.content)
-      console.log('[Thumbnails] Setting articleCount to:', count)
       setArticleCount(count)
       fetchArticleThumbnails(post.id)
     } else {
@@ -406,7 +400,6 @@ export default function AdminPage() {
         const completedThumbnails = articleThumbnails.filter(t => t.generation_status === 'completed').length
         const currentArticleCount = countArticles(editForm.content)
         if (currentArticleCount > 0 && completedThumbnails < currentArticleCount) {
-          console.log(`[Thumbnails] Missing thumbnails: ${completedThumbnails}/${currentArticleCount} - triggering generation`)
           generateArticleThumbnails(editingPost.id, editForm.content)
         }
       }
