@@ -378,7 +378,7 @@ export async function runSynthesisPipeline(
         { id: item.id, title: item.title, content: item.content },
         similarItems,
         prompt.scoring_prompt,
-        { minTotalScore: 12 }
+        { minTotalScore: 6 }
       )
 
       // Get the BEST candidate for this item (exactly 1)
@@ -651,7 +651,7 @@ export async function runSynthesisPipelineWithProgress(
         { id: item.id, title: item.title, content: item.content },
         similarItems,
         prompt.scoring_prompt,
-        { minTotalScore: 12 }
+        { minTotalScore: 6 }
       )
 
       // Get the BEST candidate for this item
