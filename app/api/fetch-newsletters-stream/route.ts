@@ -240,6 +240,12 @@ export async function POST(request: NextRequest) {
 
         const senderEmails = sources.map(s => s.email)
 
+        // All items from this fetch get the same newsletter_date:
+        // - Normal fetch: today's date (all new emails since last fetch go into today's digest)
+        // - Historical import: the specified targetDate
+        const todayDate = new Date().toISOString().split('T')[0]
+        const fetchDate = targetDate || todayDate
+
         send({ type: 'newsletter', phase: 'fetching', item: { title: 'Emails werden abgerufen...', status: 'processing' } })
 
         // Dynamic maxResults: at least 2 emails per source, minimum 200
@@ -303,15 +309,10 @@ export async function POST(request: NextRequest) {
         let totalCharacters = 0
         const articleUrls: Array<{ url: string; title: string; newsletterTitle: string; newsletterEmail: string }> = []
 
-        // BATCH DEDUP: Fetch all existing entries for relevant dates in ONE query
+        // BATCH DEDUP: Fetch all existing entries for the fetch date in ONE query
         // This avoids N database queries (one per email) which causes Vercel timeouts
-        const relevantDates = new Set<string>()
-        for (const email of emails) {
-          const date = targetDate || email.date.toISOString().split('T')[0]
-          relevantDates.add(date)
-        }
-        const dateList = Array.from(relevantDates)
-        console.log('[Newsletter Fetch] Checking existing entries for dates:', dateList)
+        const dateList = [fetchDate]
+        console.log('[Newsletter Fetch] Checking existing entries for date:', fetchDate)
 
         const { data: existingEntries } = await supabase
           .from('daily_repo')
@@ -341,8 +342,8 @@ export async function POST(request: NextRequest) {
           })
 
           try {
-            // Check if already exists using in-memory lookup (fast!)
-            const newsletterDate = targetDate || email.date.toISOString().split('T')[0]
+            // All emails since last fetch get newsletter_date = today (or targetDate for historical imports)
+            const newsletterDate = fetchDate
             const dedupKey = `${email.from}|${email.subject}|${newsletterDate}`
             const existingId = existingIdMap.get(dedupKey)
 
@@ -544,7 +545,7 @@ export async function POST(request: NextRequest) {
                   continue
                 }
 
-                const noteDate = targetDate || note.date.toISOString().split('T')[0]
+                const noteDate = fetchDate
                 const { error: insertError } = await supabase
                   .from('daily_repo')
                   .insert({
@@ -682,7 +683,7 @@ export async function POST(request: NextRequest) {
                 }
 
                 // Use targetDate if provided, otherwise use today
-                const articleDate = targetDate || new Date().toISOString().split('T')[0]
+                const articleDate = fetchDate
                 // Use the resolved final URL if available (resolves tracking redirects)
                 // This ensures we store clean URLs like mlpills.substack.com/p/... instead of substack.com/redirect/...
                 const resolvedUrl = extracted.finalUrl || article.url
