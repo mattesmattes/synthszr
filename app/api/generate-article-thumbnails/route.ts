@@ -30,26 +30,13 @@ interface ArticleThumbnailRequest {
 }
 
 /**
- * Convert hex color to RGB
- */
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16),
-  } : { r: 204, g: 255, b: 0 } // Default to neon yellow
-}
-
-/**
- * Process image into circular thumbnail with vote-colored background
+ * Process image into circular thumbnail with transparent background
+ * The vote color is applied via CSS, not baked into the image
  */
 async function processToCircularThumbnail(
-  imageBase64: string,
-  voteColor: string
+  imageBase64: string
 ): Promise<Buffer> {
   const imageBuffer = Buffer.from(imageBase64, 'base64')
-  const rgb = hexToRgb(voteColor)
 
   // Get image metadata
   const metadata = await sharp(imageBuffer).metadata()
@@ -74,7 +61,8 @@ async function processToCircularThumbnail(
 
   const { data, info } = croppedBuffer
 
-  // Process pixels: white/transparent → vote color, dark → black
+  // Process pixels: white/transparent → transparent, dark → black
+  // Same approach as cover images - artwork is black on transparent
   const pixels = new Uint8Array(data)
   for (let i = 0; i < pixels.length; i += 4) {
     const r = pixels[i]
@@ -85,19 +73,19 @@ async function processToCircularThumbnail(
     // Calculate luminance
     const luminance = (r + g + b) / 3
 
-    // If pixel is transparent OR bright → vote color background
+    // If pixel is transparent OR bright → make transparent
     // If pixel is dark → pure black (the artwork)
     const threshold = 128
     if (a < 128 || luminance >= threshold) {
-      pixels[i] = rgb.r
-      pixels[i + 1] = rgb.g
-      pixels[i + 2] = rgb.b
-      pixels[i + 3] = 255
+      pixels[i] = 0
+      pixels[i + 1] = 0
+      pixels[i + 2] = 0
+      pixels[i + 3] = 0  // Transparent
     } else {
       pixels[i] = 0
       pixels[i + 1] = 0
       pixels[i + 2] = 0
-      pixels[i + 3] = 255
+      pixels[i + 3] = 255  // Opaque black
     }
   }
 
@@ -208,8 +196,8 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // Process into circular thumbnail with vote color
-        const circularThumbnail = await processToCircularThumbnail(result.imageBase64, voteColor)
+        // Process into circular thumbnail (transparent background, color via CSS)
+        const circularThumbnail = await processToCircularThumbnail(result.imageBase64)
 
         // Upload to Vercel Blob
         const fileName = `post-images/${postId}/thumbnail-${article.index}-${imageRecord.id}.png`
