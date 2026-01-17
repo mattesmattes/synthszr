@@ -129,7 +129,7 @@ export function NewsletterEmail({
             />
           </Section>
 
-          {/* Cover Image with centered logo overlay */}
+          {/* Cover Image in 1:1 format */}
           {coverImageUrl && (
             <Section style={coverSection}>
               <div style={coverImageContainer}>
@@ -137,6 +137,7 @@ export function NewsletterEmail({
                   src={coverImageUrl}
                   alt={subject}
                   width="600"
+                  height="600"
                   style={coverImage}
                 />
               </div>
@@ -244,13 +245,16 @@ const coverSection = {
 
 const coverImageContainer = {
   backgroundColor: '#CCFF00',
-  width: '100%',
+  width: '600px',
+  height: '600px',
+  overflow: 'hidden' as const,
 }
 
 const coverImage = {
-  width: '100%',
-  height: 'auto',
+  width: '600px',
+  height: '600px',
   display: 'block',
+  objectFit: 'cover' as const,
 }
 
 const contentSection = {
