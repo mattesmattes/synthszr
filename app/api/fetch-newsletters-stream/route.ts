@@ -251,9 +251,43 @@ export async function POST(request: NextRequest) {
 
         send({ type: 'newsletter', phase: 'fetching', item: { title: 'Emails werden abgerufen...', status: 'processing' } })
 
-        console.log('[Newsletter Fetch] Fetching emails from', senderEmails.length, 'sources:', senderEmails.slice(0, 5), senderEmails.length > 5 ? '...' : '')
-        const emails = await gmailClient.fetchEmailsFromSenders(senderEmails, 50, afterDate, beforeDate)
-        console.log('[Newsletter Fetch] Fetched', emails.length, 'emails from Gmail')
+        // Dynamic maxResults: at least 2 emails per source, minimum 200
+        const maxResults = Math.max(200, senderEmails.length * 2)
+        console.log('[Newsletter Fetch] Fetching emails from', senderEmails.length, 'sources (maxResults:', maxResults, '):', senderEmails.slice(0, 5), senderEmails.length > 5 ? '...' : '')
+
+        // Fetch emails from registered sources
+        const senderEmails_fetched = await gmailClient.fetchEmailsFromSenders(senderEmails, maxResults, afterDate, beforeDate)
+        console.log('[Newsletter Fetch] Fetched', senderEmails_fetched.length, 'emails from sources')
+
+        // Also fetch emails from newsstand labels (catches newsletters not yet registered as sources)
+        const NEWSSTAND_LABELS = ['newsstand-ai', 'newsstand-marketing', '#newsstand-ai', '#newsstand-marketing']
+        send({ type: 'newsletter', phase: 'fetching', item: { title: 'Emails aus Labels werden abgerufen...', status: 'processing' } })
+
+        let labelEmails: typeof senderEmails_fetched = []
+        for (const labelPattern of NEWSSTAND_LABELS) {
+          try {
+            const emails = await gmailClient.fetchEmailsFromLabels(labelPattern, 100, afterDate)
+            if (emails.length > 0) {
+              console.log(`[Newsletter Fetch] Fetched ${emails.length} emails from label "${labelPattern}"`)
+              labelEmails = labelEmails.concat(emails)
+            }
+          } catch (err) {
+            console.log(`[Newsletter Fetch] No emails from label "${labelPattern}" (may not exist)`)
+          }
+        }
+        console.log('[Newsletter Fetch] Total emails from labels:', labelEmails.length)
+
+        // Merge and deduplicate by email ID
+        const seenIds = new Set<string>()
+        const emails: typeof senderEmails_fetched = []
+
+        for (const email of [...senderEmails_fetched, ...labelEmails]) {
+          if (!seenIds.has(email.id)) {
+            seenIds.add(email.id)
+            emails.push(email)
+          }
+        }
+        console.log('[Newsletter Fetch] Total unique emails after merge:', emails.length)
 
         // Log unique senders found
         const uniqueSenders = new Set(emails.map(e => e.from))

@@ -102,7 +102,7 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
 
   return (
     <div className="border border-border">
-      <div className="flex flex-wrap gap-1 border-b border-border bg-secondary/30 p-2">
+      <div className="sticky top-0 z-10 flex flex-wrap gap-1 border-b border-border bg-secondary/30 p-2">
         <Button
           type="button"
           variant="ghost"

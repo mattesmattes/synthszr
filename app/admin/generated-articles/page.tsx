@@ -273,6 +273,29 @@ export default function GeneratedArticlesPage() {
       })
 
       if (res.ok) {
+        // Trigger translations when publishing for the first time
+        const wasPublished = editingPost.status === 'published'
+        const isNowPublished = editForm.status === 'published'
+        if (!wasPublished && isNowPublished) {
+          console.log(`[i18n] Triggering translations for post ${editingPost.id}`)
+          fetch('/api/admin/translations/queue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              content_type: 'generated_post',
+              content_id: editingPost.id,
+              priority: 10,
+            }),
+          })
+            .then(res => res.json())
+            .then(data => {
+              if (data.queued > 0) {
+                console.log(`[i18n] Queued ${data.queued} translations`)
+              }
+            })
+            .catch(err => console.error('[i18n] Translation queue error:', err))
+        }
         setEditingPost(null)
         fetchPosts()
       } else {
