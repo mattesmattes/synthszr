@@ -1,7 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { SynthszrBadge } from './synthszr-badge'
+import { StockSynthszrLayer } from './stock-synthszr-layer'
+import { StockQuotePopover } from './stock-quote-popover'
 import { ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -25,13 +28,29 @@ interface CompanyCardProps {
   className?: string
 }
 
+const directionStyles = {
+  up: 'bg-[#39FF14] text-black',
+  down: 'bg-[#FF6600] text-black',
+  neutral: 'bg-gray-300 text-black',
+}
+
+const directionArrows = {
+  up: '↑',
+  down: '↓',
+  neutral: '→',
+}
+
 /**
  * Card component for displaying a company in the companies list
  *
  * Shows: Company name, ticker, percentage change, rating badge, news count link
  */
 export function CompanyCard({ company, className }: CompanyCardProps) {
+  const [showAnalysis, setShowAnalysis] = useState(false)
+  const [showQuote, setShowQuote] = useState(false)
+
   const hasRating = company.rating != null
+  const hasQuoteData = company.type === 'public' && company.ticker && typeof company.changePercent === 'number'
 
   return (
     <div
@@ -41,7 +60,7 @@ export function CompanyCard({ company, className }: CompanyCardProps) {
       )}
     >
       {/* Left side: Company info + badge */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
         {hasRating ? (
           <SynthszrBadge
             company={company.slug}
@@ -56,12 +75,45 @@ export function CompanyCard({ company, className }: CompanyCardProps) {
             size="md"
           />
         ) : (
-          <span className="text-sm font-medium truncate">
-            {company.name}
-            {company.type === 'premarket' && (
-              <span className="ml-1 text-xs text-muted-foreground">(Premarket)</span>
+          <>
+            {/* Company name - clickable for quote if public */}
+            <span
+              onClick={company.type === 'public' ? () => setShowQuote(true) : undefined}
+              className={cn(
+                'text-sm font-medium',
+                company.type === 'public' && 'hover:underline cursor-pointer'
+              )}
+            >
+              {company.name}
+              {company.ticker && (
+                <span className="text-muted-foreground ml-0.5">({company.ticker})</span>
+              )}
+            </span>
+
+            {/* Percentage change badge */}
+            {hasQuoteData && company.direction && (
+              <span className={cn(
+                'px-1 py-0.5 rounded text-[11px] font-bold',
+                directionStyles[company.direction]
+              )}>
+                {directionArrows[company.direction]}{Math.abs(company.changePercent!).toFixed(1)}%
+              </span>
             )}
-          </span>
+
+            {/* Generate rating button for public companies without rating */}
+            {company.type === 'public' && (
+              <button
+                onClick={() => setShowAnalysis(true)}
+                className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+              >
+                Analyse
+              </button>
+            )}
+
+            {company.type === 'premarket' && (
+              <span className="text-xs text-muted-foreground">(Premarket)</span>
+            )}
+          </>
         )}
       </div>
 
@@ -73,6 +125,20 @@ export function CompanyCard({ company, className }: CompanyCardProps) {
         <span>{company.mentionCount} {company.mentionCount === 1 ? 'Artikel' : 'Artikel'}</span>
         <ArrowRight className="h-3 w-3" />
       </Link>
+
+      {/* Dialogs */}
+      {showAnalysis && (
+        <StockSynthszrLayer
+          company={company.slug}
+          onClose={() => setShowAnalysis(false)}
+        />
+      )}
+      {showQuote && (
+        <StockQuotePopover
+          company={company.slug}
+          onClose={() => setShowQuote(false)}
+        />
+      )}
     </div>
   )
 }
