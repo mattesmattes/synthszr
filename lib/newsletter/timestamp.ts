@@ -9,8 +9,11 @@ import { SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * Get the timestamp of the last successfully fetched newsletter.
- * This is based on the most recent `email_received_at` in daily_repo,
- * which represents the actual email receipt time (not when added to DB).
+ *
+ * Reads from the `settings` table (last_newsletter_fetch) which stores
+ * the timestamp of the most recent email that was successfully processed.
+ * This timestamp is updated after each successful fetch and recalculated
+ * when items are deleted.
  *
  * @param supabase - Supabase client
  * @param fallbackHours - Hours to go back if no data exists (default: 36)
@@ -20,34 +23,28 @@ export async function getLastFetchTimestamp(
   supabase: SupabaseClient,
   fallbackHours: number = 36
 ): Promise<Date> {
-  // Get the most recent email_received_at from daily_repo
-  // This is the actual email date, not when it was added to the database
-  const { data: latestItem } = await supabase
-    .from('daily_repo')
-    .select('email_received_at')
-    .not('email_received_at', 'is', null)
-    .order('email_received_at', { ascending: false })
-    .limit(1)
+  // Read from settings table - this is the source of truth
+  const { data: setting } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'last_newsletter_fetch')
     .single()
 
-  if (latestItem?.email_received_at) {
-    const timestamp = new Date(latestItem.email_received_at)
-    console.log(`[Newsletter Timestamp] Using email_received_at from daily_repo: ${timestamp.toISOString()}`)
+  if (setting?.value?.timestamp) {
+    const timestamp = new Date(setting.value.timestamp)
+    console.log(`[Newsletter Timestamp] Using timestamp from settings: ${timestamp.toISOString()}`)
     return timestamp
   }
 
-  // Fallback: no data exists, use fallback hours
+  // Fallback: no setting exists, use fallback hours
   const fallback = new Date(Date.now() - fallbackHours * 60 * 60 * 1000)
-  console.log(`[Newsletter Timestamp] No data in daily_repo, using fallback: ${fallback.toISOString()} (${fallbackHours}h ago)`)
+  console.log(`[Newsletter Timestamp] No timestamp in settings, using fallback: ${fallback.toISOString()} (${fallbackHours}h ago)`)
   return fallback
 }
 
 /**
  * Update the stored last_newsletter_fetch setting.
- * This should be called after a successful fetch to record the timestamp.
- *
- * Note: The timestamp is based on email_received_at (actual email date),
- * not collected_at (when added to DB), to ensure correct behavior after re-fetches.
+ * Called after a successful fetch to set the timestamp to the newest email date.
  *
  * @param supabase - Supabase client
  */
@@ -74,11 +71,56 @@ export async function updateLastFetchTimestamp(supabase: SupabaseClient): Promis
 }
 
 /**
- * Recalculate and update the last_newsletter_fetch timestamp.
- * Call this after deleting items from daily_repo to ensure consistency.
+ * Recalculate the timestamp after items are deleted.
+ *
+ * Uses the newest email_received_at from remaining items.
+ * Falls back to newest newsletter_date + 23:59:59 if no items exist.
  *
  * @param supabase - Supabase client
  */
 export async function recalculateFetchTimestamp(supabase: SupabaseClient): Promise<void> {
-  await updateLastFetchTimestamp(supabase)
+  // Get the most recent email_received_at from remaining items
+  const { data: latestItem } = await supabase
+    .from('daily_repo')
+    .select('email_received_at, newsletter_date')
+    .not('email_received_at', 'is', null)
+    .order('email_received_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (latestItem?.email_received_at) {
+    // Check if this is a real timestamp or a midnight backfill
+    const ts = new Date(latestItem.email_received_at)
+    const isMidnight = ts.getUTCHours() === 0 && ts.getUTCMinutes() === 0 && ts.getUTCSeconds() === 0
+
+    let newTimestamp: string
+    if (isMidnight && latestItem.newsletter_date) {
+      // Backfilled timestamp - use end of the newsletter_date instead
+      // This prevents re-fetching items from that day
+      newTimestamp = `${latestItem.newsletter_date}T23:59:59.000Z`
+      console.log(`[Newsletter Timestamp] Detected midnight backfill, using end of day: ${newTimestamp}`)
+    } else {
+      // Real timestamp
+      newTimestamp = latestItem.email_received_at
+      console.log(`[Newsletter Timestamp] Using real timestamp: ${newTimestamp}`)
+    }
+
+    await supabase
+      .from('settings')
+      .upsert({
+        key: 'last_newsletter_fetch',
+        value: { timestamp: newTimestamp }
+      }, { onConflict: 'key' })
+    return
+  }
+
+  // No items exist - use fallback
+  const fallback = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString()
+  await supabase
+    .from('settings')
+    .upsert({
+      key: 'last_newsletter_fetch',
+      value: { timestamp: fallback }
+    }, { onConflict: 'key' })
+  console.log(`[Newsletter Timestamp] No items found, using fallback: ${fallback}`)
 }
