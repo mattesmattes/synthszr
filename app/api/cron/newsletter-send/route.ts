@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { NewsletterEmail } from '@/lib/resend/templates/newsletter'
 import { render } from '@react-email/components'
-import { generateEmailContentWithVotes } from '@/lib/email/tiptap-to-html'
+import { generateEmailContentWithVotes, ArticleThumbnail } from '@/lib/email/tiptap-to-html'
 
 // Verify cron secret (Vercel cron jobs send this header)
 function verifyCronAuth(request: NextRequest): boolean {
@@ -97,6 +97,21 @@ export async function GET(request: NextRequest) {
 
     const post = todaysPosts[0]
 
+    // Fetch article thumbnails for this post
+    const { data: thumbnailsData } = await supabase
+      .from('post_images')
+      .select('article_index, image_url, vote_color')
+      .eq('post_id', post.id)
+      .eq('image_type', 'article_thumbnail')
+      .eq('generation_status', 'completed')
+      .order('article_index', { ascending: true })
+
+    const articleThumbnails: ArticleThumbnail[] = (thumbnailsData || []).map(t => ({
+      article_index: t.article_index,
+      image_url: t.image_url,
+      vote_color: t.vote_color || undefined,
+    }))
+
     // Check if this post was already sent
     const { data: existingSend } = await supabase
       .from('newsletter_sends')
@@ -141,10 +156,11 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Generate email content with Synthszr Vote badges (once for all subscribers)
+    // Generate email content with Synthszr Vote badges and thumbnails (once for all subscribers)
     const emailContent = await generateEmailContentWithVotes(
       { content: post.content, excerpt: post.excerpt, slug: post.slug },
-      BASE_URL
+      BASE_URL,
+      articleThumbnails
     )
 
     // Send to all subscribers (sequentially with preference tokens)

@@ -44,6 +44,12 @@ interface RatingData {
   isin?: string
 }
 
+export interface ArticleThumbnail {
+  article_index: number
+  image_url: string
+  vote_color?: string
+}
+
 interface BatchQuoteResult {
   company: string
   displayName: string
@@ -232,10 +238,12 @@ export function generateEmailContent(post: { content?: unknown; excerpt?: string
 /**
  * Convert post content to email-friendly HTML with Synthszr Vote badges
  * Async version that fetches ratings (with ticker/percent for public companies) from APIs
+ * Optionally includes article thumbnails before H2 headings
  */
 export async function generateEmailContentWithVotes(
   post: { content?: unknown; excerpt?: string; slug?: string },
-  baseUrl: string
+  baseUrl: string,
+  thumbnails?: ArticleThumbnail[]
 ): Promise<string> {
   const rawContent = post.content
   let doc: TiptapDoc | null = null
@@ -367,8 +375,41 @@ export async function generateEmailContentWithVotes(
     ? await fetchRatings(Array.from(allPublicCompanies), Array.from(allPremarketCompanies), baseUrl)
     : new Map<string, { rating: 'BUY' | 'HOLD' | 'SELL'; type: 'public' | 'premarket'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isin?: string }>()
 
-  // Convert to HTML with vote badges (no inline tickers)
+  // Track article index for thumbnails (H2 headings that aren't Synthszr Take)
+  let articleIndex = 0
+  const thumbnailMap = new Map<number, ArticleThumbnail>()
+  if (thumbnails) {
+    for (const t of thumbnails) {
+      thumbnailMap.set(t.article_index, t)
+    }
+  }
+
+  // Convert to HTML with vote badges and thumbnails
   const htmlParts = doc.content.map((node, index) => {
+    let prefix = ''
+
+    // Check if this is an H2 heading (article heading)
+    if (node.type === 'heading' && (node.attrs?.level === 2 || node.attrs?.level === '2')) {
+      const headingText = extractTextFromNode(node).toLowerCase()
+      // Skip "Synthszr Take" and "Mattes Synthese" headings
+      if (!headingText.includes('synthszr take') && !headingText.includes('mattes synthese')) {
+        const thumbnail = thumbnailMap.get(articleIndex)
+        if (thumbnail?.image_url) {
+          // Determine vote color (default to neon yellow)
+          const bgColor = thumbnail.vote_color || '#CCFF00'
+          // Add separator and centered circular thumbnail before article
+          const isFirst = articleIndex === 0
+          prefix = `${!isFirst ? '<div style="height: 32px;"></div>' : ''}
+<div style="text-align: center; margin: 24px 0;">
+  <div style="width: 200px; height: 200px; border-radius: 50%; overflow: hidden; margin: 0 auto; background-color: ${bgColor};">
+    <img src="${thumbnail.image_url}" alt="" style="width: 100%; height: 100%; object-fit: cover;" />
+  </div>
+</div>`
+        }
+        articleIndex++
+      }
+    }
+
     const baseHtml = convertNodeToHtml(node)
 
     // Check if this is a Synthszr Take paragraph
@@ -408,11 +449,11 @@ export async function generateEmailContentWithVotes(
       if (ratings.length > 0) {
         const voteBadges = generateVoteBadgesHtml(ratings, baseUrl, post.slug)
         // Insert badges before closing </p> tag
-        return baseHtml.replace(/<\/p>$/, `${voteBadges}</p>`)
+        return prefix + baseHtml.replace(/<\/p>$/, `${voteBadges}</p>`)
       }
     }
 
-    return baseHtml
+    return prefix + baseHtml
   })
 
   return htmlParts.join('\n')

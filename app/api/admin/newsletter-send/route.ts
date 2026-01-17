@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth/session'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { NewsletterEmail } from '@/lib/resend/templates/newsletter'
 import { render } from '@react-email/components'
-import { generateEmailContentWithVotes } from '@/lib/email/tiptap-to-html'
+import { generateEmailContentWithVotes, ArticleThumbnail } from '@/lib/email/tiptap-to-html'
 
 // Check admin auth (via session or cron secret header for Vercel cron jobs)
 async function isAuthenticated(request?: NextRequest): Promise<boolean> {
@@ -79,6 +79,21 @@ export async function POST(request: NextRequest) {
     // Extract cover image URL
     const coverImageUrl = (post.post_images as { image_url?: string } | null)?.image_url || null
 
+    // Fetch article thumbnails for this post
+    const { data: thumbnailsData } = await supabase
+      .from('post_images')
+      .select('article_index, image_url, vote_color')
+      .eq('post_id', postId)
+      .eq('image_type', 'article_thumbnail')
+      .eq('generation_status', 'completed')
+      .order('article_index', { ascending: true })
+
+    const articleThumbnails: ArticleThumbnail[] = (thumbnailsData || []).map(t => ({
+      article_index: t.article_index,
+      image_url: t.image_url,
+      vote_color: t.vote_color || undefined,
+    }))
+
     // Fetch email template settings
     const { data: templateSettings } = await supabase
       .from('newsletter_settings')
@@ -98,10 +113,11 @@ export async function POST(request: NextRequest) {
 
     // If testEmail, send only to that address
     if (testEmail) {
-      // Generate email content with Synthszr Vote badges and stock tickers
+      // Generate email content with Synthszr Vote badges, stock tickers, and thumbnails
       const emailContent = await generateEmailContentWithVotes(
         { content: post.content, excerpt: post.excerpt, slug: post.slug },
-        BASE_URL
+        BASE_URL,
+        articleThumbnails
       )
 
       const html = await render(
@@ -145,10 +161,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Send emails sequentially with delay to avoid rate limits
-    // Generate email content with Synthszr Vote badges and stock tickers
+    // Generate email content with Synthszr Vote badges, stock tickers, and thumbnails
     const emailContent = await generateEmailContentWithVotes(
       { content: post.content, excerpt: post.excerpt, slug: post.slug },
-      BASE_URL
+      BASE_URL,
+      articleThumbnails
     )
     let successCount = 0
     let failCount = 0
