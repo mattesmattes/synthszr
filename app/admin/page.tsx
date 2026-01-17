@@ -180,7 +180,7 @@ export default function AdminPage() {
     }
   }
 
-  // Generate article thumbnails
+  // Generate article thumbnails (deletes existing ones first for regeneration)
   async function generateArticleThumbnails(postId: string, content: Record<string, unknown>) {
     setGeneratingThumbnails(true)
 
@@ -212,6 +212,13 @@ export default function AdminPage() {
     }
 
     try {
+      // Delete existing article thumbnails before regenerating
+      await supabase
+        .from('post_images')
+        .delete()
+        .eq('post_id', postId)
+        .eq('image_type', 'article_thumbnail')
+
       const res = await fetch('/api/generate-article-thumbnails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
