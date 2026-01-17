@@ -837,16 +837,21 @@ export default function AdminPage() {
 
               <TabsContent value="images" className="mt-4">
                 {editingPost?.source === 'ai' ? (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     {/* Article Thumbnails Section */}
                     {articleCount > 0 && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="font-medium text-sm">Artikel-Thumbnails</h3>
-                            <p className="text-xs text-muted-foreground">
-                              {articleThumbnails.filter(t => t.generation_status === 'completed').length} von {articleCount} generiert
-                            </p>
+                      <div className="border rounded-lg p-4 bg-muted/10">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-[#CCFF00] flex items-center justify-center">
+                              <span className="text-xs font-bold text-black">●</span>
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-sm">Artikel-Thumbnails</h3>
+                              <p className="text-xs text-muted-foreground">
+                                Runde Icons für jede News • {articleThumbnails.filter(t => t.generation_status === 'completed').length} von {articleCount} generiert
+                              </p>
+                            </div>
                           </div>
                           <Button
                             type="button"
@@ -864,19 +869,19 @@ export default function AdminPage() {
                             ) : (
                               <>
                                 <Sparkles className="h-3.5 w-3.5" />
-                                {articleThumbnails.length > 0 ? 'Neu generieren' : 'Generieren'}
+                                {articleThumbnails.filter(t => t.generation_status === 'completed').length > 0 ? 'Neu generieren' : 'Generieren'}
                               </>
                             )}
                           </Button>
                         </div>
                         {/* Thumbnail Grid with Headlines */}
-                        {articleThumbnails.length > 0 && (
+                        {articleThumbnails.filter(t => t.generation_status === 'completed').length > 0 ? (
                           <div className="grid grid-cols-3 gap-3">
                             {getArticleHeadlines(editForm.content).map((headline, idx) => {
                               const thumbnail = articleThumbnails.find(t => t.article_index === idx)
                               return (
-                                <div key={idx} className="border rounded-lg p-2 bg-muted/20">
-                                  <div className="aspect-square rounded-full overflow-hidden bg-[#CCFF00] mb-2 mx-auto w-16">
+                                <div key={idx} className="border rounded-lg p-2 bg-background">
+                                  <div className="aspect-square rounded-full overflow-hidden bg-[#CCFF00] mb-2 mx-auto w-14">
                                     {thumbnail?.image_url ? (
                                       <img
                                         src={thumbnail.image_url}
@@ -896,11 +901,30 @@ export default function AdminPage() {
                               )
                             })}
                           </div>
+                        ) : (
+                          <div className="text-center py-6 text-muted-foreground text-sm border border-dashed rounded-lg">
+                            Noch keine Thumbnails generiert
+                          </div>
                         )}
                       </div>
                     )}
-                    <PostImageGallery postId={editingPost.id} />
-                    <GenerateImagesButton postId={editingPost.id} />
+
+                    {/* Cover Images Section */}
+                    <div className="border rounded-lg p-4 bg-muted/10">
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-8 h-8 rounded bg-[#CCFF00] flex items-center justify-center">
+                          <span className="text-xs font-bold text-black">▢</span>
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-sm">Cover-Bilder</h3>
+                          <p className="text-xs text-muted-foreground">Rechteckige Bilder für Artikelvorschau</p>
+                        </div>
+                      </div>
+                      <PostImageGallery postId={editingPost.id} />
+                      <div className="mt-3">
+                        <GenerateImagesButton postId={editingPost.id} />
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex items-center justify-center py-12 text-muted-foreground">
