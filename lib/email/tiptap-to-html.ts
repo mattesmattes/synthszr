@@ -375,6 +375,70 @@ export async function generateEmailContentWithVotes(
     ? await fetchRatings(Array.from(allPublicCompanies), Array.from(allPremarketCompanies), baseUrl)
     : new Map<string, { rating: 'BUY' | 'HOLD' | 'SELL'; type: 'public' | 'premarket'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isin?: string }>()
 
+  // Vote color logic: BUY > HOLD > SELL > NONE
+  const votePriority: Record<string, number> = { 'BUY': 3, 'HOLD': 2, 'SELL': 1 }
+  const voteColors: Record<string, string> = {
+    'BUY': '#39FF14',
+    'HOLD': '#00FFFF',
+    'SELL': '#FF6600',
+    'NONE': '#CCFF00'
+  }
+
+  // Pre-process: find article sections and their best vote colors
+  // Each article section is from one H2 to the next H2 (excluding Synthszr Take headings)
+  const articleSections: Array<{ startIndex: number; endIndex: number }> = []
+  let currentArticleStart: number | null = null
+
+  doc.content.forEach((node, index) => {
+    if (node.type === 'heading' && (node.attrs?.level === 2 || node.attrs?.level === '2')) {
+      const headingText = extractTextFromNode(node).toLowerCase()
+      if (!headingText.includes('synthszr take') && !headingText.includes('mattes synthese')) {
+        // Close previous article section
+        if (currentArticleStart !== null) {
+          articleSections.push({ startIndex: currentArticleStart, endIndex: index - 1 })
+        }
+        currentArticleStart = index
+      }
+    }
+  })
+  // Close the last article section
+  if (currentArticleStart !== null) {
+    articleSections.push({ startIndex: currentArticleStart, endIndex: doc.content.length - 1 })
+  }
+
+  // Calculate best vote color for each article section
+  const articleVoteColors: string[] = articleSections.map(section => {
+    let bestVote: 'BUY' | 'HOLD' | 'SELL' | null = null
+
+    // Extract text from this section and find companies
+    for (let i = section.startIndex; i <= section.endIndex && doc.content; i++) {
+      const nodeText = extractTextFromNode(doc.content[i])
+      const sectionCompanies = findCompaniesInText(nodeText)
+
+      // Check public companies
+      for (const c of sectionCompanies.public) {
+        const ratingData = ratingsMap.get(c.apiName.toLowerCase())
+        if (ratingData?.rating) {
+          if (!bestVote || votePriority[ratingData.rating] > votePriority[bestVote]) {
+            bestVote = ratingData.rating
+          }
+        }
+      }
+
+      // Check premarket companies
+      for (const c of sectionCompanies.premarket) {
+        const ratingData = ratingsMap.get(c.apiName.toLowerCase())
+        if (ratingData?.rating) {
+          if (!bestVote || votePriority[ratingData.rating] > votePriority[bestVote]) {
+            bestVote = ratingData.rating
+          }
+        }
+      }
+    }
+
+    return bestVote ? voteColors[bestVote] : voteColors['NONE']
+  })
+
   // Track article index for thumbnails (H2 headings that aren't Synthszr Take)
   let articleIndex = 0
   const thumbnailMap = new Map<number, ArticleThumbnail>()
@@ -395,8 +459,8 @@ export async function generateEmailContentWithVotes(
       if (!headingText.includes('synthszr take') && !headingText.includes('mattes synthese')) {
         const thumbnail = thumbnailMap.get(articleIndex)
         if (thumbnail?.image_url) {
-          // Determine vote color (default to neon yellow)
-          const bgColor = thumbnail.vote_color || '#CCFF00'
+          // Use dynamically calculated vote color from article section
+          const bgColor = articleVoteColors[articleIndex] || voteColors['NONE']
           // Add separator and centered circular thumbnail before article
           const isFirst = articleIndex === 0
           prefix = `${!isFirst ? '<div style="height: 32px;"></div>' : ''}
