@@ -149,19 +149,6 @@ export async function POST(request: NextRequest) {
       imageUrl?: string
     }> = []
 
-    // Delete existing article thumbnails before regenerating
-    const { error: deleteError } = await supabase
-      .from('post_images')
-      .delete()
-      .eq('post_id', postId)
-      .eq('image_type', 'article_thumbnail')
-
-    if (deleteError) {
-      console.error('[Thumbnail] Failed to delete existing thumbnails:', deleteError)
-    } else {
-      console.log(`[Thumbnail] Deleted existing article thumbnails for post ${postId}`)
-    }
-
     // Process articles sequentially to avoid API rate limits
     for (const article of articles) {
       try {
@@ -304,4 +291,36 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({ thumbnails })
+}
+
+/**
+ * DELETE /api/generate-article-thumbnails
+ * Delete article thumbnails for a post (admin only)
+ */
+export async function DELETE(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const postId = searchParams.get('postId')
+
+  if (!postId) {
+    return NextResponse.json({ error: 'postId is required' }, { status: 400 })
+  }
+
+  const supabase = await createClient()
+
+  const { error, count } = await supabase
+    .from('post_images')
+    .delete()
+    .eq('post_id', postId)
+    .eq('image_type', 'article_thumbnail')
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true, deleted: count })
 }
