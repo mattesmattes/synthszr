@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
           await runSynthesisPipelineWithProgress(
             digestId,
             {
-              maxItemsToProcess: options?.maxItems || 50, // Continuation handles time constraints
+              maxItemsToProcess: options?.maxItems || 150, // Increased from 50 to handle larger batches
               maxCandidatesPerItem: options?.maxCandidates || 5,
               minSimilarity: options?.minSimilarity || 0.5,
               maxAgeDays: options?.maxAge || 90,

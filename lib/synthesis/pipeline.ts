@@ -293,7 +293,7 @@ export async function runSynthesisPipeline(
   } = {}
 ): Promise<SynthesisPipelineResult> {
   const {
-    maxItemsToProcess = 50, // No limit needed - continuation handles time constraints // Process all items by default
+    maxItemsToProcess = 150, // Increased from 50 to handle larger batches
     maxCandidatesPerItem = 5,
     minSimilarity = 0.5, // Lower threshold to find more candidates
     maxAgeDays = 90,
@@ -516,7 +516,7 @@ export async function runSynthesisPipelineWithProgress(
   console.log(`[Pipeline ${PIPELINE_VERSION}] Starting for digest ${digestId}`)
 
   const {
-    maxItemsToProcess = 50, // No limit needed - continuation handles time constraints
+    maxItemsToProcess = 150, // Increased from 50 to handle larger batches
     maxCandidatesPerItem = 5,
     minSimilarity = 0.5,
     maxAgeDays = 90,
