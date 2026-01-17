@@ -629,7 +629,7 @@ export default function GeneratedArticlesPage() {
               </TabsList>
 
               <TabsContent value="content" className="flex-1 flex flex-col min-h-0 mt-4">
-                <div className="flex-1 min-h-[300px] max-h-[40vh] overflow-y-auto border rounded-md">
+                <div className="flex-1 min-h-[400px] border rounded-md">
                   <TiptapEditor
                     content={editForm.content}
                     onChange={(content) => setEditForm({ ...editForm, content })}
