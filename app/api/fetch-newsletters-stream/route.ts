@@ -5,6 +5,7 @@ import { extractArticleContent, isArticleTooOld, isLikelyArticleUrl, isNonArticl
 import { createClient } from '@/lib/supabase/server'
 import { isAdminRequest } from '@/lib/auth/session'
 import { DEFAULT_NEWSLETTER_FETCH_MS } from '@/lib/config/constants'
+import { getLastFetchTimestamp, updateLastFetchTimestamp } from '@/lib/newsletter/timestamp'
 
 // Node.js runtime for jsdom compatibility
 export const runtime = 'nodejs'
@@ -231,20 +232,10 @@ export async function POST(request: NextRequest) {
           console.log(`[Newsletter Fetch] Historical import for date range: ${targetDate} (UTC: ${afterDate.toISOString()} to ${beforeDate.toISOString()})`)
         } else {
           // No targetDate: fetch all emails since last successful crawl
-          // Fall back to DEFAULT_NEWSLETTER_FETCH_MS (36h) if no last crawl timestamp
-          const { data: lastFetchSetting } = await supabase
-            .from('settings')
-            .select('value')
-            .eq('key', 'last_newsletter_fetch')
-            .single()
-
-          if (lastFetchSetting?.value?.timestamp) {
-            afterDate = new Date(lastFetchSetting.value.timestamp)
-            console.log(`[Newsletter Fetch] Fetching since last crawl: ${afterDate.toISOString()}`)
-          } else {
-            afterDate = new Date(Date.now() - DEFAULT_NEWSLETTER_FETCH_MS)
-            console.log(`[Newsletter Fetch] No last crawl found, using fallback: last ${DEFAULT_NEWSLETTER_FETCH_MS / (1000 * 60 * 60)} hours`)
-          }
+          // Timestamp is derived from actual daily_repo data to ensure consistency
+          // This prevents issues when items are deleted - the timestamp auto-adjusts
+          afterDate = await getLastFetchTimestamp(supabase, DEFAULT_NEWSLETTER_FETCH_MS / (1000 * 60 * 60))
+          console.log(`[Newsletter Fetch] Fetching since: ${afterDate.toISOString()}`)
         }
 
         const senderEmails = sources.map(s => s.email)
@@ -730,13 +721,9 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Update last fetch timestamp
-        await supabase
-          .from('settings')
-          .upsert({
-            key: 'last_newsletter_fetch',
-            value: { timestamp: new Date().toISOString() },
-          }, { onConflict: 'key' })
+        // Update last fetch timestamp based on actual data in daily_repo
+        // This ensures consistency - if items are deleted, the timestamp auto-adjusts
+        await updateLastFetchTimestamp(supabase)
 
         // ========================================
         // PHASE 4: Scan all mail for potential newsletter sources
