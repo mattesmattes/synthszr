@@ -128,6 +128,7 @@ export default async function Page() {
               readTime={estimateReadTime(featuredPost.content)}
               category={featuredPost.category.toUpperCase()}
               coverImageUrl={featuredPost.cover_image_url}
+              postId={featuredPost.id}
             />
 
             {/* Last 7 Days Headlines */}

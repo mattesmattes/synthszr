@@ -190,6 +190,7 @@ export default async function Page({ params }: PageProps) {
               category={featuredPost.category.toUpperCase()}
               coverImageUrl={featuredPost.cover_image_url}
               locale={locale}
+              postId={featuredPost.id}
             />
 
             {/* Last 7 Days Headlines */}

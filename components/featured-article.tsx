@@ -12,6 +12,7 @@ interface FeaturedArticleProps {
   category: string
   coverImageUrl?: string | null
   locale?: LanguageCode
+  postId?: string // For article thumbnails
 }
 
 function formatDateWithWeekday(dateString: string, locale: LanguageCode = 'de'): string {
@@ -31,7 +32,8 @@ export function FeaturedArticle({
   content,
   createdAt,
   coverImageUrl,
-  locale = 'de'
+  locale = 'de',
+  postId
 }: FeaturedArticleProps) {
   const postUrl = `/${locale}/posts/${slug}`
 
@@ -82,7 +84,7 @@ export function FeaturedArticle({
       )}
 
       <div className="prose-article">
-        <TiptapRenderer content={content} />
+        <TiptapRenderer content={content} postId={postId} />
       </div>
 
       <a href={postUrl} className="mt-8 inline-block font-mono text-xs text-accent hover:underline">
