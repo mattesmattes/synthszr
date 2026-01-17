@@ -185,6 +185,22 @@ export default function AdminPage() {
     }
   }
 
+  // Delete all article thumbnails for a post
+  async function deleteArticleThumbnails(postId: string) {
+    if (!confirm('Alle Artikel-Thumbnails löschen?')) return
+    try {
+      const res = await fetch(`/api/generate-article-thumbnails?postId=${postId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (res.ok) {
+        setArticleThumbnails([])
+      }
+    } catch (err) {
+      console.error('[Thumbnails] Delete failed:', err)
+    }
+  }
+
   // Generate article thumbnails (deletes existing ones first for regeneration)
   async function generateArticleThumbnails(postId: string, content: Record<string, unknown>) {
     setGeneratingThumbnails(true)
@@ -853,35 +869,49 @@ export default function AdminPage() {
                               </p>
                             </div>
                           </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => generateArticleThumbnails(editingPost.id, editForm.content)}
-                            disabled={generatingThumbnails}
-                            className="gap-1.5"
-                          >
-                            {generatingThumbnails ? (
-                              <>
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                Generiere...
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles className="h-3.5 w-3.5" />
-                                {articleThumbnails.filter(t => t.generation_status === 'completed').length > 0 ? 'Neu generieren' : 'Generieren'}
-                              </>
+                          <div className="flex items-center gap-2">
+                            {articleThumbnails.filter(t => t.generation_status === 'completed').length > 0 && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => deleteArticleThumbnails(editingPost.id)}
+                                className="gap-1.5 text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Löschen
+                              </Button>
                             )}
-                          </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => generateArticleThumbnails(editingPost.id, editForm.content)}
+                              disabled={generatingThumbnails}
+                              className="gap-1.5"
+                            >
+                              {generatingThumbnails ? (
+                                <>
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  Generiere...
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  {articleThumbnails.filter(t => t.generation_status === 'completed').length > 0 ? 'Neu generieren' : 'Generieren'}
+                                </>
+                              )}
+                            </Button>
+                          </div>
                         </div>
                         {/* Thumbnail Grid with Headlines */}
                         {articleThumbnails.filter(t => t.generation_status === 'completed').length > 0 ? (
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-3 gap-4">
                             {getArticleHeadlines(editForm.content).map((headline, idx) => {
                               const thumbnail = articleThumbnails.find(t => t.article_index === idx)
                               return (
-                                <div key={idx} className="border rounded-lg p-2 bg-background">
-                                  <div className="aspect-square rounded-full overflow-hidden bg-[#CCFF00] mb-2 mx-auto w-14">
+                                <div key={idx} className="border rounded-lg p-3 bg-background">
+                                  <div className="aspect-square rounded-full overflow-hidden bg-[#CCFF00] mb-3 mx-auto w-24">
                                     {thumbnail?.image_url ? (
                                       <img
                                         src={thumbnail.image_url}
@@ -894,8 +924,8 @@ export default function AdminPage() {
                                       </div>
                                     )}
                                   </div>
-                                  <p className="text-[10px] text-center line-clamp-2 text-muted-foreground">
-                                    {headline.slice(0, 60)}{headline.length > 60 ? '...' : ''}
+                                  <p className="text-xs text-center line-clamp-2 text-muted-foreground">
+                                    {headline.slice(0, 80)}{headline.length > 80 ? '...' : ''}
                                   </p>
                                 </div>
                               )
