@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { Menu } from 'bloom-menu'
-import Image from 'next/image'
 import type { LanguageCode, Language } from '@/lib/types'
 import { addLocaleToPathname } from '@/lib/i18n/config'
 
@@ -40,38 +40,30 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
     window.location.href = newPath
   }
 
-  // Don't render if loading or only one language
+  const linkStyle = "font-mono text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+
+  // Don't render language switcher if loading or only one language, but still show companies link
   if (loading || activeLanguages.length <= 1) {
     return (
-      <div className="flex justify-center mb-6">
-        <div className="w-10 h-10 rounded-full overflow-hidden">
-          <Image
-            src="/oh-so-icon.svg"
-            alt="OH-SO"
-            width={40}
-            height={40}
-          />
-        </div>
+      <div className="flex justify-center items-center gap-4 mb-6">
+        <Link href="/companies" className={linkStyle}>
+          Show Companies
+        </Link>
       </div>
     )
   }
 
   return (
-    <div className="flex justify-center mb-6">
+    <div className="flex justify-center items-center gap-4 mb-6">
       <Menu.Root direction="bottom" anchor="center">
         <Menu.Container
-          buttonSize={40}
+          buttonSize={24}
           menuWidth={180}
           menuRadius={16}
           className="bg-background shadow-lg border border-border"
         >
-          <Menu.Trigger className="flex items-center justify-center w-full h-full rounded-full overflow-hidden cursor-pointer hover:opacity-90 transition-opacity">
-            <Image
-              src="/oh-so-icon.svg"
-              alt="OH-SO"
-              width={40}
-              height={40}
-            />
+          <Menu.Trigger className={linkStyle}>
+            Switch Language
           </Menu.Trigger>
           <Menu.Content className="py-2 bg-background">
             {activeLanguages.map((lang) => (
@@ -96,6 +88,10 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
           </Menu.Content>
         </Menu.Container>
       </Menu.Root>
+      <span className="text-muted-foreground">·</span>
+      <Link href="/companies" className={linkStyle}>
+        Show Companies
+      </Link>
     </div>
   )
 }
