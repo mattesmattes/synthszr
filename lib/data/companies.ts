@@ -89,10 +89,22 @@ export const KNOWN_COMPANIES: Record<string, string> = {
 /**
  * Known premarket companies from glitch.green API
  * Format: { 'Company Name': 'API Name' }
- * Total: 0 companies
+ *
+ * Note: Manually added private companies are included here for detection,
+ * even if they don't have glitch.green data.
  */
 export const KNOWN_PREMARKET_COMPANIES: Record<string, string> = {
-
+  // Manually added private tech companies
+  'Anthropic': 'anthropic',
+  'Anysphere': 'anysphere',
+  'Canva': 'canva',
+  'Discord': 'discord',
+  'Figma': 'figma',
+  'Notion': 'notion',
+  'OpenAI': 'openai',
+  'Perplexity': 'perplexity',
+  'Scale AI': 'scale-ai',
+  'Vercel': 'vercel',
 }
 
 /**
