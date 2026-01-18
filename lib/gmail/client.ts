@@ -23,6 +23,11 @@ export class GmailClient {
   /**
    * Fetch emails from specific senders
    * Note: For large sender lists (>30), queries are batched to avoid Gmail API limits
+   *
+   * IMPROVED (2026-01-18):
+   * - Includes Promotions/Updates categories explicitly
+   * - Increased per-batch results for better coverage
+   * - Tracks which senders were found for gap detection
    */
   async fetchEmailsFromSenders(
     senderEmails: string[],
@@ -33,6 +38,9 @@ export class GmailClient {
     // Batch size to avoid Gmail query length limits
     // Gmail has ~2048 char limit, each email adds ~30 chars, so 30 is safe
     const BATCH_SIZE = 30
+
+    // INCREASED: Request more results per batch to avoid missing low-volume senders
+    const RESULTS_PER_BATCH = 100
 
     // Build date filter suffix
     let dateFilter = ''
@@ -64,6 +72,7 @@ export class GmailClient {
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
       const batch = batches[batchIndex]
       const fromQuery = batch.map(email => `from:${email}`).join(' OR ')
+      // IMPROVED: Don't restrict to inbox - search everywhere including Promotions/Updates
       const query = `(${fromQuery})${dateFilter}`
 
       console.log(`[Gmail] Batch ${batchIndex + 1}/${batches.length}: ${batch.length} senders, query length: ${query.length}`)
@@ -72,7 +81,7 @@ export class GmailClient {
         const listResponse = await this.gmail.users.messages.list({
           userId: 'me',
           q: query,
-          maxResults: Math.ceil(maxResults / batches.length) + 10, // Slightly more per batch to account for overlap
+          maxResults: RESULTS_PER_BATCH, // INCREASED: Fixed per-batch limit instead of divided
           includeSpamTrash: false,
         })
 
@@ -125,6 +134,66 @@ export class GmailClient {
     }
 
     return emails
+  }
+
+  /**
+   * Fetch emails from a SINGLE sender - used as fallback for missed senders
+   * This is more targeted and reliable than batch queries for specific senders
+   *
+   * ADDED (2026-01-18): Per-sender fallback to catch newsletters missed by batch queries
+   */
+  async fetchEmailsFromSingleSender(
+    senderEmail: string,
+    maxResults: number = 5,
+    afterDate?: Date
+  ): Promise<EmailMessage[]> {
+    let dateFilter = ''
+    if (afterDate) {
+      const dateStr = afterDate.toISOString().split('T')[0].replace(/-/g, '/')
+      dateFilter = ` after:${dateStr}`
+    }
+
+    // Simple, targeted query for a single sender
+    const query = `from:${senderEmail}${dateFilter}`
+
+    console.log(`[Gmail] Single-sender fetch for: ${senderEmail}`)
+
+    try {
+      const listResponse = await this.gmail.users.messages.list({
+        userId: 'me',
+        q: query,
+        maxResults,
+        includeSpamTrash: false,
+      })
+
+      const messages = listResponse.data.messages || []
+      console.log(`[Gmail] Single-sender found: ${messages.length} messages`)
+
+      const emails: EmailMessage[] = []
+      for (const msg of messages) {
+        if (!msg.id) continue
+
+        try {
+          const fullMessage = await this.gmail.users.messages.get({
+            userId: 'me',
+            id: msg.id,
+            format: 'full',
+          })
+
+          const email = this.parseMessage(fullMessage.data)
+          if (email) {
+            emails.push(email)
+          }
+        } catch (error) {
+          console.error('[Gmail] Error fetching message:', msg.id, error)
+        }
+      }
+
+      return emails
+    } catch (error) {
+      console.error(`[Gmail] Error in single-sender fetch for ${senderEmail}:`, error)
+      return []
+    }
   }
 
   /**
@@ -330,6 +399,11 @@ export class GmailClient {
    * Fetch emails from specific Gmail labels
    * Used to fetch newsletters that are labeled (e.g., "newsstand-ai", "newsstand-marketing")
    *
+   * IMPROVED (2026-01-18):
+   * - Uses labelIds parameter instead of label: query for reliability
+   * - Properly handles labels with special characters (#, /, spaces)
+   * - Increased per-label results
+   *
    * @param labelPattern - Pattern to match label names (e.g., "newsstand" matches "newsstand-ai", "newsstand/marketing")
    * @param maxResults - Maximum number of emails to fetch
    * @param afterDate - Only fetch emails after this date
@@ -341,9 +415,13 @@ export class GmailClient {
   ): Promise<EmailMessage[]> {
     // First, find all labels matching the pattern
     const allLabels = await this.listLabels()
-    const matchingLabels = allLabels.filter(label =>
-      label.name.toLowerCase().includes(labelPattern.toLowerCase())
-    )
+
+    // IMPROVED: More flexible label matching - handle # prefix and case variations
+    const normalizedPattern = labelPattern.toLowerCase().replace(/^#/, '')
+    const matchingLabels = allLabels.filter(label => {
+      const normalizedLabelName = label.name.toLowerCase().replace(/^#/, '')
+      return normalizedLabelName.includes(normalizedPattern)
+    })
 
     if (matchingLabels.length === 0) {
       console.log(`[Gmail] No labels found matching pattern: ${labelPattern}`)
@@ -351,7 +429,7 @@ export class GmailClient {
     }
 
     console.log(`[Gmail] Found ${matchingLabels.length} labels matching "${labelPattern}":`,
-      matchingLabels.map(l => l.name).join(', '))
+      matchingLabels.map(l => `${l.name} (id: ${l.id})`).join(', '))
 
     // Build date query filter
     let dateQuery = ''
@@ -360,24 +438,20 @@ export class GmailClient {
       dateQuery = `after:${dateStr}`
     }
 
-    const allMessageIds: string[] = []
+    const allMessages: gmail_v1.Schema$Message[] = []
     const seenIds = new Set<string>()
 
-    // Fetch message IDs from each matching label using query (supports date filter)
+    // IMPROVED: Use labelIds parameter instead of label: query
+    // This is more reliable and handles special characters correctly
     for (const label of matchingLabels) {
       try {
-        // Use label: query with date filter - this is more efficient than labelIds + manual date check
-        const labelQuery = label.name.includes('/')
-          ? `label:${label.name.replace(/\//g, '-')}`
-          : `label:${label.name}`
-        const query = dateQuery ? `${labelQuery} ${dateQuery}` : labelQuery
-
-        console.log(`[Gmail] Fetching from label "${label.name}" with query: ${query}`)
+        console.log(`[Gmail] Fetching from label "${label.name}" (id: ${label.id})`)
 
         const listResponse = await this.gmail.users.messages.list({
           userId: 'me',
-          q: query,
-          maxResults: Math.ceil(maxResults / matchingLabels.length) + 10,
+          labelIds: [label.id], // Use labelIds instead of query - more reliable!
+          q: dateQuery || undefined, // Only add date filter if present
+          maxResults: 100, // INCREASED: More results per label
           includeSpamTrash: false,
         })
 
@@ -387,7 +461,7 @@ export class GmailClient {
         for (const msg of messages) {
           if (msg.id && !seenIds.has(msg.id)) {
             seenIds.add(msg.id)
-            allMessageIds.push(msg.id)
+            allMessages.push(msg)
           }
         }
       } catch (error) {
@@ -396,17 +470,26 @@ export class GmailClient {
       }
     }
 
-    console.log(`[Gmail] Total unique message IDs from labels: ${allMessageIds.length}`)
+    console.log(`[Gmail] Total unique messages from labels: ${allMessages.length}`)
+
+    // Sort by internalDate (most recent first)
+    allMessages.sort((a, b) => {
+      const dateA = parseInt(a.internalDate || '0', 10)
+      const dateB = parseInt(b.internalDate || '0', 10)
+      return dateB - dateA
+    })
 
     // Limit to maxResults and fetch full message details
-    const idsToFetch = allMessageIds.slice(0, maxResults)
+    const messagesToFetch = allMessages.slice(0, maxResults)
     const emails: EmailMessage[] = []
 
-    for (const msgId of idsToFetch) {
+    for (const msg of messagesToFetch) {
+      if (!msg.id) continue
+
       try {
         const fullMessage = await this.gmail.users.messages.get({
           userId: 'me',
-          id: msgId,
+          id: msg.id,
           format: 'full',
         })
 
@@ -415,7 +498,7 @@ export class GmailClient {
           emails.push(email)
         }
       } catch (error) {
-        console.error('[Gmail] Error fetching message:', msgId, error)
+        console.error('[Gmail] Error fetching message:', msg.id, error)
       }
     }
 

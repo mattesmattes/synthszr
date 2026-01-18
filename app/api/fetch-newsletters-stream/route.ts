@@ -256,8 +256,9 @@ export async function POST(request: NextRequest) {
 
         send({ type: 'newsletter', phase: 'fetching', item: { title: 'Emails werden abgerufen...', status: 'processing' } })
 
-        // Dynamic maxResults: at least 2 emails per source, minimum 200
-        const maxResults = Math.max(200, senderEmails.length * 2)
+        // Dynamic maxResults: at least 3 emails per source, minimum 300
+        // INCREASED (2026-01-18): Higher limits to avoid missing low-volume senders
+        const maxResults = Math.max(300, senderEmails.length * 3)
         console.log('[Newsletter Fetch] Fetching emails from', senderEmails.length, 'sources (maxResults:', maxResults, '):', senderEmails.slice(0, 5), senderEmails.length > 5 ? '...' : '')
 
         // Fetch emails from registered sources
@@ -265,19 +266,21 @@ export async function POST(request: NextRequest) {
         console.log('[Newsletter Fetch] Fetched', senderEmails_fetched.length, 'emails from sources')
 
         // Also fetch emails from newsstand labels (catches newsletters not yet registered as sources)
-        const NEWSSTAND_LABELS = ['newsstand-ai', 'newsstand-marketing', '#newsstand-ai', '#newsstand-marketing']
+        // SIMPLIFIED: The improved fetchEmailsFromLabels now handles # prefix automatically
+        const NEWSSTAND_LABELS = ['newsstand-ai', 'newsstand-marketing']
         send({ type: 'newsletter', phase: 'fetching', item: { title: 'Emails aus Labels werden abgerufen...', status: 'processing' } })
 
         let labelEmails: typeof senderEmails_fetched = []
         for (const labelPattern of NEWSSTAND_LABELS) {
           try {
-            const emails = await gmailClient.fetchEmailsFromLabels(labelPattern, 100, afterDate)
+            // INCREASED: Fetch up to 150 emails per label to ensure good coverage
+            const emails = await gmailClient.fetchEmailsFromLabels(labelPattern, 150, afterDate)
             if (emails.length > 0) {
               console.log(`[Newsletter Fetch] Fetched ${emails.length} emails from label "${labelPattern}"`)
               labelEmails = labelEmails.concat(emails)
             }
           } catch (err) {
-            console.log(`[Newsletter Fetch] No emails from label "${labelPattern}" (may not exist)`)
+            console.log(`[Newsletter Fetch] No emails from label "${labelPattern}" (may not exist):`, err)
           }
         }
         console.log('[Newsletter Fetch] Total emails from labels:', labelEmails.length)
@@ -294,6 +297,56 @@ export async function POST(request: NextRequest) {
         }
         console.log('[Newsletter Fetch] Total unique emails after merge:', allEmails.length)
 
+        // ========================================
+        // FALLBACK: Detect and fetch missed senders
+        // ========================================
+        // Identify registered senders that have NO emails in the batch
+        // This catches newsletters that were missed due to batching limits or Gmail categorization
+        const fetchedSenderEmails = new Set(
+          allEmails.map(e => {
+            // Extract email from "Name <email>" format
+            const match = e.from.match(/<([^>]+)>/)
+            return (match ? match[1] : e.from).toLowerCase()
+          })
+        )
+
+        const missedSenders = senderEmails.filter(s => !fetchedSenderEmails.has(s.toLowerCase()))
+
+        if (missedSenders.length > 0 && missedSenders.length <= 20) {
+          // Only do fallback for up to 20 missed senders to avoid timeouts
+          console.log(`[Newsletter Fetch] FALLBACK: ${missedSenders.length} registered senders had no emails in batch`)
+          console.log('[Newsletter Fetch] Missed senders:', missedSenders.slice(0, 10), missedSenders.length > 10 ? '...' : '')
+
+          send({ type: 'newsletter', phase: 'fetching', item: { title: `Fallback: ${missedSenders.length} verpasste Sender werden abgerufen...`, status: 'processing' } })
+
+          let fallbackCount = 0
+          for (const senderEmail of missedSenders) {
+            try {
+              const fallbackEmails = await gmailClient.fetchEmailsFromSingleSender(senderEmail, 3, afterDate)
+              if (fallbackEmails.length > 0) {
+                console.log(`[Newsletter Fetch] FALLBACK SUCCESS: Found ${fallbackEmails.length} emails from ${senderEmail}`)
+                for (const email of fallbackEmails) {
+                  if (!seenIds.has(email.id)) {
+                    seenIds.add(email.id)
+                    allEmails.push(email)
+                    fallbackCount++
+                  }
+                }
+              }
+            } catch (err) {
+              console.log(`[Newsletter Fetch] FALLBACK failed for ${senderEmail}:`, err)
+            }
+          }
+
+          if (fallbackCount > 0) {
+            console.log(`[Newsletter Fetch] FALLBACK: Added ${fallbackCount} additional emails from missed senders`)
+            send({ type: 'newsletter', phase: 'fetching', item: { title: `Fallback: ${fallbackCount} zusätzliche Emails gefunden`, status: 'success' } })
+          }
+        } else if (missedSenders.length > 20) {
+          console.log(`[Newsletter Fetch] WARNING: ${missedSenders.length} missed senders (too many for fallback)`)
+          console.log('[Newsletter Fetch] Sample missed senders:', missedSenders.slice(0, 10))
+        }
+
         // Filter emails that are older than afterDate (Gmail's after: query only uses date, not time)
         // This ensures we only process emails received AFTER the timestamp, not just on the same day
         const emails = targetDate
@@ -304,7 +357,7 @@ export async function POST(request: NextRequest) {
           console.log(`[Newsletter Fetch] Filtered ${allEmails.length - emails.length} emails older than ${afterDate.toISOString()}`)
         }
 
-        // Log unique senders found
+        // Log unique senders found (after fallback)
         const uniqueSenders = new Set(emails.map(e => e.from))
         console.log('[Newsletter Fetch] Unique senders in fetch:', uniqueSenders.size, Array.from(uniqueSenders).slice(0, 5))
 
