@@ -325,7 +325,15 @@ export default function GeneratedArticlesPage() {
             .then(res => res.json())
             .then(data => {
               if (data.queued > 0) {
-                console.log(`[i18n] Queued ${data.queued} translations`)
+                console.log(`[i18n] Queued ${data.queued} translations, starting processing...`)
+                // Immediately start processing the queue
+                fetch('/api/admin/translations/process-queue', {
+                  method: 'POST',
+                  credentials: 'include',
+                })
+                  .then(res => res.json())
+                  .then(result => console.log(`[i18n] Processing started: ${result.processed} items`))
+                  .catch(err => console.error('[i18n] Process queue error:', err))
               }
             })
             .catch(err => console.error('[i18n] Translation queue error:', err))
@@ -386,7 +394,15 @@ export default function GeneratedArticlesPage() {
             .then(res => res.json())
             .then(data => {
               if (data.queued > 0) {
-                console.log(`[i18n] Queued ${data.queued} translations`)
+                console.log(`[i18n] Queued ${data.queued} translations, starting processing...`)
+                // Immediately start processing the queue
+                fetch('/api/admin/translations/process-queue', {
+                  method: 'POST',
+                  credentials: 'include',
+                })
+                  .then(res => res.json())
+                  .then(result => console.log(`[i18n] Processing started: ${result.processed} items`))
+                  .catch(err => console.error('[i18n] Process queue error:', err))
               }
             })
             .catch(err => console.error('[i18n] Translation queue error:', err))
