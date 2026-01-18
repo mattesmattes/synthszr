@@ -106,12 +106,12 @@ interface PremarketApiResponse {
   }
 }
 
-async function fetchPremarketCompanies(): Promise<string[]> {
+async function fetchPremarketCompanies(): Promise<string[] | null> {
   console.log('Fetching premarket companies from glitch.green API...')
 
   if (!STOCKS_PREMARKET_API_KEY) {
-    console.warn('Warning: STOCKS_PREMARKET_API_KEY not set, using empty list')
-    return []
+    console.warn('Warning: STOCKS_PREMARKET_API_KEY not set, skipping sync (keeping existing file)')
+    return null // Return null to signal "skip sync"
   }
 
   const allCompanies: string[] = []
@@ -238,6 +238,12 @@ async function main() {
     // Fetch from API
     const premarketCompanies = await fetchPremarketCompanies()
 
+    // If null, API key was missing - skip sync and keep existing file
+    if (premarketCompanies === null) {
+      console.log('Sync skipped - existing companies.ts file preserved')
+      return
+    }
+
     // Generate TypeScript file
     const content = generateTypeScriptFile(premarketCompanies)
 
@@ -255,7 +261,8 @@ async function main() {
 
   } catch (error) {
     console.error('Error syncing companies:', error)
-    process.exit(1)
+    // Don't exit with error - allow build to continue with existing file
+    console.log('Sync failed - existing companies.ts file preserved')
   }
 }
 

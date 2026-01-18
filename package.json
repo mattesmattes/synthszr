@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "prebuild": "npx tsx scripts/sync-premarket-companies.ts",
-    "build": "next build",
+    "build": "npm run prebuild && next build",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
