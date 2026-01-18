@@ -462,10 +462,11 @@ export async function generateEmailContentWithVotes(
           // Use dynamically calculated vote color from article section
           const bgColor = articleVoteColors[articleIndex] || voteColors['NONE']
           // Add separator and centered circular thumbnail before article
+          // REDUCED (2026-01-18): 180px instead of 302px for better text readability on mobile
           const isFirst = articleIndex === 0
           prefix = `${!isFirst ? '<div style="height: 32px;"></div>' : ''}
 <div style="text-align: center; margin: 24px 0;">
-  <div style="width: 302px; height: 302px; border-radius: 50%; overflow: hidden; margin: 0 auto; background-color: ${bgColor};">
+  <div style="width: 180px; height: 180px; border-radius: 50%; overflow: hidden; margin: 0 auto; background-color: ${bgColor};">
     <img src="${thumbnail.image_url}" alt="" style="width: 100%; height: 100%; object-fit: cover;" />
   </div>
 </div>`
