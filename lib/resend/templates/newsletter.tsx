@@ -136,8 +136,8 @@ export function NewsletterEmail({
                 <Img
                   src={coverImageUrl}
                   alt={subject}
-                  width="400"
-                  height="400"
+                  width="302"
+                  height="302"
                   style={coverImage}
                 />
               </div>
@@ -246,16 +246,16 @@ const coverSection = {
 
 const coverImageContainer = {
   backgroundColor: '#CCFF00',
-  width: '400px',
-  height: '400px',
+  width: '302px',
+  height: '302px',
   overflow: 'hidden' as const,
   margin: '0 auto',
   borderRadius: '0',
 }
 
 const coverImage = {
-  width: '400px',
-  height: '400px',
+  width: '302px',
+  height: '302px',
   display: 'block',
   objectFit: 'cover' as const,
 }
