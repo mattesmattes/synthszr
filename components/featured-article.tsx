@@ -1,4 +1,5 @@
 import { TiptapRenderer } from "./tiptap-renderer"
+import { formatUpdateDate } from "@/lib/i18n/config"
 import type { LanguageCode } from "@/lib/types"
 
 interface FeaturedArticleProps {
@@ -13,16 +14,6 @@ interface FeaturedArticleProps {
   coverImageUrl?: string | null
   locale?: LanguageCode
   postId?: string // For article thumbnails
-}
-
-function formatDateWithWeekday(dateString: string, locale: LanguageCode = 'de'): string {
-  const d = new Date(dateString)
-  const localeStr = locale === 'de' ? 'de-DE' : locale
-  const weekday = d.toLocaleDateString(localeStr, { weekday: "long" })
-  const day = d.getDate().toString().padStart(2, '0')
-  const month = (d.getMonth() + 1).toString().padStart(2, '0')
-  const year = d.getFullYear()
-  return `${weekday}, der ${day}.${month}.${year}`
 }
 
 export function FeaturedArticle({
@@ -67,7 +58,7 @@ export function FeaturedArticle({
 
       <div className="mb-4">
         <span className="inline-block px-2 py-1 font-mono text-xs font-medium text-black" style={{ backgroundColor: '#CCFF00' }}>
-          {formatDateWithWeekday(createdAt, locale)}
+          {formatUpdateDate(createdAt, locale)}
         </span>
       </div>
 
