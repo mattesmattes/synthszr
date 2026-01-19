@@ -76,6 +76,7 @@ interface GeneratedPost {
   status: 'draft' | 'published' | 'archived'
   pending_queue_item_ids: string[] | null
   ai_model: string | null
+  digest_id: string | null
 }
 
 export default function EditGeneratedArticlePage({ params }: { params: Promise<{ id: string }> }) {
@@ -106,6 +107,9 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   const [articleThumbnails, setArticleThumbnails] = useState<ArticleThumbnail[]>([])
   const [articleCount, setArticleCount] = useState(0)
   const [generatingThumbnails, setGeneratingThumbnails] = useState(false)
+
+  // Cover images
+  const [coverImageCount, setCoverImageCount] = useState(0)
 
   // Metadata section collapsed state
   const [metadataOpen, setMetadataOpen] = useState(false)
@@ -197,6 +201,69 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       setGeneratingThumbnails(false)
     }
   }, [id, fetchArticleThumbnails])
+
+  // Fetch cover images count
+  const fetchCoverImages = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/post-images?postId=${id}`)
+      if (res.ok) {
+        const data = await res.json()
+        const completedCovers = (data.images || []).filter(
+          (img: { generation_status: string }) => img.generation_status === 'completed'
+        ).length
+        setCoverImageCount(completedCovers)
+      }
+    } catch (err) {
+      console.error('[CoverImages] Failed to fetch:', err)
+    }
+  }, [id])
+
+  // Trigger cover image generation (if digest available)
+  const triggerCoverImageGeneration = useCallback(async (digestId: string) => {
+    console.log('[CoverImages] Fetching digest content for image generation...')
+    try {
+      // Fetch digest content
+      const { data: digest } = await supabase
+        .from('daily_digests')
+        .select('analysis_content')
+        .eq('id', digestId)
+        .single()
+
+      if (!digest?.analysis_content) {
+        console.log('[CoverImages] No digest content found, skipping')
+        return
+      }
+
+      // Extract news items from digest (simple approach - take first few lines)
+      const lines = digest.analysis_content.split('\n').filter((l: string) => l.trim())
+      const newsItems = lines.slice(0, 3).map((line: string) => line.slice(0, 500))
+
+      if (newsItems.length === 0) {
+        console.log('[CoverImages] No news items extracted from digest')
+        return
+      }
+
+      console.log(`[CoverImages] Generating ${newsItems.length} cover images...`)
+
+      // Generate images (fire and forget)
+      for (const text of newsItems) {
+        fetch('/api/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ postId: id, newsText: text }),
+        })
+          .then(res => {
+            if (!res.ok) {
+              res.json().then(data => console.error('[CoverImages] Generation failed:', data))
+            }
+          })
+          .catch(err => console.error('[CoverImages] Generation error:', err))
+      }
+    } catch (err) {
+      console.error('[CoverImages] Error triggering generation:', err)
+    }
+  }, [id, supabase])
 
   // Fetch applied patterns for highlighting
   const fetchAppliedPatterns = useCallback(async () => {
@@ -338,6 +405,9 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         fetchArticleThumbnails()
         setArticleCount(countArticles(parsedContent))
 
+        // Load cover images count
+        fetchCoverImages()
+
         // Initialize edit history if this is the first edit
         // This preserves the original AI-generated content for learning
         ensureInitialEditHistory(id, parsedContent, data.ai_model, supabase)
@@ -353,7 +423,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     }
 
     loadPost()
-  }, [id, supabase, fetchQueueItems, fetchAppliedPatterns, fetchArticleThumbnails, countArticles])
+  }, [id, supabase, fetchQueueItems, fetchAppliedPatterns, fetchArticleThumbnails, fetchCoverImages, countArticles])
 
   const handleTitleChange = (value: string) => {
     setTitle(value)
@@ -474,6 +544,12 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     if (articleCount > 0 && completedThumbnails < articleCount) {
       console.log(`[Thumbnails] Missing thumbnails: ${completedThumbnails}/${articleCount} - triggering generation`)
       generateArticleThumbnails(content)
+    }
+
+    // Generate cover images if missing and digest available
+    if (coverImageCount === 0 && post?.digest_id) {
+      console.log(`[CoverImages] No cover images found - triggering generation`)
+      triggerCoverImageGeneration(post.digest_id)
     }
 
     setSaving(false)
