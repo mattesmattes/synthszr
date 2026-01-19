@@ -13,6 +13,8 @@ import {
   Img,
   Preview,
 } from '@react-email/components'
+import { formatUpdateDate } from '@/lib/i18n/config'
+import type { LanguageCode } from '@/lib/types'
 
 interface NewsletterEmailProps {
   subject: string
@@ -25,6 +27,98 @@ interface NewsletterEmailProps {
   coverImageUrl?: string | null
   postDate?: string
   baseUrl?: string
+  locale?: LanguageCode
+}
+
+// Localized UI strings
+const UI_STRINGS: Record<LanguageCode, {
+  footer: string
+  readArticle: string
+  changeLanguage: string
+  unsubscribe: string
+  imprint: string
+  privacy: string
+}> = {
+  de: {
+    footer: 'Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.',
+    readArticle: 'Artikel auf synthszr.com lesen',
+    changeLanguage: 'Sprache ändern',
+    unsubscribe: 'Abbestellen',
+    imprint: 'Impressum',
+    privacy: 'Datenschutz',
+  },
+  en: {
+    footer: 'You are receiving this email because you subscribed to the Synthszr Newsletter.',
+    readArticle: 'Read article on synthszr.com',
+    changeLanguage: 'Change language',
+    unsubscribe: 'Unsubscribe',
+    imprint: 'Imprint',
+    privacy: 'Privacy',
+  },
+  fr: {
+    footer: 'Vous recevez cet e-mail car vous êtes abonné à la newsletter Synthszr.',
+    readArticle: 'Lire l\'article sur synthszr.com',
+    changeLanguage: 'Changer de langue',
+    unsubscribe: 'Se désabonner',
+    imprint: 'Mentions légales',
+    privacy: 'Confidentialité',
+  },
+  es: {
+    footer: 'Recibes este correo porque te suscribiste al boletín de Synthszr.',
+    readArticle: 'Leer artículo en synthszr.com',
+    changeLanguage: 'Cambiar idioma',
+    unsubscribe: 'Cancelar suscripción',
+    imprint: 'Aviso legal',
+    privacy: 'Privacidad',
+  },
+  it: {
+    footer: 'Ricevi questa email perché sei iscritto alla newsletter di Synthszr.',
+    readArticle: 'Leggi l\'articolo su synthszr.com',
+    changeLanguage: 'Cambia lingua',
+    unsubscribe: 'Annulla iscrizione',
+    imprint: 'Note legali',
+    privacy: 'Privacy',
+  },
+  pt: {
+    footer: 'Você está recebendo este e-mail porque assinou a newsletter Synthszr.',
+    readArticle: 'Ler artigo em synthszr.com',
+    changeLanguage: 'Mudar idioma',
+    unsubscribe: 'Cancelar inscrição',
+    imprint: 'Informações legais',
+    privacy: 'Privacidade',
+  },
+  nl: {
+    footer: 'Je ontvangt deze e-mail omdat je je hebt aangemeld voor de Synthszr nieuwsbrief.',
+    readArticle: 'Lees artikel op synthszr.com',
+    changeLanguage: 'Taal wijzigen',
+    unsubscribe: 'Afmelden',
+    imprint: 'Impressum',
+    privacy: 'Privacy',
+  },
+  pl: {
+    footer: 'Otrzymujesz ten e-mail, ponieważ subskrybujesz newsletter Synthszr.',
+    readArticle: 'Przeczytaj artykuł na synthszr.com',
+    changeLanguage: 'Zmień język',
+    unsubscribe: 'Wypisz się',
+    imprint: 'Impressum',
+    privacy: 'Prywatność',
+  },
+  cs: {
+    footer: 'Tento e-mail vám přišel, protože jste přihlášeni k odběru newsletteru Synthszr.',
+    readArticle: 'Přečíst článek na synthszr.com',
+    changeLanguage: 'Změnit jazyk',
+    unsubscribe: 'Odhlásit odběr',
+    imprint: 'Impressum',
+    privacy: 'Ochrana soukromí',
+  },
+  nds: {
+    footer: 'Du kriggst disse E-Mail, wiel du den Synthszr Newsletter abonneert hest.',
+    readArticle: 'Artikel op synthszr.com lesen',
+    changeLanguage: 'Spraak ännern',
+    unsubscribe: 'Afmellen',
+    imprint: 'Impressum',
+    privacy: 'Datenschutz',
+  },
 }
 
 export function NewsletterEmail({
@@ -34,19 +128,15 @@ export function NewsletterEmail({
   postUrl,
   unsubscribeUrl,
   preferencesUrl,
-  footerText = 'Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.',
+  footerText,
   coverImageUrl,
   postDate,
   baseUrl = 'https://synthszr.vercel.app',
+  locale = 'de',
 }: NewsletterEmailProps) {
-  const formattedDate = postDate
-    ? new Date(postDate).toLocaleDateString('de-DE', {
-        weekday: 'long',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      })
-    : null
+  const formattedDate = postDate ? formatUpdateDate(postDate, locale) : null
+  const strings = UI_STRINGS[locale] || UI_STRINGS.de
+  const actualFooterText = footerText || strings.footer
 
   return (
     <Html>
@@ -149,7 +239,7 @@ export function NewsletterEmail({
             {/* Date Tag */}
             {formattedDate && (
               <Text style={dateTag}>
-                Update vom {formattedDate}
+                {formattedDate}
               </Text>
             )}
 
@@ -172,7 +262,7 @@ export function NewsletterEmail({
 
             {/* CTA Button */}
             <Button style={button} href={postUrl}>
-              Artikel auf synthszr.com lesen
+              {strings.readArticle}
             </Button>
           </Section>
 
@@ -188,27 +278,27 @@ export function NewsletterEmail({
               />
             </Link>
             <Text style={footer}>
-              {footerText}
+              {actualFooterText}
             </Text>
             <Text style={footerLinks}>
               {preferencesUrl && (
                 <>
                   <Link href={preferencesUrl} style={unsubscribeLink}>
-                    Sprache ändern
+                    {strings.changeLanguage}
                   </Link>
                   <span style={linkSeparator}>•</span>
                 </>
               )}
               <Link href={unsubscribeUrl} style={unsubscribeLink}>
-                Abbestellen
+                {strings.unsubscribe}
               </Link>
               <span style={linkSeparator}>•</span>
-              <Link href={`${baseUrl}/impressum`} style={unsubscribeLink}>
-                Impressum
+              <Link href={`${baseUrl}/${locale === 'de' ? 'impressum' : `${locale}/impressum`}`} style={unsubscribeLink}>
+                {strings.imprint}
               </Link>
               <span style={linkSeparator}>•</span>
-              <Link href={`${baseUrl}/datenschutz`} style={unsubscribeLink}>
-                Datenschutz
+              <Link href={`${baseUrl}/${locale === 'de' ? 'datenschutz' : `${locale}/datenschutz`}`} style={unsubscribeLink}>
+                {strings.privacy}
               </Link>
             </Text>
           </Section>

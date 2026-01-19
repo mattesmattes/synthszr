@@ -46,3 +46,64 @@ export const LANGUAGE_NAMES: Record<LanguageCode, { name: string; native: string
   cs: { name: 'Czech', native: 'Čeština' },
   nds: { name: 'Low German', native: 'Plattdüütsch' },
 }
+
+/** Locale strings for toLocaleDateString() */
+const LOCALE_STRINGS: Record<LanguageCode, string> = {
+  de: 'de-DE',
+  en: 'en-US',
+  fr: 'fr-FR',
+  es: 'es-ES',
+  it: 'it-IT',
+  pt: 'pt-PT',
+  nl: 'nl-NL',
+  pl: 'pl-PL',
+  cs: 'cs-CZ',
+  nds: 'de-DE', // Low German falls back to German locale for weekdays
+}
+
+/**
+ * Format a date with weekday for the "Update from..." display
+ * Each language has its own natural pattern
+ */
+export function formatUpdateDate(date: string | Date, locale: LanguageCode): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  const localeStr = LOCALE_STRINGS[locale]
+
+  const weekday = d.toLocaleDateString(localeStr, { weekday: 'long' })
+  const day = d.getDate().toString().padStart(2, '0')
+  const month = (d.getMonth() + 1).toString().padStart(2, '0')
+  const year = d.getFullYear()
+
+  // Full formatted date for languages that use it
+  const fullDate = d.toLocaleDateString(localeStr, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  })
+
+  switch (locale) {
+    case 'de':
+      return `Update vom ${weekday}, den ${day}.${month}.${year}`
+    case 'en':
+      return `Update from ${weekday}, ${fullDate}`
+    case 'fr':
+      return `Mise à jour du ${weekday.toLowerCase()} ${fullDate}`
+    case 'es':
+      return `Actualización del ${weekday.toLowerCase()}, ${fullDate}`
+    case 'it':
+      return `Aggiornamento di ${weekday.toLowerCase()} ${fullDate}`
+    case 'pt':
+      return `Atualização de ${weekday.toLowerCase()}, ${fullDate}`
+    case 'nl':
+      return `Update van ${weekday.toLowerCase()} ${fullDate}`
+    case 'pl':
+      return `Aktualizacja z ${weekday}, ${day}.${month}.${year}`
+    case 'cs':
+      return `Aktualizace z ${weekday} ${fullDate}`
+    case 'nds':
+      // Low German: use German-style formatting with Plattdüütsch prefix
+      return `Updoot vun ${weekday}, den ${day}.${month}.${year}`
+    default:
+      return `Update vom ${weekday}, den ${day}.${month}.${year}`
+  }
+}

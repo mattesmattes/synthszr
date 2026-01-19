@@ -8,6 +8,7 @@ import { LanguageSwitcher } from "@/components/language-switcher"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
+import { formatUpdateDate } from "@/lib/i18n/config"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
 
@@ -232,13 +233,7 @@ export default async function PostPage({ params }: PageProps) {
   const olderPost: AdjacentPost | null = olderPosts?.[0] || null
 
   const formatDateWithWeekday = (date: string) => {
-    const d = new Date(date)
-    const localeStr = locale === 'de' ? 'de-DE' : locale
-    const weekday = d.toLocaleDateString(localeStr, { weekday: "long" })
-    const day = d.getDate().toString().padStart(2, '0')
-    const month = (d.getMonth() + 1).toString().padStart(2, '0')
-    const year = d.getFullYear()
-    return `Update vom ${weekday}, den ${day}.${month}.${year}`
+    return formatUpdateDate(date, locale)
   }
 
   const formatNavDate = (date: string) => {
