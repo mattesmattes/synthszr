@@ -169,7 +169,7 @@ function stripExplicitCompanyTags(text: string): string {
  * Format: "Synthszr Vote: Nvidia (NVDA) ↑5.2% Buy, Tesla (TSLA) ↓2.1% Hold"
  * Premarket: "Synthszr Vote: OpenAI Buy" (no ticker/percent)
  */
-function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug?: string): string {
+function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug?: string, locale?: string): string {
   if (ratings.length === 0) return ''
 
   const badges = ratings.map((r, idx) => {
@@ -177,9 +177,10 @@ function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug
     const label = r.rating === 'BUY' ? 'Buy' : r.rating === 'HOLD' ? 'Hold' : 'Sell'
     const prefix = idx === 0 ? '<span style="font-weight: bold; text-transform: uppercase; font-size: 13px;">Synthszr Vote:</span> ' : ', '
 
-    // Link to analysis dialog on the blog post
+    // Link to analysis dialog on the blog post (with locale prefix if not German)
+    const localePath = locale && locale !== 'de' ? `/${locale}` : ''
     const href = postSlug
-      ? `${baseUrl}/posts/${postSlug}?${r.type === 'premarket' ? 'premarket' : 'stock'}=${encodeURIComponent(r.displayName)}`
+      ? `${baseUrl}${localePath}/posts/${postSlug}?${r.type === 'premarket' ? 'premarket' : 'stock'}=${encodeURIComponent(r.displayName)}`
       : '#'
 
     // Build company info: "Nvidia (NVDA) ↑5.2%" for public, "OpenAI" for premarket
@@ -243,7 +244,8 @@ export function generateEmailContent(post: { content?: unknown; excerpt?: string
 export async function generateEmailContentWithVotes(
   post: { content?: unknown; excerpt?: string; slug?: string },
   baseUrl: string,
-  thumbnails?: ArticleThumbnail[]
+  thumbnails?: ArticleThumbnail[],
+  locale?: string
 ): Promise<string> {
   const rawContent = post.content
   let doc: TiptapDoc | null = null
@@ -511,7 +513,7 @@ export async function generateEmailContentWithVotes(
       }
 
       if (ratings.length > 0) {
-        const voteBadges = generateVoteBadgesHtml(ratings, baseUrl, post.slug)
+        const voteBadges = generateVoteBadgesHtml(ratings, baseUrl, post.slug, locale)
         // Insert badges before closing </p> tag
         return prefix + baseHtml.replace(/<\/p>$/, `${voteBadges}</p>`)
       }

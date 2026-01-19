@@ -186,7 +186,11 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
   // Device pixel ratio for 1:1 thumbnail rendering (Retina optimization)
   const [devicePixelRatio, setDevicePixelRatio] = useState(1)
 
+  // Track if mounted (for safe document.body portal usage)
+  const [isMounted, setIsMounted] = useState(false)
+
   useEffect(() => {
+    setIsMounted(true)
     setDevicePixelRatio(window.devicePixelRatio || 1)
   }, [])
 
@@ -1040,17 +1044,20 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
       })}
 
       {/* Auto-open dialogs from URL params (newsletter email links) */}
-      {autoOpenStock && (
+      {/* Render to document.body via portal to avoid CSS context issues with thumbnails */}
+      {isMounted && autoOpenStock && createPortal(
         <StockSynthszrLayer
           company={autoOpenStock}
           onClose={() => setAutoOpenStock(null)}
-        />
+        />,
+        document.body
       )}
-      {autoOpenPremarket && (
+      {isMounted && autoOpenPremarket && createPortal(
         <PremarketSynthszrLayer
           company={autoOpenPremarket}
           onClose={() => setAutoOpenPremarket(null)}
-        />
+        />,
+        document.body
       )}
     </div>
   )

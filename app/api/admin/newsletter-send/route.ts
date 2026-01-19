@@ -5,6 +5,7 @@ import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { NewsletterEmail } from '@/lib/resend/templates/newsletter'
 import { render } from '@react-email/components'
 import { generateEmailContentWithVotes, ArticleThumbnail } from '@/lib/email/tiptap-to-html'
+import type { LanguageCode } from '@/lib/types'
 
 // Check admin auth (via session or cron secret header for Vercel cron jobs)
 async function isAuthenticated(request?: NextRequest): Promise<boolean> {
@@ -111,13 +112,17 @@ export async function POST(request: NextRequest) {
     const postUrl = `${BASE_URL}/posts/${post.slug}`
     const postDate = post.created_at
 
-    // If testEmail, send only to that address
+    // If testEmail, send only to that address (default German locale for test)
     if (testEmail) {
+      const testLocale = 'de'
+      const testPostUrl = `${BASE_URL}/posts/${post.slug}`
+
       // Generate email content with Synthszr Vote badges, stock tickers, and thumbnails
       const emailContent = await generateEmailContentWithVotes(
         { content: post.content, excerpt: post.excerpt, slug: post.slug },
         BASE_URL,
-        articleThumbnails
+        articleThumbnails,
+        testLocale
       )
 
       const html = await render(
@@ -125,13 +130,14 @@ export async function POST(request: NextRequest) {
           subject,
           previewText,
           content: emailContent,
-          postUrl,
+          postUrl: testPostUrl,
           unsubscribeUrl: `${BASE_URL}/newsletter/unsubscribe?id=test`,
           preferencesUrl: `${BASE_URL}/newsletter/preferences?token=test`,
           footerText,
           coverImageUrl,
           postDate,
           baseUrl: BASE_URL,
+          locale: testLocale,
         })
       )
 
@@ -148,10 +154,10 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Get all active subscribers
+    // Get all active subscribers with their language preferences
     const { data: subscribers, error: subError } = await supabase
       .from('subscribers')
-      .select('id, email')
+      .select('id, email, preferences')
       .eq('status', 'active')
 
     if (subError || !subscribers || subscribers.length === 0) {
@@ -160,67 +166,94 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // Group subscribers by language for efficient content generation
+    const subscribersByLocale = new Map<string, typeof subscribers>()
+    for (const subscriber of subscribers) {
+      const prefs = subscriber.preferences as { language?: string } | null
+      const locale = prefs?.language || 'de'
+      if (!subscribersByLocale.has(locale)) {
+        subscribersByLocale.set(locale, [])
+      }
+      subscribersByLocale.get(locale)!.push(subscriber)
+    }
+
+    // Pre-generate email content for each language (avoids redundant API calls)
+    const contentByLocale = new Map<string, string>()
+    for (const locale of subscribersByLocale.keys()) {
+      const emailContent = await generateEmailContentWithVotes(
+        { content: post.content, excerpt: post.excerpt, slug: post.slug },
+        BASE_URL,
+        articleThumbnails,
+        locale
+      )
+      contentByLocale.set(locale, emailContent)
+    }
+
     // Send emails sequentially with delay to avoid rate limits
-    // Generate email content with Synthszr Vote badges, stock tickers, and thumbnails
-    const emailContent = await generateEmailContentWithVotes(
-      { content: post.content, excerpt: post.excerpt, slug: post.slug },
-      BASE_URL,
-      articleThumbnails
-    )
     let successCount = 0
     let failCount = 0
+    let subscriberIndex = 0
+    const totalSubscribers = subscribers.length
 
-    for (let i = 0; i < subscribers.length; i++) {
-      const subscriber = subscribers[i]
-      const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
+    for (const [locale, localeSubscribers] of subscribersByLocale) {
+      const emailContent = contentByLocale.get(locale)!
+      // Build locale-aware post URL
+      const localePrefix = locale !== 'de' ? `/${locale}` : ''
+      const localizedPostUrl = `${BASE_URL}${localePrefix}/posts/${post.slug}`
 
-      // Generate preferences token for this subscriber
-      let preferencesUrl: string | undefined
-      try {
-        const prefResponse = await fetch(`${BASE_URL}/api/newsletter/preferences`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subscriberId: subscriber.id }),
-        })
-        if (prefResponse.ok) {
-          const { token } = await prefResponse.json()
-          preferencesUrl = `${BASE_URL}/newsletter/preferences?token=${token}`
-        }
-      } catch (prefError) {
-        console.warn(`Failed to generate preferences token for ${subscriber.email}:`, prefError)
-      }
+      for (const subscriber of localeSubscribers) {
+        const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
 
-      try {
-        const html = await render(
-          NewsletterEmail({
-            subject,
-            previewText,
-            content: emailContent,
-            postUrl,
-            unsubscribeUrl,
-            preferencesUrl,
-            footerText,
-            coverImageUrl,
-            postDate,
-            baseUrl: BASE_URL,
+        // Generate preferences token for this subscriber
+        let preferencesUrl: string | undefined
+        try {
+          const prefResponse = await fetch(`${BASE_URL}/api/newsletter/preferences`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subscriberId: subscriber.id }),
           })
-        )
+          if (prefResponse.ok) {
+            const { token } = await prefResponse.json()
+            preferencesUrl = `${BASE_URL}/newsletter/preferences?token=${token}`
+          }
+        } catch (prefError) {
+          console.warn(`Failed to generate preferences token for ${subscriber.email}:`, prefError)
+        }
 
-        await getResend().emails.send({
-          from: FROM_EMAIL,
-          to: subscriber.email,
-          subject,
-          html,
-        })
-        successCount++
-      } catch (error) {
-        console.error(`Failed to send to ${subscriber.email}:`, error)
-        failCount++
-      }
+        try {
+          const html = await render(
+            NewsletterEmail({
+              subject,
+              previewText,
+              content: emailContent,
+              postUrl: localizedPostUrl,
+              unsubscribeUrl,
+              preferencesUrl,
+              footerText,
+              coverImageUrl,
+              postDate,
+              baseUrl: BASE_URL,
+              locale: locale as LanguageCode,
+            })
+          )
 
-      // 500ms delay between each email to stay under rate limit
-      if (i < subscribers.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500))
+          await getResend().emails.send({
+            from: FROM_EMAIL,
+            to: subscriber.email,
+            subject,
+            html,
+          })
+          successCount++
+        } catch (error) {
+          console.error(`Failed to send to ${subscriber.email}:`, error)
+          failCount++
+        }
+
+        // 500ms delay between each email to stay under rate limit
+        subscriberIndex++
+        if (subscriberIndex < totalSubscribers) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
       }
     }
 

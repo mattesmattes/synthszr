@@ -4,6 +4,7 @@ import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { NewsletterEmail } from '@/lib/resend/templates/newsletter'
 import { render } from '@react-email/components'
 import { generateEmailContentWithVotes, ArticleThumbnail } from '@/lib/email/tiptap-to-html'
+import type { LanguageCode } from '@/lib/types'
 
 // Verify cron secret (Vercel cron jobs send this header)
 function verifyCronAuth(request: NextRequest): boolean {
@@ -140,12 +141,11 @@ export async function GET(request: NextRequest) {
 
     const subject = subjectTemplate.replace(/\{\{title\}\}/g, post.title)
     const previewText = post.excerpt || ''
-    const postUrl = `${BASE_URL}/blog/${post.slug}`
 
-    // Get all active subscribers
+    // Get all active subscribers with their language preferences
     const { data: subscribers, error: subError } = await supabase
       .from('subscribers')
-      .select('id, email')
+      .select('id, email, preferences')
       .eq('status', 'active')
 
     if (subError || !subscribers || subscribers.length === 0) {
@@ -156,63 +156,92 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Generate email content with Synthszr Vote badges and thumbnails (once for all subscribers)
-    const emailContent = await generateEmailContentWithVotes(
-      { content: post.content, excerpt: post.excerpt, slug: post.slug },
-      BASE_URL,
-      articleThumbnails
-    )
+    // Group subscribers by language for efficient content generation
+    const subscribersByLocale = new Map<string, typeof subscribers>()
+    for (const subscriber of subscribers) {
+      const prefs = subscriber.preferences as { language?: string } | null
+      const locale = prefs?.language || 'de'
+      if (!subscribersByLocale.has(locale)) {
+        subscribersByLocale.set(locale, [])
+      }
+      subscribersByLocale.get(locale)!.push(subscriber)
+    }
+
+    // Pre-generate email content for each language (avoids redundant API calls)
+    const contentByLocale = new Map<string, string>()
+    for (const locale of subscribersByLocale.keys()) {
+      const emailContent = await generateEmailContentWithVotes(
+        { content: post.content, excerpt: post.excerpt, slug: post.slug },
+        BASE_URL,
+        articleThumbnails,
+        locale
+      )
+      contentByLocale.set(locale, emailContent)
+    }
 
     // Send to all subscribers (sequentially with preference tokens)
     let successCount = 0
     let failCount = 0
+    let subscriberIndex = 0
+    const totalSubscribers = subscribers.length
 
-    for (const subscriber of subscribers) {
-      try {
-        const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
+    for (const [locale, localeSubscribers] of subscribersByLocale) {
+      const emailContent = contentByLocale.get(locale)!
+      // Build locale-aware post URL
+      const localePrefix = locale !== 'de' ? `/${locale}` : ''
+      const localizedPostUrl = `${BASE_URL}${localePrefix}/posts/${post.slug}`
 
-        // Generate preferences token for this subscriber
-        let preferencesUrl: string | undefined
+      for (const subscriber of localeSubscribers) {
         try {
-          const prefResponse = await fetch(`${BASE_URL}/api/newsletter/preferences`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subscriberId: subscriber.id }),
-          })
-          if (prefResponse.ok) {
-            const { token } = await prefResponse.json()
-            preferencesUrl = `${BASE_URL}/newsletter/preferences?token=${token}`
+          const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
+
+          // Generate preferences token for this subscriber
+          let preferencesUrl: string | undefined
+          try {
+            const prefResponse = await fetch(`${BASE_URL}/api/newsletter/preferences`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ subscriberId: subscriber.id }),
+            })
+            if (prefResponse.ok) {
+              const { token } = await prefResponse.json()
+              preferencesUrl = `${BASE_URL}/newsletter/preferences?token=${token}`
+            }
+          } catch (prefError) {
+            console.warn(`Failed to generate preferences token for ${subscriber.email}:`, prefError)
           }
-        } catch (prefError) {
-          console.warn(`Failed to generate preferences token for ${subscriber.email}:`, prefError)
-        }
 
-        const html = await render(
-          NewsletterEmail({
+          const html = await render(
+            NewsletterEmail({
+              subject,
+              previewText,
+              content: emailContent,
+              postUrl: localizedPostUrl,
+              unsubscribeUrl,
+              preferencesUrl,
+              footerText,
+              baseUrl: BASE_URL,
+              locale: locale as LanguageCode,
+            })
+          )
+
+          await getResend().emails.send({
+            from: FROM_EMAIL,
+            to: subscriber.email,
             subject,
-            previewText,
-            content: emailContent,
-            postUrl,
-            unsubscribeUrl,
-            preferencesUrl,
-            footerText,
-            baseUrl: BASE_URL,
+            html,
           })
-        )
+          successCount++
 
-        await getResend().emails.send({
-          from: FROM_EMAIL,
-          to: subscriber.email,
-          subject,
-          html,
-        })
-        successCount++
-
-        // 500ms delay between emails to stay under rate limit
-        await new Promise(resolve => setTimeout(resolve, 500))
-      } catch (error) {
-        console.error(`Failed to send to ${subscriber.email}:`, error)
-        failCount++
+          // 500ms delay between emails to stay under rate limit
+          subscriberIndex++
+          if (subscriberIndex < totalSubscribers) {
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
+        } catch (error) {
+          console.error(`Failed to send to ${subscriber.email}:`, error)
+          failCount++
+        }
       }
     }
 
