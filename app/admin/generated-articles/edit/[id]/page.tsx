@@ -539,10 +539,10 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         .catch(err => console.error('[i18n] Translation queue error:', err))
     }
 
-    // Generate article thumbnails if missing
-    const completedThumbnails = articleThumbnails.filter(t => t.generation_status === 'completed').length
-    if (articleCount > 0 && completedThumbnails < articleCount) {
-      console.log(`[Thumbnails] Missing thumbnails: ${completedThumbnails}/${articleCount} - triggering generation`)
+    // Generate article thumbnails if missing (count all non-failed thumbnails)
+    const existingThumbnails = articleThumbnails.filter(t => t.generation_status !== 'failed').length
+    if (articleCount > 0 && existingThumbnails < articleCount) {
+      console.log(`[Thumbnails] Missing thumbnails: ${existingThumbnails}/${articleCount} - triggering generation`)
       generateArticleThumbnails(content)
     }
 

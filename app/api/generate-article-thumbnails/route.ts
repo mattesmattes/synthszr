@@ -98,6 +98,32 @@ export async function POST(request: NextRequest) {
     // Process articles sequentially to avoid API rate limits
     for (const article of articles) {
       try {
+        // Check if thumbnail already exists for this article index
+        const { data: existingThumbnail } = await supabase
+          .from('post_images')
+          .select('id, generation_status')
+          .eq('post_id', postId)
+          .eq('article_index', article.index)
+          .eq('image_type', 'article_thumbnail')
+          .single()
+
+        if (existingThumbnail) {
+          // Skip if already completed, generating, or pending
+          if (existingThumbnail.generation_status !== 'failed') {
+            console.log(`[Thumbnail] Skipping article ${article.index} - already exists with status: ${existingThumbnail.generation_status}`)
+            results.push({
+              index: article.index,
+              success: true,
+              imageId: existingThumbnail.id,
+              error: `Skipped - already ${existingThumbnail.generation_status}`
+            })
+            continue
+          }
+          // For failed thumbnails, delete and regenerate
+          console.log(`[Thumbnail] Regenerating failed thumbnail for article ${article.index}`)
+          await supabase.from('post_images').delete().eq('id', existingThumbnail.id)
+        }
+
         console.log(`[Thumbnail] Generating thumbnail ${article.index + 1}/${articles.length} for post ${postId}`)
 
         // Determine vote color

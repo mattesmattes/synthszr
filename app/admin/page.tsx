@@ -453,10 +453,10 @@ export default function AdminPage() {
           throw new Error(error.error || 'Fehler beim Speichern')
         }
 
-        // Generate article thumbnails if missing
-        const completedThumbnails = articleThumbnails.filter(t => t.generation_status === 'completed').length
+        // Generate article thumbnails if missing (count all non-failed thumbnails)
+        const existingThumbnails = articleThumbnails.filter(t => t.generation_status !== 'failed').length
         const currentArticleCount = countArticles(editForm.content)
-        if (currentArticleCount > 0 && completedThumbnails < currentArticleCount) {
+        if (currentArticleCount > 0 && existingThumbnails < currentArticleCount) {
           generateArticleThumbnails(editingPost.id, editForm.content)
         }
       }

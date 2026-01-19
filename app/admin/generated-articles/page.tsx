@@ -408,11 +408,11 @@ export default function GeneratedArticlesPage() {
             .catch(err => console.error('[i18n] Translation queue error:', err))
         }
 
-        // Generate article thumbnails if missing
-        const completedThumbnails = articleThumbnails.filter(t => t.generation_status === 'completed').length
+        // Generate article thumbnails if missing (count all non-failed thumbnails)
+        const existingThumbnails = articleThumbnails.filter(t => t.generation_status !== 'failed').length
         const currentArticleCount = countArticles(editForm.content)
-        if (currentArticleCount > 0 && completedThumbnails < currentArticleCount) {
-          console.log(`[Thumbnails] Missing thumbnails: ${completedThumbnails}/${currentArticleCount} - triggering generation`)
+        if (currentArticleCount > 0 && existingThumbnails < currentArticleCount) {
+          console.log(`[Thumbnails] Missing thumbnails: ${existingThumbnails}/${currentArticleCount} - triggering generation`)
           generateArticleThumbnails(editingPost.id, editForm.content)
         }
 
