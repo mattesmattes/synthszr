@@ -192,6 +192,8 @@ export async function getBalancedSelection(
 ): Promise<BalancedQueueSelection[]> {
   const supabase = createAdminClient()
 
+  console.log(`[NewsQueue] Calling get_balanced_queue_selection(max_items=${maxItems}, target_source_limit=${SOURCE_LIMIT_PERCENTAGE})`)
+
   const { data, error } = await supabase
     .rpc('get_balanced_queue_selection', {
       max_items: maxItems,
@@ -201,6 +203,16 @@ export async function getBalancedSelection(
   if (error) {
     console.error('[NewsQueue] Failed to get balanced selection:', error)
     return []
+  }
+
+  console.log(`[NewsQueue] get_balanced_queue_selection returned ${data?.length || 0} items`)
+  if (data && data.length > 0) {
+    // Log source distribution
+    const sources: Record<string, number> = {}
+    for (const item of data) {
+      sources[item.source_identifier] = (sources[item.source_identifier] || 0) + 1
+    }
+    console.log(`[NewsQueue] Balanced selection sources:`, sources)
   }
 
   return data || []
@@ -284,6 +296,8 @@ export async function selectItemsForArticle(
 ): Promise<{ items: NewsQueueItem[]; error?: string }> {
   const supabase = createAdminClient()
 
+  console.log(`[NewsQueue] selectItemsForArticle called with ${itemIds.length} item IDs`)
+
   // Note: We no longer validate source limits here because:
   // 1. getBalancedSelection() already handles this intelligently (35% rule after 4 items)
   // 2. Manual selection explicitly chooses items regardless of source
@@ -301,7 +315,13 @@ export async function selectItemsForArticle(
     .select()
 
   if (error) {
+    console.error(`[NewsQueue] selectItemsForArticle error:`, error)
     return { items: [], error: error.message }
+  }
+
+  console.log(`[NewsQueue] selectItemsForArticle updated ${data?.length || 0} items from pending to selected`)
+  if (data && data.length < itemIds.length) {
+    console.warn(`[NewsQueue] WARNING: Only ${data.length}/${itemIds.length} items were updated - some may not be in 'pending' status`)
   }
 
   return { items: data || [] }

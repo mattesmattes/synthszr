@@ -68,9 +68,10 @@ export async function POST(request: NextRequest) {
     } else if (useSelected) {
       // Use manually selected items (status='selected') + fill from balanced if needed
       const manuallySelected = await getSelectedItems()
+      console.log(`[Ghostwriter-Queue] getSelectedItems returned ${manuallySelected.length} items (after filtering published)`)
 
       if (manuallySelected.length > 0) {
-        console.log(`[Ghostwriter-Queue] Found ${manuallySelected.length} manually selected items`)
+        console.log(`[Ghostwriter-Queue] Using ${manuallySelected.length} manually selected items`)
         selectedItems = manuallySelected
 
         // Fill up with balanced items if selected < maxItems
@@ -79,15 +80,18 @@ export async function POST(request: NextRequest) {
           console.log(`[Ghostwriter-Queue] Need ${neededCount} more items from balanced selection to reach ${maxItems}`)
 
           const balancedSelection = await getBalancedSelection(neededCount)
+          console.log(`[Ghostwriter-Queue] getBalancedSelection(${neededCount}) returned ${balancedSelection.length} items`)
 
           if (balancedSelection.length > 0) {
             // Filter out items that are already in manuallySelected
             const selectedIds = new Set(manuallySelected.map(i => i.id))
             const additionalItems = balancedSelection.filter(s => !selectedIds.has(s.id))
+            console.log(`[Ghostwriter-Queue] After filtering duplicates: ${additionalItems.length} additional items`)
 
             if (additionalItems.length > 0) {
               const itemIds = additionalItems.map(s => s.id)
               const result = await selectItemsForArticle(itemIds)
+              console.log(`[Ghostwriter-Queue] selectItemsForArticle returned ${result.items.length} items (error: ${result.error || 'none'})`)
 
               if (!result.error && result.items.length > 0) {
                 console.log(`[Ghostwriter-Queue] Added ${result.items.length} items from balanced selection`)
@@ -97,11 +101,12 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        console.log(`[Ghostwriter-Queue] Total items: ${selectedItems.length}`)
+        console.log(`[Ghostwriter-Queue] Total items after fill: ${selectedItems.length}`)
       } else {
         // Fallback to balanced selection if no items manually selected
-        console.log(`[Ghostwriter-Queue] No manually selected items, using balanced selection`)
+        console.log(`[Ghostwriter-Queue] No manually selected items (all filtered or none exist), using balanced selection for ${maxItems} items`)
         const balancedSelection = await getBalancedSelection(maxItems)
+        console.log(`[Ghostwriter-Queue] getBalancedSelection(${maxItems}) returned ${balancedSelection.length} items`)
 
         if (balancedSelection.length === 0) {
           return new Response(JSON.stringify({ error: 'No items available in queue. Select items first or add items to the pending queue.' }), {
@@ -111,7 +116,9 @@ export async function POST(request: NextRequest) {
         }
 
         const itemIds = balancedSelection.map(s => s.id)
+        console.log(`[Ghostwriter-Queue] Calling selectItemsForArticle with ${itemIds.length} item IDs`)
         const result = await selectItemsForArticle(itemIds)
+        console.log(`[Ghostwriter-Queue] selectItemsForArticle returned ${result.items.length} items (error: ${result.error || 'none'})`)
 
         if (result.error) {
           return new Response(JSON.stringify({ error: result.error }), {
@@ -121,6 +128,7 @@ export async function POST(request: NextRequest) {
         }
 
         selectedItems = result.items
+        console.log(`[Ghostwriter-Queue] Final selected items count: ${selectedItems.length}`)
       }
     } else {
       // Use balanced selection from pending items
