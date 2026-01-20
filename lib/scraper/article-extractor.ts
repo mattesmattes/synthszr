@@ -301,8 +301,15 @@ export function isLikelyArticleUrl(url: string): boolean {
 
     // Help centers and support pages
     /help\.[^\/]+\.[a-z]+\//i, // help.*.com/* subdomains (help.nytimes.com, etc.)
+    /zendesk\.com/i,           // Zendesk help centers (theinformation.zendesk.com, etc.)
     /\/v2\/offers\//i,         // Subscription offer pages (newyorker.com/v2/offers/)
     /\/about\/?(\?|$)/i,       // About pages (e.g., wirecutter/about/)
+
+    // User/author profile pages
+    /\/u\/[a-z0-9_-]+(\?|$)/i, // User profiles (theinformation.com/u/username)
+    /\/author\/[a-z0-9_-]+(\?|$)/i, // Author pages
+    /\/authors?\/[a-z0-9_-]+(\?|$)/i, // Author pages (plural)
+    /\/team\/[a-z0-9_-]+(\?|$)/i,    // Team member pages
   ]
 
   for (const pattern of skipPatterns) {

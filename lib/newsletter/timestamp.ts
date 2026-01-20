@@ -46,13 +46,19 @@ export async function getLastFetchTimestamp(
  * Update the stored last_newsletter_fetch setting.
  * Called after a successful fetch to set the timestamp to the newest email date.
  *
+ * CRITICAL: Only use NEWSLETTER entries, not articles!
+ * Articles set email_received_at to extraction time, which would push the timestamp
+ * forward and cause older newsletters to be skipped.
+ *
  * @param supabase - Supabase client
  */
 export async function updateLastFetchTimestamp(supabase: SupabaseClient): Promise<void> {
-  // Get the most recent email_received_at from daily_repo
+  // Get the most recent email_received_at from NEWSLETTERS only (not articles!)
+  // Articles use extraction time which would incorrectly advance the timestamp
   const { data: latestItem } = await supabase
     .from('daily_repo')
     .select('email_received_at')
+    .eq('source_type', 'newsletter')  // CRITICAL: Only newsletters!
     .not('email_received_at', 'is', null)
     .order('email_received_at', { ascending: false })
     .limit(1)
@@ -73,16 +79,18 @@ export async function updateLastFetchTimestamp(supabase: SupabaseClient): Promis
 /**
  * Recalculate the timestamp after items are deleted.
  *
- * Uses the newest email_received_at from remaining items.
+ * Uses the newest email_received_at from remaining NEWSLETTER items only.
  * Falls back to newest newsletter_date + 23:59:59 if no items exist.
  *
  * @param supabase - Supabase client
  */
 export async function recalculateFetchTimestamp(supabase: SupabaseClient): Promise<void> {
-  // Get the most recent email_received_at from remaining items
+  // Get the most recent email_received_at from remaining NEWSLETTER items only
+  // Articles use extraction time which would incorrectly advance the timestamp
   const { data: latestItem } = await supabase
     .from('daily_repo')
     .select('email_received_at, newsletter_date')
+    .eq('source_type', 'newsletter')  // CRITICAL: Only newsletters!
     .not('email_received_at', 'is', null)
     .order('email_received_at', { ascending: false })
     .limit(1)

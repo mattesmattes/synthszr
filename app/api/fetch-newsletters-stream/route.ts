@@ -713,6 +713,19 @@ export async function POST(request: NextRequest) {
                 const extracted = await extractArticleContent(article.url)
 
                 if (extracted && extracted.content) {
+                  const resolvedUrl = extracted.finalUrl || article.url
+
+                  // CRITICAL: Check if RESOLVED URL is a non-article page
+                  // The original URL might be a tracking URL that resolves to LinkedIn, user profiles, etc.
+                  if (!isLikelyArticleUrl(resolvedUrl)) {
+                    console.log(`[Newsletter Fetch] Filtered RESOLVED URL: ${resolvedUrl.slice(0, 80)}`)
+                    return {
+                      globalIndex, article, status: 'skipped' as const,
+                      title: extracted.title || article.title, url: resolvedUrl,
+                      error: 'Resolved URL is not an article'
+                    }
+                  }
+
                   // Check if article is too old (max 48 hours)
                   if (isArticleTooOld(extracted.publishedDate, 48)) {
                     const ageInfo = extracted.publishedDate
@@ -724,8 +737,6 @@ export async function POST(request: NextRequest) {
                       error: `Artikel zu alt${ageInfo}`
                     }
                   }
-
-                  const resolvedUrl = extracted.finalUrl || article.url
 
                   // Check if resolved URL exists
                   if (extracted.finalUrl) {
