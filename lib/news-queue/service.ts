@@ -209,11 +209,15 @@ export async function getBalancedSelection(
 /**
  * Get items that have been manually selected (status='selected')
  * These are items the user explicitly chose for article generation
+ *
+ * IMPORTANT: Excludes items that are already used in published posts
+ * This handles the case where items were used but not properly marked as 'used'
  */
 export async function getSelectedItems(): Promise<NewsQueueItem[]> {
   const supabase = createAdminClient()
 
-  const { data, error } = await supabase
+  // First, get all selected items
+  const { data: selectedItems, error } = await supabase
     .from('news_queue')
     .select('*')
     .eq('status', 'selected')
@@ -224,7 +228,50 @@ export async function getSelectedItems(): Promise<NewsQueueItem[]> {
     return []
   }
 
-  return data || []
+  if (!selectedItems || selectedItems.length === 0) {
+    return []
+  }
+
+  // Check which items are already used in published posts
+  // This handles the case where markItemsAsUsed wasn't called properly
+  const { data: publishedPosts } = await supabase
+    .from('generated_posts')
+    .select('pending_queue_item_ids')
+    .eq('status', 'published')
+    .not('pending_queue_item_ids', 'is', null)
+
+  // Build a set of item IDs that are in published posts
+  const usedInPublishedPosts = new Set<string>()
+  if (publishedPosts) {
+    for (const post of publishedPosts) {
+      const itemIds = post.pending_queue_item_ids as string[] | null
+      if (itemIds && Array.isArray(itemIds)) {
+        for (const id of itemIds) {
+          usedInPublishedPosts.add(id)
+        }
+      }
+    }
+  }
+
+  // Filter out items that are already in published posts
+  const availableItems = selectedItems.filter(item => !usedInPublishedPosts.has(item.id))
+
+  if (availableItems.length < selectedItems.length) {
+    const excluded = selectedItems.length - availableItems.length
+    console.log(`[NewsQueue] Excluded ${excluded} selected items (already in published posts)`)
+
+    // Auto-fix: Mark these items as 'used' since they're in published posts
+    const itemsToMarkUsed = selectedItems.filter(item => usedInPublishedPosts.has(item.id))
+    if (itemsToMarkUsed.length > 0) {
+      console.log(`[NewsQueue] Auto-fixing ${itemsToMarkUsed.length} items: marking as 'used'`)
+      await supabase
+        .from('news_queue')
+        .update({ status: 'used' })
+        .in('id', itemsToMarkUsed.map(i => i.id))
+    }
+  }
+
+  return availableItems
 }
 
 /**

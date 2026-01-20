@@ -302,7 +302,7 @@ export async function runSynthesisPipeline(
 ): Promise<SynthesisPipelineResult> {
   const {
     maxItemsToProcess = 150, // Increased from 50 to handle larger batches
-    maxCandidatesPerItem = 5,
+    maxCandidatesPerItem = 2, // Reduced from 5 to speed up scoring
     minSimilarity = 0.5, // Lower threshold to find more candidates
     maxAgeDays = 90,
   } = options
@@ -372,7 +372,7 @@ export async function runSynthesisPipeline(
       // Find similar items (embedding is now guaranteed to be a valid string or array)
       const similarItems = await findSimilarItems(item.id, embedding as string | number[], {
         maxAge: maxAgeDays,
-        limit: maxCandidatesPerItem * 2, // Get extra for filtering
+        limit: maxCandidatesPerItem, // Reduced to speed up scoring
         minSimilarity,
       })
 
@@ -564,7 +564,7 @@ export async function runSynthesisPipelineWithProgress(
 
   const {
     maxItemsToProcess = 150, // Increased from 50 to handle larger batches
-    maxCandidatesPerItem = 5,
+    maxCandidatesPerItem = 2, // Reduced from 5 to speed up scoring (was 10 similar items!)
     minSimilarity = 0.5,
     maxAgeDays = 90,
   } = options
@@ -631,6 +631,9 @@ export async function runSynthesisPipelineWithProgress(
   // Phase 1: Search and score for each item
   // Reserve 60s for Phase 2 - stop Phase 1 early if needed
   const PHASE1_TIMEOUT_MS = PIPELINE_TIMEOUT_MS - 60000
+  // After 60% of Phase 1 time, switch to fast mode (queue without scoring)
+  const PHASE1_FAST_MODE_MS = PHASE1_TIMEOUT_MS * 0.6
+  let fastModeEnabled = false
 
   for (let i = 0; i < itemsNeedingScoring.length; i++) {
     const item = itemsNeedingScoring[i]
@@ -648,6 +651,17 @@ export async function runSynthesisPipelineWithProgress(
       break
     }
 
+    // Enable fast mode after 60% of Phase 1 time - queue items without scoring
+    if (!fastModeEnabled && phase1Elapsed > PHASE1_FAST_MODE_MS) {
+      const remaining = itemsNeedingScoring.length - i
+      console.log(`[Pipeline] Switching to fast mode at item ${overallIndex + 1} - ${remaining} items will be queued without scoring`)
+      fastModeEnabled = true
+      onProgress({
+        type: 'partial',
+        message: `Fast-Mode aktiviert: Verbleibende ${remaining} Items werden direkt zur Queue hinzugefügt.`,
+      })
+    }
+
     onProgress({
       type: 'searching',
       currentItem: overallIndex + 1,
@@ -656,6 +670,13 @@ export async function runSynthesisPipelineWithProgress(
     })
 
     try {
+      // FAST MODE: Skip scoring and queue directly
+      if (fastModeEnabled) {
+        itemsWithoutSimilar.push({ id: item.id, title: item.title, content: item.content })
+        console.log(`[Pipeline] Fast mode: queuing "${item.title.slice(0, 40)}..." without scoring`)
+        continue
+      }
+
       // Get or generate embedding
       // Embedding can be a string (from DB) or array (newly generated) or null
       let embedding: string | number[] | null = item.embedding
@@ -678,9 +699,10 @@ export async function runSynthesisPipelineWithProgress(
       }
 
       // Find similar items (embedding is now guaranteed to be a valid string or array)
+      // Reduced limit to speed up scoring
       const similarItems = await findSimilarItems(item.id, embedding as string | number[], {
         maxAge: maxAgeDays,
-        limit: maxCandidatesPerItem * 2,
+        limit: maxCandidatesPerItem, // Reduced: was maxCandidatesPerItem * 2
         minSimilarity,
       })
 
@@ -698,12 +720,12 @@ export async function runSynthesisPipelineWithProgress(
         itemTitle: item.title,
       })
 
-      // Score candidates
+      // Score candidates - reduced concurrency to be safer with rate limits
       const scoredCandidates = await scoreSynthesisCandidates(
         { id: item.id, title: item.title, content: item.content },
         similarItems,
         prompt.scoring_prompt,
-        { minTotalScore: 6 }
+        { minTotalScore: 6, concurrency: 3 }
       )
 
       // Get the BEST candidate for this item

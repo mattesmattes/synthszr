@@ -66,15 +66,41 @@ export async function POST(request: NextRequest) {
       }
       selectedItems = result.items
     } else if (useSelected) {
-      // Use manually selected items (status='selected')
+      // Use manually selected items (status='selected') + fill from balanced if needed
       const manuallySelected = await getSelectedItems()
 
       if (manuallySelected.length > 0) {
-        console.log(`[Ghostwriter-Queue] Using ${manuallySelected.length} manually selected items`)
+        console.log(`[Ghostwriter-Queue] Found ${manuallySelected.length} manually selected items`)
         selectedItems = manuallySelected
+
+        // Fill up with balanced items if selected < maxItems
+        if (manuallySelected.length < maxItems) {
+          const neededCount = maxItems - manuallySelected.length
+          console.log(`[Ghostwriter-Queue] Need ${neededCount} more items from balanced selection to reach ${maxItems}`)
+
+          const balancedSelection = await getBalancedSelection(neededCount)
+
+          if (balancedSelection.length > 0) {
+            // Filter out items that are already in manuallySelected
+            const selectedIds = new Set(manuallySelected.map(i => i.id))
+            const additionalItems = balancedSelection.filter(s => !selectedIds.has(s.id))
+
+            if (additionalItems.length > 0) {
+              const itemIds = additionalItems.map(s => s.id)
+              const result = await selectItemsForArticle(itemIds)
+
+              if (!result.error && result.items.length > 0) {
+                console.log(`[Ghostwriter-Queue] Added ${result.items.length} items from balanced selection`)
+                selectedItems = [...manuallySelected, ...result.items]
+              }
+            }
+          }
+        }
+
+        console.log(`[Ghostwriter-Queue] Total items: ${selectedItems.length}`)
       } else {
         // Fallback to balanced selection if no items manually selected
-        console.log(`[Ghostwriter-Queue] No manually selected items, falling back to balanced selection`)
+        console.log(`[Ghostwriter-Queue] No manually selected items, using balanced selection`)
         const balancedSelection = await getBalancedSelection(maxItems)
 
         if (balancedSelection.length === 0) {
