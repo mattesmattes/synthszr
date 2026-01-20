@@ -6,7 +6,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { generateEmbedding, prepareTextForEmbedding } from '@/lib/embeddings/generator'
 import { findSimilarItems, getItemEmbedding, SimilarItem } from './search'
-import { scoreSynthesisCandidates, getTopCandidates, ScoredCandidate, SynthesisType } from './score'
+import { scoreSynthesisCandidates, getTopCandidates, scoreContentOnly, ScoredCandidate, SynthesisType } from './score'
 import { developSyntheses, developContentSynthesis, DevelopedSynthesis } from './develop'
 import { addToQueue } from '@/lib/news-queue'
 import { isJunkTitle } from '@/lib/news-queue/service'
@@ -436,9 +436,9 @@ export async function runSynthesisPipeline(
   await queueCandidatesForArticle(allCandidates)
 
   // Also queue items WITHOUT similar articles - they're still valid news
-  // BUT filter out junk items (games, privacy policies, etc.)
+  // NOW WITH PROPER CONTENT SCORING instead of default scores!
   if (itemsWithoutSimilar.length > 0) {
-    // Filter out junk before queuing
+    // Filter out junk before scoring (saves API calls)
     const validItems = itemsWithoutSimilar.filter(item => {
       if (isJunkTitle(item.title)) {
         console.log(`[Pipeline] Skipping junk item: "${item.title.slice(0, 50)}..."`)
@@ -449,11 +449,15 @@ export async function runSynthesisPipeline(
 
     const junkCount = itemsWithoutSimilar.length - validItems.length
     if (junkCount > 0) {
-      console.log(`[Pipeline] Filtered out ${junkCount} junk items before queuing`)
+      console.log(`[Pipeline] Filtered out ${junkCount} junk items before content scoring`)
     }
 
     if (validItems.length > 0) {
-      console.log(`[Pipeline] Queuing ${validItems.length} valid items without similar articles...`)
+      console.log(`[Pipeline] Content scoring ${validItems.length} items with Haiku...`)
+
+      // Score items using Claude Haiku for content quality
+      const contentScores = await scoreContentOnly(validItems, { concurrency: 5 })
+      console.log(`[Pipeline] Content scoring complete: ${contentScores.size} items scored`)
 
       const itemIds = validItems.map(i => i.id)
       const { data: sourceItems } = await supabase
@@ -468,21 +472,23 @@ export async function runSynthesisPipeline(
         }
       }
 
+      // Queue with AI-scored values (not defaults!)
       const queueItems = validItems.map(item => {
         const source = sourceMap.get(item.id)
+        const score = contentScores.get(item.id)
         return {
           dailyRepoId: item.id,
           title: item.title,
           sourceEmail: source?.source_email || undefined,
           sourceUrl: source?.source_url || undefined,
-          synthesisScore: 5,
-          relevanceScore: 5,
-          uniquenessScore: 7
+          synthesisScore: score?.synthesisScore ?? 3,
+          relevanceScore: score?.relevanceScore ?? 3,
+          uniquenessScore: score?.uniquenessScore ?? 3
         }
       })
 
       const result = await addToQueue(queueItems)
-      console.log(`[Pipeline] Queued ${result.added} valid items (${result.skipped} skipped as duplicates)`)
+      console.log(`[Pipeline] Queued ${result.added} AI-scored items (${result.skipped} skipped as duplicates)`)
     } else {
       console.log(`[Pipeline] No valid items to queue (all ${itemsWithoutSimilar.length} were junk)`)
     }
@@ -790,42 +796,74 @@ export async function runSynthesisPipelineWithProgress(
   // CRITICAL FIX: Also queue items WITHOUT similar articles
   // These are valid news items that just don't have historical comparisons
   // They should still be available for Ghostwriter selection
+  // NOW WITH PROPER CONTENT SCORING instead of default scores!
   if (itemsWithoutSimilar.length > 0) {
-    console.log(`[Pipeline] Queuing ${itemsWithoutSimilar.length} items without similar articles...`)
+    console.log(`[Pipeline] Scoring and queuing ${itemsWithoutSimilar.length} items without similar articles...`)
 
-    // Get source info for these items
-    const itemIds = itemsWithoutSimilar.map(i => i.id)
-    const { data: sourceItems } = await supabase
-      .from('daily_repo')
-      .select('id, source_email, source_url')
-      .in('id', itemIds)
-
-    const sourceMap = new Map<string, { source_email: string | null; source_url: string | null }>()
-    if (sourceItems) {
-      for (const item of sourceItems) {
-        sourceMap.set(item.id, {
-          source_email: item.source_email,
-          source_url: item.source_url
-        })
+    // First, filter out junk items before scoring (saves API calls)
+    const validItems = itemsWithoutSimilar.filter(item => {
+      if (isJunkTitle(item.title)) {
+        console.log(`[Pipeline] Skipping junk item before scoring: "${item.title.slice(0, 50)}..."`)
+        return false
       }
-    }
-
-    // Queue with default scores (no synthesis comparison available)
-    const queueItems = itemsWithoutSimilar.map(item => {
-      const source = sourceMap.get(item.id)
-      return {
-        dailyRepoId: item.id,
-        title: item.title,
-        sourceEmail: source?.source_email || undefined,
-        sourceUrl: source?.source_url || undefined,
-        synthesisScore: 5, // Default mid-range score
-        relevanceScore: 5, // Default mid-range score
-        uniquenessScore: 7  // Higher uniqueness since no similar articles found
-      }
+      return true
     })
 
-    const result = await addToQueue(queueItems)
-    console.log(`[Pipeline] Queued ${result.added} items without similar (${result.skipped} skipped)`)
+    const junkCount = itemsWithoutSimilar.length - validItems.length
+    if (junkCount > 0) {
+      console.log(`[Pipeline] Filtered out ${junkCount} junk items before content scoring`)
+    }
+
+    if (validItems.length > 0) {
+      // Score items using Claude Haiku for content quality
+      console.log(`[Pipeline] Content scoring ${validItems.length} items with Haiku...`)
+      const contentScores = await scoreContentOnly(validItems, { concurrency: 5 })
+      console.log(`[Pipeline] Content scoring complete: ${contentScores.size} items scored`)
+
+      // Get source info for these items
+      const itemIds = validItems.map(i => i.id)
+      const { data: sourceItems } = await supabase
+        .from('daily_repo')
+        .select('id, source_email, source_url')
+        .in('id', itemIds)
+
+      const sourceMap = new Map<string, { source_email: string | null; source_url: string | null }>()
+      if (sourceItems) {
+        for (const item of sourceItems) {
+          sourceMap.set(item.id, {
+            source_email: item.source_email,
+            source_url: item.source_url
+          })
+        }
+      }
+
+      // Queue with AI-scored values (not defaults!)
+      const queueItems = validItems.map(item => {
+        const source = sourceMap.get(item.id)
+        const score = contentScores.get(item.id)
+        return {
+          dailyRepoId: item.id,
+          title: item.title,
+          sourceEmail: source?.source_email || undefined,
+          sourceUrl: source?.source_url || undefined,
+          synthesisScore: score?.synthesisScore ?? 3,  // Use AI score or low default
+          relevanceScore: score?.relevanceScore ?? 3,  // Use AI score or low default
+          uniquenessScore: score?.uniquenessScore ?? 3  // Use AI score or low default
+        }
+      })
+
+      // Log sample scores for debugging
+      const sampleScores = queueItems.slice(0, 3).map(q => ({
+        title: q.title.slice(0, 40),
+        scores: `S:${q.synthesisScore} R:${q.relevanceScore} U:${q.uniquenessScore}`
+      }))
+      console.log(`[Pipeline] Sample content scores:`, sampleScores)
+
+      const result = await addToQueue(queueItems)
+      console.log(`[Pipeline] Queued ${result.added} AI-scored items (${result.skipped} skipped as duplicates)`)
+    } else {
+      console.log(`[Pipeline] No valid items to score (all ${itemsWithoutSimilar.length} were junk)`)
+    }
   }
 
   // Phase 2: Develop syntheses ONE BY ONE - no parallelization
