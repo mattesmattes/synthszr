@@ -222,13 +222,31 @@ export async function getBalancedSelection(
  * Get items that have been manually selected (status='selected')
  * These are items the user explicitly chose for article generation
  *
- * IMPORTANT: Excludes items that are already used in published posts
- * This handles the case where items were used but not properly marked as 'used'
+ * IMPORTANT: First resets any "stale" selected items (selected > 2 hours ago)
+ * This handles the case where items were selected but the article was never saved
  */
 export async function getSelectedItems(): Promise<NewsQueueItem[]> {
   const supabase = createAdminClient()
 
-  // First, get all selected items
+  // FIRST: Reset any stale selected items (older than 2 hours)
+  // This handles items that were selected but the generated article was never saved
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+
+  const { data: staleItems } = await supabase
+    .from('news_queue')
+    .update({
+      status: 'pending',
+      selected_at: null
+    })
+    .eq('status', 'selected')
+    .lt('selected_at', twoHoursAgo)
+    .select('id')
+
+  if (staleItems && staleItems.length > 0) {
+    console.log(`[NewsQueue] Reset ${staleItems.length} stale selected items (older than 2h) to pending`)
+  }
+
+  // Now get remaining selected items (fresh selections)
   const { data: selectedItems, error } = await supabase
     .from('news_queue')
     .select('*')
@@ -240,50 +258,9 @@ export async function getSelectedItems(): Promise<NewsQueueItem[]> {
     return []
   }
 
-  if (!selectedItems || selectedItems.length === 0) {
-    return []
-  }
+  console.log(`[NewsQueue] getSelectedItems returning ${selectedItems?.length || 0} items`)
 
-  // Check which items are already used in published posts
-  // This handles the case where markItemsAsUsed wasn't called properly
-  const { data: publishedPosts } = await supabase
-    .from('generated_posts')
-    .select('pending_queue_item_ids')
-    .eq('status', 'published')
-    .not('pending_queue_item_ids', 'is', null)
-
-  // Build a set of item IDs that are in published posts
-  const usedInPublishedPosts = new Set<string>()
-  if (publishedPosts) {
-    for (const post of publishedPosts) {
-      const itemIds = post.pending_queue_item_ids as string[] | null
-      if (itemIds && Array.isArray(itemIds)) {
-        for (const id of itemIds) {
-          usedInPublishedPosts.add(id)
-        }
-      }
-    }
-  }
-
-  // Filter out items that are already in published posts
-  const availableItems = selectedItems.filter(item => !usedInPublishedPosts.has(item.id))
-
-  if (availableItems.length < selectedItems.length) {
-    const excluded = selectedItems.length - availableItems.length
-    console.log(`[NewsQueue] Excluded ${excluded} selected items (already in published posts)`)
-
-    // Auto-fix: Mark these items as 'used' since they're in published posts
-    const itemsToMarkUsed = selectedItems.filter(item => usedInPublishedPosts.has(item.id))
-    if (itemsToMarkUsed.length > 0) {
-      console.log(`[NewsQueue] Auto-fixing ${itemsToMarkUsed.length} items: marking as 'used'`)
-      await supabase
-        .from('news_queue')
-        .update({ status: 'used' })
-        .in('id', itemsToMarkUsed.map(i => i.id))
-    }
-  }
-
-  return availableItems
+  return selectedItems || []
 }
 
 /**
