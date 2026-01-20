@@ -144,14 +144,34 @@ export async function addToQueue(
         metadata: item.metadata || {}
       }
 
-      const { error } = await supabase.from('news_queue').insert(record)
+      // First try to insert
+      const { error: insertError } = await supabase.from('news_queue').insert(record)
 
-      if (error) {
-        if (error.code === '23505') {
-          // Duplicate - item already in queue
-          skipped++
+      if (insertError) {
+        if (insertError.code === '23505' && item.dailyRepoId) {
+          // Duplicate - try to update scores for pending items only
+          // Don't touch selected/used items (they're in use)
+          const { data: updated, error: updateError } = await supabase
+            .from('news_queue')
+            .update({
+              synthesis_score: record.synthesis_score,
+              relevance_score: record.relevance_score,
+              uniqueness_score: record.uniqueness_score,
+              total_score: (record.synthesis_score * 0.4) + (record.relevance_score * 0.3) + (record.uniqueness_score * 0.3)
+            })
+            .eq('daily_repo_id', item.dailyRepoId)
+            .eq('status', 'pending')  // Only update pending items
+            .select('id')
+
+          if (updateError) {
+            errors.push(`Failed to update "${item.title.slice(0, 30)}...": ${updateError.message}`)
+          } else if (updated && updated.length > 0) {
+            added++  // Count as added since we updated scores
+          } else {
+            skipped++  // Item exists but is selected/used, skip it
+          }
         } else {
-          errors.push(`Failed to add "${item.title.slice(0, 30)}...": ${error.message}`)
+          errors.push(`Failed to add "${item.title.slice(0, 30)}...": ${insertError.message}`)
         }
       } else {
         added++
