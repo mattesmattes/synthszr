@@ -12,7 +12,7 @@ import type {
   BalancedQueueSelection
 } from '@/lib/supabase/types'
 
-const SOURCE_LIMIT_PERCENTAGE = 0.30 // 30% max from any single source
+const SOURCE_LIMIT_PERCENTAGE = 0.35 // 35% max from any single source
 
 /**
  * Extract normalized source identifier from email
@@ -166,7 +166,7 @@ export async function getSourceDistribution(): Promise<NewsQueueSourceDistributi
 }
 
 /**
- * Get selectable items (respecting 30% source limit)
+ * Get selectable items (respecting 35% source limit)
  */
 export async function getSelectableItems(): Promise<NewsQueueSelectableItem[]> {
   const supabase = createAdminClient()
@@ -238,7 +238,7 @@ export async function selectItemsForArticle(
   const supabase = createAdminClient()
 
   // Note: We no longer validate source limits here because:
-  // 1. getBalancedSelection() already handles this intelligently (30% rule after 4 items)
+  // 1. getBalancedSelection() already handles this intelligently (35% rule after 4 items)
   // 2. Manual selection explicitly chooses items regardless of source
   // The previous check against news_queue_selectable was too restrictive for small queues
 
