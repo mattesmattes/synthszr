@@ -233,17 +233,13 @@ export async function POST(request: NextRequest) {
         let afterDate: Date
         let beforeDate: Date | undefined
 
+        // BULLETPROOF APPROACH: ALWAYS fetch last 48h, deduplicate by Gmail message ID
+        // targetDate only controls which newsletter_date the items get assigned to
+        // No complex timestamp tracking needed - we simply skip emails already imported
+        afterDate = new Date(Date.now() - FETCH_WINDOW_HOURS * 60 * 60 * 1000)
+        console.log(`[Newsletter Fetch] Fetching last ${FETCH_WINDOW_HOURS}h: since ${afterDate.toISOString()}`)
         if (targetDate) {
-          // For specific date: search for emails from that day (historical re-import)
-          // Use UTC dates to avoid timezone issues with Gmail's date query
-          afterDate = new Date(targetDate + 'T00:00:00Z')  // Force UTC
-          beforeDate = new Date(targetDate + 'T23:59:59Z')  // Force UTC
-          console.log(`[Newsletter Fetch] Historical import for date range: ${targetDate} (UTC: ${afterDate.toISOString()} to ${beforeDate.toISOString()})`)
-        } else {
-          // BULLETPROOF APPROACH: Always fetch last 48h, deduplicate by Gmail message ID
-          // No complex timestamp tracking needed - we simply skip emails already imported
-          afterDate = new Date(Date.now() - FETCH_WINDOW_HOURS * 60 * 60 * 1000)
-          console.log(`[Newsletter Fetch] Fetching last ${FETCH_WINDOW_HOURS}h: since ${afterDate.toISOString()}`)
+          console.log(`[Newsletter Fetch] Items will be assigned to newsletter_date: ${targetDate}`)
         }
 
         const senderEmails = sources.map(s => s.email)
