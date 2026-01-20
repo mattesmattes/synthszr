@@ -55,7 +55,9 @@ export class GmailClient {
       dateFilter += ` before:${dateStr}`
     }
 
-    console.log('[Gmail] Searching for emails from:', senderEmails.length, 'senders')
+    console.log(`[Gmail] ========== FETCH START ==========`)
+    console.log(`[Gmail] Searching ${senderEmails.length} senders, afterDate: ${afterDate?.toISOString()}, beforeDate: ${beforeDate?.toISOString()}`)
+    console.log(`[Gmail] Sample senders: ${senderEmails.slice(0, 10).join(', ')}${senderEmails.length > 10 ? '...' : ''}`)
 
     // Split into batches if needed
     const batches: string[][] = []
@@ -63,7 +65,7 @@ export class GmailClient {
       batches.push(senderEmails.slice(i, i + BATCH_SIZE))
     }
 
-    console.log('[Gmail] Processing in', batches.length, 'batch(es)')
+    console.log(`[Gmail] Split into ${batches.length} batches of max ${BATCH_SIZE} senders each`)
 
     const allMessages: gmail_v1.Schema$Message[] = []
     const seenIds = new Set<string>()
@@ -75,7 +77,9 @@ export class GmailClient {
       // IMPROVED: Don't restrict to inbox - search everywhere including Promotions/Updates
       const query = `(${fromQuery})${dateFilter}`
 
-      console.log(`[Gmail] Batch ${batchIndex + 1}/${batches.length}: ${batch.length} senders, query length: ${query.length}`)
+      console.log(`[Gmail] Batch ${batchIndex + 1}/${batches.length}: ${batch.length} senders`)
+      console.log(`[Gmail] Batch ${batchIndex + 1} senders: ${batch.slice(0, 5).join(', ')}${batch.length > 5 ? '...' : ''}`)
+      console.log(`[Gmail] Batch ${batchIndex + 1} query: ${query.slice(0, 200)}...`)
 
       try {
         const listResponse = await this.gmail.users.messages.list({
@@ -86,7 +90,7 @@ export class GmailClient {
         })
 
         const messages = listResponse.data.messages || []
-        console.log(`[Gmail] Batch ${batchIndex + 1} found:`, messages.length, 'messages')
+        console.log(`[Gmail] Batch ${batchIndex + 1} RESULT: ${messages.length} messages found`)
 
         for (const msg of messages) {
           if (msg.id && !seenIds.has(msg.id)) {
@@ -100,7 +104,8 @@ export class GmailClient {
       }
     }
 
-    console.log('[Gmail] Total unique messages found:', allMessages.length)
+    console.log(`[Gmail] ========== FETCH SUMMARY ==========`)
+    console.log(`[Gmail] Total unique messages from all batches: ${allMessages.length}`)
 
     // Sort by internalDate (most recent first) to ensure fair distribution across batches
     // Gmail's internalDate is a string timestamp in milliseconds
@@ -112,6 +117,7 @@ export class GmailClient {
 
     // Limit to maxResults and fetch full message details
     const messagesToFetch = allMessages.slice(0, maxResults)
+    console.log(`[Gmail] Will fetch details for ${messagesToFetch.length} messages (maxResults: ${maxResults})`)
     const emails: EmailMessage[] = []
 
     for (const msg of messagesToFetch) {
@@ -131,6 +137,22 @@ export class GmailClient {
       } catch (error) {
         console.error('[Gmail] Error fetching message:', msg.id, error)
       }
+    }
+
+    // Log which senders were actually found
+    const foundSenders = new Set(emails.map(e => {
+      const match = e.from.match(/<([^>]+)>/)
+      return match ? match[1].toLowerCase() : e.from.toLowerCase()
+    }))
+    console.log(`[Gmail] ========== FETCH COMPLETE ==========`)
+    console.log(`[Gmail] Fetched ${emails.length} full emails from ${foundSenders.size} unique senders`)
+    console.log(`[Gmail] Found senders: ${Array.from(foundSenders).slice(0, 15).join(', ')}${foundSenders.size > 15 ? '...' : ''}`)
+
+    // Check which registered senders were NOT found
+    const missingSenders = senderEmails.filter(s => !foundSenders.has(s.toLowerCase()))
+    if (missingSenders.length > 0) {
+      console.log(`[Gmail] WARNING: ${missingSenders.length}/${senderEmails.length} registered senders had NO emails in results`)
+      console.log(`[Gmail] Missing senders sample: ${missingSenders.slice(0, 10).join(', ')}${missingSenders.length > 10 ? '...' : ''}`)
     }
 
     return emails
