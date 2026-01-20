@@ -57,6 +57,70 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(selection)
       }
 
+      case 'debug': {
+        // Full diagnostic info for debugging queue issues
+        const supabase = await createClient()
+
+        // Count by status
+        const { data: statusCounts } = await supabase
+          .from('news_queue')
+          .select('status')
+
+        const byStatus: Record<string, number> = {}
+        for (const item of statusCounts || []) {
+          byStatus[item.status] = (byStatus[item.status] || 0) + 1
+        }
+
+        // Count pending items by expiration
+        const now = new Date().toISOString()
+        const { count: pendingNotExpired } = await supabase
+          .from('news_queue')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending')
+          .gt('expires_at', now)
+
+        const { count: pendingExpired } = await supabase
+          .from('news_queue')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending')
+          .lte('expires_at', now)
+
+        // Get source distribution for pending items
+        const { data: pendingItems } = await supabase
+          .from('news_queue')
+          .select('source_identifier')
+          .eq('status', 'pending')
+          .gt('expires_at', now)
+
+        const sourceDistribution: Record<string, number> = {}
+        for (const item of pendingItems || []) {
+          sourceDistribution[item.source_identifier] = (sourceDistribution[item.source_identifier] || 0) + 1
+        }
+
+        // Test balanced selection
+        const maxItems = parseInt(searchParams.get('max') || '20')
+        const balancedSelection = await getBalancedSelection(maxItems)
+
+        return NextResponse.json({
+          counts: {
+            byStatus,
+            pendingNotExpired,
+            pendingExpired,
+            sourceDistribution
+          },
+          balancedSelection: {
+            requested: maxItems,
+            returned: balancedSelection.length,
+            items: balancedSelection.map(i => ({
+              title: i.title?.slice(0, 50),
+              source: i.source_identifier,
+              score: i.total_score
+            }))
+          },
+          timestamp: now
+        })
+      }
+
       case 'list':
       default: {
         const supabase = await createClient()
