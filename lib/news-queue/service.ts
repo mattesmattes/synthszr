@@ -186,6 +186,7 @@ export async function getSelectableItems(): Promise<NewsQueueSelectableItem[]> {
 
 /**
  * Get balanced selection using database function
+ * Falls back to simple score-based selection if balanced returns too few items
  */
 export async function getBalancedSelection(
   maxItems: number = 10
@@ -202,10 +203,12 @@ export async function getBalancedSelection(
 
   if (error) {
     console.error('[NewsQueue] Failed to get balanced selection:', error)
-    return []
+    // Fallback to simple selection on error
+    return getSimpleSelection(supabase, maxItems)
   }
 
   console.log(`[NewsQueue] get_balanced_queue_selection returned ${data?.length || 0} items`)
+
   if (data && data.length > 0) {
     // Log source distribution
     const sources: Record<string, number> = {}
@@ -215,7 +218,70 @@ export async function getBalancedSelection(
     console.log(`[NewsQueue] Balanced selection sources:`, sources)
   }
 
+  // If balanced selection returns significantly fewer items than requested,
+  // fall back to simple selection (might be a bug in the SQL function)
+  if (data && data.length < maxItems * 0.7) {
+    console.warn(`[NewsQueue] Balanced selection returned only ${data.length}/${maxItems} items - trying simple fallback`)
+    const simpleData = await getSimpleSelection(supabase, maxItems)
+    if (simpleData.length > data.length) {
+      console.log(`[NewsQueue] Simple selection returned ${simpleData.length} items - using this instead`)
+      return simpleData
+    }
+  }
+
   return data || []
+}
+
+/**
+ * Simple fallback selection - just gets top items by score without source balancing
+ */
+async function getSimpleSelection(
+  supabase: ReturnType<typeof createAdminClient>,
+  maxItems: number
+): Promise<BalancedQueueSelection[]> {
+  console.log(`[NewsQueue] Using simple selection fallback for ${maxItems} items`)
+
+  // First, log the total count of eligible items
+  const { count: totalPending } = await supabase
+    .from('news_queue')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'pending')
+    .gt('expires_at', new Date().toISOString())
+
+  console.log(`[NewsQueue] Total pending items (not expired): ${totalPending}`)
+
+  // Also check without expires_at filter
+  const { count: totalPendingAll } = await supabase
+    .from('news_queue')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'pending')
+
+  console.log(`[NewsQueue] Total pending items (including expired): ${totalPendingAll}`)
+
+  const { data, error } = await supabase
+    .from('news_queue')
+    .select('id, title, source_identifier, source_display_name, total_score, expires_at')
+    .eq('status', 'pending')
+    .gt('expires_at', new Date().toISOString())
+    .order('total_score', { ascending: false })
+    .limit(maxItems)
+
+  if (error) {
+    console.error('[NewsQueue] Simple selection also failed:', error)
+    return []
+  }
+
+  console.log(`[NewsQueue] Simple selection returned ${data?.length || 0} items`)
+
+  // Map to BalancedQueueSelection format
+  return (data || []).map((item, index) => ({
+    id: item.id,
+    title: item.title,
+    source_identifier: item.source_identifier,
+    source_display_name: item.source_display_name,
+    total_score: item.total_score,
+    selection_rank: index + 1
+  }))
 }
 
 /**
