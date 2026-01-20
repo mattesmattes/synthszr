@@ -360,6 +360,8 @@ export async function runSynthesisPipeline(
   console.log(`[Pipeline] Processing ${itemsToProcess.length} items`)
 
   const allCandidates: ScoredCandidate[] = []
+  // Track items without similar articles for direct queuing
+  const itemsWithoutSimilar: Array<{ id: string; title: string; content: string }> = []
 
   // For each item, find and score similar items
   for (const item of itemsToProcess) {
@@ -395,7 +397,9 @@ export async function runSynthesisPipeline(
       })
 
       if (similarItems.length === 0) {
-        console.log(`[Pipeline] No similar items found for "${item.title.slice(0, 30)}..."`)
+        // Track for direct queuing - these are valid news items without historical comparison
+        itemsWithoutSimilar.push({ id: item.id, title: item.title, content: item.content })
+        console.log(`[Pipeline] No similar items for "${item.title.slice(0, 30)}..." - will queue directly`)
         continue
       }
 
@@ -430,6 +434,40 @@ export async function runSynthesisPipeline(
 
   // Auto-queue candidates for article generation (source-diversified)
   await queueCandidatesForArticle(allCandidates)
+
+  // Also queue items WITHOUT similar articles - they're still valid news
+  if (itemsWithoutSimilar.length > 0) {
+    console.log(`[Pipeline] Queuing ${itemsWithoutSimilar.length} items without similar articles...`)
+
+    const itemIds = itemsWithoutSimilar.map(i => i.id)
+    const { data: sourceItems } = await supabase
+      .from('daily_repo')
+      .select('id, source_email, source_url')
+      .in('id', itemIds)
+
+    const sourceMap = new Map<string, { source_email: string | null; source_url: string | null }>()
+    if (sourceItems) {
+      for (const item of sourceItems) {
+        sourceMap.set(item.id, { source_email: item.source_email, source_url: item.source_url })
+      }
+    }
+
+    const queueItems = itemsWithoutSimilar.map(item => {
+      const source = sourceMap.get(item.id)
+      return {
+        dailyRepoId: item.id,
+        title: item.title,
+        sourceEmail: source?.source_email || undefined,
+        sourceUrl: source?.source_url || undefined,
+        synthesisScore: 5,
+        relevanceScore: 5,
+        uniquenessScore: 7
+      }
+    })
+
+    const result = await addToQueue(queueItems)
+    console.log(`[Pipeline] Queued ${result.added} items without similar (${result.skipped} skipped)`)
+  }
 
   // allCandidates now contains exactly 1 candidate per item (the best one)
   if (allCandidates.length === 0) {
@@ -708,6 +746,47 @@ export async function runSynthesisPipelineWithProgress(
     await queueCandidatesForArticle(allCandidates)
   }
 
+  // CRITICAL FIX: Also queue items WITHOUT similar articles
+  // These are valid news items that just don't have historical comparisons
+  // They should still be available for Ghostwriter selection
+  if (itemsWithoutSimilar.length > 0) {
+    console.log(`[Pipeline] Queuing ${itemsWithoutSimilar.length} items without similar articles...`)
+
+    // Get source info for these items
+    const itemIds = itemsWithoutSimilar.map(i => i.id)
+    const { data: sourceItems } = await supabase
+      .from('daily_repo')
+      .select('id, source_email, source_url')
+      .in('id', itemIds)
+
+    const sourceMap = new Map<string, { source_email: string | null; source_url: string | null }>()
+    if (sourceItems) {
+      for (const item of sourceItems) {
+        sourceMap.set(item.id, {
+          source_email: item.source_email,
+          source_url: item.source_url
+        })
+      }
+    }
+
+    // Queue with default scores (no synthesis comparison available)
+    const queueItems = itemsWithoutSimilar.map(item => {
+      const source = sourceMap.get(item.id)
+      return {
+        dailyRepoId: item.id,
+        title: item.title,
+        sourceEmail: source?.source_email || undefined,
+        sourceUrl: source?.source_url || undefined,
+        synthesisScore: 5, // Default mid-range score
+        relevanceScore: 5, // Default mid-range score
+        uniquenessScore: 7  // Higher uniqueness since no similar articles found
+      }
+    })
+
+    const result = await addToQueue(queueItems)
+    console.log(`[Pipeline] Queued ${result.added} items without similar (${result.skipped} skipped)`)
+  }
+
   // Phase 2: Develop syntheses ONE BY ONE - no parallelization
   const synthesesMap = new Map<string, DevelopedSynthesis>()
 
@@ -851,7 +930,6 @@ export async function runSynthesisPipelineWithProgress(
   console.log(`[Pipeline ${PIPELINE_VERSION}] Phase 2: Processing ${remainingCandidates.length} items sequentially (${skippedCount} already done)`)
 
   // Simple sequential loop - NO Promise.all, NO batching
-  let stoppedDueToTimeout = false
   for (let i = 0; i < remainingCandidates.length; i++) {
     const candidate = remainingCandidates[i]
 
@@ -860,7 +938,6 @@ export async function runSynthesisPipelineWithProgress(
     if (elapsed > PIPELINE_TIMEOUT_MS) {
       const remaining = remainingCandidates.length - i
       console.log(`[Pipeline] Time limit reached after ${elapsed}ms - ${remaining} items remaining`)
-      stoppedDueToTimeout = true
       onProgress({
         type: 'partial',
         message: `Zeit-Limit erreicht. ${synthesesDeveloped} Synthesen erstellt, ${remaining} verbleibend. Starte erneut für Rest.`,
