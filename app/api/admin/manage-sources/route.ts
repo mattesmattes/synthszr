@@ -35,20 +35,63 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Add new sources to newsletter_sources
+    // Note: We set created_at explicitly so re-enabled sources appear at the top of the list
     if (addSources.length > 0) {
       for (const source of addSources) {
-        const { error } = await supabase
-          .from('newsletter_sources')
-          .upsert({
-            email: source.email.toLowerCase(),
-            name: source.name || null,
-            enabled: true
-          }, { onConflict: 'email' })
+        const emailLower = source.email.toLowerCase()
 
-        if (error) {
-          results.errors.push(`Failed to add source ${source.email}: ${error.message}`)
+        // First, remove from excluded_senders if present (user changed their mind)
+        const { error: deleteExcludeError } = await supabase
+          .from('excluded_senders')
+          .delete()
+          .eq('email', emailLower)
+
+        if (deleteExcludeError) {
+          console.warn(`[ManageSources] Could not remove ${emailLower} from excluded_senders:`, deleteExcludeError)
+        }
+
+        // Check if source already exists
+        const { data: existing } = await supabase
+          .from('newsletter_sources')
+          .select('id, enabled')
+          .eq('email', emailLower)
+          .single()
+
+        if (existing) {
+          // Update existing source - set enabled=true and update created_at so it appears as "new"
+          const { error } = await supabase
+            .from('newsletter_sources')
+            .update({
+              name: source.name || null,
+              enabled: true,
+              created_at: new Date().toISOString() // Update timestamp so it appears at top
+            })
+            .eq('id', existing.id)
+
+          if (error) {
+            console.error(`[ManageSources] Failed to update source ${emailLower}:`, error)
+            results.errors.push(`Failed to update source ${source.email}: ${error.message}`)
+          } else {
+            console.log(`[ManageSources] Updated existing source: ${emailLower} (was enabled: ${existing.enabled})`)
+            results.sourcesAdded++
+          }
         } else {
-          results.sourcesAdded++
+          // Insert new source
+          const { error } = await supabase
+            .from('newsletter_sources')
+            .insert({
+              email: emailLower,
+              name: source.name || null,
+              enabled: true
+            })
+
+          if (error) {
+            console.error(`[ManageSources] Failed to insert source ${emailLower}:`, error)
+            results.errors.push(`Failed to add source ${source.email}: ${error.message}`)
+          } else {
+            console.log(`[ManageSources] Added new source: ${emailLower}`)
+            results.sourcesAdded++
+          }
         }
       }
     }

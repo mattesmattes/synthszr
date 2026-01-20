@@ -808,8 +808,14 @@ export async function POST(request: NextRequest) {
             item: { title: 'Scanne alle Mails nach Newsletter-Quellen...', status: 'processing' }
           })
 
-          // Get all registered sources (email addresses)
-          const sourceEmailsLower = senderEmails.map(e => e.toLowerCase())
+          // Get ALL registered sources (both enabled AND disabled)
+          // This ensures we don't show sources in the dialog that were previously decided
+          const { data: allSources } = await supabase
+            .from('newsletter_sources')
+            .select('email')
+
+          const allSourceEmailsLower = (allSources || []).map(s => s.email.toLowerCase())
+          console.log(`[Newsletter Fetch] All known sources (enabled + disabled): ${allSourceEmailsLower.length}`)
 
           // Get excluded senders
           const { data: excludedSenders } = await supabase
@@ -856,7 +862,7 @@ export async function POST(request: NextRequest) {
             })
           }
 
-          console.log(`[Newsletter Fetch] Sources count: ${sourceEmailsLower.length}, Excluded count: ${excludedEmailsLower.length}`)
+          console.log(`[Newsletter Fetch] Sources count: ${allSourceEmailsLower.length}, Excluded count: ${excludedEmailsLower.length}`)
 
           // Scan mail for unique senders since calculated date
           // Limited to 100 messages to avoid timeout (each message requires individual API call)
@@ -870,13 +876,14 @@ export async function POST(request: NextRequest) {
           })
 
           // Filter to only unfetched senders (not in sources, not excluded)
+          // Note: We filter against ALL sources (enabled + disabled), not just enabled ones
           let filteredOutAsSource = 0
           let filteredOutAsExcluded = 0
 
           unfetchedEmails = allSenders
             .filter(sender => {
               const emailLower = sender.email.toLowerCase()
-              if (sourceEmailsLower.includes(emailLower)) {
+              if (allSourceEmailsLower.includes(emailLower)) {
                 filteredOutAsSource++
                 return false
               }
