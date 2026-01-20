@@ -1,13 +1,12 @@
 /**
  * Daily Repo API
  * GET: Fetch daily_repo items by date
- * DELETE: Remove items and recalculate fetch timestamp
+ * DELETE: Remove items (re-fetch happens automatically via 48h window + gmail_message_id dedup)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
 import { createClient } from '@/lib/supabase/server'
-import { recalculateFetchTimestamp } from '@/lib/newsletter/timestamp'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -101,15 +100,14 @@ export async function DELETE(request: NextRequest) {
       console.log(`[DailyRepo API] Deleted ${deletedCount} items for date ${date}`)
     }
 
-    // Recalculate the fetch timestamp based on remaining data
-    // This ensures the next fetch will re-fetch deleted items
-    await recalculateFetchTimestamp(supabase)
-    console.log('[DailyRepo API] Recalculated fetch timestamp after deletion')
+    // BULLETPROOF: No timestamp recalculation needed!
+    // We always fetch last 48h and deduplicate by gmail_message_id
+    // Deleted items will be re-fetched if still in 48h window, or use historical import
 
     return NextResponse.json({
       success: true,
       deleted: deletedCount,
-      message: 'Items deleted and fetch timestamp recalculated'
+      message: 'Items deleted successfully'
     })
   } catch (error) {
     console.error('[DailyRepo API] DELETE error:', error)

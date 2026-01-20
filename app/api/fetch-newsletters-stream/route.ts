@@ -4,8 +4,9 @@ import { parseNewsletterHtml } from '@/lib/email/parser'
 import { extractArticleContent, isArticleTooOld, isLikelyArticleUrl, isNonArticleLinkText } from '@/lib/scraper/article-extractor'
 import { createClient } from '@/lib/supabase/server'
 import { isAdminRequest } from '@/lib/auth/session'
-import { DEFAULT_NEWSLETTER_FETCH_MS } from '@/lib/config/constants'
-import { getLastFetchTimestamp, updateLastFetchTimestamp } from '@/lib/newsletter/timestamp'
+
+// BULLETPROOF APPROACH: Always fetch last 48h, deduplicate by Gmail message ID
+const FETCH_WINDOW_HOURS = 48
 
 // Node.js runtime for jsdom compatibility
 export const runtime = 'nodejs'
@@ -239,11 +240,10 @@ export async function POST(request: NextRequest) {
           beforeDate = new Date(targetDate + 'T23:59:59Z')  // Force UTC
           console.log(`[Newsletter Fetch] Historical import for date range: ${targetDate} (UTC: ${afterDate.toISOString()} to ${beforeDate.toISOString()})`)
         } else {
-          // No targetDate: fetch all emails since last successful crawl
-          // Timestamp is derived from actual daily_repo data to ensure consistency
-          // This prevents issues when items are deleted - the timestamp auto-adjusts
-          afterDate = await getLastFetchTimestamp(supabase, DEFAULT_NEWSLETTER_FETCH_MS / (1000 * 60 * 60))
-          console.log(`[Newsletter Fetch] Fetching since: ${afterDate.toISOString()}`)
+          // BULLETPROOF APPROACH: Always fetch last 48h, deduplicate by Gmail message ID
+          // No complex timestamp tracking needed - we simply skip emails already imported
+          afterDate = new Date(Date.now() - FETCH_WINDOW_HOURS * 60 * 60 * 1000)
+          console.log(`[Newsletter Fetch] Fetching last ${FETCH_WINDOW_HOURS}h: since ${afterDate.toISOString()}`)
         }
 
         const senderEmails = sources.map(s => s.email)
@@ -370,25 +370,27 @@ export async function POST(request: NextRequest) {
         let totalCharacters = 0
         const articleUrls: Array<{ url: string; title: string; newsletterTitle: string; newsletterEmail: string }> = []
 
-        // BATCH DEDUP: Fetch all existing entries for the fetch date in ONE query
-        // This avoids N database queries (one per email) which causes Vercel timeouts
-        const dateList = [fetchDate]
-        console.log('[Newsletter Fetch] Checking existing entries for date:', fetchDate)
+        // BULLETPROOF DEDUP: Fetch all existing gmail_message_ids in ONE query
+        // Gmail message IDs are globally unique - no need to check by date or composite keys
+        // We extract the IDs we're about to process and query only those (efficient batch lookup)
+        const incomingGmailIds = emails.map(e => e.id)
+        console.log(`[Newsletter Fetch] Checking ${incomingGmailIds.length} gmail_message_ids for dedup`)
 
         const { data: existingEntries } = await supabase
           .from('daily_repo')
-          .select('id, source_email, title, newsletter_date')
-          .in('newsletter_date', dateList)
+          .select('id, gmail_message_id')
+          .in('gmail_message_id', incomingGmailIds)
 
-        // Build in-memory lookup Set with composite keys
-        const existingSet = new Set<string>()
-        const existingIdMap = new Map<string, string>()  // key -> id (for force delete)
+        // Build in-memory lookup Set with gmail_message_id
+        const existingGmailIds = new Set<string>()
+        const existingIdByGmailId = new Map<string, string>()  // gmail_message_id -> db id (for force delete)
         for (const entry of existingEntries || []) {
-          const key = `${entry.source_email}|${entry.title}|${entry.newsletter_date}`
-          existingSet.add(key)
-          existingIdMap.set(key, entry.id)
+          if (entry.gmail_message_id) {
+            existingGmailIds.add(entry.gmail_message_id)
+            existingIdByGmailId.set(entry.gmail_message_id, entry.id)
+          }
         }
-        console.log(`[Newsletter Fetch] Found ${existingSet.size} existing entries for dedup`)
+        console.log(`[Newsletter Fetch] Found ${existingGmailIds.size} existing entries for dedup (by gmail_message_id)`)
 
         // Process newsletters
         for (let i = 0; i < emails.length; i++) {
@@ -405,16 +407,17 @@ export async function POST(request: NextRequest) {
           try {
             // All emails since last fetch get newsletter_date = today (or targetDate for historical imports)
             const newsletterDate = fetchDate
-            const dedupKey = `${email.from}|${email.subject}|${newsletterDate}`
-            const existingId = existingIdMap.get(dedupKey)
 
-            if (existingId) {
+            // BULLETPROOF DEDUP: Check by gmail_message_id
+            const existingDbId = existingIdByGmailId.get(email.id)
+
+            if (existingDbId) {
               if (force) {
                 // Delete existing entry to allow re-processing
-                await supabase.from('daily_repo').delete().eq('id', existingId)
+                await supabase.from('daily_repo').delete().eq('id', existingDbId)
               } else {
                 skippedNewsletters++
-                console.log(`[Newsletter Fetch] Skipping duplicate: "${email.subject}" from ${email.from} (date: ${newsletterDate})`)
+                console.log(`[Newsletter Fetch] Skipping duplicate (gmail_id: ${email.id}): "${email.subject}"`)
                 send({
                   type: 'newsletter',
                   phase: 'processing',
@@ -493,6 +496,7 @@ export async function POST(request: NextRequest) {
                 raw_html: htmlContent,
                 newsletter_date: newsletterDate,
                 email_received_at: email.date.toISOString(),
+                gmail_message_id: email.id,  // BULLETPROOF: Store Gmail ID for deduplication
               })
 
             if (insertError) {
@@ -568,13 +572,11 @@ export async function POST(request: NextRequest) {
               })
 
               try {
-                // Check if already exists
+                // BULLETPROOF: Check by gmail_message_id
                 const { data: existing } = await supabase
                   .from('daily_repo')
                   .select('id')
-                  .eq('source_email', note.from)
-                  .eq('title', cleanedTitle)
-                  .eq('source_type', 'email_note')
+                  .eq('gmail_message_id', note.id)
                   .single()
 
                 if (existing) {
@@ -617,6 +619,7 @@ export async function POST(request: NextRequest) {
                     content: content,
                     newsletter_date: noteDate,
                     email_received_at: note.date.toISOString(),
+                    gmail_message_id: note.id,  // BULLETPROOF: Store Gmail ID for deduplication
                   })
 
                 if (insertError) {
@@ -803,9 +806,8 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Update last fetch timestamp based on actual data in daily_repo
-        // This ensures consistency - if items are deleted, the timestamp auto-adjusts
-        await updateLastFetchTimestamp(supabase)
+        // BULLETPROOF: No timestamp update needed!
+        // We always fetch last 48h and deduplicate by gmail_message_id
 
         // ========================================
         // PHASE 4: Scan all mail for potential newsletter sources

@@ -310,6 +310,18 @@ export function isLikelyArticleUrl(url: string): boolean {
     /\/author\/[a-z0-9_-]+(\?|$)/i, // Author pages
     /\/authors?\/[a-z0-9_-]+(\?|$)/i, // Author pages (plural)
     /\/team\/[a-z0-9_-]+(\?|$)/i,    // Team member pages
+
+    // German legal/utility pages
+    /\/impressum\/?(\?|$)/i,        // Imprint
+    /\/datenschutz\/?(\?|$)/i,      // Privacy policy
+    /\/agb\/?(\?|$)/i,              // Terms & conditions
+    /\/kontakt\/?(\?|$)/i,          // Contact
+    /\/abmelden\/?(\?|$)/i,         // Unsubscribe
+    /\/nutzungsbedingungen\/?(\?|$)/i, // Terms of use
+    /\/privacy\/?(\?|$)/i,          // Privacy (English path)
+    /\/terms\/?(\?|$)/i,            // Terms (English path)
+    /\/legal\/?(\?|$)/i,            // Legal
+    /\/contact\/?(\?|$)/i,          // Contact (English path)
   ]
 
   for (const pattern of skipPatterns) {
@@ -328,6 +340,7 @@ export function isNonArticleLinkText(text: string): boolean {
   const textLower = text.toLowerCase().trim()
 
   const skipTextPatterns = [
+    // English
     /^subscribe/i,
     /^sign up/i,
     /^join/i,
@@ -340,6 +353,20 @@ export function isNonArticleLinkText(text: string): boolean {
     /^manage preferences/i,
     /\| linkedin$/i,  // "Company | LinkedIn"
     /\| substack$/i,  // "Author | Substack"
+
+    // German footer/utility links
+    /^abmelden/i,           // Unsubscribe
+    /^abbestellen/i,        // Unsubscribe (alternative)
+    /^impressum/i,          // Imprint/Legal notice
+    /^datenschutz/i,        // Privacy policy
+    /^kontakt$/i,           // Contact
+    /^agb$/i,               // Terms & conditions
+    /^nutzungsbedingungen/i, // Terms of use
+    /^im browser (ansehen|anzeigen|öffnen)/i, // View in browser
+    /^newsletter abbestellen/i,
+    /^email.?einstellungen/i, // Email settings
+    /^profil bearbeiten/i,  // Edit profile
+    /^einstellungen ändern/i, // Change settings
   ]
 
   for (const pattern of skipTextPatterns) {

@@ -139,22 +139,20 @@ export async function POST(request: NextRequest) {
           // Process and store each email
           for (const email of emails) {
             try {
-              // Check if already exists
-              const newsletterDate = email.date.toISOString().split('T')[0]
+              // BULLETPROOF: Check by gmail_message_id
               const { data: existing } = await supabase
                 .from('daily_repo')
                 .select('id')
-                .eq('source_email', email.from)
-                .eq('title', email.subject)
-                .eq('newsletter_date', newsletterDate)
+                .eq('gmail_message_id', email.id)
                 .single()
 
               if (existing) continue
 
+              const newsletterDate = email.date.toISOString().split('T')[0]
               const htmlContent = email.htmlBody || email.textBody || ''
               const parsed = parseNewsletterHtml(htmlContent, email.subject, email.from, email.date)
 
-              // Store newsletter
+              // Store newsletter with gmail_message_id for bulletproof deduplication
               const { error: insertError } = await supabase
                 .from('daily_repo')
                 .insert({
@@ -164,6 +162,8 @@ export async function POST(request: NextRequest) {
                   content: parsed.plainText,
                   raw_html: htmlContent,
                   newsletter_date: newsletterDate,
+                  email_received_at: email.date.toISOString(),
+                  gmail_message_id: email.id,
                 })
 
               if (!insertError) {

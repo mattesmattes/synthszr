@@ -1,8 +1,14 @@
 /**
- * Newsletter fetch timestamp management
+ * @deprecated DEPRECATED - No longer used since 2026-01-20
  *
- * The timestamp is always derived from the actual data in daily_repo,
- * ensuring consistency even when items are deleted.
+ * Replaced by bulletproof gmail_message_id deduplication approach:
+ * - Always fetch last 48h
+ * - Deduplicate by Gmail message ID (unique, immutable)
+ * - No complex timestamp tracking needed
+ *
+ * See: app/api/fetch-newsletters-stream/route.ts
+ *
+ * This file is kept for reference only and can be deleted.
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
