@@ -810,12 +810,20 @@ export async function POST(request: NextRequest) {
 
           // Get ALL registered sources (both enabled AND disabled)
           // This ensures we don't show sources in the dialog that were previously decided
-          const { data: allSources } = await supabase
+          const { data: allSources, error: allSourcesError } = await supabase
             .from('newsletter_sources')
             .select('email')
 
+          if (allSourcesError) {
+            console.error('[Newsletter Fetch] Error fetching all sources:', allSourcesError)
+          }
+
           const allSourceEmailsLower = (allSources || []).map(s => s.email.toLowerCase())
           console.log(`[Newsletter Fetch] All known sources (enabled + disabled): ${allSourceEmailsLower.length}`)
+          // Debug: Log some sample emails to verify format
+          if (allSourceEmailsLower.length > 0) {
+            console.log(`[Newsletter Fetch] Sample source emails: ${allSourceEmailsLower.slice(0, 5).join(', ')}`)
+          }
 
           // Get excluded senders
           const { data: excludedSenders } = await supabase
