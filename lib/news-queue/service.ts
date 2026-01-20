@@ -15,6 +15,51 @@ import type {
 const SOURCE_LIMIT_PERCENTAGE = 0.35 // 35% max from any single source
 
 /**
+ * Patterns that indicate a queue item is NOT a real article
+ * These should be filtered out during selection
+ */
+const JUNK_TITLE_PATTERNS = [
+  // NYT games and puzzles
+  /^play spelling bee$/i,
+  /^connections\s*[-–]\s*group words/i,
+  /^wordle/i,
+  /^the mini/i,
+  /^strands/i,
+
+  // Meta/utility pages
+  /^help center$/i,
+  /^privacy policy/i,
+  /^terms of (service|use)/i,
+  /^subscribe to/i,
+  /^introducing the .* app$/i,
+  /^unsubscribe$/i,
+
+  // Too short/generic
+  /^x$/i,
+  /^home$/i,
+  /^about$/i,
+  /^contact$/i,
+
+  // Spam indicators
+  /missing something[✨★⭐]/i,
+  /^your outfit/i,
+  /limited time offer/i,
+  /click here/i,
+
+  // Forum/discussion pages (not articles)
+  /^open thread \d+$/i,
+  /^forum$/i,
+]
+
+/**
+ * Check if a title indicates junk content
+ */
+function isJunkTitle(title: string): boolean {
+  const normalizedTitle = title.trim()
+  return JUNK_TITLE_PATTERNS.some(pattern => pattern.test(normalizedTitle))
+}
+
+/**
  * Extract normalized source identifier from email
  * e.g., "Newsletter Name <email@domain.com>" → "email@domain.com"
  */
@@ -209,27 +254,53 @@ export async function getBalancedSelection(
 
   console.log(`[NewsQueue] get_balanced_queue_selection returned ${data?.length || 0} items`)
 
-  if (data && data.length > 0) {
+  // Filter out junk items
+  const filteredData = (data || []).filter((item: BalancedQueueSelection) => {
+    if (isJunkTitle(item.title)) {
+      console.log(`[NewsQueue] Filtering junk item: "${item.title.slice(0, 50)}"`)
+      return false
+    }
+    return true
+  })
+
+  if (filteredData.length < (data?.length || 0)) {
+    console.log(`[NewsQueue] Filtered out ${(data?.length || 0) - filteredData.length} junk items`)
+  }
+
+  if (filteredData.length > 0) {
     // Log source distribution
     const sources: Record<string, number> = {}
-    for (const item of data) {
+    for (const item of filteredData) {
       sources[item.source_identifier] = (sources[item.source_identifier] || 0) + 1
     }
     console.log(`[NewsQueue] Balanced selection sources:`, sources)
   }
 
-  // If balanced selection returns significantly fewer items than requested,
-  // fall back to simple selection (might be a bug in the SQL function)
-  if (data && data.length < maxItems * 0.7) {
-    console.warn(`[NewsQueue] Balanced selection returned only ${data.length}/${maxItems} items - trying simple fallback`)
-    const simpleData = await getSimpleSelection(supabase, maxItems)
-    if (simpleData.length > data.length) {
-      console.log(`[NewsQueue] Simple selection returned ${simpleData.length} items - using this instead`)
-      return simpleData
+  // If we don't have enough items after filtering, get more
+  if (filteredData.length < maxItems) {
+    console.log(`[NewsQueue] Only ${filteredData.length} valid items after filtering, getting more...`)
+    // Request more items to compensate for filtering
+    const extraNeeded = maxItems - filteredData.length
+    const { data: extraData } = await supabase
+      .rpc('get_balanced_queue_selection', {
+        max_items: maxItems + extraNeeded * 2, // Request extra to account for more junk
+        target_source_limit: SOURCE_LIMIT_PERCENTAGE
+      })
+
+    if (extraData) {
+      const existingIds = new Set(filteredData.map((i: BalancedQueueSelection) => i.id))
+      const extraFiltered = (extraData as BalancedQueueSelection[])
+        .filter((item: BalancedQueueSelection) => !existingIds.has(item.id) && !isJunkTitle(item.title))
+        .slice(0, extraNeeded)
+
+      if (extraFiltered.length > 0) {
+        console.log(`[NewsQueue] Added ${extraFiltered.length} extra items after filtering`)
+        filteredData.push(...extraFiltered)
+      }
     }
   }
 
-  return data || []
+  return filteredData
 }
 
 /**
@@ -273,8 +344,14 @@ async function getSimpleSelection(
 
   console.log(`[NewsQueue] Simple selection returned ${data?.length || 0} items`)
 
-  // Map to BalancedQueueSelection format
-  return (data || []).map((item, index) => ({
+  // Filter out junk and map to BalancedQueueSelection format
+  const filtered = (data || []).filter(item => !isJunkTitle(item.title))
+
+  if (filtered.length < (data?.length || 0)) {
+    console.log(`[NewsQueue] Simple selection: filtered out ${(data?.length || 0) - filtered.length} junk items`)
+  }
+
+  return filtered.map((item, index) => ({
     id: item.id,
     title: item.title,
     source_identifier: item.source_identifier,
