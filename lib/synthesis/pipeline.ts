@@ -9,6 +9,7 @@ import { findSimilarItems, getItemEmbedding, SimilarItem } from './search'
 import { scoreSynthesisCandidates, getTopCandidates, ScoredCandidate, SynthesisType } from './score'
 import { developSyntheses, developContentSynthesis, DevelopedSynthesis } from './develop'
 import { addToQueue } from '@/lib/news-queue'
+import { isJunkTitle } from '@/lib/news-queue/service'
 
 export interface SynthesisPipelineResult {
   success: boolean
@@ -179,6 +180,7 @@ async function storeCandidates(
 /**
  * Auto-queue synthesis candidates for article generation
  * This adds scored candidates to the news_queue for source-diversified selection
+ * Filters out junk items (games, privacy policies, etc.)
  */
 async function queueCandidatesForArticle(
   candidates: ScoredCandidate[]
@@ -187,10 +189,28 @@ async function queueCandidatesForArticle(
     return { added: 0, skipped: 0 }
   }
 
+  // Filter out junk candidates
+  const validCandidates = candidates.filter(c => {
+    if (isJunkTitle(c.sourceItem.title)) {
+      console.log(`[Pipeline] Skipping junk candidate: "${c.sourceItem.title.slice(0, 50)}..."`)
+      return false
+    }
+    return true
+  })
+
+  const junkCount = candidates.length - validCandidates.length
+  if (junkCount > 0) {
+    console.log(`[Pipeline] Filtered out ${junkCount} junk candidates`)
+  }
+
+  if (validCandidates.length === 0) {
+    return { added: 0, skipped: candidates.length }
+  }
+
   const supabase = await createClient()
 
   // Get source info from daily_repo for each candidate
-  const sourceItemIds = candidates.map(c => c.sourceItem.id)
+  const sourceItemIds = validCandidates.map(c => c.sourceItem.id)
   const { data: sourceItems } = await supabase
     .from('daily_repo')
     .select('id, source_email, source_url')
@@ -207,7 +227,7 @@ async function queueCandidatesForArticle(
   }
 
   // Map candidates to queue items
-  const queueItems = candidates.map(c => {
+  const queueItems = validCandidates.map(c => {
     const source = sourceMap.get(c.sourceItem.id)
     return {
       dailyRepoId: c.sourceItem.id,
@@ -220,7 +240,7 @@ async function queueCandidatesForArticle(
     }
   })
 
-  console.log(`[Pipeline] Auto-queuing ${queueItems.length} candidates for article generation`)
+  console.log(`[Pipeline] Auto-queuing ${queueItems.length} valid candidates for article generation`)
 
   try {
     const result = await addToQueue(queueItems)
@@ -416,37 +436,56 @@ export async function runSynthesisPipeline(
   await queueCandidatesForArticle(allCandidates)
 
   // Also queue items WITHOUT similar articles - they're still valid news
+  // BUT filter out junk items (games, privacy policies, etc.)
   if (itemsWithoutSimilar.length > 0) {
-    console.log(`[Pipeline] Queuing ${itemsWithoutSimilar.length} items without similar articles...`)
-
-    const itemIds = itemsWithoutSimilar.map(i => i.id)
-    const { data: sourceItems } = await supabase
-      .from('daily_repo')
-      .select('id, source_email, source_url')
-      .in('id', itemIds)
-
-    const sourceMap = new Map<string, { source_email: string | null; source_url: string | null }>()
-    if (sourceItems) {
-      for (const item of sourceItems) {
-        sourceMap.set(item.id, { source_email: item.source_email, source_url: item.source_url })
+    // Filter out junk before queuing
+    const validItems = itemsWithoutSimilar.filter(item => {
+      if (isJunkTitle(item.title)) {
+        console.log(`[Pipeline] Skipping junk item: "${item.title.slice(0, 50)}..."`)
+        return false
       }
-    }
-
-    const queueItems = itemsWithoutSimilar.map(item => {
-      const source = sourceMap.get(item.id)
-      return {
-        dailyRepoId: item.id,
-        title: item.title,
-        sourceEmail: source?.source_email || undefined,
-        sourceUrl: source?.source_url || undefined,
-        synthesisScore: 5,
-        relevanceScore: 5,
-        uniquenessScore: 7
-      }
+      return true
     })
 
-    const result = await addToQueue(queueItems)
-    console.log(`[Pipeline] Queued ${result.added} items without similar (${result.skipped} skipped)`)
+    const junkCount = itemsWithoutSimilar.length - validItems.length
+    if (junkCount > 0) {
+      console.log(`[Pipeline] Filtered out ${junkCount} junk items before queuing`)
+    }
+
+    if (validItems.length > 0) {
+      console.log(`[Pipeline] Queuing ${validItems.length} valid items without similar articles...`)
+
+      const itemIds = validItems.map(i => i.id)
+      const { data: sourceItems } = await supabase
+        .from('daily_repo')
+        .select('id, source_email, source_url')
+        .in('id', itemIds)
+
+      const sourceMap = new Map<string, { source_email: string | null; source_url: string | null }>()
+      if (sourceItems) {
+        for (const item of sourceItems) {
+          sourceMap.set(item.id, { source_email: item.source_email, source_url: item.source_url })
+        }
+      }
+
+      const queueItems = validItems.map(item => {
+        const source = sourceMap.get(item.id)
+        return {
+          dailyRepoId: item.id,
+          title: item.title,
+          sourceEmail: source?.source_email || undefined,
+          sourceUrl: source?.source_url || undefined,
+          synthesisScore: 5,
+          relevanceScore: 5,
+          uniquenessScore: 7
+        }
+      })
+
+      const result = await addToQueue(queueItems)
+      console.log(`[Pipeline] Queued ${result.added} valid items (${result.skipped} skipped as duplicates)`)
+    } else {
+      console.log(`[Pipeline] No valid items to queue (all ${itemsWithoutSimilar.length} were junk)`)
+    }
   }
 
   // allCandidates now contains exactly 1 candidate per item (the best one)

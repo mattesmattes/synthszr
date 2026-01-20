@@ -25,4 +25,5 @@ export {
   // Helper functions
   normalizeSourceIdentifier,
   extractSourceDisplayName,
+  isJunkTitle,
 } from './service'

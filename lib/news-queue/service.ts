@@ -52,9 +52,10 @@ const JUNK_TITLE_PATTERNS = [
 ]
 
 /**
- * Check if a title indicates junk content
+ * Check if a title indicates junk content (not a real article)
+ * Exported so it can be used in the synthesis pipeline to prevent junk from being queued
  */
-function isJunkTitle(title: string): boolean {
+export function isJunkTitle(title: string): boolean {
   const normalizedTitle = title.trim()
   return JUNK_TITLE_PATTERNS.some(pattern => pattern.test(normalizedTitle))
 }
