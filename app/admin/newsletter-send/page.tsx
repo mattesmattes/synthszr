@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Send, FileText, Mail, Loader2, CheckCircle, AlertCircle, Clock, Users, History, Settings, FileEdit } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { Send, FileText, Mail, Loader2, CheckCircle, AlertCircle, Clock, Users, History, Settings, FileEdit, Globe, AlertTriangle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -64,6 +64,16 @@ export default function NewsletterSendPage() {
   const [templateSettings, setTemplateSettings] = useState<EmailTemplateSettings>(DEFAULT_TEMPLATE)
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [showTemplateEditor, setShowTemplateEditor] = useState(false)
+
+  // Translation warning state
+  const [translationStatus, setTranslationStatus] = useState<{
+    pending: number
+    completed: number
+    total: number
+    languages: string[]
+  } | null>(null)
+  const [showTranslationWarning, setShowTranslationWarning] = useState(false)
+  const [checkingTranslations, setCheckingTranslations] = useState(false)
 
   const supabase = createClient()
 
@@ -175,6 +185,61 @@ export default function NewsletterSendPage() {
     }
   }
 
+  // Check translation status for selected post
+  const checkTranslationStatus = useCallback(async (postId: string) => {
+    setCheckingTranslations(true)
+    try {
+      // Get all active languages
+      const { data: languages } = await supabase
+        .from('languages')
+        .select('code, name')
+        .eq('is_active', true)
+        .eq('is_default', false)
+
+      if (!languages || languages.length === 0) {
+        setTranslationStatus({ pending: 0, completed: 0, total: 0, languages: [] })
+        return
+      }
+
+      // Get existing translations for this post
+      const { data: translations } = await supabase
+        .from('content_translations')
+        .select('language_code, translation_status')
+        .eq('generated_post_id', postId)
+
+      // Get pending queue items for this post
+      const { data: queueItems } = await supabase
+        .from('translation_queue')
+        .select('target_language, status')
+        .eq('content_type', 'generated_post')
+        .eq('content_id', postId)
+        .in('status', ['pending', 'processing'])
+
+      const completedLanguages = new Set(
+        translations?.filter(t => t.translation_status === 'completed').map(t => t.language_code) || []
+      )
+      const pendingLanguages = languages.filter(l => !completedLanguages.has(l.code))
+
+      setTranslationStatus({
+        pending: pendingLanguages.length + (queueItems?.length || 0),
+        completed: completedLanguages.size,
+        total: languages.length,
+        languages: pendingLanguages.map(l => l.name),
+      })
+    } catch (err) {
+      console.error('Error checking translation status:', err)
+    } finally {
+      setCheckingTranslations(false)
+    }
+  }, [supabase])
+
+  // Check translations when post selection changes
+  useEffect(() => {
+    if (selectedPostId) {
+      checkTranslationStatus(selectedPostId)
+    }
+  }, [selectedPostId, checkTranslationStatus])
+
   async function sendTestEmail() {
     if (!selectedPostId || !testEmail) return
 
@@ -202,8 +267,14 @@ export default function NewsletterSendPage() {
     }
   }
 
-  async function sendToAll() {
+  async function sendToAll(bypassWarning = false) {
     if (!selectedPostId) return
+
+    // Check if there are pending translations
+    if (!bypassWarning && translationStatus && translationStatus.pending > 0) {
+      setShowTranslationWarning(true)
+      return
+    }
 
     if (!confirm(`Newsletter wirklich an ${activeSubscriberCount} Subscriber senden?`)) {
       return
@@ -211,6 +282,7 @@ export default function NewsletterSendPage() {
 
     setSending(true)
     setMessage(null)
+    setShowTranslationWarning(false)
 
     try {
       const res = await fetch('/api/admin/newsletter-send', {
@@ -354,8 +426,33 @@ export default function NewsletterSendPage() {
                 <p className="text-xs text-muted-foreground mb-3">
                   Newsletter wird an {activeSubscriberCount} aktive Subscriber gesendet.
                 </p>
+
+                {/* Translation Status Indicator */}
+                {translationStatus && (
+                  <div className={`mb-3 p-2 rounded text-xs flex items-center gap-2 ${
+                    translationStatus.pending > 0
+                      ? 'bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                      : 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200'
+                  }`}>
+                    {checkingTranslations ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : translationStatus.pending > 0 ? (
+                      <AlertTriangle className="h-3 w-3" />
+                    ) : (
+                      <Globe className="h-3 w-3" />
+                    )}
+                    <span>
+                      {checkingTranslations
+                        ? 'Prüfe Übersetzungen...'
+                        : translationStatus.pending > 0
+                          ? `${translationStatus.pending} Übersetzungen ausstehend`
+                          : `Alle ${translationStatus.total} Übersetzungen fertig`}
+                    </span>
+                  </div>
+                )}
+
                 <Button
-                  onClick={sendToAll}
+                  onClick={() => sendToAll(false)}
                   disabled={!selectedPostId || sending || activeSubscriberCount === 0}
                   className="w-full gap-2"
                 >
@@ -580,6 +677,71 @@ export default function NewsletterSendPage() {
           saving={savingTemplate}
           selectedPostTitle={selectedPost?.title}
         />
+      )}
+
+      {/* Translation Warning Modal */}
+      {showTranslationWarning && translationStatus && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-4 border-b flex items-center gap-3">
+              <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Übersetzungen ausstehend</h2>
+                <p className="text-sm text-muted-foreground">
+                  Nicht alle Übersetzungen sind fertig
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <p className="text-sm">
+                Für diesen Artikel fehlen noch <strong>{translationStatus.pending}</strong> von{' '}
+                <strong>{translationStatus.total}</strong> Übersetzungen:
+              </p>
+
+              {translationStatus.languages.length > 0 && (
+                <div className="bg-muted/50 p-3 rounded text-xs space-y-1">
+                  {translationStatus.languages.slice(0, 5).map((lang, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                      {lang}
+                    </div>
+                  ))}
+                  {translationStatus.languages.length > 5 && (
+                    <div className="text-muted-foreground">
+                      ... und {translationStatus.languages.length - 5} weitere
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                Du kannst trotzdem senden - Subscriber mit fehlenden Sprachen erhalten den deutschen Newsletter.
+              </p>
+            </div>
+
+            <div className="p-4 border-t flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTranslationWarning(false)}
+              >
+                Abbrechen
+              </Button>
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => sendToAll(true)}
+                className="gap-1.5"
+              >
+                <Send className="h-3 w-3" />
+                Trotzdem senden
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
