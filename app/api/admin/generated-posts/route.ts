@@ -121,6 +121,24 @@ export async function PUT(request: NextRequest) {
         .catch((err) => {
           console.error('[stock-synthszr] Pre-generation failed:', err)
         })
+
+      // Queue translations for all active languages (async, don't block response)
+      fetch(new URL('/api/admin/translations/queue', request.url).toString(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content_type: 'generated_post',
+          content_id: id,
+          priority: 10,  // High priority for newly published posts
+        }),
+      })
+        .then(async (res) => {
+          const result = await res.json()
+          console.log(`[translations] Queued translations for post ${id}: ${result.queued} languages`)
+        })
+        .catch((err) => {
+          console.error('[translations] Failed to queue translations:', err)
+        })
     }
 
     // Sync company mentions to post_company_mentions table (async, don't block response)
