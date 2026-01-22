@@ -27,6 +27,7 @@ interface ArticleThumbnailRequest {
     index: number
     text: string
     vote?: 'BUY' | 'HOLD' | 'SELL' | null
+    queueItemId?: string  // Stable link to news_queue item (survives article deletion)
   }>
 }
 
@@ -98,14 +99,21 @@ export async function POST(request: NextRequest) {
     // Process articles sequentially to avoid API rate limits
     for (const article of articles) {
       try {
-        // Check if thumbnail already exists for this article index
-        const { data: existingThumbnail } = await supabase
+        // Check if thumbnail already exists for this article
+        // Priority: Check by queue_item_id (stable), fallback to article_index (legacy)
+        let existingThumbnailQuery = supabase
           .from('post_images')
           .select('id, generation_status')
           .eq('post_id', postId)
-          .eq('article_index', article.index)
           .eq('image_type', 'article_thumbnail')
-          .single()
+
+        if (article.queueItemId) {
+          existingThumbnailQuery = existingThumbnailQuery.eq('article_queue_item_id', article.queueItemId)
+        } else {
+          existingThumbnailQuery = existingThumbnailQuery.eq('article_index', article.index)
+        }
+
+        const { data: existingThumbnail } = await existingThumbnailQuery.single()
 
         if (existingThumbnail) {
           // Skip if already completed, generating, or pending
@@ -139,6 +147,7 @@ export async function POST(request: NextRequest) {
             source_text: article.text.slice(0, 2000),
             generation_status: 'generating',
             article_index: article.index,
+            article_queue_item_id: article.queueItemId || null,  // Stable link to queue item
             vote_color: voteColor,
             image_type: 'article_thumbnail',
           })
@@ -278,7 +287,7 @@ export async function GET(request: NextRequest) {
 /**
  * DELETE /api/generate-article-thumbnails
  * Delete article thumbnails for a post (admin only)
- * Optional: articleIndex param to delete only a single thumbnail
+ * Optional: articleIndex or queueItemId param to delete only a single thumbnail
  */
 export async function DELETE(request: NextRequest) {
   const session = await getSession()
@@ -289,6 +298,7 @@ export async function DELETE(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const postId = searchParams.get('postId')
   const articleIndex = searchParams.get('articleIndex')
+  const queueItemId = searchParams.get('queueItemId')
 
   if (!postId) {
     return NextResponse.json({ error: 'postId is required' }, { status: 400 })
@@ -296,14 +306,18 @@ export async function DELETE(request: NextRequest) {
 
   const supabase = await createClient()
 
-  // Build query - optionally filter by article_index for single deletion
+  // Build query - optionally filter by queueItemId (stable) or article_index (legacy)
   let query = supabase
     .from('post_images')
     .delete()
     .eq('post_id', postId)
     .eq('image_type', 'article_thumbnail')
 
-  if (articleIndex !== null) {
+  if (queueItemId) {
+    // Prefer queue item ID (stable identifier)
+    query = query.eq('article_queue_item_id', queueItemId)
+  } else if (articleIndex !== null) {
+    // Fallback to article index (legacy)
     query = query.eq('article_index', parseInt(articleIndex, 10))
   }
 

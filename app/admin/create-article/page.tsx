@@ -547,9 +547,8 @@ export default function CreateArticlePage() {
   }
 
   // Trigger article thumbnail generation for each news section
-  async function triggerArticleThumbnails(postId: string, tiptapContent: object) {
-    const contentString = JSON.stringify(tiptapContent)
-
+  // queueItemIds: Array of queue item UUIDs in the same order as articles in the generated content
+  async function triggerArticleThumbnails(postId: string, tiptapContent: object, queueItemIds: string[] = []) {
     // Extract articles from TipTap content by finding heading nodes
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const extractArticles = (node: any, articles: Array<{ index: number; text: string }>, currentIndex = { value: 0 }) => {
@@ -589,14 +588,17 @@ export default function CreateArticlePage() {
 
     console.log(`[Thumbnails] Found ${articles.length} articles for thumbnail generation`)
 
-    // Extract company tags for vote color determination
-    const companies = extractCompanyTags(contentString)
-
-    // For now, set vote to null (will be updated when ratings are available)
-    const articlesWithVotes = articles.map(article => ({
+    // Map articles to queue item IDs (stable link survives article deletion)
+    // queueItemIds[i] corresponds to article index i
+    const articlesWithVotes = articles.map((article, i) => ({
       ...article,
       vote: null as 'BUY' | 'HOLD' | 'SELL' | null,
+      queueItemId: queueItemIds[i] || undefined,  // Link to queue item for stable reference
     }))
+
+    if (queueItemIds.length > 0) {
+      console.log(`[Thumbnails] Linking ${Math.min(articles.length, queueItemIds.length)} thumbnails to queue items`)
+    }
 
     // Trigger thumbnail generation in background
     fetch('/api/generate-article-thumbnails', {
@@ -699,8 +701,9 @@ export default function CreateArticlePage() {
       }
 
       // Trigger article thumbnail generation for news items
+      // Pass queue item IDs for stable thumbnail-to-article linking
       if (newPost?.id) {
-        triggerArticleThumbnails(newPost.id, tiptapContent)
+        triggerArticleThumbnails(newPost.id, tiptapContent, usedQueueItemIds)
       }
 
       // Initialize edit history with original AI content (for learning from edits)

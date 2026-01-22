@@ -48,6 +48,7 @@ interface AppliedPatternData {
 interface ArticleThumbnail {
   id: string
   article_index: number
+  article_queue_item_id: string | null  // Stable link to queue item
   image_url: string
   generation_status: string
 }
@@ -149,11 +150,12 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   }, [id])
 
   // Generate article thumbnails
+  // Uses queueItemIds to create stable links between thumbnails and articles
   const generateArticleThumbnails = useCallback(async (tiptapContent: Record<string, unknown>) => {
     setGeneratingThumbnails(true)
 
     // Extract articles from TipTap content
-    const articles: Array<{ index: number; text: string; vote: null }> = []
+    const articles: Array<{ index: number; text: string; vote: null; queueItemId?: string }> = []
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const extractArticles = (node: any, currentIndex = { value: 0 }) => {
       if (!node) return
@@ -165,6 +167,8 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
             index: currentIndex.value,
             text: headingText.slice(0, 300),
             vote: null,
+            // Link thumbnail to queue item for stable reference (survives article deletion)
+            queueItemId: queueItemIds[currentIndex.value] || undefined,
           })
           currentIndex.value++
         }
@@ -181,7 +185,8 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       return
     }
 
-    console.log(`[Thumbnails] Generating ${articles.length} thumbnails for post ${id}`)
+    const linkedCount = articles.filter(a => a.queueItemId).length
+    console.log(`[Thumbnails] Generating ${articles.length} thumbnails for post ${id} (${linkedCount} linked to queue items)`)
 
     try {
       const res = await fetch('/api/generate-article-thumbnails', {
@@ -200,7 +205,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     } finally {
       setGeneratingThumbnails(false)
     }
-  }, [id, fetchArticleThumbnails])
+  }, [id, fetchArticleThumbnails, queueItemIds])
 
   // Fetch cover images count
   const fetchCoverImages = useCallback(async () => {
@@ -331,7 +336,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     }
   }, [supabase])
 
-  // Remove a queue item (reset to pending)
+  // Remove a queue item (reset to pending) and its associated thumbnail
   const removeQueueItem = async (itemId: string) => {
     setRemovingItemId(itemId)
 
@@ -348,10 +353,26 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       })
 
       if (response.ok) {
+        // Delete the associated thumbnail (by queue item ID for stable reference)
+        fetch(`/api/generate-article-thumbnails?postId=${id}&queueItemId=${itemId}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+          .then(res => {
+            if (res.ok) {
+              console.log(`[Thumbnails] Deleted thumbnail linked to queue item ${itemId}`)
+              // Refresh thumbnail list
+              fetchArticleThumbnails()
+            }
+          })
+          .catch(err => console.error('[Thumbnails] Failed to delete:', err))
+
         // Update local state
-        const newIds = queueItemIds.filter(id => id !== itemId)
+        const newIds = queueItemIds.filter(qid => qid !== itemId)
         setQueueItemIds(newIds)
         setQueueItems(prev => prev.filter(item => item.id !== itemId))
+        // Also remove from local thumbnail state (optimistic update)
+        setArticleThumbnails(prev => prev.filter(t => t.article_queue_item_id !== itemId))
 
         // Update the post's pending_queue_item_ids in database
         await supabase
