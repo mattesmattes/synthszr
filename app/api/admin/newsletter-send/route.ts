@@ -178,15 +178,48 @@ export async function POST(request: NextRequest) {
     }
 
     // Pre-generate email content for each language (avoids redundant API calls)
+    // For non-German locales, fetch translated content from content_translations
     const contentByLocale = new Map<string, string>()
+    const subjectByLocale = new Map<string, string>()
+    const previewTextByLocale = new Map<string, string>()
+
     for (const locale of subscribersByLocale.keys()) {
+      let contentToUse = post.content
+      let excerptToUse = post.excerpt
+      let titleToUse = post.title
+
+      // For non-German locales, try to fetch translated content
+      if (locale !== 'de') {
+        const { data: translation } = await supabase
+          .from('content_translations')
+          .select('title, content, excerpt')
+          .eq('generated_post_id', postId)
+          .eq('language_code', locale)
+          .eq('translation_status', 'completed')
+          .single()
+
+        if (translation?.content) {
+          console.log(`[Newsletter] Using translated content for locale: ${locale}`)
+          contentToUse = translation.content
+          excerptToUse = translation.excerpt || post.excerpt
+          titleToUse = translation.title || post.title
+        } else {
+          console.warn(`[Newsletter] No translation found for locale ${locale}, falling back to German`)
+        }
+      }
+
       const emailContent = await generateEmailContentWithVotes(
-        { content: post.content, excerpt: post.excerpt, slug: post.slug },
+        { content: contentToUse, excerpt: excerptToUse, slug: post.slug },
         BASE_URL,
         articleThumbnails,
         locale
       )
       contentByLocale.set(locale, emailContent)
+
+      // Apply template variables with localized title
+      const localizedSubject = subjectTemplate.replace(/\{\{title\}\}/g, titleToUse)
+      subjectByLocale.set(locale, localizedSubject)
+      previewTextByLocale.set(locale, excerptToUse || '')
     }
 
     // Send emails sequentially with delay to avoid rate limits
@@ -197,6 +230,9 @@ export async function POST(request: NextRequest) {
 
     for (const [locale, localeSubscribers] of subscribersByLocale) {
       const emailContent = contentByLocale.get(locale)!
+      const localizedSubject = subjectByLocale.get(locale) || subject
+      const localizedPreviewText = previewTextByLocale.get(locale) || previewText
+
       // Build locale-aware post URL
       const localePrefix = locale !== 'de' ? `/${locale}` : ''
       const localizedPostUrl = `${BASE_URL}${localePrefix}/posts/${post.slug}`
@@ -223,8 +259,8 @@ export async function POST(request: NextRequest) {
         try {
           const html = await render(
             NewsletterEmail({
-              subject,
-              previewText,
+              subject: localizedSubject,
+              previewText: localizedPreviewText,
               content: emailContent,
               postUrl: localizedPostUrl,
               unsubscribeUrl,
@@ -240,7 +276,7 @@ export async function POST(request: NextRequest) {
           await getResend().emails.send({
             from: FROM_EMAIL,
             to: subscriber.email,
-            subject,
+            subject: localizedSubject,
             html,
           })
           successCount++
