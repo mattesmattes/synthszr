@@ -3,34 +3,11 @@
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { X, Loader2, CheckCircle2 } from "lucide-react"
-import type { LanguageCode } from "@/lib/types"
-import { ALL_LOCALES } from "@/lib/i18n/config"
 
 const COOKIE_NAME = 'synthszr_subscribed'
 const COOKIE_DAYS = 365
 const POPUP_DELAY_MS = 5000 // Show popup after 5 seconds
 const LOCAL_STORAGE_EMAIL_KEY = 'synthszr_email_draft'
-
-interface NewsletterPopupProps {
-  locale?: LanguageCode
-}
-
-/**
- * Detect locale from URL path (e.g., /de/posts/... → 'de')
- * Defaults to English if no locale detected (user hasn't chosen yet)
- */
-function detectLocaleFromPath(): LanguageCode {
-  if (typeof window === 'undefined') return 'en'
-
-  const pathSegments = window.location.pathname.split('/')
-  const firstSegment = pathSegments[1]
-
-  if (firstSegment && ALL_LOCALES.includes(firstSegment as LanguageCode)) {
-    return firstSegment as LanguageCode
-  }
-
-  return 'en' // Default to English (before user chooses)
-}
 
 // Translations for the popup
 type PopupTranslation = {
@@ -52,26 +29,6 @@ const defaultTranslation: PopupTranslation = {
   success: 'Almost there! Please confirm your email.',
 }
 
-const translations: Partial<Record<LanguageCode, PopupTranslation>> = {
-  en: defaultTranslation,
-  de: {
-    heading: 'Kostenlos abonnieren. Abbestellen, wenn\'s nervt.',
-    subheading: 'Das Interessanteste aus AI, Business, UX und Tech jeden Morgen in Deiner Inbox.',
-    placeholder: 'your@email.com',
-    submit: 'Subscribe',
-    submitting: 'Senden...',
-    success: 'Fast geschafft! Bitte bestätige deine E-Mail.',
-  },
-  cs: {
-    heading: 'Odebírejte zdarma. Odhlaste se, kdykoliv.',
-    subheading: 'To nejzajímavější z AI, businessu, UX a technologií každé ráno ve vaší schránce.',
-    placeholder: 'your@email.com',
-    submit: 'Subscribe',
-    submitting: 'Odesílání...',
-    success: 'Skoro hotovo! Potvrďte prosím svůj email.',
-  },
-}
-
 function setCookie(name: string, value: string, days: number) {
   const expires = new Date()
   expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000)
@@ -85,25 +42,16 @@ function getCookie(name: string): string | null {
   return null
 }
 
-export function NewsletterPopup({ locale: localeProp }: NewsletterPopupProps) {
+export function NewsletterPopup() {
   const [isVisible, setIsVisible] = useState(false)
   const [email, setEmail] = useState("")
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState("")
-  const [detectedLocale, setDetectedLocale] = useState<LanguageCode>('en')
   const popupRef = useRef<HTMLDivElement>(null)
 
-  // Use prop if provided, otherwise detect from URL
-  const locale = localeProp ?? detectedLocale
-
-  const t: PopupTranslation = translations[locale] ?? defaultTranslation
-
-  // Detect locale from URL on mount
-  useEffect(() => {
-    if (!localeProp) {
-      setDetectedLocale(detectLocaleFromPath())
-    }
-  }, [localeProp])
+  // Always use English for the popup (design decision: English is the universal default)
+  // The popup should show English to all users regardless of URL locale
+  const t: PopupTranslation = defaultTranslation
 
   // Check if popup should be shown
   useEffect(() => {
@@ -178,7 +126,7 @@ export function NewsletterPopup({ locale: localeProp }: NewsletterPopupProps) {
       const res = await fetch('/api/newsletter/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, language: locale }),
+        body: JSON.stringify({ email, language: 'en' }),
       })
 
       const data = await res.json()
