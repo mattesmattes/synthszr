@@ -50,7 +50,7 @@ export function FeaturedArticle({
             <img
               src="/synthszr-logo.svg"
               alt="Synthszr"
-              className="relative z-10 h-20 md:h-24 w-auto"
+              className="relative z-10 h-20 md:h-24 w-auto max-w-[80%]"
             />
           </div>
         </a>
