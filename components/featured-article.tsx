@@ -46,11 +46,11 @@ export function FeaturedArticle({
               className="absolute inset-0 w-full h-full object-cover"
               style={{ imageRendering: 'pixelated' }}
             />
-            {/* Logo centered on top */}
+            {/* Logo centered on top - explicit mobile width constraint */}
             <img
               src="/synthszr-logo.svg"
               alt="Synthszr"
-              className="relative z-10 h-20 md:h-24 w-auto max-w-[80%]"
+              className="relative z-10 h-auto w-[70%] max-w-[300px] md:h-24 md:w-auto md:max-w-[400px]"
             />
           </div>
         </a>

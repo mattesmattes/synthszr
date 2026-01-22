@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
-import { ConfirmationEmail } from '@/lib/resend/templates/confirmation'
+import { ConfirmationEmail, getConfirmationSubject } from '@/lib/resend/templates/confirmation'
 import { render } from '@react-email/components'
 
 export async function POST(request: NextRequest) {
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', existing.id)
 
-        await sendConfirmationEmail(email, confirmationToken)
+        await sendConfirmationEmail(email, confirmationToken, language)
 
         return NextResponse.json({
           success: true,
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', existing.id)
 
-        await sendConfirmationEmail(email, confirmationToken)
+        await sendConfirmationEmail(email, confirmationToken, language)
 
         return NextResponse.json({
           success: true,
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Send confirmation email
-    await sendConfirmationEmail(email, confirmationToken)
+    await sendConfirmationEmail(email, confirmationToken, language)
 
     return NextResponse.json({
       success: true,
@@ -126,15 +126,16 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function sendConfirmationEmail(email: string, token: string) {
+async function sendConfirmationEmail(email: string, token: string, language: string = 'de') {
   const confirmationUrl = `${BASE_URL}/api/newsletter/confirm?token=${token}`
 
-  const html = await render(ConfirmationEmail({ confirmationUrl }))
+  const html = await render(ConfirmationEmail({ confirmationUrl, locale: language }))
+  const subject = getConfirmationSubject(language)
 
   await getResend().emails.send({
     from: FROM_EMAIL,
     to: email,
-    subject: 'Bestätige deine Newsletter-Anmeldung',
+    subject,
     html,
   })
 }

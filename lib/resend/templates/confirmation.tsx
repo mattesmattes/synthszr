@@ -11,36 +11,84 @@ import {
   Link,
 } from '@react-email/components'
 
+type Locale = 'de' | 'en' | 'cs' | string
+
 interface ConfirmationEmailProps {
   confirmationUrl: string
+  locale?: Locale
 }
 
-export function ConfirmationEmail({ confirmationUrl }: ConfirmationEmailProps) {
+// Translations for confirmation email
+const translations: Record<string, {
+  heading: string
+  thanks: string
+  confirm: string
+  button: string
+  copyLink: string
+  ignore: string
+  subject: string
+}> = {
+  de: {
+    heading: 'Synthszr Newsletter',
+    thanks: 'Danke für deine Anmeldung zum Synthszr Newsletter!',
+    confirm: 'Bitte bestätige deine E-Mail-Adresse, um den Newsletter zu erhalten:',
+    button: 'E-Mail bestätigen',
+    copyLink: 'Oder kopiere diesen Link in deinen Browser:',
+    ignore: 'Falls du diese E-Mail nicht angefordert hast, kannst du sie ignorieren.',
+    subject: 'Bestätige deine Newsletter-Anmeldung',
+  },
+  en: {
+    heading: 'Synthszr Newsletter',
+    thanks: 'Thank you for signing up for the Synthszr Newsletter!',
+    confirm: 'Please confirm your email address to receive the newsletter:',
+    button: 'Confirm Email',
+    copyLink: 'Or copy this link into your browser:',
+    ignore: 'If you did not request this email, you can ignore it.',
+    subject: 'Confirm your newsletter subscription',
+  },
+  cs: {
+    heading: 'Synthszr Newsletter',
+    thanks: 'Děkujeme za přihlášení k odběru Synthszr Newsletteru!',
+    confirm: 'Potvrďte prosím svou e-mailovou adresu pro příjem newsletteru:',
+    button: 'Potvrdit e-mail',
+    copyLink: 'Nebo zkopírujte tento odkaz do prohlížeče:',
+    ignore: 'Pokud jste o tento e-mail nežádali, můžete ho ignorovat.',
+    subject: 'Potvrďte odběr newsletteru',
+  },
+}
+
+export function getConfirmationSubject(locale: Locale = 'de'): string {
+  return translations[locale]?.subject || translations.de.subject
+}
+
+export function ConfirmationEmail({ confirmationUrl, locale = 'de' }: ConfirmationEmailProps) {
+  const t = translations[locale] || translations.de
+
   return (
     <Html>
       <Head />
       <Body style={main}>
         <Container style={container}>
           <Section style={section}>
-            <Text style={heading}>Synthszr Newsletter</Text>
+            <Text style={heading}>{t.heading}</Text>
             <Text style={paragraph}>
-              Danke für deine Anmeldung zum Synthszr Newsletter!
+              {t.thanks}
             </Text>
             <Text style={paragraph}>
-              Bitte bestätige deine E-Mail-Adresse, um den Newsletter zu erhalten:
+              {t.confirm}
             </Text>
             <Button style={button} href={confirmationUrl}>
-              E-Mail bestätigen
+              {t.button}
             </Button>
             <Text style={smallText}>
-              Oder kopiere diesen Link in deinen Browser:
+              {t.copyLink}
             </Text>
             <Link href={confirmationUrl} style={link}>
               {confirmationUrl}
             </Link>
             <Hr style={hr} />
             <Text style={footer}>
-              Falls du diese E-Mail nicht angefordert hast, kannst du sie ignorieren.
+              {t.ignore}
             </Text>
           </Section>
         </Container>
