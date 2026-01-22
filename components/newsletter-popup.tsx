@@ -16,10 +16,11 @@ interface NewsletterPopupProps {
 }
 
 /**
- * Detect locale from URL path (e.g., /en/posts/... → 'en')
+ * Detect locale from URL path (e.g., /de/posts/... → 'de')
+ * Defaults to English if no locale detected (user hasn't chosen yet)
  */
 function detectLocaleFromPath(): LanguageCode {
-  if (typeof window === 'undefined') return 'de'
+  if (typeof window === 'undefined') return 'en'
 
   const pathSegments = window.location.pathname.split('/')
   const firstSegment = pathSegments[1]
@@ -28,7 +29,7 @@ function detectLocaleFromPath(): LanguageCode {
     return firstSegment as LanguageCode
   }
 
-  return 'de' // Default to German
+  return 'en' // Default to English (before user chooses)
 }
 
 // Translations for the popup
@@ -41,28 +42,29 @@ type PopupTranslation = {
   success: string
 }
 
+// English is the default (shown before user chooses a language)
 const defaultTranslation: PopupTranslation = {
-  heading: 'Kostenlos abonnieren. Abbestellen, wenn\'s nervt.',
-  subheading: 'Das Interessante aus AI, Business, UX und Tech jeden Morgen in Deiner Inbox.',
+  heading: 'Subscribe for free. Unsubscribe when it bothers you.',
+  subheading: 'The most interesting from AI, Business, UX and Tech every morning in your inbox.',
   placeholder: 'your@email.com',
   submit: 'Subscribe',
   submitting: 'Sending...',
-  success: 'Fast geschafft! Bitte bestätige deine E-Mail.',
+  success: 'Almost there! Please confirm your email.',
 }
 
 const translations: Partial<Record<LanguageCode, PopupTranslation>> = {
-  de: defaultTranslation,
-  en: {
-    heading: 'Subscribe for free. Unsubscribe when it bothers you.',
-    subheading: 'The interesting stuff from AI, Business, UX and Tech every morning in your inbox.',
+  en: defaultTranslation,
+  de: {
+    heading: 'Kostenlos abonnieren. Abbestellen, wenn\'s nervt.',
+    subheading: 'Das Interessanteste aus AI, Business, UX und Tech jeden Morgen in Deiner Inbox.',
     placeholder: 'your@email.com',
     submit: 'Subscribe',
-    submitting: 'Sending...',
-    success: 'Almost there! Please confirm your email.',
+    submitting: 'Senden...',
+    success: 'Fast geschafft! Bitte bestätige deine E-Mail.',
   },
   cs: {
     heading: 'Odebírejte zdarma. Odhlaste se, kdykoliv.',
-    subheading: 'Zajímavosti z AI, businessu, UX a technologií každé ráno ve vaší schránce.',
+    subheading: 'To nejzajímavější z AI, businessu, UX a technologií každé ráno ve vaší schránce.',
     placeholder: 'your@email.com',
     submit: 'Subscribe',
     submitting: 'Odesílání...',
@@ -88,7 +90,7 @@ export function NewsletterPopup({ locale: localeProp }: NewsletterPopupProps) {
   const [email, setEmail] = useState("")
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState("")
-  const [detectedLocale, setDetectedLocale] = useState<LanguageCode>('de')
+  const [detectedLocale, setDetectedLocale] = useState<LanguageCode>('en')
   const popupRef = useRef<HTMLDivElement>(null)
 
   // Use prop if provided, otherwise detect from URL
