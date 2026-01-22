@@ -19,7 +19,7 @@ const protectedRoutes = ['/admin']
 const authRoutes = ['/login']
 
 // Routes that should NOT have locale prefix (static, api, admin, etc.)
-const NON_LOCALIZED_PREFIXES = ['/api', '/admin', '/login', '/_next', '/favicon', '/docs']
+const NON_LOCALIZED_PREFIXES = ['/api', '/admin', '/login', '/_next', '/favicon', '/docs', '/newsletter']
 
 // Cache for active languages (refreshed every 5 minutes)
 let activeLanguagesCache: Set<string> | null = null

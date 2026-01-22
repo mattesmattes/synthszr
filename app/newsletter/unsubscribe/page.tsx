@@ -14,8 +14,8 @@ function UnsubscribeContent() {
     if (status === 'success') {
       return {
         icon: <CheckCircle2 className="h-16 w-16 text-green-500" />,
-        title: 'Abmeldung erfolgreich',
-        message: 'Du wurdest erfolgreich vom Newsletter abgemeldet. Wir werden dir keine weiteren E-Mails senden.',
+        title: 'Unsubscribed',
+        message: 'You have been successfully unsubscribed from our newsletter. We will not send you any more emails.',
         type: 'success' as const,
       }
     }
@@ -23,8 +23,8 @@ function UnsubscribeContent() {
     if (status === 'already_unsubscribed') {
       return {
         icon: <AlertCircle className="h-16 w-16 text-yellow-500" />,
-        title: 'Bereits abgemeldet',
-        message: 'Du bist bereits vom Newsletter abgemeldet.',
+        title: 'Already unsubscribed',
+        message: 'You are already unsubscribed from our newsletter.',
         type: 'warning' as const,
       }
     }
@@ -32,8 +32,8 @@ function UnsubscribeContent() {
     if (error === 'not_found') {
       return {
         icon: <XCircle className="h-16 w-16 text-red-500" />,
-        title: 'Nicht gefunden',
-        message: 'Wir konnten deine E-Mail-Adresse nicht finden. Möglicherweise wurdest du bereits abgemeldet.',
+        title: 'Not found',
+        message: 'We could not find your email address. You may have already been unsubscribed.',
         type: 'error' as const,
       }
     }
@@ -41,16 +41,16 @@ function UnsubscribeContent() {
     if (error === 'missing_id') {
       return {
         icon: <XCircle className="h-16 w-16 text-red-500" />,
-        title: 'Ungültiger Link',
-        message: 'Der Abmelde-Link ist unvollständig. Bitte verwende den Link aus der E-Mail.',
+        title: 'Invalid link',
+        message: 'The unsubscribe link is incomplete. Please use the link from the email.',
         type: 'error' as const,
       }
     }
 
     return {
       icon: <XCircle className="h-16 w-16 text-red-500" />,
-      title: 'Fehler',
-      message: 'Bei der Abmeldung ist ein Fehler aufgetreten. Bitte versuche es später erneut.',
+      title: 'Error',
+      message: 'An error occurred during unsubscription. Please try again later.',
       type: 'error' as const,
     }
   }
@@ -69,7 +69,7 @@ function UnsubscribeContent() {
           href="/"
           className="inline-block mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-sm font-medium hover:bg-primary/90 transition-colors"
         >
-          Zur Startseite
+          Go to homepage
         </Link>
       </div>
     </main>
@@ -80,7 +80,7 @@ export default function UnsubscribePage() {
   return (
     <Suspense fallback={
       <main className="min-h-screen flex items-center justify-center p-4">
-        <div className="animate-pulse">Laden...</div>
+        <div className="animate-pulse">Loading...</div>
       </main>
     }>
       <UnsubscribeContent />

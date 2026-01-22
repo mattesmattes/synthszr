@@ -14,8 +14,8 @@ function ConfirmContent() {
     if (status === 'success') {
       return {
         icon: <CheckCircle2 className="h-16 w-16 text-green-500" />,
-        title: 'E-Mail bestätigt!',
-        message: 'Vielen Dank! Du erhältst ab jetzt unseren Newsletter.',
+        title: 'Email confirmed!',
+        message: 'Thank you! You will now receive our newsletter.',
         type: 'success' as const,
       }
     }
@@ -23,8 +23,8 @@ function ConfirmContent() {
     if (status === 'already_confirmed') {
       return {
         icon: <AlertCircle className="h-16 w-16 text-yellow-500" />,
-        title: 'Bereits bestätigt',
-        message: 'Deine E-Mail-Adresse wurde bereits bestätigt. Du erhältst unseren Newsletter.',
+        title: 'Already confirmed',
+        message: 'Your email address has already been confirmed. You are subscribed to our newsletter.',
         type: 'warning' as const,
       }
     }
@@ -32,8 +32,8 @@ function ConfirmContent() {
     if (error === 'invalid_token') {
       return {
         icon: <XCircle className="h-16 w-16 text-red-500" />,
-        title: 'Ungültiger Link',
-        message: 'Dieser Bestätigungslink ist ungültig oder abgelaufen. Bitte melde dich erneut an.',
+        title: 'Invalid link',
+        message: 'This confirmation link is invalid or expired. Please sign up again.',
         type: 'error' as const,
       }
     }
@@ -41,16 +41,16 @@ function ConfirmContent() {
     if (error === 'missing_token') {
       return {
         icon: <XCircle className="h-16 w-16 text-red-500" />,
-        title: 'Fehlender Link',
-        message: 'Der Bestätigungslink ist unvollständig. Bitte verwende den Link aus der E-Mail.',
+        title: 'Missing link',
+        message: 'The confirmation link is incomplete. Please use the link from the email.',
         type: 'error' as const,
       }
     }
 
     return {
       icon: <XCircle className="h-16 w-16 text-red-500" />,
-      title: 'Fehler',
-      message: 'Bei der Bestätigung ist ein Fehler aufgetreten. Bitte versuche es später erneut.',
+      title: 'Error',
+      message: 'An error occurred during confirmation. Please try again later.',
       type: 'error' as const,
     }
   }
@@ -69,7 +69,7 @@ function ConfirmContent() {
           href="/"
           className="inline-block mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-sm font-medium hover:bg-primary/90 transition-colors"
         >
-          Zur Startseite
+          Go to homepage
         </Link>
       </div>
     </main>
@@ -80,7 +80,7 @@ export default function ConfirmPage() {
   return (
     <Suspense fallback={
       <main className="min-h-screen flex items-center justify-center p-4">
-        <div className="animate-pulse">Laden...</div>
+        <div className="animate-pulse">Loading...</div>
       </main>
     }>
       <ConfirmContent />
