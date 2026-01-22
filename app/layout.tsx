@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { IBM_Plex_Serif, Space_Mono } from "next/font/google"
 import { Analytics } from "@/components/analytics"
 import { ConsentBanner } from "@/components/consent-banner"
+import { NewsletterPopup } from "@/components/newsletter-popup"
 import "./globals.css"
 
 const ibmPlexSerif = IBM_Plex_Serif({
@@ -43,6 +44,7 @@ export default function RootLayout({
         {children}
         <Analytics />
         <ConsentBanner />
+        <NewsletterPopup />
       </body>
     </html>
   )
