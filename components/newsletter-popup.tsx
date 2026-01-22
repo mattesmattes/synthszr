@@ -208,7 +208,7 @@ export function NewsletterPopup({ locale: localeProp }: NewsletterPopupProps) {
 
       <div
         ref={popupRef}
-        className="relative w-full max-w-xl bg-[#f5f5f5] p-8 md:p-12 shadow-2xl animate-popup-emerge overflow-hidden"
+        className="relative w-full max-w-md bg-[#f5f5f5] p-6 md:p-8 shadow-2xl animate-popup-emerge overflow-hidden"
         role="dialog"
         aria-modal="true"
         aria-labelledby="newsletter-popup-heading"
@@ -227,27 +227,27 @@ export function NewsletterPopup({ locale: localeProp }: NewsletterPopupProps) {
         </button>
 
         {status === 'success' ? (
-          <div className="text-center py-8">
-            <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-4" />
-            <p className="text-lg text-gray-700">{t.success}</p>
+          <div className="text-center py-6">
+            <CheckCircle2 className="h-10 w-10 text-green-600 mx-auto mb-3" />
+            <p className="text-base text-gray-700">{t.success}</p>
           </div>
         ) : (
           <>
             {/* Heading */}
             <h2
               id="newsletter-popup-heading"
-              className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight mb-2"
+              className="text-xl md:text-2xl font-bold text-gray-900 leading-tight mb-2"
             >
               {t.heading}
             </h2>
 
             {/* Subheading */}
-            <p className="text-lg md:text-xl text-gray-400 leading-relaxed mb-8">
+            <p className="text-base md:text-lg text-gray-400 leading-relaxed mb-6">
               {t.subheading}
             </p>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
+            <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
               <input
                 type="email"
                 value={email}
@@ -255,12 +255,12 @@ export function NewsletterPopup({ locale: localeProp }: NewsletterPopupProps) {
                 placeholder={t.placeholder}
                 required
                 disabled={status === 'loading'}
-                className="flex-1 px-4 py-3 text-base border border-gray-300 bg-white focus:border-gray-500 focus:outline-none disabled:opacity-50"
+                className="flex-1 px-3 py-2.5 text-sm border border-gray-300 bg-white focus:border-gray-500 focus:outline-none disabled:opacity-50"
               />
               <button
                 type="submit"
                 disabled={status === 'loading'}
-                className="px-8 py-3 text-base font-medium bg-black text-white hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap"
+                className="px-6 py-2.5 text-sm font-medium bg-black text-white hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 {status === 'loading' ? (
                   <>
