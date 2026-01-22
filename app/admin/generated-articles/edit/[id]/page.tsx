@@ -545,19 +545,25 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       })
         .then(res => res.json())
         .then(data => {
-          if (data.queued > 0) {
-            console.log(`[i18n] Queued ${data.queued} translations, starting processing...`)
-            // Immediately start processing the queue
-            fetch('/api/admin/translations/process-queue', {
-              method: 'POST',
-              credentials: 'include',
-            })
-              .then(res => res.json())
-              .then(result => console.log(`[i18n] Processing started: ${result.processed} items`))
-              .catch(err => console.error('[i18n] Process queue error:', err))
-          }
+          console.log(`[i18n] Queue response: ${data.queued || 0} queued, ${data.skipped || 0} skipped`)
+          // Always start processing the queue (handles any pending items)
+          console.log('[i18n] Starting translation processing...')
+          fetch('/api/admin/translations/process-queue', {
+            method: 'POST',
+            credentials: 'include',
+          })
+            .then(res => res.json())
+            .then(result => console.log(`[i18n] Processing result: ${result.processed || 0} processed, ${result.success || 0} success, ${result.failed || 0} failed`))
+            .catch(err => console.error('[i18n] Process queue error:', err))
         })
-        .catch(err => console.error('[i18n] Translation queue error:', err))
+        .catch(err => {
+          console.error('[i18n] Translation queue error:', err)
+          // Still try to process queue even if queuing failed
+          fetch('/api/admin/translations/process-queue', {
+            method: 'POST',
+            credentials: 'include',
+          }).catch(() => {})
+        })
     }
 
     // Generate article thumbnails if missing (count all non-failed thumbnails)

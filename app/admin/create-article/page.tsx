@@ -622,31 +622,6 @@ export default function CreateArticlePage() {
       .catch(err => console.error('[Thumbnails] Error:', err))
   }
 
-  // Trigger translations for all active languages
-  async function triggerTranslations(postId: string) {
-    console.log(`[i18n] Triggering translations for post ${postId}`)
-
-    fetch('/api/admin/translations/queue', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        content_type: 'generated_post',
-        content_id: postId,
-        priority: 10, // High priority for new articles
-      }),
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.queued > 0) {
-          console.log(`[i18n] Queued ${data.queued} translation jobs for languages: ${data.languages?.join(', ')}`)
-        } else {
-          console.log('[i18n] No translations queued:', data.message)
-        }
-      })
-      .catch(err => console.error('[i18n] Error queuing translations:', err))
-  }
-
   async function saveAsDraft() {
     if (!articleContent) return
 
@@ -695,10 +670,9 @@ export default function CreateArticlePage() {
       // Trigger Synthszr ratings for companies with {Company} tags
       triggerSynthszrRatings(tiptapContent)
 
-      // Trigger translations for all active languages
-      if (newPost?.id) {
-        triggerTranslations(newPost.id)
-      }
+      // NOTE: Translations are NOT triggered for drafts
+      // They will be triggered when the post is published from the edit page
+      // This prevents queue items from sitting in 'pending' status unnecessarily
 
       // Trigger article thumbnail generation for news items
       // Pass queue item IDs for stable thumbnail-to-article linking
