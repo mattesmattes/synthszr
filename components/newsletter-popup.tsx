@@ -22,7 +22,7 @@ type PopupTranslation = {
 // English is the default (shown before user chooses a language)
 const defaultTranslation: PopupTranslation = {
   heading: 'Subscribe free. Unsubscribe the second it sucks.',
-  subheading: 'High-signal news across AI, business, UX, and tech.',
+  subheading: 'High-signal news across AI, business, UX, and tech. Every morning.',
   placeholder: 'your@email.com',
   submit: 'Subscribe',
   submitting: 'Sending...',
