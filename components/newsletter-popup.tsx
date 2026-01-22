@@ -186,9 +186,9 @@ export function NewsletterPopup() {
             {/* Heading */}
             <h2
               id="newsletter-popup-heading"
-              className="text-xl md:text-2xl font-bold text-gray-900 leading-tight mb-2"
+              className="text-xl md:text-2xl font-bold text-gray-900 leading-tight mb-2 pr-8"
             >
-              {t.heading}
+              Subscribe free. Unsubscribe<br />the second it sucks.
             </h2>
 
             {/* Subheading */}
