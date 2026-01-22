@@ -202,20 +202,20 @@ export function NewsletterPopup({ locale: localeProp }: NewsletterPopupProps) {
   if (!isVisible) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-backdrop-fade">
-      {/* Animated backdrop with blur */}
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Animated backdrop - radial blur expanding from center */}
+      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm animate-backdrop-blur" />
 
       <div
         ref={popupRef}
-        className="relative w-full max-w-xl bg-[#f5f5f5] p-8 md:p-12 shadow-2xl animate-popup-enter overflow-hidden"
+        className="relative w-full max-w-xl bg-[#f5f5f5] p-8 md:p-12 shadow-2xl animate-popup-emerge overflow-hidden"
         role="dialog"
         aria-modal="true"
         aria-labelledby="newsletter-popup-heading"
       >
-        {/* Subtle shimmer effect on the edge */}
+        {/* Subtle shimmer effect */}
         <div className="absolute inset-0 opacity-0 animate-shimmer pointer-events-none">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-shimmer-slide" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full animate-shimmer-slide" />
         </div>
         {/* Close button */}
         <button

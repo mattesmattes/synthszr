@@ -330,37 +330,44 @@
 
 /* ===== Newsletter Popup Animations ===== */
 
-/* Backdrop fade in */
-@keyframes backdrop-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.animate-backdrop-fade {
-  animation: backdrop-fade 0.3s ease-out forwards;
-}
-
-/* Popup entrance - scale + fade with spring-like easing */
-@keyframes popup-enter {
+/* Backdrop: expands from center with blur + fade */
+@keyframes backdrop-blur {
   0% {
     opacity: 0;
-    transform: scale(0.95) translateY(10px);
-  }
-  50% {
-    opacity: 1;
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
   }
   100% {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
   }
 }
 
-.animate-popup-enter {
-  animation: popup-enter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+.animate-backdrop-blur {
+  animation: backdrop-blur 0.35s ease-out forwards;
+}
+
+/* Popup: emerges from center - scale + fade synchronized with backdrop */
+@keyframes popup-emerge {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+    filter: blur(8px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0px);
+  }
+}
+
+.animate-popup-emerge {
+  animation: popup-emerge 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* Shimmer container fade in (delayed) */
@@ -374,7 +381,7 @@
 }
 
 .animate-shimmer {
-  animation: shimmer-fade 0.1s ease-out 0.4s forwards;
+  animation: shimmer-fade 0.1s ease-out 0.5s forwards;
 }
 
 /* Shimmer slide effect */
@@ -388,5 +395,5 @@
 }
 
 .animate-shimmer-slide {
-  animation: shimmer-slide 1.2s ease-in-out 0.5s forwards;
+  animation: shimmer-slide 1s ease-in-out 0.6s forwards;
 }
