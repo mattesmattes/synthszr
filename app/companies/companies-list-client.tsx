@@ -68,13 +68,13 @@ export function CompaniesListClient({ companies, locale }: CompaniesListClientPr
           comparison = a.name.localeCompare(b.name, 'de')
           break
         case 'ticker':
-          // Sort by ticker, null values last
-          const tickerA = a.ticker || ''
-          const tickerB = b.ticker || ''
-          if (!tickerA && !tickerB) comparison = 0
-          else if (!tickerA) comparison = 1
-          else if (!tickerB) comparison = -1
-          else comparison = tickerA.localeCompare(tickerB)
+          // Sort by performance (changePercent), null values last
+          const perfA = a.changePercent ?? null
+          const perfB = b.changePercent ?? null
+          if (perfA === null && perfB === null) comparison = 0
+          else if (perfA === null) comparison = 1
+          else if (perfB === null) comparison = -1
+          else comparison = perfB - perfA // Higher performance first by default
           break
         case 'vote':
           // Sort by rating: BUY > HOLD > SELL > null
@@ -100,7 +100,7 @@ export function CompaniesListClient({ companies, locale }: CompaniesListClientPr
     } else {
       // New column: set default direction
       setSortColumn(column)
-      setSortDirection(column === 'vote' || column === 'articles' ? 'desc' : 'asc')
+      setSortDirection(column === 'vote' || column === 'articles' || column === 'ticker' ? 'desc' : 'asc')
     }
   }
 
