@@ -410,11 +410,12 @@ export async function getSelectedItems(): Promise<NewsQueueItem[]> {
     console.log(`[NewsQueue] Reset ${staleItems.length} stale selected items (older than 2h) to pending`)
   }
 
-  // Now get remaining selected items (fresh selections)
+  // Now get remaining selected items (fresh selections, not expired)
   const { data: selectedItems, error } = await supabase
     .from('news_queue')
     .select('*')
     .eq('status', 'selected')
+    .gt('expires_at', new Date().toISOString())
     .order('total_score', { ascending: false })
 
   if (error) {
