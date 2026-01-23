@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { queueTranslations } from '@/lib/translations/queue'
 
 /**
  * GET /api/admin/translations
@@ -288,6 +289,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         message: `${deletedCount} orphaned queue items deleted`,
         count: deletedCount,
+      })
+    }
+
+    if (action === 'trigger' && body.content_id) {
+      // Manually trigger translations for a content item (even if already published)
+      const contentType = body.content_type || 'generated_post'
+      const priority = body.priority || 10
+      const force = body.force || false
+
+      const result = await queueTranslations(contentType, body.content_id, priority, force)
+
+      if (result.error) {
+        return NextResponse.json({ error: result.error }, { status: 500 })
+      }
+
+      return NextResponse.json({
+        message: `Queued ${result.queued} translations`,
+        ...result,
       })
     }
 

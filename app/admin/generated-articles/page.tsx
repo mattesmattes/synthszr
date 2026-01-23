@@ -21,7 +21,8 @@ import {
   FileEdit,
   ImageIcon,
   Bot,
-  Sparkles
+  Sparkles,
+  Languages
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import Link from 'next/link'
@@ -154,6 +155,9 @@ export default function GeneratedArticlesPage() {
   const [articleCount, setArticleCount] = useState(0)
   const [generatingThumbnails, setGeneratingThumbnails] = useState(false)
 
+  // Translation trigger state
+  const [triggeringTranslations, setTriggeringTranslations] = useState<string | null>(null)
+
   // Count H2 headings (articles) in TipTap content
   function countArticles(content: Record<string, unknown>): number {
     let count = 0
@@ -243,6 +247,44 @@ export default function GeneratedArticlesPage() {
   useEffect(() => {
     fetchPosts()
   }, [])
+
+  // Trigger translations for a post manually
+  async function triggerTranslations(postId: string) {
+    setTriggeringTranslations(postId)
+    try {
+      const res = await fetch('/api/admin/translations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'trigger',
+          content_type: 'generated_post',
+          content_id: postId,
+          priority: 10,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.queued > 0) {
+        console.log(`[i18n] Queued ${data.queued} translations for post ${postId}`)
+        // Start processing the queue
+        fetch('/api/admin/translations/process-queue', {
+          method: 'POST',
+          credentials: 'include',
+        })
+          .then(r => r.json())
+          .then(result => console.log(`[i18n] Processing started: ${result.processed} items`))
+          .catch(err => console.error('[i18n] Process queue error:', err))
+      } else if (data.queued === 0) {
+        console.log('[i18n] No translations queued (all manually edited or no languages)')
+      } else {
+        console.error('[i18n] Failed to trigger translations:', data.error)
+      }
+    } catch (err) {
+      console.error('[i18n] Error triggering translations:', err)
+    } finally {
+      setTriggeringTranslations(null)
+    }
+  }
 
   async function fetchPosts() {
     setLoading(true)
@@ -578,20 +620,36 @@ export default function GeneratedArticlesPage() {
                       </Button>
                     )}
                     {post.status === 'published' && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleStatusChange(post.id, 'draft')}
-                        disabled={changingStatus === post.id}
-                        title="Zurück zu Entwurf"
-                        className="text-yellow-600 hover:text-yellow-700"
-                      >
-                        {changingStatus === post.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <FileEdit className="h-4 w-4" />
-                        )}
-                      </Button>
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => triggerTranslations(post.id)}
+                          disabled={triggeringTranslations === post.id}
+                          title="Übersetzungen triggern"
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          {triggeringTranslations === post.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Languages className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleStatusChange(post.id, 'draft')}
+                          disabled={changingStatus === post.id}
+                          title="Zurück zu Entwurf"
+                          className="text-yellow-600 hover:text-yellow-700"
+                        >
+                          {changingStatus === post.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <FileEdit className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </>
                     )}
                     <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(post)} title="Löschen">
                       <Trash2 className="h-4 w-4 text-destructive" />

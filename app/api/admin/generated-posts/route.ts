@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 import { pregenerateStockSynthszr } from '@/lib/stock-synthszr/pregenerate'
 import { syncPostCompanyMentions } from '@/lib/companies/sync'
+import { queueTranslations } from '@/lib/translations/queue'
 
 export async function GET() {
   const session = await getSession()
@@ -123,21 +124,16 @@ export async function PUT(request: NextRequest) {
         })
 
       // Queue translations for all active languages (async, don't block response)
-      fetch(new URL('/api/admin/translations/queue', request.url).toString(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content_type: 'generated_post',
-          content_id: id,
-          priority: 10,  // High priority for newly published posts
-        }),
-      })
-        .then(async (res) => {
-          const result = await res.json()
-          console.log(`[translations] Queued translations for post ${id}: ${result.queued} languages`)
+      queueTranslations('generated_post', id, 10)
+        .then((result) => {
+          if (result.error) {
+            console.error(`[translations] Failed to queue translations for post ${id}: ${result.error}`)
+          } else {
+            console.log(`[translations] Queued ${result.queued} translations for post ${id}: ${result.languages.join(', ')}`)
+          }
         })
         .catch((err) => {
-          console.error('[translations] Failed to queue translations:', err)
+          console.error('[translations] Unexpected error queuing translations:', err)
         })
     }
 
