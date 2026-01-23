@@ -24,6 +24,7 @@ interface PostData {
   category: string
   created_at: string
   cover_image_url?: string | null
+  pending_queue_item_ids?: string[] | null
 }
 
 interface AdjacentPost {
@@ -134,7 +135,7 @@ export default async function PostPage({ params }: PageProps) {
     // First try by original slug
     let { data: aiPost } = await supabase
       .from("generated_posts")
-      .select("id, title, slug, excerpt, content, category, created_at, cover_image_id")
+      .select("id, title, slug, excerpt, content, category, created_at, cover_image_id, pending_queue_item_ids")
       .eq("slug", slug)
       .eq("status", "published")
       .single()
@@ -152,7 +153,7 @@ export default async function PostPage({ params }: PageProps) {
       if (translationBySlug?.generated_post_id) {
         const { data: postByTranslatedSlug } = await supabase
           .from("generated_posts")
-          .select("id, title, slug, excerpt, content, category, created_at, cover_image_id")
+          .select("id, title, slug, excerpt, content, category, created_at, cover_image_id, pending_queue_item_ids")
           .eq("id", translationBySlug.generated_post_id)
           .eq("status", "published")
           .single()
@@ -199,7 +200,8 @@ export default async function PostPage({ params }: PageProps) {
         excerpt: translatedExcerpt,
         category: aiPost.category || 'AI & Tech',
         content: translatedContent,
-        cover_image_url: coverImageUrl
+        cover_image_url: coverImageUrl,
+        pending_queue_item_ids: aiPost.pending_queue_item_ids
       } as PostData
     }
   }
@@ -292,7 +294,7 @@ export default async function PostPage({ params }: PageProps) {
           </header>
 
           <div className="prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-xl prose-h2:text-lg prose-h2:mt-8 prose-h2:mb-3 prose-p:mb-5 prose-blockquote:border-l-2 prose-blockquote:border-accent prose-blockquote:pl-6 prose-blockquote:italic">
-            <TiptapRenderer content={post.content} postId={post.id} />
+            <TiptapRenderer content={post.content} postId={post.id} queueItemIds={post.pending_queue_item_ids || undefined} />
           </div>
         </article>
 

@@ -14,6 +14,7 @@ interface FeaturedArticleProps {
   coverImageUrl?: string | null
   locale?: LanguageCode
   postId?: string // For article thumbnails
+  queueItemIds?: string[] // For stable thumbnail matching
 }
 
 export function FeaturedArticle({
@@ -24,7 +25,8 @@ export function FeaturedArticle({
   createdAt,
   coverImageUrl,
   locale = 'de',
-  postId
+  postId,
+  queueItemIds
 }: FeaturedArticleProps) {
   const postUrl = `/${locale}/posts/${slug}`
 
@@ -75,7 +77,7 @@ export function FeaturedArticle({
       )}
 
       <div className="prose-article">
-        <TiptapRenderer content={content} postId={postId} />
+        <TiptapRenderer content={content} postId={postId} queueItemIds={queueItemIds} />
       </div>
 
       <a href={postUrl} className="mt-8 inline-block font-mono text-xs text-accent hover:underline">

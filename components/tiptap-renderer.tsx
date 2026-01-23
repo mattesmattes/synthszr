@@ -161,6 +161,7 @@ function PremarketRatingLink({ company, displayName, rating, isFirst, isin }: Pr
 interface ArticleThumbnail {
   id: string
   article_index: number
+  article_queue_item_id: string | null
   image_url: string
   vote_color: string
   generation_status: string
@@ -169,9 +170,10 @@ interface ArticleThumbnail {
 interface TiptapRendererProps {
   content: Record<string, unknown>
   postId?: string // Optional: enables article thumbnail display
+  queueItemIds?: string[] // Optional: queue item IDs for stable thumbnail matching
 }
 
-export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
+export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const searchParams = useSearchParams()
   const [ratingPortals, setRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isFirst: boolean }>>([])
@@ -783,7 +785,17 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
       if (headingText.includes('mattes synthese') || headingText.includes("mattes' synthese") || headingText.includes('synthszr take')) return
 
       // Insert thumbnail placeholder before the H2 if we have one for this article
-      const thumbnail = articleThumbnails.find(t => t.article_index === articleIndex && t.generation_status === 'completed')
+      // Priority: Match by queue item ID (stable) if available, otherwise fall back to article_index
+      const expectedQueueItemId = queueItemIds?.[articleIndex]
+      const thumbnail = articleThumbnails.find(t => {
+        if (t.generation_status !== 'completed') return false
+        // If we have queue item IDs and thumbnail has one, match by that (stable)
+        if (expectedQueueItemId && t.article_queue_item_id) {
+          return t.article_queue_item_id === expectedQueueItemId
+        }
+        // Fallback to article_index (legacy)
+        return t.article_index === articleIndex
+      })
       if (thumbnail && !h2.previousElementSibling?.classList.contains('article-thumbnail-container')) {
         // Add separator before thumbnail (except for first article)
         if (articleIndex > 0) {
@@ -899,7 +911,7 @@ export function TiptapRenderer({ content, postId }: TiptapRendererProps) {
     if (newThumbnailPortals.length > 0) {
       setThumbnailPortals(newThumbnailPortals)
     }
-  }, [articleThumbnails])
+  }, [articleThumbnails, queueItemIds])
 
   // Hide {Company} syntax from rendered content (used for explicit company tagging)
   const hideExplicitCompanyTags = useCallback(() => {

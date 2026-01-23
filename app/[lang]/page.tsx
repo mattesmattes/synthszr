@@ -21,6 +21,7 @@ interface CombinedPost {
   category: string
   created_at: string
   cover_image_url?: string | null
+  pending_queue_item_ids?: string[] | null
 }
 
 interface PageProps {
@@ -55,7 +56,7 @@ export default async function Page({ params }: PageProps) {
   // Fetch AI-generated posts that are published with cover images
   const { data: aiPosts } = await supabase
     .from("generated_posts")
-    .select("id, title, slug, excerpt, content, category, created_at, cover_image_id")
+    .select("id, title, slug, excerpt, content, category, created_at, cover_image_id, pending_queue_item_ids")
     .eq("status", "published")
     .order("created_at", { ascending: false })
 
@@ -115,7 +116,8 @@ export default async function Page({ params }: PageProps) {
       content: translation?.content || originalContent,
       slug: translation?.slug || post.slug || post.id,
       category: post.category || 'AI & Tech',
-      cover_image_url: post.cover_image_id ? coverImageMap.get(post.cover_image_id) : null
+      cover_image_url: post.cover_image_id ? coverImageMap.get(post.cover_image_id) : null,
+      pending_queue_item_ids: post.pending_queue_item_ids
     }
   })
 
@@ -191,6 +193,7 @@ export default async function Page({ params }: PageProps) {
               coverImageUrl={featuredPost.cover_image_url}
               locale={locale}
               postId={featuredPost.id}
+              queueItemIds={featuredPost.pending_queue_item_ids || undefined}
             />
 
             {/* Last 7 Days Headlines */}
