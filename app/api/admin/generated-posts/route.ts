@@ -139,13 +139,21 @@ export async function PUT(request: NextRequest) {
 
     // Sync company mentions to post_company_mentions table (async, don't block response)
     if (content) {
-      syncPostCompanyMentions(id, content)
-        .then((result) => {
-          console.log(`[sync-companies] Synced ${result.companiesFound} companies for post ${id}`)
-        })
-        .catch((err) => {
+      // Fetch queue item IDs for article-level tracking, then sync
+      ;(async () => {
+        try {
+          const { data: postData } = await supabase
+            .from('generated_posts')
+            .select('pending_queue_item_ids')
+            .eq('id', id)
+            .single()
+          const queueItemIds = postData?.pending_queue_item_ids as string[] | undefined
+          const result = await syncPostCompanyMentions(id, content, queueItemIds)
+          console.log(`[sync-companies] Synced ${result.companiesFound} companies in ${result.articlesWithCompanies} articles for post ${id}`)
+        } catch (err) {
           console.error('[sync-companies] Sync failed:', err)
-        })
+        }
+      })()
     }
 
     return NextResponse.json(data)

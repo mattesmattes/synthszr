@@ -12,7 +12,6 @@ interface PostInfo {
   id: string
   title: string
   slug: string | null
-  excerpt: string | null
   created_at: string
 }
 
@@ -20,7 +19,19 @@ interface CompanyMention {
   company_name: string
   company_slug: string
   company_type: 'public' | 'premarket'
+  article_index: number | null
+  article_headline: string | null
+  article_excerpt: string | null
   post: PostInfo
+}
+
+interface ArticleInfo {
+  postId: string
+  postSlug: string
+  postCreatedAt: string
+  articleIndex: number
+  headline: string
+  excerpt: string
 }
 
 interface PageProps {
@@ -33,18 +44,20 @@ export default async function CompanyDetailPage({ params }: PageProps) {
   const supabase = await createClient()
   const t = await getTranslations(locale)
 
-  // Fetch company mentions with posts
+  // Fetch company mentions with article-level detail
   const { data: mentions, error } = await supabase
     .from('post_company_mentions')
     .select(`
       company_name,
       company_slug,
       company_type,
+      article_index,
+      article_headline,
+      article_excerpt,
       post:generated_posts!inner(
         id,
         title,
         slug,
-        excerpt,
         created_at,
         status
       )
@@ -72,24 +85,18 @@ export default async function CompanyDetailPage({ params }: PageProps) {
     type: firstMention.company_type,
   }
 
-  // Extract unique posts
-  const postMap = new Map<string, PostInfo>()
-  for (const mention of typedMentions) {
-    const post = mention.post
-    if (!postMap.has(post.id)) {
-      postMap.set(post.id, {
-        id: post.id,
-        title: post.title,
-        slug: post.slug || post.id,
-        excerpt: post.excerpt,
-        created_at: post.created_at,
-      })
-    }
-  }
-
-  // Sort by date (newest first)
-  const posts = Array.from(postMap.values())
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  // Build articles list from mentions
+  const articles: ArticleInfo[] = typedMentions
+    .filter(m => m.article_headline) // Only include mentions with article data
+    .map(m => ({
+      postId: m.post.id,
+      postSlug: m.post.slug || m.post.id,
+      postCreatedAt: m.post.created_at,
+      articleIndex: m.article_index ?? 0,
+      headline: m.article_headline || m.post.title,
+      excerpt: m.article_excerpt || '',
+    }))
+    .sort((a, b) => new Date(b.postCreatedAt).getTime() - new Date(a.postCreatedAt).getTime())
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -102,7 +109,7 @@ export default async function CompanyDetailPage({ params }: PageProps) {
           {t['companies.all_companies']}
         </Link>
 
-        <CompanyDetailClient company={company} posts={posts} locale={locale} translations={t} />
+        <CompanyDetailClient company={company} articles={articles} locale={locale} translations={t} />
       </main>
 
       <footer className="border-t border-border">

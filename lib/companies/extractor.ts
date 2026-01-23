@@ -15,10 +15,22 @@ export interface ExtractedCompany {
   type: 'public' | 'premarket'
 }
 
+export interface ArticleCompanyMention {
+  company: ExtractedCompany
+  articleIndex: number
+  articleQueueItemId?: string
+  articleHeadline: string
+  articleExcerpt: string
+}
+
 interface TipTapNode {
   type?: string
   text?: string
   content?: TipTapNode[]
+  attrs?: {
+    level?: number
+    [key: string]: unknown
+  }
 }
 
 /**
@@ -112,6 +124,163 @@ export function extractCompaniesFromContent(content: unknown): ExtractedCompany[
  */
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Check if text contains a company mention
+ */
+function textContainsCompany(text: string, displayName: string): boolean {
+  const escapedName = escapeRegex(displayName)
+  const regex = new RegExp(`\\b${escapedName}s?(-[\\wäöüÄÖÜß]+)*\\b`, 'gi')
+  const explicitRegex = new RegExp(`\\{${escapedName}\\}`, 'gi')
+  return regex.test(text) || explicitRegex.test(text)
+}
+
+/**
+ * Extract a short excerpt from text (first ~150 chars, ending at word boundary)
+ */
+function extractExcerpt(text: string, maxLength: number = 150): string {
+  // Clean up text: remove {Company} tags, normalize whitespace
+  const cleaned = text
+    .replace(/\{[^}]+\}/g, '') // Remove {Company} tags
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim()
+
+  if (cleaned.length <= maxLength) return cleaned
+
+  // Find last space before maxLength
+  const truncated = cleaned.slice(0, maxLength)
+  const lastSpace = truncated.lastIndexOf(' ')
+
+  if (lastSpace > maxLength * 0.7) {
+    return truncated.slice(0, lastSpace) + '...'
+  }
+  return truncated + '...'
+}
+
+/**
+ * Extract companies per article (H2 section) from TipTap content
+ *
+ * Returns one entry per company per article. A company mentioned in
+ * multiple articles will have multiple entries.
+ *
+ * @param content - TipTap JSON content
+ * @param queueItemIds - Optional array of queue item IDs (from generated_posts.pending_queue_item_ids)
+ */
+export function extractCompaniesPerArticle(
+  content: unknown,
+  queueItemIds?: string[]
+): ArticleCompanyMention[] {
+  if (!content || typeof content !== 'object') return []
+
+  const rootNode = content as TipTapNode
+  if (!rootNode.content || !Array.isArray(rootNode.content)) return []
+
+  const mentions: ArticleCompanyMention[] = []
+
+  // Parse content into articles (H2 sections)
+  // Each article starts with an H2 and includes all content until the next H2
+  interface Article {
+    index: number
+    headline: string
+    text: string
+    queueItemId?: string
+  }
+
+  const articles: Article[] = []
+  let currentArticle: Article | null = null
+  let articleIndex = 0
+
+  for (const node of rootNode.content) {
+    // Check if this is an H2 heading (new article)
+    if (node.type === 'heading' && node.attrs?.level === 2) {
+      const headlineText = extractTextFromNode(node)
+      const lowerHeadline = headlineText.toLowerCase()
+
+      // Skip "Synthszr Take" or "Mattes Synthese" headings - these are commentary, not articles
+      if (lowerHeadline.includes('synthszr take') ||
+          lowerHeadline.includes('mattes synthese') ||
+          lowerHeadline.includes("mattes' synthese")) {
+        continue
+      }
+
+      // Start new article
+      currentArticle = {
+        index: articleIndex,
+        headline: headlineText,
+        text: headlineText, // Include headline in searchable text
+        queueItemId: queueItemIds?.[articleIndex],
+      }
+      articles.push(currentArticle)
+      articleIndex++
+    } else if (currentArticle) {
+      // Add content to current article
+      const nodeText = extractTextFromNode(node)
+      if (nodeText.trim()) {
+        currentArticle.text += ' ' + nodeText
+      }
+    }
+  }
+
+  // Now extract companies from each article
+  for (const article of articles) {
+    const companiesInArticle = new Set<string>()
+
+    // Check public companies
+    for (const [displayName, apiSlug] of Object.entries(KNOWN_COMPANIES)) {
+      if (isExcludedCompanyName(displayName)) continue
+
+      if (textContainsCompany(article.text, displayName)) {
+        if (!companiesInArticle.has(apiSlug)) {
+          companiesInArticle.add(apiSlug)
+          mentions.push({
+            company: { name: displayName, slug: apiSlug, type: 'public' },
+            articleIndex: article.index,
+            articleQueueItemId: article.queueItemId,
+            articleHeadline: article.headline,
+            articleExcerpt: extractExcerpt(article.text),
+          })
+        }
+      }
+    }
+
+    // Check premarket companies
+    for (const [displayName, apiSlug] of Object.entries(KNOWN_PREMARKET_COMPANIES)) {
+      if (isExcludedCompanyName(displayName)) continue
+
+      if (textContainsCompany(article.text, displayName)) {
+        if (!companiesInArticle.has(apiSlug)) {
+          companiesInArticle.add(apiSlug)
+          mentions.push({
+            company: { name: displayName, slug: apiSlug, type: 'premarket' },
+            articleIndex: article.index,
+            articleQueueItemId: article.queueItemId,
+            articleHeadline: article.headline,
+            articleExcerpt: extractExcerpt(article.text),
+          })
+        }
+      }
+    }
+
+    // Check company aliases (e.g., "Cursor" -> "Anysphere")
+    for (const [aliasName, aliasInfo] of Object.entries(COMPANY_ALIASES)) {
+      if (textContainsCompany(article.text, aliasName)) {
+        const slug = aliasInfo.canonical.toLowerCase()
+        if (!companiesInArticle.has(slug)) {
+          companiesInArticle.add(slug)
+          mentions.push({
+            company: { name: aliasInfo.canonical, slug, type: aliasInfo.type },
+            articleIndex: article.index,
+            articleQueueItemId: article.queueItemId,
+            articleHeadline: article.headline,
+            articleExcerpt: extractExcerpt(article.text),
+          })
+        }
+      }
+    }
+  }
+
+  return mentions
 }
 
 /**

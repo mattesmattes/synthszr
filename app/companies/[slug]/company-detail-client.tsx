@@ -10,12 +10,13 @@ interface CompanyInfo {
   type: 'public' | 'premarket'
 }
 
-interface PostInfo {
-  id: string
-  title: string
-  slug: string | null
-  excerpt: string | null
-  created_at: string
+interface ArticleInfo {
+  postId: string
+  postSlug: string
+  postCreatedAt: string
+  articleIndex: number
+  headline: string
+  excerpt: string
 }
 
 interface RatingData {
@@ -28,7 +29,7 @@ interface RatingData {
 
 interface CompanyDetailClientProps {
   company: CompanyInfo
-  posts: PostInfo[]
+  articles: ArticleInfo[]
   locale?: string
   translations?: Record<string, string>
 }
@@ -37,15 +38,15 @@ interface CompanyDetailClientProps {
  * Client component for company detail page
  *
  * Fetches rating data and displays company header with rating badge,
- * followed by list of related posts.
+ * followed by list of related articles (H2 sections within posts).
  */
 const defaultTranslations: Record<string, string> = {
-  'companies.articles_count_singular': '{count} Artikel erwähnt {company}',
-  'companies.articles_count_plural': '{count} Artikel erwähnen {company}',
+  'companies.articles_count_singular': '{count} News erwähnt {company}',
+  'companies.articles_count_plural': '{count} News erwähnen {company}',
   'companies.premarket_label': 'Pre-IPO Unternehmen',
 }
 
-export function CompanyDetailClient({ company, posts, locale, translations }: CompanyDetailClientProps) {
+export function CompanyDetailClient({ company, articles, locale, translations }: CompanyDetailClientProps) {
   const t = translations || defaultTranslations
   const [ratingData, setRatingData] = useState<RatingData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -126,9 +127,9 @@ export function CompanyDetailClient({ company, posts, locale, translations }: Co
           ) : null}
         </div>
         <p className="mt-2 text-muted-foreground">
-          {posts.length === 1
+          {articles.length === 1
             ? t['companies.articles_count_singular'].replace('{count}', '1').replace('{company}', company.name)
-            : t['companies.articles_count_plural'].replace('{count}', String(posts.length)).replace('{company}', company.name)
+            : t['companies.articles_count_plural'].replace('{count}', String(articles.length)).replace('{company}', company.name)
           }
         </p>
         {company.type === 'premarket' && (
@@ -138,23 +139,23 @@ export function CompanyDetailClient({ company, posts, locale, translations }: Co
         )}
       </div>
 
-      {/* Posts List */}
+      {/* Articles List */}
       <div className="space-y-4">
-        {posts.map((post) => (
+        {articles.map((article, idx) => (
           <Link
-            key={post.id}
-            href={locale ? `/${locale}/posts/${post.slug || post.id}` : `/posts/${post.slug || post.id}`}
+            key={`${article.postId}-${article.articleIndex}-${idx}`}
+            href={locale ? `/${locale}/posts/${article.postSlug}#article-${article.articleIndex}` : `/posts/${article.postSlug}#article-${article.articleIndex}`}
             className="group block py-4 border-b border-border last:border-b-0 transition-colors hover:bg-muted/50 -mx-4 px-4 rounded"
           >
             <span className="font-mono text-xs text-muted-foreground">
-              {formatDate(post.created_at)}
+              {formatDate(article.postCreatedAt)}
             </span>
             <h2 className="mt-1 text-base font-medium group-hover:text-accent group-hover:underline">
-              {post.title}
+              {article.headline}
             </h2>
-            {post.excerpt && (
+            {article.excerpt && (
               <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-                {post.excerpt}
+                {article.excerpt}
               </p>
             )}
           </Link>
