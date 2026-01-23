@@ -47,17 +47,18 @@ export default async function CompaniesPage({ params }: PageProps) {
     console.error('[companies] Query error:', error)
   }
 
-  // Aggregate by company
+  // Aggregate by company (case-insensitive slug to merge duplicates like "Anthropic" and "anthropic")
   const companyMap = new Map<string, CompanyAggregation>()
 
   for (const mention of (mentions || []) as unknown as CompanyMention[]) {
-    const existing = companyMap.get(mention.company_slug)
+    const normalizedSlug = mention.company_slug.toLowerCase()
+    const existing = companyMap.get(normalizedSlug)
     if (existing) {
       existing.mentionCount++
     } else {
-      companyMap.set(mention.company_slug, {
+      companyMap.set(normalizedSlug, {
         name: mention.company_name,
-        slug: mention.company_slug,
+        slug: normalizedSlug, // Use normalized slug
         type: mention.company_type,
         mentionCount: 1,
       })

@@ -122,6 +122,7 @@ export function CompanyTableRow({ company, locale = 'de' }: CompanyTableRowProps
           {company.rating ? (
             <button
               onClick={handleBadgeClick}
+              title="Zur kompletten Analyse"
               className={cn(
                 'text-xs font-bold px-2 py-1 rounded cursor-pointer hover:opacity-80 transition-opacity',
                 ratingStyles[company.rating]
