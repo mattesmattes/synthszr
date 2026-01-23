@@ -128,12 +128,19 @@ export async function GET(request: NextRequest) {
         const limit = parseInt(searchParams.get('limit') || '50')
         const offset = parseInt(searchParams.get('offset') || '0')
 
-        const { data, error, count } = await supabase
+        let query = supabase
           .from('news_queue')
           .select('*', { count: 'exact' })
           .eq('status', status)
           .order('total_score', { ascending: false })
           .range(offset, offset + limit - 1)
+
+        // For pending items, only show non-expired ones
+        if (status === 'pending') {
+          query = query.gt('expires_at', new Date().toISOString())
+        }
+
+        const { data, error, count } = await query
 
         if (error) {
           return NextResponse.json({ error: error.message }, { status: 500 })

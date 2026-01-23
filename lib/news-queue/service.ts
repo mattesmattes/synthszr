@@ -556,11 +556,12 @@ export async function getQueueStats(): Promise<{
   total: number
 }> {
   const supabase = createAdminClient()
+  const now = new Date().toISOString()
 
   const { data, error } = await supabase
     .from('news_queue')
-    .select('status')
-    .gte('queued_at', new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString())
+    .select('status, expires_at')
+    .gte('queued_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
 
   if (error || !data) {
     return { pending: 0, selected: 0, used: 0, expired: 0, skipped: 0, total: 0 }
@@ -576,9 +577,14 @@ export async function getQueueStats(): Promise<{
   }
 
   for (const item of data) {
-    const status = item.status as keyof typeof stats
-    if (status in stats) {
-      stats[status]++
+    // Count pending items as expired if past expiration date
+    if (item.status === 'pending' && item.expires_at && item.expires_at < now) {
+      stats.expired++
+    } else {
+      const status = item.status as keyof typeof stats
+      if (status in stats) {
+        stats[status]++
+      }
     }
   }
 
