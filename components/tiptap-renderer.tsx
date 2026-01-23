@@ -496,23 +496,26 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
 
       // Collect text from the news paragraph(s) BEFORE the Synthszr Take
       // Go back through previous siblings to find news content (stop at H2 or start)
+      // NOTE: Use innerText instead of textContent to preserve whitespace from <br> tags
+      // This ensures word boundaries work correctly (e.g., "AM<br>Anthropic" → "AM Anthropic" not "AMAnthropic")
       let textToSearch = ''
       let prevElement = container.previousElementSibling
       while (prevElement) {
         // Stop if we hit a heading (new section)
         if (prevElement.tagName.match(/^H[1-6]$/)) break
         // Stop if we hit another Synthszr Take
-        if (prevElement.textContent?.toLowerCase().includes('synthszr take') ||
-            prevElement.textContent?.toLowerCase().includes('mattes synthese')) break
+        const prevText = (prevElement as HTMLElement).innerText || prevElement.textContent || ''
+        if (prevText.toLowerCase().includes('synthszr take') ||
+            prevText.toLowerCase().includes('mattes synthese')) break
         // Collect text from paragraphs
         if (prevElement.tagName === 'P') {
-          textToSearch = (prevElement.textContent || '') + ' ' + textToSearch
+          textToSearch = prevText + ' ' + textToSearch
         }
         prevElement = prevElement.previousElementSibling
       }
 
       // Also include the Synthszr Take paragraph itself
-      textToSearch += ' ' + (container.textContent || '')
+      textToSearch += ' ' + ((container as HTMLElement).innerText || container.textContent || '')
 
       // Find all mentioned public companies in the combined text
       // Matches: "Meta", "Metas" (possessive), "Google-Aktien" (compound), or {Meta} (explicit)
@@ -570,7 +573,7 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
     // ALSO scan the ENTIRE document for explicit {Company} tags
     // This catches companies tagged anywhere, not just near "Synthszr Take" sections
     const explicitTagPattern = /\{([^}]+)\}/g
-    const fullText = containerRef.current.textContent || ''
+    const fullText = (containerRef.current as HTMLElement).innerText || containerRef.current.textContent || ''
     const explicitMatches = [...fullText.matchAll(explicitTagPattern)]
 
     if (explicitMatches.length > 0) {
