@@ -968,6 +968,15 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
         await processSynthszrRatingLinks()
         // Hide {Company} syntax AFTER company detection and badge placement
         hideExplicitCompanyTags()
+
+        // Scroll to anchor if URL has hash (IDs are set after React renders)
+        const hash = window.location.hash
+        if (hash) {
+          const element = document.querySelector(hash)
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth' })
+          }
+        }
       }, 100)
       return () => clearTimeout(timeoutId)
     }
