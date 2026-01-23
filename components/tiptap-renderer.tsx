@@ -811,6 +811,9 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
         h2.parentNode?.insertBefore(thumbnailContainer, h2)
         newThumbnailPortals.push({ element: thumbnailContainer, thumbnail, h2Element: h2 as HTMLElement })
       }
+
+      // Add anchor ID for deep linking from company pages
+      h2.id = `article-${articleIndex}`
       articleIndex++
 
       // Find the next sibling paragraph that contains a source link
