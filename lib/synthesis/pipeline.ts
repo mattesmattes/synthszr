@@ -3,7 +3,7 @@
  * Orchestrates the full synthesis process: search → score → develop → store
  */
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { generateEmbedding, prepareTextForEmbedding } from '@/lib/embeddings/generator'
 import { findSimilarItems, getItemEmbedding, SimilarItem } from './search'
 import { scoreSynthesisCandidates, getTopCandidates, scoreContentOnly, ScoredCandidate, SynthesisType } from './score'
@@ -47,7 +47,7 @@ export interface SynthesisPrompt {
  * Get the active synthesis prompt from the database
  */
 async function getActiveSynthesisPrompt(): Promise<SynthesisPrompt | null> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase
     .from('synthesis_prompts')
@@ -75,7 +75,7 @@ async function getDigestItems(digestId: string): Promise<
     embedding: string | number[] | null  // Can be string from DB, array if newly generated, or null
   }>
 > {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Get the digest to find its date and content
   const { data: digest, error: digestError } = await supabase
@@ -155,7 +155,7 @@ async function storeCandidates(
 ): Promise<void> {
   if (candidates.length === 0) return
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const records = candidates.map((c) => ({
     source_item_id: c.sourceItem.id,
@@ -207,7 +207,7 @@ async function queueCandidatesForArticle(
     return { added: 0, skipped: candidates.length }
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Get source info from daily_repo for each candidate
   const sourceItemIds = validCandidates.map(c => c.sourceItem.id)
@@ -261,7 +261,7 @@ async function storeContentSyntheses(
 ): Promise<void> {
   if (syntheses.size === 0) return
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const records = Array.from(syntheses.values()).map((synthesis) => ({
     candidate_id: null,  // Content-only syntheses have no candidate
@@ -289,7 +289,7 @@ async function storeSyntheses(
 ): Promise<void> {
   if (syntheses.size === 0) return
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const records = Array.from(syntheses.entries()).map(([key, synthesis]) => ({
     candidate_id: candidateIds.get(key) || null,
@@ -333,7 +333,7 @@ export async function runSynthesisPipeline(
 
   console.log(`[Pipeline] Starting synthesis pipeline for digest ${digestId}`)
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Clean up any existing syntheses/candidates for this digest (prevents duplicates on re-run)
   await supabase.from('developed_syntheses').delete().eq('digest_id', digestId)
@@ -554,7 +554,7 @@ export async function runSynthesisPipeline(
 export async function getSynthesesForDigest(
   digestId: string
 ): Promise<DevelopedSynthesis[]> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Use left join to include content-only syntheses (where candidate_id is null)
   const { data, error } = await supabase
@@ -620,7 +620,7 @@ export async function runSynthesisPipelineWithProgress(
 
   console.log(`[Pipeline] Starting streaming synthesis pipeline for digest ${digestId}`)
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // NOTE: We keep BOTH syntheses AND candidates to support continuation
   // The pipeline will skip items that already have candidates
