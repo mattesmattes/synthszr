@@ -589,7 +589,7 @@ export async function getSynthesesForDigest(
  * Run the synthesis pipeline with progress callbacks for streaming UI
  */
 // Pipeline version for deployment verification
-const PIPELINE_VERSION = 'v13-full-continuation'
+const PIPELINE_VERSION = 'v14-show-existing-syntheses'
 
 export async function runSynthesisPipelineWithProgress(
   digestId: string,
@@ -976,14 +976,22 @@ export async function runSynthesisPipelineWithProgress(
   const { developSynthesis } = await import('./develop')
 
   // Check which items already have syntheses (for continuation)
-  const { data: existingSyntheses } = await supabase
+  // Fetch full synthesis data so we can send them to the UI
+  const { data: existingSynthesesData } = await supabase
     .from('developed_syntheses')
-    .select('candidate_id, synthesis_candidates!inner(source_item_id)')
+    .select(`
+      id,
+      synthesis_headline,
+      synthesis_content,
+      historical_reference,
+      candidate_id,
+      synthesis_candidates(source_item_id, daily_repo!synthesis_candidates_source_item_id_fkey(title))
+    `)
     .eq('digest_id', digestId)
 
   const processedSourceIds = new Set<string>()
-  if (existingSyntheses) {
-    for (const s of existingSyntheses) {
+  if (existingSynthesesData) {
+    for (const s of existingSynthesesData) {
       // Handle both array and single object cases from Supabase join
       const candidates = s.synthesis_candidates as unknown as { source_item_id: string }[] | { source_item_id: string } | null
       if (Array.isArray(candidates)) {
@@ -996,6 +1004,40 @@ export async function runSynthesisPipelineWithProgress(
     }
   }
 
+  // Send existing syntheses to UI so they appear in the progress dialog
+  // This ensures the UI shows all syntheses, not just newly created ones
+  if (existingSynthesesData && existingSynthesesData.length > 0) {
+    console.log(`[Pipeline] Sending ${existingSynthesesData.length} existing syntheses to UI`)
+    for (const s of existingSynthesesData) {
+      // Handle Supabase join result - can be array or single object
+      const candidateData = s.synthesis_candidates as unknown as
+        | { source_item_id: string; daily_repo?: { title?: string } | null }
+        | { source_item_id: string; daily_repo?: { title?: string } | null }[]
+        | null
+      let sourceTitle = 'Unbekannt'
+      if (candidateData) {
+        if (Array.isArray(candidateData) && candidateData[0]?.daily_repo?.title) {
+          sourceTitle = candidateData[0].daily_repo.title
+        } else if (!Array.isArray(candidateData) && candidateData.daily_repo?.title) {
+          sourceTitle = candidateData.daily_repo.title
+        }
+      }
+
+      onProgress({
+        type: 'developed',
+        currentItem: processedSourceIds.size,
+        totalItems: allDbCandidates.length,
+        itemTitle: sourceTitle,
+        synthesis: {
+          headline: s.synthesis_headline,
+          content: s.synthesis_content,
+          historicalReference: s.historical_reference || '',
+        },
+      })
+      synthesesDeveloped++
+    }
+  }
+
   // Filter out already processed items
   const remainingCandidates = allDbCandidates.filter(
     c => !processedSourceIds.has(c.sourceItem.id)
@@ -1003,7 +1045,7 @@ export async function runSynthesisPipelineWithProgress(
 
   const skippedCount = allDbCandidates.length - remainingCandidates.length
   if (skippedCount > 0) {
-    console.log(`[Pipeline] Skipping ${skippedCount} already processed items`)
+    console.log(`[Pipeline] Skipping ${skippedCount} already processed items (syntheses already exist)`)
   }
 
   console.log(`[Pipeline ${PIPELINE_VERSION}] Phase 2: Processing ${remainingCandidates.length} items sequentially (${skippedCount} already done)`)
