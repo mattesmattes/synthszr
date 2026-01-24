@@ -3,7 +3,7 @@
  * Finds semantically similar items in the daily_repo using pgvector
  */
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export interface SimilarItem {
   id: string
@@ -32,7 +32,7 @@ export async function findSimilarItems(
 ): Promise<SimilarItem[]> {
   const { maxAge = 90, limit = 10, minSimilarity = 0.7 } = options
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Convert embedding to pgvector format string if needed
   // The embedding can be either an array or a string (from database)
@@ -77,7 +77,7 @@ export async function findSimilarByText(
  * Get embedding for an existing daily_repo item
  */
 export async function getItemEmbedding(itemId: string): Promise<number[] | null> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase
     .from('daily_repo')
