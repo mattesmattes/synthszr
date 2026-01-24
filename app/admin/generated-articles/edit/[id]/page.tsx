@@ -566,6 +566,24 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         })
     }
 
+    // Re-index thumbnails when publishing to match current article order
+    if (isNowPublished) {
+      console.log(`[Thumbnails] Re-indexing thumbnails for post ${id}`)
+      fetch('/api/admin/reindex-thumbnails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ postId: id, content }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.updated > 0 || data.deleted > 0) {
+            console.log(`[Thumbnails] Re-indexed: ${data.updated} updated, ${data.deleted} deleted`)
+          }
+        })
+        .catch(err => console.error('[Thumbnails] Re-index error:', err))
+    }
+
     // Generate article thumbnails if missing (count all non-failed thumbnails)
     const existingThumbnails = articleThumbnails.filter(t => t.generation_status !== 'failed').length
     if (articleCount > 0 && existingThumbnails < articleCount) {
