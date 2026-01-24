@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
  * POST /api/admin/translations/queue
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Get all active languages (except default)
     const { data: languages, error: langError } = await supabase
@@ -134,7 +134,7 @@ export async function DELETE(request: NextRequest) {
     const contentId = searchParams.get('content_id')
     const status = searchParams.get('status') || 'pending'
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     let query = supabase
       .from('translation_queue')

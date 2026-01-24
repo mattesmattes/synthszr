@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { translateContent, type TranslationModel } from '@/lib/i18n/translation-service'
@@ -24,8 +23,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Use admin client for cron, regular client for session
-    const supabase = cronSecretValid ? createAdminClient() : await createClient()
+    // Always use admin client to bypass RLS (auth already verified above)
+    const supabase = createAdminClient()
 
     // Get pending queue items (ordered by priority and age)
     const { data: queueItems, error: fetchError } = await supabase
@@ -123,7 +122,7 @@ interface ProcessResult {
 }
 
 async function processQueueItem(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   item: TranslationQueueItem
 ): Promise<ProcessResult> {
   // Get the target language's configured model
@@ -148,7 +147,7 @@ async function processQueueItem(
 }
 
 async function processGeneratedPost(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   item: TranslationQueueItem,
   model: TranslationModel
 ): Promise<ProcessResult> {
@@ -237,7 +236,7 @@ async function processGeneratedPost(
 }
 
 async function processStaticPage(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   item: TranslationQueueItem,
   model: TranslationModel
 ): Promise<ProcessResult> {
@@ -321,7 +320,7 @@ async function processStaticPage(
 }
 
 async function updateQueueFailed(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   itemId: string,
   error: string
 ) {
@@ -337,7 +336,7 @@ async function updateQueueFailed(
  */
 export async function GET() {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { data: stats } = await supabase
       .from('translation_queue')
