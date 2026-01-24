@@ -4,6 +4,7 @@ import { parseNewsletterHtml } from '@/lib/email/parser'
 import { extractArticleContent, isArticleTooOld, isLikelyArticleUrl, isNonArticleLinkText } from '@/lib/scraper/article-extractor'
 import { createClient } from '@/lib/supabase/server'
 import { isAdminRequest } from '@/lib/auth/session'
+import { backfillMissingEmbeddings } from '@/lib/embeddings/backfill'
 
 // BULLETPROOF APPROACH: Always fetch last 48h, deduplicate by Gmail message ID
 const FETCH_WINDOW_HOURS = 48
@@ -143,8 +144,8 @@ interface UnfetchedEmail {
 }
 
 interface ProgressEvent {
-  type: 'start' | 'newsletter' | 'article' | 'email_note' | 'unfetched_emails' | 'complete' | 'error'
-  phase: 'fetching' | 'processing' | 'extracting' | 'importing_notes' | 'scanning_unfetched' | 'done'
+  type: 'start' | 'newsletter' | 'article' | 'email_note' | 'unfetched_emails' | 'embedding_backfill' | 'complete' | 'error'
+  phase: 'fetching' | 'processing' | 'extracting' | 'importing_notes' | 'scanning_unfetched' | 'embedding_backfill' | 'done'
   current?: number
   total?: number
   batch?: {
@@ -959,6 +960,60 @@ export async function POST(request: NextRequest) {
           console.log(`[Newsletter Fetch] unfetched_emails event sent successfully`)
         } else {
           console.log(`[Newsletter Fetch] No unfetched emails to send`)
+        }
+
+        // ========================================
+        // PHASE 5: Generate missing embeddings
+        // ========================================
+        send({
+          type: 'embedding_backfill',
+          phase: 'embedding_backfill',
+          item: { title: 'Generiere fehlende Embeddings...', status: 'processing' }
+        })
+
+        try {
+          const backfillResult = await backfillMissingEmbeddings(
+            50, // batchSize
+            0,  // maxBatches (0 = unlimited, process all)
+            (progress) => {
+              send({
+                type: 'embedding_backfill',
+                phase: 'embedding_backfill',
+                current: progress.current,
+                total: progress.total,
+                item: { title: progress.title || 'Embedding...', status: 'processing' }
+              })
+            }
+          )
+
+          if (backfillResult.processed > 0) {
+            send({
+              type: 'embedding_backfill',
+              phase: 'embedding_backfill',
+              item: {
+                title: `${backfillResult.processed} Embeddings generiert${backfillResult.remaining > 0 ? ` (${backfillResult.remaining} verbleibend)` : ''}`,
+                status: 'success'
+              }
+            })
+          } else {
+            send({
+              type: 'embedding_backfill',
+              phase: 'embedding_backfill',
+              item: { title: 'Alle Embeddings vorhanden', status: 'skipped' }
+            })
+          }
+        } catch (err) {
+          console.error('[Newsletter Fetch] Embedding backfill error:', err)
+          send({
+            type: 'embedding_backfill',
+            phase: 'embedding_backfill',
+            item: {
+              title: 'Embedding-Backfill fehlgeschlagen',
+              status: 'error',
+              error: err instanceof Error ? err.message : 'Unbekannter Fehler'
+            }
+          })
+          // Continue - embedding backfill is optional
         }
 
         // Send completion
