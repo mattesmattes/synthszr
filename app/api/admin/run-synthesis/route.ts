@@ -40,8 +40,29 @@ export async function POST(request: NextRequest) {
   }
   log.push('Got active prompt')
 
-  // Get candidates
-  const { data: dbCandidates, error: candErr } = await supabase
+  // Get already-processed source_item_ids
+  const { data: existingSyntheses } = await supabase
+    .from('developed_syntheses')
+    .select('synthesis_candidates!inner(source_item_id)')
+    .eq('digest_id', digestId)
+
+  const processedSourceIds = new Set<string>()
+  if (existingSyntheses) {
+    for (const s of existingSyntheses) {
+      const candidates = s.synthesis_candidates as unknown as { source_item_id: string }[] | { source_item_id: string } | null
+      if (Array.isArray(candidates)) {
+        for (const c of candidates) {
+          if (c?.source_item_id) processedSourceIds.add(c.source_item_id)
+        }
+      } else if (candidates?.source_item_id) {
+        processedSourceIds.add(candidates.source_item_id)
+      }
+    }
+  }
+  log.push(`Found ${processedSourceIds.size} already-processed source items`)
+
+  // Get all candidates for this digest
+  const { data: allCandidates, error: candErr } = await supabase
     .from('synthesis_candidates')
     .select(`
       id,
@@ -56,7 +77,11 @@ export async function POST(request: NextRequest) {
       related:daily_repo!synthesis_candidates_related_item_id_fkey(id, title, content, collected_at, source_type)
     `)
     .eq('digest_id', digestId)
-    .limit(maxItems)
+
+  // Filter to only unprocessed candidates
+  const dbCandidates = (allCandidates || [])
+    .filter(c => !processedSourceIds.has(c.source_item_id))
+    .slice(0, maxItems)
 
   if (candErr) {
     log.push(`ERROR: Failed to get candidates - ${candErr.message}`)
