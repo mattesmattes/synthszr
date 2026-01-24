@@ -20,15 +20,36 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
   const debug: Record<string, unknown> = {}
 
-  // Step 1: Check digest exists
-  const { data: digest, error: digestErr } = await supabase
+  // Check environment
+  debug.env = {
+    hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    serviceRoleKeyPrefix: process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 10),
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 30),
+  }
+
+  // Step 0: Test admin client works
+  const { data: testQuery, error: testErr } = await supabase
+    .from('daily_digests')
+    .select('id')
+    .limit(1)
+
+  debug.step0_adminClientTest = {
+    works: !!testQuery && testQuery.length > 0,
+    count: testQuery?.length || 0,
+    error: testErr?.message
+  }
+
+  // Step 1: Check digest exists (without .single() to see all results)
+  const { data: digestResults, error: digestErr } = await supabase
     .from('daily_digests')
     .select('id, digest_date')
     .eq('id', digestId)
-    .single()
+
+  const digest = digestResults?.[0] || null
 
   debug.step1_digest = {
     found: !!digest,
+    resultsCount: digestResults?.length || 0,
     date: digest?.digest_date,
     error: digestErr?.message
   }
