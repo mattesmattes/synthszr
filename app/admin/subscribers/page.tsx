@@ -80,9 +80,7 @@ export default function SubscribersPage() {
     }
   }
 
-  async function activateSubscriber(id: string, email: string) {
-    if (!confirm(`"${email}" manuell aktivieren?`)) return
-
+  async function activateSubscriber(id: string) {
     setActivatingId(id)
     try {
       const res = await fetch('/api/admin/subscribers', {
@@ -277,7 +275,7 @@ export default function SubscribersPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => activateSubscriber(subscriber.id, subscriber.email)}
+                      onClick={() => activateSubscriber(subscriber.id)}
                       disabled={activatingId === subscriber.id}
                       className="h-6 w-6 text-green-600 hover:text-green-700 shrink-0"
                       title="Manuell aktivieren"
