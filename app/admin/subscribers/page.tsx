@@ -87,8 +87,8 @@ export default function SubscribersPage() {
       s.email,
       s.name || '',
       s.status,
-      new Date(s.created_at).toLocaleDateString('de-DE'),
-      s.confirmed_at ? new Date(s.confirmed_at).toLocaleDateString('de-DE') : '',
+      new Date(s.created_at).toLocaleString('de-DE'),
+      s.confirmed_at ? new Date(s.confirmed_at).toLocaleString('de-DE') : '',
     ])
 
     const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n')
@@ -237,9 +237,9 @@ export default function SubscribersPage() {
                       <span className="text-sm font-medium truncate">{subscriber.email}</span>
                     </div>
                     <div className="text-[10px] text-muted-foreground">
-                      Angemeldet: {new Date(subscriber.created_at).toLocaleDateString('de-DE')}
+                      Angemeldet: {new Date(subscriber.created_at).toLocaleString('de-DE')}
                       {subscriber.confirmed_at && (
-                        <> · Bestätigt: {new Date(subscriber.confirmed_at).toLocaleDateString('de-DE')}</>
+                        <> · Bestätigt: {new Date(subscriber.confirmed_at).toLocaleString('de-DE')}</>
                       )}
                     </div>
                   </div>
