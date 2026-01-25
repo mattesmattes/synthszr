@@ -78,9 +78,10 @@ export default function ArchitecturePage() {
             <li><a href="#post-generation" className="text-zinc-300 hover:text-white">7. AI Post Generation</a></li>
             <li><a href="#edit-learning" className="text-zinc-300 hover:text-white">8. Edit Learning System</a></li>
             <li><a href="#stock-synthszr" className="text-zinc-300 hover:text-white">9. Stock Values & Stock-Synthszr</a></li>
-            <li><a href="#data-model" className="text-zinc-300 hover:text-white">10. Data Model</a></li>
-            <li><a href="#security" className="text-zinc-300 hover:text-white">11. Security & Tech Debt</a></li>
-            <li><a href="#api-routes" className="text-zinc-300 hover:text-white">12. API Routes</a></li>
+            <li><a href="#translations" className="text-zinc-300 hover:text-white">10. Translation System (i18n)</a></li>
+            <li><a href="#data-model" className="text-zinc-300 hover:text-white">11. Data Model</a></li>
+            <li><a href="#security" className="text-zinc-300 hover:text-white">12. Security & Tech Debt</a></li>
+            <li><a href="#api-routes" className="text-zinc-300 hover:text-white">13. API Routes</a></li>
           </ul>
         </nav>
 
@@ -849,9 +850,121 @@ export default function ArchitecturePage() {
           </div>
         </section>
 
-        {/* Section 10: Data Model */}
+        {/* Section 10: Translation System */}
+        <section id="translations" className="mb-16">
+          <h2 className="mb-6 text-2xl font-bold">10. Translation System (i18n)</h2>
+          <p className="mb-6 text-zinc-400">
+            The translation system provides multi-language support for blog posts and static pages.
+            It uses AI (Claude/Gemini) to generate translations and maintains a queue-based processing
+            system for reliable background translation.
+          </p>
+
+          <DiagramContainer title="Translation Flow">
+            <div className="flex flex-col items-center gap-2">
+              <FlowBox variant="muted" className="w-64">
+                <div className="font-semibold">Post Published</div>
+                <div className="text-xs">status: &apos;published&apos;</div>
+              </FlowBox>
+              <Arrow />
+              <FlowBox variant="primary" className="w-64">
+                <div className="font-semibold">queueTranslations()</div>
+                <div className="text-xs">lib/translations/queue.ts</div>
+              </FlowBox>
+              <Arrow />
+              <FlowBox className="w-64">
+                <div className="font-semibold">translation_queue</div>
+                <div className="text-xs">status: pending</div>
+              </FlowBox>
+              <Arrow />
+              <FlowBox variant="warning" className="w-64">
+                <div className="font-semibold">process-queue</div>
+                <div className="text-xs">Claude/Gemini API</div>
+              </FlowBox>
+              <Arrow />
+              <FlowBox variant="success" className="w-64">
+                <div className="font-semibold">content_translations</div>
+                <div className="text-xs">Translated content stored</div>
+              </FlowBox>
+            </div>
+          </DiagramContainer>
+
+          <h3 className="mb-3 text-lg font-semibold">Language Configuration</h3>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 mb-6">
+            <p className="text-sm text-zinc-400 mb-3">
+              Languages are configured in the <code className="bg-zinc-800 px-1 rounded">languages</code> table.
+              Only active, non-default languages receive automatic translations.
+            </p>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <div className="text-emerald-400 font-semibold">is_active</div>
+                <div className="text-xs text-zinc-500">Language enabled for translation</div>
+              </div>
+              <div>
+                <div className="text-blue-400 font-semibold">is_default</div>
+                <div className="text-xs text-zinc-500">Source language (German)</div>
+              </div>
+              <div>
+                <div className="text-amber-400 font-semibold">llm_model</div>
+                <div className="text-xs text-zinc-500">AI model per language</div>
+              </div>
+            </div>
+          </div>
+
+          <h3 className="mb-3 text-lg font-semibold">Queue Status Flow</h3>
+          <div className="grid grid-cols-5 gap-2 text-sm mb-6">
+            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2 text-center">
+              <div className="font-mono text-amber-400">pending</div>
+              <div className="text-xs text-zinc-500">Queued</div>
+            </div>
+            <div className="text-zinc-500 flex items-center justify-center">→</div>
+            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2 text-center">
+              <div className="font-mono text-blue-400">processing</div>
+              <div className="text-xs text-zinc-500">AI translating</div>
+            </div>
+            <div className="text-zinc-500 flex items-center justify-center">→</div>
+            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2 text-center">
+              <div className="font-mono text-emerald-400">completed</div>
+              <div className="text-xs text-zinc-500">Done</div>
+            </div>
+          </div>
+
+          <h3 className="mb-3 text-lg font-semibold">Manual Edit Protection</h3>
+          <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-4 mb-6">
+            <p className="text-sm text-zinc-400 mb-3">
+              When a translation is manually edited, it&apos;s marked with <code className="bg-zinc-800 px-1 rounded">is_manually_edited=true</code>.
+              These translations are automatically skipped during re-translation to protect human edits.
+            </p>
+            <div className="text-xs text-zinc-500">
+              Use <code className="bg-zinc-800 px-1 rounded">force=true</code> to override and re-translate anyway.
+            </div>
+          </div>
+
+          <h3 className="mb-3 text-lg font-semibold">Key Implementation Details</h3>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+              <div className="font-semibold text-zinc-200 mb-2">Admin Client Requirement</div>
+              <ul className="space-y-1 text-zinc-400">
+                <li>• Uses <code className="bg-zinc-800 px-1 rounded">createAdminClient()</code></li>
+                <li>• Required for async fire-and-forget operations</li>
+                <li>• Bypasses cookie context limitations</li>
+                <li>• Service Role Key authentication</li>
+              </ul>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+              <div className="font-semibold text-zinc-200 mb-2">Supported Content Types</div>
+              <ul className="space-y-1 text-zinc-400">
+                <li>• <code className="bg-zinc-800 px-1 rounded">generated_post</code> — Blog posts</li>
+                <li>• <code className="bg-zinc-800 px-1 rounded">static_page</code> — Static pages</li>
+                <li>• TipTap JSON content preserved</li>
+                <li>• Metadata (title, excerpt) translated</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        {/* Section 11: Data Model */}
         <section id="data-model" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">10. Data Model</h2>
+          <h2 className="mb-6 text-2xl font-bold">11. Data Model</h2>
           <p className="mb-6 text-zinc-400">
             The system uses Supabase (PostgreSQL) with the following core tables
             for content management.
@@ -980,11 +1093,31 @@ export default function ArchitecturePage() {
               <span className="text-zinc-500 ml-2">— Pattern usage tracking</span>
             </div>
           </div>
+
+          <h4 className="font-semibold mb-3 mt-6">Translation Tables (i18n)</h4>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="rounded border border-cyan-800/50 bg-cyan-950/20 px-3 py-2">
+              <span className="text-cyan-300">languages</span>
+              <span className="text-zinc-500 ml-2">— Language config (is_active, llm_model)</span>
+            </div>
+            <div className="rounded border border-cyan-800/50 bg-cyan-950/20 px-3 py-2">
+              <span className="text-cyan-300">translation_queue</span>
+              <span className="text-zinc-500 ml-2">— Pending/processing translations</span>
+            </div>
+            <div className="rounded border border-cyan-800/50 bg-cyan-950/20 px-3 py-2">
+              <span className="text-cyan-300">content_translations</span>
+              <span className="text-zinc-500 ml-2">— Completed translations + manual flag</span>
+            </div>
+            <div className="rounded border border-cyan-800/50 bg-cyan-950/20 px-3 py-2">
+              <span className="text-cyan-300">ui_translations</span>
+              <span className="text-zinc-500 ml-2">— UI string translations</span>
+            </div>
+          </div>
         </section>
 
-        {/* Section 11: Security & Tech Debt */}
+        {/* Section 12: Security & Tech Debt */}
         <section id="security" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">11. Security & Tech Debt</h2>
+          <h2 className="mb-6 text-2xl font-bold">12. Security & Tech Debt</h2>
 
           <h3 className="mb-4 text-xl font-semibold">Security Measures</h3>
           <p className="mb-6 text-zinc-400">
@@ -1103,9 +1236,9 @@ export default function ArchitecturePage() {
           </div>
         </section>
 
-        {/* Section 12: API Routes */}
+        {/* Section 13: API Routes */}
         <section id="api-routes" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">12. API Routes</h2>
+          <h2 className="mb-6 text-2xl font-bold">13. API Routes</h2>
           <p className="mb-6 text-zinc-400">
             Key API endpoints for the content pipeline. All cron routes require
             CRON_SECRET authentication in production.
@@ -1157,6 +1290,16 @@ export default function ArchitecturePage() {
                 <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/admin/analyze-edits</span><span className="text-zinc-600 ml-auto">Analyze pending edits</span></div>
                 <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/admin/pattern-feedback</span><span className="text-zinc-600 ml-auto">Update pattern confidence</span></div>
                 <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/cron/extract-patterns</span><span className="text-zinc-600 ml-auto">Extract patterns from diffs</span></div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+              <h4 className="font-semibold text-zinc-200 mb-3">Translations (i18n)</h4>
+              <div className="space-y-2 text-sm font-mono">
+                <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/admin/translations</span><span className="text-zinc-600 ml-auto">Queue stats & items</span></div>
+                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/admin/translations</span><span className="text-zinc-600 ml-auto">Actions (retry, cancel, trigger)</span></div>
+                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/admin/translations/queue</span><span className="text-zinc-600 ml-auto">Add items to queue</span></div>
+                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/admin/translations/process-queue</span><span className="text-zinc-600 ml-auto">Process pending translations</span></div>
               </div>
             </div>
 
