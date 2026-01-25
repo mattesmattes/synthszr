@@ -172,7 +172,7 @@ interface ProgressEvent {
 export async function POST(request: NextRequest) {
   // Check admin session
   if (!(await isAdminRequest(request))) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+    return new Response(JSON.stringify({ error: 'Nicht autorisiert' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' }
     })

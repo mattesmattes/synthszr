@@ -19,7 +19,7 @@ interface ManageSourcesRequest {
 export async function POST(request: NextRequest) {
   // Check admin session
   if (!(await isAdminRequest(request))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   try {

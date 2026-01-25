@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { ConfirmationEmail, getConfirmationSubject } from '@/lib/resend/templates/confirmation'
 import { render } from '@react-email/components'
+import { logIfUnexpected } from '@/lib/supabase/error-handling'
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,11 +29,13 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient()
 
     // Check if email already exists
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from('subscribers')
       .select('id, status')
       .eq('email', email.toLowerCase())
       .single()
+
+    logIfUnexpected('newsletter/subscribe', existingError)
 
     if (existing) {
       if (existing.status === 'active') {

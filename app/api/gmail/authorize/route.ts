@@ -8,7 +8,7 @@ export async function GET() {
 
   if (!session) {
     return NextResponse.json(
-      { error: 'Unauthorized' },
+      { error: 'Nicht autorisiert' },
       { status: 401 }
     )
   }

@@ -45,9 +45,17 @@ async function fetchQuote(
 ): Promise<{ changePercent: number; direction: 'up' | 'down' | 'neutral' } | null> {
   try {
     const url = `https://eodhistoricaldata.com/api/real-time/${tickerInfo.symbol}.${tickerInfo.exchange}?api_token=${apiKey}&fmt=json`
+
+    // Add timeout to prevent hanging on unresponsive API
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
+
     const response = await fetch(url, {
+      signal: controller.signal,
       next: { revalidate: 300 }, // Cache for 5 minutes
     })
+
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       console.error(`[batch-quotes] EODHD error for ${tickerInfo.symbol}: ${response.status}`)
@@ -79,7 +87,16 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse(rateLimitResult)
     }
 
-    const payload = await request.json().catch(() => ({}))
+    let payload: Record<string, unknown>
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json(
+        { ok: false, error: 'Ungültiges JSON im Request Body' },
+        { status: 400 }
+      )
+    }
+
     const companies = Array.isArray(payload?.companies) ? payload.companies : []
 
     if (companies.length === 0) {

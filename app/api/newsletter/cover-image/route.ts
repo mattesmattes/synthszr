@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import sharp from 'sharp'
+import { parseIntParam } from '@/lib/validation/query-params'
 
 // Neon yellow RGB values
 const NEON_YELLOW = { r: 204, g: 255, b: 0 }
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const imageUrl = searchParams.get('url')
-    const size = parseInt(searchParams.get('size') || '1104')
+    const size = parseIntParam(searchParams.get('size'), 1104, 100, 4000)
 
     if (!imageUrl) {
       return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 })

@@ -6,7 +6,7 @@ import { getSession } from '@/lib/auth/session'
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   const { searchParams } = new URL(request.url)
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   try {

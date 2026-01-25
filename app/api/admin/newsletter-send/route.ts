@@ -26,7 +26,7 @@ async function isAuthenticated(request?: NextRequest): Promise<boolean> {
 export async function GET() {
   const session = await getSession()
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   try {
@@ -53,7 +53,7 @@ export async function GET() {
 // POST: Send newsletter
 export async function POST(request: NextRequest) {
   if (!(await isAuthenticated(request))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   try {

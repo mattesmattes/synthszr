@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { isAdminRequest } from '@/lib/auth/session'
+import { requireAdmin } from '@/lib/auth/session'
 
 export const runtime = 'nodejs'
 
@@ -10,13 +10,9 @@ export const runtime = 'nodejs'
  * - date: specific date (YYYY-MM-DD) or "recent" for last 7 days
  */
 export async function GET(request: NextRequest) {
-  // Check admin auth
-  if (process.env.NODE_ENV === 'production') {
-    const isAdmin = await isAdminRequest(request)
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  }
+  // Always require admin auth
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const supabase = createAdminClient()
   const { searchParams } = new URL(request.url)

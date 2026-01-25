@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { isAdminRequest } from '@/lib/auth/session'
+import { requireAdmin } from '@/lib/auth/session'
 import { generateEmbedding, prepareTextForEmbedding } from '@/lib/embeddings/generator'
+import { parseIntParam } from '@/lib/validation/query-params'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes max
@@ -10,13 +11,9 @@ export const maxDuration = 300 // 5 minutes max
  * GET: Check how many items need embeddings
  */
 export async function GET(request: NextRequest) {
-  // Check admin auth
-  if (process.env.NODE_ENV === 'production') {
-    const isAdmin = await isAdminRequest(request)
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  }
+  // Always require admin auth
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const supabase = createAdminClient()
 
@@ -56,16 +53,12 @@ export async function GET(request: NextRequest) {
  * - dryRun: if true, only count without generating
  */
 export async function POST(request: NextRequest) {
-  // Check admin auth
-  if (process.env.NODE_ENV === 'production') {
-    const isAdmin = await isAdminRequest(request)
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  }
+  // Always require admin auth
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const { searchParams } = new URL(request.url)
-  const batchSize = Math.min(parseInt(searchParams.get('batchSize') || '50'), 100)
+  const batchSize = parseIntParam(searchParams.get('batchSize'), 50, 1, 100)
   const dryRun = searchParams.get('dryRun') === 'true'
 
   const supabase = createAdminClient()

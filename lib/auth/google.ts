@@ -36,11 +36,18 @@ export async function getAdminTokensFromCode(code: string) {
 
 export async function getGoogleUserInfo(accessToken: string): Promise<{ email: string; name: string; picture: string } | null> {
   try {
+    // Add timeout to prevent hanging on unresponsive API
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
+
     const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
+      signal: controller.signal,
     })
+
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       console.error('Failed to get user info:', response.status)

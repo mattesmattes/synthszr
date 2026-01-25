@@ -23,12 +23,13 @@ import {
   resetSelectedToPending
 } from '@/lib/news-queue/service'
 import { createClient } from '@/lib/supabase/server'
+import { parseIntParam } from '@/lib/validation/query-params'
 
 // GET: List queue items, stats, or distribution
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   const { searchParams } = new URL(request.url)
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest) {
       }
 
       case 'balanced': {
-        const maxItems = parseInt(searchParams.get('max') || '10')
+        const maxItems = parseIntParam(searchParams.get('max'), 10, 1, 100)
         const selection = await getBalancedSelection(maxItems)
         return NextResponse.json(selection)
       }
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Test balanced selection
-        const maxItems = parseInt(searchParams.get('max') || '20')
+        const maxItems = parseIntParam(searchParams.get('max'), 20, 1, 100)
         const balancedSelection = await getBalancedSelection(maxItems)
 
         return NextResponse.json({
@@ -125,8 +126,8 @@ export async function GET(request: NextRequest) {
       default: {
         const supabase = await createClient()
         const status = searchParams.get('status') || 'pending'
-        const limit = parseInt(searchParams.get('limit') || '50')
-        const offset = parseInt(searchParams.get('offset') || '0')
+        const limit = parseIntParam(searchParams.get('limit'), 50, 1, 500)
+        const offset = parseIntParam(searchParams.get('offset'), 0, 0)
 
         let query = supabase
           .from('news_queue')
@@ -167,7 +168,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   try {
@@ -348,7 +349,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const session = await getSession()
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   try {

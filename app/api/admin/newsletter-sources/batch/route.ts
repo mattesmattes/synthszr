@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { isAdminRequest } from '@/lib/auth/session'
+import { requireAdmin } from '@/lib/auth/session'
 
 export async function POST(request: NextRequest) {
-  // Check admin auth in production
-  if (process.env.NODE_ENV === 'production') {
-    const isAdmin = await isAdminRequest(request)
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  }
+  // Always require admin auth
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   try {
     const { sources } = await request.json()

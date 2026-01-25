@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   const cronSecretValid = authHeader === `Bearer ${process.env.CRON_SECRET}`
 
   if (!session && !cronSecretValid) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   // Rate limiting: 5 requests per minute for expensive image generation
@@ -178,7 +178,7 @@ export async function PUT(request: NextRequest) {
   const cronSecretValid = authHeader === `Bearer ${process.env.CRON_SECRET}`
 
   if (!session && !cronSecretValid) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   // Rate limiting: stricter for batch operations (3 per minute)

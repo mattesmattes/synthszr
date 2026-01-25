@@ -59,15 +59,22 @@ export async function fetchPremarketSyntheses(
   try {
     console.log(`[premarket] Fetching from ${url}`)
 
+    // Add timeout to prevent hanging on unresponsive API
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         'X-API-Key': apiKey,
       },
+      signal: controller.signal,
       // Cache for 1 hour in Next.js
       next: { revalidate: 3600 },
     })
+
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       const errorText = await response.text()

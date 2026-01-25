@@ -8,13 +8,18 @@ export const runtime = 'nodejs'
 
 // POST to trigger a fetch with forceSince
 export async function POST(request: NextRequest) {
+  // Validate auth: check debug secret from env, or require admin session
   const url = new URL(request.url)
   const debugSecret = url.searchParams.get('secret')
+  const envSecret = process.env.DEBUG_LABELS_SECRET
 
-  if (process.env.NODE_ENV === 'production' && debugSecret !== 'debug-labels-2026') {
+  // Only accept secret if it's configured in environment (never hardcoded)
+  const secretValid = envSecret && debugSecret === envSecret
+
+  if (!secretValid) {
     const isAdmin = await isAdminRequest(request)
     if (!isAdmin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
     }
   }
 
@@ -27,14 +32,18 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  // Check admin auth in production (allow temp debug secret)
+  // Validate auth: check debug secret from env, or require admin session
   const url = new URL(request.url)
   const debugSecret = url.searchParams.get('secret')
+  const envSecret = process.env.DEBUG_LABELS_SECRET
 
-  if (process.env.NODE_ENV === 'production' && debugSecret !== 'debug-labels-2026') {
+  // Only accept secret if it's configured in environment (never hardcoded)
+  const secretValid = envSecret && debugSecret === envSecret
+
+  if (!secretValid) {
     const isAdmin = await isAdminRequest(request)
     if (!isAdmin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
     }
   }
 

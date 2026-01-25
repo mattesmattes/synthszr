@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
   const cronSecretValid = authHeader === `Bearer ${process.env.CRON_SECRET}`
 
   if (!session && !cronSecretValid) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+    return new Response(JSON.stringify({ error: 'Nicht autorisiert' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     })

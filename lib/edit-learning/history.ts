@@ -14,13 +14,18 @@ export async function ensureInitialEditHistory(
   const client = supabase || createClient()
 
   // Check if there's already an edit history for this post
-  const { data: existing } = await client
+  const { data: existing, error: existingError } = await client
     .from('edit_history')
     .select('version')
     .eq('post_id', postId)
     .order('version', { ascending: false })
     .limit(1)
     .single()
+
+  // PGRST116 = no rows found (expected for new posts)
+  if (existingError && existingError.code !== 'PGRST116') {
+    console.error('[EditHistory] Error checking existing history:', existingError)
+  }
 
   if (existing) {
     return { version: existing.version, isNew: false }
@@ -60,13 +65,20 @@ export async function recordEditVersion(
   const client = supabase || createClient()
 
   // Get the latest version
-  const { data: latest } = await client
+  const { data: latest, error: latestError } = await client
     .from('edit_history')
     .select('version, content_after')
     .eq('post_id', postId)
     .order('version', { ascending: false })
     .limit(1)
     .single()
+
+  if (latestError) {
+    // PGRST116 = no rows found, which we handle below
+    if (latestError.code !== 'PGRST116') {
+      console.error('[EditHistory] Error fetching latest version:', latestError)
+    }
+  }
 
   if (!latest) {
     console.warn('[EditHistory] No existing history found for post:', postId)

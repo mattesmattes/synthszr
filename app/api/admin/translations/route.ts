@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { queueTranslations } from '@/lib/translations/queue'
+import { parseIntParam } from '@/lib/validation/query-params'
 
 /**
  * GET /api/admin/translations
@@ -11,8 +12,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'all'
     const language = searchParams.get('language')
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
+    const limit = parseIntParam(searchParams.get('limit'), 50, 1, 500)
+    const offset = parseIntParam(searchParams.get('offset'), 0, 0)
 
     const supabase = await createClient()
 

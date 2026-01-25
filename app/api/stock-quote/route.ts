@@ -178,9 +178,17 @@ export async function GET(request: NextRequest) {
 
   try {
     const url = `https://eodhistoricaldata.com/api/real-time/${tickerInfo.symbol}.${tickerInfo.exchange}?api_token=${apiKey}&fmt=json`
+
+    // Add timeout to prevent hanging on unresponsive API
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
+
     const response = await fetch(url, {
+      signal: controller.signal,
       next: { revalidate: 300 }, // Cache for 5 minutes
     })
+
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       throw new Error(`EODHD API error: ${response.status}`)

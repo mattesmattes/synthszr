@@ -12,7 +12,7 @@ export const maxDuration = 60
 
 export async function GET(request: NextRequest) {
   if (!(await isAdminRequest(request))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   const supabase = await createClient()

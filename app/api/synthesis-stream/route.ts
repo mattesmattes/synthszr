@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   // Require admin authentication
   const session = await getSession()
   if (!session) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+    return new Response(JSON.stringify({ error: 'Nicht autorisiert' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     })

@@ -32,7 +32,16 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse(rateLimitResult)
     }
 
-    const payload = await request.json().catch(() => ({}))
+    let payload: Record<string, unknown>
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json(
+        { ok: false, error: 'Ungültiges JSON im Request Body' },
+        { status: 400 }
+      )
+    }
+
     const companies = Array.isArray(payload?.companies) ? payload.companies : []
 
     if (companies.length === 0) {

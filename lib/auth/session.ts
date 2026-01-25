@@ -116,3 +116,43 @@ export async function isAdminRequest(request: NextRequest): Promise<boolean> {
     return false
   }
 }
+
+/**
+ * Require admin authentication for a request.
+ * Always checks auth in all environments (no production-only bypass).
+ *
+ * @returns null if authenticated, NextResponse with 401 if not
+ *
+ * Usage:
+ * const authError = await requireAdmin(request)
+ * if (authError) return authError
+ */
+export async function requireAdmin(request: NextRequest): Promise<Response | null> {
+  const isAdmin = await isAdminRequest(request)
+  if (!isAdmin) {
+    return new Response(JSON.stringify({ error: 'Nicht autorisiert' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+  return null
+}
+
+/**
+ * Require cron secret OR admin session for a request.
+ * Useful for endpoints that can be triggered by cron jobs or manually by admin.
+ *
+ * @returns null if authenticated, NextResponse with 401 if not
+ */
+export async function requireCronOrAdmin(request: NextRequest): Promise<Response | null> {
+  const authHeader = request.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+
+  // Check cron secret first
+  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+    return null
+  }
+
+  // Fall back to admin session
+  return requireAdmin(request)
+}

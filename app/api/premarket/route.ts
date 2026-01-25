@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchPremarketSyntheses } from '@/lib/premarket/client'
 import { getSession } from '@/lib/auth/session'
+import { parseIntParam } from '@/lib/validation/query-params'
 
 /**
  * GET /api/premarket
@@ -29,13 +30,11 @@ export async function GET(request: NextRequest) {
 
   const search = searchParams.get('search') ?? undefined
   const isin = searchParams.get('isin') ?? undefined
-  const limitParam = searchParams.get('limit')
-  const offsetParam = searchParams.get('offset')
   const withSynthesis = searchParams.get('withSynthesis') === 'true'
 
-  // Parse and validate limit/offset
-  const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 500) : 50
-  const offset = offsetParam ? Math.max(parseInt(offsetParam, 10) || 0, 0) : 0
+  // Parse and validate limit/offset using shared validation helper
+  const limit = parseIntParam(searchParams.get('limit'), 50, 1, 500)
+  const offset = parseIntParam(searchParams.get('offset'), 0, 0)
 
   try {
     const result = await fetchPremarketSyntheses({

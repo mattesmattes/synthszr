@@ -7,6 +7,7 @@ import {
   TipTapNode,
 } from '@/lib/edit-learning/diff-extractor'
 import { generateEmbedding } from '@/lib/embeddings/generator'
+import { parseIntParam } from '@/lib/validation/query-params'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,7 +41,7 @@ interface EditClassification {
 export async function POST(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '10', 10)
+    const limit = parseIntParam(searchParams.get('limit'), 10, 1, 100)
     const force = searchParams.get('force') === 'true'
 
     // Find unanalyzed edit_history entries

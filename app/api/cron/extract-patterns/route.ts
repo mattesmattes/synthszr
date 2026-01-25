@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import { generateEmbedding, cosineSimilarity } from '@/lib/embeddings/generator'
+import { parseIntParam, parseFloatParam } from '@/lib/validation/query-params'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,9 +45,9 @@ interface ExtractedPattern {
 export async function POST(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const daysBack = parseInt(searchParams.get('days') || '30', 10)
-    const minClusterSize = parseInt(searchParams.get('minCluster') || '3', 10)
-    const similarityThreshold = parseFloat(searchParams.get('threshold') || '0.8')
+    const daysBack = parseIntParam(searchParams.get('days'), 30, 1, 365)
+    const minClusterSize = parseIntParam(searchParams.get('minCluster'), 3, 2, 20)
+    const similarityThreshold = parseFloatParam(searchParams.get('threshold'), 0.8, 0.5, 1.0)
 
     // Calculate date threshold
     const dateThreshold = new Date()

@@ -50,7 +50,7 @@ TEXT ZUR ANALYSE:
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session?.isAdmin) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   try {

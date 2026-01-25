@@ -1,22 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processNewsletters } from '@/lib/newsletter/processor'
-import { isAdminRequest } from '@/lib/auth/session'
+import { requireCronOrAdmin, requireAdmin } from '@/lib/auth/session'
 
 // Node.js runtime for jsdom compatibility
 export const runtime = 'nodejs'
 
-// Vercel Cron protection
-const CRON_SECRET = process.env.CRON_SECRET
-
 // GET for Vercel Cron (automatic scheduling)
 export async function GET(request: NextRequest) {
-  // Verify cron secret in production (for Vercel Cron)
-  if (process.env.NODE_ENV === 'production') {
-    const authHeader = request.headers.get('authorization')
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  }
+  // Verify cron secret or admin session
+  const authError = await requireCronOrAdmin(request)
+  if (authError) return authError
 
   try {
     const result = await processNewsletters()
@@ -38,13 +31,9 @@ export async function GET(request: NextRequest) {
 // POST for manual triggers from admin panel (requires admin session)
 // Body: { forceSince?: string } - optional ISO date to force fetch from
 export async function POST(request: NextRequest) {
-  // Check if user is authenticated as admin
-  if (process.env.NODE_ENV === 'production') {
-    const isAdmin = await isAdminRequest(request)
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  }
+  // Always require admin auth for manual triggers
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   try {
     // Parse optional forceSince from request body

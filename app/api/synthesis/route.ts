@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   // Require admin authentication
   const session = await getSession()
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   try {
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
   // Require admin authentication
   const session = await getSession()
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   const { searchParams } = new URL(request.url)

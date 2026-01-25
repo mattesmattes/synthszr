@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
+import { parseIntParam } from '@/lib/validation/query-params'
 
 // GET: List all subscribers
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
   const search = searchParams.get('search')
-  const page = parseInt(searchParams.get('page') || '1')
-  const limit = parseInt(searchParams.get('limit') || '50')
+  const page = parseIntParam(searchParams.get('page'), 1, 1)
+  const limit = parseIntParam(searchParams.get('limit'), 50, 1, 500)
   const offset = (page - 1) * limit
 
   try {
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const session = await getSession()
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   const { searchParams } = new URL(request.url)
