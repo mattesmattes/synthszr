@@ -3,130 +3,176 @@
 [![Security Scan](https://github.com/mattesmattes/synthszr/actions/workflows/security.yml/badge.svg)](https://github.com/mattesmattes/synthszr/actions/workflows/security.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-AI-powered financial analysis and newsletter generation platform built with Next.js 15.
+AI-powered financial analysis and newsletter generation platform.
 
-## Features
+## Quick Start
 
-- **AI Stock Analysis** - Generate BUY/HOLD/SELL ratings for public and premarket companies
-- **Newsletter Ingestion** - Automatically fetch and parse newsletters from Gmail
-- **Ghostwriter** - AI-powered blog post generation with learned writing style
-- **Edit Learning** - System learns from manual edits to improve future generations
-- **Multi-language Support** - Automatic translation via AI models
-- **Email Newsletters** - Send personalized newsletters to subscribers
-
-## Tech Stack
-
-- **Framework**: Next.js 15 (App Router)
-- **Database**: Supabase (PostgreSQL + pgvector)
-- **AI Models**: Claude, Gemini, GPT-4
-- **Email**: Resend
-- **Styling**: Tailwind CSS + shadcn/ui
-- **Editor**: TipTap
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- pnpm (recommended) or npm
-- Supabase account
-- API keys for AI services (Anthropic, Google, OpenAI)
-
-### Installation
+### 1. Clone & Install
 
 ```bash
-# Clone the repository
 git clone https://github.com/mattesmattes/synthszr.git
 cd synthszr
-
-# Install dependencies
 pnpm install
-
-# Copy environment variables
-cp .env.example .env.local
-
-# Start development server
-pnpm dev
 ```
 
-### Environment Variables
-
-See `.env.example` for all required and optional environment variables.
-
-**Required:**
-- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
-- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
-- `ADMIN_EMAILS` - Comma-separated list of allowed admin emails
-- At least one AI API key (ANTHROPIC_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or OPENAI_API_KEY)
-
-### Database Setup
-
-Run the Supabase migrations:
+### 2. Environment Setup
 
 ```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local` with your credentials:
+
+```env
+# Supabase (Required)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Authentication (Required)
+JWT_SECRET=your-32-character-minimum-secret-key
+ADMIN_EMAILS=your-email@example.com
+
+# Google OAuth (Required for admin login)
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# AI Services (At least one required)
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_GENERATIVE_AI_API_KEY=your-gemini-key
+OPENAI_API_KEY=sk-...
+
+# Email (Required for newsletters)
+RESEND_API_KEY=re_...
+RESEND_FROM_EMAIL=Newsletter <newsletter@yourdomain.com>
+
+# Rate Limiting (Required for production)
+UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your-upstash-token
+
+# Cron Jobs (Required for production)
+CRON_SECRET=your-cron-secret
+```
+
+### 3. Database Setup
+
+Create a Supabase project and run migrations:
+
+```bash
+# Install Supabase CLI
+npm install -g supabase
+
+# Link to your project
+supabase link --project-ref your-project-ref
+
+# Push migrations
 supabase db push
 ```
 
-## Development
+### 4. Run Development Server
 
 ```bash
-pnpm dev          # Start dev server
+pnpm dev
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+## Production Deployment
+
+### Vercel (Recommended)
+
+1. Push to GitHub
+2. Import project in Vercel
+3. Add environment variables in Vercel dashboard
+4. Deploy
+
+### Required Production Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `JWT_SECRET` | Minimum 32 characters, cryptographically random |
+| `CRON_SECRET` | Secret for cron job authentication |
+| `UPSTASH_REDIS_REST_URL` | Redis for rate limiting |
+| `UPSTASH_REDIS_REST_TOKEN` | Redis token |
+| `SUPABASE_SERVICE_ROLE_KEY` | Database admin access |
+
+### Cron Jobs Setup (Vercel)
+
+Add to `vercel.json`:
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/scheduled-tasks",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}
+```
+
+## Commands
+
+```bash
+pnpm dev          # Start development server
 pnpm build        # Build for production
+pnpm start        # Start production server
 pnpm test         # Run tests
 pnpm lint         # Run linter
+pnpm test:api     # Run API tests only
 ```
 
-## Architecture
-
-### Key Directories
+## Project Structure
 
 ```
-app/                    # Next.js App Router pages
-├── admin/             # Admin dashboard pages
-├── api/               # API routes
-└── [lang]/            # Localized public pages
+app/
+├── admin/              # Admin dashboard
+├── api/                # API routes
+│   ├── admin/          # Protected admin endpoints
+│   ├── cron/           # Cron job endpoints
+│   ├── newsletter/     # Public newsletter endpoints
+│   └── stock-synthszr/ # Stock analysis endpoints
+└── [lang]/             # Localized public pages
 
-lib/                    # Shared utilities
-├── auth/              # Authentication helpers
-├── claude/            # AI integration (Claude, Gemini)
-├── edit-learning/     # Edit pattern learning system
-├── newsletter/        # Newsletter processing
-├── supabase/          # Database clients
-└── validation/        # Input validation helpers
+lib/
+├── auth/               # Authentication (JWT, OAuth)
+├── security/           # Security utilities (CSRF, rate limiting)
+├── supabase/           # Database clients
+├── claude/             # AI integrations
+└── newsletter/         # Newsletter processing
 
-components/            # React components
-├── admin/             # Admin-only components
-├── ui/                # shadcn/ui components
-└── tiptap-*.tsx       # Editor components
+components/
+├── admin/              # Admin components
+├── ui/                 # shadcn/ui components
+└── tiptap-*.tsx        # Rich text editor
 ```
 
-### API Routes
+## External Services
 
-| Endpoint | Description |
-|----------|-------------|
-| `/api/stock-synthszr` | Generate AI stock analysis |
-| `/api/premarket` | Fetch premarket company data |
-| `/api/ghostwriter` | Generate blog posts |
-| `/api/newsletter/subscribe` | Newsletter subscription |
-| `/api/admin/*` | Admin-only endpoints |
+| Service | Purpose | Required |
+|---------|---------|----------|
+| [Supabase](https://supabase.com) | Database (PostgreSQL + pgvector) | Yes |
+| [Vercel](https://vercel.com) | Hosting & Cron | Yes |
+| [Upstash](https://upstash.com) | Redis for rate limiting | Production |
+| [Resend](https://resend.com) | Email sending | For newsletters |
+| [Anthropic](https://anthropic.com) | Claude AI | At least one AI |
+| [Google AI](https://ai.google.dev) | Gemini AI | At least one AI |
+| [OpenAI](https://openai.com) | GPT-4 | At least one AI |
 
 ## Security
 
-This project implements comprehensive security measures:
-
-- **Rate Limiting** - Redis-based rate limiting on public endpoints
-- **CSRF Protection** - Origin header validation for form submissions
-- **Authentication** - JWT sessions with Google OAuth for admin access
-- **Input Validation** - Strict validation and sanitization
-- **Security Headers** - X-Frame-Options, CSP, and more
-
-For security vulnerabilities, please see [SECURITY.md](SECURITY.md).
+See [SECURITY.md](SECURITY.md) for:
+- Security measures implemented
+- How to report vulnerabilities
+- Security headers and protections
 
 ## Contributing
 
-Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting a pull request.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- Development setup
+- Code style guidelines
+- Pull request process
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License - see [LICENSE](LICENSE)
