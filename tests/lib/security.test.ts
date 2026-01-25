@@ -80,7 +80,8 @@ describe('Security: Cron Authentication', () => {
     expect(result.authorized).toBe(false)
   })
 
-  it('allows dev bypass when explicitly enabled', async () => {
+  it('does not allow dev bypass (removed for security)', async () => {
+    // Dev bypass was removed - CRON_SECRET is required in all environments
     vi.stubEnv('NODE_ENV', 'development')
     process.env.ALLOW_DEV_CRON_BYPASS = 'true'
 
@@ -92,8 +93,8 @@ describe('Security: Cron Authentication', () => {
     } as any
 
     const result = verifyCronAuth(request)
-    expect(result.authorized).toBe(true)
-    expect(result.method).toBe('dev-bypass')
+    expect(result.authorized).toBe(false)
+    expect(result.method).toBe('none')
   })
 })
 

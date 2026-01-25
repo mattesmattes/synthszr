@@ -12,7 +12,7 @@ import { NextRequest } from 'next/server'
 
 export interface CronAuthResult {
   authorized: boolean
-  method: 'bearer' | 'vercel-cron' | 'dev-bypass' | 'none'
+  method: 'bearer' | 'vercel-cron' | 'none'
 }
 
 /**
@@ -38,12 +38,9 @@ export function verifyCronAuth(request: NextRequest): CronAuthResult {
     return { authorized: true, method: 'vercel-cron' }
   }
 
-  // Method 3: Development bypass (MUST be explicitly enabled)
-  // Security: Requires BOTH conditions to prevent accidental exposure
-  if (!isProduction && process.env.ALLOW_DEV_CRON_BYPASS === 'true') {
-    console.warn('[CronAuth] Using development bypass - disable in production!')
-    return { authorized: true, method: 'dev-bypass' }
-  }
+  // Method 3: Development bypass (REMOVED for security)
+  // Previously allowed bypass in development - now require CRON_SECRET in all environments
+  // If you need to test cron endpoints locally, set CRON_SECRET in .env.local
 
   // Production safety: If no CRON_SECRET is set, log error
   if (isProduction && !cronSecret) {

@@ -61,10 +61,9 @@ export function verifyOrigin(request: NextRequest): { valid: boolean; origin: st
 
   const allowedOrigins = getAllowedOrigins()
 
-  // Check if origin is in allowed list
-  const isAllowed = allowedOrigins.some(allowed =>
-    requestOrigin === allowed || requestOrigin.endsWith('.vercel.app')
-  )
+  // Check if origin is in allowed list (exact match only - no wildcards)
+  // Vercel preview URLs are added explicitly via VERCEL_URL env var
+  const isAllowed = allowedOrigins.some(allowed => requestOrigin === allowed)
 
   return { valid: isAllowed, origin: requestOrigin }
 }

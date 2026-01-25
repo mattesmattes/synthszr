@@ -10,9 +10,17 @@ function getRateLimiter(): Ratelimit | null {
 
   const url = process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  const isProduction = process.env.NODE_ENV === 'production'
 
   if (!url || !token) {
-    console.warn('Rate limiting disabled: UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN not set')
+    if (isProduction) {
+      // In production, rate limiting MUST be configured
+      console.error('[RateLimit] CRITICAL: Upstash Redis not configured in production!')
+      console.error('[RateLimit] Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN')
+      // Don't throw - gracefully degrade but log loudly on every request
+    } else {
+      console.warn('[RateLimit] Rate limiting disabled in development')
+    }
     return null
   }
 
@@ -46,11 +54,12 @@ export async function checkRateLimit(
   const limiter = customLimiter || getRateLimiter()
 
   if (!limiter) {
-    // If rate limiting is not configured, allow all requests but warn in production
+    // If rate limiting is not configured in production, log every request as warning
     if (process.env.NODE_ENV === 'production') {
-      console.warn('[RateLimit] WARNING: Rate limiting disabled - endpoint unprotected against abuse')
+      console.error(`[RateLimit] UNPROTECTED REQUEST: ${identifier} - configure Upstash Redis!`)
     }
-    return { success: true, remaining: 999, reset: Date.now() + 60000, limit: 999 }
+    // Allow but mark as unprotected
+    return { success: true, remaining: 0, reset: Date.now() + 60000, limit: 0 }
   }
 
   const result = await limiter.limit(identifier)

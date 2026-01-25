@@ -7,11 +7,30 @@ export const SESSION_COOKIE_NAME = 'synthszr_session'
 const SESSION_DURATION = 60 * 60 * 24 * 7 // 7 days in seconds
 
 function getSecretKey() {
-  // Use JWT_SECRET if available, fallback to ADMIN_PASSWORD for backwards compatibility
-  const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
+  const secret = process.env.JWT_SECRET
+  const isProduction = process.env.NODE_ENV === 'production'
+
   if (!secret) {
-    throw new Error('JWT_SECRET or ADMIN_PASSWORD environment variable is not set')
+    if (isProduction) {
+      throw new Error('CRITICAL: JWT_SECRET must be set in production')
+    }
+    // Development fallback - warn loudly
+    const fallback = process.env.ADMIN_PASSWORD
+    if (!fallback) {
+      throw new Error('JWT_SECRET or ADMIN_PASSWORD must be set')
+    }
+    console.warn('[Auth] WARNING: Using ADMIN_PASSWORD as JWT secret - set JWT_SECRET in production!')
+    return new TextEncoder().encode(fallback)
   }
+
+  // Validate minimum secret length (256 bits = 32 chars minimum)
+  if (secret.length < 32) {
+    if (isProduction) {
+      throw new Error('CRITICAL: JWT_SECRET must be at least 32 characters')
+    }
+    console.warn('[Auth] WARNING: JWT_SECRET should be at least 32 characters')
+  }
+
   return new TextEncoder().encode(secret)
 }
 

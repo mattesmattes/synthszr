@@ -8,19 +8,10 @@ export const runtime = 'nodejs'
 
 // POST to trigger a fetch with forceSince
 export async function POST(request: NextRequest) {
-  // Validate auth: check debug secret from env, or require admin session
-  const url = new URL(request.url)
-  const debugSecret = url.searchParams.get('secret')
-  const envSecret = process.env.DEBUG_LABELS_SECRET
-
-  // Only accept secret if it's configured in environment (never hardcoded)
-  const secretValid = envSecret && debugSecret === envSecret
-
-  if (!secretValid) {
-    const isAdmin = await isAdminRequest(request)
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
-    }
+  // Require admin session - no query param secrets (they leak in logs/referrer)
+  const isAdmin = await isAdminRequest(request)
+  if (!isAdmin) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   // Force fetch from 2 days ago
@@ -32,19 +23,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  // Validate auth: check debug secret from env, or require admin session
-  const url = new URL(request.url)
-  const debugSecret = url.searchParams.get('secret')
-  const envSecret = process.env.DEBUG_LABELS_SECRET
-
-  // Only accept secret if it's configured in environment (never hardcoded)
-  const secretValid = envSecret && debugSecret === envSecret
-
-  if (!secretValid) {
-    const isAdmin = await isAdminRequest(request)
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
-    }
+  // Require admin session - no query param secrets (they leak in logs/referrer)
+  const isAdmin = await isAdminRequest(request)
+  if (!isAdmin) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   const supabase = createAdminClient()
