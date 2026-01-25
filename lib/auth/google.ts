@@ -5,10 +5,11 @@ const ADMIN_AUTH_SCOPES = [
   'https://www.googleapis.com/auth/userinfo.profile',
 ]
 
-// Whitelist of allowed admin emails
-const ALLOWED_ADMIN_EMAILS = [
-  'mattes@gmail.com',
-]
+// Whitelist of allowed admin emails (comma-separated in env var)
+const ALLOWED_ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
+  .split(',')
+  .map(email => email.trim().toLowerCase())
+  .filter(Boolean)
 
 export function getAdminOAuth2Client() {
   return new google.auth.OAuth2(

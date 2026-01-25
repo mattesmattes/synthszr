@@ -111,10 +111,10 @@ importers:
         specifier: 0.8.0
         version: 0.8.0(@supabase/supabase-js@2.89.0)
       '@supabase/supabase-js':
-        specifier: latest
+        specifier: ^2.89.0
         version: 2.89.0
       '@tiptap/core':
-        specifier: latest
+        specifier: ^3.14.0
         version: 3.14.0(@tiptap/pm@3.14.0)
       '@tiptap/extension-link':
         specifier: ^3.14.0
@@ -123,10 +123,10 @@ importers:
         specifier: 3.14.0
         version: 3.14.0(@tiptap/extensions@3.14.0(@tiptap/core@3.14.0(@tiptap/pm@3.14.0))(@tiptap/pm@3.14.0))
       '@tiptap/extensions':
-        specifier: latest
+        specifier: ^3.14.0
         version: 3.14.0(@tiptap/core@3.14.0(@tiptap/pm@3.14.0))(@tiptap/pm@3.14.0)
       '@tiptap/pm':
-        specifier: latest
+        specifier: ^3.14.0
         version: 3.14.0
       '@tiptap/react':
         specifier: 3.14.0
