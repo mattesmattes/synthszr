@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAnonClient } from '@/lib/supabase/admin'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
-import { MAX_BATCH_SIZE } from '@/lib/data/companies'
+import { MAX_BATCH_SIZE } from '@/lib/constants/thresholds'
 
 // Standard rate limiter for read operations (30 requests per minute per IP)
 const standardLimiter = rateLimiters.standard()

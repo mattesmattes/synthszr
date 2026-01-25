@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { fetchPremarketSyntheses } from '@/lib/premarket/client'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 import type { PremarketItem } from '@/lib/premarket/types'
-import { MAX_BATCH_SIZE } from '@/lib/data/companies'
+import { MAX_BATCH_SIZE } from '@/lib/constants/thresholds'
 
 // Standard rate limiter for read operations (30 requests per minute per IP)
 const standardLimiter = rateLimiters.standard()
