@@ -18,9 +18,14 @@ import { NextRequest, NextResponse } from 'next/server'
 function getAllowedOrigins(): string[] {
   const origins: string[] = []
 
-  // Production domain
+  // Production domain (from env)
   if (process.env.NEXT_PUBLIC_BASE_URL) {
-    origins.push(new URL(process.env.NEXT_PUBLIC_BASE_URL).origin)
+    const baseOrigin = new URL(process.env.NEXT_PUBLIC_BASE_URL).origin
+    origins.push(baseOrigin)
+    // Also allow www variant
+    if (baseOrigin.startsWith('https://') && !baseOrigin.includes('www.')) {
+      origins.push(baseOrigin.replace('https://', 'https://www.'))
+    }
   }
 
   // Vercel preview deployments
