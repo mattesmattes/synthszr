@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 interface QueueTranslationsResult {
   queued: number
@@ -25,7 +25,7 @@ export async function queueTranslations(
   force: boolean = false
 ): Promise<QueueTranslationsResult> {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Get all active languages (except default)
     const { data: languages, error: langError } = await supabase
@@ -120,7 +120,7 @@ export async function queueTranslations(
  * Check if a post has pending translations
  */
 export async function hasPendingTranslations(contentId: string): Promise<boolean> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { count } = await supabase
     .from('translation_queue')
@@ -140,7 +140,7 @@ export async function getTranslationStatus(contentId: string): Promise<{
   failed: number
   languages: Array<{ code: string; status: string }>
 }> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data: queueItems } = await supabase
     .from('translation_queue')

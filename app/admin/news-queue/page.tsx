@@ -390,6 +390,45 @@ export default function NewsQueuePage() {
     return `vor ${days}d`
   }
 
+  // Get synthesis score gradient color: cyan (low) → neon yellow (mid) → neon orange (high)
+  const getSynthesisScoreColor = (score: number, allScores: number[]) => {
+    if (allScores.length === 0) return 'transparent'
+
+    const minScore = Math.min(...allScores)
+    const maxScore = Math.max(...allScores)
+
+    if (minScore === maxScore) return '#CCFF00' // neon yellow if all same
+
+    // Normalize to 0-1 range
+    const normalized = (score - minScore) / (maxScore - minScore)
+
+    // Three-stop gradient: cyan (0) → neon yellow (0.5) → neon orange (1)
+    // Cyan: #00FFFF, Neon Yellow: #CCFF00, Neon Orange: #FF6B00
+    if (normalized <= 0.5) {
+      // Interpolate from cyan to neon yellow
+      const t = normalized * 2 // 0 to 1
+      const r = Math.round(0 + t * 204)    // 0 → 204
+      const g = Math.round(255 - t * 0)     // 255 → 255
+      const b = Math.round(255 - t * 255)   // 255 → 0
+      return `rgb(${r}, ${g}, ${b})`
+    } else {
+      // Interpolate from neon yellow to neon orange
+      const t = (normalized - 0.5) * 2 // 0 to 1
+      const r = Math.round(204 + t * 51)   // 204 → 255
+      const g = Math.round(255 - t * 148)  // 255 → 107
+      const b = Math.round(0)              // 0 → 0
+      return `rgb(${r}, ${g}, ${b})`
+    }
+  }
+
+  // Sort items: for pending, newest first (by queued_at descending)
+  const sortedItems = statusFilter === 'pending'
+    ? [...items].sort((a, b) => new Date(b.queued_at).getTime() - new Date(a.queued_at).getTime())
+    : items
+
+  // Extract all synthesis scores for gradient calculation
+  const allSynthesisScores = sortedItems.map(item => item.synthesis_score)
+
   return (
     <div className="p-4 md:p-6 max-w-full">
       <div className="mb-4">
@@ -602,7 +641,7 @@ export default function NewsQueuePage() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : items.length === 0 ? (
+          ) : sortedItems.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
                 <ListTodo className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
@@ -616,7 +655,7 @@ export default function NewsQueuePage() {
                   <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
                     <input
                       type="checkbox"
-                      checked={selectedItems.size === items.length && items.length > 0}
+                      checked={selectedItems.size === sortedItems.length && sortedItems.length > 0}
                       onChange={selectAll}
                       className="rounded"
                     />
@@ -624,7 +663,7 @@ export default function NewsQueuePage() {
                   </div>
                 )}
                 <div className="divide-y max-h-[60vh] overflow-y-auto">
-                  {items.map((item) => (
+                  {sortedItems.map((item) => (
                     <div
                       key={item.id}
                       className={`flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors ${
@@ -650,8 +689,16 @@ export default function NewsQueuePage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-mono">
-                          {item.total_score.toFixed(1)}
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] px-1.5 py-0 h-4 font-mono font-bold border-0"
+                          style={{
+                            backgroundColor: getSynthesisScoreColor(item.synthesis_score, allSynthesisScores),
+                            color: '#000'
+                          }}
+                          title={`Synthesis: ${item.synthesis_score.toFixed(1)} | Total: ${item.total_score.toFixed(1)}`}
+                        >
+                          {item.synthesis_score.toFixed(1)}
                         </Badge>
                         <Button
                           variant="ghost"
