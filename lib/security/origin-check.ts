@@ -38,6 +38,9 @@ function getAllowedOrigins(): string[] {
     origins.push(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`)
   }
 
+  // Explicit Vercel app domain
+  origins.push('https://synthszr.vercel.app')
+
   // Development
   if (process.env.NODE_ENV === 'development') {
     origins.push('http://localhost:3000')
