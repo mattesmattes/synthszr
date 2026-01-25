@@ -67,6 +67,67 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// PATCH: Update subscriber status (e.g., activate pending subscriber)
+export async function PATCH(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
+  try {
+    const body = await request.json()
+    const { id, status } = body
+
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json({ error: 'Subscriber ID required' }, { status: 400 })
+    }
+
+    // Only allow setting to active (manual activation)
+    if (status !== 'active') {
+      return NextResponse.json({ error: 'Only activation is supported' }, { status: 400 })
+    }
+
+    const supabase = createAdminClient()
+
+    // Verify subscriber exists and is pending
+    const { data: existing, error: fetchError } = await supabase
+      .from('subscribers')
+      .select('id, status, email')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !existing) {
+      return NextResponse.json({ error: 'Subscriber not found' }, { status: 404 })
+    }
+
+    if (existing.status !== 'pending') {
+      return NextResponse.json({ error: 'Subscriber is not pending' }, { status: 400 })
+    }
+
+    // Activate the subscriber
+    const { error: updateError } = await supabase
+      .from('subscribers')
+      .update({
+        status: 'active',
+        confirmed_at: new Date().toISOString(),
+        confirmation_token: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    if (updateError) {
+      console.error('Activate subscriber error:', updateError)
+      return NextResponse.json({ error: 'Failed to activate subscriber' }, { status: 500 })
+    }
+
+    console.log(`[Admin] Manually activated subscriber: ${existing.email}`)
+    return NextResponse.json({ success: true, email: existing.email })
+  } catch (error) {
+    console.error('Subscribers PATCH error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
 // DELETE: Remove a subscriber
 export async function DELETE(request: NextRequest) {
   const session = await getSession()

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download, Search } from 'lucide-react'
+import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download, Search, UserCheck } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -38,6 +38,7 @@ export default function SubscribersPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [activatingId, setActivatingId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
@@ -76,6 +77,29 @@ export default function SubscribersPage() {
       console.error('Delete error:', error)
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  async function activateSubscriber(id: string, email: string) {
+    if (!confirm(`"${email}" manuell aktivieren?`)) return
+
+    setActivatingId(id)
+    try {
+      const res = await fetch('/api/admin/subscribers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: 'active' }),
+      })
+      if (res.ok) {
+        fetchSubscribers()
+      } else {
+        const error = await res.json()
+        alert(error.error || 'Aktivierung fehlgeschlagen')
+      }
+    } catch (error) {
+      console.error('Activate error:', error)
+    } finally {
+      setActivatingId(null)
     }
   }
 
@@ -249,6 +273,22 @@ export default function SubscribersPage() {
                   >
                     {statusLabel(subscriber.status)}
                   </Badge>
+                  {subscriber.status === 'pending' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => activateSubscriber(subscriber.id, subscriber.email)}
+                      disabled={activatingId === subscriber.id}
+                      className="h-6 w-6 text-green-600 hover:text-green-700 shrink-0"
+                      title="Manuell aktivieren"
+                    >
+                      {activatingId === subscriber.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <UserCheck className="h-3 w-3" />
+                      )}
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"

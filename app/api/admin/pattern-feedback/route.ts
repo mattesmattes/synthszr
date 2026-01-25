@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getSession } from '@/lib/auth/session'
 
 /**
  * POST /api/admin/pattern-feedback
@@ -19,7 +15,13 @@ const supabase = createClient(
  * - action: 'accept' | 'reject' | 'deactivate'
  */
 export async function POST(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
   try {
+    const supabase = createAdminClient()
     const body = await request.json()
     const { appliedPatternId, action } = body
 
@@ -128,7 +130,13 @@ export async function POST(request: NextRequest) {
  * Get all applied patterns for a post (for highlighting in editor)
  */
 export async function GET(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
   try {
+    const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
     const postId = searchParams.get('postId')
 

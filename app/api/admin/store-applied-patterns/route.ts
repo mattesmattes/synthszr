@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getSession } from '@/lib/auth/session'
 import { getActiveLearnedPatterns } from '@/lib/edit-learning/retrieval'
 import {
   detectPatternsInContent,
   type DetectedPatternMatch,
 } from '@/lib/edit-learning/pattern-detection'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 interface TipTapNode {
   type: string
@@ -29,7 +25,13 @@ interface TipTapNode {
  * - content: TipTap JSON content
  */
 export async function POST(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
   try {
+    const supabase = createAdminClient()
     const body = await request.json()
     const { postId, content } = body
 

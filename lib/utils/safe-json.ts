@@ -63,7 +63,12 @@ export function parseTipTapContent(
   }
 
   try {
-    return JSON.parse(content) as Record<string, unknown>
+    const parsed = JSON.parse(content)
+    // Ensure we return a valid object (handles 'null', 'true', numbers, etc.)
+    if (!parsed || typeof parsed !== 'object') {
+      return emptyDoc
+    }
+    return parsed as Record<string, unknown>
   } catch (error) {
     console.error('[parseTipTapContent] Failed to parse TipTap JSON:', error instanceof Error ? error.message : error)
     return emptyDoc

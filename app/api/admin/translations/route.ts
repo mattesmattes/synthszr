@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getSession } from '@/lib/auth/session'
 import { queueTranslations } from '@/lib/translations/queue'
 import { parseIntParam } from '@/lib/validation/query-params'
 
@@ -8,6 +9,11 @@ import { parseIntParam } from '@/lib/validation/query-params'
  * Returns translation statistics and queue items
  */
 export async function GET(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
   try {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'all'
@@ -125,6 +131,11 @@ export async function GET(request: NextRequest) {
  * Actions on translations (retry, cancel, etc.)
  */
 export async function POST(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
   try {
     const body = await request.json()
     const { action, queue_item_id, translation_id } = body

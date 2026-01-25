@@ -5,33 +5,12 @@ import { NewsletterEmail } from '@/lib/resend/templates/newsletter'
 import { render } from '@react-email/components'
 import { generateEmailContentWithVotes, ArticleThumbnail } from '@/lib/email/tiptap-to-html'
 import type { LanguageCode } from '@/lib/types'
-
-// Verify cron secret (Vercel cron jobs send this header)
-function verifyCronAuth(request: NextRequest): boolean {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-
-  // Allow if CRON_SECRET matches or if called from Vercel cron (no secret needed)
-  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
-    return true
-  }
-
-  // Allow if x-vercel-cron header is present (Vercel cron jobs)
-  if (request.headers.get('x-vercel-cron') === '1') {
-    return true
-  }
-
-  // In development, allow without auth
-  if (process.env.NODE_ENV === 'development') {
-    return true
-  }
-
-  return false
-}
+import { verifyCronAuth } from '@/lib/security/cron-auth'
 
 export async function GET(request: NextRequest) {
-  // Verify authorization
-  if (!verifyCronAuth(request)) {
+  // Verify cron authentication (secure - no dev bypass by default)
+  const authResult = verifyCronAuth(request)
+  if (!authResult.authorized) {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
@@ -231,20 +210,29 @@ export async function GET(request: NextRequest) {
         try {
           const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
 
-          // Generate preferences token for this subscriber
+          // Generate preferences token for this subscriber (with 5s timeout)
           let preferencesUrl: string | undefined
+          const prefController = new AbortController()
+          const prefTimeoutId = setTimeout(() => prefController.abort(), 5000)
           try {
             const prefResponse = await fetch(`${BASE_URL}/api/newsletter/preferences`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ subscriberId: subscriber.id }),
+              signal: prefController.signal,
             })
+            clearTimeout(prefTimeoutId)
             if (prefResponse.ok) {
               const { token } = await prefResponse.json()
               preferencesUrl = `${BASE_URL}/newsletter/preferences?token=${token}`
             }
           } catch (prefError) {
-            console.warn(`Failed to generate preferences token for ${subscriber.email}:`, prefError)
+            clearTimeout(prefTimeoutId)
+            if (prefError instanceof Error && prefError.name === 'AbortError') {
+              console.warn(`[Newsletter Cron] Preferences token timeout for ${subscriber.email}`)
+            } else {
+              console.warn(`Failed to generate preferences token for ${subscriber.email}:`, prefError)
+            }
           }
 
           const html = await render(

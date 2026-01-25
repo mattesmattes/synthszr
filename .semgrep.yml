@@ -1,0 +1,171 @@
+rules:
+  # Detect missing rate limiting on public POST endpoints
+  - id: missing-rate-limit-post
+    patterns:
+      - pattern: |
+          export async function POST(request: NextRequest) {
+            ...
+          }
+      - pattern-not: |
+          export async function POST(request: NextRequest) {
+            ...
+            checkRateLimit(...)
+            ...
+          }
+      - pattern-not: |
+          export async function POST(request: NextRequest) {
+            ...
+            getSession()
+            ...
+          }
+    paths:
+      include:
+        - app/api/newsletter/**
+        - app/api/premarket/**
+        - app/api/stock-synthszr/**
+    message: "Public POST endpoint without rate limiting - consider adding checkRateLimit()"
+    languages: [typescript]
+    severity: WARNING
+
+  # Detect development bypasses in authentication
+  - id: dev-bypass-in-auth
+    pattern-either:
+      - pattern: |
+          if (process.env.NODE_ENV === 'development') {
+            return true
+          }
+      - pattern: |
+          if (process.env.NODE_ENV !== 'production') {
+            return true
+          }
+    paths:
+      include:
+        - lib/auth/**
+        - lib/security/**
+        - app/api/cron/**
+        - app/api/admin/**
+    message: "Development bypass in authentication logic - use explicit ALLOW_DEV_* env vars instead"
+    languages: [typescript]
+    severity: ERROR
+
+  # Detect JSON.parse without try-catch
+  - id: unsafe-json-parse
+    pattern: JSON.parse($X)
+    pattern-not-inside: |
+      try { ... } catch { ... }
+    pattern-not-inside: |
+      try { ... } catch (...) { ... }
+    paths:
+      exclude:
+        - node_modules/**
+        - .next/**
+    message: "JSON.parse without try-catch - use safeParseJSON() from lib/utils/safe-json"
+    languages: [typescript, javascript]
+    severity: WARNING
+
+  # Detect .single() without error handling
+  - id: supabase-single-no-error
+    pattern: |
+      const { data: $DATA } = await $SUPABASE
+        ...
+        .single()
+    pattern-not: |
+      const { data: $DATA, error: $ERROR } = await $SUPABASE
+        ...
+        .single()
+    paths:
+      exclude:
+        - node_modules/**
+        - .next/**
+    message: "Supabase .single() without error capture - add 'error' to destructuring"
+    languages: [typescript]
+    severity: WARNING
+
+  # Detect fetch without timeout/AbortController
+  - id: fetch-without-timeout
+    patterns:
+      - pattern: await fetch($URL, { ... })
+      - pattern-not: await fetch($URL, { ..., signal: $SIGNAL, ... })
+    paths:
+      include:
+        - app/api/cron/**
+        - lib/**
+      exclude:
+        - node_modules/**
+    message: "fetch() without AbortController signal - add timeout for reliability"
+    languages: [typescript]
+    severity: INFO
+
+  # Detect potential SQL injection (even though Supabase parameterizes)
+  - id: potential-sql-injection
+    pattern-either:
+      - pattern: .rpc($FUNC, { ..., $KEY: `...${$VAR}...`, ... })
+      - pattern: .rpc($FUNC, { ..., $KEY: "..." + $VAR, ... })
+    paths:
+      exclude:
+        - node_modules/**
+    message: "Potential SQL injection via RPC - ensure input is validated"
+    languages: [typescript]
+    severity: ERROR
+
+  # Detect hardcoded secrets
+  - id: hardcoded-secret
+    pattern-either:
+      - pattern: |
+          const $KEY = "sk-..."
+      - pattern: |
+          const $KEY = "sk_..."
+      - pattern: |
+          $OBJ.apiKey = "..."
+      - pattern: |
+          authorization: "Bearer $TOKEN"
+    pattern-not: |
+      authorization: `Bearer ${...}`
+    paths:
+      exclude:
+        - node_modules/**
+        - .next/**
+        - "*.test.ts"
+    message: "Potential hardcoded secret - use environment variables"
+    languages: [typescript, javascript]
+    severity: ERROR
+
+  # Detect console.log with sensitive data
+  - id: sensitive-logging
+    pattern-either:
+      - pattern: console.log(..., $EMAIL, ...)
+      - pattern: console.log(..., password, ...)
+      - pattern: console.log(..., token, ...)
+      - pattern: console.log(..., apiKey, ...)
+      - pattern: console.log(..., secret, ...)
+    paths:
+      exclude:
+        - node_modules/**
+        - "*.test.ts"
+    message: "Logging potentially sensitive data - consider redacting"
+    languages: [typescript, javascript]
+    severity: WARNING
+
+  # Detect missing Content-Type validation
+  - id: missing-content-type-check
+    patterns:
+      - pattern: |
+          export async function POST(request: NextRequest) {
+            ...
+            const $BODY = await request.json()
+            ...
+          }
+      - pattern-not: |
+          export async function POST(request: NextRequest) {
+            ...
+            request.headers.get('content-type')
+            ...
+          }
+    paths:
+      include:
+        - app/api/**
+      exclude:
+        - node_modules/**
+    message: "POST endpoint without Content-Type validation"
+    languages: [typescript]
+    severity: INFO

@@ -219,8 +219,10 @@ export function generateEmailContent(post: { content?: unknown; excerpt?: string
       if (parsed && typeof parsed === 'object' && parsed.type === 'doc') {
         return convertTiptapToHtml(parsed as TiptapDoc)
       }
-    } catch {
+    } catch (error) {
       // Not JSON, might be HTML string - use as is
+      console.warn('[tiptap-to-html] JSON parse failed, using raw:',
+        error instanceof Error ? error.message : 'unknown')
       return rawContent
     }
     // If we couldn't parse it and it's a string, return as is
@@ -259,7 +261,9 @@ export async function generateEmailContentWithVotes(
       } else {
         return rawContent
       }
-    } catch {
+    } catch (error) {
+      console.warn('[tiptap-to-html] JSON parse failed in generateEmailContentWithVotes:',
+        error instanceof Error ? error.message : 'unknown')
       return rawContent
     }
   } else if (rawContent && typeof rawContent === 'object') {

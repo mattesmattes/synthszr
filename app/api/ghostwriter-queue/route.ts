@@ -245,21 +245,27 @@ export async function POST(request: NextRequest) {
       sourceReference += `- ${d.source}: ${d.count} News (${d.percentage}%)\n`
     }
 
-    // Get ghostwriter prompt
+    // Get ghostwriter prompt (with .single() error handling)
     let promptText: string
     if (promptId) {
-      const { data: prompt } = await supabase
+      const { data: prompt, error: promptError } = await supabase
         .from('ghostwriter_prompts')
         .select('prompt_text')
         .eq('id', promptId)
         .single()
+      if (promptError) {
+        console.warn(`[Ghostwriter-Queue] Prompt ${promptId} not found, using default`)
+      }
       promptText = prompt?.prompt_text || getDefaultPrompt()
     } else {
-      const { data: activePrompt } = await supabase
+      const { data: activePrompt, error: activeError } = await supabase
         .from('ghostwriter_prompts')
         .select('prompt_text')
         .eq('is_active', true)
         .single()
+      if (activeError) {
+        console.warn('[Ghostwriter-Queue] No active prompt found, using default')
+      }
       promptText = activePrompt?.prompt_text || getDefaultPrompt()
     }
 

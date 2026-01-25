@@ -64,3 +64,16 @@ export const PATTERN_MAX_COUNT = 20
 
 /** Weekly decay factor for pattern confidence */
 export const PATTERN_DECAY_FACTOR = 0.95
+
+// =============================================================================
+// Scheduled Tasks (Cron)
+// =============================================================================
+
+/** Maximum number of digest sections to process for image generation */
+export const MAX_DIGEST_SECTIONS = 3
+
+/** Maximum characters to include in content preview for image generation */
+export const MAX_CONTENT_PREVIEW_CHARS = 2000
+
+/** Minimum length (characters) for analysis content to be considered valid */
+export const MIN_ANALYSIS_LENGTH = 100

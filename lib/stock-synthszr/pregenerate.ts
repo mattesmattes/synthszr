@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { STOCK_SYNTHSZR_CACHE_MS } from '@/lib/config/constants'
 import { fetchStockSynthszr } from './fetch-synthesis'
+import { parseTipTapContent } from '@/lib/utils/safe-json'
 import type { StockSynthszrResult } from './types'
 
 interface TipTapNode {
@@ -39,8 +40,8 @@ export function extractStockTickers(content: TipTapNode | string): Array<{ symbo
     }
   }
 
-  const parsedContent = typeof content === 'string' ? JSON.parse(content) : content
-  traverse(parsedContent)
+  const parsedContent = typeof content === 'string' ? parseTipTapContent(content) : content
+  traverse(parsedContent as TipTapNode)
   return tickers
 }
 

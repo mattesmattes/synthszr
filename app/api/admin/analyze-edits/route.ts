@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getSession } from '@/lib/auth/session'
 import Anthropic from '@anthropic-ai/sdk'
 import {
   extractSentenceDiffs,
@@ -8,11 +9,6 @@ import {
 } from '@/lib/edit-learning/diff-extractor'
 import { generateEmbedding } from '@/lib/embeddings/generator'
 import { parseIntParam } from '@/lib/validation/query-params'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -39,7 +35,13 @@ interface EditClassification {
  * - force: Re-analyze even if already processed
  */
 export async function POST(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
   try {
+    const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
     const limit = parseIntParam(searchParams.get('limit'), 10, 1, 100)
     const force = searchParams.get('force') === 'true'
@@ -268,7 +270,13 @@ Respond in this exact JSON format:
  * Get stats about edit analysis
  */
 export async function GET() {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
   try {
+    const supabase = createAdminClient()
     // Get counts
     const { count: totalHistory } = await supabase
       .from('edit_history')

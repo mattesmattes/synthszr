@@ -115,54 +115,60 @@ export async function POST(request: NextRequest) {
     const supabase = createAnonClient()
     const apiKey = process.env.EODHD_API_KEY
 
-    // Process all companies in parallel
+    // Process all companies in parallel with error isolation
     const results = await Promise.all(
       companies.map(async (company: unknown): Promise<BatchQuoteResult | null> => {
-        if (typeof company !== 'string' || !company.trim()) return null
+        try {
+          if (typeof company !== 'string' || !company.trim()) return null
 
-        // Look up ticker info using centralized helper
-        const tickerInfo = getCompanyTicker(company.trim())
+          // Look up ticker info using centralized helper
+          const tickerInfo = getCompanyTicker(company.trim())
 
-        // Fetch rating from cache
-        const { data: cached } = await supabase
-          .from('stock_synthszr_cache')
-          .select('company, data, created_at')
-          .ilike('company', company.trim())
-          .gt('expires_at', new Date().toISOString())
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single<CacheRow>()
+          // Fetch rating from cache
+          const { data: cached } = await supabase
+            .from('stock_synthszr_cache')
+            .select('company, data, created_at')
+            .ilike('company', company.trim())
+            .gt('expires_at', new Date().toISOString())
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single<CacheRow>()
 
-        const rating = cached?.data?.final_recommendation?.rating ?? null
+          const rating = cached?.data?.final_recommendation?.rating ?? null
 
-        // If no ticker mapping, return rating only
-        if (!tickerInfo) {
+          // If no ticker mapping, return rating only
+          if (!tickerInfo) {
+            return {
+              company: company.trim(),
+              displayName: company.trim(),
+              ticker: null,
+              changePercent: null,
+              direction: null,
+              rating,
+            }
+          }
+
+          // Fetch quote data if we have API key
+          let quoteData: { changePercent: number; direction: 'up' | 'down' | 'neutral' } | null = null
+          if (apiKey) {
+            quoteData = await fetchQuote(tickerInfo, apiKey)
+          }
+
+          // Format display name (capitalize first letter)
+          const displayName = company.trim().charAt(0).toUpperCase() + company.trim().slice(1)
+
           return {
             company: company.trim(),
-            displayName: company.trim(),
-            ticker: null,
-            changePercent: null,
-            direction: null,
+            displayName,
+            ticker: tickerInfo.symbol,
+            changePercent: quoteData?.changePercent ?? null,
+            direction: quoteData?.direction ?? null,
             rating,
           }
-        }
-
-        // Fetch quote data if we have API key
-        let quoteData: { changePercent: number; direction: 'up' | 'down' | 'neutral' } | null = null
-        if (apiKey) {
-          quoteData = await fetchQuote(tickerInfo, apiKey)
-        }
-
-        // Format display name (capitalize first letter)
-        const displayName = company.trim().charAt(0).toUpperCase() + company.trim().slice(1)
-
-        return {
-          company: company.trim(),
-          displayName,
-          ticker: tickerInfo.symbol,
-          changePercent: quoteData?.changePercent ?? null,
-          direction: quoteData?.direction ?? null,
-          rating,
+        } catch (error) {
+          const companyName = typeof company === 'string' ? company : 'unknown'
+          console.error(`[batch-quotes] Failed for ${companyName}:`, error)
+          return null  // Graceful degradation
         }
       })
     )

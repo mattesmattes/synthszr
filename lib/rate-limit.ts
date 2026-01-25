@@ -46,7 +46,10 @@ export async function checkRateLimit(
   const limiter = customLimiter || getRateLimiter()
 
   if (!limiter) {
-    // If rate limiting is not configured, allow all requests
+    // If rate limiting is not configured, allow all requests but warn in production
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('[RateLimit] WARNING: Rate limiting disabled - endpoint unprotected against abuse')
+    }
     return { success: true, remaining: 999, reset: Date.now() + 60000, limit: 999 }
   }
 
@@ -152,6 +155,34 @@ export const rateLimiters = {
       redis: new Redis({ url, token }),
       limiter: Ratelimit.slidingWindow(100, '1 m'),
       prefix: 'synthszr:relaxed',
+    })
+  },
+
+  // Admin: 60 requests per minute (for authenticated admin endpoints)
+  // Prevents abuse even with valid session (e.g., compromised credentials)
+  admin: () => {
+    const url = process.env.UPSTASH_REDIS_REST_URL
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN
+    if (!url || !token) return null
+
+    return new Ratelimit({
+      redis: new Redis({ url, token }),
+      limiter: Ratelimit.slidingWindow(60, '1 m'),
+      prefix: 'synthszr:admin',
+    })
+  },
+
+  // Admin write: 20 requests per minute (for admin write operations)
+  // More restrictive for state-changing operations
+  adminWrite: () => {
+    const url = process.env.UPSTASH_REDIS_REST_URL
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN
+    if (!url || !token) return null
+
+    return new Ratelimit({
+      redis: new Redis({ url, token }),
+      limiter: Ratelimit.slidingWindow(20, '1 m'),
+      prefix: 'synthszr:admin-write',
     })
   },
 }

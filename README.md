@@ -1,5 +1,8 @@
 # Synthszr
 
+[![Security Scan](https://github.com/mattesmattes/synthszr/actions/workflows/security.yml/badge.svg)](https://github.com/mattesmattes/synthszr/actions/workflows/security.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 AI-powered financial analysis and newsletter generation platform built with Next.js 15.
 
 ## Features
@@ -33,7 +36,7 @@ AI-powered financial analysis and newsletter generation platform built with Next
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/synthszr.git
+git clone https://github.com/mattesmattes/synthszr.git
 cd synthszr
 
 # Install dependencies
@@ -107,6 +110,22 @@ components/            # React components
 | `/api/ghostwriter` | Generate blog posts |
 | `/api/newsletter/subscribe` | Newsletter subscription |
 | `/api/admin/*` | Admin-only endpoints |
+
+## Security
+
+This project implements comprehensive security measures:
+
+- **Rate Limiting** - Redis-based rate limiting on public endpoints
+- **CSRF Protection** - Origin header validation for form submissions
+- **Authentication** - JWT sessions with Google OAuth for admin access
+- **Input Validation** - Strict validation and sanitization
+- **Security Headers** - X-Frame-Options, CSP, and more
+
+For security vulnerabilities, please see [SECURITY.md](SECURITY.md).
+
+## Contributing
+
+Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting a pull request.
 
 ## License
 

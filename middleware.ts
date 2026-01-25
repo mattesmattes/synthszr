@@ -13,7 +13,7 @@ type LocaleType = (typeof ALL_LOCALES)[number]
 const DEFAULT_LOCALE: LocaleType = 'de'
 
 // Routes that require authentication
-const protectedRoutes = ['/admin']
+const protectedRoutes = ['/admin', '/api/admin']
 
 // Routes that should redirect to admin if already logged in
 const authRoutes = ['/login']
@@ -111,7 +111,7 @@ export async function middleware(request: NextRequest) {
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
 
   // ========================================
-  // AUTH HANDLING (admin routes)
+  // AUTH HANDLING (admin routes + API routes)
   // ========================================
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
   const isAuthRoute = authRoutes.some(route => pathname.startsWith(route))
@@ -120,6 +120,10 @@ export async function middleware(request: NextRequest) {
     const isAuthenticated = sessionToken ? await verifyToken(sessionToken) : false
 
     if (isProtectedRoute && !isAuthenticated) {
+      // API routes return 401, page routes redirect to login
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+      }
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('redirect', pathname)
       return NextResponse.redirect(loginUrl)

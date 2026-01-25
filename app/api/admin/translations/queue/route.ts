@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSession } from '@/lib/auth/session'
 
 /**
  * POST /api/admin/translations/queue
@@ -11,6 +12,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
  * - priority?: number (default: 0, higher = more important)
  */
 export async function POST(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
   try {
     const body = await request.json()
     const { content_type, content_id, priority = 0 } = body
@@ -129,6 +135,11 @@ export async function POST(request: NextRequest) {
  * Clears pending queue items (for maintenance)
  */
 export async function DELETE(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
   try {
     const { searchParams } = new URL(request.url)
     const contentId = searchParams.get('content_id')

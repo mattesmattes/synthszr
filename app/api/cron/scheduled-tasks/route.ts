@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { runSynthesisPipeline } from '@/lib/synthesis/pipeline'
 import { processNewsletters } from '@/lib/newsletter/processor'
 import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPublishedPostsQueueItems } from '@/lib/news-queue/service'
+import { MAX_DIGEST_SECTIONS, MAX_CONTENT_PREVIEW_CHARS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresholds'
+import { verifyCronAuth } from '@/lib/security/cron-auth'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes max
@@ -91,13 +93,10 @@ async function markTaskRun(supabase: ReturnType<typeof createAdminClient>, taskK
 }
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret for security
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    // Allow in development or if no secret is set
-    if (process.env.NODE_ENV === 'production' && process.env.CRON_SECRET) {
-      return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
-    }
+  // Verify cron authentication (secure - no dev bypass by default)
+  const authResult = verifyCronAuth(request)
+  if (!authResult.authorized) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   const supabase = createAdminClient()
@@ -255,14 +254,26 @@ export async function GET(request: NextRequest) {
           .single()
 
         if (latestPost) {
-          await fetch(`${baseUrl}/api/admin/newsletter-send`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-            },
-            body: JSON.stringify({ postId: latestPost.id }),
-          })
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 60000) // 60s timeout
+          try {
+            await fetch(`${baseUrl}/api/admin/newsletter-send`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+              },
+              body: JSON.stringify({ postId: latestPost.id }),
+              signal: controller.signal,
+            })
+            clearTimeout(timeoutId)
+          } catch (error) {
+            clearTimeout(timeoutId)
+            if (error instanceof Error && error.name === 'AbortError') {
+              console.error('[Scheduler] Newsletter send timeout after 60s')
+            }
+            throw error
+          }
           await markTaskRun(supabase, 'newsletter_send')
           results.newsletterSend = 'completed'
         } else {
@@ -315,24 +326,38 @@ export async function GET(request: NextRequest) {
     let totalFailed = 0
 
     for (let batch = 0; batch < 3; batch++) {
-      const response = await fetch(`${baseUrl}/api/admin/translations/process-queue`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-        },
-      })
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
+      try {
+        const response = await fetch(`${baseUrl}/api/admin/translations/process-queue`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+          },
+          signal: controller.signal,
+        })
+        clearTimeout(timeoutId)
 
-      if (response.ok) {
-        const data = await response.json()
-        totalProcessed += data.processed || 0
-        totalSuccess += data.success || 0
-        totalFailed += data.failed || 0
+        if (response.ok) {
+          const data = await response.json()
+          totalProcessed += data.processed || 0
+          totalSuccess += data.success || 0
+          totalFailed += data.failed || 0
 
-        // Stop if no more pending items
-        if (!data.processed || data.processed === 0) break
-      } else {
-        console.error('[Scheduler] Translation queue processing failed:', response.status)
+          // Stop if no more pending items
+          if (!data.processed || data.processed === 0) break
+        } else {
+          console.error('[Scheduler] Translation queue processing failed:', response.status)
+          break
+        }
+      } catch (error) {
+        clearTimeout(timeoutId)
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.error('[Scheduler] Translation queue processing timeout after 30s')
+        } else {
+          console.error('[Scheduler] Translation queue processing error:', error)
+        }
         break
       }
     }
@@ -405,18 +430,32 @@ async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>)
     ? `https://${process.env.VERCEL_URL}`
     : 'http://localhost:3000'
 
-  const response = await fetch(`${baseUrl}/api/ghostwriter`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-    },
-    body: JSON.stringify({
-      digestContent: digest.analysis_content,
-      customPrompt: promptData?.prompt_text,
-      vocabularyIntensity: 10,
-    }),
-  })
+  const ghostwriterController = new AbortController()
+  const ghostwriterTimeoutId = setTimeout(() => ghostwriterController.abort(), 120000) // 120s timeout
+
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}/api/ghostwriter`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+      },
+      body: JSON.stringify({
+        digestContent: digest.analysis_content,
+        customPrompt: promptData?.prompt_text,
+        vocabularyIntensity: 10,
+      }),
+      signal: ghostwriterController.signal,
+    })
+    clearTimeout(ghostwriterTimeoutId)
+  } catch (error) {
+    clearTimeout(ghostwriterTimeoutId)
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('[PostGen] Ghostwriter API timeout after 120s')
+    }
+    throw error
+  }
 
   if (!response.ok) {
     throw new Error(`Ghostwriter API failed: ${response.status}`)
@@ -505,24 +544,38 @@ async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>)
       }
     }
 
-    const sectionsToProcess = sections.slice(0, 3) // Reduced from 5 to save AI Gateway costs (~$0.20/image)
+    const sectionsToProcess = sections.slice(0, MAX_DIGEST_SECTIONS)
 
     if (sectionsToProcess.length > 0) {
       console.log(`[PostGen] Triggering image generation for ${sectionsToProcess.length} sections`)
 
-      fetch(`${baseUrl}/api/generate-image`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-        },
-        body: JSON.stringify({
-          postId: newPost.id,
-          newsItems: sectionsToProcess.map(s => ({
-            text: `${s.title}\n\n${s.content.slice(0, 2000)}`,
-          })),
-        }),
-      }).catch(err => console.error('[PostGen] Image generation error:', err))
+      const imageController = new AbortController()
+      const imageTimeoutId = setTimeout(() => imageController.abort(), 30000) // 30s timeout
+
+      try {
+        await fetch(`${baseUrl}/api/generate-image`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+          },
+          body: JSON.stringify({
+            postId: newPost.id,
+            newsItems: sectionsToProcess.map(s => ({
+              text: `${s.title}\n\n${s.content.slice(0, MAX_CONTENT_PREVIEW_CHARS)}`,
+            })),
+          }),
+          signal: imageController.signal,
+        })
+        clearTimeout(imageTimeoutId)
+      } catch (err) {
+        clearTimeout(imageTimeoutId)
+        if (err instanceof Error && err.name === 'AbortError') {
+          console.error('[PostGen] Image generation timeout after 30s')
+        } else {
+          console.error('[PostGen] Image generation error:', err)
+        }
+      }
     }
   }
 
@@ -629,7 +682,7 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
     reader.releaseLock()
   }
 
-  if (!analysisContent || analysisContent.length < 100) {
+  if (!analysisContent || analysisContent.length < MIN_ANALYSIS_LENGTH) {
     console.error('[DailyAnalysis] Analysis content too short or empty')
     return { success: false, error: 'Analysis content empty or too short' }
   }

@@ -5,12 +5,17 @@ import { ConfirmationEmail, getConfirmationSubject } from '@/lib/resend/template
 import { render } from '@react-email/components'
 import { logIfUnexpected } from '@/lib/supabase/error-handling'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+import { requireValidOrigin } from '@/lib/security/origin-check'
 
 // Newsletter rate limiter: 10 requests per hour per IP (anti-spam)
 const newsletterLimiter = rateLimiters.newsletter()
 
 export async function POST(request: NextRequest) {
   try {
+    // CSRF protection: verify request comes from our domain
+    const originError = requireValidOrigin(request)
+    if (originError) return originError
+
     // Rate limit check - 10 requests per hour per IP to prevent spam
     const clientIP = getClientIP(request)
     const rateLimitResult = await checkRateLimit(`newsletter:${clientIP}`, newsletterLimiter ?? undefined)
