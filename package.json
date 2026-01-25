@@ -8,7 +8,10 @@
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
-    "sync-companies": "npx tsx scripts/sync-premarket-companies.ts"
+    "sync-companies": "npx tsx scripts/sync-premarket-companies.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:api": "vitest run tests/api"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.46",
@@ -98,10 +101,13 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.1.2",
     "dotenv": "^17.2.3",
+    "happy-dom": "^20.3.7",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "tw-animate-css": "1.3.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }

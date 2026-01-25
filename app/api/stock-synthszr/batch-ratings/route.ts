@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAnonClient } from '@/lib/supabase/admin'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+import { MAX_BATCH_SIZE } from '@/lib/data/companies'
 
 // Standard rate limiter for read operations (30 requests per minute per IP)
 const standardLimiter = rateLimiters.standard()
@@ -41,9 +42,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Limit to prevent abuse
-    if (companies.length > 20) {
+    if (companies.length > MAX_BATCH_SIZE) {
       return NextResponse.json(
-        { ok: false, error: 'Maximal 20 Unternehmen pro Anfrage' },
+        { ok: false, error: `Maximal ${MAX_BATCH_SIZE} Unternehmen pro Anfrage` },
         { status: 400 }
       )
     }
