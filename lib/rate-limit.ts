@@ -103,6 +103,19 @@ export function rateLimitResponse(result: RateLimitResult): NextResponse {
  * Rate limiter presets for different endpoints
  */
 export const rateLimiters = {
+  // Newsletter: 10 requests per hour (anti-spam for subscription endpoints)
+  newsletter: () => {
+    const url = process.env.UPSTASH_REDIS_REST_URL
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN
+    if (!url || !token) return null
+
+    return new Ratelimit({
+      redis: new Redis({ url, token }),
+      limiter: Ratelimit.slidingWindow(10, '1 h'),
+      prefix: 'synthszr:newsletter',
+    })
+  },
+
   // Strict: 5 requests per minute (for expensive operations like image generation)
   strict: () => {
     const url = process.env.UPSTASH_REDIS_REST_URL

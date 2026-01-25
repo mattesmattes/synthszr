@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAnonClient } from '@/lib/supabase/admin'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+
+// Relaxed rate limiter: 100 requests per minute per IP (public read endpoint)
+const relaxedLimiter = rateLimiters.relaxed()
 
 interface PostInfo {
   id: string
@@ -19,6 +23,14 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  // Rate limit check - 100 requests per minute per IP
+  const clientIP = getClientIP(request)
+  const rateLimitResult = await checkRateLimit(`company-detail:${clientIP}`, relaxedLimiter ?? undefined)
+
+  if (!rateLimitResult.success) {
+    return rateLimitResponse(rateLimitResult)
+  }
+
   try {
     const { slug } = await params
     const supabase = createAnonClient()

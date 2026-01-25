@@ -1,5 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createAnonClient } from '@/lib/supabase/admin'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+
+// Relaxed rate limiter: 100 requests per minute per IP (public read endpoint)
+const relaxedLimiter = rateLimiters.relaxed()
 
 interface CompanyMention {
   company_name: string
@@ -23,7 +27,15 @@ interface CompanyAggregation {
  * Returns all companies with mention counts, sorted alphabetically.
  * Only includes companies from published posts.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Rate limit check - 100 requests per minute per IP
+  const clientIP = getClientIP(request)
+  const rateLimitResult = await checkRateLimit(`companies:${clientIP}`, relaxedLimiter ?? undefined)
+
+  if (!rateLimitResult.success) {
+    return rateLimitResponse(rateLimitResult)
+  }
+
   try {
     const supabase = createAnonClient()
 

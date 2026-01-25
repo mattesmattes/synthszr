@@ -4,9 +4,20 @@ import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { ConfirmationEmail, getConfirmationSubject } from '@/lib/resend/templates/confirmation'
 import { render } from '@react-email/components'
 import { logIfUnexpected } from '@/lib/supabase/error-handling'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+
+// Newsletter rate limiter: 10 requests per hour per IP (anti-spam)
+const newsletterLimiter = rateLimiters.newsletter()
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit check - 10 requests per hour per IP to prevent spam
+    const clientIP = getClientIP(request)
+    const rateLimitResult = await checkRateLimit(`newsletter:${clientIP}`, newsletterLimiter ?? undefined)
+
+    if (!rateLimitResult.success) {
+      return rateLimitResponse(rateLimitResult)
+    }
     const body = await request.json()
     const { email, name, language = 'de' } = body
 

@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { BASE_URL } from '@/lib/resend/client'
+import { checkRateLimit, getClientIP, rateLimiters } from '@/lib/rate-limit'
+
+// Standard rate limiter: 30 requests per minute per IP
+const standardLimiter = rateLimiters.standard()
 
 export async function GET(request: NextRequest) {
+  // Rate limit check
+  const clientIP = getClientIP(request)
+  const rateLimitResult = await checkRateLimit(`confirm:${clientIP}`, standardLimiter ?? undefined)
+
+  if (!rateLimitResult.success) {
+    return NextResponse.redirect(`${BASE_URL}/newsletter/confirm?error=rate_limited`)
+  }
+
   const { searchParams } = new URL(request.url)
   const token = searchParams.get('token')
 

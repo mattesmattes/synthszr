@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+
+// Standard rate limiter: 30 requests per minute per IP
+const standardLimiter = rateLimiters.standard()
 
 /**
  * GET /api/newsletter/preferences?token=xxx
  * Returns subscriber preferences for the given token
  */
 export async function GET(request: NextRequest) {
+  // Rate limit check
+  const clientIP = getClientIP(request)
+  const rateLimitResult = await checkRateLimit(`preferences:${clientIP}`, standardLimiter ?? undefined)
+
+  if (!rateLimitResult.success) {
+    return rateLimitResponse(rateLimitResult)
+  }
+
   try {
     const { searchParams } = new URL(request.url)
     const token = searchParams.get('token')
@@ -60,6 +72,14 @@ export async function GET(request: NextRequest) {
  * Updates subscriber preferences
  */
 export async function PUT(request: NextRequest) {
+  // Rate limit check
+  const clientIP = getClientIP(request)
+  const rateLimitResult = await checkRateLimit(`preferences:${clientIP}`, standardLimiter ?? undefined)
+
+  if (!rateLimitResult.success) {
+    return rateLimitResponse(rateLimitResult)
+  }
+
   try {
     const body = await request.json()
     const { token, language } = body

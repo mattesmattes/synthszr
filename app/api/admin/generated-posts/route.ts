@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth/session'
 import { pregenerateStockSynthszr } from '@/lib/stock-synthszr/pregenerate'
 import { syncPostCompanyMentions } from '@/lib/companies/sync'
 import { queueTranslations } from '@/lib/translations/queue'
+import { parseTipTapContent } from '@/lib/utils/safe-json'
 
 export async function GET() {
   const session = await getSession()
@@ -84,7 +85,7 @@ export async function PUT(request: NextRequest) {
         }
         return ''
       }
-      const contentObj = typeof content === 'string' ? JSON.parse(content) : content
+      const contentObj = parseTipTapContent(content)
       const text = extractText(contentObj)
       updateData.word_count = text.split(/\s+/).filter(Boolean).length
     }

@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { translateContent, type TranslationModel } from '@/lib/i18n/translation-service'
 import type { LanguageCode, TranslationQueueItem } from '@/lib/types'
+import { parseTipTapContent } from '@/lib/utils/safe-json'
 
 const BATCH_SIZE = 5
 const MAX_ATTEMPTS = 3
@@ -188,7 +189,7 @@ async function processGeneratedPost(
     {
       title: post.title,
       excerpt: post.excerpt,
-      content: typeof post.content === 'string' ? JSON.parse(post.content) : post.content,
+      content: parseTipTapContent(post.content),
     },
     item.target_language as LanguageCode,
     model
@@ -275,7 +276,7 @@ async function processStaticPage(
   const translationResult = await translateContent(
     {
       title: page.title,
-      content: typeof page.content === 'string' ? JSON.parse(page.content) : page.content,
+      content: parseTipTapContent(page.content),
     },
     item.target_language as LanguageCode,
     model
