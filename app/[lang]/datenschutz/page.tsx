@@ -116,6 +116,9 @@ export default async function DatenschutzPage({ params }: PageProps) {
               <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
                 LinkedIn
               </a>
+              <a href="https://synthszr.com/en/sources" className="hover:text-accent transition-colors">
+                {t['footer.sources'] || 'Sources'}
+              </a>
               <Link href={`/${locale}/impressum`} className="hover:text-accent transition-colors">
                 {t['footer.imprint'] || 'Impressum'}
               </Link>
