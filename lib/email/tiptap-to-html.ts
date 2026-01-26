@@ -159,9 +159,13 @@ function findCompaniesInText(text: string): { public: Array<{ apiName: string; d
 
 /**
  * Remove {Company} explicit tags from text
+ * IMPORTANT: Do NOT use .trim() here as it removes trailing spaces
+ * that are needed for word separation between adjacent text nodes
  */
 function stripExplicitCompanyTags(text: string): string {
-  return text.replace(/\{([^}]+)\}/g, '').replace(/\s+/g, ' ').trim()
+  // Remove {Company} tags and collapse multiple spaces into one
+  // But preserve leading/trailing spaces as they may be word separators
+  return text.replace(/\{([^}]+)\}/g, '').replace(/\s{2,}/g, ' ')
 }
 
 /**
