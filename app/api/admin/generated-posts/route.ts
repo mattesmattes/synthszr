@@ -114,17 +114,29 @@ export async function PUT(request: NextRequest) {
     }
 
     // Pre-generate Stock-Synthszr when publishing (async, don't block response)
-    if (status === 'published' && !wasPublished && content) {
-      const contentToProcess = typeof content === 'string' ? content : JSON.stringify(content)
-      pregenerateStockSynthszr(contentToProcess)
-        .then((result) => {
-          console.log(`[stock-synthszr] Pre-generation complete: ${result.generated} generated, ${result.skipped} cached, ${result.errors} errors`)
-        })
-        .catch((err) => {
-          console.error('[stock-synthszr] Pre-generation failed:', err)
-        })
+    // This requires content - if not in request, use the content already in DB
+    if (status === 'published' && !wasPublished) {
+      // Get content for stock-synthszr: from request or from DB (fetched earlier for wasPublished check)
+      const contentForProcessing = content || (await supabase
+        .from('generated_posts')
+        .select('content')
+        .eq('id', id)
+        .single()
+        .then(r => r.data?.content))
+
+      if (contentForProcessing) {
+        const contentToProcess = typeof contentForProcessing === 'string' ? contentForProcessing : JSON.stringify(contentForProcessing)
+        pregenerateStockSynthszr(contentToProcess)
+          .then((result) => {
+            console.log(`[stock-synthszr] Pre-generation complete: ${result.generated} generated, ${result.skipped} cached, ${result.errors} errors`)
+          })
+          .catch((err) => {
+            console.error('[stock-synthszr] Pre-generation failed:', err)
+          })
+      }
 
       // Queue translations for all active languages (async, don't block response)
+      // This does NOT require content - it just needs the post ID
       queueTranslations('generated_post', id, 10)
         .then((result) => {
           if (result.error) {

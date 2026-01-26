@@ -351,34 +351,56 @@ export default function GeneratedArticlesPage() {
       })
 
       if (res.ok) {
-        // Trigger translations when publishing
+        // Trigger translations when publishing (with retry logic)
         if (newStatus === 'published') {
           console.log(`[i18n] Triggering translations for post ${postId}`)
-          fetch('/api/admin/translations/queue', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              content_type: 'generated_post',
-              content_id: postId,
-              priority: 10,
-            }),
-          })
-            .then(res => res.json())
-            .then(data => {
-              if (data.queued > 0) {
-                console.log(`[i18n] Queued ${data.queued} translations, starting processing...`)
-                // Immediately start processing the queue
-                fetch('/api/admin/translations/process-queue', {
+
+          const queueWithRetry = async (retries = 3): Promise<{ queued: number; error?: string }> => {
+            for (let attempt = 1; attempt <= retries; attempt++) {
+              try {
+                const queueRes = await fetch('/api/admin/translations/queue', {
                   method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
                   credentials: 'include',
+                  body: JSON.stringify({
+                    content_type: 'generated_post',
+                    content_id: postId,
+                    priority: 10,
+                  }),
                 })
-                  .then(res => res.json())
-                  .then(result => console.log(`[i18n] Processing started: ${result.processed} items`))
-                  .catch(err => console.error('[i18n] Process queue error:', err))
+                if (!queueRes.ok) {
+                  const errorData = await queueRes.json().catch(() => ({ error: 'Unknown error' }))
+                  throw new Error(errorData.error || `HTTP ${queueRes.status}`)
+                }
+                return await queueRes.json()
+              } catch (err) {
+                console.error(`[i18n] Queue attempt ${attempt}/${retries} failed:`, err)
+                if (attempt === retries) {
+                  return { queued: 0, error: err instanceof Error ? err.message : 'Unbekannter Fehler' }
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
               }
-            })
-            .catch(err => console.error('[i18n] Translation queue error:', err))
+            }
+            return { queued: 0, error: 'Alle Versuche fehlgeschlagen' }
+          }
+
+          queueWithRetry().then(async (result) => {
+            if (result.error) {
+              console.error('[i18n] Translation queue failed:', result.error)
+              alert(`⚠️ Post veröffentlicht, aber Übersetzungen fehlgeschlagen: ${result.error}\n\nBitte manuell in /admin/translations starten.`)
+              return
+            }
+            if (result.queued > 0) {
+              console.log(`[i18n] Queued ${result.queued} translations, starting processing...`)
+              fetch('/api/admin/translations/process-queue', {
+                method: 'POST',
+                credentials: 'include',
+              })
+                .then(res => res.json())
+                .then(processResult => console.log(`[i18n] Processing started: ${processResult.processed || 0} items`))
+                .catch(err => console.error('[i18n] Process queue error:', err))
+            }
+          })
         }
         fetchPosts()
       } else {

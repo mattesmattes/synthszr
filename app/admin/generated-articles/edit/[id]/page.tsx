@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2, ImageIcon, Newspaper, X, ChevronDown, Settings2, Sparkles } from 'lucide-react'
+import { ArrowLeft, Loader2, ImageIcon, Newspaper, X, ChevronDown, Settings2, Sparkles, CheckCircle2, AlertCircle, Languages } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -111,6 +111,10 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
   // Cover images
   const [coverImageCount, setCoverImageCount] = useState(0)
+
+  // Translation status
+  const [translationStatus, setTranslationStatus] = useState<'idle' | 'queuing' | 'processing' | 'success' | 'error'>('idle')
+  const [translationMessage, setTranslationMessage] = useState<string>('')
 
   // Metadata section collapsed state
   const [metadataOpen, setMetadataOpen] = useState(false)
@@ -533,37 +537,80 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     // Trigger translations when publishing for the first time
     if (!wasPublished && isNowPublished) {
       console.log(`[i18n] Triggering translations for post ${id}`)
-      fetch('/api/admin/translations/queue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          content_type: 'generated_post',
-          content_id: id,
-          priority: 10,
-        }),
-      })
-        .then(res => res.json())
-        .then(data => {
-          console.log(`[i18n] Queue response: ${data.queued || 0} queued, ${data.skipped || 0} skipped`)
-          // Always start processing the queue (handles any pending items)
-          console.log('[i18n] Starting translation processing...')
-          fetch('/api/admin/translations/process-queue', {
+      setTranslationStatus('queuing')
+      setTranslationMessage('Übersetzungen werden eingereiht...')
+
+      // Queue translations with retry logic
+      const queueWithRetry = async (retries = 3): Promise<{ queued: number; error?: string }> => {
+        for (let attempt = 1; attempt <= retries; attempt++) {
+          try {
+            const res = await fetch('/api/admin/translations/queue', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                content_type: 'generated_post',
+                content_id: id,
+                priority: 10,
+              }),
+            })
+
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
+              throw new Error(errorData.error || `HTTP ${res.status}`)
+            }
+
+            return await res.json()
+          } catch (err) {
+            console.error(`[i18n] Queue attempt ${attempt}/${retries} failed:`, err)
+            if (attempt === retries) {
+              return { queued: 0, error: err instanceof Error ? err.message : 'Unbekannter Fehler' }
+            }
+            // Wait before retry (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+          }
+        }
+        return { queued: 0, error: 'Alle Versuche fehlgeschlagen' }
+      }
+
+      // Execute queue with retry
+      queueWithRetry().then(async (queueResult) => {
+        if (queueResult.error) {
+          console.error('[i18n] Translation queue failed:', queueResult.error)
+          setTranslationStatus('error')
+          setTranslationMessage(`Übersetzungen fehlgeschlagen: ${queueResult.error}`)
+          alert(`⚠️ Übersetzungen konnten nicht eingereiht werden: ${queueResult.error}\n\nBitte manuell in /admin/translations starten.`)
+          return
+        }
+
+        if (queueResult.queued === 0) {
+          console.log('[i18n] No translations to queue (all manually edited or no languages)')
+          setTranslationStatus('success')
+          setTranslationMessage('Keine Übersetzungen nötig')
+          return
+        }
+
+        console.log(`[i18n] Queued ${queueResult.queued} translations`)
+        setTranslationStatus('processing')
+        setTranslationMessage(`${queueResult.queued} Übersetzungen werden verarbeitet...`)
+
+        // Start processing (fire-and-forget is OK here since queue is already saved)
+        try {
+          const processRes = await fetch('/api/admin/translations/process-queue', {
             method: 'POST',
             credentials: 'include',
           })
-            .then(res => res.json())
-            .then(result => console.log(`[i18n] Processing result: ${result.processed || 0} processed, ${result.success || 0} success, ${result.failed || 0} failed`))
-            .catch(err => console.error('[i18n] Process queue error:', err))
-        })
-        .catch(err => {
-          console.error('[i18n] Translation queue error:', err)
-          // Still try to process queue even if queuing failed
-          fetch('/api/admin/translations/process-queue', {
-            method: 'POST',
-            credentials: 'include',
-          }).catch(() => {})
-        })
+          const processResult = await processRes.json()
+          console.log(`[i18n] Processing result:`, processResult)
+          setTranslationStatus('success')
+          setTranslationMessage(`${processResult.success || 0} Übersetzungen gestartet`)
+        } catch (err) {
+          console.error('[i18n] Process queue error:', err)
+          // Queue is saved, processing can be retried manually
+          setTranslationStatus('success')
+          setTranslationMessage(`${queueResult.queued} Übersetzungen eingereiht (Verarbeitung läuft)`)
+        }
+      })
     }
 
     // Re-index thumbnails when publishing to match current article order
@@ -658,6 +705,20 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Speichern
               </Button>
+              {/* Translation Status Indicator */}
+              {translationStatus !== 'idle' && (
+                <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded ${
+                  translationStatus === 'error' ? 'bg-red-100 text-red-700' :
+                  translationStatus === 'success' ? 'bg-green-100 text-green-700' :
+                  'bg-blue-100 text-blue-700'
+                }`}>
+                  {translationStatus === 'queuing' && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {translationStatus === 'processing' && <Languages className="h-3 w-3 animate-pulse" />}
+                  {translationStatus === 'success' && <CheckCircle2 className="h-3 w-3" />}
+                  {translationStatus === 'error' && <AlertCircle className="h-3 w-3" />}
+                  <span>{translationMessage}</span>
+                </div>
+              )}
             </div>
           </div>
 
