@@ -71,6 +71,8 @@ export async function POST(request: NextRequest) {
         const thumbnailHeadline = extractHeadlineFromSourceText(thumbnail.source_text)
         const normalizedThumbnailHeadline = normalizeText(thumbnailHeadline)
 
+        console.log(`[Reindex] Thumbnail "${thumbnailHeadline.slice(0, 40)}" (index ${thumbnail.article_index})`)
+
         // Find best matching article by headline
         let bestScore = 0
         articles.forEach((article, idx) => {
@@ -95,6 +97,10 @@ export async function POST(request: NextRequest) {
               matchMethod = 'contains_headline'
             }
           })
+        }
+
+        if (matchedIndex !== -1) {
+          console.log(`[Reindex]   → Matched to article ${matchedIndex} "${articles[matchedIndex].heading.slice(0, 30)}" via ${matchMethod}`)
         }
       }
 
