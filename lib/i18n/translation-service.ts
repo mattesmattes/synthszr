@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import type { LanguageCode } from '@/lib/types'
+import { normalizeQuotesInTipTap, fixQuotes } from '@/lib/utils/typography'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
@@ -193,12 +194,17 @@ ${JSON.stringify(source.content, null, 2)}`
       }
     }
 
+    // Normalize quotes to the correct typographic style for the target language
+    const normalizedTitle = fixQuotes(title, targetLanguage)
+    const normalizedExcerpt = excerpt ? fixQuotes(excerpt, targetLanguage) : undefined
+    const normalizedContent = normalizeQuotesInTipTap(content, targetLanguage)
+
     return {
       success: true,
-      title,
-      slug: slug || generateSlug(title),
-      excerpt,
-      content,
+      title: normalizedTitle,
+      slug: slug || generateSlug(title), // Use original title for slug generation
+      excerpt: normalizedExcerpt,
+      content: normalizedContent,
     }
   } catch (error) {
     console.error('[Translation] Error:', error)
