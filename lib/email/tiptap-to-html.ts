@@ -531,13 +531,44 @@ export async function generateEmailContentWithVotes(
 
 /**
  * Extract plain text from a TipTap node
+ * Handles mark transitions by adding spaces between adjacent text nodes with different marks
  */
 function extractTextFromNode(node: TiptapNode): string {
   if (node.type === 'text') {
     return node.text || ''
   }
   if (node.content) {
-    return node.content.map(extractTextFromNode).join('')
+    // Join text nodes with space-awareness for mark transitions
+    const parts: string[] = []
+    for (let i = 0; i < node.content.length; i++) {
+      const childNode = node.content[i]
+      const text = extractTextFromNode(childNode)
+
+      // Check for mark transition that needs a space
+      if (i > 0 && childNode.type === 'text' && node.content[i - 1].type === 'text') {
+        const prevNode = node.content[i - 1]
+        const prevMarks = JSON.stringify(prevNode.marks || [])
+        const currMarks = JSON.stringify(childNode.marks || [])
+
+        if (prevMarks !== currMarks) {
+          const prevText = prevNode.text || ''
+          const currText = childNode.text || ''
+          const lastChar = prevText.slice(-1)
+          const firstChar = currText.slice(0, 1)
+
+          // Add space if neither ends/starts with whitespace or punctuation
+          const needsNoSpace = /[\s.,;:!?\-–—()\[\]{}'"„"«»]/.test(lastChar) ||
+                              /[\s.,;:!?\-–—()\[\]{}'"„"«»]/.test(firstChar)
+
+          if (!needsNoSpace && lastChar && firstChar) {
+            parts.push(' ')
+          }
+        }
+      }
+
+      parts.push(text)
+    }
+    return parts.join('')
   }
   return ''
 }
@@ -552,11 +583,35 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string 
   // First, render all content normally
   const fullHtml = renderContent(content)
 
-  // Get the plain text to find sentence boundaries
-  const plainText = content.map(node => {
-    if (node.type === 'text') return node.text || ''
-    return ''
-  }).join('')
+  // Get the plain text to find sentence boundaries (with space handling for mark transitions)
+  const plainTextParts: string[] = []
+  for (let i = 0; i < content.length; i++) {
+    const node = content[i]
+    if (node.type === 'text') {
+      // Check for mark transition that needs a space
+      if (i > 0 && content[i - 1].type === 'text') {
+        const prevNode = content[i - 1]
+        const prevMarks = JSON.stringify(prevNode.marks || [])
+        const currMarks = JSON.stringify(node.marks || [])
+
+        if (prevMarks !== currMarks) {
+          const prevText = prevNode.text || ''
+          const currText = node.text || ''
+          const lastChar = prevText.slice(-1)
+          const firstChar = currText.slice(0, 1)
+
+          const needsNoSpace = /[\s.,;:!?\-–—()\[\]{}'"„"«»]/.test(lastChar) ||
+                              /[\s.,;:!?\-–—()\[\]{}'"„"«»]/.test(firstChar)
+
+          if (!needsNoSpace && lastChar && firstChar) {
+            plainTextParts.push(' ')
+          }
+        }
+      }
+      plainTextParts.push(node.text || '')
+    }
+  }
+  const plainText = plainTextParts.join('')
 
   // Find the last sentence boundary: ". " followed by capital letter
   const sentenceEndRegex = /\.\s+(?=[A-ZÄÖÜ])/g
@@ -630,11 +685,19 @@ export function convertTiptapToHtml(doc: TiptapDoc): string {
 /**
  * Render TipTap node content with marks (bold, italic, links)
  * Includes special styling for "Synthszr Take:" sections
+ *
+ * IMPORTANT: Adjacent text nodes with different marks need space handling.
+ * TipTap stores "italic text" + "normal text" as separate nodes.
+ * Without careful handling, they get concatenated without spaces.
  */
 function renderContent(content?: TiptapNode[]): string {
   if (!content) return ''
 
-  return content.map(node => {
+  const renderedParts: string[] = []
+
+  for (let i = 0; i < content.length; i++) {
+    const node = content[i]
+
     if (node.type === 'text') {
       let text = node.text || ''
 
@@ -672,9 +735,38 @@ function renderContent(content?: TiptapNode[]): string {
         }
       }
 
-      return text
-    }
+      // Check if we need to add a space before this text node
+      // This handles mark transitions (e.g., italic → normal) where TipTap
+      // stores them as separate nodes without preserving the space between
+      if (i > 0 && renderedParts.length > 0) {
+        const prevNode = content[i - 1]
+        const prevText = prevNode.text || ''
+        const currentRawText = node.text || ''
 
-    return ''
-  }).join('')
+        // Check if marks are different (mark transition)
+        const prevMarks = JSON.stringify(prevNode.marks || [])
+        const currMarks = JSON.stringify(node.marks || [])
+        const isMarkTransition = prevMarks !== currMarks
+
+        if (isMarkTransition) {
+          const lastCharOfPrev = prevText.slice(-1)
+          const firstCharOfCurr = currentRawText.slice(0, 1)
+
+          // Add space if:
+          // - Previous doesn't end with whitespace or certain punctuation
+          // - Current doesn't start with whitespace or certain punctuation
+          const needsNoSpace = /[\s.,;:!?\-–—()\[\]{}'"„"«»]/.test(lastCharOfPrev) ||
+                              /[\s.,;:!?\-–—()\[\]{}'"„"«»]/.test(firstCharOfCurr)
+
+          if (!needsNoSpace && lastCharOfPrev && firstCharOfCurr) {
+            renderedParts.push(' ')
+          }
+        }
+      }
+
+      renderedParts.push(text)
+    }
+  }
+
+  return renderedParts.join('')
 }
