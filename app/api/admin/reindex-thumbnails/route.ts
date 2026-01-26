@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
+import { parseTipTapContent } from '@/lib/utils/safe-json'
 
 /**
  * POST /api/admin/reindex-thumbnails
@@ -25,8 +26,11 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
+    // Parse content if it's a string (editor sends JSON-stringified content)
+    const parsedContent = parseTipTapContent(content)
+
     // Extract article headings from TipTap content in order
-    const articles = extractArticleHeadings(content)
+    const articles = extractArticleHeadings(parsedContent)
     console.log(`[Reindex] Found ${articles.length} articles in content for post ${postId}`)
 
     // Get all existing thumbnails for this post
