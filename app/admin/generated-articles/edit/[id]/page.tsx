@@ -613,23 +613,24 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       })
     }
 
-    // Re-index thumbnails when publishing to match current article order
-    if (isNowPublished) {
-      console.log(`[Thumbnails] Re-indexing thumbnails for post ${id}`)
-      fetch('/api/admin/reindex-thumbnails', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ postId: id, content }),
+    // Re-index thumbnails on EVERY save to match current article order
+    // This ensures thumbnails stay in sync even when articles are reordered in draft
+    console.log(`[Thumbnails] Re-indexing thumbnails for post ${id}`)
+    fetch('/api/admin/reindex-thumbnails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ postId: id, content }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.updated > 0 || data.deleted > 0) {
+          console.log(`[Thumbnails] Re-indexed: ${data.updated} updated, ${data.deleted} deleted`)
+        } else if (data.mismatchCount > 0) {
+          console.warn(`[Thumbnails] ${data.mismatchCount} thumbnails could not be matched to articles`)
+        }
       })
-        .then(res => res.json())
-        .then(data => {
-          if (data.updated > 0 || data.deleted > 0) {
-            console.log(`[Thumbnails] Re-indexed: ${data.updated} updated, ${data.deleted} deleted`)
-          }
-        })
-        .catch(err => console.error('[Thumbnails] Re-index error:', err))
-    }
+      .catch(err => console.error('[Thumbnails] Re-index error:', err))
 
     // Generate article thumbnails if missing (count all non-failed thumbnails)
     const existingThumbnails = articleThumbnails.filter(t => t.generation_status !== 'failed').length

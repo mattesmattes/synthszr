@@ -65,21 +65,37 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Priority 2: Match by source_text (headline similarity)
+      // Priority 2: Match by source_text (extract headline from source_text and compare)
       if (matchedIndex === -1 && thumbnail.source_text) {
-        const normalizedThumbnailText = normalizeText(thumbnail.source_text)
+        // Extract headline from source_text (first line or ### heading)
+        const thumbnailHeadline = extractHeadlineFromSourceText(thumbnail.source_text)
+        const normalizedThumbnailHeadline = normalizeText(thumbnailHeadline)
 
         // Find best matching article by headline
         let bestScore = 0
         articles.forEach((article, idx) => {
           const normalizedArticleText = normalizeText(article.heading)
-          const score = calculateSimilarity(normalizedThumbnailText, normalizedArticleText)
-          if (score > bestScore && score > 0.5) { // Require at least 50% similarity
+          const score = calculateSimilarity(normalizedThumbnailHeadline, normalizedArticleText)
+          if (score > bestScore && score > 0.3) { // Lower threshold since we're comparing headlines
             bestScore = score
             matchedIndex = idx
-            matchMethod = `source_text (${Math.round(score * 100)}%)`
+            matchMethod = `headline (${Math.round(score * 100)}%)`
           }
         })
+
+        // Fallback: try matching full source_text if headline match failed
+        if (matchedIndex === -1) {
+          const normalizedFullText = normalizeText(thumbnail.source_text)
+          articles.forEach((article, idx) => {
+            const normalizedArticleText = normalizeText(article.heading)
+            // Check if article heading appears in source_text
+            if (normalizedFullText.includes(normalizedArticleText) ||
+                normalizedArticleText.split(' ').filter(w => w.length > 3).every(word => normalizedFullText.includes(word))) {
+              matchedIndex = idx
+              matchMethod = 'contains_headline'
+            }
+          })
+        }
       }
 
       if (matchedIndex !== -1 && matchedIndex !== thumbnail.article_index) {
@@ -215,4 +231,31 @@ function calculateSimilarity(a: string, b: string): number {
   const union = new Set([...wordsA, ...wordsB])
 
   return intersection.size / union.size
+}
+
+/**
+ * Extract headline from source_text (typically the first line or ### heading)
+ * Source texts often have formats like:
+ * - "### Headline\nContent..."
+ * - "Headline: Content..."
+ * - "Headline\nContent..."
+ */
+function extractHeadlineFromSourceText(sourceText: string): string {
+  const lines = sourceText.split('\n').filter(l => l.trim())
+  if (lines.length === 0) return sourceText
+
+  let headline = lines[0].trim()
+
+  // Remove markdown heading markers
+  headline = headline.replace(/^#+\s*/, '')
+
+  // If the first line looks like a label (e.g., "Quelle:"), try the second line
+  if (headline.match(/^[A-Za-z]+:\s*$/) && lines.length > 1) {
+    headline = lines[1].trim().replace(/^#+\s*/, '')
+  }
+
+  // Remove trailing colons or periods
+  headline = headline.replace(/[:.]$/, '')
+
+  return headline
 }

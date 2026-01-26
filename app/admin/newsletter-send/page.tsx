@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Send, FileText, Mail, Loader2, CheckCircle, AlertCircle, Clock, Users, History, Settings, FileEdit, Globe, AlertTriangle } from 'lucide-react'
+import { Send, FileText, Mail, Loader2, CheckCircle, AlertCircle, Clock, Users, History, Settings, FileEdit, Globe, AlertTriangle, Image } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -74,6 +74,18 @@ export default function NewsletterSendPage() {
   } | null>(null)
   const [showTranslationWarning, setShowTranslationWarning] = useState(false)
   const [checkingTranslations, setCheckingTranslations] = useState(false)
+
+  // Thumbnail validation state
+  const [thumbnailStatus, setThumbnailStatus] = useState<{
+    articlesInContent: number
+    thumbnailsFound: number
+    matched: number
+    mismatched: number
+    orphaned: number
+    missing: number
+    valid: boolean
+  } | null>(null)
+  const [checkingThumbnails, setCheckingThumbnails] = useState(false)
 
   const supabase = createClient()
 
@@ -185,6 +197,116 @@ export default function NewsletterSendPage() {
     }
   }
 
+  // Check thumbnail order for selected post
+  const checkThumbnailStatus = useCallback(async (postId: string) => {
+    setCheckingThumbnails(true)
+    try {
+      // Get post content
+      const { data: post } = await supabase
+        .from('generated_posts')
+        .select('content')
+        .eq('id', postId)
+        .single()
+
+      if (!post?.content) {
+        setThumbnailStatus({ articlesInContent: 0, thumbnailsFound: 0, matched: 0, mismatched: 0, orphaned: 0, missing: 0, valid: true })
+        return
+      }
+
+      // Parse content and extract H2 headings (articles)
+      let content: Record<string, unknown>
+      try {
+        content = typeof post.content === 'string' ? JSON.parse(post.content) : post.content
+      } catch {
+        setThumbnailStatus({ articlesInContent: 0, thumbnailsFound: 0, matched: 0, mismatched: 0, orphaned: 0, missing: 0, valid: true })
+        return
+      }
+
+      // Extract article headings
+      const articles: Array<{ heading: string; queueItemId?: string }> = []
+      const traverse = (node: Record<string, unknown>) => {
+        if (!node) return
+        if (node.type === 'heading' && (node.attrs as Record<string, unknown>)?.level === 2) {
+          const extractText = (n: Record<string, unknown>): string => {
+            if (n.type === 'text') return (n.text as string) || ''
+            if (Array.isArray(n.content)) return (n.content as Record<string, unknown>[]).map(extractText).join('')
+            return ''
+          }
+          const headingText = extractText(node)
+          const lowerText = headingText.toLowerCase()
+          if (!lowerText.includes('mattes synthese') && !lowerText.includes("mattes' synthese") && !lowerText.includes('synthszr take')) {
+            const attrs = node.attrs as Record<string, unknown> | undefined
+            articles.push({ heading: headingText, queueItemId: attrs?.queueItemId as string | undefined })
+          }
+        }
+        if (Array.isArray(node.content)) {
+          for (const child of node.content as Record<string, unknown>[]) traverse(child)
+        }
+      }
+      traverse(content)
+
+      // Get thumbnails
+      const { data: thumbnails } = await supabase
+        .from('post_images')
+        .select('id, article_index, article_queue_item_id')
+        .eq('post_id', postId)
+        .eq('image_type', 'article_thumbnail')
+
+      if (!thumbnails || thumbnails.length === 0) {
+        setThumbnailStatus({
+          articlesInContent: articles.length,
+          thumbnailsFound: 0,
+          matched: 0,
+          mismatched: 0,
+          orphaned: 0,
+          missing: articles.length,
+          valid: articles.length === 0
+        })
+        return
+      }
+
+      // Check matches
+      let matched = 0
+      let mismatched = 0
+      let orphaned = 0
+
+      for (const thumb of thumbnails) {
+        if (thumb.article_queue_item_id) {
+          const matchIdx = articles.findIndex(a => a.queueItemId === thumb.article_queue_item_id)
+          if (matchIdx === thumb.article_index) {
+            matched++
+          } else if (matchIdx === -1) {
+            orphaned++
+          } else {
+            mismatched++
+          }
+        } else if (thumb.article_index !== null && thumb.article_index < articles.length) {
+          matched++ // Assume index-based match is correct
+        } else {
+          orphaned++
+        }
+      }
+
+      const missing = Math.max(0, articles.length - thumbnails.length)
+      const valid = mismatched === 0 && orphaned === 0
+
+      setThumbnailStatus({
+        articlesInContent: articles.length,
+        thumbnailsFound: thumbnails.length,
+        matched,
+        mismatched,
+        orphaned,
+        missing,
+        valid
+      })
+    } catch (err) {
+      console.error('Error checking thumbnail status:', err)
+      setThumbnailStatus(null)
+    } finally {
+      setCheckingThumbnails(false)
+    }
+  }, [supabase])
+
   // Check translation status for selected post
   const checkTranslationStatus = useCallback(async (postId: string) => {
     setCheckingTranslations(true)
@@ -233,12 +355,13 @@ export default function NewsletterSendPage() {
     }
   }, [supabase])
 
-  // Check translations when post selection changes
+  // Check translations and thumbnails when post selection changes
   useEffect(() => {
     if (selectedPostId) {
       checkTranslationStatus(selectedPostId)
+      checkThumbnailStatus(selectedPostId)
     }
-  }, [selectedPostId, checkTranslationStatus])
+  }, [selectedPostId, checkTranslationStatus, checkThumbnailStatus])
 
   async function sendTestEmail() {
     if (!selectedPostId || !testEmail) return
@@ -447,6 +570,36 @@ export default function NewsletterSendPage() {
                         : translationStatus.pending > 0
                           ? `${translationStatus.pending} Übersetzungen ausstehend`
                           : `Alle ${translationStatus.total} Übersetzungen fertig`}
+                    </span>
+                  </div>
+                )}
+
+                {/* Thumbnail Status Indicator */}
+                {thumbnailStatus && (
+                  <div className={`mb-3 p-2 rounded text-xs flex items-center gap-2 ${
+                    !thumbnailStatus.valid
+                      ? 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200'
+                      : thumbnailStatus.missing > 0
+                        ? 'bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                        : 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200'
+                  }`}>
+                    {checkingThumbnails ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : !thumbnailStatus.valid ? (
+                      <AlertCircle className="h-3 w-3" />
+                    ) : thumbnailStatus.missing > 0 ? (
+                      <AlertTriangle className="h-3 w-3" />
+                    ) : (
+                      <Image className="h-3 w-3" />
+                    )}
+                    <span>
+                      {checkingThumbnails
+                        ? 'Prüfe Thumbnails...'
+                        : !thumbnailStatus.valid
+                          ? `Thumbnail-Reihenfolge stimmt nicht (${thumbnailStatus.mismatched} falsch, ${thumbnailStatus.orphaned} verwaist)`
+                          : thumbnailStatus.missing > 0
+                            ? `${thumbnailStatus.missing} von ${thumbnailStatus.articlesInContent} Thumbnails fehlen`
+                            : `Alle ${thumbnailStatus.thumbnailsFound} Thumbnails korrekt zugeordnet`}
                     </span>
                   </div>
                 )}
