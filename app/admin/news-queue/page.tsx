@@ -75,6 +75,7 @@ interface QueueItem {
   status: string
   queued_at: string
   expires_at: string
+  email_received_at: string | null
   skip_reason: string | null
 }
 
@@ -505,9 +506,10 @@ export default function NewsQueuePage() {
   // Extract all synthesis scores for gradient calculation (sorting is now server-side)
   const allSynthesisScores = items.map(item => item.synthesis_score)
 
-  // Group items by 8-hour clusters for better overview, then sort each group by score descending
+  // Group items by 8-hour clusters based on newsletter received date (not queue date)
   const groupedItems = items.reduce((groups, item) => {
-    const date = new Date(item.queued_at)
+    // Use email_received_at if available, fall back to queued_at
+    const date = new Date(item.email_received_at || item.queued_at)
     const clusterHour = Math.floor(date.getHours() / 8) * 8
     const nextClusterHour = (clusterHour + 8) % 24
     const hourKey = `${date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })} ${clusterHour}:00-${nextClusterHour}:00`

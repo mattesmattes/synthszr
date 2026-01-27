@@ -117,6 +117,7 @@ export async function addToQueue(
     synthesisScore?: number
     relevanceScore?: number
     uniquenessScore?: number
+    emailReceivedAt?: string | null
     metadata?: Record<string, unknown>
   }>
 ): Promise<{ added: number; skipped: number; errors: string[] }> {
@@ -141,6 +142,7 @@ export async function addToQueue(
         synthesis_score: item.synthesisScore || 0,
         relevance_score: item.relevanceScore || 0,
         uniqueness_score: item.uniquenessScore || 0,
+        email_received_at: item.emailReceivedAt || null,
         metadata: item.metadata || {}
       }
 
@@ -195,7 +197,7 @@ export async function queueFromDailyRepo(
   // Fetch the items
   const { data: repoItems, error } = await supabase
     .from('daily_repo')
-    .select('id, title, content, source_email, source_url')
+    .select('id, title, content, source_email, source_url, email_received_at')
     .in('id', repoItemIds)
 
   if (error || !repoItems) {
@@ -208,6 +210,7 @@ export async function queueFromDailyRepo(
     content: item.content || undefined,
     sourceEmail: item.source_email,
     sourceUrl: item.source_url,
+    emailReceivedAt: item.email_received_at,
   }))
 
   return addToQueue(items)

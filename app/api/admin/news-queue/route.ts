@@ -239,30 +239,34 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'candidates array required' }, { status: 400 })
         }
 
-        // Fetch content from daily_repo for all candidates
+        // Fetch content and email_received_at from daily_repo for all candidates
         const supabase = await createClient()
         const sourceItemIds = candidates.map(c => c.source_item_id).filter(Boolean)
         const { data: repoItems } = await supabase
           .from('daily_repo')
-          .select('id, content')
+          .select('id, content, email_received_at')
           .in('id', sourceItemIds)
 
-        const contentMap = new Map(repoItems?.map(r => [r.id, r.content]) || [])
+        const repoDataMap = new Map(repoItems?.map(r => [r.id, { content: r.content, emailReceivedAt: r.email_received_at }]) || [])
 
         // Map synthesis scores to queue scores
         // originality_score (0-10) -> synthesis_score (0-10)
         // relevance_score (0-10) -> relevance_score (0-10)
         // uniqueness_score calculated separately (default 5)
-        const items = candidates.map(c => ({
-          dailyRepoId: c.source_item_id,
-          title: c.title,
-          content: contentMap.get(c.source_item_id) || undefined,
-          sourceEmail: c.source_identifier,
-          sourceUrl: c.source_url,
-          synthesisScore: c.originality_score,
-          relevanceScore: c.relevance_score,
-          uniquenessScore: 5 // Default, can be calculated later
-        }))
+        const items = candidates.map(c => {
+          const repoData = repoDataMap.get(c.source_item_id)
+          return {
+            dailyRepoId: c.source_item_id,
+            title: c.title,
+            content: repoData?.content || undefined,
+            sourceEmail: c.source_identifier,
+            sourceUrl: c.source_url,
+            synthesisScore: c.originality_score,
+            relevanceScore: c.relevance_score,
+            uniquenessScore: 5, // Default, can be calculated later
+            emailReceivedAt: repoData?.emailReceivedAt || null
+          }
+        })
 
         const result = await addToQueue(items)
         return NextResponse.json(result)

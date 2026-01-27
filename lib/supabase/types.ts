@@ -100,6 +100,7 @@ export interface NewsQueueItem {
   skip_reason: string | null
   queued_at: string
   expires_at: string
+  email_received_at: string | null
   metadata: Record<string, unknown>
 }
 
