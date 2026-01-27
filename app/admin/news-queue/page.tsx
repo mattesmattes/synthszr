@@ -16,7 +16,10 @@ import {
   PieChart,
   Plus,
   Calendar,
-  Database
+  Database,
+  ChevronDown,
+  ExternalLink,
+  X
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -30,6 +33,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 
 interface QueueStats {
   pending: number
@@ -100,6 +108,7 @@ export default function NewsQueuePage() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [statusFilter, setStatusFilter] = useState<string>('pending')
   const [viewingItem, setViewingItem] = useState<QueueItem | null>(null)
+  const [showSidebar, setShowSidebar] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showBalancedDialog, setShowBalancedDialog] = useState(false)
   const [showImportDialog, setShowImportDialog] = useState(false)
@@ -341,6 +350,26 @@ export default function NewsQueuePage() {
     setActionLoading(null)
   }
 
+  const handleUnselect = async (itemId: string) => {
+    setActionLoading(`unselect-${itemId}`)
+    try {
+      const res = await fetch('/api/admin/news-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'reset-item',
+          itemId
+        })
+      })
+      if (res.ok) {
+        fetchData()
+      }
+    } catch (error) {
+      console.error('Unselect failed:', error)
+    }
+    setActionLoading(null)
+  }
+
   const toggleSelect = (id: string) => {
     const newSelected = new Set(selectedItems)
     if (newSelected.has(id)) {
@@ -539,60 +568,148 @@ export default function NewsQueuePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left: Source Distribution */}
-        <div className="lg:col-span-1">
-          <Card>
-            <CardHeader className="p-3 pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <PieChart className="h-4 w-4" />
-                Quellen-Verteilung
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 pt-0">
-              {distribution.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">
-                  Keine Daten
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {distribution.map((source) => (
-                    <div key={source.source_identifier}>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="truncate max-w-[150px]">
-                          {source.source_display_name || source.source_identifier}
-                        </span>
-                        <span className={`font-mono ${source.percentage_of_total > 30 ? 'text-red-500 font-bold' : ''}`}>
-                          {source.percentage_of_total}%
-                        </span>
+      {/* Collapsible Sidebar: Source Distribution & Embeddings */}
+      <Collapsible open={showSidebar} onOpenChange={setShowSidebar} className="mb-4">
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" size="sm" className="w-full justify-between text-xs">
+            <span className="flex items-center gap-2">
+              <PieChart className="h-3.5 w-3.5" />
+              Quellen-Verteilung & Embeddings
+              {distribution.some(d => d.percentage_of_total > 30) && (
+                <Badge variant="destructive" className="text-[9px] px-1 py-0">!</Badge>
+              )}
+            </span>
+            <ChevronDown className={`h-4 w-4 transition-transform ${showSidebar ? 'rotate-180' : ''}`} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Source Distribution */}
+            <Card>
+              <CardHeader className="p-3 pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <PieChart className="h-4 w-4" />
+                  Quellen-Verteilung
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                {distribution.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-4">
+                    Keine Daten
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {distribution.map((source) => (
+                      <div key={source.source_identifier}>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="truncate max-w-[200px]">
+                            {source.source_display_name || source.source_identifier}
+                          </span>
+                          <span className={`font-mono ${source.percentage_of_total > 30 ? 'text-red-500 font-bold' : ''}`}>
+                            {source.percentage_of_total}%
+                          </span>
+                        </div>
+                        <Progress
+                          value={source.percentage_of_total}
+                          className={`h-2 ${source.percentage_of_total > 30 ? '[&>div]:bg-red-500' : ''}`}
+                        />
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                          <span>{source.pending_count} pending</span>
+                          <span className="text-blue-500">{source.selected_count} selected</span>
+                          <span className="text-green-500">{source.used_count} used</span>
+                        </div>
                       </div>
-                      <Progress
-                        value={source.percentage_of_total}
-                        className={`h-2 ${source.percentage_of_total > 30 ? '[&>div]:bg-red-500' : ''}`}
-                      />
-                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
-                        <span>{source.pending_count} pending</span>
-                        <span className="text-blue-500">{source.selected_count} selected</span>
-                        <span className="text-green-500">{source.used_count} used</span>
+                    ))}
+                  </div>
+                )}
+
+                {distribution.some(d => d.percentage_of_total > 30) && (
+                  <div className="mt-4 p-2 bg-red-500/10 rounded text-xs text-red-600 flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>Eine oder mehrere Quellen überschreiten das 30%-Limit</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Synthese-Embeddings */}
+            <Card>
+              <CardHeader className="p-3 pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Database className="h-4 w-4" />
+                  Synthese-Embeddings
+                </CardTitle>
+                <p className="text-[10px] text-muted-foreground">
+                  Für Synthese-Pipeline benötigt
+                </p>
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                {embeddingLoading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-xs text-muted-foreground">Lade Status...</span>
+                  </div>
+                ) : embeddingStatus ? (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Embeddings vorhanden</span>
+                        <span className="font-medium">{embeddingStatus.withEmbeddings} / {embeddingStatus.total}</span>
+                      </div>
+                      <Progress value={embeddingStatus.percentComplete} className="h-2" />
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>{embeddingStatus.percentComplete}% vollständig</span>
+                        <span>{embeddingStatus.missingEmbeddings} fehlend</span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
 
-              {distribution.some(d => d.percentage_of_total > 30) && (
-                <div className="mt-4 p-2 bg-red-500/10 rounded text-xs text-red-600 flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>Eine oder mehrere Quellen überschreiten das 30%-Limit</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    {embeddingStatus.missingEmbeddings > 0 && (
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <p className="text-xs text-muted-foreground">
+                          {embeddingStatus.missingEmbeddings} fehlend
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs h-7"
+                          onClick={runBackfill}
+                          disabled={backfillRunning}
+                        >
+                          {backfillRunning ? (
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                          )}
+                          Backfill
+                        </Button>
+                      </div>
+                    )}
 
-        </div>
+                    {backfillResult && (
+                      <div className={`flex items-center gap-2 text-xs ${backfillResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                        {backfillResult.success ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                        {backfillResult.message}
+                      </div>
+                    )}
 
-        {/* Right: Queue Items */}
-        <div className="lg:col-span-2">
+                    {embeddingStatus.missingEmbeddings === 0 && (
+                      <div className="flex items-center gap-2 text-xs text-green-600">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Alle Items haben Embeddings
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Status nicht verfügbar</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Queue Items - Full Width */}
+      <div>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <Badge variant={statusFilter === 'pending' ? 'default' : 'outline'} className="text-xs cursor-pointer" onClick={() => setStatusFilter('pending')}>
@@ -679,8 +796,11 @@ export default function NewsQueuePage() {
                         />
                       )}
                       <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${getStatusColor(item.status)}`} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-medium truncate">{item.title}</div>
+                      <div
+                        className="min-w-0 flex-1 cursor-pointer"
+                        onClick={() => setViewingItem(item)}
+                      >
+                        <div className="text-xs font-medium truncate hover:text-primary">{item.title}</div>
                         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                           <span className="truncate max-w-[120px]">
                             {item.source_display_name || item.source_identifier}
@@ -708,6 +828,22 @@ export default function NewsQueuePage() {
                         >
                           <Eye className="h-3 w-3" />
                         </Button>
+                        {statusFilter === 'selected' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleUnselect(item.id)}
+                            disabled={actionLoading === `unselect-${item.id}`}
+                            title="Zurück zu Pending"
+                          >
+                            {actionLoading === `unselect-${item.id}` ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <X className="h-3 w-3" />
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -716,97 +852,10 @@ export default function NewsQueuePage() {
             </Card>
           )}
         </div>
-      </div>
-
-      {/* Synthese-Embeddings Card */}
-      <Card className="mt-6">
-        <CardHeader className="p-4 pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Database className="h-4 w-4" />
-            Synthese-Embeddings
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Embeddings werden für die Synthese-Pipeline benötigt, um ähnliche historische Artikel zu finden
-          </p>
-        </CardHeader>
-        <CardContent className="p-4 pt-2">
-          {embeddingLoading ? (
-            <div className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-xs text-muted-foreground">Lade Status...</span>
-            </div>
-          ) : embeddingStatus ? (
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Embeddings vorhanden</span>
-                  <span className="font-medium">{embeddingStatus.withEmbeddings} / {embeddingStatus.total}</span>
-                </div>
-                <Progress value={embeddingStatus.percentComplete} className="h-2" />
-                <div className="flex justify-between text-[10px] text-muted-foreground">
-                  <span>{embeddingStatus.percentComplete}% vollständig</span>
-                  <span>{embeddingStatus.missingEmbeddings} fehlend</span>
-                </div>
-              </div>
-
-              {embeddingStatus.missingEmbeddings > 0 && (
-                <div className="flex items-center justify-between pt-2 border-t">
-                  <div>
-                    <p className="text-xs font-medium">Embeddings generieren</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      Fehlende Embeddings für historische Artikel erzeugen
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-xs"
-                    onClick={runBackfill}
-                    disabled={backfillRunning}
-                  >
-                    {backfillRunning ? (
-                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-3 w-3 mr-1" />
-                    )}
-                    Backfill starten
-                  </Button>
-                </div>
-              )}
-
-              {backfillResult && (
-                <div className={`flex items-center gap-2 text-xs ${backfillResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                  {backfillResult.success ? (
-                    <CheckCircle2 className="h-3 w-3" />
-                  ) : (
-                    <XCircle className="h-3 w-3" />
-                  )}
-                  {backfillResult.message}
-                </div>
-              )}
-
-              {embeddingStatus.missingEmbeddings === 0 && (
-                <div className="flex items-center gap-2 text-xs text-green-600">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Alle Items haben Embeddings
-                </div>
-              )}
-
-              {embeddingStatus.missingEmbeddings > 0 && (
-                <p className="text-[10px] text-muted-foreground">
-                  Hinweis: Verarbeitet 50 Items pro Durchlauf. Bei vielen fehlenden Embeddings mehrmals ausführen.
-                </p>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Status nicht verfügbar</p>
-          )}
-        </CardContent>
-      </Card>
 
       {/* View Item Dialog */}
       <Dialog open={!!viewingItem} onOpenChange={() => setViewingItem(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle className="text-sm flex items-center gap-2">
               {viewingItem && getStatusIcon(viewingItem.status)}
