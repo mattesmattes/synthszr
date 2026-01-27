@@ -8,6 +8,8 @@ const COOKIE_NAME = 'synthszr_subscribed'
 const COOKIE_DAYS = 365
 const POPUP_DELAY_MS = 5000 // Show popup after 5 seconds
 const LOCAL_STORAGE_EMAIL_KEY = 'synthszr_email_draft'
+const LOCAL_STORAGE_VISIT_KEY = 'synthszr_visit_count'
+const SHOW_POPUP_EVERY_N_VISITS = 7 // Show popup on every 7th visit
 
 // Translations for the popup
 type PopupTranslation = {
@@ -64,6 +66,16 @@ export function NewsletterPopup() {
     const savedEmail = localStorage.getItem(LOCAL_STORAGE_EMAIL_KEY)
     if (savedEmail) {
       setEmail(savedEmail)
+    }
+
+    // Increment visit counter and check if we should show popup
+    const currentCount = parseInt(localStorage.getItem(LOCAL_STORAGE_VISIT_KEY) || '0', 10)
+    const newCount = currentCount + 1
+    localStorage.setItem(LOCAL_STORAGE_VISIT_KEY, newCount.toString())
+
+    // Only show popup on every Nth visit (1st, 8th, 15th, etc.)
+    if (newCount % SHOW_POPUP_EVERY_N_VISITS !== 1) {
+      return
     }
 
     // Show popup after delay
@@ -135,8 +147,9 @@ export function NewsletterPopup() {
         setStatus('success')
         // Set cookie to not show popup again
         setCookie(COOKIE_NAME, 'true', COOKIE_DAYS)
-        // Clear localStorage
+        // Clear localStorage (email draft and visit counter)
         localStorage.removeItem(LOCAL_STORAGE_EMAIL_KEY)
+        localStorage.removeItem(LOCAL_STORAGE_VISIT_KEY)
         // Auto-close after success
         setTimeout(() => setIsVisible(false), 3000)
       } else {
