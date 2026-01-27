@@ -505,10 +505,12 @@ export default function NewsQueuePage() {
   // Extract all synthesis scores for gradient calculation (sorting is now server-side)
   const allSynthesisScores = items.map(item => item.synthesis_score)
 
-  // Group items by hour for clustering, then sort each group by score descending
+  // Group items by 8-hour clusters for better overview, then sort each group by score descending
   const groupedItems = items.reduce((groups, item) => {
     const date = new Date(item.queued_at)
-    const hourKey = `${date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })} ${date.getHours()}:00`
+    const clusterHour = Math.floor(date.getHours() / 8) * 8
+    const nextClusterHour = (clusterHour + 8) % 24
+    const hourKey = `${date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })} ${clusterHour}:00-${nextClusterHour}:00`
     if (!groups[hourKey]) {
       groups[hourKey] = []
     }
