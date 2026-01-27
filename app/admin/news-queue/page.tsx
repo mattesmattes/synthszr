@@ -18,6 +18,8 @@ import {
   Calendar,
   Database,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   X
 } from 'lucide-react'
@@ -100,10 +102,14 @@ interface SynthesisCandidateItem {
   created_at: string
 }
 
+const PAGE_SIZE = 50
+
 export default function NewsQueuePage() {
   const [stats, setStats] = useState<QueueStats | null>(null)
   const [distribution, setDistribution] = useState<SourceDistribution[]>([])
   const [items, setItems] = useState<QueueItem[]>([])
+  const [totalItems, setTotalItems] = useState(0)
+  const [currentPage, setCurrentPage] = useState(0)
   const [balancedSelection, setBalancedSelection] = useState<BalancedSelection[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
@@ -134,13 +140,14 @@ export default function NewsQueuePage() {
     remaining?: number
   } | null>(null)
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (page = currentPage) => {
     setLoading(true)
     try {
+      const offset = page * PAGE_SIZE
       const [statsRes, distRes, itemsRes] = await Promise.all([
         fetch('/api/admin/news-queue?action=stats'),
         fetch('/api/admin/news-queue?action=distribution'),
-        fetch(`/api/admin/news-queue?action=list&status=${statusFilter}&limit=100`)
+        fetch(`/api/admin/news-queue?action=list&status=${statusFilter}&limit=${PAGE_SIZE}&offset=${offset}`)
       ])
 
       if (statsRes.ok) setStats(await statsRes.json())
@@ -148,17 +155,23 @@ export default function NewsQueuePage() {
       if (itemsRes.ok) {
         const data = await itemsRes.json()
         setItems(data.items || [])
+        setTotalItems(data.total || 0)
       }
     } catch (error) {
       console.error('Failed to fetch queue data:', error)
     }
     setLoading(false)
-  }, [statusFilter])
+  }, [statusFilter, currentPage])
 
   useEffect(() => {
     fetchData()
     fetchEmbeddingStatus()
   }, [fetchData])
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setCurrentPage(0)
+  }, [statusFilter])
 
   async function fetchEmbeddingStatus() {
     setEmbeddingLoading(true)
@@ -459,13 +472,8 @@ export default function NewsQueuePage() {
     }
   }
 
-  // Sort items: for pending, newest first (by queued_at descending)
-  const sortedItems = statusFilter === 'pending'
-    ? [...items].sort((a, b) => new Date(b.queued_at).getTime() - new Date(a.queued_at).getTime())
-    : items
-
-  // Extract all synthesis scores for gradient calculation
-  const allSynthesisScores = sortedItems.map(item => item.synthesis_score)
+  // Extract all synthesis scores for gradient calculation (sorting is now server-side)
+  const allSynthesisScores = items.map(item => item.synthesis_score)
 
   return (
     <div className="p-4 md:p-6 max-w-full">
@@ -518,7 +526,7 @@ export default function NewsQueuePage() {
             size="sm"
             variant="outline"
             className="text-xs"
-            onClick={fetchData}
+            onClick={() => fetchData()}
           >
             <RefreshCw className="h-3 w-3 mr-1" />
             Aktualisieren
@@ -767,7 +775,7 @@ export default function NewsQueuePage() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : sortedItems.length === 0 ? (
+          ) : items.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
                 <ListTodo className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
@@ -781,7 +789,7 @@ export default function NewsQueuePage() {
                   <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
                     <input
                       type="checkbox"
-                      checked={selectedItems.size === sortedItems.length && sortedItems.length > 0}
+                      checked={selectedItems.size === items.length && items.length > 0}
                       onChange={selectAll}
                       className="rounded"
                     />
@@ -789,7 +797,7 @@ export default function NewsQueuePage() {
                   </div>
                 )}
                 <div className="divide-y max-h-[60vh] overflow-y-auto">
-                  {sortedItems.map((item) => (
+                  {items.map((item) => (
                     <div
                       key={item.id}
                       className={`flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors ${
@@ -859,6 +867,44 @@ export default function NewsQueuePage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* Pagination */}
+          {totalItems > PAGE_SIZE && (
+            <div className="flex items-center justify-between mt-3 text-xs">
+              <div className="text-muted-foreground">
+                Zeige {currentPage * PAGE_SIZE + 1}-{Math.min((currentPage + 1) * PAGE_SIZE, totalItems)} von {totalItems}
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => {
+                    setCurrentPage(p => p - 1)
+                    fetchData(currentPage - 1)
+                  }}
+                  disabled={currentPage === 0 || loading}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="px-2 text-muted-foreground">
+                  Seite {currentPage + 1} / {Math.ceil(totalItems / PAGE_SIZE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => {
+                    setCurrentPage(p => p + 1)
+                    fetchData(currentPage + 1)
+                  }}
+                  disabled={(currentPage + 1) * PAGE_SIZE >= totalItems || loading}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           )}
         </div>
 

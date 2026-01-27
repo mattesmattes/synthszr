@@ -128,12 +128,14 @@ export async function GET(request: NextRequest) {
         const status = searchParams.get('status') || 'pending'
         const limit = parseIntParam(searchParams.get('limit'), 50, 1, 500)
         const offset = parseIntParam(searchParams.get('offset'), 0, 0)
+        const sort = searchParams.get('sort') || (status === 'pending' ? 'queued_at' : 'total_score')
+        const sortAsc = searchParams.get('sortAsc') === 'true'
 
         let query = supabase
           .from('news_queue')
           .select('*', { count: 'exact' })
           .eq('status', status)
-          .order('total_score', { ascending: false })
+          .order(sort, { ascending: sortAsc })
           .range(offset, offset + limit - 1)
 
         // For pending items, only show non-expired ones
