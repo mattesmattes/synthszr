@@ -809,7 +809,7 @@ export default function NewsQueuePage() {
                   {hourGroups.map(([hourKey, groupItems]) => (
                     <div key={hourKey}>
                       {/* Hour cluster header */}
-                      <div className="sticky top-0 bg-zinc-800 px-3 py-1.5 border-b border-zinc-700 text-[10px] font-medium text-white">
+                      <div className="sticky top-0 bg-zinc-800 px-3 py-1.5 border-b border-zinc-700 text-[11px] font-medium text-white">
                         {hourKey} ({groupItems.length})
                       </div>
                       {/* Items in this hour */}
