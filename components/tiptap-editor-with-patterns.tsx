@@ -5,6 +5,7 @@ import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
+import { HeadingWithQueueId } from "@/lib/tiptap/heading-with-queue-id"
 import {
   Bold,
   Italic,
@@ -74,7 +75,12 @@ export function TiptapEditorWithPatterns({
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        heading: false, // Use HeadingWithQueueId instead
+      }),
+      HeadingWithQueueId.configure({
+        levels: [1, 2, 3, 4, 5, 6],
+      }),
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {

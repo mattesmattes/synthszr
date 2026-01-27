@@ -3,6 +3,7 @@ import { generateJSON } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import { normalizeQuotes } from '@/lib/utils/typography'
+import { HeadingWithQueueId } from '@/lib/tiptap/heading-with-queue-id'
 
 /**
  * Converts markdown string to TipTap JSON format
@@ -18,8 +19,14 @@ export function markdownToTiptap(markdown: string): Record<string, unknown> {
   const html = marked.parse(normalizedMarkdown, { async: false }) as string
 
   // Convert HTML to TipTap JSON with Link extension for proper link handling
+  // Use HeadingWithQueueId to preserve queueItemId attributes
   const json = generateJSON(html, [
-    StarterKit,
+    StarterKit.configure({
+      heading: false,
+    }),
+    HeadingWithQueueId.configure({
+      levels: [1, 2, 3, 4, 5, 6],
+    }),
     Link.configure({
       openOnClick: false,
     }),
@@ -34,7 +41,12 @@ export function markdownToTiptap(markdown: string): Record<string, unknown> {
 export function tiptapToHtml(json: Record<string, unknown>): string {
   const { generateHTML } = require('@tiptap/core')
   return generateHTML(json, [
-    StarterKit,
+    StarterKit.configure({
+      heading: false,
+    }),
+    HeadingWithQueueId.configure({
+      levels: [1, 2, 3, 4, 5, 6],
+    }),
     Link.configure({
       openOnClick: false,
     }),

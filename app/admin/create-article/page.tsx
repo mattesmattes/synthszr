@@ -41,6 +41,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
 import ReactMarkdown from 'react-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
+import { embedQueueItemIds } from '@/lib/utils/embed-queue-ids'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { ensureInitialEditHistory } from '@/lib/edit-learning/history'
 
@@ -635,7 +636,21 @@ export default function CreateArticlePage() {
       const slug = metadata.slug || generateSlug(title)
 
       // Convert markdown to TipTap JSON and stringify for TEXT column
-      const tiptapContent = markdownToTiptap(bodyContent)
+      let tiptapContent = markdownToTiptap(bodyContent)
+
+      // Embed queue item IDs into H2 headings for stable thumbnail matching
+      // This allows thumbnails to follow H2s when users reorder articles in the editor
+      if (usedQueueItemIds.length > 0) {
+        // Fetch queue item titles for matching
+        const { data: queueItemsData } = await supabase
+          .from('news_queue')
+          .select('id, title, content')
+          .in('id', usedQueueItemIds)
+
+        if (queueItemsData && queueItemsData.length > 0) {
+          tiptapContent = embedQueueItemIds(tiptapContent, queueItemsData)
+        }
+      }
 
       const { data: newPost, error } = await supabase.from('generated_posts').insert({
         digest_id: selectedDigestId || null,
