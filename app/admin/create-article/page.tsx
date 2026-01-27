@@ -153,7 +153,7 @@ export default function CreateArticlePage() {
   const [queueStats, setQueueStats] = useState<QueueStats>({ pending: 0, selected: 0, used: 0 })
   const [sourceDistribution, setSourceDistribution] = useState<SourceDistribution[]>([])
   const [usedQueueItemIds, setUsedQueueItemIds] = useState<string[]>([])
-  const [maxQueueItems, setMaxQueueItems] = useState(10)
+  const [maxQueueItems, setMaxQueueItems] = useState(20)
 
   // Keep digests for reference (image generation uses digest content)
   const [digests, setDigests] = useState<Digest[]>([])
@@ -796,7 +796,7 @@ export default function CreateArticlePage() {
                   value={[maxQueueItems]}
                   onValueChange={([v]) => setMaxQueueItems(v)}
                   min={5}
-                  max={20}
+                  max={30}
                   step={1}
                   className="w-full"
                 />
