@@ -392,6 +392,36 @@ export default function NewsQueuePage() {
     setActionLoading(null)
   }
 
+  // Select a single item immediately (moves from pending to selected)
+  const handleSelectSingle = async (itemId: string) => {
+    setActionLoading(`select-${itemId}`)
+    try {
+      const res = await fetch('/api/admin/news-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'select',
+          itemIds: [itemId]
+        })
+      })
+      const data = await res.json()
+      if (res.ok && !data.error) {
+        // Remove item from local state immediately for better UX
+        setItems(prev => prev.filter(item => item.id !== itemId))
+        // Update stats locally
+        if (stats) {
+          setStats({ ...stats, pending: stats.pending - 1, selected: stats.selected + 1 })
+        }
+      } else {
+        alert(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
+      }
+    } catch (error) {
+      console.error('Select failed:', error)
+      alert('Netzwerkfehler beim Auswählen')
+    }
+    setActionLoading(null)
+  }
+
   const toggleSelect = (id: string) => {
     const newSelected = new Set(selectedItems)
     if (newSelected.has(id)) {
@@ -476,6 +506,7 @@ export default function NewsQueuePage() {
   const allSynthesisScores = items.map(item => item.synthesis_score)
 
   return (
+    <Collapsible open={showSidebar} onOpenChange={setShowSidebar}>
     <div className="p-4 md:p-6 max-w-full">
       <div className="mb-4">
         <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
@@ -531,52 +562,77 @@ export default function NewsQueuePage() {
             <RefreshCw className="h-3 w-3 mr-1" />
             Aktualisieren
           </Button>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm" className="text-xs">
+              <PieChart className="h-3 w-3 mr-1" />
+              Quellen & Embeddings
+              {distribution.some(d => d.percentage_of_total > 30) && (
+                <Badge variant="destructive" className="text-[9px] px-1 py-0 ml-1">!</Badge>
+              )}
+              <ChevronDown className={`h-3 w-3 ml-1 transition-transform ${showSidebar ? 'rotate-180' : ''}`} />
+            </Button>
+          </CollapsibleTrigger>
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards / Tab Navigation */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-          <Card className="cursor-pointer hover:bg-muted/50" onClick={() => setStatusFilter('pending')}>
+          <Card
+            className={`cursor-pointer transition-all ${statusFilter === 'pending' ? 'ring-2 ring-yellow-500 bg-yellow-500/5' : 'hover:bg-muted/50'}`}
+            onClick={() => setStatusFilter('pending')}
+          >
             <CardContent className="p-3">
               <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">Pending</div>
+                <div className={`text-xs ${statusFilter === 'pending' ? 'text-yellow-600 font-medium' : 'text-muted-foreground'}`}>Pending</div>
                 <Clock className="h-4 w-4 text-yellow-500" />
               </div>
               <div className="text-2xl font-bold">{stats.pending}</div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:bg-muted/50" onClick={() => setStatusFilter('selected')}>
+          <Card
+            className={`cursor-pointer transition-all ${statusFilter === 'selected' ? 'ring-2 ring-blue-500 bg-blue-500/5' : 'hover:bg-muted/50'}`}
+            onClick={() => setStatusFilter('selected')}
+          >
             <CardContent className="p-3">
               <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">Selected</div>
+                <div className={`text-xs ${statusFilter === 'selected' ? 'text-blue-600 font-medium' : 'text-muted-foreground'}`}>Selected</div>
                 <Play className="h-4 w-4 text-blue-500" />
               </div>
               <div className="text-2xl font-bold">{stats.selected}</div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:bg-muted/50" onClick={() => setStatusFilter('used')}>
+          <Card
+            className={`cursor-pointer transition-all ${statusFilter === 'used' ? 'ring-2 ring-green-500 bg-green-500/5' : 'hover:bg-muted/50'}`}
+            onClick={() => setStatusFilter('used')}
+          >
             <CardContent className="p-3">
               <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">Used</div>
+                <div className={`text-xs ${statusFilter === 'used' ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>Used</div>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
               </div>
               <div className="text-2xl font-bold">{stats.used}</div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:bg-muted/50" onClick={() => setStatusFilter('expired')}>
+          <Card
+            className={`cursor-pointer transition-all ${statusFilter === 'expired' ? 'ring-2 ring-gray-500 bg-gray-500/5' : 'hover:bg-muted/50'}`}
+            onClick={() => setStatusFilter('expired')}
+          >
             <CardContent className="p-3">
               <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">Expired</div>
+                <div className={`text-xs ${statusFilter === 'expired' ? 'text-gray-600 font-medium' : 'text-muted-foreground'}`}>Expired</div>
                 <XCircle className="h-4 w-4 text-gray-500" />
               </div>
               <div className="text-2xl font-bold">{stats.expired}</div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:bg-muted/50" onClick={() => setStatusFilter('skipped')}>
+          <Card
+            className={`cursor-pointer transition-all ${statusFilter === 'skipped' ? 'ring-2 ring-orange-500 bg-orange-500/5' : 'hover:bg-muted/50'}`}
+            onClick={() => setStatusFilter('skipped')}
+          >
             <CardContent className="p-3">
               <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">Skipped</div>
+                <div className={`text-xs ${statusFilter === 'skipped' ? 'text-orange-600 font-medium' : 'text-muted-foreground'}`}>Skipped</div>
                 <SkipForward className="h-4 w-4 text-orange-500" />
               </div>
               <div className="text-2xl font-bold">{stats.skipped}</div>
@@ -585,21 +641,8 @@ export default function NewsQueuePage() {
         </div>
       )}
 
-      {/* Collapsible Sidebar: Source Distribution & Embeddings */}
-      <Collapsible open={showSidebar} onOpenChange={setShowSidebar} className="mb-4">
-        <CollapsibleTrigger asChild>
-          <Button variant="outline" size="sm" className="w-full justify-between text-xs">
-            <span className="flex items-center gap-2">
-              <PieChart className="h-3.5 w-3.5" />
-              Quellen-Verteilung & Embeddings
-              {distribution.some(d => d.percentage_of_total > 30) && (
-                <Badge variant="destructive" className="text-[9px] px-1 py-0">!</Badge>
-              )}
-            </span>
-            <ChevronDown className={`h-4 w-4 transition-transform ${showSidebar ? 'rotate-180' : ''}`} />
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="pt-3">
+      {/* Collapsible Content: Source Distribution & Embeddings */}
+      <CollapsibleContent className="mb-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Source Distribution */}
             <Card>
@@ -723,53 +766,9 @@ export default function NewsQueuePage() {
             </Card>
           </div>
         </CollapsibleContent>
-      </Collapsible>
 
       {/* Queue Items - Full Width */}
       <div>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Badge variant={statusFilter === 'pending' ? 'default' : 'outline'} className="text-xs cursor-pointer" onClick={() => setStatusFilter('pending')}>
-                Pending
-              </Badge>
-              <Badge variant={statusFilter === 'selected' ? 'default' : 'outline'} className="text-xs cursor-pointer" onClick={() => setStatusFilter('selected')}>
-                Selected
-              </Badge>
-              <Badge variant={statusFilter === 'used' ? 'default' : 'outline'} className="text-xs cursor-pointer" onClick={() => setStatusFilter('used')}>
-                Used
-              </Badge>
-            </div>
-            {selectedItems.size > 0 && statusFilter === 'pending' && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{selectedItems.size} ausgewählt</span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={handleSelect}
-                  disabled={actionLoading === 'select'}
-                >
-                  {actionLoading === 'select' ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    'Für Artikel auswählen'
-                  )}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => {
-                    const reason = prompt('Grund für Skip:')
-                    if (reason) handleSkip(reason)
-                  }}
-                  disabled={actionLoading === 'skip'}
-                >
-                  Skip
-                </Button>
-              </div>
-            )}
-          </div>
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -785,33 +784,12 @@ export default function NewsQueuePage() {
           ) : (
             <Card>
               <CardContent className="p-0">
-                {statusFilter === 'pending' && (
-                  <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
-                    <input
-                      type="checkbox"
-                      checked={selectedItems.size === items.length && items.length > 0}
-                      onChange={selectAll}
-                      className="rounded"
-                    />
-                    <span className="text-xs text-muted-foreground">Alle auswählen</span>
-                  </div>
-                )}
                 <div className="divide-y max-h-[60vh] overflow-y-auto">
                   {items.map((item) => (
                     <div
                       key={item.id}
-                      className={`flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors ${
-                        selectedItems.has(item.id) ? 'bg-primary/5' : ''
-                      }`}
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors"
                     >
-                      {statusFilter === 'pending' && (
-                        <input
-                          type="checkbox"
-                          checked={selectedItems.has(item.id)}
-                          onChange={() => toggleSelect(item.id)}
-                          className="rounded shrink-0"
-                        />
-                      )}
                       <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${getStatusColor(item.status)}`} />
                       <div
                         className="min-w-0 flex-1 cursor-pointer"
@@ -845,6 +823,24 @@ export default function NewsQueuePage() {
                         >
                           <Eye className="h-3 w-3" />
                         </Button>
+                        {statusFilter === 'pending' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-[10px] px-2"
+                            onClick={() => handleSelectSingle(item.id)}
+                            disabled={actionLoading === `select-${item.id}`}
+                          >
+                            {actionLoading === `select-${item.id}` ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <>
+                                <Play className="h-3 w-3 mr-1" />
+                                Select
+                              </>
+                            )}
+                          </Button>
+                        )}
                         {statusFilter === 'selected' && (
                           <Button
                             variant="ghost"
@@ -1166,5 +1162,6 @@ export default function NewsQueuePage() {
         </DialogContent>
       </Dialog>
     </div>
+    </Collapsible>
   )
 }
