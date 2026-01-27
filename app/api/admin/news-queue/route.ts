@@ -23,6 +23,7 @@ import {
   resetSelectedToPending
 } from '@/lib/news-queue/service'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { parseIntParam } from '@/lib/validation/query-params'
 
 // GET: List queue items, stats, or distribution
@@ -128,15 +129,22 @@ export async function GET(request: NextRequest) {
         const status = searchParams.get('status') || 'pending'
         const limit = parseIntParam(searchParams.get('limit'), 50, 1, 500)
         const offset = parseIntParam(searchParams.get('offset'), 0, 0)
-        const sort = searchParams.get('sort') || (status === 'pending' ? 'queued_at' : 'total_score')
-        const sortAsc = searchParams.get('sortAsc') === 'true'
-
         let query = supabase
           .from('news_queue')
           .select('*', { count: 'exact' })
           .eq('status', status)
-          .order(sort, { ascending: sortAsc })
-          .range(offset, offset + limit - 1)
+
+        // Sorting: newest first, then by score (for pending)
+        // For other statuses: just by score
+        if (status === 'pending') {
+          query = query
+            .order('queued_at', { ascending: false })
+            .order('total_score', { ascending: false })
+        } else {
+          query = query.order('total_score', { ascending: false })
+        }
+
+        query = query.range(offset, offset + limit - 1)
 
         // For pending items, only show non-expired ones
         if (status === 'pending') {
@@ -329,8 +337,9 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'itemId required' }, { status: 400 })
         }
 
-        const supabase = await createClient()
-        const { data, error } = await supabase
+        // Use admin client to bypass RLS
+        const adminClient = createAdminClient()
+        const { data, error } = await adminClient
           .from('news_queue')
           .update({
             status: 'pending',
@@ -346,7 +355,7 @@ export async function POST(request: NextRequest) {
 
         if (!data || data.length === 0) {
           console.warn('[NewsQueue] reset-item: no rows updated for itemId:', itemId)
-          return NextResponse.json({ error: 'Item not found or already pending' }, { status: 404 })
+          return NextResponse.json({ error: 'Item not found' }, { status: 404 })
         }
 
         console.log('[NewsQueue] reset-item success:', data[0])
