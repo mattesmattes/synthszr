@@ -505,6 +505,19 @@ export default function NewsQueuePage() {
   // Extract all synthesis scores for gradient calculation (sorting is now server-side)
   const allSynthesisScores = items.map(item => item.synthesis_score)
 
+  // Group items by hour for clustering
+  const groupedItems = items.reduce((groups, item) => {
+    const date = new Date(item.queued_at)
+    const hourKey = `${date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })} ${date.getHours()}:00`
+    if (!groups[hourKey]) {
+      groups[hourKey] = []
+    }
+    groups[hourKey].push(item)
+    return groups
+  }, {} as Record<string, QueueItem[]>)
+
+  const hourGroups = Object.entries(groupedItems)
+
   return (
     <Collapsible open={showSidebar} onOpenChange={setShowSidebar}>
     <div className="p-4 md:p-6 max-w-full">
@@ -784,79 +797,93 @@ export default function NewsQueuePage() {
           ) : (
             <Card>
               <CardContent className="p-0">
-                <div className="divide-y max-h-[60vh] overflow-y-auto">
-                  {items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors"
-                    >
-                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${getStatusColor(item.status)}`} />
-                      <div
-                        className="min-w-0 flex-1 cursor-pointer"
-                        onClick={() => setViewingItem(item)}
-                      >
-                        <div className="text-xs font-medium truncate hover:text-primary">{item.title}</div>
-                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                          <span className="truncate max-w-[120px]">
-                            {item.source_display_name || item.source_identifier}
-                          </span>
-                          <span>{formatTimeAgo(item.queued_at)}</span>
-                        </div>
+                <div className="max-h-[60vh] overflow-y-auto">
+                  {hourGroups.map(([hourKey, groupItems]) => (
+                    <div key={hourKey}>
+                      {/* Hour cluster header */}
+                      <div className="sticky top-0 bg-muted/80 backdrop-blur-sm px-3 py-1.5 border-b text-[10px] font-medium text-muted-foreground">
+                        {hourKey} ({groupItems.length})
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Badge
-                          variant="outline"
-                          className="text-[9px] px-1.5 py-0 h-4 font-mono font-bold border-0"
-                          style={{
-                            backgroundColor: getSynthesisScoreColor(item.synthesis_score, allSynthesisScores),
-                            color: '#000'
-                          }}
-                          title={`Synthesis: ${item.synthesis_score.toFixed(1)} | Total: ${item.total_score.toFixed(1)}`}
-                        >
-                          {item.synthesis_score.toFixed(1)}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => setViewingItem(item)}
-                        >
-                          <Eye className="h-3 w-3" />
-                        </Button>
-                        {statusFilter === 'pending' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-6 text-[10px] px-2"
-                            onClick={() => handleSelectSingle(item.id)}
-                            disabled={actionLoading === `select-${item.id}`}
+                      {/* Items in this hour */}
+                      <div className="divide-y">
+                        {groupItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors"
                           >
-                            {actionLoading === `select-${item.id}` ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <>
-                                <Play className="h-3 w-3 mr-1" />
-                                Select
-                              </>
+                            {/* Action button on the left */}
+                            {statusFilter === 'pending' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-[10px] px-2 shrink-0"
+                                onClick={() => handleSelectSingle(item.id)}
+                                disabled={actionLoading === `select-${item.id}`}
+                              >
+                                {actionLoading === `select-${item.id}` ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <>
+                                    <Play className="h-3 w-3 mr-1" />
+                                    Select
+                                  </>
+                                )}
+                              </Button>
                             )}
-                          </Button>
-                        )}
-                        {statusFilter === 'selected' && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                            onClick={() => handleUnselect(item.id)}
-                            disabled={actionLoading === `unselect-${item.id}`}
-                            title="Zurück zu Pending"
-                          >
-                            {actionLoading === `unselect-${item.id}` ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <X className="h-3 w-3" />
+                            {statusFilter === 'selected' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-[10px] px-2 shrink-0 text-muted-foreground hover:text-destructive hover:border-destructive"
+                                onClick={() => handleUnselect(item.id)}
+                                disabled={actionLoading === `unselect-${item.id}`}
+                                title="Zurück zu Pending"
+                              >
+                                {actionLoading === `unselect-${item.id}` ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <>
+                                    <X className="h-3 w-3 mr-1" />
+                                    Remove
+                                  </>
+                                )}
+                              </Button>
                             )}
-                          </Button>
-                        )}
+                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${getStatusColor(item.status)}`} />
+                            <div
+                              className="min-w-0 flex-1 cursor-pointer"
+                              onClick={() => setViewingItem(item)}
+                            >
+                              <div className="text-xs font-medium truncate hover:text-primary">{item.title}</div>
+                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                <span className="truncate max-w-[150px]">
+                                  {item.source_display_name || item.source_identifier}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1.5 py-0 h-4 font-mono font-bold border-0"
+                                style={{
+                                  backgroundColor: getSynthesisScoreColor(item.synthesis_score, allSynthesisScores),
+                                  color: '#000'
+                                }}
+                                title={`Synthesis: ${item.synthesis_score.toFixed(1)} | Total: ${item.total_score.toFixed(1)}`}
+                              >
+                                {item.synthesis_score.toFixed(1)}
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => setViewingItem(item)}
+                              >
+                                <Eye className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
