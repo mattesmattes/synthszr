@@ -229,6 +229,16 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'candidates array required' }, { status: 400 })
         }
 
+        // Fetch content from daily_repo for all candidates
+        const supabase = await createClient()
+        const sourceItemIds = candidates.map(c => c.source_item_id).filter(Boolean)
+        const { data: repoItems } = await supabase
+          .from('daily_repo')
+          .select('id, content')
+          .in('id', sourceItemIds)
+
+        const contentMap = new Map(repoItems?.map(r => [r.id, r.content]) || [])
+
         // Map synthesis scores to queue scores
         // originality_score (0-10) -> synthesis_score (0-10)
         // relevance_score (0-10) -> relevance_score (0-10)
@@ -236,6 +246,7 @@ export async function POST(request: NextRequest) {
         const items = candidates.map(c => ({
           dailyRepoId: c.source_item_id,
           title: c.title,
+          content: contentMap.get(c.source_item_id) || undefined,
           sourceEmail: c.source_identifier,
           sourceUrl: c.source_url,
           synthesisScore: c.originality_score,
@@ -317,20 +328,27 @@ export async function POST(request: NextRequest) {
         }
 
         const supabase = await createClient()
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('news_queue')
           .update({
             status: 'pending',
             selected_at: null
           })
           .eq('id', itemId)
-          .in('status', ['selected', 'pending']) // Only reset if selected or pending
+          .select('id, status')
 
         if (error) {
+          console.error('[NewsQueue] reset-item error:', error)
           return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
-        return NextResponse.json({ success: true })
+        if (!data || data.length === 0) {
+          console.warn('[NewsQueue] reset-item: no rows updated for itemId:', itemId)
+          return NextResponse.json({ error: 'Item not found or already pending' }, { status: 404 })
+        }
+
+        console.log('[NewsQueue] reset-item success:', data[0])
+        return NextResponse.json({ success: true, updated: data[0] })
       }
 
       default:

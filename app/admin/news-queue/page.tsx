@@ -362,14 +362,19 @@ export default function NewsQueuePage() {
           itemId
         })
       })
-      if (res.ok) {
+      const data = await res.json()
+      if (res.ok && data.success) {
+        // Remove item from local state immediately for better UX
+        setItems(prev => prev.filter(item => item.id !== itemId))
+        // Then refresh to get accurate data
         await fetchData()
       } else {
-        const data = await res.json()
         console.error('Unselect failed:', data.error)
+        alert(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
       }
     } catch (error) {
       console.error('Unselect failed:', error)
+      alert('Netzwerkfehler beim Zurücksetzen')
     }
     setActionLoading(null)
   }
@@ -892,27 +897,42 @@ export default function NewsQueuePage() {
                   = 0.4×Synthesis + 0.3×Relevance + 0.3×Uniqueness
                 </div>
               </div>
-              {viewingItem.content && (
+              {viewingItem.content ? (
                 <div>
                   <div className="text-muted-foreground mb-1">Content</div>
                   <div className="text-sm bg-muted/50 p-3 rounded max-h-[300px] overflow-y-auto whitespace-pre-wrap">
                     {viewingItem.content}
                   </div>
                 </div>
-              )}
-              {!viewingItem.content && viewingItem.excerpt && (
+              ) : viewingItem.excerpt ? (
                 <div>
                   <div className="text-muted-foreground mb-1">Excerpt</div>
                   <p className="text-sm">{viewingItem.excerpt}</p>
                 </div>
+              ) : (
+                <div className="p-3 bg-muted/30 rounded text-center text-muted-foreground">
+                  <p className="text-sm">Kein Content verfügbar</p>
+                  {viewingItem.source_url && (
+                    <a
+                      href={viewingItem.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline text-xs mt-1 inline-flex items-center gap-1"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Quelle öffnen
+                    </a>
+                  )}
+                </div>
               )}
-              {viewingItem.source_url && (
+              {viewingItem.source_url && (viewingItem.content || viewingItem.excerpt) && (
                 <a
                   href={viewingItem.source_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline block truncate"
+                  className="text-primary hover:underline block truncate flex items-center gap-1"
                 >
+                  <ExternalLink className="h-3 w-3 shrink-0" />
                   {viewingItem.source_url}
                 </a>
               )}
