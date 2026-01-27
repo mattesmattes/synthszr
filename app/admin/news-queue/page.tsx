@@ -505,7 +505,7 @@ export default function NewsQueuePage() {
   // Extract all synthesis scores for gradient calculation (sorting is now server-side)
   const allSynthesisScores = items.map(item => item.synthesis_score)
 
-  // Group items by hour for clustering
+  // Group items by hour for clustering, then sort each group by score descending
   const groupedItems = items.reduce((groups, item) => {
     const date = new Date(item.queued_at)
     const hourKey = `${date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })} ${date.getHours()}:00`
@@ -516,7 +516,11 @@ export default function NewsQueuePage() {
     return groups
   }, {} as Record<string, QueueItem[]>)
 
-  const hourGroups = Object.entries(groupedItems)
+  // Sort items within each hour group by total_score descending
+  const hourGroups = Object.entries(groupedItems).map(([key, groupItems]) => [
+    key,
+    groupItems.sort((a, b) => b.total_score - a.total_score)
+  ] as [string, QueueItem[]])
 
   return (
     <Collapsible open={showSidebar} onOpenChange={setShowSidebar}>
