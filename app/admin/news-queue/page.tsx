@@ -102,7 +102,7 @@ interface SynthesisCandidateItem {
   created_at: string
 }
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 100
 
 export default function NewsQueuePage() {
   const [stats, setStats] = useState<QueueStats | null>(null)
@@ -892,8 +892,8 @@ export default function NewsQueuePage() {
             </Card>
           )}
 
-          {/* Pagination */}
-          {totalItems > PAGE_SIZE && (
+          {/* Pagination - always show when there are items */}
+          {totalItems > 0 && (
             <div className="flex items-center justify-between mt-3 text-xs">
               <div className="text-muted-foreground">
                 Zeige {currentPage * PAGE_SIZE + 1}-{Math.min((currentPage + 1) * PAGE_SIZE, totalItems)} von {totalItems}
