@@ -62,6 +62,7 @@ interface QueueItem {
   id: string
   title: string
   excerpt: string | null
+  content: string | null
   source_identifier: string
   source_display_name: string | null
   source_url: string | null
@@ -362,7 +363,10 @@ export default function NewsQueuePage() {
         })
       })
       if (res.ok) {
-        fetchData()
+        await fetchData()
+      } else {
+        const data = await res.json()
+        console.error('Unselect failed:', data.error)
       }
     } catch (error) {
       console.error('Unselect failed:', error)
@@ -888,7 +892,15 @@ export default function NewsQueuePage() {
                   = 0.4×Synthesis + 0.3×Relevance + 0.3×Uniqueness
                 </div>
               </div>
-              {viewingItem.excerpt && (
+              {viewingItem.content && (
+                <div>
+                  <div className="text-muted-foreground mb-1">Content</div>
+                  <div className="text-sm bg-muted/50 p-3 rounded max-h-[300px] overflow-y-auto whitespace-pre-wrap">
+                    {viewingItem.content}
+                  </div>
+                </div>
+              )}
+              {!viewingItem.content && viewingItem.excerpt && (
                 <div>
                   <div className="text-muted-foreground mb-1">Excerpt</div>
                   <p className="text-sm">{viewingItem.excerpt}</p>
