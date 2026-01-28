@@ -788,12 +788,11 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
     let articleIndex = 0
 
     h2s.forEach((h2) => {
-      // Skip if already processed or is "Mattes Synthese" / "Synthszr Take" heading
-      if (h2.classList.contains('news-heading-processed')) return
+      // Skip "Mattes Synthese" / "Synthszr Take" headings entirely
       const headingText = h2.textContent?.toLowerCase() || ''
       if (headingText.includes('mattes synthese') || headingText.includes("mattes' synthese") || headingText.includes('synthszr take')) return
 
-      // Insert thumbnail placeholder before the H2 if we have one for this article
+      // Get queue item ID for thumbnail matching
       // PRIORITY ORDER for queueItemId:
       // 1. data-queue-item-id from DOM (most stable - survives reordering)
       // 2. queueItemIds array by position (legacy fallback)
@@ -802,31 +801,41 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
       const arrayQueueItemId = queueItemIds?.[articleIndex]
       const expectedQueueItemId = domQueueItemId || arrayQueueItemId
 
-      const thumbnail = articleThumbnails.find(t => {
-        if (t.generation_status !== 'completed') return false
-        // Match by queue item ID (stable) - works with both DOM and array-based IDs
-        if (expectedQueueItemId && t.article_queue_item_id === expectedQueueItemId) {
-          return true
+      // THUMBNAIL INSERTION: Check separately from main processing
+      // This allows thumbnails to be inserted even if H2 was already processed
+      // (handles case where thumbnails load after initial render)
+      if (!h2.previousElementSibling?.classList.contains('article-thumbnail-container')) {
+        const thumbnail = articleThumbnails.find(t => {
+          if (t.generation_status !== 'completed') return false
+          // Match by queue item ID (stable) - works with both DOM and array-based IDs
+          if (expectedQueueItemId && t.article_queue_item_id === expectedQueueItemId) {
+            return true
+          }
+          // Always also try article_index matching (handles legacy + mismatched queue IDs)
+          return t.article_index === articleIndex
+        })
+        if (thumbnail) {
+          // Add separator before thumbnail (except for first article)
+          if (articleIndex > 0) {
+            const separator = document.createElement('div')
+            separator.className = 'article-separator h-8 my-8'
+            h2.parentNode?.insertBefore(separator, h2)
+          }
+          const thumbnailContainer = document.createElement('div')
+          thumbnailContainer.className = 'article-thumbnail-container flex justify-center my-4'
+          h2.parentNode?.insertBefore(thumbnailContainer, h2)
+          newThumbnailPortals.push({ element: thumbnailContainer, thumbnail, h2Element: h2 as HTMLElement })
         }
-        // Always also try article_index matching (handles legacy + mismatched queue IDs)
-        return t.article_index === articleIndex
-      })
-      if (thumbnail && !h2.previousElementSibling?.classList.contains('article-thumbnail-container')) {
-        // Add separator before thumbnail (except for first article)
-        if (articleIndex > 0) {
-          const separator = document.createElement('div')
-          separator.className = 'article-separator h-8 my-8'
-          h2.parentNode?.insertBefore(separator, h2)
-        }
-        const thumbnailContainer = document.createElement('div')
-        thumbnailContainer.className = 'article-thumbnail-container flex justify-center my-4'
-        h2.parentNode?.insertBefore(thumbnailContainer, h2)
-        newThumbnailPortals.push({ element: thumbnailContainer, thumbnail, h2Element: h2 as HTMLElement })
       }
 
-      // Add anchor ID for deep linking from company pages
+      // Skip rest of processing if already processed (favicon, links, etc.)
+      const alreadyProcessed = h2.classList.contains('news-heading-processed')
+
+      // Add anchor ID for deep linking (always, even if processed - ensures ID is set)
       h2.id = `article-${articleIndex}`
       articleIndex++
+
+      if (alreadyProcessed) return
 
       // Find the next sibling paragraph that contains a source link
       let nextSibling = h2.nextElementSibling
@@ -972,7 +981,7 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
     if (editor) {
       // Wait for DOM to update
       const timeoutId = setTimeout(async () => {
-        processNewsHeadings() // Process news headings (adds favicons, removes source links)
+        processNewsHeadings() // Process news headings (adds favicons, removes source links, inserts thumbnails)
         processMattesSyntheseText()
         // Process Synthszr rating links BEFORE hiding {Company} tags
         // so the company detection can find explicit tags
