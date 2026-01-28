@@ -649,156 +649,151 @@ export async function runSynthesisPipelineWithProgress(
   const items = await getDigestItems(digestId)
   const itemsToProcess = items.slice(0, maxItemsToProcess)
 
-  // Get existing candidates to skip already-processed items (Phase 1 continuation)
-  const { data: existingCandidates } = await supabase
+  // Get existing candidates to check if Phase 1 already ran
+  const { data: existingCandidates, count: existingCandidateCount } = await supabase
     .from('synthesis_candidates')
-    .select('source_item_id')
+    .select('source_item_id', { count: 'exact' })
     .eq('digest_id', digestId)
 
-  const alreadyScoredIds = new Set<string>()
-  if (existingCandidates) {
-    for (const c of existingCandidates) {
-      alreadyScoredIds.add(c.source_item_id)
-    }
+  // OPTIMIZATION: If candidates already exist, skip Phase 1 entirely
+  // Phase 1 (scoring) is expensive and only needs to run once per digest
+  const skipPhase1 = (existingCandidateCount || 0) > 0
+
+  if (skipPhase1) {
+    console.log(`[Pipeline] Phase 1 SKIPPED: ${existingCandidateCount} candidates already exist. Going directly to Phase 2.`)
+    onProgress({
+      type: 'init',
+      totalItems: existingCandidateCount || 0,
+      message: `${existingCandidateCount} Kandidaten gefunden, überspringe Bewertung...`,
+    })
   }
-
-  const itemsNeedingScoring = itemsToProcess.filter(item => !alreadyScoredIds.has(item.id))
-  const skippedPhase1 = itemsToProcess.length - itemsNeedingScoring.length
-
-  if (skippedPhase1 > 0) {
-    console.log(`[Pipeline] Phase 1 continuation: skipping ${skippedPhase1} already-scored items`)
-  }
-
-  onProgress({
-    type: 'init',
-    totalItems: itemsToProcess.length,
-  })
 
   const allCandidates: ScoredCandidate[] = []
   // Track items without similar articles for content-only synthesis
   const itemsWithoutSimilar: Array<{ id: string; title: string; content: string }> = []
 
-  // Phase 1: Search and score for each item
-  // Reserve 60s for Phase 2 - stop Phase 1 early if needed
-  const PHASE1_TIMEOUT_MS = PIPELINE_TIMEOUT_MS - 60000
-  // After 60% of Phase 1 time, switch to fast mode (queue without scoring)
-  const PHASE1_FAST_MODE_MS = PHASE1_TIMEOUT_MS * 0.6
-  let fastModeEnabled = false
-
-  for (let i = 0; i < itemsNeedingScoring.length; i++) {
-    const item = itemsNeedingScoring[i]
-    const overallIndex = skippedPhase1 + i
-
-    // Check timeout during Phase 1 - leave time for Phase 2
-    const phase1Elapsed = Date.now() - pipelineStartTime
-    if (phase1Elapsed > PHASE1_TIMEOUT_MS) {
-      const remaining = itemsNeedingScoring.length - i
-      console.log(`[Pipeline] Phase 1 time limit reached at item ${overallIndex + 1}/${itemsToProcess.length} - ${remaining} items remaining`)
-      onProgress({
-        type: 'partial',
-        message: `Phase 1 Zeit-Limit bei Item ${overallIndex + 1}/${itemsToProcess.length}. ${candidatesFound} neue Kandidaten.`,
-      })
-      break
-    }
-
-    // Enable fast mode after 60% of Phase 1 time - queue items without scoring
-    if (!fastModeEnabled && phase1Elapsed > PHASE1_FAST_MODE_MS) {
-      const remaining = itemsNeedingScoring.length - i
-      console.log(`[Pipeline] Switching to fast mode at item ${overallIndex + 1} - ${remaining} items will be queued without scoring`)
-      fastModeEnabled = true
-      onProgress({
-        type: 'partial',
-        message: `Fast-Mode aktiviert: Verbleibende ${remaining} Items werden direkt zur Queue hinzugefügt.`,
-      })
-    }
-
+  // Phase 1: Search and score for each item (ONLY if no candidates exist yet)
+  if (!skipPhase1) {
     onProgress({
-      type: 'searching',
-      currentItem: overallIndex + 1,
+      type: 'init',
       totalItems: itemsToProcess.length,
-      itemTitle: item.title,
     })
 
-    try {
-      // FAST MODE: Skip scoring and queue directly
-      if (fastModeEnabled) {
-        itemsWithoutSimilar.push({ id: item.id, title: item.title, content: item.content })
-        console.log(`[Pipeline] Fast mode: queuing "${item.title.slice(0, 40)}..." without scoring`)
-        continue
+    // Reserve 60s for Phase 2 - stop Phase 1 early if needed
+    const PHASE1_TIMEOUT_MS = PIPELINE_TIMEOUT_MS - 60000
+    // After 60% of Phase 1 time, switch to fast mode (queue without scoring)
+    const PHASE1_FAST_MODE_MS = PHASE1_TIMEOUT_MS * 0.6
+    let fastModeEnabled = false
+
+    for (let i = 0; i < itemsToProcess.length; i++) {
+      const item = itemsToProcess[i]
+
+      // Check timeout during Phase 1 - leave time for Phase 2
+      const phase1Elapsed = Date.now() - pipelineStartTime
+      if (phase1Elapsed > PHASE1_TIMEOUT_MS) {
+        const remaining = itemsToProcess.length - i
+        console.log(`[Pipeline] Phase 1 time limit reached at item ${i + 1}/${itemsToProcess.length} - ${remaining} items remaining`)
+        onProgress({
+          type: 'partial',
+          message: `Phase 1 Zeit-Limit bei Item ${i + 1}/${itemsToProcess.length}. ${candidatesFound} neue Kandidaten.`,
+        })
+        break
       }
 
-      // Get or generate embedding
-      // Embedding can be a string (from DB) or array (newly generated) or null
-      let embedding: string | number[] | null = item.embedding
-      const hasValidEmbedding = embedding && (
-        (typeof embedding === 'string' && embedding.length > 10) ||
-        (Array.isArray(embedding) && embedding.length > 0)
-      )
-
-      if (!hasValidEmbedding) {
-        const text = prepareTextForEmbedding(item.title, item.content)
-        const newEmbedding = await generateEmbedding(text)
-
-        const embeddingString = `[${newEmbedding.join(',')}]`
-        await supabase
-          .from('daily_repo')
-          .update({ embedding: embeddingString })
-          .eq('id', item.id)
-
-        embedding = embeddingString
-      }
-
-      // Find similar items (embedding is now guaranteed to be a valid string or array)
-      // Reduced limit to speed up scoring
-      const similarItems = await findSimilarItems(item.id, embedding as string | number[], {
-        maxAge: maxAgeDays,
-        limit: maxCandidatesPerItem, // Reduced: was maxCandidatesPerItem * 2
-        minSimilarity,
-      })
-
-      if (similarItems.length === 0) {
-        // No similar items found - queue for content-only synthesis
-        itemsWithoutSimilar.push({ id: item.id, title: item.title, content: item.content })
-        console.log(`[Pipeline] No similar items for "${item.title.slice(0, 40)}..." - queued for content synthesis`)
-        continue
+      // Enable fast mode after 60% of Phase 1 time - queue items without scoring
+      if (!fastModeEnabled && phase1Elapsed > PHASE1_FAST_MODE_MS) {
+        const remaining = itemsToProcess.length - i
+        console.log(`[Pipeline] Switching to fast mode at item ${i + 1} - ${remaining} items will be queued without scoring`)
+        fastModeEnabled = true
+        onProgress({
+          type: 'partial',
+          message: `Fast-Mode aktiviert: Verbleibende ${remaining} Items werden direkt zur Queue hinzugefügt.`,
+        })
       }
 
       onProgress({
-        type: 'scoring',
+        type: 'searching',
         currentItem: i + 1,
         totalItems: itemsToProcess.length,
         itemTitle: item.title,
       })
 
-      // Score candidates - reduced concurrency to be safer with rate limits
-      const scoredCandidates = await scoreSynthesisCandidates(
-        { id: item.id, title: item.title, content: item.content },
-        similarItems,
-        prompt.scoring_prompt,
-        { minTotalScore: 6, concurrency: 3 }
-      )
+      try {
+        // FAST MODE: Skip scoring and queue directly
+        if (fastModeEnabled) {
+          itemsWithoutSimilar.push({ id: item.id, title: item.title, content: item.content })
+          console.log(`[Pipeline] Fast mode: queuing "${item.title.slice(0, 40)}..." without scoring`)
+          continue
+        }
 
-      // Get the BEST candidate for this item
-      if (scoredCandidates.length > 0) {
-        const bestCandidate = scoredCandidates[0]
-        allCandidates.push(bestCandidate)
-        candidatesFound++
+        // Get or generate embedding
+        let embedding: string | number[] | null = item.embedding
+        const hasValidEmbedding = embedding && (
+          (typeof embedding === 'string' && embedding.length > 10) ||
+          (Array.isArray(embedding) && embedding.length > 0)
+        )
+
+        if (!hasValidEmbedding) {
+          const text = prepareTextForEmbedding(item.title, item.content)
+          const newEmbedding = await generateEmbedding(text)
+
+          const embeddingString = `[${newEmbedding.join(',')}]`
+          await supabase
+            .from('daily_repo')
+            .update({ embedding: embeddingString })
+            .eq('id', item.id)
+
+          embedding = embeddingString
+        }
+
+        // Find similar items
+        const similarItems = await findSimilarItems(item.id, embedding as string | number[], {
+          maxAge: maxAgeDays,
+          limit: maxCandidatesPerItem,
+          minSimilarity,
+        })
+
+        if (similarItems.length === 0) {
+          itemsWithoutSimilar.push({ id: item.id, title: item.title, content: item.content })
+          console.log(`[Pipeline] No similar items for "${item.title.slice(0, 40)}..." - queued for content synthesis`)
+          continue
+        }
+
+        onProgress({
+          type: 'scoring',
+          currentItem: i + 1,
+          totalItems: itemsToProcess.length,
+          itemTitle: item.title,
+        })
+
+        // Score candidates
+        const scoredCandidates = await scoreSynthesisCandidates(
+          { id: item.id, title: item.title, content: item.content },
+          similarItems,
+          prompt.scoring_prompt,
+          { minTotalScore: 6, concurrency: 3 }
+        )
+
+        if (scoredCandidates.length > 0) {
+          const bestCandidate = scoredCandidates[0]
+          allCandidates.push(bestCandidate)
+          candidatesFound++
+        }
+      } catch (error) {
+        const msg = `Error processing item ${item.id}: ${error}`
+        console.error(`[Pipeline] ${msg}`)
+        errors.push(msg)
       }
-    } catch (error) {
-      const msg = `Error processing item ${item.id}: ${error}`
-      console.error(`[Pipeline] ${msg}`)
-      errors.push(msg)
     }
-  }
 
-  // Store new candidates (if any)
-  if (allCandidates.length > 0) {
-    await storeCandidates(digestId, allCandidates)
-    // Auto-queue candidates for article generation (source-diversified)
-    await queueCandidatesForArticle(allCandidates)
-  }
+    // Store new candidates (if any)
+    if (allCandidates.length > 0) {
+      await storeCandidates(digestId, allCandidates)
+      await queueCandidatesForArticle(allCandidates)
+    }
+  } // End of Phase 1 block (skipPhase1 === false)
 
-  // CRITICAL FIX: Also queue items WITHOUT similar articles
+  // Queue items WITHOUT similar articles (only if Phase 1 ran)
   // These are valid news items that just don't have historical comparisons
   // They should still be available for Ghostwriter selection
   // NOW WITH PROPER CONTENT SCORING instead of default scores!
@@ -895,7 +890,7 @@ export async function runSynthesisPipelineWithProgress(
       candidatesFound,
       synthesesDeveloped: 0,
       remainingSyntheses: totalCandidates || 0,
-      itemsProcessed: itemsNeedingScoring.length,
+      itemsProcessed: itemsToProcess.length,
       errors,
     }
   }
@@ -923,7 +918,7 @@ export async function runSynthesisPipelineWithProgress(
     return {
       success: true,
       digestId,
-      itemsProcessed: itemsNeedingScoring.length,
+      itemsProcessed: itemsToProcess.length,
       candidatesFound,
       synthesesDeveloped: 0,
       remainingSyntheses: 0,
