@@ -103,6 +103,7 @@ const TRACKING_REDIRECT_DOMAINS = [
   'sendgrid.net',
   'mailgun.org',
   'tracking.tldrnewsletter.com',
+  'every.to/emails/click', // Every newsletter tracking
   't.co', // Twitter shortener
 ]
 
