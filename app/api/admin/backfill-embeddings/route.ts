@@ -9,11 +9,52 @@ export const maxDuration = 300 // 5 minutes max
 
 /**
  * GET: Check how many items need embeddings
+ * Query params:
+ * - test=true: Test the embedding API with a sample text
  */
 export async function GET(request: NextRequest) {
   // Always require admin auth
   const authError = await requireAdmin(request)
   if (authError) return authError
+
+  const { searchParams } = new URL(request.url)
+
+  // Test mode: verify embedding API works
+  if (searchParams.get('test') === 'true') {
+    const apiKeyExists = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY
+    const apiKeyLength = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.length || 0
+
+    if (!apiKeyExists) {
+      return NextResponse.json({
+        test: 'FAILED',
+        error: 'GOOGLE_GENERATIVE_AI_API_KEY is not set',
+        apiKeyExists: false,
+      }, { status: 500 })
+    }
+
+    try {
+      const startTime = Date.now()
+      const embedding = await generateEmbedding('Test embedding for API verification')
+      const duration = Date.now() - startTime
+
+      return NextResponse.json({
+        test: 'SUCCESS',
+        apiKeyExists: true,
+        apiKeyLength,
+        embeddingDimensions: embedding.length,
+        durationMs: duration,
+        model: 'embedding-001',
+      })
+    } catch (error) {
+      return NextResponse.json({
+        test: 'FAILED',
+        apiKeyExists: true,
+        apiKeyLength,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+      }, { status: 500 })
+    }
+  }
 
   const supabase = createAdminClient()
 
