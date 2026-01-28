@@ -558,17 +558,18 @@ export async function getQueueStats(): Promise<{
   expired: number
   skipped: number
   total: number
+  oldestSelectedAt: string | null
 }> {
   const supabase = createAdminClient()
   const now = new Date().toISOString()
 
   const { data, error } = await supabase
     .from('news_queue')
-    .select('status, expires_at')
+    .select('status, expires_at, selected_at')
     .gte('queued_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
 
   if (error || !data) {
-    return { pending: 0, selected: 0, used: 0, expired: 0, skipped: 0, total: 0 }
+    return { pending: 0, selected: 0, used: 0, expired: 0, skipped: 0, total: 0, oldestSelectedAt: null }
   }
 
   const stats = {
@@ -577,7 +578,8 @@ export async function getQueueStats(): Promise<{
     used: 0,
     expired: 0,
     skipped: 0,
-    total: data.length
+    total: data.length,
+    oldestSelectedAt: null as string | null
   }
 
   for (const item of data) {
@@ -586,8 +588,15 @@ export async function getQueueStats(): Promise<{
       stats.expired++
     } else {
       const status = item.status as keyof typeof stats
-      if (status in stats) {
-        stats[status]++
+      if (status in stats && typeof stats[status] === 'number') {
+        (stats[status] as number)++
+      }
+    }
+
+    // Track oldest selected_at for selected items
+    if (item.status === 'selected' && item.selected_at) {
+      if (!stats.oldestSelectedAt || item.selected_at < stats.oldestSelectedAt) {
+        stats.oldestSelectedAt = item.selected_at
       }
     }
   }

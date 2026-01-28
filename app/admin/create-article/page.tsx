@@ -77,6 +77,7 @@ interface QueueStats {
   pending: number
   selected: number
   used: number
+  oldestSelectedAt: string | null
 }
 
 interface SourceDistribution {
@@ -150,7 +151,7 @@ const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Syn
 
 export default function CreateArticlePage() {
   // Queue-based state (replaces digest selection)
-  const [queueStats, setQueueStats] = useState<QueueStats>({ pending: 0, selected: 0, used: 0 })
+  const [queueStats, setQueueStats] = useState<QueueStats>({ pending: 0, selected: 0, used: 0, oldestSelectedAt: null })
   const [sourceDistribution, setSourceDistribution] = useState<SourceDistribution[]>([])
   const [usedQueueItemIds, setUsedQueueItemIds] = useState<string[]>([])
   const [maxQueueItems, setMaxQueueItems] = useState(20)
@@ -234,7 +235,8 @@ export default function CreateArticlePage() {
         setQueueStats({
           pending: stats.pending || 0,
           selected: stats.selected || 0,
-          used: stats.used || 0
+          used: stats.used || 0,
+          oldestSelectedAt: stats.oldestSelectedAt || null
         })
       }
 
@@ -822,6 +824,19 @@ export default function CreateArticlePage() {
               {queueStats.selected > 0 && (
                 <div className="mt-4 p-2 bg-blue-500/10 rounded text-xs text-blue-700">
                   ✓ {queueStats.selected} manuell ausgewählte Items werden verwendet.
+                  {queueStats.oldestSelectedAt && (() => {
+                    const oldestTime = new Date(queueStats.oldestSelectedAt).getTime()
+                    const expiresAt = oldestTime + 2 * 60 * 60 * 1000 // 2 hours
+                    const remaining = expiresAt - Date.now()
+                    const minutesLeft = Math.floor(remaining / 60000)
+                    if (minutesLeft <= 0) {
+                      return <span className="block mt-1 text-red-600">⚠️ Auswahl ist abgelaufen! Bitte neu selektieren.</span>
+                    } else if (minutesLeft <= 30) {
+                      return <span className="block mt-1 text-orange-600">⏰ Noch {minutesLeft} Min gültig - bald generieren!</span>
+                    } else {
+                      return <span className="block mt-1 text-muted-foreground">⏱️ Noch {Math.floor(minutesLeft / 60)}h {minutesLeft % 60}m gültig</span>
+                    }
+                  })()}
                 </div>
               )}
               {queueStats.selected === 0 && queueStats.pending === 0 && (

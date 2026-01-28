@@ -193,7 +193,7 @@ export default function NewsQueuePage() {
     setBackfillRunning(true)
     setBackfillResult(null)
     try {
-      const response = await fetch('/api/admin/backfill-embeddings?batchSize=50', { method: 'POST' })
+      const response = await fetch('/api/admin/backfill-embeddings?batchSize=200', { method: 'POST' })
       const data = await response.json()
       setBackfillResult({
         success: data.success,

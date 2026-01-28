@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       console.log(`[Ghostwriter-Queue] getSelectedItems returned ${manuallySelected.length} items (after filtering published)`)
 
       if (manuallySelected.length > 0) {
-        console.log(`[Ghostwriter-Queue] Using ${manuallySelected.length} manually selected items`)
+        console.log(`[Ghostwriter-Queue] Using ${manuallySelected.length} manually selected items (maxItems=${maxItems})`)
         selectedItems = manuallySelected
 
         // Fill up with balanced items if selected < maxItems
@@ -99,6 +99,8 @@ export async function POST(request: NextRequest) {
               }
             }
           }
+        } else {
+          console.log(`[Ghostwriter-Queue] SKIPPED fill: manuallySelected (${manuallySelected.length}) >= maxItems (${maxItems})`)
         }
 
         console.log(`[Ghostwriter-Queue] Total items after fill: ${selectedItems.length}`)
