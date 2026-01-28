@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
   if (authError) return authError
 
   const { searchParams } = new URL(request.url)
-  const batchSize = parseIntParam(searchParams.get('batchSize'), 50, 1, 100)
+  const batchSize = parseIntParam(searchParams.get('batchSize'), 200, 1, 500)
   const dryRun = searchParams.get('dryRun') === 'true'
 
   const supabase = createAdminClient()
