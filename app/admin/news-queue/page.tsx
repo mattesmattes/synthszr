@@ -506,25 +506,56 @@ export default function NewsQueuePage() {
   // Extract all synthesis scores for gradient calculation (sorting is now server-side)
   const allSynthesisScores = items.map(item => item.synthesis_score)
 
-  // Group items by 8-hour clusters based on newsletter received date (not queue date)
+  // Group items by import batch (items queued within 10 minutes of each other)
+  // This clusters items from the same daily digest import run together
   const groupedItems = items.reduce((groups, item) => {
-    // Use email_received_at if available, fall back to queued_at
-    const date = new Date(item.email_received_at || item.queued_at)
-    const clusterHour = Math.floor(date.getHours() / 8) * 8
-    const nextClusterHour = (clusterHour + 8) % 24
-    const hourKey = `${date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })} ${clusterHour}:00-${nextClusterHour}:00`
-    if (!groups[hourKey]) {
-      groups[hourKey] = []
+    const date = new Date(item.queued_at)
+    // Round to 10-minute intervals to cluster import batches
+    const roundedMinutes = Math.floor(date.getMinutes() / 10) * 10
+    const batchDate = new Date(date)
+    batchDate.setMinutes(roundedMinutes, 0, 0)
+
+    // Format: "Mo 27.01. 14:30" (import batch timestamp)
+    const batchKey = batchDate.toLocaleDateString('de-DE', {
+      weekday: 'short',
+      day: '2-digit',
+      month: '2-digit'
+    }) + ' ' + batchDate.toLocaleTimeString('de-DE', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+
+    if (!groups[batchKey]) {
+      groups[batchKey] = []
     }
-    groups[hourKey].push(item)
+    groups[batchKey].push(item)
     return groups
   }, {} as Record<string, QueueItem[]>)
 
-  // Sort items within each hour group by total_score descending
-  const hourGroups = Object.entries(groupedItems).map(([key, groupItems]) => [
-    key,
-    groupItems.sort((a, b) => b.total_score - a.total_score)
-  ] as [string, QueueItem[]])
+  // Sort groups by timestamp (newest first) and items within each group by total_score
+  const importBatches = Object.entries(groupedItems)
+    .sort((a, b) => {
+      // Parse the batch keys back to dates for sorting
+      const dateA = new Date(items.find(i => {
+        const d = new Date(i.queued_at)
+        const rounded = Math.floor(d.getMinutes() / 10) * 10
+        d.setMinutes(rounded, 0, 0)
+        return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }) + ' ' +
+               d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) === a[0]
+      })?.queued_at || 0)
+      const dateB = new Date(items.find(i => {
+        const d = new Date(i.queued_at)
+        const rounded = Math.floor(d.getMinutes() / 10) * 10
+        d.setMinutes(rounded, 0, 0)
+        return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }) + ' ' +
+               d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) === b[0]
+      })?.queued_at || 0)
+      return dateB.getTime() - dateA.getTime()
+    })
+    .map(([key, groupItems]) => [
+      key,
+      groupItems.sort((a, b) => b.total_score - a.total_score)
+    ] as [string, QueueItem[]])
 
   return (
     <Collapsible open={showSidebar} onOpenChange={setShowSidebar}>
@@ -806,13 +837,13 @@ export default function NewsQueuePage() {
             <Card>
               <CardContent className="p-0">
                 <div className="max-h-[60vh] overflow-y-auto">
-                  {hourGroups.map(([hourKey, groupItems]) => (
-                    <div key={hourKey}>
-                      {/* Hour cluster header */}
+                  {importBatches.map(([batchKey, groupItems]) => (
+                    <div key={batchKey}>
+                      {/* Import batch header */}
                       <div className="sticky top-0 bg-zinc-800 px-3 py-1.5 border-b border-zinc-700 text-xs font-medium text-white">
-                        {hourKey} ({groupItems.length})
+                        Import: {batchKey} ({groupItems.length} Items)
                       </div>
-                      {/* Items in this hour */}
+                      {/* Items in this batch */}
                       <div className="divide-y">
                         {groupItems.map((item) => (
                           <div
