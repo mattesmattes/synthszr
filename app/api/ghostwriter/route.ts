@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
 import { getSynthesesForDigest } from '@/lib/synthesis/pipeline'
+import { sanitizeUrl, isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
 
 const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview']
 
@@ -271,17 +272,17 @@ export async function POST(request: NextRequest) {
 
         // If source has a valid article URL, use it
         if (s.source_url && s.source_url.startsWith('http')) {
-          // Skip tracking URLs that haven't been resolved
-          const isTrackingUrl = s.source_url.includes('customeriomail.com') ||
-                                s.source_url.includes('mail.beehiiv.com') ||
-                                s.source_url.includes('list-manage.com') ||
-                                s.source_url.includes('substack.com/redirect')
-
-          if (!isTrackingUrl) {
-            return {
-              title: s.title,
-              url: s.source_url,
-              sourceName: newsletterName || extractNewsletterName(s.source_email)
+          // SECURITY: Skip tracking/redirect URLs and sanitize remaining URLs
+          if (isTrackingRedirectUrl(s.source_url)) {
+            // Skip - this is a tracking redirect that can't be safely used
+          } else {
+            const cleanUrl = sanitizeUrl(s.source_url)
+            if (cleanUrl) {
+              return {
+                title: s.title,
+                url: cleanUrl,
+                sourceName: newsletterName || extractNewsletterName(s.source_email)
+              }
             }
           }
         }

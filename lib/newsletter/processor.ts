@@ -4,6 +4,7 @@ import { extractArticleContent } from '@/lib/scraper/article-extractor'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { DEFAULT_NEWSLETTER_FETCH_MS, MS_PER_HOUR } from '@/lib/config/constants'
 import { generateEmbedding, prepareTextForEmbedding } from '@/lib/embeddings/generator'
+import { sanitizeUrl, isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
 
 // Article processing constants
 const MAX_ARTICLES_PER_RUN = 200
@@ -227,7 +228,10 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
       )
 
       // Extract article links for processing
-      const articleLinks = parsed.links.filter(link => link.type === 'article')
+      // SECURITY: Skip tracking redirect URLs that can't be resolved
+      const articleLinks = parsed.links.filter(link =>
+        link.type === 'article' && !isTrackingRedirectUrl(link.url)
+      )
       for (const link of articleLinks) {
         articleUrls.push({
           url: link.url,
@@ -238,7 +242,9 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
 
       // Store newsletter in daily_repo (full content, no truncation)
       // Also store the first article URL as source_url so newsletters have linkable sources
-      const primaryArticleUrl = articleLinks.length > 0 ? articleLinks[0].url : null
+      // SECURITY: Sanitize URL to remove tracking parameters before storing
+      const rawPrimaryUrl = articleLinks.length > 0 ? articleLinks[0].url : null
+      const primaryArticleUrl = sanitizeUrl(rawPrimaryUrl)
       const { data: insertedNewsletter, error: insertError } = await supabase
         .from('daily_repo')
         .insert({
@@ -328,7 +334,9 @@ export async function processNewsletters(options?: NewsletterProcessOptions): Pr
       }
 
       // Use the resolved final URL if available, otherwise the original
-      const sourceUrl = extracted.finalUrl || article.url
+      // SECURITY: Sanitize URL to remove tracking parameters
+      const rawSourceUrl = extracted.finalUrl || article.url
+      const sourceUrl = sanitizeUrl(rawSourceUrl) || rawSourceUrl
 
       // Check for duplicate by resolved URL too
       const { data: existingByFinalUrl } = await supabase

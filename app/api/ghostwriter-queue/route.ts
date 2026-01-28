@@ -10,6 +10,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
 import { getBalancedSelection, getSelectedItems, selectItemsForArticle } from '@/lib/news-queue/service'
+import { sanitizeUrl } from '@/lib/utils/url-sanitizer'
 
 const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview']
 
@@ -234,8 +235,10 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < selectedItems.length; i++) {
       const item = selectedItems[i]
       const sourceName = item.source_display_name || item.source_identifier
-      if (item.source_url) {
-        sourceReference += `${i + 1}. "${item.title}" → ${item.source_url} [QUELLE: ${sourceName}]\n`
+      // SECURITY: Sanitize URLs to prevent tracking parameter leaks
+      const cleanUrl = sanitizeUrl(item.source_url)
+      if (cleanUrl) {
+        sourceReference += `${i + 1}. "${item.title}" → ${cleanUrl} [QUELLE: ${sourceName}]\n`
       } else {
         sourceReference += `${i + 1}. "${item.title}" [QUELLE: ${sourceName}]\n`
       }
