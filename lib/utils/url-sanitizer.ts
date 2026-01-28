@@ -8,8 +8,12 @@
 const TRACKING_PARAMS = new Set([
   // Beehiiv
   '_bhlid',
+  '_bhiiv',
   'bhcid',
+  'bhcl_id',
   'bh_uid',
+  'last_resource_guid',
+  'jwt_token',
   // UTM tracking
   'utm_source',
   'utm_medium',
@@ -74,6 +78,7 @@ const TRACKING_PARAMS = new Set([
   'sg_uid',
   // Customer.io
   'cio_id',
+  'cio_link_id',
 ])
 
 // Patterns for parameters that look like session/tracking IDs (long hex strings)
