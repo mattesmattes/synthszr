@@ -1,5 +1,5 @@
 /**
- * Embedding Generator using Google's text-embedding-004 model
+ * Embedding Generator using Google's text-embedding-005 model
  * Generates 768-dimensional embeddings for semantic similarity search
  */
 
@@ -7,16 +7,19 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!)
 
+// Model name - updated from text-embedding-004 (deprecated Jan 2026)
+const EMBEDDING_MODEL = 'text-embedding-005'
+
 /**
  * Generate embedding for a single text
- * Uses Google's text-embedding-004 model (768 dimensions)
+ * Uses Google's text-embedding-005 model (768 dimensions)
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   if (!text || text.trim().length === 0) {
     throw new Error('Text cannot be empty')
   }
 
-  const model = genAI.getGenerativeModel({ model: 'text-embedding-004' })
+  const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL })
 
   // Truncate text to avoid token limits (max ~8000 tokens)
   const truncatedText = text.slice(0, 30000)
@@ -38,7 +41,7 @@ export async function generateEmbeddings(
 ): Promise<number[][]> {
   const { batchSize = 10, delayMs = 100 } = options
 
-  const model = genAI.getGenerativeModel({ model: 'text-embedding-004' })
+  const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL })
   const results: number[][] = []
 
   // Process in batches
