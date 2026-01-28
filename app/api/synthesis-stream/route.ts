@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
         }, 10000)
 
         try {
-          await runSynthesisPipelineWithProgress(
+          const result = await runSynthesisPipelineWithProgress(
             digestId,
             {
               maxItemsToProcess: options?.maxItems || 150, // Increased from 50 to handle larger batches
@@ -63,7 +63,16 @@ export async function POST(request: NextRequest) {
             }
           )
 
-          sendEvent({ type: 'complete' })
+          // Send final result with remainingSyntheses so UI knows if more runs are needed
+          sendEvent({
+            type: 'complete',
+            result: {
+              synthesesDeveloped: result.synthesesDeveloped,
+              candidatesFound: result.candidatesFound,
+              remainingSyntheses: result.remainingSyntheses,
+              itemsProcessed: result.itemsProcessed,
+            }
+          })
         } catch (error) {
           console.error('[API] Synthesis stream error:', error)
           sendEvent({

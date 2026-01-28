@@ -76,6 +76,7 @@ interface SynthesisProgress {
     historicalReference: string
   }>
   error?: string
+  remainingSyntheses?: number  // Candidates that still need development
 }
 
 export default function DigestsPage() {
@@ -364,17 +365,26 @@ export default function DigestsPage() {
                     syntheses: [...prev.syntheses, event.synthesis],
                   }))
                 } else if (event.type === 'complete') {
+                  const remaining = event.result?.remainingSyntheses || 0
                   setSynthesisProgress(prev => ({
                     ...prev,
                     phase: 'complete',
+                    remainingSyntheses: remaining,
                   }))
-                  shouldContinue = false
+                  // Auto-continue if there are remaining syntheses
+                  if (remaining > 0) {
+                    console.log(`[Synthesis] ${remaining} syntheses remaining, will continue...`)
+                    shouldContinue = true
+                  } else {
+                    shouldContinue = false
+                  }
                 } else if (event.type === 'partial') {
                   // Time limit reached - will auto-continue after stream ends
                   console.log(`[Synthesis] Batch ${batchNumber} partial, will continue...`)
                   setSynthesisProgress(prev => ({
                     ...prev,
-                    itemTitle: `Batch ${batchNumber} fertig, starte Batch ${batchNumber + 1}...`,
+                    phase: 'partial',
+                    itemTitle: `⏱️ Zeit-Limit erreicht. Starte automatisch Batch ${batchNumber + 1}...`,
                   }))
                   shouldContinue = true
                 } else if (event.type === 'error') {
@@ -1104,9 +1114,11 @@ export default function DigestsPage() {
             </DialogTitle>
             <DialogDescription className="text-xs">
               {synthesisProgress.phase === 'complete'
-                ? `${synthesisProgress.syntheses.length} Synthesen erstellt`
+                ? `${synthesisProgress.syntheses.length} Synthesen erstellt${synthesisProgress.remainingSyntheses ? ` • ${synthesisProgress.remainingSyntheses} verbleibend, Fortsetzung läuft...` : ''}`
                 : synthesisProgress.phase === 'error'
                 ? 'Fehler bei der Synthese'
+                : synthesisProgress.phase === 'partial'
+                ? `${synthesisProgress.syntheses.length} Synthesen erstellt, automatische Fortsetzung...`
                 : 'Historische Verbindungen werden analysiert...'}
             </DialogDescription>
           </DialogHeader>
@@ -1120,6 +1132,7 @@ export default function DigestsPage() {
                     {synthesisProgress.phase === 'searching' && '🔍 Suche ähnliche Artikel...'}
                     {synthesisProgress.phase === 'scoring' && '📊 Bewerte Kandidaten...'}
                     {synthesisProgress.phase === 'developing' && '✨ Generiere Synthese...'}
+                    {synthesisProgress.phase === 'partial' && '⏱️ Automatische Fortsetzung...'}
                   </span>
                   <span className="font-medium">
                     {synthesisProgress.currentItem} / {synthesisProgress.totalItems}

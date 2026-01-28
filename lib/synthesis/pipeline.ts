@@ -17,6 +17,7 @@ export interface SynthesisPipelineResult {
   itemsProcessed: number
   candidatesFound: number
   synthesesDeveloped: number
+  remainingSyntheses: number  // Candidates that still need development
   errors: string[]
 }
 
@@ -350,6 +351,7 @@ export async function runSynthesisPipeline(
       candidatesFound: 0,
       synthesesDeveloped: 0,
       errors: ['No active synthesis prompt found'],
+      remainingSyntheses: 0,
     }
   }
 
@@ -503,6 +505,7 @@ export async function runSynthesisPipeline(
       itemsProcessed: itemsToProcess.length,
       candidatesFound,
       synthesesDeveloped: 0,
+      remainingSyntheses: 0,
       errors,
     }
   }
@@ -543,6 +546,7 @@ export async function runSynthesisPipeline(
     itemsProcessed: itemsToProcess.length,
     candidatesFound,
     synthesesDeveloped,
+    remainingSyntheses: 0,  // Non-streaming version processes all in one go
     errors,
   }
 }
@@ -637,6 +641,7 @@ export async function runSynthesisPipelineWithProgress(
       candidatesFound: 0,
       synthesesDeveloped: 0,
       errors: ['No active synthesis prompt found'],
+      remainingSyntheses: 0,
     }
   }
 
@@ -878,11 +883,18 @@ export async function runSynthesisPipelineWithProgress(
       type: 'partial',
       message: `Phase 1 dauerte zu lange (${Math.round(phase1Time / 1000)}s). Bitte erneut starten.`,
     })
+    // Count remaining candidates that need development
+    const { count: totalCandidates } = await supabase
+      .from('synthesis_candidates')
+      .select('id', { count: 'exact', head: true })
+      .eq('digest_id', digestId)
+
     return {
       success: true,
       digestId,
       candidatesFound,
       synthesesDeveloped: 0,
+      remainingSyntheses: totalCandidates || 0,
       itemsProcessed: itemsNeedingScoring.length,
       errors,
     }
@@ -914,6 +926,7 @@ export async function runSynthesisPipelineWithProgress(
       itemsProcessed: itemsNeedingScoring.length,
       candidatesFound,
       synthesesDeveloped: 0,
+      remainingSyntheses: 0,
       errors,
     }
   }
@@ -1231,12 +1244,28 @@ SYNTHESE: [Der Insight-Text]`
     console.log(`[Pipeline] Skipping Phase 3 - not enough time remaining (${Math.round(phase3TimeRemaining / 1000)}s)`)
   }
 
+  // Calculate remaining syntheses by counting candidates without developed syntheses
+  const { count: totalCandidatesCount } = await supabase
+    .from('synthesis_candidates')
+    .select('id', { count: 'exact', head: true })
+    .eq('digest_id', digestId)
+
+  const { count: developedCount } = await supabase
+    .from('developed_syntheses')
+    .select('id', { count: 'exact', head: true })
+    .eq('digest_id', digestId)
+
+  const remaining = Math.max(0, (totalCandidatesCount || 0) - (developedCount || 0))
+
+  console.log(`[Pipeline] Final: ${developedCount} syntheses developed, ${remaining} candidates remaining`)
+
   return {
     success: true,
     digestId,
     itemsProcessed: itemsToProcess.length,
     candidatesFound,
     synthesesDeveloped,
+    remainingSyntheses: remaining,
     errors,
   }
 }
