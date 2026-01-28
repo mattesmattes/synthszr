@@ -151,7 +151,7 @@ async function sanitizePublishedPosts() {
   const { data: posts, error } = await supabase
     .from('generated_posts')
     .select('id, title, content, status, created_at')
-    .gte('created_at', '2025-12-29')
+    
     .order('created_at', { ascending: false })
 
   if (error) {

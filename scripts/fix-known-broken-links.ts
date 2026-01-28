@@ -94,8 +94,8 @@ async function main() {
   const { data: posts } = await supabase
     .from('generated_posts')
     .select('id, title, content')
-    .eq('status', 'published')
-    .gte('created_at', '2025-12-29')
+    
+    
 
   let postsModified = 0
   let totalFixed = 0
