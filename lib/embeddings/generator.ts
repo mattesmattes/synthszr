@@ -1,31 +1,48 @@
 /**
- * Embedding Generator using Google's text-embedding-005 model
+ * Embedding Generator using Google's embedding-001 model
  * Generates 768-dimensional embeddings for semantic similarity search
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!)
+// Lazy initialization to avoid errors when API key is not set
+let genAI: GoogleGenerativeAI | null = null
 
-// Model name - updated from text-embedding-004 (deprecated Jan 2026)
-const EMBEDDING_MODEL = 'text-embedding-005'
+function getGenAI(): GoogleGenerativeAI {
+  if (!genAI) {
+    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+    if (!apiKey) {
+      throw new Error('GOOGLE_GENERATIVE_AI_API_KEY environment variable is not set')
+    }
+    genAI = new GoogleGenerativeAI(apiKey)
+  }
+  return genAI
+}
+
+// Model name - embedding-001 is stable and returns 768 dimensions
+const EMBEDDING_MODEL = 'embedding-001'
 
 /**
  * Generate embedding for a single text
- * Uses Google's text-embedding-005 model (768 dimensions)
+ * Uses Google's embedding-001 model (768 dimensions)
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   if (!text || text.trim().length === 0) {
     throw new Error('Text cannot be empty')
   }
 
-  const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL })
+  const model = getGenAI().getGenerativeModel({ model: EMBEDDING_MODEL })
 
-  // Truncate text to avoid token limits (max ~8000 tokens)
-  const truncatedText = text.slice(0, 30000)
+  // Truncate text to avoid token limits (max ~2048 tokens for embedding-001)
+  const truncatedText = text.slice(0, 8000)
 
-  const result = await model.embedContent(truncatedText)
-  return result.embedding.values
+  try {
+    const result = await model.embedContent(truncatedText)
+    return result.embedding.values
+  } catch (error) {
+    console.error('[Embedding] Error generating embedding:', error)
+    throw error
+  }
 }
 
 /**
@@ -41,7 +58,7 @@ export async function generateEmbeddings(
 ): Promise<number[][]> {
   const { batchSize = 10, delayMs = 100 } = options
 
-  const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL })
+  const model = getGenAI().getGenerativeModel({ model: EMBEDDING_MODEL })
   const results: number[][] = []
 
   // Process in batches
