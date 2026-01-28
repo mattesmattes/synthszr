@@ -805,10 +805,10 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
       const thumbnail = articleThumbnails.find(t => {
         if (t.generation_status !== 'completed') return false
         // Match by queue item ID (stable) - works with both DOM and array-based IDs
-        if (expectedQueueItemId && t.article_queue_item_id) {
-          return t.article_queue_item_id === expectedQueueItemId
+        if (expectedQueueItemId && t.article_queue_item_id === expectedQueueItemId) {
+          return true
         }
-        // Fallback to article_index (legacy posts without queue item IDs)
+        // Always also try article_index matching (handles legacy + mismatched queue IDs)
         return t.article_index === articleIndex
       })
       if (thumbnail && !h2.previousElementSibling?.classList.contains('article-thumbnail-container')) {
