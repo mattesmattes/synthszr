@@ -126,9 +126,26 @@ export async function GET(request: NextRequest) {
       case 'list':
       default: {
         const supabase = await createClient()
+        const adminClient = createAdminClient()
         const status = searchParams.get('status') || 'pending'
         const limit = parseIntParam(searchParams.get('limit'), 50, 1, 500)
         const offset = parseIntParam(searchParams.get('offset'), 0, 0)
+
+        // Reset stale selected items (selected > 2 hours ago) before listing
+        // This keeps the UI consistent with getSelectedItems() behavior
+        if (status === 'selected') {
+          const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+          const { data: resetItems } = await adminClient
+            .from('news_queue')
+            .update({ status: 'pending', selected_at: null })
+            .eq('status', 'selected')
+            .lt('selected_at', twoHoursAgo)
+            .select('id')
+          if (resetItems && resetItems.length > 0) {
+            console.log(`[NewsQueue] Reset ${resetItems.length} stale selected items to pending`)
+          }
+        }
+
         let query = supabase
           .from('news_queue')
           .select('*', { count: 'exact' })

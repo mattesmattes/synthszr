@@ -550,6 +550,7 @@ export async function expireOldItems(): Promise<number> {
 
 /**
  * Get queue statistics
+ * Note: Automatically resets stale selected items (> 2 hours) before counting
  */
 export async function getQueueStats(): Promise<{
   pending: number
@@ -562,6 +563,19 @@ export async function getQueueStats(): Promise<{
 }> {
   const supabase = createAdminClient()
   const now = new Date().toISOString()
+
+  // Reset stale selected items (> 2 hours) before counting
+  // This keeps stats consistent with getSelectedItems() behavior
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+  const { data: resetItems } = await supabase
+    .from('news_queue')
+    .update({ status: 'pending', selected_at: null })
+    .eq('status', 'selected')
+    .lt('selected_at', twoHoursAgo)
+    .select('id')
+  if (resetItems && resetItems.length > 0) {
+    console.log(`[NewsQueue] getQueueStats: Reset ${resetItems.length} stale selected items to pending`)
+  }
 
   const { data, error } = await supabase
     .from('news_queue')
