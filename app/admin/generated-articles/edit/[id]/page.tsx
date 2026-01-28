@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/client'
 import { use } from 'react'
 import { ensureInitialEditHistory, recordEditVersion } from '@/lib/edit-learning/history'
+import { verifyContentUrls, formatIssuesForDisplay } from '@/lib/utils/url-verifier'
 import type { LearnedPattern } from '@/lib/edit-learning/retrieval'
 
 interface QueueItem {
@@ -471,6 +472,15 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+
+    // Verify URLs before saving
+    const verification = verifyContentUrls(content)
+    if (!verification.isClean) {
+      const message = formatIssuesForDisplay(verification.issues)
+      alert(`⚠️ Speichern abgebrochen!\n\n${message}\n\nBitte bereinige die URLs vor dem Speichern.`)
+      return
+    }
+
     setSaving(true)
 
     const wasPublished = post?.status === 'published'

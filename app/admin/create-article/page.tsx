@@ -44,6 +44,7 @@ import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
 import { embedQueueItemIds } from '@/lib/utils/embed-queue-ids'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { ensureInitialEditHistory } from '@/lib/edit-learning/history'
+import { verifyContentUrls, formatIssuesForDisplay } from '@/lib/utils/url-verifier'
 
 interface Digest {
   id: string
@@ -652,6 +653,15 @@ export default function CreateArticlePage() {
         if (queueItemsData && queueItemsData.length > 0) {
           tiptapContent = embedQueueItemIds(tiptapContent, queueItemsData)
         }
+      }
+
+      // Verify URLs before saving
+      const verification = verifyContentUrls(tiptapContent)
+      if (!verification.isClean) {
+        const message = formatIssuesForDisplay(verification.issues)
+        alert(`⚠️ Speichern abgebrochen!\n\n${message}\n\nBitte bereinige die URLs vor dem Speichern.`)
+        setSaving(false)
+        return
       }
 
       const { data: newPost, error } = await supabase.from('generated_posts').insert({
