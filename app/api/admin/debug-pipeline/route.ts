@@ -153,21 +153,104 @@ export async function GET(request: NextRequest) {
     error: promptErr?.message
   }
 
+  // Step 8: Test find_similar_items RPC function directly
+  // This is the critical function that was failing
+  debug.step8_findSimilarItemsTest = await testFindSimilarItems(supabase)
+
   // Summary
   const readyForPhase2 =
     (dbCandidates?.length || 0) > 0 &&
     remainingCandidates.length > 0 &&
     !!prompt
 
+  const functionWorks = debug.step8_findSimilarItemsTest &&
+    typeof debug.step8_findSimilarItemsTest === 'object' &&
+    'works' in debug.step8_findSimilarItemsTest &&
+    debug.step8_findSimilarItemsTest.works === true
+
   return NextResponse.json({
     digestId,
     readyForPhase2,
+    functionWorks,
     summary: {
       totalCandidates: dbCandidates?.length || 0,
       alreadyProcessed: processedSourceIds.size,
       remaining: remainingCandidates.length,
-      hasPrompt: !!prompt
+      hasPrompt: !!prompt,
+      findSimilarItemsWorks: functionWorks
     },
     debug
   })
+}
+
+/**
+ * Test the find_similar_items RPC function directly
+ */
+async function testFindSimilarItems(supabase: ReturnType<typeof createAdminClient>) {
+  try {
+    // First check if pgvector extension is enabled
+    const { data: extensionCheck, error: extErr } = await supabase.rpc('pg_available_extensions' as never)
+    const pgvectorInfo = extErr ? `Error checking: ${extErr.message}` : 'Check via SQL Editor needed'
+
+    // Check if function exists by querying pg_proc
+    const { data: funcCheck, error: funcErr } = await supabase
+      .from('daily_repo')
+      .select('id')
+      .limit(0)  // Just to warm up connection
+
+    // Get a sample item with embedding
+    const { data: sampleItem, error: sampleErr } = await supabase
+      .from('daily_repo')
+      .select('id, title, embedding')
+      .not('embedding', 'is', null)
+      .limit(1)
+      .single()
+
+    if (sampleErr || !sampleItem) {
+      return {
+        works: false,
+        error: 'No sample item with embedding found',
+        sampleError: sampleErr?.message
+      }
+    }
+
+    // Try calling the function with correct parameters
+    const { data, error } = await supabase.rpc('find_similar_items', {
+      query_embedding: sampleItem.embedding,
+      item_id: sampleItem.id,
+      max_age_days: 90,
+      match_threshold: 0.3,
+      match_count: 3,
+    })
+
+    if (error) {
+      return {
+        works: false,
+        error: error.message,
+        errorCode: error.code,
+        errorDetails: error.details,
+        hint: error.hint,
+        sampleItemId: sampleItem.id,
+        sampleTitle: sampleItem.title?.slice(0, 50)
+      }
+    }
+
+    return {
+      works: true,
+      resultsCount: data?.length || 0,
+      sampleItemId: sampleItem.id,
+      sampleTitle: sampleItem.title?.slice(0, 50),
+      firstResult: data?.[0] ? {
+        id: data[0].id,
+        title: data[0].title?.slice(0, 40),
+        similarity: data[0].similarity
+      } : null
+    }
+  } catch (err) {
+    return {
+      works: false,
+      error: err instanceof Error ? err.message : 'Unknown error',
+      errorType: err instanceof Error ? err.constructor.name : typeof err
+    }
+  }
 }
