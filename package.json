@@ -16,6 +16,7 @@
   "dependencies": {
     "@ai-sdk/google": "^2.0.46",
     "@anthropic-ai/sdk": "^0.71.2",
+    "@google/genai": "^1.38.0",
     "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^3.10.0",
     "@mozilla/readability": "^0.6.0",
