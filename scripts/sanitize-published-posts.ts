@@ -7,6 +7,57 @@ import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
 import { sanitizeUrl, isTrackingRedirectUrl } from '../lib/utils/url-sanitizer'
 
+/**
+ * Extract destination URL from tracking redirect URLs
+ * Many services encode the final destination in the path or query
+ */
+function extractDestinationFromRedirect(url: string): string | null {
+  try {
+    const parsed = new URL(url)
+
+    // TLDR Newsletter: https://tracking.tldrnewsletter.com/CL0/https:%2F%2Fexample.com%2Fpath
+    if (parsed.hostname.includes('tldrnewsletter.com')) {
+      // Path contains the encoded destination URL after /CL0/ or similar prefix
+      const pathMatch = parsed.pathname.match(/\/CL\d+\/(.+)/)
+      if (pathMatch) {
+        const encodedDest = pathMatch[1]
+        const decoded = decodeURIComponent(encodedDest)
+        // Now sanitize the decoded destination URL
+        return sanitizeUrl(decoded)
+      }
+    }
+
+    // Beehiiv: sometimes has 'url' or 'redirect' param
+    const redirectParam = parsed.searchParams.get('url') || parsed.searchParams.get('redirect')
+    if (redirectParam) {
+      return sanitizeUrl(redirectParam)
+    }
+
+    // Customer.io: Check for destination in path
+    if (parsed.hostname.includes('customeriomail.com')) {
+      // Often has structure like /e/xxxxx/https://...
+      const pathParts = parsed.pathname.split('/')
+      for (const part of pathParts) {
+        if (part.startsWith('http')) {
+          return sanitizeUrl(decodeURIComponent(part))
+        }
+      }
+    }
+
+    // Mailchimp/list-manage: Check for 'u' parameter with encoded URL
+    if (parsed.hostname.includes('list-manage.com') || parsed.hostname.includes('mailchimp.com')) {
+      const uParam = parsed.searchParams.get('u')
+      if (uParam && uParam.startsWith('http')) {
+        return sanitizeUrl(uParam)
+      }
+    }
+
+    return null
+  } catch {
+    return null
+  }
+}
+
 dotenv.config({ path: '.env.local' })
 
 const supabase = createClient(
@@ -44,7 +95,16 @@ function sanitizeTipTapContent(node: unknown): { node: unknown; modified: boolea
 
       if (typeof attrs.href === 'string') {
         if (isTrackingRedirectUrl(attrs.href)) {
-          console.log(`  WARNING: Tracking redirect URL: ${attrs.href.slice(0, 60)}...`)
+          // Try to extract destination URL from the redirect
+          const extractedDest = extractDestinationFromRedirect(attrs.href)
+          if (extractedDest) {
+            newAttrs.href = extractedDest
+            modified = true
+            urlsFixed++
+            console.log(`  Extracted: ${attrs.href.slice(0, 40)}... → ${extractedDest.slice(0, 50)}`)
+          } else {
+            console.log(`  WARNING: Could not extract dest from: ${attrs.href.slice(0, 60)}...`)
+          }
         } else {
           const sanitized = sanitizeUrl(attrs.href)
           if (sanitized && sanitized !== attrs.href) {
