@@ -26,6 +26,8 @@ import {
   Brain,
   FlaskConical,
   RefreshCw,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -63,6 +65,7 @@ import { TiptapRenderer } from '@/components/tiptap-renderer'
 import { PostImageGallery } from '@/components/post-image-gallery'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase/client'
+import { verifyContentUrls } from '@/lib/utils/url-verifier'
 
 interface CombinedPost {
   id: string
@@ -76,6 +79,8 @@ interface CombinedPost {
   source: 'manual' | 'ai'
   word_count?: number | null
   ai_model?: string | null
+  urlsClean?: boolean
+  urlIssueCount?: number
 }
 
 type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro' | 'gemini-3-pro-preview'
@@ -314,6 +319,7 @@ export default function AdminPage() {
             parsedContent = { type: 'doc', content: [] }
           }
         }
+        const urlVerification = verifyContentUrls(parsedContent as Record<string, unknown>)
         return {
           id: p.id,
           title: p.title,
@@ -325,6 +331,8 @@ export default function AdminPage() {
           created_at: p.created_at,
           source: 'manual' as const,
           word_count: countWords(parsedContent as Record<string, unknown>),
+          urlsClean: urlVerification.isClean,
+          urlIssueCount: urlVerification.issues.length,
         }
       }),
       ...(aiPosts || []).map(p => {
@@ -336,6 +344,7 @@ export default function AdminPage() {
             parsedContent = { type: 'doc', content: [] }
           }
         }
+        const urlVerification = verifyContentUrls(parsedContent as Record<string, unknown>)
         return {
           id: p.id,
           title: p.title,
@@ -348,6 +357,8 @@ export default function AdminPage() {
           source: 'ai' as const,
           word_count: p.word_count,
           ai_model: p.ai_model,
+          urlsClean: urlVerification.isClean,
+          urlIssueCount: urlVerification.issues.length,
         }
       })
     ]
@@ -590,6 +601,17 @@ export default function AdminPage() {
                         <Badge className={`text-xs ${AI_MODEL_LABELS[post.ai_model as AIModel].color}`}>
                           <Bot className="h-3 w-3 mr-1" />
                           {AI_MODEL_LABELS[post.ai_model as AIModel].label}
+                        </Badge>
+                      )}
+                      {post.urlsClean ? (
+                        <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800">
+                          <ShieldCheck className="h-3 w-3 mr-1" />
+                          URLs sauber
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800">
+                          <ShieldAlert className="h-3 w-3 mr-1" />
+                          {post.urlIssueCount} URL-Problem{post.urlIssueCount !== 1 ? 'e' : ''}
                         </Badge>
                       )}
                     </div>
