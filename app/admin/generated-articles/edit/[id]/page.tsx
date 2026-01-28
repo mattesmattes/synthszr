@@ -159,6 +159,8 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     setGeneratingThumbnails(true)
 
     // Extract articles from TipTap content
+    // IMPORTANT: Read queueItemId from EACH H2's attrs, NOT from array position!
+    // This ensures thumbnails stay matched even after article reordering.
     const articles: Array<{ index: number; text: string; vote: null; queueItemId?: string }> = []
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const extractArticles = (node: any, currentIndex = { value: 0 }) => {
@@ -167,12 +169,17 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         const headingText = node.content?.map((c: { text?: string }) => c.text || '').join('') || ''
         const lowerText = headingText.toLowerCase()
         if (!lowerText.includes('synthszr take') && !lowerText.includes('mattes synthese')) {
+          // Get queueItemId from H2 node attrs (stable) - this travels with the article when reordered
+          // Fallback to array position only for legacy posts without embedded IDs
+          const nodeQueueItemId = node.attrs?.queueItemId as string | undefined
+          const fallbackQueueItemId = queueItemIds[currentIndex.value]
+
           articles.push({
             index: currentIndex.value,
             text: headingText.slice(0, 300),
             vote: null,
-            // Link thumbnail to queue item for stable reference (survives article deletion)
-            queueItemId: queueItemIds[currentIndex.value] || undefined,
+            // Prefer embedded queueItemId (survives reordering), fallback to array position (legacy)
+            queueItemId: nodeQueueItemId || fallbackQueueItemId || undefined,
           })
           currentIndex.value++
         }

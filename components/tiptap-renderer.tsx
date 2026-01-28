@@ -7,6 +7,7 @@ import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import { createPortal } from "react-dom"
+import { HeadingWithQueueId } from "@/lib/tiptap/heading-with-queue-id"
 import { StockSynthszrLayer } from "./stock-synthszr-layer"
 import { StockQuotePopover } from "./stock-quote-popover"
 import { PremarketSynthszrLayer } from "./premarket-synthszr-layer"
@@ -243,7 +244,12 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        heading: false, // Use HeadingWithQueueId for stable thumbnail matching
+      }),
+      HeadingWithQueueId.configure({
+        levels: [1, 2, 3, 4, 5, 6],
+      }),
       Link.configure({
         openOnClick: true,
         HTMLAttributes: {
@@ -788,15 +794,21 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
       if (headingText.includes('mattes synthese') || headingText.includes("mattes' synthese") || headingText.includes('synthszr take')) return
 
       // Insert thumbnail placeholder before the H2 if we have one for this article
-      // Priority: Match by queue item ID (stable) if available, otherwise fall back to article_index
-      const expectedQueueItemId = queueItemIds?.[articleIndex]
+      // PRIORITY ORDER for queueItemId:
+      // 1. data-queue-item-id from DOM (most stable - survives reordering)
+      // 2. queueItemIds array by position (legacy fallback)
+      // 3. article_index match (oldest fallback)
+      const domQueueItemId = h2.getAttribute('data-queue-item-id')
+      const arrayQueueItemId = queueItemIds?.[articleIndex]
+      const expectedQueueItemId = domQueueItemId || arrayQueueItemId
+
       const thumbnail = articleThumbnails.find(t => {
         if (t.generation_status !== 'completed') return false
-        // If we have queue item IDs and thumbnail has one, match by that (stable)
+        // Match by queue item ID (stable) - works with both DOM and array-based IDs
         if (expectedQueueItemId && t.article_queue_item_id) {
           return t.article_queue_item_id === expectedQueueItemId
         }
-        // Fallback to article_index (legacy)
+        // Fallback to article_index (legacy posts without queue item IDs)
         return t.article_index === articleIndex
       })
       if (thumbnail && !h2.previousElementSibling?.classList.contains('article-thumbnail-container')) {
