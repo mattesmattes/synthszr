@@ -1,4 +1,4 @@
-import { TiptapRenderer } from "./tiptap-renderer"
+import { PostContentView } from "./post-content-view"
 import { formatUpdateDate } from "@/lib/i18n/config"
 import type { LanguageCode } from "@/lib/types"
 
@@ -77,7 +77,7 @@ export function FeaturedArticle({
       )}
 
       <div className="prose-article">
-        <TiptapRenderer content={content} postId={postId} queueItemIds={queueItemIds} />
+        <PostContentView content={content} postId={postId} queueItemIds={queueItemIds} />
       </div>
 
       <a href={postUrl} className="mt-8 inline-block font-mono text-xs text-accent hover:underline">

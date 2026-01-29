@@ -8,11 +8,30 @@ interface HumanMachineToggleProps {
 /**
  * Floating toggle between Human (HTML) and Machine (Markdown) view
  * Small-caps Unicode characters for distinctive styling
+ * Uses inline styles for Safari compatibility (fixed positioning issues)
  */
 export function HumanMachineToggle({ mode, onToggle }: HumanMachineToggleProps) {
   return (
-    <div className="fixed bottom-6 right-6 z-[9999]">
-      <div className="flex items-center gap-0.5 bg-background/95 backdrop-blur-sm border border-border rounded-full px-1 py-1 shadow-lg">
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 24,
+        right: 24,
+        zIndex: 9999,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          backgroundColor: '#fafafa',
+          border: '1px solid #e5e5e5',
+          borderRadius: 9999,
+          padding: 4,
+          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)',
+        }}
+      >
         <button
           onClick={() => onToggle('human')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
