@@ -550,82 +550,6 @@ export default function CreateArticlePage() {
     }
   }
 
-  // Trigger article thumbnail generation for each news section
-  // queueItemIds: Array of queue item UUIDs in the same order as articles in the generated content
-  async function triggerArticleThumbnails(postId: string, tiptapContent: object, queueItemIds: string[] = []) {
-    // Extract articles from TipTap content by finding heading nodes
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const extractArticles = (node: any, articles: Array<{ index: number; text: string }>, currentIndex = { value: 0 }) => {
-      if (!node) return
-
-      // Check if this is a heading node (article start)
-      if (node.type === 'heading' && node.attrs?.level === 2) {
-        const headingText = node.content?.map((c: { text?: string }) => c.text || '').join('') || ''
-
-        // Skip "Synthszr Take" or "Mattes Synthese" headings
-        const lowerText = headingText.toLowerCase()
-        if (!lowerText.includes('synthszr take') && !lowerText.includes('mattes synthese')) {
-          articles.push({
-            index: currentIndex.value,
-            text: headingText.slice(0, 300), // Use heading as prompt for thumbnail
-          })
-          currentIndex.value++
-        }
-      }
-
-      // Recursively process children
-      if (node.content && Array.isArray(node.content)) {
-        for (const child of node.content) {
-          extractArticles(child, articles, currentIndex)
-        }
-      }
-    }
-
-    const articles: Array<{ index: number; text: string }> = []
-    const content = typeof tiptapContent === 'string' ? JSON.parse(tiptapContent) : tiptapContent
-    extractArticles(content, articles)
-
-    if (articles.length === 0) {
-      console.log('[Thumbnails] No articles found for thumbnail generation')
-      return
-    }
-
-    console.log(`[Thumbnails] Found ${articles.length} articles for thumbnail generation`)
-
-    // Map articles to queue item IDs (stable link survives article deletion)
-    // queueItemIds[i] corresponds to article index i
-    const articlesWithVotes = articles.map((article, i) => ({
-      ...article,
-      vote: null as 'BUY' | 'HOLD' | 'SELL' | null,
-      queueItemId: queueItemIds[i] || undefined,  // Link to queue item for stable reference
-    }))
-
-    if (queueItemIds.length > 0) {
-      console.log(`[Thumbnails] Linking ${Math.min(articles.length, queueItemIds.length)} thumbnails to queue items`)
-    }
-
-    // Trigger thumbnail generation in background
-    fetch('/api/generate-article-thumbnails', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        postId,
-        articles: articlesWithVotes,
-      }),
-    })
-      .then(res => {
-        if (res.ok) {
-          res.json().then(data => {
-            console.log(`[Thumbnails] Generated ${data.generated} thumbnails, ${data.failed} failed`)
-          })
-        } else {
-          res.json().then(data => console.error('[Thumbnails] Generation failed:', data))
-        }
-      })
-      .catch(err => console.error('[Thumbnails] Error:', err))
-  }
-
   async function saveAsDraft() {
     if (!articleContent) return
 
@@ -701,11 +625,9 @@ export default function CreateArticlePage() {
       // They will be triggered when the post is published from the edit page
       // This prevents queue items from sitting in 'pending' status unnecessarily
 
-      // Trigger article thumbnail generation for news items
-      // Pass queue item IDs for stable thumbnail-to-article linking
-      if (newPost?.id) {
-        triggerArticleThumbnails(newPost.id, tiptapContent, usedQueueItemIds)
-      }
+      // NOTE: Thumbnails are NOT auto-generated on save
+      // User must manually go to edit page → "Bilder" tab → click "Generieren"
+      // This ensures robust thumbnail-to-article matching after any edits
 
       // Initialize edit history with original AI content (for learning from edits)
       if (newPost?.id) {

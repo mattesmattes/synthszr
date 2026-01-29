@@ -631,7 +631,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     }
 
     // Re-index thumbnails on EVERY save to match current article order
-    // Then generate any missing thumbnails
+    // NOTE: Thumbnails are NOT auto-generated - user must manually go to "Bilder" tab and click "Generieren"
     console.log(`[Thumbnails] Re-indexing thumbnails for post ${id}`)
     fetch('/api/admin/reindex-thumbnails', {
       method: 'POST',
@@ -640,42 +640,13 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       body: JSON.stringify({ postId: id, content }),
     })
       .then(res => res.json())
-      .then(async data => {
+      .then(data => {
         const actions = []
         if (data.updated > 0) actions.push(`${data.updated} updated`)
         if (data.deleted > 0) actions.push(`${data.deleted} deleted`)
+        if (data.missingArticles?.length > 0) actions.push(`${data.missingArticles.length} missing`)
         if (actions.length > 0) {
           console.log(`[Thumbnails] Re-indexed: ${actions.join(', ')}`)
-        }
-
-        // Generate missing thumbnails if any
-        if (data.missingArticles && data.missingArticles.length > 0) {
-          console.log(`[Thumbnails] Generating ${data.missingArticles.length} missing thumbnails...`)
-          try {
-            const genRes = await fetch('/api/generate-article-thumbnails', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({
-                postId: id,
-                articles: data.missingArticles.map((a: { index: number; text: string; queueItemId?: string }) => ({
-                  index: a.index,
-                  text: a.text,
-                  vote: null,
-                  queueItemId: a.queueItemId
-                }))
-              })
-            })
-            if (genRes.ok) {
-              const genData = await genRes.json()
-              const successCount = genData.results?.filter((r: { success: boolean }) => r.success).length || 0
-              console.log(`[Thumbnails] Generated ${successCount} new thumbnails`)
-            } else {
-              console.error('[Thumbnails] Generation failed:', await genRes.text())
-            }
-          } catch (genErr) {
-            console.error('[Thumbnails] Generation error:', genErr)
-          }
         }
       })
       .catch(err => console.error('[Thumbnails] Re-index error:', err))
