@@ -192,6 +192,9 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
   // Track if mounted (for safe document.body portal usage)
   const [isMounted, setIsMounted] = useState(false)
 
+  // Track companies that have already been triggered for generation (prevents infinite loops)
+  const generationTriggeredRef = useRef<Set<string>>(new Set())
+
   useEffect(() => {
     setIsMounted(true)
     setDevicePixelRatio(window.devicePixelRatio || 1)
@@ -675,6 +678,49 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
             }).then(r => r.json())
           : Promise.resolve({ ok: true, ratings: [] }),
       ])
+
+      // Identify companies WITHOUT cached ratings - trigger generation in background
+      // Only trigger for companies not already in the generation queue (prevents infinite loops)
+      const companiesWithoutRatings = (publicResponse.ok && publicResponse.quotes || [])
+        .filter((r: BatchQuoteResult) => r.rating === null)
+        .map((r: BatchQuoteResult) => r.company)
+        .filter((company: string) => !generationTriggeredRef.current.has(company.toLowerCase()))
+
+      if (companiesWithoutRatings.length > 0) {
+        console.log(`[TiptapRenderer] Triggering rating generation for ${companiesWithoutRatings.length} companies:`, companiesWithoutRatings)
+
+        // Mark these companies as triggered (prevents re-triggering on refresh)
+        companiesWithoutRatings.forEach((company: string) => {
+          generationTriggeredRef.current.add(company.toLowerCase())
+        })
+
+        // Fire-and-forget: Generate ratings in background, then re-run this function
+        Promise.all(
+          companiesWithoutRatings.map((company: string) =>
+            fetch('/api/stock-synthszr', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ company }),
+            }).catch(err => console.error(`[TiptapRenderer] Rating generation failed for ${company}:`, err))
+          )
+        ).then(() => {
+          // After all generations complete, re-run to show the new ratings
+          console.log('[TiptapRenderer] Rating generation complete, refreshing...')
+          // Small delay to ensure cache is updated
+          setTimeout(() => {
+            // Clear processed markers to allow re-processing
+            if (containerRef.current) {
+              containerRef.current.querySelectorAll('.synthszr-ratings-processed').forEach(el => {
+                el.classList.remove('synthszr-ratings-processed')
+                // Remove existing rating containers
+                el.querySelectorAll('.synthszr-ratings-container').forEach(c => c.remove())
+              })
+            }
+            // Re-run the rating link processor
+            processSynthszrRatingLinks()
+          }, 500)
+        })
+      }
 
       // Build quotes map for public companies (includes ticker, %, direction, and rating)
       const publicQuotesMap = new Map<string, BatchQuoteResult>(
