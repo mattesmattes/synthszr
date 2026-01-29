@@ -631,7 +631,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     }
 
     // Re-index thumbnails on EVERY save to match current article order
-    // This ensures thumbnails stay in sync even when articles are reordered in draft
+    // This also generates missing thumbnails for articles without them
     console.log(`[Thumbnails] Re-indexing thumbnails for post ${id}`)
     fetch('/api/admin/reindex-thumbnails', {
       method: 'POST',
@@ -641,20 +641,15 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     })
       .then(res => res.json())
       .then(data => {
-        if (data.updated > 0 || data.deleted > 0) {
-          console.log(`[Thumbnails] Re-indexed: ${data.updated} updated, ${data.deleted} deleted`)
-        } else if (data.mismatchCount > 0) {
-          console.warn(`[Thumbnails] ${data.mismatchCount} thumbnails could not be matched to articles`)
+        const actions = []
+        if (data.updated > 0) actions.push(`${data.updated} updated`)
+        if (data.deleted > 0) actions.push(`${data.deleted} deleted`)
+        if (data.generated > 0) actions.push(`${data.generated} generated`)
+        if (actions.length > 0) {
+          console.log(`[Thumbnails] Re-indexed: ${actions.join(', ')}`)
         }
       })
       .catch(err => console.error('[Thumbnails] Re-index error:', err))
-
-    // Generate article thumbnails if missing (count all non-failed thumbnails)
-    const existingThumbnails = articleThumbnails.filter(t => t.generation_status !== 'failed').length
-    if (articleCount > 0 && existingThumbnails < articleCount) {
-      console.log(`[Thumbnails] Missing thumbnails: ${existingThumbnails}/${articleCount} - triggering generation`)
-      generateArticleThumbnails(content)
-    }
 
     // Generate cover images if missing and digest available
     if (coverImageCount === 0 && post?.digest_id) {

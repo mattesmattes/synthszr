@@ -145,12 +145,87 @@ export async function POST(request: NextRequest) {
         .in('id', orphaned)
     }
 
+    // Find articles that don't have thumbnails (missing)
+    const matchedThumbnailIds = new Set(updates.map(u => u.id))
+    const unmatchedThumbnails = thumbnails.filter(t =>
+      !orphaned.includes(t.id) && !matchedThumbnailIds.has(t.id)
+    )
+
+    // Build set of article indices that have thumbnails
+    const coveredIndices = new Set<number>()
+
+    // Add indices from updates (thumbnails that were re-matched)
+    for (const update of updates) {
+      coveredIndices.add(update.newIndex)
+    }
+
+    // Add indices from unchanged thumbnails (already at correct position)
+    for (const thumb of unmatchedThumbnails) {
+      if (thumb.article_index < articles.length) {
+        coveredIndices.add(thumb.article_index)
+      }
+    }
+
+    // Find missing articles (those without thumbnails)
+    const missingArticles: Array<{ index: number; text: string; queueItemId?: string }> = []
+    for (let i = 0; i < articles.length; i++) {
+      if (!coveredIndices.has(i)) {
+        missingArticles.push({
+          index: i,
+          text: articles[i].heading.slice(0, 300),
+          queueItemId: articles[i].queueItemId
+        })
+      }
+    }
+
+    // If there are missing articles, trigger thumbnail generation
+    let generated = 0
+    if (missingArticles.length > 0) {
+      console.log(`[Reindex] ${missingArticles.length} articles missing thumbnails - triggering generation`)
+
+      // Call the thumbnail generation API internally
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : 'http://localhost:3000'
+
+      try {
+        const genResponse = await fetch(`${baseUrl}/api/generate-article-thumbnails`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.CRON_SECRET}`
+          },
+          body: JSON.stringify({
+            postId,
+            articles: missingArticles.map(a => ({
+              index: a.index,
+              text: a.text,
+              vote: null,
+              queueItemId: a.queueItemId
+            }))
+          })
+        })
+
+        if (genResponse.ok) {
+          const genResult = await genResponse.json()
+          generated = genResult.results?.filter((r: { success: boolean }) => r.success).length || 0
+          console.log(`[Reindex] Generated ${generated} new thumbnails`)
+        } else {
+          console.error(`[Reindex] Thumbnail generation failed: ${genResponse.status}`)
+        }
+      } catch (genError) {
+        console.error('[Reindex] Failed to call thumbnail generation:', genError)
+      }
+    }
+
     return NextResponse.json({
       success: true,
       articlesInContent: articles.length,
       thumbnailsFound: thumbnails.length,
       updated: updatedCount,
       deleted: orphaned.length,
+      generated,
+      missingArticles: missingArticles.length,
     })
   } catch (error) {
     console.error('[Reindex] Error:', error)
