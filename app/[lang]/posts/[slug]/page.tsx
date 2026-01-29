@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
-import { TiptapRenderer } from "@/components/tiptap-renderer"
+import { PostContentView } from "@/components/post-content-view"
 import { Newsletter } from "@/components/newsletter"
 import { SwipeNavigation } from "@/components/swipe-navigation"
 import { LanguageSwitcher } from "@/components/language-switcher"
@@ -294,7 +294,7 @@ export default async function PostPage({ params }: PageProps) {
           </header>
 
           <div className="prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-xl prose-h2:text-lg prose-h2:mt-8 prose-h2:mb-3 prose-p:mb-5 prose-blockquote:border-l-2 prose-blockquote:border-accent prose-blockquote:pl-6 prose-blockquote:italic">
-            <TiptapRenderer content={post.content} postId={post.id} queueItemIds={post.pending_queue_item_ids || undefined} />
+            <PostContentView content={post.content} postId={post.id} queueItemIds={post.pending_queue_item_ids || undefined} />
           </div>
         </article>
 
