@@ -11,7 +11,7 @@ interface HumanMachineToggleProps {
  */
 export function HumanMachineToggle({ mode, onToggle }: HumanMachineToggleProps) {
   return (
-    <div className="fixed bottom-6 right-6 z-50">
+    <div className="fixed bottom-6 right-6 z-[9999]">
       <div className="flex items-center gap-0.5 bg-background/95 backdrop-blur-sm border border-border rounded-full px-1 py-1 shadow-lg">
         <button
           onClick={() => onToggle('human')}

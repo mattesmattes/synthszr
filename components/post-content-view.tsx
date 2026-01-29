@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
 import { HumanMachineToggle } from "@/components/human-machine-toggle"
 import { convertTiptapToMarkdown, parseTiptapContent } from "@/lib/utils/tiptap-to-markdown"
@@ -18,6 +19,11 @@ interface PostContentViewProps {
  */
 export function PostContentView({ content, postId, queueItemIds }: PostContentViewProps) {
   const [viewMode, setViewMode] = useState<'human' | 'machine'>('human')
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   // Memoize Markdown conversion to avoid recalculating on every render
   const markdown = useMemo(() => {
@@ -35,7 +41,10 @@ export function PostContentView({ content, postId, queueItemIds }: PostContentVi
           {markdown}
         </div>
       )}
-      <HumanMachineToggle mode={viewMode} onToggle={setViewMode} />
+      {isMounted && createPortal(
+        <HumanMachineToggle mode={viewMode} onToggle={setViewMode} />,
+        document.body
+      )}
     </>
   )
 }
