@@ -245,6 +245,9 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
     }
   }, [searchParams])
 
+  // Track when editor content is ready in DOM
+  const [editorReady, setEditorReady] = useState(false)
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -270,6 +273,13 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
         class: "prose prose-neutral max-w-none font-serif text-base md:text-sm leading-relaxed tiptap-content",
       },
     },
+    // Use onCreate to know when editor is actually ready
+    onCreate: () => {
+      // Small delay to ensure React has flushed DOM updates
+      requestAnimationFrame(() => {
+        setEditorReady(true)
+      })
+    },
   })
 
   // Check if node is inside a heading element
@@ -293,7 +303,11 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
       const currentContent = JSON.stringify(editor.getJSON())
       const newContent = JSON.stringify(content)
       if (currentContent !== newContent) {
+        // Reset editorReady so processing waits for new content
+        setEditorReady(false)
         editor.commands.setContent(content)
+        // Re-trigger ready state after content update
+        requestAnimationFrame(() => setEditorReady(true))
       }
     }
   }, [editor, content])
@@ -1022,32 +1036,45 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
     }
   }, [])
 
-  // Process news headings and rating links after editor renders
+  // Process news headings and rating links after editor is ready
   useEffect(() => {
-    if (editor) {
-      // Wait for DOM to update
-      const timeoutId = setTimeout(async () => {
-        processNewsHeadings() // Process news headings (adds favicons, removes source links, inserts thumbnails)
-        processMattesSyntheseText()
-        // Process Synthszr rating links BEFORE hiding {Company} tags
-        // so the company detection can find explicit tags
-        // IMPORTANT: Wait for async processSynthszrRatingLinks to complete before hiding tags
-        await processSynthszrRatingLinks()
-        // Hide {Company} syntax AFTER company detection and badge placement
-        hideExplicitCompanyTags()
+    if (!editorReady || !containerRef.current) return
 
-        // Scroll to anchor if URL has hash (IDs are set after React renders)
-        const hash = window.location.hash
-        if (hash) {
-          const element = document.querySelector(hash)
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth' })
-          }
-        }
-      }, 100)
-      return () => clearTimeout(timeoutId)
+    // Verify DOM has actual content before processing (prevents race condition)
+    const hasContent = containerRef.current.querySelector('.ProseMirror')?.textContent?.trim()
+    if (!hasContent) {
+      console.log('[TiptapRenderer] DOM not ready, waiting...')
+      // Retry after a short delay
+      const retryId = setTimeout(() => setEditorReady(false), 50)
+      const resetId = setTimeout(() => setEditorReady(true), 150)
+      return () => {
+        clearTimeout(retryId)
+        clearTimeout(resetId)
+      }
     }
-  }, [editor, content, hideExplicitCompanyTags, processMattesSyntheseText, processNewsHeadings, processSynthszrRatingLinks])
+
+    const processContent = async () => {
+      processNewsHeadings() // Process news headings (adds favicons, removes source links, inserts thumbnails)
+      processMattesSyntheseText()
+      // Process Synthszr rating links BEFORE hiding {Company} tags
+      // so the company detection can find explicit tags
+      // IMPORTANT: Wait for async processSynthszrRatingLinks to complete before hiding tags
+      await processSynthszrRatingLinks()
+      // Hide {Company} syntax AFTER company detection and badge placement
+      hideExplicitCompanyTags()
+
+      // Scroll to anchor if URL has hash (IDs are set after React renders)
+      const hash = window.location.hash
+      if (hash) {
+        const element = document.querySelector(hash)
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' })
+        }
+      }
+    }
+
+    processContent()
+  }, [editorReady, content, hideExplicitCompanyTags, processMattesSyntheseText, processNewsHeadings, processSynthszrRatingLinks])
 
   if (!editor) {
     return null
