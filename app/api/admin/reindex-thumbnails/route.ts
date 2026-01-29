@@ -178,44 +178,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // If there are missing articles, trigger thumbnail generation
-    let generated = 0
+    // Log missing articles info
     if (missingArticles.length > 0) {
-      console.log(`[Reindex] ${missingArticles.length} articles missing thumbnails - triggering generation`)
-
-      // Call the thumbnail generation API internally
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : 'http://localhost:3000'
-
-      try {
-        const genResponse = await fetch(`${baseUrl}/api/generate-article-thumbnails`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.CRON_SECRET}`
-          },
-          body: JSON.stringify({
-            postId,
-            articles: missingArticles.map(a => ({
-              index: a.index,
-              text: a.text,
-              vote: null,
-              queueItemId: a.queueItemId
-            }))
-          })
-        })
-
-        if (genResponse.ok) {
-          const genResult = await genResponse.json()
-          generated = genResult.results?.filter((r: { success: boolean }) => r.success).length || 0
-          console.log(`[Reindex] Generated ${generated} new thumbnails`)
-        } else {
-          console.error(`[Reindex] Thumbnail generation failed: ${genResponse.status}`)
-        }
-      } catch (genError) {
-        console.error('[Reindex] Failed to call thumbnail generation:', genError)
-      }
+      console.log(`[Reindex] ${missingArticles.length} articles missing thumbnails`)
     }
 
     return NextResponse.json({
@@ -224,8 +189,11 @@ export async function POST(request: NextRequest) {
       thumbnailsFound: thumbnails.length,
       updated: updatedCount,
       deleted: orphaned.length,
-      generated,
-      missingArticles: missingArticles.length,
+      missingArticles: missingArticles.map(a => ({
+        index: a.index,
+        text: a.text,
+        queueItemId: a.queueItemId
+      })),
     })
   } catch (error) {
     console.error('[Reindex] Error:', error)
