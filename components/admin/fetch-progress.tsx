@@ -223,7 +223,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
   const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
 
   return (
-    <Card>
+    <Card className="w-full overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-medium flex items-center gap-2">
@@ -269,7 +269,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 overflow-hidden">
         {/* Phase indicator */}
         {phase !== 'idle' && (
           <div className="space-y-2">
@@ -287,7 +287,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
 
         {/* Live Stats during fetch */}
         {isRunning && (
-          <div className="grid grid-cols-5 gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="grid grid-cols-5 gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-lg font-bold text-blue-600">
                 <Mail className="h-4 w-4" />
@@ -328,7 +328,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
 
         {/* Final Summary */}
         {summary && !isRunning && (
-          <div className="grid grid-cols-5 gap-3 p-4 bg-muted/50 rounded-lg">
+          <div className="grid grid-cols-5 gap-2 p-3 bg-muted/50 rounded-lg">
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-xl font-bold text-blue-600">
                 <Mail className="h-4 w-4" />
@@ -369,7 +369,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
 
         {/* Item list */}
         {items.length > 0 && (
-          <div className="max-h-64 overflow-y-auto overflow-x-hidden space-y-1 border rounded-lg p-2">
+          <div className="max-h-64 overflow-y-auto overflow-x-hidden space-y-1 border rounded-lg p-2 w-full">
             {items.slice(-15).map((item, i) => (
               <div
                 key={`${item.title}-${i}`}
