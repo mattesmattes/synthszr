@@ -625,6 +625,11 @@ export default function AdminPage() {
                           day: 'numeric',
                           month: 'short',
                           year: 'numeric',
+                        })}{' '}
+                        {new Date(post.created_at).toLocaleTimeString('de-DE', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
                         })}
                       </span>
                       {post.word_count && (
