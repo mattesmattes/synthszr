@@ -116,8 +116,8 @@ export async function POST(request: NextRequest) {
         const { data: existingThumbnail } = await existingThumbnailQuery.single()
 
         if (existingThumbnail) {
-          // Skip if already completed, generating, or pending
-          if (existingThumbnail.generation_status !== 'failed') {
+          // Skip only if completed or currently generating
+          if (existingThumbnail.generation_status === 'completed' || existingThumbnail.generation_status === 'generating') {
             console.log(`[Thumbnail] Skipping article ${article.index} - already exists with status: ${existingThumbnail.generation_status}`)
             results.push({
               index: article.index,
@@ -127,8 +127,8 @@ export async function POST(request: NextRequest) {
             })
             continue
           }
-          // For failed thumbnails, delete and regenerate
-          console.log(`[Thumbnail] Regenerating failed thumbnail for article ${article.index}`)
+          // For pending or failed thumbnails, delete and regenerate
+          console.log(`[Thumbnail] Regenerating ${existingThumbnail.generation_status} thumbnail for article ${article.index}`)
           await supabase.from('post_images').delete().eq('id', existingThumbnail.id)
         }
 
