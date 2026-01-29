@@ -598,7 +598,7 @@ export default function CreateArticlePage() {
         content: JSON.stringify(tiptapContent),
         word_count: bodyContent.split(/\s+/).length,
         status: 'draft',
-        created_at: new Date().toISOString().split('T')[0], // Use today as publish date
+        created_at: new Date().toISOString(), // Full timestamp including time
         ai_model: usedModel || selectedModel, // Store the model used for generation
         // Store queue item IDs - will be marked as "used" when post is published
         pending_queue_item_ids: usedQueueItemIds.length > 0 ? usedQueueItemIds : [],
