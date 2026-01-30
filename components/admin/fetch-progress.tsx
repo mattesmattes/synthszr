@@ -223,7 +223,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
   const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
 
   return (
-    <Card className="w-full overflow-hidden">
+    <Card className="w-full overflow-hidden min-w-0">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-medium flex items-center gap-2">
@@ -269,10 +269,10 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 overflow-hidden">
+      <CardContent className="space-y-4 overflow-hidden min-w-0">
         {/* Phase indicator */}
         {phase !== 'idle' && (
-          <div className="space-y-2">
+          <div className="space-y-2 w-full min-w-0">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">{phaseLabels[phase as keyof typeof phaseLabels] || phase}</span>
               {progress.total > 0 && (
@@ -280,7 +280,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
               )}
             </div>
             {progress.total > 0 && (
-              <Progress value={progressPercent} className="h-2" />
+              <Progress value={progressPercent} className="h-2 w-full" />
             )}
           </div>
         )}
