@@ -396,7 +396,9 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
                     <div className="text-xs text-muted-foreground truncate">{item.from}</div>
                   )}
                   {item.url && (
-                    <div className="text-xs text-muted-foreground truncate max-w-full">{item.url}</div>
+                    <div className="text-xs text-muted-foreground truncate max-w-full">
+                      {item.url.length > 50 ? item.url.slice(0, 50) + '…' : item.url}
+                    </div>
                   )}
                   {item.error && (
                     <div className="text-xs text-red-600 truncate">{item.error}</div>
