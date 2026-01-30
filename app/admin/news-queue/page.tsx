@@ -629,9 +629,9 @@ export default function NewsQueuePage() {
 
       {/* Stats Cards / Tab Navigation */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6 min-w-0 overflow-hidden">
           <Card
-            className={`cursor-pointer transition-all ${statusFilter === 'pending' ? 'ring-2 ring-yellow-500 bg-yellow-500/5' : 'hover:bg-muted/50'}`}
+            className={`cursor-pointer transition-all min-w-0 overflow-hidden ${statusFilter === 'pending' ? 'ring-2 ring-yellow-500 bg-yellow-500/5' : 'hover:bg-muted/50'}`}
             onClick={() => setStatusFilter('pending')}
           >
             <CardContent className="p-3">
@@ -643,7 +643,7 @@ export default function NewsQueuePage() {
             </CardContent>
           </Card>
           <Card
-            className={`cursor-pointer transition-all ${statusFilter === 'selected' ? 'ring-2 ring-blue-500 bg-blue-500/5' : 'hover:bg-muted/50'}`}
+            className={`cursor-pointer transition-all min-w-0 overflow-hidden ${statusFilter === 'selected' ? 'ring-2 ring-blue-500 bg-blue-500/5' : 'hover:bg-muted/50'}`}
             onClick={() => setStatusFilter('selected')}
           >
             <CardContent className="p-3">
@@ -655,7 +655,7 @@ export default function NewsQueuePage() {
             </CardContent>
           </Card>
           <Card
-            className={`cursor-pointer transition-all ${statusFilter === 'used' ? 'ring-2 ring-green-500 bg-green-500/5' : 'hover:bg-muted/50'}`}
+            className={`cursor-pointer transition-all min-w-0 overflow-hidden ${statusFilter === 'used' ? 'ring-2 ring-green-500 bg-green-500/5' : 'hover:bg-muted/50'}`}
             onClick={() => setStatusFilter('used')}
           >
             <CardContent className="p-3">
@@ -667,7 +667,7 @@ export default function NewsQueuePage() {
             </CardContent>
           </Card>
           <Card
-            className={`cursor-pointer transition-all ${statusFilter === 'expired' ? 'ring-2 ring-gray-500 bg-gray-500/5' : 'hover:bg-muted/50'}`}
+            className={`cursor-pointer transition-all min-w-0 overflow-hidden ${statusFilter === 'expired' ? 'ring-2 ring-gray-500 bg-gray-500/5' : 'hover:bg-muted/50'}`}
             onClick={() => setStatusFilter('expired')}
           >
             <CardContent className="p-3">
@@ -679,7 +679,7 @@ export default function NewsQueuePage() {
             </CardContent>
           </Card>
           <Card
-            className={`cursor-pointer transition-all ${statusFilter === 'skipped' ? 'ring-2 ring-orange-500 bg-orange-500/5' : 'hover:bg-muted/50'}`}
+            className={`cursor-pointer transition-all min-w-0 overflow-hidden ${statusFilter === 'skipped' ? 'ring-2 ring-orange-500 bg-orange-500/5' : 'hover:bg-muted/50'}`}
             onClick={() => setStatusFilter('skipped')}
           >
             <CardContent className="p-3">
