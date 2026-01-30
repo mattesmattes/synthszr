@@ -6,7 +6,7 @@ interface HumanMachineToggleProps {
 }
 
 /**
- * Floating toggle between Human (HTML) and Machine (Markdown) view
+ * Floating toggle between Human (HTML) and LLM (Markdown) view
  * Small-caps Unicode characters for distinctive styling
  * Uses inline styles for Safari compatibility (fixed positioning issues)
  */
@@ -53,10 +53,10 @@ export function HumanMachineToggle({ mode, onToggle }: HumanMachineToggleProps) 
               : 'text-muted-foreground hover:text-foreground'
           }`}
           aria-pressed={mode === 'machine'}
-          title="Machine-readable Markdown"
+          title="LLM-readable Markdown"
         >
           <span className="text-[10px]">{mode === 'machine' ? '◉' : '○'}</span>
-          <span style={{ fontVariant: 'small-caps', letterSpacing: '0.05em' }}>ᴍᴀᴄʜɪɴᴇ</span>
+          <span style={{ fontVariant: 'small-caps', letterSpacing: '0.05em' }}>ʟʟᴍ</span>
         </button>
       </div>
     </div>
