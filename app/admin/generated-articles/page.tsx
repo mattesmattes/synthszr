@@ -472,13 +472,9 @@ export default function GeneratedArticlesPage() {
             .catch(err => console.error('[i18n] Translation queue error:', err))
         }
 
-        // Generate article thumbnails if missing (count all non-failed thumbnails)
-        const existingThumbnails = articleThumbnails.filter(t => t.generation_status !== 'failed').length
-        const currentArticleCount = countArticles(editForm.content)
-        if (currentArticleCount > 0 && existingThumbnails < currentArticleCount) {
-          console.log(`[Thumbnails] Missing thumbnails: ${existingThumbnails}/${currentArticleCount} - triggering generation`)
-          generateArticleThumbnails(editingPost.id, editForm.content)
-        }
+        // NOTE: Thumbnails are NOT auto-generated on save
+        // User must manually go to "Bilder" tab and click "Generieren"
+        // This ensures intentional thumbnail creation after content is finalized
 
         setEditingPost(null)
         fetchPosts()

@@ -64,6 +64,7 @@ export const KNOWN_COMPANIES: Record<string, string> = {
   'Salesforce': 'salesforce',
   'Samsung': 'samsung',
   'SAP': 'sap',
+  'Xiaomi': 'xiaomi',
   'Schneider Electric': 'schneider-electric',
   'ServiceNow': 'servicenow',
   'Shopify': 'shopify',
