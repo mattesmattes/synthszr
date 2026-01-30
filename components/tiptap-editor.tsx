@@ -6,7 +6,7 @@ import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import { HeadingWithQueueId } from "@/lib/tiptap/heading-with-queue-id"
-import { Bold, Italic, List, ListOrdered, Heading1, Heading2, Quote, Undo, Redo, Link as LinkIcon, Unlink } from "lucide-react"
+import { Bold, Italic, Strikethrough, List, ListOrdered, Heading1, Heading2, Quote, Undo, Redo, Link as LinkIcon, Unlink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
@@ -126,6 +126,16 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
           className={cn(editor.isActive("italic") && "bg-secondary")}
         >
           <Italic className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => editor.chain().focus().toggleStrike().run()}
+          className={cn(editor.isActive("strike") && "bg-secondary")}
+          title="Durchstreichen"
+        >
+          <Strikethrough className="h-4 w-4" />
         </Button>
         <div className="mx-1 w-px bg-border" />
         <Button
