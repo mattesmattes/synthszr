@@ -463,8 +463,8 @@ export default function DailyRepoPage() {
 
       {/* Fetch Dialog */}
       <Dialog open={showFetchDialog} onOpenChange={setShowFetchDialog}>
-        <DialogContent className="max-w-2xl overflow-hidden">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2 text-base">
               <RefreshCw className="h-4 w-4" />
               Newsletter abrufen
@@ -473,7 +473,7 @@ export default function DailyRepoPage() {
               Rufe Newsletter und Artikel für ein bestimmtes Datum ab
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
             <div className="flex items-center gap-2">
               <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
               <input
