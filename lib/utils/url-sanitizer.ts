@@ -96,15 +96,20 @@ const TRACKING_REDIRECT_DOMAINS = [
   'click.convertkit-mail.com',
   'click.convertkit-mail2.com',
   'email.mg.substack.com',
-  'substack.com/redirect',
   'list-manage.com',
   'mailchimp.com',
   'sendinblue.com',
   'sendgrid.net',
   'mailgun.org',
   'tracking.tldrnewsletter.com',
-  'every.to/emails/click', // Every newsletter tracking
   't.co', // Twitter shortener
+]
+
+// Tracking paths - hostname + path combinations that indicate tracking URLs
+const TRACKING_PATHS = [
+  { hostname: 'substack.com', pathPrefix: '/redirect' },
+  { hostname: 'every.to', pathPrefix: '/emails/click' },
+  { hostname: 'link.mail.beehiiv.com', pathPrefix: '/' },
 ]
 
 /**
@@ -114,10 +119,20 @@ export function isTrackingRedirectUrl(url: string): boolean {
   try {
     const parsed = new URL(url)
     const hostname = parsed.hostname.toLowerCase()
+    const pathname = parsed.pathname.toLowerCase()
 
-    return TRACKING_REDIRECT_DOMAINS.some(domain =>
+    // Check domain-only tracking services
+    const isDomainTracker = TRACKING_REDIRECT_DOMAINS.some(domain =>
       hostname === domain || hostname.endsWith('.' + domain)
     )
+    if (isDomainTracker) return true
+
+    // Check hostname + path tracking patterns
+    const isPathTracker = TRACKING_PATHS.some(tracker =>
+      (hostname === tracker.hostname || hostname.endsWith('.' + tracker.hostname)) &&
+      pathname.startsWith(tracker.pathPrefix)
+    )
+    return isPathTracker
   } catch {
     return false
   }
@@ -248,4 +263,54 @@ export function sanitizeUrlWithInfo(url: string | null | undefined): {
  */
 export function sanitizeUrls(urls: (string | null | undefined)[]): (string | null)[] {
   return urls.map(sanitizeUrl)
+}
+
+/**
+ * Sanitize all URLs within text/markdown content
+ * Removes tracking URLs entirely or cleans tracking params from other URLs
+ */
+export function sanitizeContentUrls(content: string | null | undefined): string {
+  if (!content) return ''
+
+  // Match markdown links: [text](url) and raw URLs: https://...
+  const markdownLinkRegex = /\[([^\]]*)\]\(([^)]+)\)/g
+  const rawUrlRegex = /(https?:\/\/[^\s<>\[\]"']+)/g
+
+  let result = content
+
+  // First, handle markdown links
+  result = result.replace(markdownLinkRegex, (match, text, url) => {
+    // If it's a tracking redirect, remove the entire link (keep just the text)
+    if (isTrackingRedirectUrl(url)) {
+      console.log(`[URL Sanitizer] Removed tracking link from content: ${url.slice(0, 50)}...`)
+      return text || '' // Just keep the link text
+    }
+    // Otherwise, sanitize the URL
+    const cleaned = sanitizeUrl(url)
+    if (cleaned && cleaned !== url) {
+      return `[${text}](${cleaned})`
+    }
+    return match
+  })
+
+  // Then, handle raw URLs (not in markdown format)
+  result = result.replace(rawUrlRegex, (url) => {
+    // Skip if this URL is part of a markdown link (already handled)
+    // Check if preceded by ]( which indicates markdown link
+    const urlIndex = result.indexOf(url)
+    if (urlIndex > 1 && result.slice(urlIndex - 2, urlIndex) === '](') {
+      return url // Skip, already handled
+    }
+
+    // If it's a tracking redirect, remove it entirely
+    if (isTrackingRedirectUrl(url)) {
+      console.log(`[URL Sanitizer] Removed raw tracking URL from content: ${url.slice(0, 50)}...`)
+      return '' // Remove the URL
+    }
+    // Otherwise, sanitize the URL
+    const cleaned = sanitizeUrl(url)
+    return cleaned || ''
+  })
+
+  return result
 }

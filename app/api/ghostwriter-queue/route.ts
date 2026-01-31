@@ -10,7 +10,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
 import { getBalancedSelection, getSelectedItems, selectItemsForArticle } from '@/lib/news-queue/service'
-import { sanitizeUrl } from '@/lib/utils/url-sanitizer'
+import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
 
 const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview']
 
@@ -223,7 +223,9 @@ export async function POST(request: NextRequest) {
         digestContent += `**Quelle:** ${item.source_display_name}\n`
       }
       if (item.content) {
-        digestContent += `${item.content}\n`
+        // SECURITY: Sanitize tracking URLs from content before passing to AI
+        const cleanContent = sanitizeContentUrls(item.content)
+        digestContent += `${cleanContent}\n`
       }
       digestContent += '\n---\n\n'
     }
