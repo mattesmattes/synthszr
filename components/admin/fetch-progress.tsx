@@ -224,13 +224,13 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
 
   return (
     <Card className="w-full max-w-full overflow-hidden min-w-0">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-medium flex items-center gap-2">
+      <CardHeader className="pb-3 min-w-0 max-w-full overflow-hidden">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <CardTitle className="text-lg font-medium flex items-center gap-2 shrink-0">
             <RefreshCw className={cn("h-5 w-5", isRunning && "animate-spin")} />
             Newsletter Abruf
           </CardTitle>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <div className="flex items-center gap-2">
               <Switch
                 id="force-refresh"
@@ -269,25 +269,27 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 overflow-hidden min-w-0">
+      <CardContent className="space-y-4 overflow-hidden min-w-0 max-w-full">
         {/* Phase indicator */}
         {phase !== 'idle' && (
-          <div className="space-y-2 w-full min-w-0">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">{phaseLabels[phase as keyof typeof phaseLabels] || phase}</span>
+          <div className="space-y-2 w-full min-w-0 max-w-full">
+            <div className="flex items-center justify-between text-sm min-w-0">
+              <span className="text-muted-foreground truncate">{phaseLabels[phase as keyof typeof phaseLabels] || phase}</span>
               {progress.total > 0 && (
-                <span className="font-medium">{progress.current} / {progress.total}</span>
+                <span className="font-medium shrink-0 ml-2">{progress.current} / {progress.total}</span>
               )}
             </div>
             {progress.total > 0 && (
-              <Progress value={progressPercent} className="h-2 w-full" />
+              <div className="w-full min-w-0 max-w-full">
+                <Progress value={progressPercent} className="h-2 w-full" />
+              </div>
             )}
           </div>
         )}
 
         {/* Live Stats during fetch */}
         {isRunning && (
-          <div className="grid grid-cols-5 gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="grid grid-cols-5 gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200 min-w-0 max-w-full overflow-hidden">
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-lg font-bold text-blue-600">
                 <Mail className="h-4 w-4" />
@@ -328,7 +330,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
 
         {/* Final Summary */}
         {summary && !isRunning && (
-          <div className="grid grid-cols-5 gap-2 p-3 bg-muted/50 rounded-lg">
+          <div className="grid grid-cols-5 gap-2 p-3 bg-muted/50 rounded-lg min-w-0 max-w-full overflow-hidden">
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-xl font-bold text-blue-600">
                 <Mail className="h-4 w-4" />
@@ -369,7 +371,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
 
         {/* Item list */}
         {items.length > 0 && (
-          <div className="max-h-64 overflow-y-auto overflow-x-hidden space-y-1 border rounded-lg p-2 w-full">
+          <div className="max-h-64 overflow-y-auto overflow-x-hidden space-y-1 border rounded-lg p-2 w-full min-w-0 max-w-full">
             {items.slice(-15).map((item, i) => (
               <div
                 key={`${item.title}-${i}`}
