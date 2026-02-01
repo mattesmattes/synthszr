@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, startTransition } from 'react'
 import {
   Wand2,
   Sparkles,
@@ -306,9 +306,11 @@ export default function CreateArticlePage() {
     }
 
     setGenerating(true)
-    setArticleContent('')
-    setUsedModel(null)
-    setUsedQueueItemIds([])
+    startTransition(() => {
+      setArticleContent('')
+      setUsedModel(null)
+      setUsedQueueItemIds([])
+    })
 
     try {
       // Use Queue-based Ghostwriter API
@@ -350,7 +352,7 @@ export default function CreateArticlePage() {
               const data = JSON.parse(line.slice(6))
               if (data.clear) {
                 // Clear content for new version (deduplication phase)
-                setArticleContent('')
+                startTransition(() => setArticleContent(''))
               }
               if (data.phase === 'deduplication') {
                 console.log('[Ghostwriter-Queue] Deduplication:', data.message)
@@ -362,7 +364,7 @@ export default function CreateArticlePage() {
                 }
               }
               if (data.text) {
-                setArticleContent(prev => prev + data.text)
+                startTransition(() => setArticleContent(prev => prev + data.text))
               }
               if (data.model) {
                 setUsedModel(data.model)
@@ -386,7 +388,9 @@ export default function CreateArticlePage() {
       }
     } catch (error) {
       console.error('Generation error:', error)
-      setArticleContent(prev => prev + `\n\n**Fehler:** ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
+      startTransition(() => {
+        setArticleContent(prev => prev + `\n\n**Fehler:** ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
+      })
     } finally {
       setGenerating(false)
     }

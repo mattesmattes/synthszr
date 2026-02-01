@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, startTransition } from 'react'
 import { Languages, Loader2, RefreshCw, Play, RotateCcw, X, CheckCircle, Clock, AlertCircle, PenLine, Square, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -115,11 +115,11 @@ export default function TranslationsPage() {
     if (processing) return
 
     setProcessing(true)
-    setProcessLog([])
+    startTransition(() => {
+      setProcessLog([])
+      setProgress({ current: 0, total: data?.stats?.pending || 0 })
+    })
     abortRef.current = false
-
-    const totalPending = data?.stats?.pending || 0
-    setProgress({ current: 0, total: totalPending })
 
     let processed = 0
     let successCount = 0
@@ -131,11 +131,11 @@ export default function TranslationsPage() {
       const stats = await statsRes.json()
 
       if (stats.stats?.pending === 0) {
-        setProcessLog(prev => [...prev, '✅ Alle Items verarbeitet!'])
+        startTransition(() => setProcessLog(prev => [...prev, '✅ Alle Items verarbeitet!']))
         break
       }
 
-      setProcessLog(prev => [...prev, `🔄 Verarbeite nächstes Item...`])
+      startTransition(() => setProcessLog(prev => [...prev, `🔄 Verarbeite nächstes Item...`]))
 
       try {
         const res = await fetch('/api/admin/translations/process-queue', {
@@ -148,41 +148,42 @@ export default function TranslationsPage() {
         successCount += result.success
         failCount += result.failed
 
-        for (const detail of result.details) {
-          if (detail.status === 'success') {
-            setProcessLog(prev => [...prev, `✅ Erfolgreich übersetzt: ${detail.id.slice(0, 8)}...`])
-          } else if (detail.status === 'skipped') {
-            setProcessLog(prev => [...prev, `⏭️ Übersprungen (manuell bearbeitet)`])
-          } else {
-            setProcessLog(prev => [...prev, `❌ Fehlgeschlagen: ${detail.error || 'Unbekannter Fehler'}`])
+        startTransition(() => {
+          for (const detail of result.details) {
+            if (detail.status === 'success') {
+              setProcessLog(prev => [...prev, `✅ Erfolgreich übersetzt: ${detail.id.slice(0, 8)}...`])
+            } else if (detail.status === 'skipped') {
+              setProcessLog(prev => [...prev, `⏭️ Übersprungen (manuell bearbeitet)`])
+            } else {
+              setProcessLog(prev => [...prev, `❌ Fehlgeschlagen: ${detail.error || 'Unbekannter Fehler'}`])
+            }
           }
-        }
-
-        setProgress(prev => ({ ...prev, current: prev.current + result.processed }))
+          setProgress(prev => ({ ...prev, current: prev.current + result.processed }))
+        })
 
         // Refresh data
         await fetchData()
 
         // Delay between batches to avoid rate limiting
         if (!abortRef.current && stats.stats?.pending > 0) {
-          setProcessLog(prev => [...prev, `⏳ Warte 2 Sekunden (Rate Limit)...`])
+          startTransition(() => setProcessLog(prev => [...prev, `⏳ Warte 2 Sekunden (Rate Limit)...`]))
           await new Promise(resolve => setTimeout(resolve, 2000))
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error)
-        setProcessLog(prev => [...prev, `❌ Fehler: ${errorMsg}`])
-
-        // Wait longer on error
-        setProcessLog(prev => [...prev, `⏳ Warte 5 Sekunden nach Fehler...`])
+        startTransition(() => {
+          setProcessLog(prev => [...prev, `❌ Fehler: ${errorMsg}`])
+          setProcessLog(prev => [...prev, `⏳ Warte 5 Sekunden nach Fehler...`])
+        })
         await new Promise(resolve => setTimeout(resolve, 5000))
       }
     }
 
     if (abortRef.current) {
-      setProcessLog(prev => [...prev, '🛑 Verarbeitung abgebrochen'])
+      startTransition(() => setProcessLog(prev => [...prev, '🛑 Verarbeitung abgebrochen']))
     }
 
-    setProcessLog(prev => [...prev, `📊 Ergebnis: ${successCount} erfolgreich, ${failCount} fehlgeschlagen`])
+    startTransition(() => setProcessLog(prev => [...prev, `📊 Ergebnis: ${successCount} erfolgreich, ${failCount} fehlgeschlagen`]))
     setProcessing(false)
     setCurrentItem(null)
     fetchData()
@@ -190,7 +191,7 @@ export default function TranslationsPage() {
 
   function stopProcessing() {
     abortRef.current = true
-    setProcessLog(prev => [...prev, '🛑 Stoppe Verarbeitung...'])
+    startTransition(() => setProcessLog(prev => [...prev, '🛑 Stoppe Verarbeitung...']))
   }
 
   async function retryItem(id: string) {

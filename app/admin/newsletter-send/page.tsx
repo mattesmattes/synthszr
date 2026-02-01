@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, startTransition } from 'react'
 import { Send, FileText, Mail, Loader2, CheckCircle, AlertCircle, Clock, Users, History, Settings, FileEdit, Globe, AlertTriangle, Image } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -290,14 +290,16 @@ export default function NewsletterSendPage() {
       const missing = Math.max(0, articles.length - thumbnails.length)
       const valid = mismatched === 0 && orphaned === 0
 
-      setThumbnailStatus({
-        articlesInContent: articles.length,
-        thumbnailsFound: thumbnails.length,
-        matched,
-        mismatched,
-        orphaned,
-        missing,
-        valid
+      startTransition(() => {
+        setThumbnailStatus({
+          articlesInContent: articles.length,
+          thumbnailsFound: thumbnails.length,
+          matched,
+          mismatched,
+          orphaned,
+          missing,
+          valid
+        })
       })
     } catch (err) {
       console.error('Error checking thumbnail status:', err)
@@ -403,9 +405,11 @@ export default function NewsletterSendPage() {
       return
     }
 
-    setSending(true)
-    setMessage(null)
-    setShowTranslationWarning(false)
+    startTransition(() => {
+      setSending(true)
+      setMessage(null)
+      setShowTranslationWarning(false)
+    })
 
     try {
       const res = await fetch('/api/admin/newsletter-send', {

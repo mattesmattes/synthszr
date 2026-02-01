@@ -6,19 +6,20 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 // Note: Direct API is geographically restricted - disabled due to "Image generation not available in your country" error
 const USE_DIRECT_GOOGLE_API = false
 
-const DEFAULT_IMAGE_PROMPT = `Visualisiere in Schwarz-Weiß die folgende News satirisch im Stil von Mort Drucker ohne in der Visualisierung auf "Mort Drucker" oder "MAD" hinzuweisen.
+const DEFAULT_IMAGE_PROMPT = `Create a black and white satirical illustration of the following news in the style of Mort Drucker, without any references to "Mort Drucker" or "MAD" in the image.
 
-WICHTIGE STILRICHTLINIEN:
-- Klarer Schwarz-Weiß-Kontrast mit Schraffuren und Linienzeichnung
-- Satirische, leicht überzeichnete Darstellung
-- Dynamische Kompositionen mit ausdrucksstarken Figuren
-- Keine Text-Elemente oder Beschriftungen im Bild
-- Keine Referenzen auf MAD Magazine oder den Künstler
+IMPORTANT STYLE GUIDELINES:
+- Clear black and white contrast with cross-hatching and line drawing
+- Satirical, slightly exaggerated portrayal
+- Dynamic compositions with expressive figures
+- No text elements or labels in the image
+- If any text must appear, use ENGLISH ONLY (never German)
+- No references to MAD Magazine or the artist
 
-BILDFORMAT:
-- Generiere das Bild im Breitformat mit Seitenverhältnis 21:9 (ultrawide/cinematic)
-- Breite sollte etwa 2.3x die Höhe sein
-- Horizontale, panoramaartige Komposition
+IMAGE FORMAT:
+- Generate the image in widescreen format with 21:9 aspect ratio (ultrawide/cinematic)
+- Width should be approximately 2.3x the height
+- Horizontal, panoramic composition
 
 NEWS TEXT:
 {newsText}`
