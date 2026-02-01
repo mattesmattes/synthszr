@@ -322,6 +322,42 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    if (action === 'delete' && queue_item_id) {
+      // Delete a queue item (and optionally its translation)
+      const { data: queueItem } = await supabase
+        .from('translation_queue')
+        .select('content_id, content_type, target_language')
+        .eq('id', queue_item_id)
+        .single()
+
+      if (!queueItem) {
+        return NextResponse.json({ error: 'Queue item not found' }, { status: 404 })
+      }
+
+      // Delete associated translation if exists
+      if (queueItem.content_id) {
+        await supabase
+          .from('content_translations')
+          .delete()
+          .eq('content_id', queueItem.content_id)
+          .eq('content_type', queueItem.content_type)
+          .eq('language', queueItem.target_language)
+      }
+
+      // Delete the queue item
+      const { error } = await supabase
+        .from('translation_queue')
+        .delete()
+        .eq('id', queue_item_id)
+
+      if (error) {
+        return NextResponse.json({ error: 'Failed to delete item' }, { status: 500 })
+      }
+
+      console.log(`[Translations] Deleted queue item ${queue_item_id}`)
+      return NextResponse.json({ message: 'Item deleted' })
+    }
+
     if (action === 'toggle_manual' && translation_id) {
       // Toggle is_manually_edited flag
       const { data: current } = await supabase

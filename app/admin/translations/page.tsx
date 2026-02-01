@@ -236,6 +236,28 @@ export default function TranslationsPage() {
     }
   }
 
+  async function deleteItem(id: string) {
+    if (!confirm('Übersetzung wirklich löschen? Dies löscht auch die zugehörige Übersetzung.')) {
+      return
+    }
+    try {
+      const res = await fetch('/api/admin/translations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', queue_item_id: id }),
+      })
+      if (res.ok) {
+        setProcessLog(prev => [...prev, `🗑️ Übersetzung gelöscht`])
+      } else {
+        setProcessLog(prev => [...prev, `❌ Löschen fehlgeschlagen`])
+      }
+      fetchData()
+    } catch (error) {
+      console.error('Error deleting item:', error)
+      setProcessLog(prev => [...prev, `❌ Netzwerkfehler beim Löschen`])
+    }
+  }
+
   async function retryAllFailed() {
     try {
       const res = await fetch('/api/admin/translations', {
@@ -556,6 +578,17 @@ export default function TranslationsPage() {
                       >
                         <X className="h-3 w-3 mr-1" />
                         Abbrechen
+                      </Button>
+                    )}
+                    {(item.status === 'completed' || item.status === 'failed' || item.status === 'cancelled') && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => deleteItem(item.id)}
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Löschen
                       </Button>
                     )}
                   </div>
