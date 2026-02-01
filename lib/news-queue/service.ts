@@ -258,7 +258,7 @@ export async function getSelectableItems(): Promise<NewsQueueSelectableItem[]> {
  * Falls back to simple score-based selection if balanced returns too few items
  */
 export async function getBalancedSelection(
-  maxItems: number = 10
+  maxItems: number = 25
 ): Promise<BalancedQueueSelection[]> {
   const supabase = createAdminClient()
 

@@ -783,8 +783,8 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                     value={excerpt}
                     onChange={(e) => setExcerpt(e.target.value)}
                     placeholder="Kurze Zusammenfassung..."
-                    rows={2}
-                    maxLength={200}
+                    rows={3}
+                    maxLength={800}
                     className="text-sm resize-none"
                   />
                 </div>

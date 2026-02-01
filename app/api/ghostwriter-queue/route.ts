@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const {
       queueItemIds,        // Specific items to use (optional)
       useSelected = true,  // Use manually selected items (status='selected') - NEW DEFAULT
-      maxItems = 10,       // Max items if using balanced selection (fallback)
+      maxItems = 25,       // Max items if using balanced selection (fallback)
       promptId,
       vocabularyIntensity = 50,
       model: requestedModel

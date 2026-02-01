@@ -1001,10 +1001,10 @@ export default function CreateArticlePage() {
                     value={metadata.excerpt}
                     onChange={(e) => setMetadata({ ...metadata, excerpt: e.target.value })}
                     placeholder="Kurze Zusammenfassung für Vorschau und SEO..."
-                    className="h-20 resize-none"
-                    maxLength={200}
+                    className="h-24 resize-none"
+                    maxLength={800}
                   />
-                  <p className="text-xs text-muted-foreground">{metadata.excerpt.length}/200 Zeichen</p>
+                  <p className="text-xs text-muted-foreground">{metadata.excerpt.length}/800 Zeichen</p>
                 </div>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1.5 text-sm">

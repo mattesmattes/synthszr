@@ -819,10 +819,10 @@ export default function AdminPage() {
                 value={editForm.excerpt}
                 onChange={(e) => setEditForm({ ...editForm, excerpt: e.target.value })}
                 placeholder="Kurze Zusammenfassung für Vorschau und SEO..."
-                className="h-20 resize-none"
-                maxLength={200}
+                className="h-24 resize-none"
+                maxLength={800}
               />
-              <p className="text-xs text-muted-foreground">{editForm.excerpt.length}/200 Zeichen</p>
+              <p className="text-xs text-muted-foreground">{editForm.excerpt.length}/800 Zeichen</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
