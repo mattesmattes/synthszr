@@ -663,7 +663,17 @@ function convertNodeToHtml(node: TiptapNode): string {
     }
     case 'heading': {
       const level = node.attrs?.level || 2
-      return `<h${level}>${renderContent(node.content)}</h${level}>`
+      // Email-safe heading sizes (increased by one step)
+      const headingSizes: Record<number, string> = {
+        1: '32px',
+        2: '26px',
+        3: '22px',
+        4: '18px',
+        5: '16px',
+        6: '14px',
+      }
+      const fontSize = headingSizes[Number(level)] || '22px'
+      return `<h${level} style="font-size: ${fontSize}; margin: 16px 0 8px 0;">${renderContent(node.content)}</h${level}>`
     }
     case 'bulletList':
       return `<ul>${node.content?.map(li => `<li>${renderContent(li.content?.[0]?.content)}</li>`).join('')}</ul>`
