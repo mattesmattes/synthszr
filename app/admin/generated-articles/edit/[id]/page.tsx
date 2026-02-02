@@ -260,23 +260,27 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         return
       }
 
-      console.log(`[CoverImages] Generating ${newsItems.length} cover images...`)
+      console.log(`[CoverImages] Generating cover image from ${newsItems.length} news items (combined composition)...`)
 
-      // Generate images (fire and forget)
-      for (const text of newsItems) {
-        fetch('/api/generate-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ postId: id, newsText: text }),
+      // Generate ONE combined cover image from up to 3 news items
+      fetch('/api/generate-image', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          postId: id,
+          newsItems: newsItems.map((text: string) => ({ text })),
+          coverMode: true, // Combine news items into ONE cover image
+        }),
+      })
+        .then(res => {
+          if (!res.ok) {
+            res.json().then(data => console.error('[CoverImages] Generation failed:', data))
+          } else {
+            console.log('[CoverImages] Cover image generation started successfully')
+          }
         })
-          .then(res => {
-            if (!res.ok) {
-              res.json().then(data => console.error('[CoverImages] Generation failed:', data))
-            }
-          })
-          .catch(err => console.error('[CoverImages] Generation error:', err))
-      }
+        .catch(err => console.error('[CoverImages] Generation error:', err))
     } catch (err) {
       console.error('[CoverImages] Error triggering generation:', err)
     }

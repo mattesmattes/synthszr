@@ -225,12 +225,41 @@ async function generateImageVercelSDK(prompt: string): Promise<GenerateImageResu
  * Generates a satirical black & white image based on news text using Gemini
  * Uses direct Google API or Vercel AI SDK based on USE_DIRECT_GOOGLE_API flag
  */
-export async function generateSatiricalImage(newsText: string): Promise<GenerateImageResult> {
+export interface CoverImageNews {
+  news1: string
+  news2?: string
+  news3?: string
+}
+
+/**
+ * Generate a satirical image from news text
+ * Supports single newsText string OR multiple news items for cover images
+ */
+export async function generateSatiricalImage(
+  newsTextOrItems: string | CoverImageNews
+): Promise<GenerateImageResult> {
   const maxRetries = 3
   let lastError: Error | null = null
 
   const promptTemplate = await getActiveImagePrompt()
-  const prompt = promptTemplate.replace('{newsText}', newsText.slice(0, 2000))
+
+  // Build prompt with variable substitution
+  let prompt: string
+  if (typeof newsTextOrItems === 'string') {
+    // Single news text (backward compatible)
+    prompt = promptTemplate.replace('{newsText}', newsTextOrItems.slice(0, 2000))
+  } else {
+    // Multiple news items for cover image composition
+    prompt = promptTemplate
+      .replace('{news1}', newsTextOrItems.news1?.slice(0, 800) || '')
+      .replace('{news2}', newsTextOrItems.news2?.slice(0, 800) || '')
+      .replace('{news3}', newsTextOrItems.news3?.slice(0, 800) || '')
+      .replace('{newsText}', [
+        newsTextOrItems.news1,
+        newsTextOrItems.news2,
+        newsTextOrItems.news3
+      ].filter(Boolean).join('\n\n---\n\n').slice(0, 2000))
+  }
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -487,9 +516,10 @@ export interface ImageProcessingOptions {
 /**
  * Generates a satirical image and processes it for transparency (and optionally dithering/scaling)
  * If no options provided, uses settings from the active image prompt in the database
+ * Supports single newsText string OR multiple news items for cover images
  */
 export async function generateAndProcessImage(
-  newsText: string,
+  newsTextOrItems: string | CoverImageNews,
   options?: ImageProcessingOptions
 ): Promise<{
   success: boolean
@@ -518,7 +548,7 @@ export async function generateAndProcessImage(
   }
 
   // Generate the image
-  const result = await generateSatiricalImage(newsText)
+  const result = await generateSatiricalImage(newsTextOrItems)
 
   if (!result.success || !result.imageBase64) {
     return result

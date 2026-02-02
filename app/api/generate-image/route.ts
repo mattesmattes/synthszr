@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
-import { generateAndProcessImage, ImageProcessingOptions } from '@/lib/gemini/image-generator'
+import { generateAndProcessImage, ImageProcessingOptions, CoverImageNews } from '@/lib/gemini/image-generator'
 import { getSession } from '@/lib/auth/session'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 
@@ -196,8 +196,9 @@ export async function PUT(request: NextRequest) {
       newsItems: Array<{ dailyRepoId?: string; text: string }>
       enableDithering?: boolean
       ditheringGain?: number
+      coverMode?: boolean // When true, combines first 3 news items into one cover image
     } = await request.json()
-    const { postId, newsItems, enableDithering, ditheringGain } = body
+    const { postId, newsItems, enableDithering, ditheringGain, coverMode } = body
 
     if (!postId || !newsItems || newsItems.length === 0) {
       return NextResponse.json(
@@ -218,7 +219,107 @@ export async function PUT(request: NextRequest) {
     const supabase = await createClient()
     const results: Array<{ success: boolean; error?: string; imageId?: string }> = []
 
-    // Process images sequentially to avoid API rate limits
+    // Cover mode: Generate ONE combined image from up to 3 news items
+    if (coverMode && newsItems.length > 0) {
+      console.log(`[Gemini] Generating cover image from ${Math.min(newsItems.length, 3)} news items for postId=${postId}`)
+
+      // Build CoverImageNews from first 3 items
+      const coverNews: CoverImageNews = {
+        news1: newsItems[0]?.text || '',
+        news2: newsItems[1]?.text,
+        news3: newsItems[2]?.text,
+      }
+
+      // Create pending image record for cover
+      const { data: imageRecord, error: insertError } = await supabase
+        .from('post_images')
+        .insert({
+          post_id: postId,
+          daily_repo_id: null, // Cover combines multiple sources
+          image_url: '',
+          source_text: [coverNews.news1, coverNews.news2, coverNews.news3]
+            .filter(Boolean).join('\n---\n').slice(0, 5000),
+          generation_status: 'generating',
+          is_cover: true,
+        })
+        .select()
+        .single()
+
+      if (insertError || !imageRecord) {
+        console.error('Failed to create cover image record:', insertError)
+        return NextResponse.json(
+          { error: 'Failed to create cover image record' },
+          { status: 500 }
+        )
+      }
+
+      // Generate the combined cover image
+      const result = await generateAndProcessImage(coverNews, processingOptions)
+
+      if (!result.success || !result.imageBase64) {
+        await supabase
+          .from('post_images')
+          .update({
+            generation_status: 'failed',
+            error_message: result.error || 'Unknown error',
+          })
+          .eq('id', imageRecord.id)
+
+        return NextResponse.json({
+          success: false,
+          error: result.error || 'Cover image generation failed',
+          results: [{ success: false, error: result.error, imageId: imageRecord.id }]
+        })
+      }
+
+      // Upload to Vercel Blob
+      const fileName = `post-images/${postId}/${imageRecord.id}-cover.png`
+      const imageBuffer = Buffer.from(result.imageBase64, 'base64')
+
+      try {
+        const blob = await put(fileName, imageBuffer, {
+          access: 'public',
+          contentType: result.mimeType || 'image/png',
+        })
+
+        await supabase
+          .from('post_images')
+          .update({
+            image_url: blob.url,
+            generation_status: 'completed',
+          })
+          .eq('id', imageRecord.id)
+
+        // Set as cover in generated_posts
+        await supabase
+          .from('generated_posts')
+          .update({ cover_image_id: imageRecord.id })
+          .eq('id', postId)
+
+        console.log(`[Gemini] Cover image generated successfully for postId=${postId}`)
+        return NextResponse.json({
+          success: true,
+          results: [{ success: true, imageId: imageRecord.id }]
+        })
+      } catch (uploadError) {
+        console.error('Failed to upload cover image:', uploadError)
+        await supabase
+          .from('post_images')
+          .update({
+            generation_status: 'failed',
+            error_message: 'Failed to upload to storage',
+          })
+          .eq('id', imageRecord.id)
+
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to upload cover image',
+          results: [{ success: false, error: 'Upload failed', imageId: imageRecord.id }]
+        })
+      }
+    }
+
+    // Standard mode: Process images sequentially (one per news item)
     for (const item of newsItems) {
       try {
         console.log(`[Gemini] Starting image generation for postId=${postId}`)

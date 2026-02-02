@@ -433,6 +433,7 @@ export default function CreateArticlePage() {
   }
 
   // Trigger background image generation for a post
+  // Generates ONE cover image from up to 3 news items (composition)
   async function triggerImageGeneration(postId: string, digestContent: string) {
     const newsItems = extractNewsItems(digestContent)
 
@@ -441,28 +442,27 @@ export default function CreateArticlePage() {
       return
     }
 
-    console.log(`Triggering image generation for ${newsItems.length} news items`)
+    console.log(`Triggering cover image generation from ${newsItems.length} news items (combined composition)`)
 
-    // Generate images in background (fire and forget)
-    for (const text of newsItems) {
-      fetch('/api/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // Include auth cookies
-        body: JSON.stringify({
-          postId,
-          newsText: text,
-        }),
+    // Generate a single combined cover image from up to 3 news items
+    fetch('/api/generate-image', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        postId,
+        newsItems: newsItems.map(text => ({ text })),
+        coverMode: true, // Combine news items into ONE cover image
+      }),
+    })
+      .then(res => {
+        if (!res.ok) {
+          res.json().then(data => console.error('Cover image generation failed:', data))
+        } else {
+          console.log('Cover image generation started successfully')
+        }
       })
-        .then(res => {
-          if (!res.ok) {
-            res.json().then(data => console.error('Image generation failed:', data))
-          } else {
-            console.log('Image generation started successfully')
-          }
-        })
-        .catch(err => console.error('Image generation error:', err))
-    }
+      .catch(err => console.error('Cover image generation error:', err))
   }
 
   // Extract {Company} tags from TipTap JSON content
