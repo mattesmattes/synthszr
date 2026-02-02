@@ -433,7 +433,7 @@ export default function CreateArticlePage() {
   }
 
   // Trigger background image generation for a post
-  // Generates ONE cover image from up to 3 news items (composition)
+  // Generates ONE cover image from the FIRST news item only
   async function triggerImageGeneration(postId: string, digestContent: string) {
     const newsItems = extractNewsItems(digestContent)
 
@@ -442,17 +442,17 @@ export default function CreateArticlePage() {
       return
     }
 
-    console.log(`Triggering cover image generation from ${newsItems.length} news items (combined composition)`)
+    // Use only the first news item for the cover image
+    const firstNews = newsItems[0]
+    console.log('Triggering cover image generation from first news item')
 
-    // Generate a single combined cover image from up to 3 news items
     fetch('/api/generate-image', {
-      method: 'PUT',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({
         postId,
-        newsItems: newsItems.map(text => ({ text })),
-        coverMode: true, // Combine news items into ONE cover image
+        newsText: firstNews,
       }),
     })
       .then(res => {

@@ -260,17 +260,17 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         return
       }
 
-      console.log(`[CoverImages] Generating cover image from ${newsItems.length} news items (combined composition)...`)
+      // Use only the first news item for the cover image
+      const firstNews = newsItems[0]
+      console.log('[CoverImages] Generating cover image from first news item...')
 
-      // Generate ONE combined cover image from up to 3 news items
       fetch('/api/generate-image', {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           postId: id,
-          newsItems: newsItems.map((text: string) => ({ text })),
-          coverMode: true, // Combine news items into ONE cover image
+          newsText: firstNews,
         }),
       })
         .then(res => {
