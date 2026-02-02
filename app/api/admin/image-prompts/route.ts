@@ -2,16 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 
-const DEFAULT_PROMPT = `Visualisiere in Schwarz-Weiß die folgende News satirisch im Stil von Mort Drucker ohne in der Visualisierung auf "Mort Drucker" oder "MAD" hinzuweisen.
+const DEFAULT_PROMPT = `Create a black and white satirical illustration of the following news in the style of Mort Drucker, without any references to "Mort Drucker" or "MAD" in the image.
 
-WICHTIGE STILRICHTLINIEN:
-- Klarer Schwarz-Weiß-Kontrast mit Schraffuren und Linienzeichnung
-- Satirische, leicht überzeichnete Darstellung
-- Dynamische Kompositionen mit ausdrucksstarken Figuren
-- Keine Text-Elemente oder Beschriftungen im Bild
-- Keine Referenzen auf MAD Magazine oder den Künstler
+IMPORTANT STYLE GUIDELINES:
+- Clear black and white contrast with cross-hatching and line drawing
+- Satirical, slightly exaggerated portrayal
+- Dynamic compositions with expressive figures
+- CRITICAL: Do NOT include ANY text, words, letters, labels, signs, or written language in the image
+- The image must be purely visual with ZERO text elements
+- No references to MAD Magazine or the artist
 
-NEWS TEXT:
+IMAGE FORMAT:
+- Generate the image in widescreen format with 21:9 aspect ratio (ultrawide/cinematic)
+- Width should be approximately 2.3x the height
+- Horizontal, panoramic composition
+
+NEWS TEXT (for visual inspiration only - DO NOT include any text from this in the image):
 {newsText}`
 
 export async function GET() {

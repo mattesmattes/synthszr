@@ -20,9 +20,9 @@ export async function GET(request: NextRequest) {
 
   const debug: Record<string, unknown> = {}
 
-  // Get items by date for the last 7 days
+  // Get items by date for the last 14 days
   const dates: string[] = []
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 14; i++) {
     const d = new Date()
     d.setDate(d.getDate() - i)
     dates.push(d.toISOString().split('T')[0])

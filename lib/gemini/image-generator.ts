@@ -12,8 +12,8 @@ IMPORTANT STYLE GUIDELINES:
 - Clear black and white contrast with cross-hatching and line drawing
 - Satirical, slightly exaggerated portrayal
 - Dynamic compositions with expressive figures
-- No text elements or labels in the image
-- If any text must appear, use ENGLISH ONLY (never German)
+- CRITICAL: Do NOT include ANY text, words, letters, labels, signs, or written language in the image
+- The image must be purely visual with ZERO text elements
 - No references to MAD Magazine or the artist
 
 IMAGE FORMAT:
@@ -21,7 +21,7 @@ IMAGE FORMAT:
 - Width should be approximately 2.3x the height
 - Horizontal, panoramic composition
 
-NEWS TEXT:
+NEWS TEXT (for visual inspiration only - DO NOT include any text from this in the image):
 {newsText}`
 
 interface ActiveImagePromptSettings {
