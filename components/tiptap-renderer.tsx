@@ -1146,14 +1146,11 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
 
   // Process news headings and rating links after editor is ready
   useEffect(() => {
-    console.log('[TiptapRenderer] useEffect triggered, editorReady:', editorReady, 'containerRef:', !!containerRef.current)
     if (!editorReady || !containerRef.current) return
 
     // Verify DOM has actual content before processing (prevents race condition)
     const hasContent = containerRef.current.querySelector('.ProseMirror')?.textContent?.trim()
-    console.log('[TiptapRenderer] hasContent:', !!hasContent, 'length:', hasContent?.length || 0)
     if (!hasContent) {
-      console.log('[TiptapRenderer] DOM not ready, waiting...')
       // Retry after a short delay
       const retryId = setTimeout(() => setEditorReady(false), 50)
       const resetId = setTimeout(() => setEditorReady(true), 150)
@@ -1164,10 +1161,8 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
     }
 
     const processContent = async () => {
-      console.log('[TiptapRenderer] processContent starting...')
       processNewsHeadings() // Process news headings (adds favicons, removes source links, inserts thumbnails)
       processMattesSyntheseText()
-      console.log('[TiptapRenderer] processMattesSyntheseText done, mattes-synthese count:', document.querySelectorAll('.mattes-synthese').length)
       // Process Synthszr rating links BEFORE hiding {Company} tags
       // so the company detection can find explicit tags
       // IMPORTANT: Wait for async processSynthszrRatingLinks to complete before hiding tags
