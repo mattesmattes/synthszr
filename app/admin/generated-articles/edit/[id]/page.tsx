@@ -235,42 +235,54 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     }
   }, [id])
 
-  // Trigger cover image generation (if digest available)
-  const triggerCoverImageGeneration = useCallback(async (digestId: string) => {
-    console.log('[CoverImages] Fetching digest content for image generation...')
+  // Trigger cover image generation from queue items or digest
+  const triggerCoverImageGeneration = useCallback(async (queueIds?: string[], digestId?: string) => {
+    console.log('[CoverImages] Triggering cover image generation...')
     try {
-      // Fetch digest content
-      const { data: digest } = await supabase
-        .from('daily_digests')
-        .select('analysis_content')
-        .eq('id', digestId)
-        .single()
+      let newsContent: string | null = null
 
-      if (!digest?.analysis_content) {
-        console.log('[CoverImages] No digest content found, skipping')
+      // Priority 1: Use queue item content (new flow)
+      if (queueIds && queueIds.length > 0) {
+        const { data: queueItems } = await supabase
+          .from('news_queue')
+          .select('content, title')
+          .in('id', queueIds)
+          .limit(1)
+
+        if (queueItems && queueItems[0]) {
+          newsContent = queueItems[0].content || queueItems[0].title
+          console.log('[CoverImages] Using queue item content')
+        }
+      }
+
+      // Priority 2: Fallback to digest content (legacy)
+      if (!newsContent && digestId) {
+        const { data: digest } = await supabase
+          .from('daily_digests')
+          .select('analysis_content')
+          .eq('id', digestId)
+          .single()
+
+        if (digest?.analysis_content) {
+          const lines = digest.analysis_content.split('\n').filter((l: string) => l.trim())
+          newsContent = lines[0]?.slice(0, 500) || null
+          console.log('[CoverImages] Using digest content')
+        }
+      }
+
+      if (!newsContent) {
+        console.log('[CoverImages] No content found for image generation')
         return
       }
 
-      // Extract news items from digest (simple approach - take first few lines)
-      const lines = digest.analysis_content.split('\n').filter((l: string) => l.trim())
-      const newsItems = lines.slice(0, 3).map((line: string) => line.slice(0, 500))
-
-      if (newsItems.length === 0) {
-        console.log('[CoverImages] No news items extracted from digest')
-        return
-      }
-
-      // Use only the first news item for the cover image
-      const firstNews = newsItems[0]
-      console.log('[CoverImages] Generating cover image from first news item...')
-
+      console.log('[CoverImages] Generating cover image...')
       fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           postId: id,
-          newsText: firstNews,
+          newsText: newsContent,
         }),
       })
         .then(res => {
@@ -655,10 +667,17 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       })
       .catch(err => console.error('[Thumbnails] Re-index error:', err))
 
-    // Generate cover images if missing and digest available
-    if (coverImageCount === 0 && post?.digest_id) {
-      console.log(`[CoverImages] No cover images found - triggering generation`)
-      triggerCoverImageGeneration(post.digest_id)
+    // Generate cover images if missing (use queue items or digest)
+    if (coverImageCount === 0) {
+      const hasQueueItems = queueItemIds && queueItemIds.length > 0
+      const hasDigest = !!post?.digest_id
+      if (hasQueueItems || hasDigest) {
+        console.log(`[CoverImages] No cover images found - triggering generation`)
+        triggerCoverImageGeneration(
+          hasQueueItems ? queueItemIds : undefined,
+          post?.digest_id || undefined
+        )
+      }
     }
 
     setSaving(false)

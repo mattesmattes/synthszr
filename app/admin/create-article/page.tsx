@@ -617,9 +617,26 @@ export default function CreateArticlePage() {
         console.log('[Queue] Items will be marked as "used" when post is published')
       }
 
-      // Trigger background image generation using digest content if available
-      if (newPost?.id && selectedDigest?.analysis_content) {
-        triggerImageGeneration(newPost.id, selectedDigest.analysis_content)
+      // Trigger background image generation
+      // Priority: 1. Queue items content (new flow), 2. Digest content (legacy)
+      if (newPost?.id) {
+        // Fetch queue items for image generation if we have IDs
+        if (usedQueueItemIds.length > 0) {
+          const { data: queueItems } = await supabase
+            .from('news_queue')
+            .select('content, title')
+            .in('id', usedQueueItemIds)
+            .limit(1)
+
+          if (queueItems && queueItems[0]?.content) {
+            const newsContent = queueItems[0].content || queueItems[0].title
+            console.log('[Images] Triggering cover image from first queue item')
+            triggerImageGeneration(newPost.id, newsContent)
+          }
+        } else if (selectedDigest?.analysis_content) {
+          // Fallback to digest content (legacy)
+          triggerImageGeneration(newPost.id, selectedDigest.analysis_content)
+        }
       }
 
       // Trigger Synthszr ratings for companies with {Company} tags
