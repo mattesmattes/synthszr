@@ -506,6 +506,75 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
     const syntheszrMarkers = containerRef.current.querySelectorAll('.mattes-synthese, .mattes-synthese-heading')
     if (syntheszrMarkers.length === 0) return
 
+    // Pre-extract {Company} tags from each section of the original content
+    // This allows section-specific tag matching for translations
+    const originalSectionTags: string[] = []
+    if (originalContent) {
+      // Extract sections from original TipTap content (split by headings or Synthszr Take)
+      const extractSectionsWithTags = (doc: unknown): string[] => {
+        if (!doc || typeof doc !== 'object') return []
+        const d = doc as Record<string, unknown>
+        if (!Array.isArray(d.content)) return []
+
+        const sections: string[] = []
+        let currentSectionTags = ''
+
+        const extractTagsFromNode = (node: unknown): string => {
+          if (!node || typeof node !== 'object') return ''
+          const n = node as Record<string, unknown>
+          if (n.type === 'text' && typeof n.text === 'string') {
+            const matches = n.text.match(/\{[A-Za-z0-9.\-\s]+\}/g)
+            return matches ? matches.join(' ') : ''
+          }
+          if (Array.isArray(n.content)) {
+            return n.content.map(extractTagsFromNode).join(' ')
+          }
+          return ''
+        }
+
+        const getNodeText = (node: unknown): string => {
+          if (!node || typeof node !== 'object') return ''
+          const n = node as Record<string, unknown>
+          if (n.type === 'text' && typeof n.text === 'string') return n.text
+          if (Array.isArray(n.content)) {
+            return n.content.map(getNodeText).join('')
+          }
+          return ''
+        }
+
+        const isSynthszrTakeNode = (node: unknown): boolean => {
+          const text = getNodeText(node).toLowerCase()
+          return text.includes('synthszr take') ||
+                 text.includes('mattes synthese') ||
+                 text.includes('synthszr vote') ||
+                 text.includes('synthszr meent')
+        }
+
+        for (const node of d.content as unknown[]) {
+          const n = node as Record<string, unknown>
+          // Check if this is a Synthszr Take paragraph - marks end of a section
+          if (n.type === 'paragraph' && isSynthszrTakeNode(node)) {
+            // Add tags from this paragraph too
+            currentSectionTags += ' ' + extractTagsFromNode(node)
+            // Save section and start new one
+            sections.push(currentSectionTags.trim())
+            currentSectionTags = ''
+          } else {
+            // Accumulate tags from this node
+            currentSectionTags += ' ' + extractTagsFromNode(node)
+          }
+        }
+        // Don't forget last section if no trailing Synthszr Take
+        if (currentSectionTags.trim()) {
+          sections.push(currentSectionTags.trim())
+        }
+
+        return sections
+      }
+
+      originalSectionTags.push(...extractSectionsWithTags(originalContent))
+    }
+
     // For each marker, find the containing paragraph/section and extract companies
     const sectionsToProcess: Array<{
       element: Element
@@ -513,6 +582,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       premarketCompanies: Array<{ apiName: string; displayName: string }>
     }> = []
 
+    let sectionIndex = 0
     syntheszrMarkers.forEach((marker) => {
       // Find the paragraph containing this marker
       let container: Element | null = marker
@@ -547,27 +617,10 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       // Also include the Synthszr Take paragraph itself
       textToSearch += ' ' + ((container as HTMLElement).innerText || container.textContent || '')
 
-      // For translated content, extract only explicit {Company} tags from original German content
-      // This preserves company detection when translations don't preserve the tags
-      // NOTE: We only extract {Company} tags, NOT all text, to avoid polluting every section
-      // with companies from the entire article
-      let explicitCompanyTags = ''
-      if (originalContent) {
-        const extractCompanyTags = (node: unknown): string => {
-          if (!node || typeof node !== 'object') return ''
-          const n = node as Record<string, unknown>
-          if (n.type === 'text' && typeof n.text === 'string') {
-            // Only extract {Company} patterns, not general text
-            const matches = n.text.match(/\{[A-Za-z0-9.\-\s]+\}/g)
-            return matches ? matches.join(' ') : ''
-          }
-          if (Array.isArray(n.content)) {
-            return n.content.map(extractCompanyTags).join(' ')
-          }
-          return ''
-        }
-        explicitCompanyTags = extractCompanyTags(originalContent)
-      }
+      // For translated content, use section-specific {Company} tags from original German content
+      // This ensures each translated section only gets tags from its corresponding original section
+      const explicitCompanyTags = originalSectionTags[sectionIndex] || ''
+      sectionIndex++
 
       // Find all mentioned public companies in the combined text
       // Matches: "Meta", "Metas" (possessive), "Google-Aktien" (compound), or {Meta} (explicit)
