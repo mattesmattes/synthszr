@@ -5,7 +5,9 @@ import { translateContent, type TranslationModel } from '@/lib/i18n/translation-
 import type { LanguageCode, TranslationQueueItem } from '@/lib/types'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
 
-const BATCH_SIZE = 5
+export const maxDuration = 300 // 5 minutes for batch translations
+
+const BATCH_SIZE = 3 // Reduced to avoid timeout even with maxDuration
 const MAX_ATTEMPTS = 3
 
 /**
