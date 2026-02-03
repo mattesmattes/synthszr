@@ -1,5 +1,8 @@
 "use client"
 
+// TipTap content renderer with Synthszr Vote badges
+// Supports: DE, EN, NDS (Low German), CS (Czech) translations
+
 import { useEffect, useRef, useState, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import Image from "next/image"
