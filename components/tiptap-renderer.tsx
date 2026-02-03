@@ -322,6 +322,9 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       /mattes' synthese:?/gi,
       /synthszr take:?/gi,
       /synthszr vote:?/gi,
+      /synthszr meent:?/gi,        // NDS (Low German)
+      /synthszr říká:?/gi,         // Czech
+      /synthszr hodnocení:?/gi,    // Czech alternative
     ]
 
     const isSyntheseText = (text: string) => {
@@ -329,7 +332,10 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       return lower.includes('mattes synthese') ||
              lower.includes("mattes' synthese") ||
              lower.includes('synthszr take') ||
-             lower.includes('synthszr vote')
+             lower.includes('synthszr vote') ||
+             lower.includes('synthszr meent') ||       // NDS
+             lower.includes('synthszr říká') ||        // Czech
+             lower.includes('synthszr hodnocení')      // Czech alternative
     }
 
     // First check headings
