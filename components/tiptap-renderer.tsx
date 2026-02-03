@@ -547,23 +547,31 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       // Also include the Synthszr Take paragraph itself
       textToSearch += ' ' + ((container as HTMLElement).innerText || container.textContent || '')
 
-      // For translated content, ALSO search original German content for company names
-      // This ensures companies are found even when translation changes their names
+      // For translated content, extract only explicit {Company} tags from original German content
+      // This preserves company detection when translations don't preserve the tags
+      // NOTE: We only extract {Company} tags, NOT all text, to avoid polluting every section
+      // with companies from the entire article
+      let explicitCompanyTags = ''
       if (originalContent) {
-        const extractOriginalText = (node: unknown): string => {
+        const extractCompanyTags = (node: unknown): string => {
           if (!node || typeof node !== 'object') return ''
           const n = node as Record<string, unknown>
-          if (n.type === 'text' && typeof n.text === 'string') return n.text
+          if (n.type === 'text' && typeof n.text === 'string') {
+            // Only extract {Company} patterns, not general text
+            const matches = n.text.match(/\{[A-Za-z0-9.\-\s]+\}/g)
+            return matches ? matches.join(' ') : ''
+          }
           if (Array.isArray(n.content)) {
-            return n.content.map(extractOriginalText).join(' ')
+            return n.content.map(extractCompanyTags).join(' ')
           }
           return ''
         }
-        textToSearch += ' ' + extractOriginalText(originalContent)
+        explicitCompanyTags = extractCompanyTags(originalContent)
       }
 
       // Find all mentioned public companies in the combined text
       // Matches: "Meta", "Metas" (possessive), "Google-Aktien" (compound), or {Meta} (explicit)
+      // Also check explicitCompanyTags from original content for {Company} tags
       const companies: Array<{ apiName: string; displayName: string }> = []
       for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
         // Skip excluded words (common nouns that aren't companies)
@@ -571,7 +579,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
 
         const regex = new RegExp(`\\b${displayName}s?(-[\\wäöüÄÖÜß]+)*\\b`, 'gi')
         const explicitRegex = new RegExp(`\\{${displayName}\\}`, 'gi')
-        if (regex.test(textToSearch) || explicitRegex.test(textToSearch)) {
+        if (regex.test(textToSearch) || explicitRegex.test(textToSearch) || explicitRegex.test(explicitCompanyTags)) {
           companies.push({ apiName, displayName })
         }
       }
@@ -586,7 +594,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
         const escapedName = displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const regex = new RegExp(`\\b${escapedName}s?\\b`, 'gi')
         const explicitRegex = new RegExp(`\\{${escapedName}\\}`, 'gi')
-        if (regex.test(textToSearch) || explicitRegex.test(textToSearch)) {
+        if (regex.test(textToSearch) || explicitRegex.test(textToSearch) || explicitRegex.test(explicitCompanyTags)) {
           premarketCompanies.push({ apiName, displayName })
         }
       }
@@ -596,7 +604,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
         const escapedAlias = aliasName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const regex = new RegExp(`\\b${escapedAlias}s?\\b`, 'gi')
         const explicitRegex = new RegExp(`\\{${escapedAlias}\\}`, 'gi')
-        if (regex.test(textToSearch) || explicitRegex.test(textToSearch)) {
+        if (regex.test(textToSearch) || explicitRegex.test(textToSearch) || explicitRegex.test(explicitCompanyTags)) {
           const apiName = aliasInfo.canonical.toLowerCase()
           if (aliasInfo.type === 'public') {
             if (!companies.find(c => c.apiName === apiName)) {
