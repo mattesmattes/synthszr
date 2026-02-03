@@ -208,11 +208,14 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Pass original German content for company detection
+      // This ensures {Company} tags are found even if translation didn't preserve them
       const emailContent = await generateEmailContentWithVotes(
         { content: contentToUse, excerpt: excerptToUse, slug: post.slug },
         BASE_URL,
         articleThumbnails,
-        locale
+        locale,
+        locale !== 'de' ? post.content : undefined // Pass original content for non-German locales
       )
       contentByLocale.set(locale, emailContent)
 

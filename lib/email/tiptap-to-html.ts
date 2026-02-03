@@ -246,12 +246,17 @@ export function generateEmailContent(post: { content?: unknown; excerpt?: string
  * Convert post content to email-friendly HTML with Synthszr Vote badges
  * Async version that fetches ratings (with ticker/percent for public companies) from APIs
  * Optionally includes article thumbnails before H2 headings
+ *
+ * @param originalContent - Optional original German content for company detection.
+ *                          Use this when displaying translated content to ensure
+ *                          {Company} tags are found even if translation didn't preserve them.
  */
 export async function generateEmailContentWithVotes(
   post: { content?: unknown; excerpt?: string; slug?: string },
   baseUrl: string,
   thumbnails?: ArticleThumbnail[],
-  locale?: string
+  locale?: string,
+  originalContent?: unknown
 ): Promise<string> {
   const rawContent = post.content
   let doc: TiptapDoc | null = null
@@ -278,9 +283,28 @@ export async function generateEmailContentWithVotes(
     return post.excerpt || ''
   }
 
-  // Extract full text to find ALL companies
-  const fullText = doc.content.map(node => extractTextFromNode(node)).join(' ')
-  const allCompaniesInDoc = findCompaniesInText(fullText)
+  // For company detection, prefer original content (German) if provided
+  // This ensures {Company} tags are found even if translation didn't preserve them
+  let companySourceDoc: TiptapDoc = doc
+  if (originalContent) {
+    if (typeof originalContent === 'string') {
+      try {
+        const parsed = JSON.parse(originalContent)
+        if (parsed && typeof parsed === 'object' && parsed.type === 'doc') {
+          companySourceDoc = parsed as TiptapDoc
+        }
+      } catch {
+        // Fall back to translated content
+      }
+    } else if (originalContent && typeof originalContent === 'object') {
+      companySourceDoc = originalContent as TiptapDoc
+    }
+  }
+
+  // Extract full text from ORIGINAL content to find ALL companies
+  // This ensures company tags are detected even when translations don't preserve them
+  const companySourceText = companySourceDoc.content?.map(node => extractTextFromNode(node)).join(' ') || ''
+  const allCompaniesInDoc = findCompaniesInText(companySourceText)
 
   // Collect all public and premarket companies
   const allPublicCompanies = new Set<string>()
@@ -318,7 +342,7 @@ export async function generateEmailContentWithVotes(
   // ALSO scan for explicit {Company} tags in the ENTIRE document
   // This catches companies tagged anywhere, not just near "Synthszr Take" sections
   const explicitTagPattern = /\{([^}]+)\}/g
-  const explicitMatches = [...fullText.matchAll(explicitTagPattern)]
+  const explicitMatches = [...companySourceText.matchAll(explicitTagPattern)]
 
   if (explicitMatches.length > 0) {
     const explicitCompanies: Array<{ apiName: string; displayName: string }> = []
