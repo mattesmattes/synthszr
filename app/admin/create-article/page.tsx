@@ -638,10 +638,13 @@ export default function CreateArticlePage() {
             .in('id', usedQueueItemIds)
             .limit(1)
 
-          if (queueItems && queueItems[0]?.content) {
+          if (queueItems && queueItems[0]) {
+            // Use content if available, fallback to title
             const newsContent = queueItems[0].content || queueItems[0].title
-            console.log('[Images] Triggering cover image from first queue item')
-            triggerImageGeneration(newPost.id, newsContent)
+            if (newsContent) {
+              console.log('[Images] Triggering cover image from first queue item')
+              triggerImageGeneration(newPost.id, newsContent)
+            }
           }
         } else if (selectedDigest?.analysis_content) {
           // Fallback to digest content (legacy)
