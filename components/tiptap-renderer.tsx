@@ -172,9 +172,10 @@ interface TiptapRendererProps {
   content: Record<string, unknown>
   postId?: string // Optional: enables article thumbnail display
   queueItemIds?: string[] // Optional: queue item IDs for stable thumbnail matching
+  originalContent?: Record<string, unknown> // Original German content for company detection in translations
 }
 
-export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRendererProps) {
+export function TiptapRenderer({ content, postId, queueItemIds, originalContent }: TiptapRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const searchParams = useSearchParams()
   const [ratingPortals, setRatingPortals] = useState<Array<{ element: HTMLElement; company: string; displayName: string; rating: 'BUY' | 'HOLD' | 'SELL'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isFirst: boolean }>>([])
@@ -597,7 +598,26 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
     // This catches companies tagged anywhere, not just near "Synthszr Take" sections
     const explicitTagPattern = /\{([^}]+)\}/g
     const fullText = (containerRef.current as HTMLElement).innerText || containerRef.current.textContent || ''
-    const explicitMatches = [...fullText.matchAll(explicitTagPattern)]
+
+    // For translated content, also scan originalContent for {Company} tags
+    // This ensures tags are found even if translation didn't preserve them
+    let originalText = ''
+    if (originalContent) {
+      const extractText = (node: unknown): string => {
+        if (!node || typeof node !== 'object') return ''
+        const n = node as Record<string, unknown>
+        if (n.type === 'text' && typeof n.text === 'string') return n.text
+        if (Array.isArray(n.content)) {
+          return n.content.map(extractText).join(' ')
+        }
+        return ''
+      }
+      originalText = extractText(originalContent)
+    }
+
+    // Combine matches from both rendered text and original content
+    const combinedText = fullText + ' ' + originalText
+    const explicitMatches = [...combinedText.matchAll(explicitTagPattern)]
 
     if (explicitMatches.length > 0) {
       const explicitCompanies: Array<{ apiName: string; displayName: string }> = []
@@ -836,7 +856,7 @@ export function TiptapRenderer({ content, postId, queueItemIds }: TiptapRenderer
     } catch (error) {
       console.error('[TiptapRenderer] Failed to fetch Synthszr ratings:', error)
     }
-  }, [])
+  }, [originalContent])
 
   // Process news headings: add favicon + link, remove source links from paragraphs, insert thumbnails
   const processNewsHeadings = useCallback(() => {

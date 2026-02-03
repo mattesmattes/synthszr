@@ -23,6 +23,7 @@ interface PostData {
   slug: string
   excerpt: string | null
   content: Record<string, unknown>
+  originalContent?: Record<string, unknown> // Original German content for company detection
   category: string
   created_at: string
   cover_image_url?: string | null
@@ -175,10 +176,14 @@ export default async function PostPage({ params }: PageProps) {
         coverImageUrl = coverImage?.image_url || null
       }
 
+      // Parse original content
+      const originalContent = typeof aiPost.content === 'string' ? JSON.parse(aiPost.content) : aiPost.content
+
       // Fetch translation if not default locale
       let translatedTitle = aiPost.title
       let translatedExcerpt = aiPost.excerpt
-      let translatedContent = typeof aiPost.content === 'string' ? JSON.parse(aiPost.content) : aiPost.content
+      let translatedContent = originalContent
+      let hasTranslation = false
 
       if (locale !== 'de') {
         const { data: translation } = await supabase
@@ -192,7 +197,8 @@ export default async function PostPage({ params }: PageProps) {
         if (translation) {
           translatedTitle = translation.title || aiPost.title
           translatedExcerpt = translation.excerpt ?? aiPost.excerpt
-          translatedContent = translation.content as Record<string, unknown> || translatedContent
+          translatedContent = translation.content as Record<string, unknown> || originalContent
+          hasTranslation = true
         }
       }
 
@@ -202,6 +208,8 @@ export default async function PostPage({ params }: PageProps) {
         excerpt: translatedExcerpt,
         category: aiPost.category || 'AI & Tech',
         content: translatedContent,
+        // Pass original German content for company detection when using translation
+        originalContent: hasTranslation ? originalContent : undefined,
         cover_image_url: coverImageUrl,
         pending_queue_item_ids: aiPost.pending_queue_item_ids
       } as PostData
@@ -314,7 +322,12 @@ export default async function PostPage({ params }: PageProps) {
 
           <div className="prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-xl prose-h2:text-lg prose-h2:mt-8 prose-h2:mb-3 prose-p:mb-5 prose-blockquote:border-l-2 prose-blockquote:border-accent prose-blockquote:pl-6 prose-blockquote:italic">
             <Suspense fallback={null}>
-              <PostContentView content={post.content} postId={post.id} queueItemIds={post.pending_queue_item_ids || undefined} />
+              <PostContentView
+                content={post.content}
+                postId={post.id}
+                queueItemIds={post.pending_queue_item_ids || undefined}
+                originalContent={post.originalContent}
+              />
             </Suspense>
           </div>
         </article>

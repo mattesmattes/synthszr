@@ -10,6 +10,7 @@ interface PostContentViewProps {
   content: Record<string, unknown>
   postId?: string
   queueItemIds?: string[]
+  originalContent?: Record<string, unknown> // Original German content for company detection in translations
 }
 
 /**
@@ -17,7 +18,7 @@ interface PostContentViewProps {
  * Human: Rich HTML via TiptapRenderer
  * Machine: Plain Markdown text
  */
-export function PostContentView({ content, postId, queueItemIds }: PostContentViewProps) {
+export function PostContentView({ content, postId, queueItemIds, originalContent }: PostContentViewProps) {
   const [viewMode, setViewMode] = useState<'human' | 'machine'>('human')
   const [isMounted, setIsMounted] = useState(false)
 
@@ -35,7 +36,7 @@ export function PostContentView({ content, postId, queueItemIds }: PostContentVi
   return (
     <>
       {viewMode === 'human' ? (
-        <TiptapRenderer content={content} postId={postId} queueItemIds={queueItemIds} />
+        <TiptapRenderer content={content} postId={postId} queueItemIds={queueItemIds} originalContent={originalContent} />
       ) : (
         <div className="font-mono text-sm bg-muted/30 p-6 rounded-lg border-l-4 border-[#CCFF00] whitespace-pre-wrap overflow-x-auto">
           {markdown}
