@@ -323,7 +323,8 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       /synthszr take:?/gi,
       /synthszr vote:?/gi,
       /synthszr meent:?/gi,        // NDS (Low German)
-      /synthszr říká:?/gi,         // Czech
+      /pohled synthszr:?/gi,       // Czech (actual translation)
+      /synthszr říká:?/gi,         // Czech alternative
       /synthszr hodnocení:?/gi,    // Czech alternative
     ]
 
@@ -334,7 +335,8 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
              lower.includes('synthszr take') ||
              lower.includes('synthszr vote') ||
              lower.includes('synthszr meent') ||       // NDS
-             lower.includes('synthszr říká') ||        // Czech
+             lower.includes('pohled synthszr') ||      // Czech
+             lower.includes('synthszr říká') ||        // Czech alternative
              lower.includes('synthszr hodnocení')      // Czech alternative
     }
 
@@ -547,7 +549,8 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
           return text.includes('synthszr take') ||
                  text.includes('mattes synthese') ||
                  text.includes('synthszr vote') ||
-                 text.includes('synthszr meent')
+                 text.includes('synthszr meent') ||    // NDS
+                 text.includes('pohled synthszr')      // Czech
         }
 
         for (const node of d.content as unknown[]) {
