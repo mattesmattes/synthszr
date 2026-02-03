@@ -182,11 +182,64 @@ export function CompaniesListClient({ companies, locale }: CompaniesListClientPr
         })
 
         setEnrichedCompanies(enriched)
+        setLoading(false)
+
+        // After initial load, trigger generation for companies without ratings (in background)
+        // This ensures all companies eventually have a Synthszr Vote
+        const publicWithoutRating = enriched.filter(c => c.type === 'public' && !c.rating)
+        const premarketWithoutRating = enriched.filter(c => c.type === 'premarket' && !c.rating)
+
+        // Generate missing public company ratings (one at a time to respect rate limits)
+        for (const company of publicWithoutRating) {
+          try {
+            console.log(`[companies] Generating missing rating for: ${company.slug}`)
+            const response = await fetch('/api/stock-synthszr', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ company: company.slug }),
+            })
+            if (response.ok) {
+              const data = await response.json()
+              if (data.ok && data.data?.final_recommendation?.rating) {
+                // Update the enriched company with the new rating
+                setEnrichedCompanies(prev => prev.map(c =>
+                  c.slug === company.slug
+                    ? { ...c, rating: data.data.final_recommendation.rating }
+                    : c
+                ))
+              }
+            }
+            // Small delay between requests to respect rate limits
+            await new Promise(resolve => setTimeout(resolve, 2000))
+          } catch (error) {
+            console.error(`[companies] Failed to generate rating for ${company.slug}:`, error)
+          }
+        }
+
+        // Generate missing premarket company ratings
+        for (const company of premarketWithoutRating) {
+          try {
+            console.log(`[companies] Fetching missing premarket rating for: ${company.slug}`)
+            const response = await fetch(`/api/premarket?company=${encodeURIComponent(company.slug)}`)
+            if (response.ok) {
+              const data = await response.json()
+              if (data.ok && data.data?.final_recommendation?.rating) {
+                setEnrichedCompanies(prev => prev.map(c =>
+                  c.slug === company.slug
+                    ? { ...c, rating: data.data.final_recommendation.rating }
+                    : c
+                ))
+              }
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          } catch (error) {
+            console.error(`[companies] Failed to fetch premarket rating for ${company.slug}:`, error)
+          }
+        }
       } catch (error) {
         console.error('[companies] Failed to fetch ratings:', error)
         // Still show companies without ratings
         setEnrichedCompanies(companies.map(c => ({ ...c, rating: null })))
-      } finally {
         setLoading(false)
       }
     }
