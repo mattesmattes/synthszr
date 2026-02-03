@@ -541,6 +541,21 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       // Also include the Synthszr Take paragraph itself
       textToSearch += ' ' + ((container as HTMLElement).innerText || container.textContent || '')
 
+      // For translated content, ALSO search original German content for company names
+      // This ensures companies are found even when translation changes their names
+      if (originalContent) {
+        const extractOriginalText = (node: unknown): string => {
+          if (!node || typeof node !== 'object') return ''
+          const n = node as Record<string, unknown>
+          if (n.type === 'text' && typeof n.text === 'string') return n.text
+          if (Array.isArray(n.content)) {
+            return n.content.map(extractOriginalText).join(' ')
+          }
+          return ''
+        }
+        textToSearch += ' ' + extractOriginalText(originalContent)
+      }
+
       // Find all mentioned public companies in the combined text
       // Matches: "Meta", "Metas" (possessive), "Google-Aktien" (compound), or {Meta} (explicit)
       const companies: Array<{ apiName: string; displayName: string }> = []
