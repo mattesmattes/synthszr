@@ -6,6 +6,7 @@ import { PostContentView } from "@/components/post-content-view"
 import { Newsletter } from "@/components/newsletter"
 import { SwipeNavigation } from "@/components/swipe-navigation"
 import { LanguageSwitcher } from "@/components/language-switcher"
+import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
@@ -256,6 +257,23 @@ export default async function PostPage({ params }: PageProps) {
     <div className="min-h-screen bg-background text-foreground">
 
         <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
+
+        {/* Header - same as homepage */}
+        <BloomLanguageSwitcher currentLocale={locale} />
+
+        <Link
+          href={`/${locale}/why`}
+          className="block mb-6 text-center hover:opacity-80 transition-opacity"
+        >
+          <span className="text-lg font-bold tracking-tight">
+            Feed the Soul. Run the System.
+          </span>
+          <br />
+          <span className="text-sm text-muted-foreground">
+            The morning news synthesis to start your day.
+          </span>
+        </Link>
+
         <article>
           {/* Cover Image with centered Logo overlay - links to home */}
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}

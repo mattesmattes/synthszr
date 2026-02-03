@@ -6,6 +6,7 @@ import { BlogHeader } from "@/components/blog-header"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
 import { Newsletter } from "@/components/newsletter"
 import { SwipeNavigation } from "@/components/swipe-navigation"
+import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 
 // Disable caching for posts to always show current cover image
@@ -126,6 +127,23 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
       {/* <BlogHeader /> */}
 
         <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
+
+        {/* Header - same as homepage */}
+        <BloomLanguageSwitcher currentLocale="de" />
+
+        <Link
+          href="/why"
+          className="block mb-6 text-center hover:opacity-80 transition-opacity"
+        >
+          <span className="text-lg font-bold tracking-tight">
+            Feed the Soul. Run the System.
+          </span>
+          <br />
+          <span className="text-sm text-muted-foreground">
+            The morning news synthesis to start your day.
+          </span>
+        </Link>
+
         <article>
           {/* Cover Image with centered Logo overlay - links to home */}
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
