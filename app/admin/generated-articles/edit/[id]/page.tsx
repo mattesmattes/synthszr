@@ -270,19 +270,22 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         }
       }
 
-      if (!newsContent) {
-        console.log('[CoverImages] No content found for image generation')
+      if (!newsContent || newsContent.length < 10) {
+        console.log('[CoverImages] No content or content too short for image generation')
         return
       }
 
-      console.log('[CoverImages] Generating cover image...')
+      // Limit content to 2000 chars for API
+      const newsText = newsContent.slice(0, 2000)
+      console.log(`[CoverImages] Generating cover image (${newsText.length} chars)...`)
+
       fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           postId: id,
-          newsText: newsContent,
+          newsText,
         }),
       })
         .then(res => {

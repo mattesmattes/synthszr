@@ -433,18 +433,28 @@ export default function CreateArticlePage() {
   }
 
   // Trigger background image generation for a post
-  // Generates ONE cover image from the FIRST news item only
-  async function triggerImageGeneration(postId: string, digestContent: string) {
-    const newsItems = extractNewsItems(digestContent)
+  // Generates ONE cover image from the provided content
+  async function triggerImageGeneration(postId: string, newsContent: string) {
+    // Use content directly if short enough, otherwise try to extract first section
+    let newsText = newsContent.trim()
 
-    if (newsItems.length === 0) {
-      console.log('No news items found for image generation')
+    // If content is long (likely a digest), try to extract first meaningful section
+    if (newsText.length > 3000) {
+      const newsItems = extractNewsItems(newsContent)
+      if (newsItems.length > 0) {
+        newsText = newsItems[0]
+      } else {
+        // Fallback: use first 2000 characters
+        newsText = newsContent.slice(0, 2000)
+      }
+    }
+
+    if (newsText.length < 10) {
+      console.log('News content too short for image generation:', newsText.length)
       return
     }
 
-    // Use only the first news item for the cover image
-    const firstNews = newsItems[0]
-    console.log('Triggering cover image generation from first news item')
+    console.log(`Triggering cover image generation (${newsText.length} chars)`)
 
     fetch('/api/generate-image', {
       method: 'POST',
@@ -452,7 +462,7 @@ export default function CreateArticlePage() {
       credentials: 'include',
       body: JSON.stringify({
         postId,
-        newsText: firstNews,
+        newsText: newsText.slice(0, 2000), // Limit to 2000 chars for API
       }),
     })
       .then(res => {
