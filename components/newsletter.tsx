@@ -50,9 +50,9 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
   return (
     <section className="mt-20 border-t border-border pt-16">
       <div className="mx-auto max-w-2xl">
-        <h2 className="font-mono text-2xl font-bold md:text-lg">Stay Updated</h2>
+        <h2 className="font-mono text-2xl font-bold md:text-lg">Subscribe free. Unsubscribe the second it sucks.</h2>
         <p className="mt-4 text-muted-foreground">
-          The morning synthesis delivered to your inbox.
+          High-signal news across AI, business, UX, and tech. Every morning.
         </p>
 
         {status === 'success' ? (
