@@ -569,6 +569,26 @@ export async function generateAndProcessImage(
       console.log(`[Gemini] Applying dithering with gain ${ditheringGain}, coarseness ${ditheringCoarseness}...`)
       const dithered = await applyDithering(processedBase64, ditheringGain, ditheringCoarseness)
       processedBase64 = dithered.base64
+
+      // Resize to exact 2x display size (704×384) for clean browser scaling
+      // Using 1408×768 ensures pixelated rendering works without moiré
+      // nearest-neighbor preserves sharp dithering pattern
+      const TARGET_WIDTH = 1408
+      const TARGET_HEIGHT = 768
+      const buffer = Buffer.from(processedBase64, 'base64')
+      const metadata = await sharp(buffer).metadata()
+
+      if (metadata.width !== TARGET_WIDTH || metadata.height !== TARGET_HEIGHT) {
+        console.log(`[Gemini] Resizing ${metadata.width}x${metadata.height} → ${TARGET_WIDTH}x${TARGET_HEIGHT} for clean 2:1 browser scaling`)
+        const resizedBuffer = await sharp(buffer)
+          .resize(TARGET_WIDTH, TARGET_HEIGHT, {
+            fit: 'cover',
+            kernel: sharp.kernel.nearest  // Preserve sharp dithering pixels
+          })
+          .png()
+          .toBuffer()
+        processedBase64 = resizedBuffer.toString('base64')
+      }
     }
 
     // Process for transparency
