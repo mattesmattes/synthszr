@@ -570,7 +570,7 @@ export async function generateAndProcessImage(
       // Target width ~800px produces dithering dots that survive browser downscaling
       const buffer = Buffer.from(processedBase64, 'base64')
       const metadata = await sharp(buffer).metadata()
-      const DITHER_TARGET_WIDTH = 800
+      const DITHER_TARGET_WIDTH = 1200
 
       if (metadata.width && metadata.width > DITHER_TARGET_WIDTH) {
         const scale = DITHER_TARGET_WIDTH / metadata.width
