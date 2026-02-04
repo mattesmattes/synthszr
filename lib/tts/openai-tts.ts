@@ -90,6 +90,7 @@ function isSynthszrTakeNode(node: TiptapNode): boolean {
  * - Remove URLs
  * - Strip {Company} tags
  * - Replace "Synthszr" with "Synthesizer" for pronunciation
+ * - Replace "→ source" with "Source: source" + 3sec pause
  * - Normalize whitespace
  */
 function cleanTextForTTS(text: string): string {
@@ -97,6 +98,7 @@ function cleanTextForTTS(text: string): string {
     .replace(/https?:\/\/[^\s]+/g, '') // Remove URLs
     .replace(/\{([^}]+)\}/g, '$1') // Strip {Company} tags, keep company name
     .replace(/Synthszr/gi, 'Synthesizer') // Pronounce as "Synthesizer"
+    .replace(/→\s*([^\n.]+)/g, 'Source: $1. ... ... ...') // "→ source" becomes "Source: source" + 3sec pause
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
 }
