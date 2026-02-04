@@ -224,11 +224,11 @@ export function NewsletterEmail({
             <Section style={coverSection}>
               <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
                 <Img
-                  src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&playButton=true&skipTransform=true`}
+                  src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=604&playButton=true`}
                   alt={subject}
                   width="302"
                   height="302"
-                  style={coverImage}
+                  style={coverImageCentered}
                 />
               </Link>
             </Section>
@@ -339,6 +339,14 @@ const coverImage = {
   height: '302px',
   display: 'block',
   objectFit: 'cover' as const,
+}
+
+const coverImageCentered = {
+  width: '302px',
+  height: '302px',
+  display: 'block',
+  objectFit: 'cover' as const,
+  margin: '0 auto',
 }
 
 
