@@ -49,7 +49,7 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
 
   return (
     <section className="mt-20 pt-16">
-      <div className="mx-auto max-w-2xl bg-cyan-400 p-8 rounded-lg">
+      <div className="mx-auto max-w-2xl bg-cyan-vivid p-8 rounded-lg">
         <h2 className="font-mono text-2xl font-bold md:text-lg text-black">Subscribe free. Unsubscribe the second it sucks.</h2>
         <p className="mt-4 text-black/70">
           High-signal news across AI, business, UX, and tech. Every morning.
