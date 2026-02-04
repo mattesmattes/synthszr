@@ -399,8 +399,10 @@ export async function applyDithering(
 
   console.log(`[Dithering] Coarseness ${coarseness}: working at ${workWidth}x${workHeight}, will upscale to ${originalWidth}x${originalHeight}`)
 
-  // Convert to grayscale and optionally downscale
-  let image = sharp(buffer).grayscale()
+  // Convert to grayscale, normalize contrast, and optionally downscale
+  // normalise() MUST come after grayscale() to stretch the grayscale histogram to 0-255
+  // This is critical for Floyd-Steinberg - without it, limited contrast produces noise
+  let image = sharp(buffer).grayscale().normalise()
   if (coarseness > 1) {
     image = image.resize(workWidth, workHeight, { kernel: sharp.kernel.lanczos2 })
   }
@@ -573,18 +575,10 @@ export async function generateAndProcessImage(
     }
 
     // Apply dithering if enabled
+    // Note: normalise() is applied inside applyDithering() AFTER grayscale conversion
     if (enableDithering) {
       console.log(`[Gemini] Applying dithering with gain ${ditheringGain}, coarseness ${ditheringCoarseness}...`)
-
-      // Normalize contrast before dithering (stretch histogram to full 0-255 range)
-      // This is critical - Gemini images often have limited contrast (e.g., 46-109)
-      // Without this, Floyd-Steinberg produces noise instead of clean dithering
-      const buffer = Buffer.from(processedBase64, 'base64')
-      const normalizedBuffer = await sharp(buffer).normalise().png().toBuffer()
-      const normalizedBase64 = normalizedBuffer.toString('base64')
-      console.log('[Gemini] Normalized contrast for dithering')
-
-      const dithered = await applyDithering(normalizedBase64, ditheringGain, ditheringCoarseness)
+      const dithered = await applyDithering(processedBase64, ditheringGain, ditheringCoarseness)
       processedBase64 = dithered.base64
     }
 
