@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Settings, ChevronDown, ChevronUp } from 'lucide-react'
+import { Settings, ChevronDown, ChevronUp } from 'lucide-react'
 import {
   hasConsent,
   getConsent,
@@ -62,16 +62,16 @@ export function ConsentBanner() {
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <h3 className="font-semibold text-foreground">
-                Datenschutz-Einstellungen
+                Privacy Settings
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Wir nutzen Cookies und ähnliche Technologien, um die Website zu
-                verbessern und das Nutzererlebnis zu analysieren.{' '}
+                We use cookies and similar technologies to improve the website
+                and analyze the user experience.{' '}
                 <a
                   href="/datenschutz"
                   className="underline underline-offset-2 hover:text-foreground"
                 >
-                  Datenschutzerklärung
+                  Privacy Policy
                 </a>
               </p>
             </div>
@@ -83,7 +83,7 @@ export function ConsentBanner() {
             className="mt-3 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <Settings className="h-3.5 w-3.5" />
-            <span>Einstellungen anpassen</span>
+            <span>Customize settings</span>
             {showDetails ? (
               <ChevronUp className="h-3.5 w-3.5" />
             ) : (
@@ -98,10 +98,10 @@ export function ConsentBanner() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-foreground">
-                    Technisch notwendig
+                    Essential
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Erforderlich für grundlegende Funktionen
+                    Required for basic functionality
                   </p>
                 </div>
                 <div className="relative">
@@ -121,10 +121,10 @@ export function ConsentBanner() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-foreground">
-                    Analyse
+                    Analytics
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Anonyme Nutzungsstatistiken (Vercel Analytics)
+                    Anonymous usage statistics (Vercel Analytics)
                   </p>
                 </div>
                 <button
@@ -154,7 +154,7 @@ export function ConsentBanner() {
                     Marketing
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Newsletter-Tracking und personalisierte Inhalte
+                    Newsletter tracking and personalized content
                   </p>
                 </div>
                 <button
@@ -186,7 +186,7 @@ export function ConsentBanner() {
                 onClick={handleSavePreferences}
                 className="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
               >
-                Auswahl speichern
+                Save preferences
               </button>
             ) : (
               <>
@@ -194,13 +194,13 @@ export function ConsentBanner() {
                   onClick={handleRejectAll}
                   className="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md border border-border bg-background hover:bg-muted transition-colors"
                 >
-                  Nur notwendige
+                  Essential only
                 </button>
                 <button
                   onClick={handleAcceptAll}
                   className="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                 >
-                  Alle akzeptieren
+                  Accept all
                 </button>
               </>
             )}
@@ -234,7 +234,7 @@ export function ConsentSettingsButton() {
       onClick={handleClick}
       className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
     >
-      Cookie-Einstellungen
+      Cookie Settings
     </button>
   )
 }
