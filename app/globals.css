@@ -162,12 +162,12 @@
     filter: brightness(1);
   }
   50% {
-    filter: brightness(1.15);
+    filter: brightness(1.3);
   }
 }
 
 .bg-neon-pulse {
-  animation: neon-pulse 3s ease-in-out infinite;
+  animation: neon-pulse 9s ease-in-out infinite;
 }
 
 .text-neon-green {
