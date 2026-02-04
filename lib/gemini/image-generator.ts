@@ -570,8 +570,7 @@ export async function generateAndProcessImage(
       const metadata = await sharp(buffer).metadata()
 
       // Resize to target width before dithering so pattern matches display size
-      // 1000px balances dithering density between too fine (1200) and too coarse (800)
-      const DITHER_TARGET_WIDTH = 1000
+      const DITHER_TARGET_WIDTH = 1100
       const currentWidth = metadata.width || 1400
       const currentHeight = metadata.height || 600
       const targetWidth = Math.min(currentWidth, DITHER_TARGET_WIDTH)
