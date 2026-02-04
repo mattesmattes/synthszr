@@ -7,12 +7,12 @@ import { getSession } from '@/lib/auth/session'
 
 export const maxDuration = 300 // Allow up to 5 minutes for batch thumbnail generation
 
-// Vote-based background colors
+// Vote-based background colors (sRGB approximation of P3 maximum saturation)
 const VOTE_COLORS = {
   NONE: '#00FFFF',   // Neon Cyan - no vote (default)
-  BUY: '#39FF14',    // Neon Green
-  HOLD: '#CCFF00',   // Neon Yellow
-  SELL: '#FF6600',   // Neon Orange
+  BUY: '#00FF00',    // Neon Green (pure green, closest to P3 0,1,0)
+  HOLD: '#FFFF00',   // Neon Yellow (pure yellow, closest to P3 1,1,0)
+  SELL: '#FF4D00',   // Neon Orange (boosted, closest to P3 1,0.3,0)
 } as const
 
 type VoteType = keyof typeof VOTE_COLORS

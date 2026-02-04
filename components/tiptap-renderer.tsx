@@ -1208,13 +1208,13 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       {/* Article thumbnails (circular with vote-colored backgrounds) */}
       {thumbnailPortals.map(({ element, thumbnail, h2Element }, index) => {
         // Find the best vote color from ratings in this article section
-        // BUY (#39FF14) > HOLD (#CCFF00) > SELL (#FF6600) > NONE (#00FFFF)
+        // BUY > HOLD > SELL > NONE (priority for thumbnail background)
         const votePriority: Record<string, number> = { 'BUY': 3, 'HOLD': 2, 'SELL': 1 }
-        const voteColors: Record<string, string> = {
-          'BUY': '#39FF14',
-          'HOLD': '#CCFF00',
-          'SELL': '#FF6600',
-          'NONE': '#00FFFF'
+        const voteClasses: Record<string, string> = {
+          'BUY': 'bg-neon-green',
+          'HOLD': 'bg-neon-yellow',
+          'SELL': 'bg-neon-orange',
+          'NONE': 'bg-neon-cyan'
         }
 
         // Find next H2 to define article section boundary
@@ -1241,7 +1241,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
           }
         }
 
-        const bgColor = bestVote ? voteColors[bestVote] : voteColors['NONE']
+        const bgClass = bestVote ? voteClasses[bestVote] : voteClasses['NONE']
 
         // Calculate display size for 1:1 pixel rendering
         // On Retina (dpr=2): 302px CSS = 604 physical pixels = 1:1 with our 604px image
@@ -1250,9 +1250,8 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
 
         return createPortal(
           <div
-            className="rounded-full overflow-hidden mx-auto"
+            className={`rounded-full overflow-hidden mx-auto ${bgClass}`}
             style={{
-              backgroundColor: bgColor,
               width: displaySize,
               height: displaySize,
             }}

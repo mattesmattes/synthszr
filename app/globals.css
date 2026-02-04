@@ -35,10 +35,10 @@
 
   /* Wide Gamut Colors (P3 enhanced - max saturation) */
   --cyan-vivid: oklch(0.85 0.22 195);        /* sRGB fallback */
-  --neon-yellow: #CCFF00;                     /* sRGB fallback */
-  --neon-orange: #FF6600;                     /* sRGB fallback */
+  --neon-yellow: #FFFF00;                     /* sRGB fallback (pure yellow) */
+  --neon-orange: #FF4D00;                     /* sRGB fallback (boosted orange) */
   --neon-cyan: #00FFFF;                       /* sRGB fallback */
-  --neon-green: #39FF14;                      /* sRGB fallback */
+  --neon-green: #00FF00;                      /* sRGB fallback (pure green) */
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -141,11 +141,11 @@
 }
 
 .bg-neon-yellow {
-  background-color: #CCFF00;
+  background-color: #FFFF00;
 }
 
 .bg-neon-orange {
-  background-color: #FF6600;
+  background-color: #FF4D00;
 }
 
 .bg-neon-cyan {
@@ -153,15 +153,15 @@
 }
 
 .bg-neon-green {
-  background-color: #39FF14;
+  background-color: #00FF00;
 }
 
 .text-neon-green {
-  color: #39FF14;
+  color: #00FF00;
 }
 
 .text-neon-orange {
-  color: #FF6600;
+  color: #FF4D00;
 }
 
 .text-neon-cyan {
