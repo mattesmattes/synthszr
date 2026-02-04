@@ -566,26 +566,6 @@ export async function generateAndProcessImage(
 
     // Apply dithering if enabled
     if (enableDithering) {
-      const buffer = Buffer.from(processedBase64, 'base64')
-      const metadata = await sharp(buffer).metadata()
-
-      // Resize to target width before dithering so pattern matches display size
-      const DITHER_TARGET_WIDTH = 1100
-      const currentWidth = metadata.width || 1400
-      const currentHeight = metadata.height || 600
-      const targetWidth = Math.min(currentWidth, DITHER_TARGET_WIDTH)
-      const targetHeight = Math.round(targetWidth * (currentHeight / currentWidth))
-
-      console.log(`[Gemini] Resizing from ${currentWidth}x${currentHeight} to ${targetWidth}x${targetHeight} before dithering...`)
-
-      // Resize and normalize contrast before dithering
-      const preparedBuffer = await sharp(buffer)
-        .resize(targetWidth, targetHeight, { kernel: sharp.kernel.lanczos3 })
-        .normalise() // Push mid-tones to extremes for bolder dithering
-        .png()
-        .toBuffer()
-      processedBase64 = preparedBuffer.toString('base64')
-
       console.log(`[Gemini] Applying dithering with gain ${ditheringGain}, coarseness ${ditheringCoarseness}...`)
       const dithered = await applyDithering(processedBase64, ditheringGain, ditheringCoarseness)
       processedBase64 = dithered.base64
