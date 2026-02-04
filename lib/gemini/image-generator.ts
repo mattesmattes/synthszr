@@ -49,9 +49,9 @@ async function getActiveImagePromptSettings(): Promise<ActiveImagePromptSettings
       return {
         promptText: data.prompt_text,
         enableDithering: data.enable_dithering ?? false,
-        ditheringGain: data.dithering_gain ?? 1.0,
-        ditheringCoarseness: data.dithering_coarseness ?? 1,
-        imageScale: data.image_scale ?? 1.0,
+        ditheringGain: Number(data.dithering_gain) || 1.0,
+        ditheringCoarseness: Number(data.dithering_coarseness) || 1,
+        imageScale: Number(data.image_scale) || 1.0,
       }
     }
   } catch (error) {
@@ -388,6 +388,7 @@ export async function applyDithering(
 
   // Get original dimensions
   const metadata = await sharp(buffer).metadata()
+  console.log(`[Dithering] Input image: ${metadata.width}x${metadata.height}, format=${metadata.format}, channels=${metadata.channels}, space=${metadata.space}`)
   const originalWidth = metadata.width!
   const originalHeight = metadata.height!
 
@@ -409,6 +410,13 @@ export async function applyDithering(
   const width = info.width
   const height = info.height
   const pixels = new Float32Array(data) // Use float for error accumulation
+
+  // Debug: check pixel value distribution
+  const samplePixels = Array.from(pixels.slice(0, 100))
+  const min = Math.min(...samplePixels)
+  const max = Math.max(...samplePixels)
+  const avg = samplePixels.reduce((a, b) => a + b, 0) / samplePixels.length
+  console.log(`[Dithering] Grayscale pixels - min=${min}, max=${max}, avg=${avg.toFixed(1)}, sample: [${samplePixels.slice(0, 10).map(p => p.toFixed(0)).join(', ')}]`)
 
   // Floyd-Steinberg error diffusion
   for (let y = 0; y < height; y++) {
