@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Pause, Loader2, Volume2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Slider } from '@/components/ui/slider'
+import { Play, Pause, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface AudioPlayerProps {
@@ -16,9 +14,6 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'disabled'>('idle')
   const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [error, setError] = useState<string | null>(null)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -36,7 +31,6 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
 
         if (data.audioUrl) {
           setAudioUrl(data.audioUrl)
-          setDuration(data.duration || 0)
           setStatus('ready')
         } else {
           setStatus('idle')
@@ -57,7 +51,6 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
     // If no audio URL yet, generate it
     if (!audioUrl && status !== 'loading') {
       setStatus('loading')
-      setError(null)
 
       try {
         const response = await fetch(`/api/tts/${postId}?locale=${locale}&generate=true`)
@@ -69,7 +62,6 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
 
         if (data.audioUrl) {
           setAudioUrl(data.audioUrl)
-          setDuration(data.duration || 0)
           setStatus('ready')
           // Auto-play after generation
           setTimeout(() => {
@@ -80,7 +72,6 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
         }
       } catch (err) {
         console.error('[AudioPlayer] Generation error:', err)
-        setError(err instanceof Error ? err.message : 'Generation failed')
         setStatus('error')
       }
       return
@@ -97,39 +88,9 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
   }, [audioUrl, status, postId, locale, isPlaying])
 
   // Audio event handlers
-  const handleTimeUpdate = useCallback(() => {
-    if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime)
-    }
-  }, [])
-
-  const handleLoadedMetadata = useCallback(() => {
-    if (audioRef.current) {
-      setDuration(audioRef.current.duration)
-    }
-  }, [])
-
   const handlePlay = useCallback(() => setIsPlaying(true), [])
   const handlePause = useCallback(() => setIsPlaying(false), [])
-  const handleEnded = useCallback(() => {
-    setIsPlaying(false)
-    setCurrentTime(0)
-  }, [])
-
-  // Handle slider change
-  const handleSeek = useCallback((value: number[]) => {
-    if (audioRef.current && value[0] !== undefined) {
-      audioRef.current.currentTime = value[0]
-      setCurrentTime(value[0])
-    }
-  }, [])
-
-  // Format time as MM:SS
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60)
-    const secs = Math.floor(seconds % 60)
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
+  const handleEnded = useCallback(() => setIsPlaying(false), [])
 
   // Don't render if TTS is disabled
   if (status === 'disabled') {
@@ -137,14 +98,12 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
   }
 
   return (
-    <div className={cn('flex items-center gap-3 p-3 bg-muted/50 rounded-lg', className)}>
+    <>
       {/* Hidden audio element */}
       {audioUrl && (
         <audio
           ref={audioRef}
           src={audioUrl}
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={handleLoadedMetadata}
           onPlay={handlePlay}
           onPause={handlePause}
           onEnded={handleEnded}
@@ -152,55 +111,24 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
         />
       )}
 
-      {/* Play/Pause button */}
-      <Button
-        variant="ghost"
-        size="icon"
+      {/* Play/Pause icon button - minimal white icon */}
+      <button
         onClick={togglePlayback}
         disabled={status === 'loading'}
-        className="shrink-0"
+        className={cn(
+          'text-white hover:text-white/80 transition-opacity disabled:opacity-50',
+          className
+        )}
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {status === 'loading' ? (
-          <Loader2 className="h-5 w-5 animate-spin" />
+          <Loader2 className="h-8 w-8 animate-spin" />
         ) : isPlaying ? (
-          <Pause className="h-5 w-5" />
+          <Pause className="h-8 w-8 fill-white" />
         ) : (
-          <Play className="h-5 w-5" />
+          <Play className="h-8 w-8 fill-white" />
         )}
-      </Button>
-
-      {/* Progress slider and time */}
-      <div className="flex-1 flex items-center gap-2">
-        {status === 'ready' && audioUrl ? (
-          <>
-            <span className="text-xs text-muted-foreground w-10 text-right">
-              {formatTime(currentTime)}
-            </span>
-            <Slider
-              value={[currentTime]}
-              min={0}
-              max={duration || 100}
-              step={0.1}
-              onValueChange={handleSeek}
-              className="flex-1"
-              aria-label="Audio progress"
-            />
-            <span className="text-xs text-muted-foreground w-10">
-              {formatTime(duration)}
-            </span>
-          </>
-        ) : status === 'loading' ? (
-          <span className="text-sm text-muted-foreground">Generating audio...</span>
-        ) : status === 'error' ? (
-          <span className="text-sm text-destructive">{error || 'Error'}</span>
-        ) : (
-          <span className="text-sm text-muted-foreground flex items-center gap-1">
-            <Volume2 className="h-4 w-4" />
-            Listen to article
-          </span>
-        )}
-      </div>
-    </div>
+      </button>
+    </>
   )
 }

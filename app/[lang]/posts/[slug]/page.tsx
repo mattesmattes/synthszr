@@ -288,32 +288,32 @@ export default async function PostPage({ params }: PageProps) {
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
           {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
           {post.cover_image_url && (
-            <Link href={`/${locale}`} className="block mb-4 rounded-lg overflow-hidden -mx-6">
-              {/* -mx-6 compensates for parent padding to allow full 704px width */}
-              <div
-                className="relative flex items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6] bg-neon-cyan"
-              >
-                {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
+            <div className="relative mb-8 rounded-lg overflow-hidden -mx-6 mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6]">
+              {/* Clickable background to home */}
+              <Link href={`/${locale}`} className="absolute inset-0 z-0">
                 <img
                   src={post.cover_image_url}
                   alt=""
-                  className="absolute inset-0 w-full h-full object-cover"
+                  className="w-full h-full object-cover"
                   style={{ imageRendering: 'pixelated' }}
                 />
-                {/* Logo centered on top */}
-                <img
-                  src="/synthszr-logo.svg"
-                  alt="Synthszr"
-                  className="relative z-10 h-20 md:h-24 w-auto"
-                />
+              </Link>
+              {/* Logo + Play button centered */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
+                <Link href={`/${locale}`} className="pointer-events-auto">
+                  <img
+                    src="/synthszr-logo.svg"
+                    alt="Synthszr"
+                    className="h-20 md:h-24 w-auto"
+                  />
+                </Link>
+                {/* Audio Player - directly under logo */}
+                <div className="mt-3 pointer-events-auto">
+                  <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
+                </div>
               </div>
-            </Link>
+            </div>
           )}
-
-          {/* Audio Player */}
-          <div className="mb-8">
-            <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
-          </div>
 
           <header className="mb-12 border-b border-border pb-8">
             <div className="mb-4">
