@@ -219,17 +219,19 @@ export function NewsletterEmail({
             />
           </Section>
 
-          {/* Cover Image with Play Button baked in - clicks to article with autoplay */}
+          {/* Cover Image with Play Button - clicks to article with autoplay */}
           {coverImageUrl && (
             <Section style={coverSection}>
               <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
-                <Img
-                  src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=604&playButton=true`}
-                  alt={subject}
-                  width="302"
-                  height="302"
-                  style={coverImageCentered}
-                />
+                <div style={coverImageContainer}>
+                  <Img
+                    src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=604&playButton=true&skipTransform=true`}
+                    alt={subject}
+                    width="302"
+                    height="302"
+                    style={coverImage}
+                  />
+                </div>
               </Link>
             </Section>
           )}
@@ -334,6 +336,15 @@ const coverSection = {
   textAlign: 'center' as const,
 }
 
+const coverImageContainer = {
+  backgroundColor: '#CCFF00',
+  width: '302px',
+  height: '302px',
+  overflow: 'hidden' as const,
+  margin: '0 auto',
+  borderRadius: '0',
+}
+
 const coverImage = {
   width: '302px',
   height: '302px',
@@ -341,13 +352,6 @@ const coverImage = {
   objectFit: 'cover' as const,
 }
 
-const coverImageCentered = {
-  width: '302px',
-  height: '302px',
-  display: 'block',
-  objectFit: 'cover' as const,
-  margin: '0 auto',
-}
 
 
 const contentSection = {
