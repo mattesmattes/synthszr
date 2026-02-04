@@ -71,6 +71,7 @@
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
+    "elevenlabs": "^1.59.0",
     "embla-carousel-react": "8.5.1",
     "framer-motion": "^12.25.0",
     "googleapis": "^169.0.0",

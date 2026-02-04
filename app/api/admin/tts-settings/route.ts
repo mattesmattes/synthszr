@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
-import { getTTSSettings, generatePreviewAudio, TTSVoice, TTSModel } from '@/lib/tts/openai-tts'
+import { getTTSSettings, generatePreviewAudio, TTSVoice, TTSModel, TTSProvider } from '@/lib/tts/openai-tts'
+import type { ElevenLabsModel } from '@/lib/tts/elevenlabs-tts'
 
 /**
  * GET /api/admin/tts-settings
@@ -26,16 +27,23 @@ export async function GET() {
 }
 
 interface UpdateSettingsRequest {
+  tts_provider?: TTSProvider
   tts_news_voice_de?: TTSVoice
   tts_news_voice_en?: TTSVoice
   tts_synthszr_voice_de?: TTSVoice
   tts_synthszr_voice_en?: TTSVoice
   tts_model?: TTSModel
   tts_enabled?: boolean
+  // ElevenLabs settings
+  elevenlabs_news_voice_en?: string
+  elevenlabs_synthszr_voice_en?: string
+  elevenlabs_model?: ElevenLabsModel
 }
 
 const VALID_VOICES: TTSVoice[] = ['alloy', 'echo', 'fable', 'nova', 'onyx', 'shimmer']
 const VALID_MODELS: TTSModel[] = ['tts-1', 'tts-1-hd']
+const VALID_PROVIDERS: TTSProvider[] = ['openai', 'elevenlabs']
+const VALID_ELEVENLABS_MODELS: ElevenLabsModel[] = ['eleven_multilingual_v2', 'eleven_turbo_v2_5', 'eleven_turbo_v2']
 
 /**
  * PUT /api/admin/tts-settings
@@ -91,6 +99,30 @@ export async function PUT(request: NextRequest) {
 
     if (body.tts_enabled !== undefined) {
       updates.push({ key: 'tts_enabled', value: body.tts_enabled })
+    }
+
+    // Provider setting
+    if (body.tts_provider !== undefined) {
+      if (!VALID_PROVIDERS.includes(body.tts_provider)) {
+        return NextResponse.json({ error: 'Invalid TTS provider' }, { status: 400 })
+      }
+      updates.push({ key: 'tts_provider', value: body.tts_provider })
+    }
+
+    // ElevenLabs settings (voice IDs are arbitrary strings)
+    if (body.elevenlabs_news_voice_en !== undefined) {
+      updates.push({ key: 'elevenlabs_news_voice_en', value: body.elevenlabs_news_voice_en })
+    }
+
+    if (body.elevenlabs_synthszr_voice_en !== undefined) {
+      updates.push({ key: 'elevenlabs_synthszr_voice_en', value: body.elevenlabs_synthszr_voice_en })
+    }
+
+    if (body.elevenlabs_model !== undefined) {
+      if (!VALID_ELEVENLABS_MODELS.includes(body.elevenlabs_model)) {
+        return NextResponse.json({ error: 'Invalid ElevenLabs model' }, { status: 400 })
+      }
+      updates.push({ key: 'elevenlabs_model', value: body.elevenlabs_model })
     }
 
     // Apply updates

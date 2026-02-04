@@ -130,13 +130,38 @@ export default function SettingsPage() {
   // TTS settings
   type TTSVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer'
   type TTSModel = 'tts-1' | 'tts-1-hd'
+  type TTSProvider = 'openai' | 'elevenlabs'
+  type ElevenLabsModel = 'eleven_multilingual_v2' | 'eleven_turbo_v2_5' | 'eleven_turbo_v2'
   interface TTSSettings {
+    tts_provider: TTSProvider
     tts_news_voice_de: TTSVoice
     tts_news_voice_en: TTSVoice
     tts_synthszr_voice_de: TTSVoice
     tts_synthszr_voice_en: TTSVoice
     tts_model: TTSModel
     tts_enabled: boolean
+    // ElevenLabs settings
+    elevenlabs_news_voice_en: string
+    elevenlabs_synthszr_voice_en: string
+    elevenlabs_model: ElevenLabsModel
+  }
+
+  // ElevenLabs voice presets
+  const ELEVENLABS_VOICES = {
+    news: [
+      { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Warm, professional female' },
+      { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Gigi', description: 'Energetic, youthful female' },
+      { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', description: 'Soft, friendly female' },
+      { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Authoritative British male' },
+      { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', description: 'Natural, conversational male' },
+      { id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill', description: 'Deep, trustworthy male' },
+    ],
+    synthszr: [
+      { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Authoritative British male' },
+      { id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill', description: 'Deep, trustworthy male' },
+      { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', description: 'Natural, conversational male' },
+      { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Warm, professional female' },
+    ],
   }
   const [ttsSettings, setTtsSettings] = useState<TTSSettings | null>(null)
   const [ttsLoading, setTtsLoading] = useState(true)
@@ -1051,197 +1076,237 @@ export default function SettingsPage() {
 
                 {ttsSettings.tts_enabled && (
                   <>
-                    {/* TTS Model */}
+                    {/* TTS Provider Selection */}
                     <div className="space-y-3 pb-4 border-b">
                       <div>
-                        <Label className="text-base">TTS-Modell</Label>
+                        <Label className="text-base">TTS-Anbieter</Label>
                         <p className="text-sm text-muted-foreground">
-                          tts-1 ist schneller, tts-1-hd hat höhere Qualität
+                          OpenAI ist günstig, ElevenLabs hat höhere Qualität
                         </p>
                       </div>
                       <Select
-                        value={ttsSettings.tts_model}
-                        onValueChange={(value: TTSModel) =>
-                          setTtsSettings({ ...ttsSettings, tts_model: value })
+                        value={ttsSettings.tts_provider || 'openai'}
+                        onValueChange={(value: TTSProvider) =>
+                          setTtsSettings({ ...ttsSettings, tts_provider: value })
                         }
                       >
-                        <SelectTrigger className="w-48">
+                        <SelectTrigger className="w-56">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="tts-1">tts-1 (Standard)</SelectItem>
-                          <SelectItem value="tts-1-hd">tts-1-hd (HD)</SelectItem>
+                          <SelectItem value="openai">OpenAI TTS</SelectItem>
+                          <SelectItem value="elevenlabs">ElevenLabs</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
-                    {/* German Voices */}
-                    <div className="space-y-4 pb-4 border-b">
-                      <div>
-                        <Label className="text-base">Deutsche Stimmen</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Stimmen für deutschen Newsletter-Content
-                        </p>
-                      </div>
-
-                      {/* News Voice DE */}
-                      <div className="flex items-center gap-4">
-                        <div className="flex-1">
-                          <Label className="text-sm">Nachrichten (weiblich)</Label>
+                    {/* OpenAI Settings */}
+                    {(ttsSettings.tts_provider === 'openai' || !ttsSettings.tts_provider) && (
+                      <>
+                        {/* TTS Model */}
+                        <div className="space-y-3 pb-4 border-b">
+                          <div>
+                            <Label className="text-base">OpenAI TTS-Modell</Label>
+                            <p className="text-sm text-muted-foreground">
+                              tts-1 ist schneller, tts-1-hd hat höhere Qualität
+                            </p>
+                          </div>
                           <Select
-                            value={ttsSettings.tts_news_voice_de}
-                            onValueChange={(value: TTSVoice) =>
-                              setTtsSettings({ ...ttsSettings, tts_news_voice_de: value })
+                            value={ttsSettings.tts_model}
+                            onValueChange={(value: TTSModel) =>
+                              setTtsSettings({ ...ttsSettings, tts_model: value })
                             }
                           >
-                            <SelectTrigger>
+                            <SelectTrigger className="w-48">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="nova">Nova (empfohlen)</SelectItem>
-                              <SelectItem value="shimmer">Shimmer</SelectItem>
-                              <SelectItem value="alloy">Alloy</SelectItem>
-                              <SelectItem value="echo">Echo</SelectItem>
-                              <SelectItem value="fable">Fable</SelectItem>
-                              <SelectItem value="onyx">Onyx</SelectItem>
+                              <SelectItem value="tts-1">tts-1 (Standard)</SelectItem>
+                              <SelectItem value="tts-1-hd">tts-1-hd (HD)</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => previewVoice(ttsSettings.tts_news_voice_de, 'de')}
-                          disabled={previewingVoice === `${ttsSettings.tts_news_voice_de}-de`}
-                        >
-                          {previewingVoice === `${ttsSettings.tts_news_voice_de}-de` ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Play className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
 
-                      {/* Synthszr Voice DE */}
-                      <div className="flex items-center gap-4">
-                        <div className="flex-1">
-                          <Label className="text-sm">Synthszr Take (männlich)</Label>
+                        {/* OpenAI English Voices */}
+                        <div className="space-y-4 pb-4 border-b">
+                          <div>
+                            <Label className="text-base">OpenAI Stimmen (Englisch)</Label>
+                            <p className="text-sm text-muted-foreground">
+                              Stimmen für alle Sprachversionen (EN TTS Qualität ist besser)
+                            </p>
+                          </div>
+
+                          {/* News Voice EN */}
+                          <div className="flex items-center gap-4">
+                            <div className="flex-1">
+                              <Label className="text-sm">Nachrichten</Label>
+                              <Select
+                                value={ttsSettings.tts_news_voice_en}
+                                onValueChange={(value: TTSVoice) =>
+                                  setTtsSettings({ ...ttsSettings, tts_news_voice_en: value })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="nova">Nova (empfohlen)</SelectItem>
+                                  <SelectItem value="shimmer">Shimmer</SelectItem>
+                                  <SelectItem value="alloy">Alloy</SelectItem>
+                                  <SelectItem value="echo">Echo</SelectItem>
+                                  <SelectItem value="fable">Fable</SelectItem>
+                                  <SelectItem value="onyx">Onyx</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => previewVoice(ttsSettings.tts_news_voice_en, 'en')}
+                              disabled={previewingVoice === `${ttsSettings.tts_news_voice_en}-en`}
+                            >
+                              {previewingVoice === `${ttsSettings.tts_news_voice_en}-en` ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Play className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+
+                          {/* Synthszr Voice EN */}
+                          <div className="flex items-center gap-4">
+                            <div className="flex-1">
+                              <Label className="text-sm">Synthszr Take</Label>
+                              <Select
+                                value={ttsSettings.tts_synthszr_voice_en}
+                                onValueChange={(value: TTSVoice) =>
+                                  setTtsSettings({ ...ttsSettings, tts_synthszr_voice_en: value })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="onyx">Onyx (empfohlen)</SelectItem>
+                                  <SelectItem value="echo">Echo</SelectItem>
+                                  <SelectItem value="fable">Fable</SelectItem>
+                                  <SelectItem value="alloy">Alloy</SelectItem>
+                                  <SelectItem value="nova">Nova</SelectItem>
+                                  <SelectItem value="shimmer">Shimmer</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => previewVoice(ttsSettings.tts_synthszr_voice_en, 'en')}
+                              disabled={previewingVoice === `${ttsSettings.tts_synthszr_voice_en}-en`}
+                            >
+                              {previewingVoice === `${ttsSettings.tts_synthszr_voice_en}-en` ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Play className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* ElevenLabs Settings */}
+                    {ttsSettings.tts_provider === 'elevenlabs' && (
+                      <>
+                        {/* ElevenLabs Model */}
+                        <div className="space-y-3 pb-4 border-b">
+                          <div>
+                            <Label className="text-base">ElevenLabs Modell</Label>
+                            <p className="text-sm text-muted-foreground">
+                              Multilingual v2 für beste Qualität, Turbo für schnellere Generierung
+                            </p>
+                          </div>
                           <Select
-                            value={ttsSettings.tts_synthszr_voice_de}
-                            onValueChange={(value: TTSVoice) =>
-                              setTtsSettings({ ...ttsSettings, tts_synthszr_voice_de: value })
+                            value={ttsSettings.elevenlabs_model || 'eleven_multilingual_v2'}
+                            onValueChange={(value: ElevenLabsModel) =>
+                              setTtsSettings({ ...ttsSettings, elevenlabs_model: value })
                             }
                           >
-                            <SelectTrigger>
+                            <SelectTrigger className="w-64">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="onyx">Onyx (empfohlen)</SelectItem>
-                              <SelectItem value="echo">Echo</SelectItem>
-                              <SelectItem value="fable">Fable</SelectItem>
-                              <SelectItem value="alloy">Alloy</SelectItem>
-                              <SelectItem value="nova">Nova</SelectItem>
-                              <SelectItem value="shimmer">Shimmer</SelectItem>
+                              <SelectItem value="eleven_multilingual_v2">Multilingual v2 (empfohlen)</SelectItem>
+                              <SelectItem value="eleven_turbo_v2_5">Turbo v2.5 (schnell)</SelectItem>
+                              <SelectItem value="eleven_turbo_v2">Turbo v2</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => previewVoice(ttsSettings.tts_synthszr_voice_de, 'de')}
-                          disabled={previewingVoice === `${ttsSettings.tts_synthszr_voice_de}-de`}
-                        >
-                          {previewingVoice === `${ttsSettings.tts_synthszr_voice_de}-de` ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Play className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
 
-                    {/* English Voices */}
-                    <div className="space-y-4 pb-4 border-b">
-                      <div>
-                        <Label className="text-base">Englische Stimmen</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Stimmen für englischen Newsletter-Content
-                        </p>
-                      </div>
+                        {/* ElevenLabs Voices */}
+                        <div className="space-y-4 pb-4 border-b">
+                          <div>
+                            <Label className="text-base">ElevenLabs Stimmen</Label>
+                            <p className="text-sm text-muted-foreground">
+                              Hochwertige Stimmen für alle Sprachversionen
+                            </p>
+                          </div>
 
-                      {/* News Voice EN */}
-                      <div className="flex items-center gap-4">
-                        <div className="flex-1">
-                          <Label className="text-sm">Nachrichten (weiblich)</Label>
-                          <Select
-                            value={ttsSettings.tts_news_voice_en}
-                            onValueChange={(value: TTSVoice) =>
-                              setTtsSettings({ ...ttsSettings, tts_news_voice_en: value })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="nova">Nova (empfohlen)</SelectItem>
-                              <SelectItem value="shimmer">Shimmer</SelectItem>
-                              <SelectItem value="alloy">Alloy</SelectItem>
-                              <SelectItem value="echo">Echo</SelectItem>
-                              <SelectItem value="fable">Fable</SelectItem>
-                              <SelectItem value="onyx">Onyx</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          {/* News Voice */}
+                          <div className="flex items-center gap-4">
+                            <div className="flex-1">
+                              <Label className="text-sm">Nachrichten</Label>
+                              <Select
+                                value={ttsSettings.elevenlabs_news_voice_en || 'pFZP5JQG7iQjIQuC4Bku'}
+                                onValueChange={(value: string) =>
+                                  setTtsSettings({ ...ttsSettings, elevenlabs_news_voice_en: value })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {ELEVENLABS_VOICES.news.map((voice) => (
+                                    <SelectItem key={voice.id} value={voice.id}>
+                                      {voice.name} - {voice.description}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          {/* Synthszr Voice */}
+                          <div className="flex items-center gap-4">
+                            <div className="flex-1">
+                              <Label className="text-sm">Synthszr Take</Label>
+                              <Select
+                                value={ttsSettings.elevenlabs_synthszr_voice_en || 'onwK4e9ZLuTAKqWW03F9'}
+                                onValueChange={(value: string) =>
+                                  setTtsSettings({ ...ttsSettings, elevenlabs_synthszr_voice_en: value })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {ELEVENLABS_VOICES.synthszr.map((voice) => (
+                                    <SelectItem key={voice.id} value={voice.id}>
+                                      {voice.name} - {voice.description}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => previewVoice(ttsSettings.tts_news_voice_en, 'en')}
-                          disabled={previewingVoice === `${ttsSettings.tts_news_voice_en}-en`}
-                        >
-                          {previewingVoice === `${ttsSettings.tts_news_voice_en}-en` ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Play className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
 
-                      {/* Synthszr Voice EN */}
-                      <div className="flex items-center gap-4">
-                        <div className="flex-1">
-                          <Label className="text-sm">Synthszr Take (männlich)</Label>
-                          <Select
-                            value={ttsSettings.tts_synthszr_voice_en}
-                            onValueChange={(value: TTSVoice) =>
-                              setTtsSettings({ ...ttsSettings, tts_synthszr_voice_en: value })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="onyx">Onyx (empfohlen)</SelectItem>
-                              <SelectItem value="echo">Echo</SelectItem>
-                              <SelectItem value="fable">Fable</SelectItem>
-                              <SelectItem value="alloy">Alloy</SelectItem>
-                              <SelectItem value="nova">Nova</SelectItem>
-                              <SelectItem value="shimmer">Shimmer</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => previewVoice(ttsSettings.tts_synthszr_voice_en, 'en')}
-                          disabled={previewingVoice === `${ttsSettings.tts_synthszr_voice_en}-en`}
-                        >
-                          {previewingVoice === `${ttsSettings.tts_synthszr_voice_en}-en` ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Play className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
+                        <Alert>
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            ElevenLabs erfordert einen API-Key (ELEVENLABS_API_KEY in .env.local)
+                          </AlertDescription>
+                        </Alert>
+                      </>
+                    )}
                   </>
                 )}
 
@@ -1264,9 +1329,11 @@ export default function SettingsPage() {
                 </div>
 
                 <p className="text-xs text-muted-foreground">
-                  Audio wird mit OpenAI TTS generiert. Nachrichten-Content wird mit der weiblichen Stimme,
-                  Synthszr Take Abschnitte mit der männlichen Stimme vorgelesen.
-                  Geschätzte Kosten: ~$0.30 pro Artikel (DE + EN).
+                  {ttsSettings.tts_provider === 'elevenlabs'
+                    ? 'Audio wird mit ElevenLabs generiert. Höhere Qualität, aber teurer (~$0.50+ pro Artikel).'
+                    : 'Audio wird mit OpenAI TTS generiert. Geschätzte Kosten: ~$0.30 pro Artikel.'
+                  }
+                  {' '}Nachrichten-Content wird mit der ersten Stimme, Synthszr Take Abschnitte mit der zweiten Stimme vorgelesen.
                 </p>
               </>
             ) : (
