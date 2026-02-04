@@ -566,6 +566,16 @@ export async function generateAndProcessImage(
 
     // Apply dithering if enabled
     if (enableDithering) {
+      // Normalize contrast before dithering - this pushes mid-tones to extremes,
+      // resulting in bolder dithering patterns instead of fine "grainy" noise
+      console.log(`[Gemini] Normalizing contrast before dithering...`)
+      const buffer = Buffer.from(processedBase64, 'base64')
+      const normalizedBuffer = await sharp(buffer)
+        .normalise()
+        .png()
+        .toBuffer()
+      processedBase64 = normalizedBuffer.toString('base64')
+
       console.log(`[Gemini] Applying dithering with gain ${ditheringGain}, coarseness ${ditheringCoarseness}...`)
       const dithered = await applyDithering(processedBase64, ditheringGain, ditheringCoarseness)
       processedBase64 = dithered.base64
