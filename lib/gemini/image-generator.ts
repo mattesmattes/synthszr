@@ -388,7 +388,6 @@ export async function applyDithering(
 
   // Get original dimensions
   const metadata = await sharp(buffer).metadata()
-  console.log(`[Dithering] Input image: ${metadata.width}x${metadata.height}, format=${metadata.format}, channels=${metadata.channels}, space=${metadata.space}`)
   const originalWidth = metadata.width!
   const originalHeight = metadata.height!
 
@@ -410,32 +409,6 @@ export async function applyDithering(
   const width = info.width
   const height = info.height
   const pixels = new Float32Array(data) // Use float for error accumulation
-
-  // Find actual min/max values in the image
-  let pixelMin = 255
-  let pixelMax = 0
-  for (let i = 0; i < pixels.length; i++) {
-    if (pixels[i] < pixelMin) pixelMin = pixels[i]
-    if (pixels[i] > pixelMax) pixelMax = pixels[i]
-  }
-
-  // Manual contrast stretch: scale actual range to full 0-255
-  // This is more aggressive than normalise() and guarantees full range
-  const range = pixelMax - pixelMin
-  if (range > 0) {
-    const scale = 255 / range
-    for (let i = 0; i < pixels.length; i++) {
-      pixels[i] = (pixels[i] - pixelMin) * scale
-    }
-    console.log(`[Dithering] Contrast stretch: ${pixelMin}-${pixelMax} → 0-255 (scale=${scale.toFixed(2)})`)
-  }
-
-  // Debug: check pixel value distribution after stretch
-  const samplePixels = Array.from(pixels.slice(0, 100))
-  const min = Math.min(...samplePixels)
-  const max = Math.max(...samplePixels)
-  const avg = samplePixels.reduce((a, b) => a + b, 0) / samplePixels.length
-  console.log(`[Dithering] After stretch - min=${min.toFixed(0)}, max=${max.toFixed(0)}, avg=${avg.toFixed(1)}, sample: [${samplePixels.slice(0, 10).map(p => p.toFixed(0)).join(', ')}]`)
 
   // Floyd-Steinberg error diffusion
   for (let y = 0; y < height; y++) {
@@ -592,7 +565,6 @@ export async function generateAndProcessImage(
     }
 
     // Apply dithering if enabled
-    // Note: normalise() is applied inside applyDithering() AFTER grayscale conversion
     if (enableDithering) {
       console.log(`[Gemini] Applying dithering with gain ${ditheringGain}, coarseness ${ditheringCoarseness}...`)
       const dithered = await applyDithering(processedBase64, ditheringGain, ditheringCoarseness)
