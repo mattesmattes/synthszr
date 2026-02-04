@@ -153,6 +153,8 @@ export async function middleware(request: NextRequest) {
       // Redirect to default locale (301 permanent)
       const pathWithoutLocale = pathname.replace(`/${urlLocale}`, '') || '/'
       const redirectUrl = new URL(`/${DEFAULT_LOCALE}${pathWithoutLocale}`, request.url)
+      // Preserve query parameters (e.g., ?stock=Nvidia from newsletter links)
+      redirectUrl.search = request.nextUrl.search
       return NextResponse.redirect(redirectUrl, 301)
     }
 
@@ -169,6 +171,8 @@ export async function middleware(request: NextRequest) {
 
   // Redirect to localized URL (307 temporary)
   const localizedUrl = new URL(`/${preferredLocale}${pathname === '/' ? '' : pathname}`, request.url)
+  // Preserve query parameters (e.g., ?stock=Nvidia from newsletter links)
+  localizedUrl.search = request.nextUrl.search
   const response = NextResponse.redirect(localizedUrl, 307)
   response.headers.set('x-locale', preferredLocale)
   return response
