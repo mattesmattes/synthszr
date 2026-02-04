@@ -150,20 +150,20 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
           {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
           {post.cover_image_url && (
-            <div className="relative mb-8 rounded-lg overflow-hidden -mx-6 mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6]">
-              {/* Clickable background to home */}
-              <Link href="/" className="absolute inset-0 z-0">
-                {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
-                <img
-                  src={post.cover_image_url}
-                  alt=""
-                  className="w-full h-full object-cover"
-                  style={{ imageRendering: 'pixelated' }}
-                />
-              </Link>
-              {/* Logo + Play button centered */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
-                <Link href="/" className="pointer-events-auto">
+            <div className="relative mb-8 rounded-lg overflow-hidden -mx-6">
+              <div className="relative flex flex-col items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6] bg-neon-cyan">
+                {/* Clickable background to home */}
+                <Link href="/" className="absolute inset-0 z-0">
+                  {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
+                  <img
+                    src={post.cover_image_url}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    style={{ imageRendering: 'pixelated' }}
+                  />
+                </Link>
+                {/* Logo centered */}
+                <Link href="/" className="relative z-10">
                   <img
                     src="/synthszr-logo.svg"
                     alt="Synthszr"
@@ -171,7 +171,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
                   />
                 </Link>
                 {/* Audio Player - directly under logo */}
-                <div className="mt-3 pointer-events-auto">
+                <div className="relative z-10 mt-3">
                   <AudioPlayer postId={post.id} locale="de" />
                 </div>
               </div>

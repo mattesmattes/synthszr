@@ -1,4 +1,5 @@
 import { PostContentView } from "./post-content-view"
+import { AudioPlayer } from "./audio-player"
 import { formatUpdateDate } from "@/lib/i18n/config"
 import type { LanguageCode } from "@/lib/types"
 
@@ -33,28 +34,39 @@ export function FeaturedArticle({
   return (
     <article className="mb-16 border-b border-border pb-16">
       {coverImageUrl && (
-        <a href={postUrl} className="block mb-8 rounded-lg overflow-hidden -mx-6">
+        <div className="relative mb-8 rounded-lg overflow-hidden -mx-6">
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
           {/* -mx-6 compensates for parent padding to allow full 704px width */}
           {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
           <div
-            className="relative flex items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6] bg-neon-cyan"
+            className="relative flex flex-col items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6] bg-neon-cyan"
           >
-            {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
-            <img
-              src={coverImageUrl}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover"
-              style={{ imageRendering: 'pixelated' }}
-            />
+            {/* Clickable background */}
+            <a href={postUrl} className="absolute inset-0 z-0">
+              {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
+              <img
+                src={coverImageUrl}
+                alt=""
+                className="w-full h-full object-cover"
+                style={{ imageRendering: 'pixelated' }}
+              />
+            </a>
             {/* Logo centered on top - explicit mobile width constraint */}
-            <img
-              src="/synthszr-logo.svg"
-              alt="Synthszr"
-              className="relative z-10 h-auto w-[70%] max-w-[300px] md:h-24 md:w-auto md:max-w-[400px]"
-            />
+            <a href={postUrl} className="relative z-10">
+              <img
+                src="/synthszr-logo.svg"
+                alt="Synthszr"
+                className="h-auto w-[70%] max-w-[300px] md:h-24 md:w-auto md:max-w-[400px]"
+              />
+            </a>
+            {/* Audio Player - directly under logo */}
+            {postId && (
+              <div className="relative z-10 mt-3">
+                <AudioPlayer postId={postId} locale={locale === 'de' ? 'de' : 'en'} />
+              </div>
+            )}
           </div>
-        </a>
+        </div>
       )}
 
       <div className="mb-4">
