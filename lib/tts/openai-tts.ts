@@ -89,15 +89,20 @@ function isSynthszrTakeNode(node: TiptapNode): boolean {
  * Clean text for TTS output
  * - Remove URLs
  * - Strip {Company} tags
+ * - Replace "Synthszr" with "Synthesizer" for pronunciation
  * - Normalize whitespace
  */
 function cleanTextForTTS(text: string): string {
   return text
     .replace(/https?:\/\/[^\s]+/g, '') // Remove URLs
     .replace(/\{([^}]+)\}/g, '$1') // Strip {Company} tags, keep company name
+    .replace(/Synthszr/gi, 'Synthesizer') // Pronounce as "Synthesizer"
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
 }
+
+/** Intro greeting for the audio */
+const INTRO_TEXT = "Goooood morning! Here is your daily news synthesis to start your day."
 
 /**
  * Split TipTap content into news and Synthszr Take sections
@@ -157,10 +162,13 @@ export function splitContentBySections(content: TiptapDoc | string): ContentSect
         // Skip editorial headings
         continue
       }
-      // Add heading to news section with proper formatting
+      // Add heading to news section with pauses before and after
+      // The "..." creates a natural pause in OpenAI TTS
       const cleanedText = cleanTextForTTS(nodeText)
       if (cleanedText.trim()) {
+        currentNewsText.push('...')  // Pause before heading
         currentNewsText.push(cleanedText)
+        currentNewsText.push('...')  // Pause after heading
       }
     } else if (node.type === 'paragraph' || node.type === 'bulletList' || node.type === 'orderedList') {
       // Regular content goes to news section
@@ -274,6 +282,7 @@ export async function generatePostAudio(
     }
 
     // Create or update pending record
+    // Always use English voices (German TTS quality is poor)
     const { data: audioRecord, error: upsertError } = await supabase
       .from('post_audio')
       .upsert({
@@ -282,8 +291,8 @@ export async function generatePostAudio(
         audio_url: '',
         generation_status: 'generating',
         content_hash: contentHash,
-        news_voice: locale === 'de' ? settings.tts_news_voice_de : settings.tts_news_voice_en,
-        synthszr_voice: locale === 'de' ? settings.tts_synthszr_voice_de : settings.tts_synthszr_voice_en,
+        news_voice: settings.tts_news_voice_en,
+        synthszr_voice: settings.tts_synthszr_voice_en,
         model: settings.tts_model,
       }, {
         onConflict: 'post_id,locale',
@@ -296,12 +305,22 @@ export async function generatePostAudio(
       return { success: false, error: 'Failed to create audio record' }
     }
 
-    // Select voices based on locale
-    const newsVoice = locale === 'de' ? settings.tts_news_voice_de : settings.tts_news_voice_en
-    const synthszrVoice = locale === 'de' ? settings.tts_synthszr_voice_de : settings.tts_synthszr_voice_en
+    // Always use English voices (German TTS quality is poor)
+    const newsVoice = settings.tts_news_voice_en
+    const synthszrVoice = settings.tts_synthszr_voice_en
 
     // Generate audio for each section
     const audioBuffers: Buffer[] = []
+
+    // Generate intro greeting first
+    try {
+      console.log(`[TTS] Generating intro with voice ${newsVoice}`)
+      const introBuffer = await generateSpeech(INTRO_TEXT, newsVoice, settings.tts_model)
+      audioBuffers.push(introBuffer)
+    } catch (error) {
+      console.error(`[TTS] Failed to generate intro: ${error}`)
+      // Continue without intro if it fails
+    }
 
     for (const section of sections) {
       const voice = section.type === 'synthszr_take' ? synthszrVoice : newsVoice
