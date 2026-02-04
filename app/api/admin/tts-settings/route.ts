@@ -1,0 +1,183 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { getSession } from '@/lib/auth/session'
+import { getTTSSettings, generatePreviewAudio, TTSVoice, TTSModel } from '@/lib/tts/openai-tts'
+
+/**
+ * GET /api/admin/tts-settings
+ * Fetch current TTS settings
+ */
+export async function GET() {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
+  try {
+    const settings = await getTTSSettings()
+    return NextResponse.json(settings)
+  } catch (error) {
+    console.error('[TTS Settings] Fetch error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    )
+  }
+}
+
+interface UpdateSettingsRequest {
+  tts_news_voice_de?: TTSVoice
+  tts_news_voice_en?: TTSVoice
+  tts_synthszr_voice_de?: TTSVoice
+  tts_synthszr_voice_en?: TTSVoice
+  tts_model?: TTSModel
+  tts_enabled?: boolean
+}
+
+const VALID_VOICES: TTSVoice[] = ['alloy', 'echo', 'fable', 'nova', 'onyx', 'shimmer']
+const VALID_MODELS: TTSModel[] = ['tts-1', 'tts-1-hd']
+
+/**
+ * PUT /api/admin/tts-settings
+ * Update TTS settings
+ */
+export async function PUT(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
+  try {
+    const body: UpdateSettingsRequest = await request.json()
+    const supabase = await createClient()
+
+    // Validate and update each setting
+    const updates: Array<{ key: string; value: unknown }> = []
+
+    if (body.tts_news_voice_de !== undefined) {
+      if (!VALID_VOICES.includes(body.tts_news_voice_de)) {
+        return NextResponse.json({ error: 'Invalid voice for tts_news_voice_de' }, { status: 400 })
+      }
+      updates.push({ key: 'tts_news_voice_de', value: body.tts_news_voice_de })
+    }
+
+    if (body.tts_news_voice_en !== undefined) {
+      if (!VALID_VOICES.includes(body.tts_news_voice_en)) {
+        return NextResponse.json({ error: 'Invalid voice for tts_news_voice_en' }, { status: 400 })
+      }
+      updates.push({ key: 'tts_news_voice_en', value: body.tts_news_voice_en })
+    }
+
+    if (body.tts_synthszr_voice_de !== undefined) {
+      if (!VALID_VOICES.includes(body.tts_synthszr_voice_de)) {
+        return NextResponse.json({ error: 'Invalid voice for tts_synthszr_voice_de' }, { status: 400 })
+      }
+      updates.push({ key: 'tts_synthszr_voice_de', value: body.tts_synthszr_voice_de })
+    }
+
+    if (body.tts_synthszr_voice_en !== undefined) {
+      if (!VALID_VOICES.includes(body.tts_synthszr_voice_en)) {
+        return NextResponse.json({ error: 'Invalid voice for tts_synthszr_voice_en' }, { status: 400 })
+      }
+      updates.push({ key: 'tts_synthszr_voice_en', value: body.tts_synthszr_voice_en })
+    }
+
+    if (body.tts_model !== undefined) {
+      if (!VALID_MODELS.includes(body.tts_model)) {
+        return NextResponse.json({ error: 'Invalid TTS model' }, { status: 400 })
+      }
+      updates.push({ key: 'tts_model', value: body.tts_model })
+    }
+
+    if (body.tts_enabled !== undefined) {
+      updates.push({ key: 'tts_enabled', value: body.tts_enabled })
+    }
+
+    // Apply updates
+    for (const update of updates) {
+      const { error } = await supabase
+        .from('settings')
+        .upsert({
+          key: update.key,
+          value: update.value,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'key' })
+
+      if (error) {
+        console.error(`[TTS Settings] Failed to update ${update.key}:`, error)
+        return NextResponse.json(
+          { error: `Failed to update ${update.key}` },
+          { status: 500 }
+        )
+      }
+    }
+
+    // Return updated settings
+    const settings = await getTTSSettings()
+    return NextResponse.json(settings)
+  } catch (error) {
+    console.error('[TTS Settings] Update error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    )
+  }
+}
+
+interface PreviewRequest {
+  text: string
+  voice: TTSVoice
+  model?: TTSModel
+}
+
+/**
+ * POST /api/admin/tts-settings
+ * Generate preview audio for a voice
+ */
+export async function POST(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
+  try {
+    const body: PreviewRequest = await request.json()
+    const { text, voice, model = 'tts-1' } = body
+
+    if (!text || text.length > 500) {
+      return NextResponse.json(
+        { error: 'Text must be 1-500 characters' },
+        { status: 400 }
+      )
+    }
+
+    if (!VALID_VOICES.includes(voice)) {
+      return NextResponse.json({ error: 'Invalid voice' }, { status: 400 })
+    }
+
+    if (!VALID_MODELS.includes(model)) {
+      return NextResponse.json({ error: 'Invalid model' }, { status: 400 })
+    }
+
+    const result = await generatePreviewAudio(text, voice, model)
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error || 'Preview generation failed' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      audioBase64: result.audioBase64,
+      contentType: 'audio/mpeg',
+    })
+  } catch (error) {
+    console.error('[TTS Settings] Preview error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    )
+  }
+}

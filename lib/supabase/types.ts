@@ -129,6 +129,28 @@ export interface BalancedQueueSelection {
   selection_rank: number
 }
 
+// Post Audio types
+export type PostAudioStatus = 'pending' | 'generating' | 'completed' | 'failed'
+
+export interface PostAudio {
+  id: string
+  post_id: string
+  locale: 'de' | 'en'
+  audio_url: string
+  duration_seconds: number | null
+  file_size_bytes: number | null
+  generation_status: PostAudioStatus
+  news_voice: string | null
+  synthszr_voice: string | null
+  model: string | null
+  error_message: string | null
+  content_hash: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PostAudioInsert = Omit<PostAudio, 'id' | 'created_at' | 'updated_at'>
+
 // Insert types (without auto-generated fields)
 export type NewsletterSourceInsert = Omit<NewsletterSource, 'id' | 'created_at'>
 export type DailyRepoItemInsert = Omit<DailyRepoItem, 'id' | 'collected_at'>

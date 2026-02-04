@@ -7,6 +7,7 @@ import { TiptapRenderer } from "@/components/tiptap-renderer"
 import { Newsletter } from "@/components/newsletter"
 import { SwipeNavigation } from "@/components/swipe-navigation"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
+import { AudioPlayer } from "@/components/audio-player"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 
 // Disable caching for posts to always show current cover image
@@ -149,7 +150,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
           {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
           {post.cover_image_url && (
-            <Link href="/" className="block mb-8 rounded-lg overflow-hidden -mx-6">
+            <Link href="/" className="block mb-4 rounded-lg overflow-hidden -mx-6">
               {/* -mx-6 compensates for parent padding to allow full 704px width */}
               <div
                 className="relative flex items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6] bg-neon-cyan"
@@ -170,6 +171,11 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
               </div>
             </Link>
           )}
+
+          {/* Audio Player */}
+          <div className="mb-8">
+            <AudioPlayer postId={post.id} locale="de" />
+          </div>
 
           <header className="mb-12 border-b border-border pb-8">
             <div className="mb-4">

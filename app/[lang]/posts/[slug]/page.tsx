@@ -7,6 +7,7 @@ import { Newsletter } from "@/components/newsletter"
 import { SwipeNavigation } from "@/components/swipe-navigation"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
+import { AudioPlayer } from "@/components/audio-player"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
@@ -287,7 +288,7 @@ export default async function PostPage({ params }: PageProps) {
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
           {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
           {post.cover_image_url && (
-            <Link href={`/${locale}`} className="block mb-8 rounded-lg overflow-hidden -mx-6">
+            <Link href={`/${locale}`} className="block mb-4 rounded-lg overflow-hidden -mx-6">
               {/* -mx-6 compensates for parent padding to allow full 704px width */}
               <div
                 className="relative flex items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6] bg-neon-cyan"
@@ -308,6 +309,11 @@ export default async function PostPage({ params }: PageProps) {
               </div>
             </Link>
           )}
+
+          {/* Audio Player */}
+          <div className="mb-8">
+            <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
+          </div>
 
           <header className="mb-12 border-b border-border pb-8">
             <div className="mb-4">
