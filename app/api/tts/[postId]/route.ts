@@ -77,20 +77,23 @@ export async function GET(
     )
   }
 
-  // Get appropriate content for locale
+  // Always use English content for TTS (all locales read English text)
+  // First try to get English translation, fall back to original content
   let contentToUse: TiptapDoc = post.content as TiptapDoc
 
-  if (locale === 'en') {
-    const { data: translation } = await supabase
-      .from('post_translations')
-      .select('content')
-      .eq('post_id', postId)
-      .eq('language', 'en')
-      .single()
+  const { data: translation } = await supabase
+    .from('content_translations')
+    .select('content')
+    .eq('generated_post_id', postId)
+    .eq('language_code', 'en')
+    .eq('translation_status', 'completed')
+    .single()
 
-    if (translation?.content) {
-      contentToUse = translation.content as TiptapDoc
-    }
+  if (translation?.content) {
+    contentToUse = translation.content as TiptapDoc
+    console.log(`[TTS] Using English translation for post ${postId}`)
+  } else {
+    console.log(`[TTS] No English translation found, using original content for post ${postId}`)
   }
 
   // Generate audio

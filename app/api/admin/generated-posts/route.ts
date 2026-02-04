@@ -150,7 +150,8 @@ export async function PUT(request: NextRequest) {
           console.error('[translations] Unexpected error queuing translations:', err)
         })
 
-      // Generate TTS audio for DE (async, don't block response)
+      // Generate TTS audio after translations are ready (async, don't block response)
+      // Wait a bit for translations to complete, then generate with English content
       ;(async () => {
         try {
           const settings = await getTTSSettings()
@@ -159,15 +160,38 @@ export async function PUT(request: NextRequest) {
             return
           }
 
-          const contentForTTS = contentForProcessing || content
-          if (contentForTTS) {
-            console.log(`[TTS] Generating audio for post ${id} (DE)...`)
-            const result = await generatePostAudio(id, contentForTTS, 'de')
+          // Wait for translations to be processed (they're queued with priority 10)
+          // Check every 30 seconds for up to 5 minutes
+          let englishContent = null
+          for (let attempt = 0; attempt < 10; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 30000)) // 30 sec
+
+            const { data: translation } = await supabase
+              .from('content_translations')
+              .select('content')
+              .eq('generated_post_id', id)
+              .eq('language_code', 'en')
+              .eq('translation_status', 'completed')
+              .single()
+
+            if (translation?.content) {
+              englishContent = translation.content
+              console.log(`[TTS] Found English translation for post ${id}`)
+              break
+            }
+            console.log(`[TTS] Waiting for English translation (attempt ${attempt + 1}/10)...`)
+          }
+
+          if (englishContent) {
+            console.log(`[TTS] Generating audio for post ${id} with English content...`)
+            const result = await generatePostAudio(id, englishContent, 'de')
             if (result.success) {
-              console.log(`[TTS] Audio generated for post ${id} (DE): ${result.audioUrl}`)
+              console.log(`[TTS] Audio generated for post ${id}: ${result.audioUrl}`)
             } else {
               console.error(`[TTS] Failed to generate audio for post ${id}: ${result.error}`)
             }
+          } else {
+            console.log(`[TTS] Skipped - No English translation available for post ${id}`)
           }
         } catch (err) {
           console.error('[TTS] Unexpected error generating audio:', err)
