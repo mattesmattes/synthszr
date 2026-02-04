@@ -309,7 +309,9 @@ export default async function PostPage({ params }: PageProps) {
                 </Link>
                 {/* Audio Player - directly under logo */}
                 <div className="relative z-10 mt-3">
-                  <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
+                  <Suspense fallback={null}>
+                    <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
+                  </Suspense>
                 </div>
               </div>
             </div>

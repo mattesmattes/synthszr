@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { PostContentView } from "./post-content-view"
 import { AudioPlayer } from "./audio-player"
 import { formatUpdateDate } from "@/lib/i18n/config"
@@ -62,7 +63,9 @@ export function FeaturedArticle({
             {/* Audio Player - directly under logo */}
             {postId && (
               <div className="relative z-10 mt-3">
-                <AudioPlayer postId={postId} locale={locale === 'de' ? 'de' : 'en'} />
+                <Suspense fallback={null}>
+                  <AudioPlayer postId={postId} locale={locale === 'de' ? 'de' : 'en'} />
+                </Suspense>
               </div>
             )}
           </div>

@@ -219,23 +219,34 @@ export function NewsletterEmail({
             />
           </Section>
 
-          {/* Cover Image - clicks to article with autoplay */}
+          {/* Cover Image with Play Button Overlay - clicks to article with autoplay */}
           {coverImageUrl && (
             <Section style={coverSection}>
               <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
-                <div style={coverImageContainer}>
-                  <Img
-                    src={coverImageUrl}
-                    alt={subject}
-                    width="302"
-                    height="302"
-                    style={coverImage}
-                  />
-                </div>
-              </Link>
-              {/* Listen link below cover */}
-              <Link href={`${postUrl}?autoplay=true`} style={listenLink}>
-                🎧 Listen to this article
+                {/* Table-based layout for email compatibility */}
+                <table cellPadding="0" cellSpacing="0" border={0} style={{ margin: '0 auto' }}>
+                  <tbody>
+                    <tr>
+                      <td style={coverImageCell}>
+                        {/* Cover image as background via style */}
+                        <div style={{
+                          ...coverImageContainer,
+                          backgroundImage: `url(${coverImageUrl})`,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center',
+                        }}>
+                          {/* Play button centered */}
+                          <div style={playButtonWrapper}>
+                            <div style={playButtonCircle}>
+                              {/* Play triangle using borders */}
+                              <div style={playTriangle} />
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </Link>
             </Section>
           )}
@@ -356,14 +367,37 @@ const coverImage = {
   objectFit: 'cover' as const,
 }
 
-const listenLink = {
-  display: 'inline-block',
-  marginTop: '12px',
-  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '14px',
-  fontWeight: '500' as const,
-  color: '#1a1a1a',
-  textDecoration: 'none',
+const coverImageCell = {
+  padding: 0,
+  margin: 0,
+}
+
+const playButtonWrapper = {
+  display: 'flex' as const,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+  width: '302px',
+  height: '302px',
+}
+
+const playButtonCircle = {
+  width: '64px',
+  height: '64px',
+  borderRadius: '50%',
+  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  display: 'flex' as const,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+}
+
+const playTriangle = {
+  width: '0',
+  height: '0',
+  borderTop: '12px solid transparent',
+  borderBottom: '12px solid transparent',
+  borderLeft: '20px solid #000000',
+  marginLeft: '4px', // Optical centering
 }
 
 const contentSection = {
