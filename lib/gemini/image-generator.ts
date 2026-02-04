@@ -566,15 +566,26 @@ export async function generateAndProcessImage(
 
     // Apply dithering if enabled
     if (enableDithering) {
-      // Normalize contrast before dithering - this pushes mid-tones to extremes,
-      // resulting in bolder dithering patterns instead of fine "grainy" noise
-      console.log(`[Gemini] Normalizing contrast before dithering...`)
       const buffer = Buffer.from(processedBase64, 'base64')
-      const normalizedBuffer = await sharp(buffer)
-        .normalise()
+      const metadata = await sharp(buffer).metadata()
+
+      // Resize to target width before dithering so pattern matches display size
+      // 1200px is a good balance for web display (blog covers, social sharing)
+      const DITHER_TARGET_WIDTH = 1200
+      const currentWidth = metadata.width || 1400
+      const currentHeight = metadata.height || 600
+      const targetWidth = Math.min(currentWidth, DITHER_TARGET_WIDTH)
+      const targetHeight = Math.round(targetWidth * (currentHeight / currentWidth))
+
+      console.log(`[Gemini] Resizing from ${currentWidth}x${currentHeight} to ${targetWidth}x${targetHeight} before dithering...`)
+
+      // Resize and normalize contrast before dithering
+      const preparedBuffer = await sharp(buffer)
+        .resize(targetWidth, targetHeight, { kernel: sharp.kernel.lanczos3 })
+        .normalise() // Push mid-tones to extremes for bolder dithering
         .png()
         .toBuffer()
-      processedBase64 = normalizedBuffer.toString('base64')
+      processedBase64 = preparedBuffer.toString('base64')
 
       console.log(`[Gemini] Applying dithering with gain ${ditheringGain}, coarseness ${ditheringCoarseness}...`)
       const dithered = await applyDithering(processedBase64, ditheringGain, ditheringCoarseness)
