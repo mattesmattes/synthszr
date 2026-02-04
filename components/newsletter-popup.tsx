@@ -6,7 +6,7 @@ import { X, Loader2, CheckCircle2 } from "lucide-react"
 
 const COOKIE_NAME = 'synthszr_subscribed'
 const COOKIE_DAYS = 365
-const POPUP_DELAY_MS = 5000 // Show popup after 5 seconds
+const POPUP_DELAY_MS = 15000 // Show popup after 15 seconds
 const LOCAL_STORAGE_EMAIL_KEY = 'synthszr_email_draft'
 const LOCAL_STORAGE_VISIT_KEY = 'synthszr_visit_count'
 const SHOW_POPUP_EVERY_N_VISITS = 7 // Show popup on every 7th visit
