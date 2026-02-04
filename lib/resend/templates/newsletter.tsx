@@ -219,18 +219,24 @@ export function NewsletterEmail({
             />
           </Section>
 
-          {/* Cover Image in 1:1 format - reduced size for better text readability */}
+          {/* Cover Image - clicks to article with autoplay */}
           {coverImageUrl && (
             <Section style={coverSection}>
-              <div style={coverImageContainer}>
-                <Img
-                  src={coverImageUrl}
-                  alt={subject}
-                  width="302"
-                  height="302"
-                  style={coverImage}
-                />
-              </div>
+              <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
+                <div style={coverImageContainer}>
+                  <Img
+                    src={coverImageUrl}
+                    alt={subject}
+                    width="302"
+                    height="302"
+                    style={coverImage}
+                  />
+                </div>
+              </Link>
+              {/* Listen link below cover */}
+              <Link href={`${postUrl}?autoplay=true`} style={listenLink}>
+                🎧 Listen to this article
+              </Link>
             </Section>
           )}
 
@@ -348,6 +354,16 @@ const coverImage = {
   height: '302px',
   display: 'block',
   objectFit: 'cover' as const,
+}
+
+const listenLink = {
+  display: 'inline-block',
+  marginTop: '12px',
+  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+  fontSize: '14px',
+  fontWeight: '500' as const,
+  color: '#1a1a1a',
+  textDecoration: 'none',
 }
 
 const contentSection = {

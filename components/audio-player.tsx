@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Play, Pause, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -14,8 +15,11 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'disabled'>('idle')
   const [isPlaying, setIsPlaying] = useState(false)
+  const [autoplayTriggered, setAutoplayTriggered] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const searchParams = useSearchParams()
+  const shouldAutoplay = searchParams.get('autoplay') === 'true'
 
   // Fetch audio status on mount
   useEffect(() => {
@@ -43,6 +47,49 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
 
     fetchAudioStatus()
   }, [postId, locale])
+
+  // Handle autoplay from URL parameter (e.g., from newsletter link)
+  useEffect(() => {
+    if (!shouldAutoplay || autoplayTriggered) return
+
+    // If audio is ready, play it
+    if (status === 'ready' && audioUrl) {
+      setAutoplayTriggered(true)
+      // Small delay to ensure audio element is mounted
+      setTimeout(() => {
+        audioRef.current?.play().catch((err) => {
+          // Autoplay might be blocked by browser - that's okay
+          console.log('[AudioPlayer] Autoplay blocked by browser:', err)
+        })
+      }, 500)
+    }
+    // If no audio yet, trigger generation
+    else if (status === 'idle' && !audioUrl) {
+      setAutoplayTriggered(true)
+      setStatus('loading')
+
+      fetch(`/api/tts/${postId}?locale=${locale}&generate=true`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.audioUrl) {
+            setAudioUrl(data.audioUrl)
+            setStatus('ready')
+            // Auto-play after generation
+            setTimeout(() => {
+              audioRef.current?.play().catch((err) => {
+                console.log('[AudioPlayer] Autoplay blocked by browser:', err)
+              })
+            }, 500)
+          } else {
+            setStatus('error')
+          }
+        })
+        .catch(err => {
+          console.error('[AudioPlayer] Auto-generation error:', err)
+          setStatus('error')
+        })
+    }
+  }, [shouldAutoplay, autoplayTriggered, status, audioUrl, postId, locale])
 
   // Handle play/pause
   const togglePlayback = useCallback(async () => {
