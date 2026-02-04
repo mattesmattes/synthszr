@@ -349,6 +349,7 @@ export async function generatePostAudio(
       const blob = await put(fileName, combinedAudio, {
         access: 'public',
         contentType: 'audio/mpeg',
+        allowOverwrite: true,  // Allow regeneration with updated content
       })
       blobUrl = blob.url
     } catch (uploadError) {
