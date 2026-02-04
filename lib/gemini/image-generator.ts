@@ -566,6 +566,24 @@ export async function generateAndProcessImage(
 
     // Apply dithering if enabled
     if (enableDithering) {
+      // Resize before dithering to prevent moiré when browser scales the image
+      // Target width ~800px produces dithering dots that survive browser downscaling
+      const buffer = Buffer.from(processedBase64, 'base64')
+      const metadata = await sharp(buffer).metadata()
+      const DITHER_TARGET_WIDTH = 800
+
+      if (metadata.width && metadata.width > DITHER_TARGET_WIDTH) {
+        const scale = DITHER_TARGET_WIDTH / metadata.width
+        const targetHeight = Math.round(metadata.height! * scale)
+        console.log(`[Gemini] Resizing ${metadata.width}x${metadata.height} → ${DITHER_TARGET_WIDTH}x${targetHeight} before dithering`)
+
+        const resizedBuffer = await sharp(buffer)
+          .resize(DITHER_TARGET_WIDTH, targetHeight, { kernel: sharp.kernel.lanczos3 })
+          .png()
+          .toBuffer()
+        processedBase64 = resizedBuffer.toString('base64')
+      }
+
       console.log(`[Gemini] Applying dithering with gain ${ditheringGain}, coarseness ${ditheringCoarseness}...`)
       const dithered = await applyDithering(processedBase64, ditheringGain, ditheringCoarseness)
       processedBase64 = dithered.base64
