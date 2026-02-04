@@ -332,9 +332,9 @@
   opacity: 0.7;
 }
 
-/* Synthszr Take / Mattes Synthese styling - neon green background */
+/* Synthszr Take / Mattes Synthese styling - neon cyan background */
 .mattes-synthese {
-  background-color: #39FF14;
+  background-color: #00FFFF;
   color: #000;
   padding: 0.25em 0.5em;
   border-radius: 0.25em;
@@ -346,11 +346,11 @@
 
 @supports (color: color(display-p3 0 0 0)) {
   .mattes-synthese {
-    background-color: color(display-p3 0 1 0);
+    background-color: color(display-p3 0 1 1);
   }
 }
 
-/* Style headings containing "Mattes Synthese" with neon green background */
+/* Style headings containing "Mattes Synthese" with neon cyan background */
 .tiptap-content h1.mattes-synthese-heading,
 .tiptap-content h2.mattes-synthese-heading,
 .tiptap-content h3.mattes-synthese-heading,
@@ -364,7 +364,7 @@
 .ProseMirror h2.mattes-synthese-heading,
 .ProseMirror h3.mattes-synthese-heading {
   display: inline-block;
-  background-color: #39FF14;
+  background-color: #00FFFF;
   color: #000;
   padding: 0.15em 0.4em;
   border-radius: 2px;
@@ -383,13 +383,13 @@
   .ProseMirror h1.mattes-synthese-heading,
   .ProseMirror h2.mattes-synthese-heading,
   .ProseMirror h3.mattes-synthese-heading {
-    background-color: color(display-p3 0 1 0);
+    background-color: color(display-p3 0 1 1);
   }
 }
 
-/* Highlight last sentence of Synthszr Take with neon green background */
+/* Highlight last sentence of Synthszr Take with neon cyan background */
 .synthszr-last-sentence {
-  background-color: #39FF14;
+  background-color: #00FFFF;
   color: #000;
   padding: 0.1em 0.25em;
   border-radius: 0.15em;
@@ -399,7 +399,7 @@
 
 @supports (color: color(display-p3 0 0 0)) {
   .synthszr-last-sentence {
-    background-color: color(display-p3 0 1 0);
+    background-color: color(display-p3 0 1 1);
   }
 }
 

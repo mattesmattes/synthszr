@@ -52,7 +52,7 @@ function SynthszrRatingLink({ company, displayName, rating, ticker, changePercen
   // Neon colors matching stock performance badges (P3 enhanced)
   const ratingBadgeStyles = {
     BUY: 'bg-neon-green text-black',
-    HOLD: 'bg-neon-cyan text-black',
+    HOLD: 'bg-neon-yellow text-black',
     SELL: 'bg-neon-orange text-black',
   }
 
@@ -126,7 +126,7 @@ function PremarketRatingLink({ company, displayName, rating, isFirst, isin }: Pr
   // Neon colors matching stock performance badges (P3 enhanced)
   const ratingBadgeStyles = {
     BUY: 'bg-neon-green text-black',
-    HOLD: 'bg-neon-cyan text-black',
+    HOLD: 'bg-neon-yellow text-black',
     SELL: 'bg-neon-orange text-black',
   }
 
@@ -1208,13 +1208,13 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       {/* Article thumbnails (circular with vote-colored backgrounds) */}
       {thumbnailPortals.map(({ element, thumbnail, h2Element }, index) => {
         // Find the best vote color from ratings in this article section
-        // BUY (#39FF14) > HOLD (#00FFFF) > SELL (#FF6600) > NONE (#CCFF00)
+        // BUY (#39FF14) > HOLD (#CCFF00) > SELL (#FF6600) > NONE (#00FFFF)
         const votePriority: Record<string, number> = { 'BUY': 3, 'HOLD': 2, 'SELL': 1 }
         const voteColors: Record<string, string> = {
           'BUY': '#39FF14',
-          'HOLD': '#00FFFF',
+          'HOLD': '#CCFF00',
           'SELL': '#FF6600',
-          'NONE': '#CCFF00'
+          'NONE': '#00FFFF'
         }
 
         // Find next H2 to define article section boundary

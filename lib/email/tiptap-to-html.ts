@@ -22,7 +22,7 @@ export interface TiptapDoc {
 // Rating badge styles (email-safe inline styles)
 const RATING_STYLES = {
   BUY: 'background-color: #39FF14; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
-  HOLD: 'background-color: #00FFFF; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
+  HOLD: 'background-color: #CCFF00; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
   SELL: 'background-color: #FF6600; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
 }
 
@@ -413,9 +413,9 @@ export async function generateEmailContentWithVotes(
   const votePriority: Record<string, number> = { 'BUY': 3, 'HOLD': 2, 'SELL': 1 }
   const voteColors: Record<string, string> = {
     'BUY': '#39FF14',
-    'HOLD': '#00FFFF',
+    'HOLD': '#CCFF00',
     'SELL': '#FF6600',
-    'NONE': '#CCFF00'
+    'NONE': '#00FFFF'
   }
 
   // Pre-process: find article sections and their best vote colors

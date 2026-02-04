@@ -257,9 +257,9 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
                 <span
                   className={cn(
                     'rounded-full px-2 py-0.5 text-[11px] font-bold',
-                    idea.rating === 'BUY' && 'bg-[#39FF14] text-black',
-                    idea.rating === 'SELL' && 'bg-[#FF6600] text-black',
-                    idea.rating === 'HOLD' && 'bg-[#00FFFF] text-black'
+                    idea.rating === 'BUY' && 'bg-neon-green text-black',
+                    idea.rating === 'SELL' && 'bg-neon-orange text-black',
+                    idea.rating === 'HOLD' && 'bg-neon-yellow text-black'
                   )}
                 >
                   {idea.rating}
@@ -300,9 +300,9 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
             <span
               className={cn(
                 'rounded-full px-3 py-1 text-xs font-bold',
-                data.final_recommendation.rating === 'BUY' && 'bg-[#39FF14] text-black',
-                data.final_recommendation.rating === 'SELL' && 'bg-[#FF6600] text-black',
-                data.final_recommendation.rating === 'HOLD' && 'bg-[#00FFFF] text-black'
+                data.final_recommendation.rating === 'BUY' && 'bg-neon-green text-black',
+                data.final_recommendation.rating === 'SELL' && 'bg-neon-orange text-black',
+                data.final_recommendation.rating === 'HOLD' && 'bg-neon-yellow text-black'
               )}
             >
               {data.final_recommendation.rating}

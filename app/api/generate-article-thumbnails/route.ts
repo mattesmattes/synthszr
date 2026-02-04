@@ -9,9 +9,9 @@ export const maxDuration = 300 // Allow up to 5 minutes for batch thumbnail gene
 
 // Vote-based background colors
 const VOTE_COLORS = {
-  NONE: '#CCFF00',   // Neon Yellow - no vote
+  NONE: '#00FFFF',   // Neon Cyan - no vote (default)
   BUY: '#39FF14',    // Neon Green
-  HOLD: '#00FFFF',   // Neon Cyan
+  HOLD: '#CCFF00',   // Neon Yellow
   SELL: '#FF6600',   // Neon Orange
 } as const
 

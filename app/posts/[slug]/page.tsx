@@ -152,7 +152,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
             <Link href="/" className="block mb-8 rounded-lg overflow-hidden -mx-6">
               {/* -mx-6 compensates for parent padding to allow full 704px width */}
               <div
-                className="relative flex items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6] bg-neon-yellow"
+                className="relative flex items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6] bg-neon-cyan"
               >
                 {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
                 <img

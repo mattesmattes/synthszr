@@ -204,9 +204,9 @@ function PremarketSynthesisContent({ synthesis }: { synthesis: PremarketSynthesi
               <span
                 className={cn(
                   'rounded-full px-3 py-1 text-xs font-bold',
-                  synthesis.rating === 'BUY' && 'bg-[#39FF14] text-black',
-                  synthesis.rating === 'SELL' && 'bg-[#FF6600] text-black',
-                  synthesis.rating === 'HOLD' && 'bg-[#00FFFF] text-black'
+                  synthesis.rating === 'BUY' && 'bg-neon-green text-black',
+                  synthesis.rating === 'SELL' && 'bg-neon-orange text-black',
+                  synthesis.rating === 'HOLD' && 'bg-neon-yellow text-black'
                 )}
               >
                 {synthesis.rating}
@@ -254,9 +254,9 @@ function PremarketSynthesisContent({ synthesis }: { synthesis: PremarketSynthesi
                   <span
                     className={cn(
                       'rounded-full px-2 py-0.5 text-[11px] font-bold',
-                      idea.rating === 'BUY' && 'bg-[#39FF14] text-black',
-                      idea.rating === 'SELL' && 'bg-[#FF6600] text-black',
-                      idea.rating === 'HOLD' && 'bg-[#00FFFF] text-black'
+                      idea.rating === 'BUY' && 'bg-neon-green text-black',
+                      idea.rating === 'SELL' && 'bg-neon-orange text-black',
+                      idea.rating === 'HOLD' && 'bg-neon-yellow text-black'
                     )}
                   >
                     {idea.rating}
