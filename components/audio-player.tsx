@@ -111,22 +111,22 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
         />
       )}
 
-      {/* Play/Pause icon button - minimal white icon */}
+      {/* Play/Pause icon button - white circle with dark icon */}
       <button
         onClick={togglePlayback}
         disabled={status === 'loading'}
         className={cn(
-          'text-white hover:text-white/80 transition-opacity disabled:opacity-50',
+          'flex items-center justify-center w-12 h-12 rounded-full bg-white/90 hover:bg-white transition-all shadow-lg disabled:opacity-50',
           className
         )}
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {status === 'loading' ? (
-          <Loader2 className="h-8 w-8 animate-spin" />
+          <Loader2 className="h-6 w-6 animate-spin text-black" />
         ) : isPlaying ? (
-          <Pause className="h-8 w-8 fill-white" />
+          <Pause className="h-6 w-6 text-black fill-black" />
         ) : (
-          <Play className="h-8 w-8 fill-white" />
+          <Play className="h-6 w-6 text-black fill-black ml-0.5" />
         )}
       </button>
     </>
