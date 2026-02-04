@@ -110,9 +110,14 @@ export async function GET(request: NextRequest) {
             <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
               <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.3"/>
             </filter>
+            <!-- Mask to cut out the triangle from the circle -->
+            <mask id="playMask">
+              <circle cx="${buttonSize / 2}" cy="${buttonSize / 2}" r="${circleRadius}" fill="white"/>
+              <polygon points="${buttonSize * 0.38},${buttonSize * 0.28} ${buttonSize * 0.38},${buttonSize * 0.72} ${buttonSize * 0.72},${buttonSize * 0.5}" fill="black"/>
+            </mask>
           </defs>
-          <circle cx="${buttonSize / 2}" cy="${buttonSize / 2}" r="${circleRadius}" fill="rgba(255,255,255,0.95)" filter="url(#shadow)"/>
-          <polygon points="${buttonSize * 0.38},${buttonSize * 0.28} ${buttonSize * 0.38},${buttonSize * 0.72} ${buttonSize * 0.72},${buttonSize * 0.5}" fill="#000000"/>
+          <!-- White circle with triangle cut out -->
+          <circle cx="${buttonSize / 2}" cy="${buttonSize / 2}" r="${circleRadius}" fill="rgba(255,255,255,0.95)" filter="url(#shadow)" mask="url(#playMask)"/>
         </svg>
       `
 
