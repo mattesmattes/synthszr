@@ -13,12 +13,14 @@ const NEON_YELLOW = { r: 204, g: 255, b: 0 }
  * Query params:
  * - url: The original image URL
  * - size: Output size in pixels (default: 1104 = 2x display size for sharp dithering at 552px)
+ * - playButton: If 'true', adds a play button overlay in the center
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const imageUrl = searchParams.get('url')
     const size = parseIntParam(searchParams.get('size'), 1104, 100, 4000)
+    const addPlayButton = searchParams.get('playButton') === 'true'
 
     if (!imageUrl) {
       return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 })
@@ -85,8 +87,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Create final image
-    const finalImage = await sharp(Buffer.from(pixels), {
+    // Create base image from processed pixels
+    let finalImage = await sharp(Buffer.from(pixels), {
       raw: {
         width: info.width,
         height: info.height,
@@ -95,6 +97,36 @@ export async function GET(request: NextRequest) {
     })
       .png()
       .toBuffer()
+
+    // Add play button overlay if requested
+    if (addPlayButton) {
+      // Scale play button to image size (80px at 302px = ~26% of image)
+      const buttonSize = Math.round(size * 0.26)
+      const circleRadius = Math.round(buttonSize * 0.45)
+
+      const playButtonSvg = `
+        <svg width="${buttonSize}" height="${buttonSize}" viewBox="0 0 ${buttonSize} ${buttonSize}" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.3"/>
+            </filter>
+          </defs>
+          <circle cx="${buttonSize / 2}" cy="${buttonSize / 2}" r="${circleRadius}" fill="rgba(255,255,255,0.95)" filter="url(#shadow)"/>
+          <polygon points="${buttonSize * 0.38},${buttonSize * 0.28} ${buttonSize * 0.38},${buttonSize * 0.72} ${buttonSize * 0.72},${buttonSize * 0.5}" fill="#000000"/>
+        </svg>
+      `
+
+      finalImage = await sharp(finalImage)
+        .composite([
+          {
+            input: Buffer.from(playButtonSvg),
+            top: Math.round((size - buttonSize) / 2),
+            left: Math.round((size - buttonSize) / 2),
+          },
+        ])
+        .png()
+        .toBuffer()
+    }
 
     // Return the final image with short cache (for development)
     return new NextResponse(new Uint8Array(finalImage), {

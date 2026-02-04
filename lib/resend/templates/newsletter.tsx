@@ -219,34 +219,17 @@ export function NewsletterEmail({
             />
           </Section>
 
-          {/* Cover Image with Play Button Overlay - clicks to article with autoplay */}
+          {/* Cover Image with Play Button baked in - clicks to article with autoplay */}
           {coverImageUrl && (
             <Section style={coverSection}>
               <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
-                {/* Table-based layout for email compatibility */}
-                <table cellPadding="0" cellSpacing="0" border={0} style={{ margin: '0 auto' }}>
-                  <tbody>
-                    <tr>
-                      <td style={coverImageCell}>
-                        {/* Cover image as background via style */}
-                        <div style={{
-                          ...coverImageContainer,
-                          backgroundImage: `url(${coverImageUrl})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }}>
-                          {/* Play button centered */}
-                          <div style={playButtonWrapper}>
-                            <div style={playButtonCircle}>
-                              {/* Play triangle using borders */}
-                              <div style={playTriangle} />
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                <Img
+                  src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=604&playButton=true`}
+                  alt={subject}
+                  width="302"
+                  height="302"
+                  style={coverImage}
+                />
               </Link>
             </Section>
           )}
@@ -351,15 +334,6 @@ const coverSection = {
   textAlign: 'center' as const,
 }
 
-const coverImageContainer = {
-  backgroundColor: '#CCFF00',
-  width: '302px',
-  height: '302px',
-  overflow: 'hidden' as const,
-  margin: '0 auto',
-  borderRadius: '0',
-}
-
 const coverImage = {
   width: '302px',
   height: '302px',
@@ -367,38 +341,6 @@ const coverImage = {
   objectFit: 'cover' as const,
 }
 
-const coverImageCell = {
-  padding: 0,
-  margin: 0,
-}
-
-const playButtonWrapper = {
-  display: 'flex' as const,
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
-  width: '302px',
-  height: '302px',
-}
-
-const playButtonCircle = {
-  width: '64px',
-  height: '64px',
-  borderRadius: '50%',
-  backgroundColor: 'rgba(255, 255, 255, 0.9)',
-  display: 'flex' as const,
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
-  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
-}
-
-const playTriangle = {
-  width: '0',
-  height: '0',
-  borderTop: '12px solid transparent',
-  borderBottom: '12px solid transparent',
-  borderLeft: '20px solid #000000',
-  marginLeft: '4px', // Optical centering
-}
 
 const contentSection = {
   padding: '32px',
