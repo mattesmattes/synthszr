@@ -174,11 +174,11 @@
   }
 
   .bg-neon-yellow {
-    background-color: color(display-p3 0.85 1 0);
+    background-color: color(display-p3 1 1 0);
   }
 
   .bg-neon-orange {
-    background-color: color(display-p3 1 0.45 0);
+    background-color: color(display-p3 1 0.3 0);
   }
 
   .bg-neon-cyan {
@@ -186,15 +186,15 @@
   }
 
   .bg-neon-green {
-    background-color: color(display-p3 0.3 1 0.2);
+    background-color: color(display-p3 0 1 0);
   }
 
   .text-neon-green {
-    color: color(display-p3 0.3 1 0.2);
+    color: color(display-p3 0 1 0);
   }
 
   .text-neon-orange {
-    color: color(display-p3 1 0.45 0);
+    color: color(display-p3 1 0.3 0);
   }
 
   .text-neon-cyan {
@@ -346,7 +346,7 @@
 
 @supports (color: color(display-p3 0 0 0)) {
   .mattes-synthese {
-    background-color: color(display-p3 0.85 1 0);
+    background-color: color(display-p3 1 1 0);
   }
 }
 
@@ -383,7 +383,7 @@
   .ProseMirror h1.mattes-synthese-heading,
   .ProseMirror h2.mattes-synthese-heading,
   .ProseMirror h3.mattes-synthese-heading {
-    background-color: color(display-p3 0.85 1 0);
+    background-color: color(display-p3 1 1 0);
   }
 }
 
@@ -399,7 +399,7 @@
 
 @supports (color: color(display-p3 0 0 0)) {
   .synthszr-last-sentence {
-    background-color: color(display-p3 0.85 1 0);
+    background-color: color(display-p3 1 1 0);
   }
 }
 
