@@ -49,9 +49,9 @@ async function getActiveImagePromptSettings(): Promise<ActiveImagePromptSettings
       return {
         promptText: data.prompt_text,
         enableDithering: data.enable_dithering ?? false,
-        ditheringGain: Number(data.dithering_gain) || 1.0,
-        ditheringCoarseness: Number(data.dithering_coarseness) || 1,
-        imageScale: Number(data.image_scale) || 1.0,
+        ditheringGain: data.dithering_gain ?? 1.0,
+        ditheringCoarseness: data.dithering_coarseness ?? 1,
+        imageScale: data.image_scale ?? 1.0,
       }
     }
   } catch (error) {
@@ -410,25 +410,6 @@ export async function applyDithering(
   const height = info.height
   const pixels = new Float32Array(data) // Use float for error accumulation
 
-  // CRITICAL: Stretch contrast to full 0-255 range before Floyd-Steinberg
-  // Without this, if all pixels are below 128 (e.g., 46-109), the algorithm
-  // produces noise instead of proper halftone patterns
-  let pixelMin = 255
-  let pixelMax = 0
-  for (let i = 0; i < pixels.length; i++) {
-    if (pixels[i] < pixelMin) pixelMin = pixels[i]
-    if (pixels[i] > pixelMax) pixelMax = pixels[i]
-  }
-  const range = pixelMax - pixelMin
-  if (range > 0 && (pixelMin > 10 || pixelMax < 245)) {
-    // Only stretch if the range is significantly limited
-    const scale = 255 / range
-    for (let i = 0; i < pixels.length; i++) {
-      pixels[i] = (pixels[i] - pixelMin) * scale
-    }
-    console.log(`[Dithering] Contrast stretch: ${pixelMin.toFixed(0)}-${pixelMax.toFixed(0)} → 0-255`)
-  }
-
   // Floyd-Steinberg error diffusion
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -583,31 +564,11 @@ export async function generateAndProcessImage(
       processedBase64 = scaled.base64
     }
 
-    // Apply dithering if enabled (full resolution - CSS handles browser scaling)
+    // Apply dithering if enabled
     if (enableDithering) {
       console.log(`[Gemini] Applying dithering with gain ${ditheringGain}, coarseness ${ditheringCoarseness}...`)
       const dithered = await applyDithering(processedBase64, ditheringGain, ditheringCoarseness)
       processedBase64 = dithered.base64
-
-      // Resize to exact 2x display size (704×384) for clean browser scaling
-      // Using 1408×768 ensures pixelated rendering works without moiré
-      // nearest-neighbor preserves sharp dithering pattern
-      const TARGET_WIDTH = 1408
-      const TARGET_HEIGHT = 768
-      const buffer = Buffer.from(processedBase64, 'base64')
-      const metadata = await sharp(buffer).metadata()
-
-      if (metadata.width !== TARGET_WIDTH || metadata.height !== TARGET_HEIGHT) {
-        console.log(`[Gemini] Resizing ${metadata.width}x${metadata.height} → ${TARGET_WIDTH}x${TARGET_HEIGHT} for clean 2:1 browser scaling`)
-        const resizedBuffer = await sharp(buffer)
-          .resize(TARGET_WIDTH, TARGET_HEIGHT, {
-            fit: 'cover',
-            kernel: sharp.kernel.nearest  // Preserve sharp dithering pixels
-          })
-          .png()
-          .toBuffer()
-        processedBase64 = resizedBuffer.toString('base64')
-      }
     }
 
     // Process for transparency
