@@ -14,6 +14,7 @@ const NEON_YELLOW = { r: 204, g: 255, b: 0 }
  * - url: The original image URL
  * - size: Output size in pixels (default: 1104 = 2x display size for sharp dithering at 552px)
  * - playButton: If 'true', adds a play button overlay in the center
+ * - skipTransform: If 'true', skips color transformation (for already-processed images)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
     const imageUrl = searchParams.get('url')
     const size = parseIntParam(searchParams.get('size'), 1104, 100, 4000)
     const addPlayButton = searchParams.get('playButton') === 'true'
+    const skipTransform = searchParams.get('skipTransform') === 'true'
 
     if (!imageUrl) {
       return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 })
@@ -47,56 +49,67 @@ export async function GET(request: NextRequest) {
     const left = Math.floor((width - cropSize) / 2)
     const top = Math.floor((height - cropSize) / 2)
 
-    // Crop to square and resize first
-    const croppedBuffer = await sharp(imageBuffer)
-      .extract({ left, top, width: cropSize, height: cropSize })
-      .resize(size, size, { fit: 'fill', kernel: sharp.kernel.nearest })
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true })
+    let finalImage: Buffer
 
-    const { data, info } = croppedBuffer
+    if (skipTransform) {
+      // Skip color transformation - just crop and resize (for already-processed images)
+      finalImage = await sharp(imageBuffer)
+        .extract({ left, top, width: cropSize, height: cropSize })
+        .resize(size, size, { fit: 'fill' })
+        .png()
+        .toBuffer()
+    } else {
+      // Full processing with color transformation
+      const croppedBuffer = await sharp(imageBuffer)
+        .extract({ left, top, width: cropSize, height: cropSize })
+        .resize(size, size, { fit: 'fill', kernel: sharp.kernel.nearest })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true })
 
-    // Process pixels: white/transparent → neon yellow, dark → black
-    // This recreates the frontend effect (yellow BG + transparent PNG overlay)
-    const pixels = new Uint8Array(data)
-    for (let i = 0; i < pixels.length; i += 4) {
-      const r = pixels[i]
-      const g = pixels[i + 1]
-      const b = pixels[i + 2]
-      const a = pixels[i + 3]
+      const { data, info } = croppedBuffer
 
-      // Calculate luminance
-      const luminance = (r + g + b) / 3
+      // Process pixels: white/transparent → neon yellow, dark → black
+      // This recreates the frontend effect (yellow BG + transparent PNG overlay)
+      const pixels = new Uint8Array(data)
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i]
+        const g = pixels[i + 1]
+        const b = pixels[i + 2]
+        const a = pixels[i + 3]
 
-      // If pixel is transparent OR bright (white in dithered image) → neon yellow
-      // If pixel is dark (black in dithered image) → pure black
-      const threshold = 128
-      if (a < 128 || luminance >= threshold) {
-        // White/transparent → neon yellow
-        pixels[i] = NEON_YELLOW.r
-        pixels[i + 1] = NEON_YELLOW.g
-        pixels[i + 2] = NEON_YELLOW.b
-        pixels[i + 3] = 255
-      } else {
-        // Dark → pure black
-        pixels[i] = 0
-        pixels[i + 1] = 0
-        pixels[i + 2] = 0
-        pixels[i + 3] = 255
+        // Calculate luminance
+        const luminance = (r + g + b) / 3
+
+        // If pixel is transparent OR bright (white in dithered image) → neon yellow
+        // If pixel is dark (black in dithered image) → pure black
+        const threshold = 128
+        if (a < 128 || luminance >= threshold) {
+          // White/transparent → neon yellow
+          pixels[i] = NEON_YELLOW.r
+          pixels[i + 1] = NEON_YELLOW.g
+          pixels[i + 2] = NEON_YELLOW.b
+          pixels[i + 3] = 255
+        } else {
+          // Dark → pure black
+          pixels[i] = 0
+          pixels[i + 1] = 0
+          pixels[i + 2] = 0
+          pixels[i + 3] = 255
+        }
       }
-    }
 
-    // Create base image from processed pixels
-    let finalImage = await sharp(Buffer.from(pixels), {
-      raw: {
-        width: info.width,
-        height: info.height,
-        channels: 4,
-      },
-    })
-      .png()
-      .toBuffer()
+      // Create base image from processed pixels
+      finalImage = await sharp(Buffer.from(pixels), {
+        raw: {
+          width: info.width,
+          height: info.height,
+          channels: 4,
+        },
+      })
+        .png()
+        .toBuffer()
+    }
 
     // Add play button overlay if requested
     if (addPlayButton) {
