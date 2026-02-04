@@ -30,8 +30,8 @@ interface CompanyCardProps {
 }
 
 const directionStyles = {
-  up: 'bg-[#39FF14] text-black',
-  down: 'bg-[#FF6600] text-black',
+  up: 'bg-neon-green text-black',
+  down: 'bg-neon-orange text-black',
   neutral: 'bg-gray-300 text-black',
 }
 

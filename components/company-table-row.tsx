@@ -27,9 +27,9 @@ interface CompanyTableRowProps {
 }
 
 const ratingStyles = {
-  BUY: 'bg-[#39FF14] text-black',
-  HOLD: 'bg-[#00FFFF] text-black',
-  SELL: 'bg-[#FF6600] text-black',
+  BUY: 'bg-neon-green text-black',
+  HOLD: 'bg-neon-cyan text-black',
+  SELL: 'bg-neon-orange text-black',
 }
 
 const ratingLabels = {
@@ -39,8 +39,8 @@ const ratingLabels = {
 }
 
 const directionStyles = {
-  up: 'text-[#39FF14]',
-  down: 'text-[#FF6600]',
+  up: 'text-neon-green',
+  down: 'text-neon-orange',
   neutral: 'text-muted-foreground',
 }
 

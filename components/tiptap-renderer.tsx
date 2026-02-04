@@ -49,11 +49,11 @@ function SynthszrRatingLink({ company, displayName, rating, ticker, changePercen
   const [showSynthszr, setShowSynthszr] = useState(false)
   const [showQuote, setShowQuote] = useState(false)
 
-  // Neon colors matching stock performance badges
+  // Neon colors matching stock performance badges (P3 enhanced)
   const ratingBadgeStyles = {
-    BUY: 'bg-[#39FF14] text-black',      // Neon Green
-    HOLD: 'bg-[#00FFFF] text-black',  // Gray
-    SELL: 'bg-[#FF6600] text-black',     // Neon Orange
+    BUY: 'bg-neon-green text-black',
+    HOLD: 'bg-neon-cyan text-black',
+    SELL: 'bg-neon-orange text-black',
   }
 
   const ratingLabels = {
@@ -62,11 +62,11 @@ function SynthszrRatingLink({ company, displayName, rating, ticker, changePercen
     SELL: 'Sell',
   }
 
-  // Percentage direction styling (black text on colored background)
+  // Percentage direction styling (P3 enhanced)
   const directionStyles = {
-    up: 'bg-[#39FF14] text-black',      // Neon Green
-    down: 'bg-[#FF6600] text-black',    // Neon Orange
-    neutral: 'bg-gray-300 text-black',  // Gray
+    up: 'bg-neon-green text-black',
+    down: 'bg-neon-orange text-black',
+    neutral: 'bg-gray-300 text-black',
   }
 
   const directionArrows = {
@@ -123,11 +123,11 @@ function SynthszrRatingLink({ company, displayName, rating, ticker, changePercen
 function PremarketRatingLink({ company, displayName, rating, isFirst, isin }: PremarketRatingLinkProps) {
   const [showPremarket, setShowPremarket] = useState(false)
 
-  // Neon colors matching stock performance badges
+  // Neon colors matching stock performance badges (P3 enhanced)
   const ratingBadgeStyles = {
-    BUY: 'bg-[#39FF14] text-black',      // Neon Green
-    HOLD: 'bg-[#00FFFF] text-black',  // Gray
-    SELL: 'bg-[#FF6600] text-black',     // Neon Orange
+    BUY: 'bg-neon-green text-black',
+    HOLD: 'bg-neon-cyan text-black',
+    SELL: 'bg-neon-orange text-black',
   }
 
   const ratingLabels = {

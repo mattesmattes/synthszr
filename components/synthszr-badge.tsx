@@ -34,9 +34,9 @@ interface SynthszrBadgeProps {
 }
 
 const ratingStyles = {
-  BUY: 'bg-[#39FF14] text-black',      // Neon Green
-  HOLD: 'bg-[#00FFFF] text-black',  // Gray
-  SELL: 'bg-[#FF6600] text-black',     // Neon Orange
+  BUY: 'bg-neon-green text-black',      // Neon Green (P3 enhanced)
+  HOLD: 'bg-neon-cyan text-black',      // Neon Cyan (P3 enhanced)
+  SELL: 'bg-neon-orange text-black',    // Neon Orange (P3 enhanced)
 }
 
 const ratingLabels = {
@@ -46,8 +46,8 @@ const ratingLabels = {
 }
 
 const directionStyles = {
-  up: 'bg-[#39FF14] text-black',
-  down: 'bg-[#FF6600] text-black',
+  up: 'bg-neon-green text-black',
+  down: 'bg-neon-orange text-black',
   neutral: 'bg-gray-300 text-black',
 }
 
