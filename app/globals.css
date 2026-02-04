@@ -156,6 +156,20 @@
   background-color: #00FF00;
 }
 
+/* Subtle pulse animation for neon backgrounds */
+@keyframes neon-pulse {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.15);
+  }
+}
+
+.bg-neon-pulse {
+  animation: neon-pulse 3s ease-in-out infinite;
+}
+
 .text-neon-green {
   color: #00FF00;
 }

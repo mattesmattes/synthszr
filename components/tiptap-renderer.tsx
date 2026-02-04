@@ -1250,7 +1250,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
 
         return createPortal(
           <div
-            className={`rounded-full overflow-hidden mx-auto ${bgClass}`}
+            className={`rounded-full overflow-hidden mx-auto ${bgClass} bg-neon-pulse`}
             style={{
               width: displaySize,
               height: displaySize,
