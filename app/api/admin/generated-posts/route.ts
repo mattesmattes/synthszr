@@ -5,6 +5,7 @@ import { pregenerateStockSynthszr } from '@/lib/stock-synthszr/pregenerate'
 import { syncPostCompanyMentions } from '@/lib/companies/sync'
 import { queueTranslations } from '@/lib/translations/queue'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
+import { generatePostAudio, getTTSSettings } from '@/lib/tts/openai-tts'
 
 export async function GET() {
   const session = await getSession()
@@ -148,6 +149,30 @@ export async function PUT(request: NextRequest) {
         .catch((err) => {
           console.error('[translations] Unexpected error queuing translations:', err)
         })
+
+      // Generate TTS audio for DE (async, don't block response)
+      ;(async () => {
+        try {
+          const settings = await getTTSSettings()
+          if (!settings.tts_enabled) {
+            console.log(`[TTS] Skipped - TTS is disabled`)
+            return
+          }
+
+          const contentForTTS = contentForProcessing || content
+          if (contentForTTS) {
+            console.log(`[TTS] Generating audio for post ${id} (DE)...`)
+            const result = await generatePostAudio(id, contentForTTS, 'de')
+            if (result.success) {
+              console.log(`[TTS] Audio generated for post ${id} (DE): ${result.audioUrl}`)
+            } else {
+              console.error(`[TTS] Failed to generate audio for post ${id}: ${result.error}`)
+            }
+          }
+        } catch (err) {
+          console.error('[TTS] Unexpected error generating audio:', err)
+        }
+      })()
     }
 
     // Sync company mentions to post_company_mentions table (async, don't block response)
