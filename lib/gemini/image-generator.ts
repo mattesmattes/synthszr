@@ -410,6 +410,25 @@ export async function applyDithering(
   const height = info.height
   const pixels = new Float32Array(data) // Use float for error accumulation
 
+  // CRITICAL: Stretch contrast to full 0-255 range before Floyd-Steinberg
+  // Without this, if all pixels are below 128 (e.g., 46-109), the algorithm
+  // produces noise instead of proper halftone patterns
+  let pixelMin = 255
+  let pixelMax = 0
+  for (let i = 0; i < pixels.length; i++) {
+    if (pixels[i] < pixelMin) pixelMin = pixels[i]
+    if (pixels[i] > pixelMax) pixelMax = pixels[i]
+  }
+  const range = pixelMax - pixelMin
+  if (range > 0 && (pixelMin > 10 || pixelMax < 245)) {
+    // Only stretch if the range is significantly limited
+    const scale = 255 / range
+    for (let i = 0; i < pixels.length; i++) {
+      pixels[i] = (pixels[i] - pixelMin) * scale
+    }
+    console.log(`[Dithering] Contrast stretch: ${pixelMin.toFixed(0)}-${pixelMax.toFixed(0)} → 0-255`)
+  }
+
   // Floyd-Steinberg error diffusion
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
