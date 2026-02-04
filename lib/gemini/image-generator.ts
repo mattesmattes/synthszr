@@ -570,8 +570,8 @@ export async function generateAndProcessImage(
       const metadata = await sharp(buffer).metadata()
 
       // Resize to target width before dithering so pattern matches display size
-      // 1200px is a good balance for web display (blog covers, social sharing)
-      const DITHER_TARGET_WIDTH = 1200
+      // 800px gives similar dithering density to 604px thumbnails
+      const DITHER_TARGET_WIDTH = 800
       const currentWidth = metadata.width || 1400
       const currentHeight = metadata.height || 600
       const targetWidth = Math.min(currentWidth, DITHER_TARGET_WIDTH)
