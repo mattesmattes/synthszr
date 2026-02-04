@@ -48,17 +48,17 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
   }
 
   return (
-    <section className="mt-20 border-t border-border pt-16">
-      <div className="mx-auto max-w-2xl">
-        <h2 className="font-mono text-2xl font-bold md:text-lg">Subscribe free. Unsubscribe the second it sucks.</h2>
-        <p className="mt-4 text-muted-foreground">
+    <section className="mt-20 pt-16">
+      <div className="mx-auto max-w-2xl bg-cyan-400 p-8 rounded-lg">
+        <h2 className="font-mono text-2xl font-bold md:text-lg text-black">Subscribe free. Unsubscribe the second it sucks.</h2>
+        <p className="mt-4 text-black/70">
           High-signal news across AI, business, UX, and tech. Every morning.
         </p>
 
         {status === 'success' ? (
-          <div className="mt-6 flex items-center gap-3 rounded-sm border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950 px-4 py-3">
-            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
-            <p className="text-sm text-green-800 dark:text-green-200">{message}</p>
+          <div className="mt-6 flex items-center gap-3 rounded-sm bg-white/80 px-4 py-3">
+            <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+            <p className="text-sm text-green-800">{message}</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3 sm:flex-row">
