@@ -103,10 +103,23 @@ function cleanTextForTTS(text: string): string {
  * Split TipTap content into news and Synthszr Take sections
  * Returns sections in order they appear in the document
  */
-export function splitContentBySections(content: TiptapDoc): ContentSection[] {
+export function splitContentBySections(content: TiptapDoc | string): ContentSection[] {
   const sections: ContentSection[] = []
 
-  if (!content.content || !Array.isArray(content.content)) {
+  // Handle string content (may be stored as JSON string in DB)
+  let doc: TiptapDoc
+  if (typeof content === 'string') {
+    try {
+      doc = JSON.parse(content) as TiptapDoc
+    } catch {
+      console.error('[TTS] Failed to parse content as JSON')
+      return sections
+    }
+  } else {
+    doc = content
+  }
+
+  if (!doc.content || !Array.isArray(doc.content)) {
     return sections
   }
 
@@ -122,7 +135,7 @@ export function splitContentBySections(content: TiptapDoc): ContentSection[] {
     }
   }
 
-  for (const node of content.content) {
+  for (const node of doc.content) {
     const nodeText = extractTextFromNode(node)
 
     // Check if this is a paragraph with Synthszr Take
@@ -168,7 +181,7 @@ export function splitContentBySections(content: TiptapDoc): ContentSection[] {
 /**
  * Generate a content hash for cache invalidation
  */
-export function generateContentHash(content: TiptapDoc): string {
+export function generateContentHash(content: TiptapDoc | string): string {
   const sections = splitContentBySections(content)
   const text = sections.map(s => s.text).join('|')
   return createHash('md5').update(text).digest('hex')
