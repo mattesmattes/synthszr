@@ -33,9 +33,9 @@
   --chart-5: oklch(0.769 0.188 70.08);
   --radius: 0.125rem;
 
-  /* Wide Gamut Colors (P3 enhanced) */
-  --cyan-vivid: oklch(0.82 0.18 195);        /* sRGB fallback */
-  --cyan-vivid-p3: color(display-p3 0 0.85 0.95); /* P3 enhanced */
+  /* Wide Gamut Colors (P3 enhanced - max saturation) */
+  --cyan-vivid: oklch(0.85 0.22 195);        /* sRGB fallback */
+  --cyan-vivid-p3: color(display-p3 0 0.95 1); /* P3 near-maximum */
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -134,12 +134,12 @@
 
 /* Wide Gamut utility classes - P3 enhanced colors */
 .bg-cyan-vivid {
-  background-color: oklch(0.82 0.18 195);
+  background-color: oklch(0.85 0.22 195);
 }
 
 @supports (color: color(display-p3 0 0 0)) {
   .bg-cyan-vivid {
-    background-color: color(display-p3 0 0.85 0.95);
+    background-color: color(display-p3 0 0.95 1);
   }
 }
 
