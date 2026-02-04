@@ -290,8 +290,7 @@ export default async function PostPage({ params }: PageProps) {
             <Link href={`/${locale}`} className="block mb-8 rounded-lg overflow-hidden -mx-6">
               {/* -mx-6 compensates for parent padding to allow full 704px width */}
               <div
-                className="relative flex items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6]"
-                style={{ backgroundColor: '#CCFF00' }}
+                className="relative flex items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6] bg-neon-yellow"
               >
                 {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
                 <img
@@ -312,7 +311,7 @@ export default async function PostPage({ params }: PageProps) {
 
           <header className="mb-12 border-b border-border pb-8">
             <div className="mb-4">
-              <span className="inline-block px-2 py-1 font-mono text-xs font-medium text-black" style={{ backgroundColor: '#CCFF00' }}>
+              <span className="inline-block px-2 py-1 font-mono text-xs font-medium text-black bg-neon-yellow">
                 {formatDateWithWeekday(post.created_at)}
               </span>
             </div>

@@ -35,7 +35,8 @@
 
   /* Wide Gamut Colors (P3 enhanced - max saturation) */
   --cyan-vivid: oklch(0.85 0.22 195);        /* sRGB fallback */
-  --cyan-vivid-p3: color(display-p3 0 0.95 1); /* P3 near-maximum */
+  --neon-yellow: #CCFF00;                     /* sRGB fallback */
+  --neon-orange: #FF6600;                     /* sRGB fallback */
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -137,9 +138,25 @@
   background-color: oklch(0.85 0.22 195);
 }
 
+.bg-neon-yellow {
+  background-color: #CCFF00;
+}
+
+.bg-neon-orange {
+  background-color: #FF6600;
+}
+
 @supports (color: color(display-p3 0 0 0)) {
   .bg-cyan-vivid {
     background-color: color(display-p3 0 0.95 1);
+  }
+
+  .bg-neon-yellow {
+    background-color: color(display-p3 0.85 1 0);
+  }
+
+  .bg-neon-orange {
+    background-color: color(display-p3 1 0.45 0);
   }
 }
 
@@ -285,6 +302,12 @@
   font-size: 0.8125em; /* ~13px when base is 16px */
 }
 
+@supports (color: color(display-p3 0 0 0)) {
+  .mattes-synthese {
+    background-color: color(display-p3 0.85 1 0);
+  }
+}
+
 /* Style headings containing "Mattes Synthese" with neon yellow background */
 .tiptap-content h1.mattes-synthese-heading,
 .tiptap-content h2.mattes-synthese-heading,
@@ -305,6 +328,23 @@
   border-radius: 2px;
 }
 
+@supports (color: color(display-p3 0 0 0)) {
+  .tiptap-content h1.mattes-synthese-heading,
+  .tiptap-content h2.mattes-synthese-heading,
+  .tiptap-content h3.mattes-synthese-heading,
+  .prose h1.mattes-synthese-heading,
+  .prose h2.mattes-synthese-heading,
+  .prose h3.mattes-synthese-heading,
+  .prose-article h1.mattes-synthese-heading,
+  .prose-article h2.mattes-synthese-heading,
+  .prose-article h3.mattes-synthese-heading,
+  .ProseMirror h1.mattes-synthese-heading,
+  .ProseMirror h2.mattes-synthese-heading,
+  .ProseMirror h3.mattes-synthese-heading {
+    background-color: color(display-p3 0.85 1 0);
+  }
+}
+
 /* Highlight last sentence of Synthszr Take with neon yellow background */
 .synthszr-last-sentence {
   background-color: #CCFF00;
@@ -313,6 +353,12 @@
   border-radius: 0.15em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+}
+
+@supports (color: color(display-p3 0 0 0)) {
+  .synthszr-last-sentence {
+    background-color: color(display-p3 0.85 1 0);
+  }
 }
 
 /* News headline links with favicon - no underline, inherit heading color */

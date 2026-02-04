@@ -38,8 +38,7 @@ export function FeaturedArticle({
           {/* -mx-6 compensates for parent padding to allow full 704px width */}
           {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
           <div
-            className="relative flex items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6]"
-            style={{ backgroundColor: '#CCFF00' }}
+            className="relative flex items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6] bg-neon-yellow"
           >
             {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
             <img
@@ -59,7 +58,7 @@ export function FeaturedArticle({
       )}
 
       <div className="mb-4">
-        <span className="inline-block px-2 py-1 font-mono text-xs font-medium text-black" style={{ backgroundColor: '#CCFF00' }}>
+        <span className="inline-block px-2 py-1 font-mono text-xs font-medium text-black bg-neon-yellow">
           {formatUpdateDate(createdAt, locale)}
         </span>
       </div>
