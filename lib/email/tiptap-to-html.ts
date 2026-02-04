@@ -602,6 +602,40 @@ function extractTextFromNode(node: TiptapNode): string {
 }
 
 /**
+ * Common abbreviations that should NOT be treated as sentence endings
+ * Lowercase versions - we check case-insensitively
+ */
+const ABBREVIATIONS = new Set([
+  'vs', 'z.b', 'd.h', 'u.a', 'etc', 'inc', 'corp', 'ltd', 'co',
+  'dr', 'mr', 'mrs', 'ms', 'prof', 'ca', 'bzw', 'usw', 'ggf',
+  'evtl', 'max', 'min', 'nr', 'mrd', 'mio', 'bsp', 'vgl', 'sog',
+  'zzgl', 'inkl', 'exkl', 'ca', 'rd', 'u.v.m', 'o.ä', 's', 'abs',
+])
+
+/**
+ * Check if a period at given position is likely an abbreviation (not sentence end)
+ */
+function isAbbreviationDot(text: string, dotIndex: number): boolean {
+  // Find the word before the dot
+  const beforeDot = text.slice(0, dotIndex)
+  const wordMatch = beforeDot.match(/(\S+)$/)
+  if (!wordMatch) return false
+
+  const word = wordMatch[1].toLowerCase()
+
+  // Check if it's a known abbreviation
+  if (ABBREVIATIONS.has(word)) return true
+
+  // Single letter followed by dot is usually abbreviation (z.B., u.a., S.)
+  if (word.length === 1) return true
+
+  // Check for pattern like "z.B." - word ending with letter+dot already
+  if (/\.[a-zäöü]$/i.test(word)) return true
+
+  return false
+}
+
+/**
  * Render content with the last sentence highlighted in neon yellow
  * Used for SYNTHSZR TAKE paragraphs in newsletter emails
  */
@@ -641,16 +675,40 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string 
   }
   const plainText = plainTextParts.join('')
 
-  // Find the last sentence boundary: ". " followed by capital letter
-  const sentenceEndRegex = /\.\s+(?=[A-ZÄÖÜ])/g
+  // Find the last REAL sentence boundary: ".!?" followed by space and capital letter
+  // But exclude abbreviations like "vs.", "z.B.", etc.
   let lastSentenceStart = 0
+
+  // Match potential sentence endings: . ! ? followed by space(s) and capital letter
+  const potentialEndRegex = /[.!?]\s+(?=[A-ZÄÖÜ])/g
   let match
-  while ((match = sentenceEndRegex.exec(plainText)) !== null) {
+  while ((match = potentialEndRegex.exec(plainText)) !== null) {
+    const punctuation = plainText[match.index]
+
+    // For periods, check if it's an abbreviation
+    if (punctuation === '.' && isAbbreviationDot(plainText, match.index)) {
+      continue // Skip abbreviations
+    }
+
+    // This is a real sentence boundary
     lastSentenceStart = match.index + match[0].length
   }
 
-  // If no sentence boundary found, just return normal rendering
+  // If no sentence boundary found, try to highlight everything after "Synthszr Take:"
   if (lastSentenceStart === 0) {
+    const synthszrMatch = plainText.match(/synthszr take:?\s*/i)
+    if (synthszrMatch) {
+      // Highlight everything after "Synthszr Take:"
+      const afterLabel = plainText.slice(synthszrMatch.index! + synthszrMatch[0].length)
+      if (afterLabel.trim()) {
+        const escapedAfterLabel = afterLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const highlightRegex = new RegExp(`(${escapedAfterLabel})$`)
+        return fullHtml.replace(
+          highlightRegex,
+          '<span style="background-color: #CCFF00; padding: 2px 4px;">$1</span>'
+        )
+      }
+    }
     return fullHtml
   }
 
