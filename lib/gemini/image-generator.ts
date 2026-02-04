@@ -575,7 +575,16 @@ export async function generateAndProcessImage(
     // Apply dithering if enabled
     if (enableDithering) {
       console.log(`[Gemini] Applying dithering with gain ${ditheringGain}, coarseness ${ditheringCoarseness}...`)
-      const dithered = await applyDithering(processedBase64, ditheringGain, ditheringCoarseness)
+
+      // Normalize contrast before dithering (stretch histogram to full 0-255 range)
+      // This is critical - Gemini images often have limited contrast (e.g., 46-109)
+      // Without this, Floyd-Steinberg produces noise instead of clean dithering
+      const buffer = Buffer.from(processedBase64, 'base64')
+      const normalizedBuffer = await sharp(buffer).normalise().png().toBuffer()
+      const normalizedBase64 = normalizedBuffer.toString('base64')
+      console.log('[Gemini] Normalized contrast for dithering')
+
+      const dithered = await applyDithering(normalizedBase64, ditheringGain, ditheringCoarseness)
       processedBase64 = dithered.base64
     }
 
