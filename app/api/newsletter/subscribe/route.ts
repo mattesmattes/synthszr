@@ -24,11 +24,11 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse(rateLimitResult)
     }
     const body = await request.json()
-    const { email, name, language = 'de' } = body
+    const { email, name, language = 'en' } = body
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json(
-        { error: 'E-Mail-Adresse erforderlich' },
+        { error: 'Email address required' },
         { status: 400 }
       )
     }
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
       return NextResponse.json(
-        { error: 'Ungültige E-Mail-Adresse' },
+        { error: 'Invalid email address' },
         { status: 400 }
       )
     }
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     if (existing) {
       if (existing.status === 'active') {
         return NextResponse.json(
-          { error: 'Diese E-Mail ist bereits angemeldet' },
+          { error: 'This email is already subscribed' },
           { status: 409 }
         )
       }
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           success: true,
-          message: 'Bestätigungs-E-Mail wurde erneut gesendet'
+          message: 'Confirmation email has been resent'
         })
       }
 
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           success: true,
-          message: 'Bestätigungs-E-Mail wurde erneut gesendet'
+          message: 'Confirmation email has been resent'
         })
       }
     }
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
     if (insertError) {
       console.error('Subscribe insert error:', insertError)
       return NextResponse.json(
-        { error: 'Fehler beim Speichern' },
+        { error: 'Error saving subscription' },
         { status: 500 }
       )
     }
@@ -134,18 +134,18 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Bestätigungs-E-Mail wurde gesendet'
+      message: 'Confirmation email sent'
     })
   } catch (error) {
     console.error('Subscribe error:', error)
     return NextResponse.json(
-      { error: 'Interner Serverfehler' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
 
-async function sendConfirmationEmail(email: string, token: string, language: string = 'de') {
+async function sendConfirmationEmail(email: string, token: string, language: string = 'en') {
   const confirmationUrl = `${BASE_URL}/api/newsletter/confirm?token=${token}`
 
   const html = await render(ConfirmationEmail({ confirmationUrl, locale: language }))

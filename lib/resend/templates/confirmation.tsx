@@ -57,12 +57,12 @@ const translations: Record<string, {
   },
 }
 
-export function getConfirmationSubject(locale: Locale = 'de'): string {
-  return translations[locale]?.subject || translations.de.subject
+export function getConfirmationSubject(locale: Locale = 'en'): string {
+  return translations[locale]?.subject || translations.en.subject
 }
 
-export function ConfirmationEmail({ confirmationUrl, locale = 'de' }: ConfirmationEmailProps) {
-  const t = translations[locale] || translations.de
+export function ConfirmationEmail({ confirmationUrl, locale = 'en' }: ConfirmationEmailProps) {
+  const t = translations[locale] || translations.en
 
   return (
     <Html>
