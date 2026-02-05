@@ -329,6 +329,7 @@ export default function AudioPage() {
       const res = await fetch('/api/podcast/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           script: podcastScript,
           hostVoiceId: ttsSettings?.podcast_host_voice_id,
