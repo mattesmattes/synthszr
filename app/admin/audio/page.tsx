@@ -165,6 +165,7 @@ export default function AudioPage() {
   const [selectedPostId, setSelectedPostId] = useState<string>('')
   const [selectedLocale, setSelectedLocale] = useState<'de' | 'en' | 'cs' | 'nds'>('de')
   const [scriptGenerating, setScriptGenerating] = useState(false)
+  const [customPrompt, setCustomPrompt] = useState(PODCAST_SCRIPT_PROMPT)
 
   useEffect(() => {
     fetchTTSSettings()
@@ -200,6 +201,7 @@ export default function AudioPage() {
           postId: selectedPostId,
           locale: selectedLocale,
           durationMinutes: podcastDuration,
+          customPrompt: customPrompt,
         }),
       })
 
@@ -1077,7 +1079,7 @@ export default function AudioPage() {
             </CardContent>
           </Card>
 
-          {/* Script Prompt Reference */}
+          {/* Script Prompt Editor */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -1085,28 +1087,34 @@ export default function AudioPage() {
                 Skript-Prompt Vorlage
               </CardTitle>
               <CardDescription>
-                Dieser Prompt wird verwendet um lebendige Podcast-Skripte zu generieren
+                Bearbeite den Prompt um die Podcast-Generierung anzupassen. Platzhalter: {'{duration}'}, {'{wordCount}'}, {'{content}'}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Textarea
-                value={PODCAST_SCRIPT_PROMPT
-                  .replace('{duration}', String(podcastDuration))
-                  .replace('{wordCount}', String(estimatedWordCount))
-                  .replace('{content}', '[Blog-Artikel Content wird hier eingefügt]')
-                }
-                readOnly
-                className="font-mono text-xs h-[400px] bg-muted/50"
+                value={customPrompt}
+                onChange={(e) => setCustomPrompt(e.target.value)}
+                className="font-mono text-xs h-[400px]"
               />
-              <div className="mt-4 space-y-2">
-                <p className="text-sm font-medium">Verfügbare Emotion-Tags:</p>
-                <div className="flex flex-wrap gap-2">
-                  {['[cheerfully]', '[thoughtfully]', '[seriously]', '[excitedly]', '[skeptically]', '[laughing]', '[sighing]', '[whispering]', '[interrupting]'].map((tag) => (
-                    <Badge key={tag} variant="outline" className="font-mono text-xs">
-                      {tag}
-                    </Badge>
-                  ))}
+              <div className="mt-4 flex items-center justify-between">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Verfügbare Emotion-Tags:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {['[cheerfully]', '[thoughtfully]', '[seriously]', '[excitedly]', '[skeptically]', '[laughing]', '[sighing]', '[whispering]', '[interrupting]'].map((tag) => (
+                      <Badge key={tag} variant="outline" className="font-mono text-xs">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCustomPrompt(PODCAST_SCRIPT_PROMPT)}
+                  disabled={customPrompt === PODCAST_SCRIPT_PROMPT}
+                >
+                  Zurücksetzen
+                </Button>
               </div>
             </CardContent>
           </Card>
