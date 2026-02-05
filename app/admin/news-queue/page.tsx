@@ -105,6 +105,10 @@ interface SynthesisCandidateItem {
 
 const PAGE_SIZE = 100
 
+// Truncate title to prevent UI breakage from long titles
+const truncateTitle = (title: string, maxLength: number = 50) =>
+  title.length > maxLength ? title.slice(0, maxLength) + '...' : title
+
 export default function NewsQueuePage() {
   const [stats, setStats] = useState<QueueStats | null>(null)
   const [distribution, setDistribution] = useState<SourceDistribution[]>([])
@@ -893,7 +897,7 @@ export default function NewsQueuePage() {
                               className="min-w-0 flex-1 cursor-pointer"
                               onClick={() => setViewingItem(item)}
                             >
-                              <div className="text-xs font-medium truncate hover:text-primary">{item.title}</div>
+                              <div className="text-xs font-medium truncate hover:text-primary">{truncateTitle(item.title)}</div>
                               <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                                 <span className="truncate max-w-[150px]">
                                   {item.source_display_name || item.source_identifier}
@@ -1074,7 +1078,7 @@ export default function NewsQueuePage() {
               <div key={item.id} className="flex items-center gap-2 p-2 bg-muted/50 rounded text-xs">
                 <span className="font-mono text-muted-foreground w-5">{idx + 1}.</span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium truncate">{item.title}</div>
+                  <div className="font-medium truncate">{truncateTitle(item.title)}</div>
                   <div className="text-muted-foreground truncate">
                     {item.source_display_name || item.source_identifier}
                   </div>
@@ -1179,7 +1183,7 @@ export default function NewsQueuePage() {
                         className="rounded shrink-0"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">{item.title}</div>
+                        <div className="font-medium truncate">{truncateTitle(item.title)}</div>
                         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                           <span className="truncate max-w-[150px]">
                             {item.source_email || item.source_url || 'Unbekannte Quelle'}
