@@ -28,9 +28,15 @@ export interface TTSSettings {
   elevenlabs_news_voice_en: string
   elevenlabs_synthszr_voice_en: string
   elevenlabs_model: string
-  // Podcast settings (ElevenLabs Text-to-Dialogue)
+  // Podcast settings - legacy (backwards compatible)
   podcast_host_voice_id: string
   podcast_guest_voice_id: string
+  // Podcast settings - German voices
+  podcast_host_voice_de: string
+  podcast_guest_voice_de: string
+  // Podcast settings - English voices (used for EN, CS, NDS, etc.)
+  podcast_host_voice_en: string
+  podcast_guest_voice_en: string
   podcast_duration_minutes: number
 }
 
@@ -230,6 +236,10 @@ export async function getTTSSettings(): Promise<TTSSettings> {
       'elevenlabs_model',
       'podcast_host_voice_id',
       'podcast_guest_voice_id',
+      'podcast_host_voice_de',
+      'podcast_guest_voice_de',
+      'podcast_host_voice_en',
+      'podcast_guest_voice_en',
       'podcast_duration_minutes',
     ])
 
@@ -252,9 +262,15 @@ export async function getTTSSettings(): Promise<TTSSettings> {
     elevenlabs_news_voice_en: (settingsMap.elevenlabs_news_voice_en as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
     elevenlabs_synthszr_voice_en: (settingsMap.elevenlabs_synthszr_voice_en as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
     elevenlabs_model: (settingsMap.elevenlabs_model as string) || 'eleven_multilingual_v2',
-    // Podcast defaults - Lily as host, Daniel as guest (Synthszr)
+    // Podcast legacy (backwards compatible)
     podcast_host_voice_id: (settingsMap.podcast_host_voice_id as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
     podcast_guest_voice_id: (settingsMap.podcast_guest_voice_id as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
+    // Podcast German voices - Matilda as host, Ethan as guest
+    podcast_host_voice_de: (settingsMap.podcast_host_voice_de as string) || 'XrExE9yKIg1WjnnlVkGX', // Matilda
+    podcast_guest_voice_de: (settingsMap.podcast_guest_voice_de as string) || 'g5CIjZEefAph4nQFvHAz', // Ethan
+    // Podcast English voices - Lily as host, Daniel as guest
+    podcast_host_voice_en: (settingsMap.podcast_host_voice_en as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
+    podcast_guest_voice_en: (settingsMap.podcast_guest_voice_en as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
     podcast_duration_minutes: (settingsMap.podcast_duration_minutes as number) || 15,
   }
 }

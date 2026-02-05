@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -31,11 +31,25 @@ interface TTSSettings {
   elevenlabs_news_voice_en: string
   elevenlabs_synthszr_voice_en: string
   elevenlabs_model: ElevenLabsModel
-  // Podcast settings
-  podcast_host_voice_id: string
-  podcast_guest_voice_id: string
+  // Podcast settings - German voices
+  podcast_host_voice_id: string      // Legacy, now used for German
+  podcast_guest_voice_id: string     // Legacy, now used for German
+  podcast_host_voice_de: string
+  podcast_guest_voice_de: string
+  // Podcast settings - English voices (used for EN, CS, NDS, etc.)
+  podcast_host_voice_en: string
+  podcast_guest_voice_en: string
   podcast_duration_minutes: number
 }
+
+// Supported podcast locales and their TTS language mapping
+type PodcastLocale = 'de' | 'en' | 'cs' | 'nds'
+const PODCAST_LOCALES: { code: PodcastLocale; name: string; ttsLang: 'de' | 'en' }[] = [
+  { code: 'de', name: 'Deutsch', ttsLang: 'de' },
+  { code: 'en', name: 'English', ttsLang: 'en' },
+  { code: 'cs', name: 'Čeština', ttsLang: 'en' },
+  { code: 'nds', name: 'Plattdüütsch', ttsLang: 'en' },
+]
 
 // ElevenLabs voice presets for Reading
 const ELEVENLABS_VOICES = {
@@ -55,17 +69,36 @@ const ELEVENLABS_VOICES = {
   ],
 }
 
-// ElevenLabs voice presets for Podcast (conversational)
-const PODCAST_VOICES = [
-  { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Warm host voice, professional' },
-  { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Gigi', description: 'Energetic, youthful' },
-  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', description: 'Soft, friendly' },
-  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Authoritative British' },
-  { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', description: 'Natural, conversational' },
-  { id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill', description: 'Deep, trustworthy' },
-  { id: '9BWtsMINqrJLrRacOk9x', name: 'Aria', description: 'Expressive, dynamic' },
-  { id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Roger', description: 'Confident, clear' },
+// ElevenLabs voice presets for Podcast (conversational) - English
+const PODCAST_VOICES_EN = [
+  { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Warm, professional female' },
+  { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Gigi', description: 'Energetic, youthful female' },
+  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', description: 'Soft, friendly female' },
+  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Authoritative British male' },
+  { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', description: 'Natural, conversational male' },
+  { id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill', description: 'Deep, trustworthy male' },
+  { id: '9BWtsMINqrJLrRacOk9x', name: 'Aria', description: 'Expressive, dynamic female' },
+  { id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Roger', description: 'Confident, clear male' },
 ]
+
+// ElevenLabs voice presets for Podcast - German
+const PODCAST_VOICES_DE = [
+  { id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda', description: 'Warm, professional female' },
+  { id: 'ThT5KcBeYPX3keUQqHPh', name: 'Dorothy', description: 'Clear, articulate female' },
+  { id: 'g5CIjZEefAph4nQFvHAz', name: 'Ethan', description: 'Natural German male' },
+  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Authoritative male (EN accent)' },
+  { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Warm female (EN accent)' },
+]
+
+// Example test script for podcast generation
+const EXAMPLE_PODCAST_SCRIPT = `HOST: [cheerfully] Good morning and welcome to Synthszr Daily! I'm your host, and today we have some exciting market news to discuss.
+GUEST: [thoughtfully] Thanks for having me. And yes... the markets are definitely giving us a lot to talk about today.
+HOST: [curiously] Let's dive right in. What caught your attention this morning?
+GUEST: [excitedly] Well, the Fed minutes came out and... [seriously] I have to say, the hawkish tone surprised me a bit.
+HOST: [thoughtfully] Interesting. How do you think that will impact tech stocks?
+GUEST: [skeptically] Look... the market has been pricing in rate cuts for months now. If those get pushed back, we could see some volatility.
+HOST: [cheerfully] Great insights as always! That's all the time we have for today.
+GUEST: [laughing] Until next time!`
 
 // Example podcast script prompt
 const PODCAST_SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erstelle ein lebendiges, natürliches Gespräch zwischen einem Host und einem Gast für einen Finance/Tech-Podcast.
@@ -119,6 +152,13 @@ export default function AudioPage() {
 
   // Podcast-specific state
   const [podcastDuration, setPodcastDuration] = useState(15)
+  const [podcastScript, setPodcastScript] = useState(EXAMPLE_PODCAST_SCRIPT)
+  const [podcastGenerating, setPodcastGenerating] = useState(false)
+  const [podcastAudioUrl, setPodcastAudioUrl] = useState<string | null>(null)
+  const [podcastError, setPodcastError] = useState<string | null>(null)
+  const [podcastDurationSeconds, setPodcastDurationSeconds] = useState<number | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     fetchTTSSettings()
@@ -205,6 +245,62 @@ export default function AudioPage() {
 
   // Calculate estimated word count based on duration
   const estimatedWordCount = Math.round(podcastDuration * 150) // ~150 words per minute for natural speech
+
+  // Podcast generation
+  async function generatePodcast() {
+    if (!podcastScript.trim()) {
+      setPodcastError('Bitte gib ein Script ein')
+      return
+    }
+
+    setPodcastGenerating(true)
+    setPodcastError(null)
+    setPodcastAudioUrl(null)
+
+    try {
+      const res = await fetch('/api/podcast/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script: podcastScript,
+          hostVoiceId: ttsSettings?.podcast_host_voice_id,
+          guestVoiceId: ttsSettings?.podcast_guest_voice_id,
+          title: `test-podcast-${Date.now()}`,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Podcast-Generierung fehlgeschlagen')
+      }
+
+      setPodcastAudioUrl(data.audioUrl)
+      setPodcastDurationSeconds(data.durationSeconds)
+    } catch (error) {
+      console.error('Podcast generation error:', error)
+      setPodcastError(error instanceof Error ? error.message : 'Unbekannter Fehler')
+    } finally {
+      setPodcastGenerating(false)
+    }
+  }
+
+  // Audio playback
+  function togglePlayback() {
+    if (!audioRef.current) return
+
+    if (isPlaying) {
+      audioRef.current.pause()
+    } else {
+      audioRef.current.play()
+    }
+    setIsPlaying(!isPlaying)
+  }
+
+  // Count lines in script
+  const scriptLineCount = podcastScript.split('\n').filter(line =>
+    line.trim().match(/^(HOST|GUEST):/i)
+  ).length
 
   return (
     <div className="p-8">
@@ -557,64 +653,133 @@ export default function AudioPage() {
                 </div>
               ) : ttsSettings ? (
                 <>
-                  {/* Host Voice */}
-                  <div className="space-y-3 pb-4 border-b">
-                    <div>
-                      <Label className="text-base">Host-Stimme (Nachrichten)</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Moderiert das Gespräch und präsentiert die News
-                      </p>
-                    </div>
-                    <Select
-                      value={ttsSettings.podcast_host_voice_id || 'pFZP5JQG7iQjIQuC4Bku'}
-                      onValueChange={(value: string) =>
-                        setTtsSettings({ ...ttsSettings, podcast_host_voice_id: value })
-                      }
-                    >
-                      <SelectTrigger className="w-full max-w-md">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PODCAST_VOICES.map((voice) => (
-                          <SelectItem key={voice.id} value={voice.id}>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{voice.name}</span>
-                              <span className="text-muted-foreground">- {voice.description}</span>
-                            </div>
-                          </SelectItem>
+                  {/* Language Mapping Info */}
+                  <Alert className="bg-muted/50">
+                    <Info className="h-4 w-4" />
+                    <AlertDescription className="text-sm">
+                      <strong>TTS-Sprache pro Locale:</strong>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {PODCAST_LOCALES.map((loc) => (
+                          <Badge key={loc.code} variant={loc.ttsLang === 'de' ? 'default' : 'secondary'}>
+                            {loc.name} → {loc.ttsLang === 'de' ? 'Deutsch' : 'English'} TTS
+                          </Badge>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+
+                  {/* German Voices Section */}
+                  <div className="space-y-4 pb-4 border-b">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="default">DE</Badge>
+                      <Label className="text-base">Deutsche Stimmen</Label>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Verwendet für: Deutsch (de)
+                    </p>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {/* Host Voice DE */}
+                      <div className="space-y-2">
+                        <Label className="text-sm">Host (News)</Label>
+                        <Select
+                          value={ttsSettings.podcast_host_voice_de || ttsSettings.podcast_host_voice_id || 'XrExE9yKIg1WjnnlVkGX'}
+                          onValueChange={(value: string) =>
+                            setTtsSettings({ ...ttsSettings, podcast_host_voice_de: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PODCAST_VOICES_DE.map((voice) => (
+                              <SelectItem key={voice.id} value={voice.id}>
+                                {voice.name} - {voice.description}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Guest Voice DE */}
+                      <div className="space-y-2">
+                        <Label className="text-sm">Guest (Synthszr)</Label>
+                        <Select
+                          value={ttsSettings.podcast_guest_voice_de || ttsSettings.podcast_guest_voice_id || 'g5CIjZEefAph4nQFvHAz'}
+                          onValueChange={(value: string) =>
+                            setTtsSettings({ ...ttsSettings, podcast_guest_voice_de: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PODCAST_VOICES_DE.map((voice) => (
+                              <SelectItem key={voice.id} value={voice.id}>
+                                {voice.name} - {voice.description}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Guest Voice */}
-                  <div className="space-y-3 pb-4 border-b">
-                    <div>
-                      <Label className="text-base">Guest-Stimme (Synthszr Takes)</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Der AI-Analyst mit pointierten Meinungen und Analysen
-                      </p>
+                  {/* English Voices Section */}
+                  <div className="space-y-4 pb-4 border-b">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">EN</Badge>
+                      <Label className="text-base">Englische Stimmen</Label>
                     </div>
-                    <Select
-                      value={ttsSettings.podcast_guest_voice_id || 'onwK4e9ZLuTAKqWW03F9'}
-                      onValueChange={(value: string) =>
-                        setTtsSettings({ ...ttsSettings, podcast_guest_voice_id: value })
-                      }
-                    >
-                      <SelectTrigger className="w-full max-w-md">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PODCAST_VOICES.map((voice) => (
-                          <SelectItem key={voice.id} value={voice.id}>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{voice.name}</span>
-                              <span className="text-muted-foreground">- {voice.description}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <p className="text-sm text-muted-foreground">
+                      Verwendet für: English (en), Čeština (cs), Plattdüütsch (nds)
+                    </p>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {/* Host Voice EN */}
+                      <div className="space-y-2">
+                        <Label className="text-sm">Host (News)</Label>
+                        <Select
+                          value={ttsSettings.podcast_host_voice_en || 'pFZP5JQG7iQjIQuC4Bku'}
+                          onValueChange={(value: string) =>
+                            setTtsSettings({ ...ttsSettings, podcast_host_voice_en: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PODCAST_VOICES_EN.map((voice) => (
+                              <SelectItem key={voice.id} value={voice.id}>
+                                {voice.name} - {voice.description}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Guest Voice EN */}
+                      <div className="space-y-2">
+                        <Label className="text-sm">Guest (Synthszr)</Label>
+                        <Select
+                          value={ttsSettings.podcast_guest_voice_en || 'onwK4e9ZLuTAKqWW03F9'}
+                          onValueChange={(value: string) =>
+                            setTtsSettings({ ...ttsSettings, podcast_guest_voice_en: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PODCAST_VOICES_EN.map((voice) => (
+                              <SelectItem key={voice.id} value={voice.id}>
+                                {voice.name} - {voice.description}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Duration Slider */}
@@ -677,6 +842,121 @@ export default function AudioPage() {
                 <p className="text-sm text-muted-foreground">
                   Einstellungen konnten nicht geladen werden.
                 </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Podcast Test & Preview */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Sparkles className="h-5 w-5" />
+                Podcast testen
+              </CardTitle>
+              <CardDescription>
+                Teste die Podcast-Generierung mit einem Beispiel-Script
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Script Editor */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Script</Label>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <FileText className="h-3 w-3" />
+                    {scriptLineCount} Zeilen
+                  </div>
+                </div>
+                <Textarea
+                  value={podcastScript}
+                  onChange={(e) => setPodcastScript(e.target.value)}
+                  placeholder="HOST: [cheerfully] Welcome to the show!&#10;GUEST: [thoughtfully] Thanks for having me..."
+                  className="font-mono text-sm h-[200px]"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Format: <code className="bg-muted px-1 rounded">HOST:</code> oder <code className="bg-muted px-1 rounded">GUEST:</code> gefolgt von optionalen Emotion-Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code>
+                </p>
+              </div>
+
+              {/* Generate Button & Status */}
+              <div className="flex items-center gap-4">
+                <Button
+                  onClick={generatePodcast}
+                  disabled={podcastGenerating || !podcastScript.trim()}
+                  className="min-w-[180px]"
+                >
+                  {podcastGenerating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generiere...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      Podcast generieren
+                    </>
+                  )}
+                </Button>
+
+                {podcastGenerating && (
+                  <span className="text-sm text-muted-foreground">
+                    Dies kann je nach Script-Länge 30-120 Sekunden dauern...
+                  </span>
+                )}
+              </div>
+
+              {/* Error */}
+              {podcastError && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{podcastError}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Audio Player */}
+              {podcastAudioUrl && (
+                <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={togglePlayback}
+                        className="h-10 w-10"
+                      >
+                        {isPlaying ? (
+                          <Pause className="h-5 w-5" />
+                        ) : (
+                          <Play className="h-5 w-5" />
+                        )}
+                      </Button>
+                      <div>
+                        <p className="text-sm font-medium">Podcast Preview</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {podcastDurationSeconds ? `~${Math.floor(podcastDurationSeconds / 60)}:${String(podcastDurationSeconds % 60).padStart(2, '0')}` : 'Unbekannt'}
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={podcastAudioUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-500 hover:underline"
+                    >
+                      MP3 herunterladen
+                    </a>
+                  </div>
+                  <audio
+                    ref={audioRef}
+                    src={podcastAudioUrl}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={() => setIsPlaying(false)}
+                    controls
+                    className="w-full h-10"
+                  />
+                </div>
               )}
             </CardContent>
           </Card>

@@ -118,3 +118,260 @@ export function getRecommendedVoices(
 ): Array<{ id: string; name: string; description: string }> {
   return ELEVENLABS_VOICES[locale]?.[type] || ELEVENLABS_VOICES.en[type]
 }
+
+// ============================================================================
+// TEXT-TO-DIALOGUE (Podcast) API
+// ============================================================================
+
+/**
+ * A single line of dialogue in a podcast script
+ */
+export interface PodcastLine {
+  speaker: 'HOST' | 'GUEST'
+  text: string // Can include emotion tags like [cheerfully], [thoughtfully]
+}
+
+/**
+ * Complete podcast script structure
+ */
+export interface PodcastScript {
+  lines: PodcastLine[]
+  hostVoiceId: string
+  guestVoiceId: string
+  model?: ElevenLabsModel
+}
+
+/**
+ * Result of podcast generation
+ */
+export interface PodcastGenerationResult {
+  success: boolean
+  audioBuffer?: Buffer
+  durationSeconds?: number
+  error?: string
+}
+
+/**
+ * Emotion tags supported by ElevenLabs for natural dialogue
+ * These can be placed at the start of text: "[cheerfully] Great news today!"
+ */
+export const EMOTION_TAGS = [
+  'cheerfully',
+  'thoughtfully',
+  'seriously',
+  'excitedly',
+  'skeptically',
+  'laughing',
+  'sighing',
+  'whispering',
+  'interrupting',
+  'curiously',
+  'dramatically',
+  'calmly',
+  'enthusiastically',
+] as const
+
+export type EmotionTag = typeof EMOTION_TAGS[number]
+
+/**
+ * Generate a single dialogue segment with ElevenLabs
+ * Includes voice settings optimized for conversational speech
+ */
+async function generateDialogueSegment(
+  text: string,
+  voiceId: string,
+  model: ElevenLabsModel = 'eleven_multilingual_v2'
+): Promise<Buffer> {
+  const elevenLabs = getClient()
+
+  const audioStream = await elevenLabs.textToSpeech.convert(voiceId, {
+    text,
+    model_id: model,
+    output_format: 'mp3_44100_128',
+    voice_settings: {
+      stability: 0.4, // Lower stability for more expressive speech
+      similarity_boost: 0.8,
+      style: 0.2, // Add some style exaggeration for podcast feel
+      use_speaker_boost: true,
+    },
+  })
+
+  const chunks: Uint8Array[] = []
+  for await (const chunk of audioStream) {
+    chunks.push(chunk)
+  }
+
+  return Buffer.concat(chunks)
+}
+
+/**
+ * Generate a short silence buffer (for natural pauses between speakers)
+ * Creates a ~300ms pause using a minimal valid MP3 frame
+ */
+function generateSilenceBuffer(): Buffer {
+  // Minimal valid MP3 silence frame (MPEG Audio Layer 3, 128kbps, 44.1kHz)
+  // This creates approximately 300ms of silence
+  const silenceFrames: number[] = []
+
+  // MP3 frame header for 128kbps, 44.1kHz, stereo
+  const frameHeader = [0xFF, 0xFB, 0x90, 0x00]
+  const frameData = new Array(417 - 4).fill(0) // Frame size for 128kbps @ 44.1kHz
+
+  // Add ~12 frames for ~300ms of silence
+  for (let i = 0; i < 12; i++) {
+    silenceFrames.push(...frameHeader, ...frameData)
+  }
+
+  return Buffer.from(silenceFrames)
+}
+
+/**
+ * Generate complete podcast audio from a script
+ *
+ * @param script - The podcast script with speaker assignments
+ * @returns Audio buffer and metadata
+ *
+ * @example
+ * const result = await generatePodcastDialogue({
+ *   lines: [
+ *     { speaker: 'HOST', text: '[cheerfully] Welcome to today\'s market analysis!' },
+ *     { speaker: 'GUEST', text: '[thoughtfully] Thanks! Let\'s dive into the key stories.' },
+ *   ],
+ *   hostVoiceId: 'pFZP5JQG7iQjIQuC4Bku', // Lily
+ *   guestVoiceId: 'onwK4e9ZLuTAKqWW03F9', // Daniel
+ * })
+ */
+export async function generatePodcastDialogue(
+  script: PodcastScript
+): Promise<PodcastGenerationResult> {
+  try {
+    if (!script.lines || script.lines.length === 0) {
+      return { success: false, error: 'Script has no dialogue lines' }
+    }
+
+    const audioBuffers: Buffer[] = []
+    const silenceBuffer = generateSilenceBuffer()
+
+    let previousSpeaker: 'HOST' | 'GUEST' | null = null
+
+    for (let i = 0; i < script.lines.length; i++) {
+      const line = script.lines[i]
+
+      // Skip empty lines
+      if (!line.text.trim()) continue
+
+      // Add pause between different speakers for natural conversation flow
+      if (previousSpeaker && previousSpeaker !== line.speaker) {
+        audioBuffers.push(silenceBuffer)
+      }
+
+      // Select voice based on speaker
+      const voiceId = line.speaker === 'HOST'
+        ? script.hostVoiceId
+        : script.guestVoiceId
+
+      console.log(`[Podcast] Generating line ${i + 1}/${script.lines.length}: ${line.speaker} (${line.text.substring(0, 50)}...)`)
+
+      const segmentBuffer = await generateDialogueSegment(
+        line.text,
+        voiceId,
+        script.model || 'eleven_multilingual_v2'
+      )
+
+      audioBuffers.push(segmentBuffer)
+      previousSpeaker = line.speaker
+    }
+
+    // Concatenate all audio segments
+    const combinedAudio = Buffer.concat(audioBuffers)
+
+    // Estimate duration (MP3 at 128kbps = 16KB per second)
+    const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
+
+    console.log(`[Podcast] Generated ${script.lines.length} segments, ~${durationSeconds}s total`)
+
+    return {
+      success: true,
+      audioBuffer: combinedAudio,
+      durationSeconds,
+    }
+  } catch (error) {
+    console.error('[Podcast] Generation failed:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
+
+/**
+ * Parse a raw script text into structured PodcastScript lines
+ *
+ * Supports formats:
+ * - "HOST: [cheerfully] Welcome everyone!"
+ * - "GUEST: Thanks for having me."
+ *
+ * @param rawScript - Raw text script with HOST:/GUEST: prefixes
+ * @returns Array of parsed PodcastLine objects
+ */
+export function parseScriptText(rawScript: string): PodcastLine[] {
+  const lines: PodcastLine[] = []
+
+  // Split by newlines and process each line
+  const rawLines = rawScript.split('\n').filter(line => line.trim())
+
+  for (const rawLine of rawLines) {
+    const trimmed = rawLine.trim()
+
+    // Match "HOST: text" or "GUEST: text" patterns
+    const hostMatch = trimmed.match(/^HOST:\s*(.+)$/i)
+    const guestMatch = trimmed.match(/^GUEST:\s*(.+)$/i)
+
+    if (hostMatch) {
+      lines.push({ speaker: 'HOST', text: hostMatch[1].trim() })
+    } else if (guestMatch) {
+      lines.push({ speaker: 'GUEST', text: guestMatch[1].trim() })
+    }
+    // Skip lines that don't match either pattern
+  }
+
+  return lines
+}
+
+/**
+ * Estimate podcast duration from script
+ * Based on average speaking rate of ~150 words per minute
+ */
+export function estimatePodcastDuration(script: PodcastLine[]): number {
+  const totalWords = script.reduce((sum, line) => {
+    // Remove emotion tags for word count
+    const cleanText = line.text.replace(/\[[^\]]+\]/g, '').trim()
+    return sum + cleanText.split(/\s+/).length
+  }, 0)
+
+  // ~150 words per minute, return seconds
+  return Math.round((totalWords / 150) * 60)
+}
+
+/**
+ * Validate that a script uses proper emotion tags
+ * Returns warnings for any invalid tags found
+ */
+export function validateScriptEmotions(script: PodcastLine[]): string[] {
+  const warnings: string[] = []
+  const validTags = new Set(EMOTION_TAGS)
+
+  for (let i = 0; i < script.length; i++) {
+    const line = script[i]
+    const emotionMatches = line.text.matchAll(/\[(\w+)\]/g)
+
+    for (const match of emotionMatches) {
+      const tag = match[1].toLowerCase()
+      if (!validTags.has(tag as EmotionTag)) {
+        warnings.push(`Line ${i + 1}: Unknown emotion tag [${match[1]}]`)
+      }
+    }
+  }
+
+  return warnings
+}

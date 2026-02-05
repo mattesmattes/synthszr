@@ -38,9 +38,15 @@ interface UpdateSettingsRequest {
   elevenlabs_news_voice_en?: string
   elevenlabs_synthszr_voice_en?: string
   elevenlabs_model?: ElevenLabsModel
-  // Podcast settings
+  // Podcast settings - legacy (backwards compatible)
   podcast_host_voice_id?: string
   podcast_guest_voice_id?: string
+  // Podcast settings - German voices
+  podcast_host_voice_de?: string
+  podcast_guest_voice_de?: string
+  // Podcast settings - English voices
+  podcast_host_voice_en?: string
+  podcast_guest_voice_en?: string
   podcast_duration_minutes?: number
 }
 
@@ -130,12 +136,31 @@ export async function PUT(request: NextRequest) {
     }
 
     // Podcast settings (voice IDs are arbitrary ElevenLabs voice IDs)
+    // Legacy fields (backwards compatible)
     if (body.podcast_host_voice_id !== undefined) {
       updates.push({ key: 'podcast_host_voice_id', value: body.podcast_host_voice_id })
     }
 
     if (body.podcast_guest_voice_id !== undefined) {
       updates.push({ key: 'podcast_guest_voice_id', value: body.podcast_guest_voice_id })
+    }
+
+    // German podcast voices
+    if (body.podcast_host_voice_de !== undefined) {
+      updates.push({ key: 'podcast_host_voice_de', value: body.podcast_host_voice_de })
+    }
+
+    if (body.podcast_guest_voice_de !== undefined) {
+      updates.push({ key: 'podcast_guest_voice_de', value: body.podcast_guest_voice_de })
+    }
+
+    // English podcast voices
+    if (body.podcast_host_voice_en !== undefined) {
+      updates.push({ key: 'podcast_host_voice_en', value: body.podcast_host_voice_en })
+    }
+
+    if (body.podcast_guest_voice_en !== undefined) {
+      updates.push({ key: 'podcast_guest_voice_en', value: body.podcast_guest_voice_en })
     }
 
     if (body.podcast_duration_minutes !== undefined) {
