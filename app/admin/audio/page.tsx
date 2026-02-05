@@ -81,6 +81,8 @@ const PODCAST_VOICES_EN = [
   { id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill', description: 'Deep, trustworthy male' },
   { id: '9BWtsMINqrJLrRacOk9x', name: 'Aria', description: 'Expressive, dynamic female' },
   { id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Roger', description: 'Confident, clear male' },
+  { id: 'aMSt68OGf4xUZAnLpTU8', name: 'Custom 1', description: 'Custom voice' },
+  { id: 'j46AY0iVY3oHcnZbgEJg', name: 'Custom 2', description: 'Custom voice' },
 ]
 
 // ElevenLabs voice presets for Podcast - German
@@ -90,6 +92,8 @@ const PODCAST_VOICES_DE = [
   { id: 'g5CIjZEefAph4nQFvHAz', name: 'Ethan', description: 'Natural German male' },
   { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Authoritative male (EN accent)' },
   { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Warm female (EN accent)' },
+  { id: 'aMSt68OGf4xUZAnLpTU8', name: 'Custom 1', description: 'Custom voice' },
+  { id: 'j46AY0iVY3oHcnZbgEJg', name: 'Custom 2', description: 'Custom voice' },
 ]
 
 // Example test script for podcast generation
