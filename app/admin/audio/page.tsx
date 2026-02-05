@@ -109,8 +109,9 @@ const PODCAST_SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erste
 - HOST: Moderiert das Gespräch, stellt Fragen, fasst zusammen
 - GUEST: Synthszr - der AI-Analyst mit pointierten Meinungen
 
-**Format für jede Zeile:**
-{"speaker": "HOST" | "GUEST", "text": "[emotion] Dialog..."}
+**Output-Format (WICHTIG - exakt dieses Format pro Zeile):**
+HOST: [emotion] Dialog text...
+GUEST: [emotion] Dialog text...
 
 **Verfügbare Emotion-Tags:**
 - [cheerfully] - fröhlich, begeistert
@@ -122,6 +123,7 @@ const PODCAST_SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erste
 - [sighing] - seufzend
 - [whispering] - flüsternd (für dramatische Effekte)
 - [interrupting] - unterbrechend
+- [curiously] - neugierig
 
 **Stilregeln für natürliche Dialoge:**
 1. Nutze Füllwörter: "Also...", "Hmm...", "Weißt du...", "Naja..."
@@ -129,19 +131,21 @@ const PODCAST_SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erste
 3. Reaktionen: "Genau!", "Interessant!", "Warte mal..."
 4. Pausen mit "..." für Denkpausen
 5. Variiere die Satzlänge - kurze Einwürfe, längere Erklärungen
+6. Der GUEST bringt die "Synthszr Take" Meinungen aus dem Artikel ein
 
-**Beispiel-Struktur:**
-{"speaker": "HOST", "text": "[cheerfully] Willkommen bei Synthszr Daily! Heute haben wir wieder einiges zu besprechen..."}
-{"speaker": "GUEST", "text": "[thoughtfully] Ja, und ich muss sagen... die Nvidia-Zahlen haben mich wirklich überrascht."}
-{"speaker": "HOST", "text": "[excitedly] Genau da wollte ich anfangen! Was genau—"}
-{"speaker": "GUEST", "text": "[interrupting] Also, warte mal. Bevor wir da reingehen... [seriously] die Zahlen sind gut, klar. Aber der Markt preist schon Perfektion ein."}
+**Beispiel:**
+HOST: [cheerfully] Willkommen bei Synthszr Daily! Heute haben wir wieder einiges zu besprechen...
+GUEST: [thoughtfully] Ja, und ich muss sagen... die Zahlen haben mich wirklich überrascht.
+HOST: [excitedly] Genau da wollte ich anfangen! Was genau—
+GUEST: [interrupting] Also, warte mal. Bevor wir da reingehen... [seriously] die Zahlen sind gut, klar. Aber der Markt preist schon Perfektion ein.
+HOST: [curiously] Interessant! Kannst du das genauer erklären?
 
 **Ziel-Länge:** {duration} Minuten (ca. {wordCount} Wörter)
 
-**Content für diese Episode:**
+**Blog-Artikel Content für diese Episode:**
 {content}
 
-Erstelle jetzt das Skript als JSON-Array mit natürlichen Übergängen, Emotionen und gelegentlichen Unterbrechungen.`
+Erstelle jetzt das Podcast-Skript. Beginne direkt mit "HOST:" - keine Einleitung oder Erklärung.`
 
 export default function AudioPage() {
   const [ttsSettings, setTtsSettings] = useState<TTSSettings | null>(null)
