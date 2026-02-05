@@ -38,6 +38,10 @@ interface UpdateSettingsRequest {
   elevenlabs_news_voice_en?: string
   elevenlabs_synthszr_voice_en?: string
   elevenlabs_model?: ElevenLabsModel
+  // Podcast settings
+  podcast_host_voice_id?: string
+  podcast_guest_voice_id?: string
+  podcast_duration_minutes?: number
 }
 
 const VALID_VOICES: TTSVoice[] = ['alloy', 'echo', 'fable', 'nova', 'onyx', 'shimmer']
@@ -123,6 +127,23 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid ElevenLabs model' }, { status: 400 })
       }
       updates.push({ key: 'elevenlabs_model', value: body.elevenlabs_model })
+    }
+
+    // Podcast settings (voice IDs are arbitrary ElevenLabs voice IDs)
+    if (body.podcast_host_voice_id !== undefined) {
+      updates.push({ key: 'podcast_host_voice_id', value: body.podcast_host_voice_id })
+    }
+
+    if (body.podcast_guest_voice_id !== undefined) {
+      updates.push({ key: 'podcast_guest_voice_id', value: body.podcast_guest_voice_id })
+    }
+
+    if (body.podcast_duration_minutes !== undefined) {
+      const duration = body.podcast_duration_minutes
+      if (duration < 5 || duration > 30) {
+        return NextResponse.json({ error: 'Podcast duration must be between 5 and 30 minutes' }, { status: 400 })
+      }
+      updates.push({ key: 'podcast_duration_minutes', value: duration })
     }
 
     // Apply updates

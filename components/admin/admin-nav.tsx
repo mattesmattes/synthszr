@@ -22,7 +22,8 @@ import {
   FileCode,
   TrendingUp,
   ListTodo,
-  Globe
+  Globe,
+  Headphones
 } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
@@ -88,6 +89,11 @@ const navGroups: NavGroup[] = [
         label: 'Übersetzungen',
         href: '/admin/translations',
         icon: Globe
+      },
+      {
+        label: 'Audio',
+        href: '/admin/audio',
+        icon: Headphones
       }
     ]
   },

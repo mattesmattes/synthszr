@@ -28,6 +28,10 @@ export interface TTSSettings {
   elevenlabs_news_voice_en: string
   elevenlabs_synthszr_voice_en: string
   elevenlabs_model: string
+  // Podcast settings (ElevenLabs Text-to-Dialogue)
+  podcast_host_voice_id: string
+  podcast_guest_voice_id: string
+  podcast_duration_minutes: number
 }
 
 export interface ContentSection {
@@ -224,6 +228,9 @@ export async function getTTSSettings(): Promise<TTSSettings> {
       'elevenlabs_news_voice_en',
       'elevenlabs_synthszr_voice_en',
       'elevenlabs_model',
+      'podcast_host_voice_id',
+      'podcast_guest_voice_id',
+      'podcast_duration_minutes',
     ])
 
   const settingsMap: Record<string, unknown> = {}
@@ -241,10 +248,14 @@ export async function getTTSSettings(): Promise<TTSSettings> {
     tts_synthszr_voice_en: (settingsMap.tts_synthszr_voice_en as TTSVoice) || 'onyx',
     tts_model: (settingsMap.tts_model as TTSModel) || 'tts-1',
     tts_enabled: settingsMap.tts_enabled !== false, // Default to true
-    // ElevenLabs defaults - Daniel for news, Bill for Synthszr Take
+    // ElevenLabs defaults - Lily for news, Daniel for Synthszr Take
     elevenlabs_news_voice_en: (settingsMap.elevenlabs_news_voice_en as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
     elevenlabs_synthszr_voice_en: (settingsMap.elevenlabs_synthszr_voice_en as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
     elevenlabs_model: (settingsMap.elevenlabs_model as string) || 'eleven_multilingual_v2',
+    // Podcast defaults - Lily as host, Daniel as guest (Synthszr)
+    podcast_host_voice_id: (settingsMap.podcast_host_voice_id as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
+    podcast_guest_voice_id: (settingsMap.podcast_guest_voice_id as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
+    podcast_duration_minutes: (settingsMap.podcast_duration_minutes as number) || 15,
   }
 }
 
