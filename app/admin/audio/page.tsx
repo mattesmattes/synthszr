@@ -160,9 +160,64 @@ export default function AudioPage() {
   const [isPlaying, setIsPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  // Post selection for script generation
+  const [recentPosts, setRecentPosts] = useState<Array<{ id: string; title: string; slug: string; created_at: string }>>([])
+  const [selectedPostId, setSelectedPostId] = useState<string>('')
+  const [selectedLocale, setSelectedLocale] = useState<'de' | 'en' | 'cs' | 'nds'>('de')
+  const [scriptGenerating, setScriptGenerating] = useState(false)
+
   useEffect(() => {
     fetchTTSSettings()
+    fetchRecentPosts()
   }, [])
+
+  async function fetchRecentPosts() {
+    try {
+      const res = await fetch('/api/admin/posts?limit=20&published=true')
+      if (res.ok) {
+        const data = await res.json()
+        setRecentPosts(data.posts || [])
+      }
+    } catch (error) {
+      console.error('Error fetching posts:', error)
+    }
+  }
+
+  async function generateScriptFromPost() {
+    if (!selectedPostId) {
+      setPodcastError('Bitte wähle einen Post aus')
+      return
+    }
+
+    setScriptGenerating(true)
+    setPodcastError(null)
+
+    try {
+      const res = await fetch('/api/podcast/generate-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postId: selectedPostId,
+          locale: selectedLocale,
+          durationMinutes: podcastDuration,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Script-Generierung fehlgeschlagen')
+      }
+
+      setPodcastScript(data.script)
+      setPodcastAudioUrl(null) // Reset audio when new script is generated
+    } catch (error) {
+      console.error('Script generation error:', error)
+      setPodcastError(error instanceof Error ? error.message : 'Unbekannter Fehler')
+    } finally {
+      setScriptGenerating(false)
+    }
+  }
 
   async function fetchTTSSettings() {
     try {
@@ -854,10 +909,71 @@ export default function AudioPage() {
                 Podcast testen
               </CardTitle>
               <CardDescription>
-                Teste die Podcast-Generierung mit einem Beispiel-Script
+                Generiere ein Podcast-Script aus einem Blog-Post oder teste mit einem eigenen Script
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Post Selection for Script Generation */}
+              <div className="space-y-3 p-4 bg-muted/30 rounded-lg border">
+                <Label className="text-sm font-medium">Script aus Post generieren</Label>
+                <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto]">
+                  <Select
+                    value={selectedPostId}
+                    onValueChange={setSelectedPostId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Post auswählen..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {recentPosts.map((post) => (
+                        <SelectItem key={post.id} value={post.id}>
+                          <span className="truncate max-w-[300px] block">
+                            {post.title}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={selectedLocale}
+                    onValueChange={(v) => setSelectedLocale(v as 'de' | 'en' | 'cs' | 'nds')}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PODCAST_LOCALES.map((loc) => (
+                        <SelectItem key={loc.code} value={loc.code}>
+                          {loc.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Button
+                    onClick={generateScriptFromPost}
+                    disabled={scriptGenerating || !selectedPostId}
+                    variant="secondary"
+                  >
+                    {scriptGenerating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Generiere...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        Script generieren
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Claude generiert ein Podcast-Script basierend auf dem Post-Content (~{podcastDuration} Min)
+                </p>
+              </div>
+
               {/* Script Editor */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -871,7 +987,7 @@ export default function AudioPage() {
                   value={podcastScript}
                   onChange={(e) => setPodcastScript(e.target.value)}
                   placeholder="HOST: [cheerfully] Welcome to the show!&#10;GUEST: [thoughtfully] Thanks for having me..."
-                  className="font-mono text-sm h-[200px]"
+                  className="font-mono text-sm h-[300px]"
                 />
                 <p className="text-xs text-muted-foreground">
                   Format: <code className="bg-muted px-1 rounded">HOST:</code> oder <code className="bg-muted px-1 rounded">GUEST:</code> gefolgt von optionalen Emotion-Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code>
