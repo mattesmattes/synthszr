@@ -184,7 +184,7 @@ export async function PUT(request: NextRequest) {
 
           if (englishContent) {
             console.log(`[TTS] Generating audio for post ${id} with English content...`)
-            const result = await generatePostAudio(id, englishContent, 'de')
+            const result = await generatePostAudio(id, englishContent, 'en')
             if (result.success) {
               console.log(`[TTS] Audio generated for post ${id}: ${result.audioUrl}`)
             } else {
