@@ -41,18 +41,9 @@ interface GeneratePodcastRequest {
 }
 
 export async function POST(request: NextRequest) {
-  // Debug: log cookies
-  const allCookies = request.cookies.getAll()
-  console.log('[Podcast Generate] Cookies received:', allCookies.map(c => c.name))
-  console.log('[Podcast Generate] Has synthszr_session:', request.cookies.has('synthszr_session'))
-
   // Auth check - only admin can generate podcasts
   const authError = await requireAdmin(request)
-  if (authError) {
-    console.log('[Podcast Generate] Auth failed - returning 401')
-    return authError
-  }
-  console.log('[Podcast Generate] Auth passed')
+  if (authError) return authError
 
   try {
     const body: GeneratePodcastRequest = await request.json()
