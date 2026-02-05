@@ -40,6 +40,8 @@ interface TTSSettings {
   podcast_host_voice_en: string
   podcast_guest_voice_en: string
   podcast_duration_minutes: number
+  // Podcast script prompt
+  podcast_script_prompt: string | null
 }
 
 // Supported podcast locales and their TTS language mapping
@@ -230,6 +232,10 @@ export default function AudioPage() {
         if (data.podcast_duration_minutes) {
           setPodcastDuration(data.podcast_duration_minutes)
         }
+        // Load saved prompt or keep default
+        if (data.podcast_script_prompt) {
+          setCustomPrompt(data.podcast_script_prompt)
+        }
       }
     } catch (error) {
       console.error('Error fetching TTS settings:', error)
@@ -249,6 +255,7 @@ export default function AudioPage() {
         body: JSON.stringify({
           ...ttsSettings,
           podcast_duration_minutes: podcastDuration,
+          podcast_script_prompt: customPrompt !== PODCAST_SCRIPT_PROMPT ? customPrompt : null,
         }),
       })
       if (res.ok) {
@@ -1096,25 +1103,47 @@ export default function AudioPage() {
                 onChange={(e) => setCustomPrompt(e.target.value)}
                 className="font-mono text-xs h-[400px]"
               />
-              <div className="mt-4 flex items-center justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Verfügbare Emotion-Tags:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {['[cheerfully]', '[thoughtfully]', '[seriously]', '[excitedly]', '[skeptically]', '[laughing]', '[sighing]', '[whispering]', '[interrupting]'].map((tag) => (
-                      <Badge key={tag} variant="outline" className="font-mono text-xs">
-                        {tag}
-                      </Badge>
-                    ))}
+              <div className="mt-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Verfügbare Emotion-Tags:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {['[cheerfully]', '[thoughtfully]', '[seriously]', '[excitedly]', '[skeptically]', '[laughing]', '[sighing]', '[whispering]', '[interrupting]'].map((tag) => (
+                        <Badge key={tag} variant="outline" className="font-mono text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCustomPrompt(PODCAST_SCRIPT_PROMPT)}
+                      disabled={customPrompt === PODCAST_SCRIPT_PROMPT}
+                    >
+                      Zurücksetzen
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={saveTTSSettings}
+                      disabled={ttsSaving}
+                    >
+                      {ttsSaving ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="mr-2 h-4 w-4" />
+                      )}
+                      Prompt speichern
+                    </Button>
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCustomPrompt(PODCAST_SCRIPT_PROMPT)}
-                  disabled={customPrompt === PODCAST_SCRIPT_PROMPT}
-                >
-                  Zurücksetzen
-                </Button>
+                {ttsSuccess && (
+                  <span className="text-sm text-green-600 flex items-center gap-1">
+                    <CheckCircle className="h-4 w-4" />
+                    Gespeichert
+                  </span>
+                )}
               </div>
             </CardContent>
           </Card>

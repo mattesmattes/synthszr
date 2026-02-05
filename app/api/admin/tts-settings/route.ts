@@ -48,6 +48,8 @@ interface UpdateSettingsRequest {
   podcast_host_voice_en?: string
   podcast_guest_voice_en?: string
   podcast_duration_minutes?: number
+  // Podcast script prompt
+  podcast_script_prompt?: string
 }
 
 const VALID_VOICES: TTSVoice[] = ['alloy', 'echo', 'fable', 'nova', 'onyx', 'shimmer']
@@ -169,6 +171,11 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: 'Podcast duration must be between 5 and 30 minutes' }, { status: 400 })
       }
       updates.push({ key: 'podcast_duration_minutes', value: duration })
+    }
+
+    // Podcast script prompt (can be any string)
+    if (body.podcast_script_prompt !== undefined) {
+      updates.push({ key: 'podcast_script_prompt', value: body.podcast_script_prompt })
     }
 
     // Apply updates

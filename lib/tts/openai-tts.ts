@@ -38,6 +38,8 @@ export interface TTSSettings {
   podcast_host_voice_en: string
   podcast_guest_voice_en: string
   podcast_duration_minutes: number
+  // Podcast script prompt
+  podcast_script_prompt: string | null
 }
 
 export interface ContentSection {
@@ -241,6 +243,7 @@ export async function getTTSSettings(): Promise<TTSSettings> {
       'podcast_host_voice_en',
       'podcast_guest_voice_en',
       'podcast_duration_minutes',
+      'podcast_script_prompt',
     ])
 
   const settingsMap: Record<string, unknown> = {}
@@ -272,6 +275,8 @@ export async function getTTSSettings(): Promise<TTSSettings> {
     podcast_host_voice_en: (settingsMap.podcast_host_voice_en as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
     podcast_guest_voice_en: (settingsMap.podcast_guest_voice_en as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
     podcast_duration_minutes: (settingsMap.podcast_duration_minutes as number) || 15,
+    // Podcast script prompt (null means use default)
+    podcast_script_prompt: (settingsMap.podcast_script_prompt as string) || null,
   }
 }
 
