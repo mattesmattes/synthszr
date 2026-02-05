@@ -249,36 +249,61 @@ export async function generatePodcastDialogue(
       return { success: false, error: 'Script has no dialogue lines' }
     }
 
-    const audioBuffers: Buffer[] = []
-    const silenceBuffer = generateSilenceBuffer()
+    // Filter out empty lines first
+    const validLines = script.lines.filter(line => line.text.trim())
 
+    if (validLines.length === 0) {
+      return { success: false, error: 'Script has no valid dialogue lines' }
+    }
+
+    const silenceBuffer = generateSilenceBuffer()
+    const BATCH_SIZE = 5 // Generate 5 lines in parallel to avoid rate limiting
+
+    console.log(`[Podcast] Generating ${validLines.length} lines in parallel batches of ${BATCH_SIZE}`)
+
+    // Generate all audio segments in parallel batches
+    const audioSegments: Buffer[] = []
+
+    for (let batchStart = 0; batchStart < validLines.length; batchStart += BATCH_SIZE) {
+      const batch = validLines.slice(batchStart, batchStart + BATCH_SIZE)
+
+      console.log(`[Podcast] Batch ${Math.floor(batchStart / BATCH_SIZE) + 1}/${Math.ceil(validLines.length / BATCH_SIZE)}: lines ${batchStart + 1}-${batchStart + batch.length}`)
+
+      const batchPromises = batch.map((line, idx) => {
+        const voiceId = line.speaker === 'HOST'
+          ? script.hostVoiceId
+          : script.guestVoiceId
+
+        return generateDialogueSegment(
+          line.text,
+          voiceId,
+          script.model || 'eleven_multilingual_v2'
+        ).then(buffer => ({ index: batchStart + idx, buffer }))
+      })
+
+      const batchResults = await Promise.all(batchPromises)
+
+      // Sort by index to maintain order
+      batchResults.sort((a, b) => a.index - b.index)
+
+      for (const result of batchResults) {
+        audioSegments[result.index] = result.buffer
+      }
+    }
+
+    // Assemble final audio with silences between speaker changes
+    const audioBuffers: Buffer[] = []
     let previousSpeaker: 'HOST' | 'GUEST' | null = null
 
-    for (let i = 0; i < script.lines.length; i++) {
-      const line = script.lines[i]
-
-      // Skip empty lines
-      if (!line.text.trim()) continue
+    for (let i = 0; i < validLines.length; i++) {
+      const line = validLines[i]
 
       // Add pause between different speakers for natural conversation flow
       if (previousSpeaker && previousSpeaker !== line.speaker) {
         audioBuffers.push(silenceBuffer)
       }
 
-      // Select voice based on speaker
-      const voiceId = line.speaker === 'HOST'
-        ? script.hostVoiceId
-        : script.guestVoiceId
-
-      console.log(`[Podcast] Generating line ${i + 1}/${script.lines.length}: ${line.speaker} (${line.text.substring(0, 50)}...)`)
-
-      const segmentBuffer = await generateDialogueSegment(
-        line.text,
-        voiceId,
-        script.model || 'eleven_multilingual_v2'
-      )
-
-      audioBuffers.push(segmentBuffer)
+      audioBuffers.push(audioSegments[i])
       previousSpeaker = line.speaker
     }
 
@@ -288,7 +313,7 @@ export async function generatePodcastDialogue(
     // Estimate duration (MP3 at 128kbps = 16KB per second)
     const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
 
-    console.log(`[Podcast] Generated ${script.lines.length} segments, ~${durationSeconds}s total`)
+    console.log(`[Podcast] Generated ${validLines.length} segments, ~${durationSeconds}s total`)
 
     return {
       success: true,

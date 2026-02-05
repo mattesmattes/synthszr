@@ -21,6 +21,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
+
+// Increase timeout for long podcast generation (up to 5 minutes)
+export const maxDuration = 300
 import { requireAdmin } from '@/lib/auth/session'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
 import {
