@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
  */
 export async function GET() {
   return NextResponse.json({
+    deployedAt: '2025-02-05T15:00:00Z',
     endpoint: '/api/podcast/generate',
     method: 'POST',
     description: 'Generate a podcast audio from a dialogue script',
