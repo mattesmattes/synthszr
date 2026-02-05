@@ -64,15 +64,46 @@ interface RouteParams {
 }
 
 /**
- * Extract plain text from TipTap JSON
+ * Extract plain text from TipTap JSON content recursively
  */
 function extractTextFromTiptap(content: unknown): string {
-  if (!content || typeof content !== 'object') return ''
-  const doc = content as { type?: string; content?: unknown[]; text?: string }
-  if (doc.type === 'text' && doc.text) return doc.text
-  if (Array.isArray(doc.content)) {
-    return doc.content.map(node => extractTextFromTiptap(node)).join('\n\n')
+  if (!content) return ''
+
+  // Handle string content (might be JSON string)
+  if (typeof content === 'string') {
+    try {
+      const parsed = JSON.parse(content)
+      return extractTextFromTiptap(parsed)
+    } catch {
+      return content
+    }
   }
+
+  if (typeof content !== 'object') return ''
+
+  const node = content as { type?: string; content?: unknown[]; text?: string }
+
+  if (node.type === 'text' && node.text) {
+    return node.text
+  }
+
+  if (Array.isArray(node.content)) {
+    const texts: string[] = []
+    for (const child of node.content) {
+      const text = extractTextFromTiptap(child)
+      if (text.trim()) {
+        texts.push(text)
+      }
+    }
+    if (node.type === 'paragraph' || node.type === 'heading') {
+      return texts.join('') + '\n\n'
+    }
+    if (node.type === 'listItem') {
+      return '• ' + texts.join('') + '\n'
+    }
+    return texts.join('')
+  }
+
   return ''
 }
 
