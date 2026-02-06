@@ -306,8 +306,11 @@ async function loadIntro(): Promise<Float32Array[]> {
       throw new Error(`Failed to fetch intro: ${response.status}`)
     }
     const arrayBuffer = await response.arrayBuffer()
+    console.log(`[Crossfade] Intro fetched: ${arrayBuffer.byteLength} bytes`)
     const pcm = await decodeMP3(Buffer.from(arrayBuffer))
-    console.log(`[Crossfade] Loaded intro: ${(pcm[0].length / SAMPLE_RATE).toFixed(1)}s`)
+    // Log audio stats to verify data is valid
+    const maxVal = Math.max(...pcm[0].slice(0, 10000).map(Math.abs))
+    console.log(`[Crossfade] Loaded intro: ${(pcm[0].length / SAMPLE_RATE).toFixed(1)}s, max amplitude: ${maxVal.toFixed(4)}`)
     return pcm
   } catch (err) {
     console.error(`[Crossfade] Failed to load intro from ${introUrl}:`, err)
@@ -375,7 +378,8 @@ function applyIntroWithCrossfade(
     }
   }
 
-  console.log(`[Crossfade] Applied intro with ${crossfadeSec}s crossfade. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s`)
+  const maxVal = Math.max(...result[0].slice(0, 50000).map(Math.abs))
+  console.log(`[Crossfade] Applied intro with ${crossfadeSec}s crossfade. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, max amplitude: ${maxVal.toFixed(4)}`)
 
   return result
 }
@@ -393,8 +397,10 @@ async function loadOutro(): Promise<Float32Array[]> {
       throw new Error(`Failed to fetch outro: ${response.status}`)
     }
     const arrayBuffer = await response.arrayBuffer()
+    console.log(`[Crossfade] Outro fetched: ${arrayBuffer.byteLength} bytes`)
     const pcm = await decodeMP3(Buffer.from(arrayBuffer))
-    console.log(`[Crossfade] Loaded outro: ${(pcm[0].length / SAMPLE_RATE).toFixed(1)}s`)
+    const maxVal = Math.max(...pcm[0].slice(0, 10000).map(Math.abs))
+    console.log(`[Crossfade] Loaded outro: ${(pcm[0].length / SAMPLE_RATE).toFixed(1)}s, max amplitude: ${maxVal.toFixed(4)}`)
     return pcm
   } catch (err) {
     console.error(`[Crossfade] Failed to load outro from ${outroUrl}:`, err)
@@ -463,7 +469,9 @@ function applyOutroWithCrossfade(
     }
   }
 
-  console.log(`[Crossfade] Applied outro with ${crossfadeSec}s crossfade. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s`)
+  const maxValStart = Math.max(...result[0].slice(0, 50000).map(Math.abs))
+  const maxValEnd = Math.max(...result[0].slice(-50000).map(Math.abs))
+  console.log(`[Crossfade] Applied outro with ${crossfadeSec}s crossfade. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, start amp: ${maxValStart.toFixed(4)}, end amp: ${maxValEnd.toFixed(4)}`)
 
   return result
 }
