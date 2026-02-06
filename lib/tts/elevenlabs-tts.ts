@@ -307,8 +307,64 @@ function extractMpegFrames(buffer: Buffer): Buffer {
 }
 
 /**
+ * Create a Xing header for proper browser MP3 playback
+ * The Xing header contains total frames and bytes, enabling accurate seeking
+ */
+function createXingHeader(totalFrames: number, totalBytes: number): Buffer {
+  // Create a minimal MP3 frame with Xing header
+  // MP3 frame header: FF FB 90 C4 (MPEG1 Layer3 128kbps 44.1kHz mono)
+  const frameSize = 417 // Frame size for 128kbps mono
+  const header = Buffer.alloc(frameSize)
+
+  // MP3 frame header
+  header[0] = 0xFF
+  header[1] = 0xFB
+  header[2] = 0x90
+  header[3] = 0xC4
+
+  // Side info (mono) - 17 bytes of zeros
+  // Xing header starts at offset 21 for mono
+  const xingOffset = 21
+
+  // "Info" tag (for CBR) - use Info instead of Xing
+  header.write('Info', xingOffset)
+
+  // Flags: frames + bytes present (0x03)
+  header.writeUInt32BE(0x00000003, xingOffset + 4)
+
+  // Total frames
+  header.writeUInt32BE(totalFrames, xingOffset + 8)
+
+  // Total bytes
+  header.writeUInt32BE(totalBytes, xingOffset + 12)
+
+  return header
+}
+
+/**
+ * Count MPEG frames in a buffer
+ */
+function countMpegFrames(buffer: Buffer): number {
+  let count = 0
+  let offset = 0
+
+  while (offset < buffer.length - 1) {
+    // Find frame sync
+    if (buffer[offset] === 0xFF && (buffer[offset + 1] & 0xE0) === 0xE0) {
+      count++
+      // Skip frame (assuming 128kbps mono @ 44.1kHz = 417 bytes per frame)
+      offset += 417
+    } else {
+      offset++
+    }
+  }
+
+  return count
+}
+
+/**
  * Concatenate multiple MP3 buffers properly
- * Strips ID3 tags from subsequent files and combines raw MPEG audio frames
+ * Strips ID3 tags from subsequent files and adds Xing header for browser compatibility
  */
 function concatenateMp3Buffers(buffers: Buffer[]): Buffer {
   if (buffers.length === 0) return Buffer.alloc(0)
@@ -325,7 +381,19 @@ function concatenateMp3Buffers(buffers: Buffer[]): Buffer {
     extractedFrames.push(frames)
   }
 
-  return Buffer.concat(extractedFrames)
+  // Concatenate all frames
+  const audioData = Buffer.concat(extractedFrames)
+
+  // Count total frames for Xing header
+  const totalFrames = countMpegFrames(audioData)
+  const totalBytes = audioData.length + 417 // Include Xing frame
+
+  // Create Xing header and prepend it
+  const xingFrame = createXingHeader(totalFrames + 1, totalBytes)
+
+  console.log(`[MP3] Created Xing header: ${totalFrames} frames, ${totalBytes} bytes`)
+
+  return Buffer.concat([xingFrame, audioData])
 }
 
 /**
