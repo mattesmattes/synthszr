@@ -343,7 +343,13 @@ export default function AudioPage() {
   // Calculate estimated word count based on duration
   const estimatedWordCount = Math.round(podcastDuration * 150) // ~150 words per minute for natural speech
 
-  // Podcast generation
+  // Job-based podcast generation state
+  const [podcastJobId, setPodcastJobId] = useState<string | null>(null)
+  const [podcastProgress, setPodcastProgress] = useState(0)
+  const [podcastCurrentLine, setPodcastCurrentLine] = useState(0)
+  const [podcastTotalLines, setPodcastTotalLines] = useState(0)
+
+  // Podcast generation using background job system
   async function generatePodcast() {
     if (!podcastScript.trim()) {
       setPodcastError('Bitte gib ein Script ein')
@@ -353,6 +359,8 @@ export default function AudioPage() {
     setPodcastGenerating(true)
     setPodcastError(null)
     setPodcastAudioUrl(null)
+    setPodcastProgress(0)
+    setPodcastCurrentLine(0)
 
     try {
       // Build request body based on provider
@@ -362,7 +370,7 @@ export default function AudioPage() {
             hostVoiceId: openaiHostVoice,
             guestVoiceId: openaiGuestVoice,
             provider: 'openai' as const,
-            openaiModel: openaiModel,
+            model: openaiModel,
             title: `test-podcast-${Date.now()}`,
           }
         : {
@@ -374,36 +382,69 @@ export default function AudioPage() {
             title: `test-podcast-${Date.now()}`,
           }
 
-      const res = await fetch('/api/podcast/generate', {
+      // Create job
+      const createRes = await fetch('/api/podcast/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(requestBody),
       })
 
-      const data = await res.json()
+      const createData = await createRes.json()
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Podcast-Generierung fehlgeschlagen')
+      if (!createRes.ok) {
+        throw new Error(createData.error || 'Job-Erstellung fehlgeschlagen')
       }
 
-      setPodcastAudioUrl(data.audioUrl)
-      setPodcastDurationSeconds(data.durationSeconds)
+      const jobId = createData.jobId
+      setPodcastJobId(jobId)
+      setPodcastTotalLines(createData.totalLines)
 
-      // Store segment data for stereo mixing
-      if (data.segmentUrls && data.segmentMetadata) {
-        setSegmentUrls(data.segmentUrls)
-        setSegmentMetadata(data.segmentMetadata)
-      } else {
-        // Clear old segment data if not available
-        setSegmentUrls([])
-        setSegmentMetadata([])
+      console.log(`[Podcast] Job ${jobId} created, polling for status...`)
+
+      // Poll for job status
+      let completed = false
+      while (!completed) {
+        await new Promise(resolve => setTimeout(resolve, 2000)) // Poll every 2 seconds
+
+        const statusRes = await fetch(`/api/podcast/jobs/${jobId}`, {
+          credentials: 'include',
+        })
+        const status = await statusRes.json()
+
+        if (!statusRes.ok) {
+          throw new Error(status.error || 'Status-Abfrage fehlgeschlagen')
+        }
+
+        setPodcastProgress(status.progress || 0)
+        setPodcastCurrentLine(status.currentLine || 0)
+        setPodcastTotalLines(status.totalLines || 0)
+
+        if (status.status === 'completed') {
+          completed = true
+          setPodcastAudioUrl(status.audioUrl)
+          setPodcastDurationSeconds(status.durationSeconds)
+
+          if (status.segmentUrls && status.segmentMetadata) {
+            setSegmentUrls(status.segmentUrls)
+            setSegmentMetadata(status.segmentMetadata)
+          } else {
+            setSegmentUrls([])
+            setSegmentMetadata([])
+          }
+
+          console.log(`[Podcast] Job ${jobId} completed!`)
+        } else if (status.status === 'failed') {
+          throw new Error(status.errorMessage || 'Podcast-Generierung fehlgeschlagen')
+        }
+        // Continue polling if still processing
       }
     } catch (error) {
       console.error('Podcast generation error:', error)
       setPodcastError(error instanceof Error ? error.message : 'Unbekannter Fehler')
     } finally {
       setPodcastGenerating(false)
+      setPodcastJobId(null)
     }
   }
 
@@ -1216,9 +1257,25 @@ export default function AudioPage() {
                   )}
                 </Button>
 
-                {podcastGenerating && (
+                {podcastGenerating && podcastTotalLines > 0 && (
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Zeile {podcastCurrentLine} / {podcastTotalLines}
+                      </span>
+                      <span className="font-medium">{podcastProgress}%</span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary transition-all duration-300"
+                        style={{ width: `${podcastProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+                {podcastGenerating && podcastTotalLines === 0 && (
                   <span className="text-sm text-muted-foreground">
-                    Dies kann je nach Script-Länge 30-120 Sekunden dauern...
+                    Starte Job...
                   </span>
                 )}
               </div>
