@@ -1,17 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import { generateEmbedding, cosineSimilarity } from '@/lib/embeddings/generator'
 import { parseIntParam, parseFloatParam } from '@/lib/validation/query-params'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization to avoid build-time errors
+let supabase: SupabaseClient | null = null
+let anthropic: Anthropic | null = null
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+function getSupabase(): SupabaseClient {
+  if (!supabase) {
+    supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+  }
+  return supabase
+}
+
+function getAnthropic(): Anthropic {
+  if (!anthropic) {
+    anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    })
+  }
+  return anthropic
+}
 
 interface EditDiff {
   id: string
@@ -54,7 +68,7 @@ export async function POST(request: NextRequest) {
     dateThreshold.setDate(dateThreshold.getDate() - daysBack)
 
     // Fetch generalizable diffs with embeddings
-    const { data: diffs, error: fetchError } = await supabase
+    const { data: diffs, error: fetchError } = await getSupabase()
       .from('edit_diffs')
       .select('id, original_text, edited_text, edit_type, embedding, generalizability_score, pattern_explanation')
       .gte('created_at', dateThreshold.toISOString())
@@ -113,7 +127,7 @@ export async function POST(request: NextRequest) {
           // Compare confidence and handle conflict
           if (pattern.confidence > existingConflict.confidence_score * 1.2) {
             // New pattern wins - deactivate old
-            await supabase
+            await getSupabase()
               .from('learned_patterns')
               .update({ is_active: false })
               .eq('id', existingConflict.id)
@@ -138,7 +152,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Store the pattern
-        const { error: insertError } = await supabase.from('learned_patterns').insert({
+        const { error: insertError } = await getSupabase().from('learned_patterns').insert({
           pattern_type: pattern.pattern_type,
           original_form: pattern.original_form,
           preferred_form: pattern.preferred_form,
@@ -282,7 +296,7 @@ Antworte im exakten JSON-Format:
 }`
 
   try {
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 600,
       messages: [{ role: 'user', content: prompt }],
@@ -320,7 +334,7 @@ async function findContradictingPattern(
 ): Promise<{ id: string; confidence_score: number } | null> {
   if (!newPattern.original_form && !newPattern.preferred_form) return null
 
-  const { data: existing } = await supabase
+  const { data: existing } = await getSupabase()
     .from('learned_patterns')
     .select('id, original_form, preferred_form, confidence_score')
     .eq('is_active', true)
@@ -350,16 +364,16 @@ async function findContradictingPattern(
  */
 export async function GET() {
   try {
-    const { count: totalPatterns } = await supabase
+    const { count: totalPatterns } = await getSupabase()
       .from('learned_patterns')
       .select('*', { count: 'exact', head: true })
 
-    const { count: activePatterns } = await supabase
+    const { count: activePatterns } = await getSupabase()
       .from('learned_patterns')
       .select('*', { count: 'exact', head: true })
       .eq('is_active', true)
 
-    const { data: typeDistribution } = await supabase
+    const { data: typeDistribution } = await getSupabase()
       .from('learned_patterns')
       .select('pattern_type')
       .eq('is_active', true)
