@@ -24,6 +24,49 @@ export const maxDuration = 800
 // Parallel TTS batch size (to speed up generation while respecting rate limits)
 const TTS_BATCH_SIZE = 5
 
+// Retry settings for transient API errors
+const MAX_RETRIES = 3
+const INITIAL_RETRY_DELAY_MS = 1000
+
+/**
+ * Retry wrapper with exponential backoff for transient API errors
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  context: string,
+  maxRetries: number = MAX_RETRIES
+): Promise<T> {
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+
+      // Check if it's a retryable error (5xx, connection errors)
+      const isRetryable =
+        lastError.message.includes('503') ||
+        lastError.message.includes('502') ||
+        lastError.message.includes('500') ||
+        lastError.message.includes('429') ||
+        lastError.message.includes('connection') ||
+        lastError.message.includes('ECONNREFUSED') ||
+        lastError.message.includes('timeout')
+
+      if (!isRetryable || attempt === maxRetries) {
+        throw lastError
+      }
+
+      const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt)
+      console.log(`[Podcast Jobs] ${context} failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms: ${lastError.message}`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+
+  throw lastError
+}
+
 // TTS Pronunciation replacements
 const TTS_PRONUNCIATIONS: Record<string, string> = {
   'Synthszr': 'Synthesizer',
@@ -53,25 +96,27 @@ async function generateSegmentElevenLabs(
 
   const ttsText = prepareTTSText(text)
 
-  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-    method: 'POST',
-    headers: {
-      'xi-api-key': apiKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      text: ttsText,
-      model_id: model,
-      output_format: 'mp3_44100_128',
-    }),
-  })
+  return withRetry(async () => {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text: ttsText,
+        model_id: model,
+        output_format: 'mp3_44100_128',
+      }),
+    })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
-  }
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
+    }
 
-  return Buffer.from(await response.arrayBuffer())
+    return Buffer.from(await response.arrayBuffer())
+  }, `ElevenLabs TTS (${voiceId})`)
 }
 
 async function generateSegmentOpenAI(
@@ -84,26 +129,28 @@ async function generateSegmentOpenAI(
 
   const cleanText = prepareTTSText(stripEmotionTags(text))
 
-  const response = await fetch('https://api.openai.com/v1/audio/speech', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      voice,
-      input: cleanText,
-      response_format: 'mp3',
-    }),
-  })
+  return withRetry(async () => {
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        voice,
+        input: cleanText,
+        response_format: 'mp3',
+      }),
+    })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`OpenAI TTS API error: ${response.status} - ${errorText}`)
-  }
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`OpenAI TTS API error: ${response.status} - ${errorText}`)
+    }
 
-  return Buffer.from(await response.arrayBuffer())
+    return Buffer.from(await response.arrayBuffer())
+  }, `OpenAI TTS (${voice})`)
 }
 
 export async function POST(request: NextRequest) {
