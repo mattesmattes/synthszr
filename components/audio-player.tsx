@@ -105,8 +105,8 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
       pendingAutoplayRef.current = true
       setStatus('loading')
 
-      // Trigger podcast generation - always use EN
-      fetch(`/api/podcast/${postId}?locale=en&generate=true`)
+      // Trigger podcast generation - always use EN, force regeneration for new intro/outro
+      fetch(`/api/podcast/${postId}?locale=en&generate=true&force=true`)
         .then(res => res.json())
         .then(data => {
           if (data.audioUrl) {
@@ -172,7 +172,8 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
 
       try {
         // Trigger podcast generation - always use EN
-        const response = await fetch(`/api/podcast/${postId}?locale=en&generate=true`)
+        // Force regeneration to get new version with intro/outro
+        const response = await fetch(`/api/podcast/${postId}?locale=en&generate=true&force=true`)
         const data = await response.json()
 
         if (!response.ok && data.status !== 'generating') {

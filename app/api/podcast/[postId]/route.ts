@@ -116,6 +116,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const { searchParams } = new URL(request.url)
   const locale = searchParams.get('locale') || 'de'
   const shouldGenerate = searchParams.get('generate') === 'true'
+  const forceRegenerate = searchParams.get('force') === 'true'
 
   const supabase = await createClient()
 
@@ -127,7 +128,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     .eq('locale', locale)
     .single()
 
-  if (existingPodcast?.status === 'completed' && existingPodcast.audio_url) {
+  // Return existing podcast unless force regeneration requested
+  if (existingPodcast?.status === 'completed' && existingPodcast.audio_url && !forceRegenerate) {
     return NextResponse.json({
       exists: true,
       audioUrl: existingPodcast.audio_url,
@@ -136,7 +138,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     })
   }
 
-  if (existingPodcast?.status === 'generating') {
+  // Force regeneration: delete old entry first
+  if (forceRegenerate && existingPodcast) {
+    console.log(`[Podcast] Force regeneration requested for post ${postId}`)
+    await supabase
+      .from('post_podcasts')
+      .delete()
+      .eq('post_id', postId)
+      .eq('locale', locale)
+  }
+
+  if (existingPodcast?.status === 'generating' && !forceRegenerate) {
     return NextResponse.json({
       exists: false,
       status: 'generating',
@@ -145,7 +157,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 
   // If generate flag is set, trigger generation
-  if (shouldGenerate) {
+  if (shouldGenerate || forceRegenerate) {
+    console.log(`[Podcast] Starting generation for post ${postId}, locale ${locale}`)
     // Start generation in background
     generatePodcastForPost(postId, locale).catch(console.error)
 
