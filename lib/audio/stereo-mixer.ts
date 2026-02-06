@@ -90,10 +90,56 @@ export async function mixToStereo(options: MixerOptions): Promise<MixResult> {
     console.log(`[StereoMixer] Segment ${i} decoded: ${buffer.duration.toFixed(2)}s, ${buffer.numberOfChannels}ch`)
   }
 
-  // Calculate total duration based on actual decoded audio
+  // Post-process timing for natural overlaps (helps OpenAI which has no emotion tags)
+  // Heuristic: short responses (< 2s) when speaker changes are likely reactions/interruptions
+  const REACTION_THRESHOLD = 2.0  // seconds
+  const REACTION_OVERLAP = 0.15   // 150ms overlap for reactions
+  const INTERRUPTION_OVERLAP = 0.3 // 300ms overlap for very short responses
+
+  const adjustedStartTimes: number[] = []
+  let currentTime = 0
+
+  for (let i = 0; i < decodedSegments.length; i++) {
+    const segment = decodedSegments[i]
+    const meta = segmentMetadata[i]
+    const prevMeta = i > 0 ? segmentMetadata[i - 1] : null
+    const prevDuration = i > 0 ? decodedSegments[i - 1].duration : 0
+
+    // Check for speaker change
+    const speakerChanged = prevMeta && prevMeta.speaker !== meta.speaker
+
+    if (speakerChanged) {
+      // Calculate overlap based on response length
+      const responseDuration = segment.duration
+      let overlap = 0
+
+      if (responseDuration < 1.0) {
+        // Very short response (< 1s) - likely an interruption
+        overlap = INTERRUPTION_OVERLAP
+      } else if (responseDuration < REACTION_THRESHOLD) {
+        // Short response (< 2s) - likely a reaction
+        overlap = REACTION_OVERLAP
+      }
+
+      // Previous segment end time minus overlap
+      const prevEndTime = adjustedStartTimes[i - 1] + prevDuration
+      currentTime = Math.max(0, prevEndTime - overlap)
+
+      if (overlap > 0) {
+        console.log(`[StereoMixer] Segment ${i}: applying ${(overlap * 1000).toFixed(0)}ms overlap (${responseDuration.toFixed(1)}s response)`)
+      }
+    } else if (i > 0) {
+      // Same speaker continues - no gap
+      currentTime = adjustedStartTimes[i - 1] + prevDuration
+    }
+
+    adjustedStartTimes.push(currentTime)
+  }
+
+  // Calculate total duration based on adjusted timing
   let totalDuration = 0
   for (let i = 0; i < decodedSegments.length; i++) {
-    const startTime = segmentMetadata[i].startTime
+    const startTime = adjustedStartTimes[i]
     const duration = decodedSegments[i].duration
     const endTime = startTime + duration
     if (endTime > totalDuration) {
@@ -116,7 +162,8 @@ export async function mixToStereo(options: MixerOptions): Promise<MixResult> {
   for (let i = 0; i < decodedSegments.length; i++) {
     const segment = decodedSegments[i]
     const meta = segmentMetadata[i]
-    const startSample = Math.floor(meta.startTime * sampleRate)
+    // Use adjusted start time for natural overlaps
+    const startSample = Math.floor(adjustedStartTimes[i] * sampleRate)
 
     // Get source channel data (use first channel if mono)
     const sourceData = segment.getChannelData(0)
@@ -137,7 +184,7 @@ export async function mixToStereo(options: MixerOptions): Promise<MixResult> {
       rightChannel[startSample + j] += sample * rightGain
     }
 
-    console.log(`[StereoMixer] Mixed segment ${i} (${meta.speaker}) at ${meta.startTime.toFixed(2)}s, pan=${pan} (L:${(leftGain*100).toFixed(0)}% R:${(rightGain*100).toFixed(0)}%)`)
+    console.log(`[StereoMixer] Mixed segment ${i} (${meta.speaker}) at ${adjustedStartTimes[i].toFixed(2)}s, pan=${pan} (L:${(leftGain*100).toFixed(0)}% R:${(rightGain*100).toFixed(0)}%)`)
   }
 
   // Normalize to prevent clipping

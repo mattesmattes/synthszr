@@ -33,8 +33,8 @@ const LOCALE_TO_TTS_LANG: Record<string, 'de' | 'en'> = {
   nds: 'en',
 }
 
-// Default podcast script prompt template
-const DEFAULT_SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erstelle ein lebendiges, natürliches Gespräch zwischen einem Host und einem Gast für einen Finance/Tech-Podcast.
+// Default podcast script prompt template - GERMAN
+const DEFAULT_SCRIPT_PROMPT_DE = `Du bist ein erfahrener Podcast-Skriptautor. Erstelle ein lebendiges, natürliches Gespräch auf DEUTSCH zwischen einem Host und einem Gast für einen Finance/Tech-Podcast.
 
 **Rollen:**
 - HOST: Moderiert das Gespräch, stellt Fragen, fasst zusammen
@@ -53,19 +53,17 @@ GUEST: [emotion] Response text here...
 - [laughing] - lachend
 - [sighing] - seufzend
 - [curiously] - neugierig
-- [dramatically] - dramatisch
+- [interrupting] - unterbrechend (für Überlappung)
 
 **Stilregeln für natürliche Dialoge:**
 1. Nutze Füllwörter: "Also...", "Hmm...", "Weißt du...", "Naja..."
-2. Unterbrechungen: GUEST kann HOST unterbrechen wenn aufgeregt
+2. Unterbrechungen mit [interrupting]: GUEST kann HOST unterbrechen
 3. Reaktionen: "Genau!", "Interessant!", "Warte mal..."
 4. Pausen mit "..." für Denkpausen
 5. Variiere die Satzlänge - kurze Einwürfe, längere Erklärungen
-6. Der GUEST (Synthszr) sollte die "Synthszr Take" Meinungen aus dem Artikel einbringen
+6. Der GUEST (Synthszr) sollte die "Synthszr Take" Meinungen einbringen
 
 **Ziel-Länge:** {duration} Minuten (ca. {wordCount} Wörter)
-
-**Sprache des Podcasts:** {language}
 
 **Blog-Artikel Content für diese Episode:**
 ---
@@ -74,7 +72,53 @@ Titel: {title}
 {content}
 ---
 
-Erstelle jetzt das Podcast-Skript. Beginne direkt mit "HOST:" - keine Einleitung oder Erklärung.`
+WICHTIG: Das gesamte Skript MUSS auf DEUTSCH sein!
+Erstelle jetzt das Podcast-Skript. Beginne direkt mit "HOST:" - keine Einleitung.`
+
+// Default podcast script prompt template - ENGLISH
+const DEFAULT_SCRIPT_PROMPT_EN = `You are an experienced podcast script writer. Create a lively, natural conversation in ENGLISH between a host and a guest for a Finance/Tech podcast.
+
+**Roles:**
+- HOST: Moderates the conversation, asks questions, summarizes
+- GUEST: Synthszr - the AI analyst with pointed opinions
+
+**Output Format (IMPORTANT - use exactly this format):**
+HOST: [emotion] Dialog text here...
+GUEST: [emotion] Response text here...
+
+**Available Emotion Tags:**
+- [cheerfully] - happy, enthusiastic
+- [thoughtfully] - reflective, considering
+- [seriously] - serious, important
+- [excitedly] - excited, enthusiastic
+- [skeptically] - skeptical, questioning
+- [laughing] - laughing
+- [sighing] - sighing
+- [curiously] - curious
+- [interrupting] - interrupting (for overlap effect)
+
+**Style Rules for Natural Dialogue:**
+1. Use filler words: "Well...", "Hmm...", "You know...", "I mean..."
+2. Interruptions with [interrupting]: GUEST can interrupt HOST
+3. Reactions: "Exactly!", "Interesting!", "Wait..."
+4. Pauses with "..." for thinking
+5. Vary sentence length - short interjections, longer explanations
+6. GUEST (Synthszr) should bring in the "Synthszr Take" opinions
+
+**Target Length:** {duration} minutes (approx. {wordCount} words)
+
+**Blog Article Content for this Episode:**
+---
+Title: {title}
+
+{content}
+---
+
+IMPORTANT: The entire script MUST be in ENGLISH!
+Create the podcast script now. Start directly with "HOST:" - no introduction.`
+
+// Legacy alias for backwards compatibility
+const DEFAULT_SCRIPT_PROMPT = DEFAULT_SCRIPT_PROMPT_DE
 
 interface GenerateScriptRequest {
   postId: string
@@ -205,12 +249,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Post has no content' }, { status: 400 })
     }
 
-    // Build the prompt
-    const languageLabel = ttsLang === 'de' ? 'Deutsch' : 'English'
-    const prompt = (body.customPrompt || DEFAULT_SCRIPT_PROMPT)
+    // Build the prompt - use language-appropriate template
+    const defaultPrompt = ttsLang === 'de' ? DEFAULT_SCRIPT_PROMPT_DE : DEFAULT_SCRIPT_PROMPT_EN
+    const prompt = (body.customPrompt || defaultPrompt)
       .replace('{duration}', String(durationMinutes))
       .replace('{wordCount}', String(wordCount))
-      .replace('{language}', languageLabel)
       .replace('{title}', postTitle)
       .replace('{content}', postContent)
 
