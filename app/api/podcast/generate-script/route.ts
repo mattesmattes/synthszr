@@ -78,6 +78,9 @@ Erstelle jetzt das Podcast-Skript. Beginne direkt mit "HOST:" - keine Einleitung
 // Default podcast script prompt template - ENGLISH
 const DEFAULT_SCRIPT_PROMPT_EN = `You are an experienced podcast script writer. Create a lively, natural conversation in ENGLISH between a host and a guest for a Finance/Tech podcast.
 
+**CRITICAL LANGUAGE REQUIREMENT:**
+The source content below may be in German or another language. You MUST translate all content and create the entire podcast script in ENGLISH. Do not use any German words or phrases in your output.
+
 **Roles:**
 - HOST: Moderates the conversation, asks questions, summarizes
 - GUEST: Synthszr - the AI analyst with pointed opinions
@@ -107,15 +110,14 @@ GUEST: [emotion] Response text here...
 
 **Target Length:** {duration} minutes (approx. {wordCount} words)
 
-**Blog Article Content for this Episode:**
+**Blog Article Content for this Episode (translate to English if not already in English):**
 ---
 Title: {title}
 
 {content}
 ---
 
-IMPORTANT: The entire script MUST be in ENGLISH!
-Create the podcast script now. Start directly with "HOST:" - no introduction.`
+REMEMBER: Output the ENTIRE script in ENGLISH only. Start directly with "HOST:" - no introduction.`
 
 // Legacy alias for backwards compatibility
 const DEFAULT_SCRIPT_PROMPT = DEFAULT_SCRIPT_PROMPT_DE
