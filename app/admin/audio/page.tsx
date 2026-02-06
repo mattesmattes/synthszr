@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText } from 'lucide-react'
+import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones } from 'lucide-react'
+import { StereoPodcastPlayer } from '@/components/stereo-podcast-player'
+import type { SegmentMetadata } from '@/lib/audio/stereo-mixer'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -169,6 +171,10 @@ export default function AudioPage() {
   const [podcastDurationSeconds, setPodcastDurationSeconds] = useState<number | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Stereo mixing data
+  const [segmentUrls, setSegmentUrls] = useState<string[]>([])
+  const [segmentMetadata, setSegmentMetadata] = useState<SegmentMetadata[]>([])
 
   // Post selection for script generation
   const [recentPosts, setRecentPosts] = useState<Array<{ id: string; title: string; slug: string; created_at: string }>>([])
@@ -351,6 +357,16 @@ export default function AudioPage() {
 
       setPodcastAudioUrl(data.audioUrl)
       setPodcastDurationSeconds(data.durationSeconds)
+
+      // Store segment data for stereo mixing
+      if (data.segmentUrls && data.segmentMetadata) {
+        setSegmentUrls(data.segmentUrls)
+        setSegmentMetadata(data.segmentMetadata)
+      } else {
+        // Clear old segment data if not available
+        setSegmentUrls([])
+        setSegmentMetadata([])
+      }
     } catch (error) {
       console.error('Podcast generation error:', error)
       setPodcastError(error instanceof Error ? error.message : 'Unbekannter Fehler')
@@ -1077,49 +1093,67 @@ export default function AudioPage() {
                 </Alert>
               )}
 
-              {/* Audio Player */}
+              {/* Audio Player - Stereo or Mono fallback */}
               {podcastAudioUrl && (
-                <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={togglePlayback}
-                        className="h-10 w-10"
-                      >
-                        {isPlaying ? (
-                          <Pause className="h-5 w-5" />
-                        ) : (
-                          <Play className="h-5 w-5" />
-                        )}
-                      </Button>
-                      <div>
-                        <p className="text-sm font-medium">Podcast Preview</p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {podcastDurationSeconds ? `~${Math.floor(podcastDurationSeconds / 60)}:${String(podcastDurationSeconds % 60).padStart(2, '0')}` : 'Unbekannt'}
-                        </p>
+                <div className="space-y-4">
+                  {/* Stereo Player (65/35 positioning) */}
+                  {segmentUrls.length > 0 && segmentMetadata.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Headphones className="h-4 w-4 text-green-500" />
+                        <span className="font-medium text-green-600">Stereo Player</span>
+                        <span className="text-muted-foreground">(HOST 65% links, GUEST 65% rechts)</span>
                       </div>
+                      <StereoPodcastPlayer
+                        segmentUrls={segmentUrls}
+                        segmentMetadata={segmentMetadata}
+                        title="test-podcast"
+                      />
                     </div>
-                    <a
-                      href={podcastAudioUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-blue-500 hover:underline"
-                    >
-                      MP3 herunterladen
-                    </a>
-                  </div>
-                  <audio
-                    ref={audioRef}
-                    src={podcastAudioUrl}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                    onEnded={() => setIsPlaying(false)}
-                    controls
-                    className="w-full h-10"
-                  />
+                  ) : (
+                    <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={togglePlayback}
+                            className="h-10 w-10"
+                          >
+                            {isPlaying ? (
+                              <Pause className="h-5 w-5" />
+                            ) : (
+                              <Play className="h-5 w-5" />
+                            )}
+                          </Button>
+                          <div>
+                            <p className="text-sm font-medium">Podcast Preview (Mono)</p>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {podcastDurationSeconds ? `~${Math.floor(podcastDurationSeconds / 60)}:${String(podcastDurationSeconds % 60).padStart(2, '0')}` : 'Unbekannt'}
+                            </p>
+                          </div>
+                        </div>
+                        <a
+                          href={podcastAudioUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-500 hover:underline"
+                        >
+                          MP3 herunterladen
+                        </a>
+                      </div>
+                      <audio
+                        ref={audioRef}
+                        src={podcastAudioUrl}
+                        onPlay={() => setIsPlaying(true)}
+                        onPause={() => setIsPlaying(false)}
+                        onEnded={() => setIsPlaying(false)}
+                        controls
+                        className="w-full h-10"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
