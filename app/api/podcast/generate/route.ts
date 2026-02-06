@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
     // Estimate duration before generation
     const estimatedDuration = estimatePodcastDuration(lines)
     console.log(`[Podcast] Generating podcast with ${lines.length} lines, estimated ${estimatedDuration}s`)
+    console.log(`[Podcast] Using model: ${model}, host: ${hostVoiceId}, guest: ${guestVoiceId}`)
 
     // Generate the podcast audio
     const result = await generatePodcastDialogue({

@@ -586,7 +586,7 @@ export default function AudioPage() {
                               </p>
                             </div>
                             <Select
-                              value={ttsSettings.elevenlabs_model || 'eleven_multilingual_v2'}
+                              value={ttsSettings.elevenlabs_model || 'eleven_v3'}
                               onValueChange={(value: ElevenLabsModel) =>
                                 setTtsSettings({ ...ttsSettings, elevenlabs_model: value })
                               }
@@ -595,7 +595,8 @@ export default function AudioPage() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="eleven_multilingual_v2">Multilingual v2 (empfohlen)</SelectItem>
+                                <SelectItem value="eleven_v3">Eleven v3 (empfohlen für Podcast)</SelectItem>
+                                <SelectItem value="eleven_multilingual_v2">Multilingual v2</SelectItem>
                                 <SelectItem value="eleven_turbo_v2_5">Turbo v2.5 (schnell)</SelectItem>
                                 <SelectItem value="eleven_turbo_v2">Turbo v2</SelectItem>
                               </SelectContent>
