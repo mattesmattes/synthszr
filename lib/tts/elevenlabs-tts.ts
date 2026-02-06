@@ -177,6 +177,15 @@ export type EmotionTag = typeof EMOTION_TAGS[number]
  * Generate a single dialogue segment with ElevenLabs
  * Includes voice settings optimized for conversational speech
  */
+/**
+ * Strip emotion tags like [cheerfully], [thoughtfully] etc from text
+ * These are used for script formatting but not supported by ElevenLabs TTS
+ */
+function stripEmotionTags(text: string): string {
+  // Remove emotion tags at the start: [cheerfully], [thoughtfully], etc.
+  return text.replace(/^\s*\[[^\]]+\]\s*/g, '').trim()
+}
+
 async function generateDialogueSegment(
   text: string,
   voiceId: string,
@@ -184,8 +193,16 @@ async function generateDialogueSegment(
 ): Promise<Buffer> {
   const elevenLabs = getClient()
 
+  // Strip emotion tags - ElevenLabs TTS doesn't interpret them
+  const cleanText = stripEmotionTags(text)
+
+  if (!cleanText) {
+    // Return empty buffer for empty text
+    return Buffer.alloc(0)
+  }
+
   const audioStream = await elevenLabs.textToSpeech.convert(voiceId, {
-    text,
+    text: cleanText,
     model_id: model,
     output_format: 'mp3_44100_128',
     voice_settings: {
@@ -262,34 +279,47 @@ export async function generatePodcastDialogue(
     console.log(`[Podcast] Generating ${validLines.length} lines in parallel batches of ${BATCH_SIZE}`)
 
     // Generate all audio segments in parallel batches
-    const audioSegments: Buffer[] = []
+    const audioSegments: Buffer[] = new Array(validLines.length)
 
     for (let batchStart = 0; batchStart < validLines.length; batchStart += BATCH_SIZE) {
       const batch = validLines.slice(batchStart, batchStart + BATCH_SIZE)
+      const batchNum = Math.floor(batchStart / BATCH_SIZE) + 1
+      const totalBatches = Math.ceil(validLines.length / BATCH_SIZE)
 
-      console.log(`[Podcast] Batch ${Math.floor(batchStart / BATCH_SIZE) + 1}/${Math.ceil(validLines.length / BATCH_SIZE)}: lines ${batchStart + 1}-${batchStart + batch.length}`)
+      console.log(`[Podcast] Batch ${batchNum}/${totalBatches}: generating lines ${batchStart + 1}-${batchStart + batch.length}`)
 
-      const batchPromises = batch.map((line, idx) => {
+      const batchPromises = batch.map(async (line, idx) => {
+        const globalIndex = batchStart + idx
         const voiceId = line.speaker === 'HOST'
           ? script.hostVoiceId
           : script.guestVoiceId
 
-        return generateDialogueSegment(
-          line.text,
-          voiceId,
-          script.model || 'eleven_multilingual_v2'
-        ).then(buffer => ({ index: batchStart + idx, buffer }))
+        try {
+          const buffer = await generateDialogueSegment(
+            line.text,
+            voiceId,
+            script.model || 'eleven_multilingual_v2'
+          )
+          console.log(`[Podcast] Line ${globalIndex + 1}: generated ${buffer.length} bytes`)
+          return { index: globalIndex, buffer, success: true }
+        } catch (error) {
+          console.error(`[Podcast] Line ${globalIndex + 1} failed:`, error)
+          return { index: globalIndex, buffer: Buffer.alloc(0), success: false }
+        }
       })
 
       const batchResults = await Promise.all(batchPromises)
 
-      // Sort by index to maintain order
-      batchResults.sort((a, b) => a.index - b.index)
-
       for (const result of batchResults) {
         audioSegments[result.index] = result.buffer
       }
+
+      console.log(`[Podcast] Batch ${batchNum}/${totalBatches} complete`)
     }
+
+    // Check how many segments we got
+    const successfulSegments = audioSegments.filter(b => b && b.length > 0).length
+    console.log(`[Podcast] Generated ${successfulSegments}/${validLines.length} audio segments`)
 
     // Assemble final audio with silences between speaker changes
     const audioBuffers: Buffer[] = []
