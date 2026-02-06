@@ -19,6 +19,7 @@ import {
   parseScriptText,
   type ElevenLabsModel,
 } from '@/lib/tts/elevenlabs-tts'
+import { concatenateWithCrossfade, type AudioSegment } from '@/lib/audio/crossfade'
 import Anthropic from '@anthropic-ai/sdk'
 
 // TTS language mapping
@@ -292,7 +293,7 @@ async function generatePodcastForPost(
       ? settings.podcast_guest_voice_de
       : settings.podcast_guest_voice_en
 
-    // Generate audio
+    // Generate audio segments
     const audioResult = await generatePodcastDialogue({
       lines,
       hostVoiceId,
@@ -300,13 +301,44 @@ async function generatePodcastForPost(
       model: settings.elevenlabs_model as ElevenLabsModel,
     })
 
-    if (!audioResult.success || !audioResult.audioBuffer) {
+    if (!audioResult.success || !audioResult.segmentBuffers || audioResult.segmentBuffers.length === 0) {
       throw new Error(audioResult.error || 'Audio generation failed')
     }
 
+    // Build AudioSegment array for crossfade processing
+    const segments: AudioSegment[] = []
+    const segmentMeta = audioResult.segmentMetadata || []
+
+    for (let i = 0; i < audioResult.segmentBuffers.length; i++) {
+      const buffer = audioResult.segmentBuffers[i]
+      const meta = segmentMeta[i]
+
+      if (buffer && buffer.length > 0) {
+        segments.push({
+          buffer,
+          speaker: meta?.speaker || (i % 2 === 0 ? 'HOST' : 'GUEST'),
+          text: meta?.text || '',
+        })
+      }
+    }
+
+    console.log(`[Podcast] Processing ${segments.length} segments with crossfade + intro/outro...`)
+
+    // Use crossfade module with intro and outro
+    const combinedAudio = await concatenateWithCrossfade(segments, {
+      includeIntro: true,
+      introCrossfadeSec: 4,
+      includeOutro: true,
+      outroCrossfadeSec: 4,
+    })
+
+    // Estimate duration (MP3 at 128kbps = 16KB per second)
+    const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
+    console.log(`[Podcast] Final audio with intro/outro: ${combinedAudio.length} bytes, ~${durationSeconds}s`)
+
     // Upload to Vercel Blob
     const fileName = `podcasts/${postId}/${locale}.mp3`
-    const blob = await put(fileName, audioResult.audioBuffer, {
+    const blob = await put(fileName, combinedAudio, {
       access: 'public',
       contentType: 'audio/mpeg',
       allowOverwrite: true,
@@ -320,7 +352,7 @@ async function generatePodcastForPost(
         locale,
         status: 'completed',
         audio_url: blob.url,
-        duration_seconds: audioResult.durationSeconds,
+        duration_seconds: durationSeconds,
         script_content: script,
       }, { onConflict: 'post_id,locale' })
 
@@ -329,7 +361,7 @@ async function generatePodcastForPost(
     return {
       success: true,
       audioUrl: blob.url,
-      duration: audioResult.durationSeconds,
+      duration: durationSeconds,
     }
   } catch (error) {
     console.error('[Podcast] Generation failed:', error)
