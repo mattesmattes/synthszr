@@ -400,7 +400,15 @@ export default function AudioPage() {
       setPodcastJobId(jobId)
       setPodcastTotalLines(createData.totalLines)
 
-      console.log(`[Podcast] Job ${jobId} created, polling for status...`)
+      console.log(`[Podcast] Job ${jobId} created, triggering processing...`)
+
+      // Trigger processing (don't await - let it run in background)
+      fetch('/api/podcast/jobs/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ jobId }),
+      }).catch(err => console.error('[Podcast] Process trigger failed:', err))
 
       // Poll for job status
       let completed = false

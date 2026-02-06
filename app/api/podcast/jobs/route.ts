@@ -75,18 +75,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Podcast Jobs] Created job ${job.id} with ${lines.length} lines`)
 
-    // Trigger processing immediately via fetch (fire and forget)
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-
-    fetch(`${baseUrl}/api/podcast/jobs/process`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId: job.id }),
-    }).catch(err => {
-      console.error('[Podcast Jobs] Failed to trigger processing:', err)
-    })
+    // Note: Processing is triggered by the client calling /api/podcast/jobs/process
 
     return NextResponse.json({
       success: true,
