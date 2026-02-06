@@ -19,17 +19,17 @@ export interface TiptapDoc {
   content?: TiptapNode[]
 }
 
-// Rating badge styles (email-safe inline styles)
+// Rating badge styles (email-safe inline styles) - colors match website
 const RATING_STYLES = {
-  BUY: 'background-color: #39FF14; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
-  HOLD: 'background-color: #CCFF00; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
-  SELL: 'background-color: #FF6600; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
+  BUY: 'background-color: #00FF00; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
+  HOLD: 'background-color: #FFFF00; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
+  SELL: 'background-color: #FF4D00; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
 }
 
 // Percentage change styles for vote badges (black text on colored background)
 const PERCENT_STYLES = {
-  up: 'background-color: #39FF14; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px;',
-  down: 'background-color: #FF6600; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px;',
+  up: 'background-color: #00FF00; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px;',
+  down: 'background-color: #FF4D00; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px;',
   neutral: 'background-color: #9CA3AF; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px;',
 }
 
@@ -409,12 +409,12 @@ export async function generateEmailContentWithVotes(
     ? await fetchRatings(Array.from(allPublicCompanies), Array.from(allPremarketCompanies), baseUrl)
     : new Map<string, { rating: 'BUY' | 'HOLD' | 'SELL'; type: 'public' | 'premarket'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isin?: string }>()
 
-  // Vote color logic: BUY > HOLD > SELL > NONE
+  // Vote color logic: BUY > HOLD > SELL > NONE - colors match website
   const votePriority: Record<string, number> = { 'BUY': 3, 'HOLD': 2, 'SELL': 1 }
   const voteColors: Record<string, string> = {
-    'BUY': '#39FF14',
-    'HOLD': '#CCFF00',
-    'SELL': '#FF6600',
+    'BUY': '#00FF00',
+    'HOLD': '#FFFF00',
+    'SELL': '#FF4D00',
     'NONE': '#00FFFF'
   }
 
@@ -705,7 +705,7 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string 
         const highlightRegex = new RegExp(`(${escapedAfterLabel})$`)
         return fullHtml.replace(
           highlightRegex,
-          '<span style="background-color: #CCFF00; padding: 2px 4px;">$1</span>'
+          '<span style="background-color: #FFFF00; padding: 2px 4px;">$1</span>'
         )
       }
     }
@@ -723,7 +723,7 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string 
   const highlightRegex = new RegExp(`(${escapedLastSentence})(?!.*${escapedLastSentence})`)
   const highlightedHtml = fullHtml.replace(
     highlightRegex,
-    '<span style="background-color: #CCFF00; padding: 2px 4px;">$1</span>'
+    '<span style="background-color: #FFFF00; padding: 2px 4px;">$1</span>'
   )
 
   return highlightedHtml
@@ -806,7 +806,7 @@ function renderContent(content?: TiptapNode[]): string {
 
       // If "Synthszr Take:" is not already bold, wrap it with styling
       if (!hasBoldMark && synthszrPattern.test(text)) {
-        text = text.replace(synthszrPattern, '<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">$1</strong>')
+        text = text.replace(synthszrPattern, '<strong style="background-color: #FFFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">$1</strong>')
       }
 
       // Apply marks
@@ -816,7 +816,7 @@ function renderContent(content?: TiptapNode[]): string {
             case 'bold':
               // Check if this is "Synthszr Take:" - add background styling
               if (/synthszr take:?/i.test(text)) {
-                text = `<strong style="background-color: #CCFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">${text}</strong>`
+                text = `<strong style="background-color: #FFFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">${text}</strong>`
               } else {
                 text = `<strong>${text}</strong>`
               }
