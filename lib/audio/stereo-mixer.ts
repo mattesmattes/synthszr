@@ -1,12 +1,22 @@
 /**
  * Stereo Podcast Mixer
  *
- * Mixes podcast segments into a stereo audio file:
- * - HOST audio on the LEFT channel
- * - GUEST audio on the RIGHT channel
+ * Mixes podcast segments into a stereo audio file with natural positioning:
+ * - HOST: 65% left, 35% right (slightly left of center)
+ * - GUEST: 35% left, 65% right (slightly right of center)
+ *
+ * This creates a natural "two people at a table" feel instead of
+ * the unnatural hard-panned 100% left/right separation.
  *
  * Supports overlapping audio when speakers interrupt each other.
  */
+
+// Stereo panning configuration (0.0 = full left, 1.0 = full right)
+// 0.35 = 65% left, 35% right | 0.65 = 35% left, 65% right
+const STEREO_POSITION = {
+  HOST: 0.35,   // Slightly left of center
+  GUEST: 0.65,  // Slightly right of center
+} as const
 
 export interface SegmentMetadata {
   index: number
@@ -84,7 +94,7 @@ export async function mixToStereo(options: MixerOptions): Promise<MixResult> {
   const leftChannel = outputBuffer.getChannelData(0)  // HOST
   const rightChannel = outputBuffer.getChannelData(1) // GUEST
 
-  // Mix each segment into the appropriate channel
+  // Mix each segment with natural stereo positioning
   for (let i = 0; i < decodedSegments.length; i++) {
     const segment = decodedSegments[i]
     const meta = segmentMetadata[i]
@@ -93,16 +103,23 @@ export async function mixToStereo(options: MixerOptions): Promise<MixResult> {
     // Get source channel data (use first channel if mono)
     const sourceData = segment.getChannelData(0)
 
-    // Determine target channel based on speaker
-    const targetChannel = meta.speaker === 'HOST' ? leftChannel : rightChannel
+    // Get stereo position (0.0 = full left, 1.0 = full right)
+    const pan = STEREO_POSITION[meta.speaker]
 
-    // Copy samples to target channel
-    for (let j = 0; j < sourceData.length && (startSample + j) < targetChannel.length; j++) {
+    // Calculate gain for each channel using constant-power panning
+    // This maintains perceived loudness across the stereo field
+    const leftGain = Math.cos(pan * Math.PI / 2)   // 0.35 -> ~0.94 (65%)
+    const rightGain = Math.sin(pan * Math.PI / 2)  // 0.35 -> ~0.54 (35%)
+
+    // Mix samples to both channels with appropriate gains
+    for (let j = 0; j < sourceData.length && (startSample + j) < leftChannel.length; j++) {
+      const sample = sourceData[j]
       // Add to existing data (allows overlapping)
-      targetChannel[startSample + j] += sourceData[j]
+      leftChannel[startSample + j] += sample * leftGain
+      rightChannel[startSample + j] += sample * rightGain
     }
 
-    console.log(`[StereoMixer] Mixed segment ${i} (${meta.speaker}) at ${meta.startTime.toFixed(2)}s`)
+    console.log(`[StereoMixer] Mixed segment ${i} (${meta.speaker}) at ${meta.startTime.toFixed(2)}s, pan=${pan} (L:${(leftGain*100).toFixed(0)}% R:${(rightGain*100).toFixed(0)}%)`)
   }
 
   // Normalize to prevent clipping
