@@ -63,6 +63,12 @@ GUEST: [emotion] Response text here...
 5. Variiere die Satzlänge - kurze Einwürfe, längere Erklärungen
 6. Der GUEST (Synthszr) sollte die "Synthszr Take" Meinungen einbringen
 
+**WICHTIG - Verabschiedung am Ende:**
+Der Podcast MUSS mit einer freundlichen Verabschiedung enden, die folgende Elemente enthält:
+- Hinweis, dass wir uns morgen wiedersehen/wiederhören
+- Bitte an die Hörer, den Podcast Freunden weiterzuempfehlen
+Beispiel: "Wir sehen uns morgen wieder! Und wenn euch die Folge gefallen hat, empfehlt uns gerne weiter."
+
 **Ziel-Länge:** {duration} Minuten (ca. {wordCount} Wörter)
 
 **Blog-Artikel Content für diese Episode:**
@@ -107,6 +113,12 @@ GUEST: [emotion] Response text here...
 4. Pauses with "..." for thinking
 5. Vary sentence length - short interjections, longer explanations
 6. GUEST (Synthszr) should bring in the "Synthszr Take" opinions
+
+**IMPORTANT - Closing/Outro:**
+The podcast MUST end with a friendly farewell that includes:
+- Mention that we'll see/hear each other again tomorrow
+- Ask listeners to recommend the podcast to their friends
+Example: "We'll see you again tomorrow! And if you enjoyed this episode, please share it with your friends."
 
 **Target Length:** {duration} minutes (approx. {wordCount} words)
 
