@@ -39,8 +39,8 @@ export const ELEVENLABS_VOICES = {
   },
 }
 
-// Model options
-export type ElevenLabsModel = 'eleven_multilingual_v2' | 'eleven_turbo_v2_5' | 'eleven_turbo_v2'
+// Model options - eleven_v3 supports audio tags like [cheerfully], [whispers], etc.
+export type ElevenLabsModel = 'eleven_v3' | 'eleven_multilingual_v2' | 'eleven_turbo_v2_5' | 'eleven_turbo_v2'
 
 let client: ElevenLabsClient | null = null
 
@@ -177,32 +177,20 @@ export type EmotionTag = typeof EMOTION_TAGS[number]
  * Generate a single dialogue segment with ElevenLabs
  * Includes voice settings optimized for conversational speech
  */
-/**
- * Strip emotion tags like [cheerfully], [thoughtfully] etc from text
- * These are used for script formatting but not supported by ElevenLabs TTS
- */
-function stripEmotionTags(text: string): string {
-  // Remove emotion tags at the start: [cheerfully], [thoughtfully], etc.
-  return text.replace(/^\s*\[[^\]]+\]\s*/g, '').trim()
-}
-
 async function generateDialogueSegment(
   text: string,
   voiceId: string,
-  model: ElevenLabsModel = 'eleven_multilingual_v2'
+  model: ElevenLabsModel = 'eleven_v3' // v3 supports audio tags like [cheerfully]
 ): Promise<Buffer> {
   const elevenLabs = getClient()
 
-  // Strip emotion tags - ElevenLabs TTS doesn't interpret them
-  const cleanText = stripEmotionTags(text)
-
-  if (!cleanText) {
-    // Return empty buffer for empty text
+  if (!text.trim()) {
     return Buffer.alloc(0)
   }
 
+  // eleven_v3 interprets audio tags like [cheerfully], [whispers], [sighs]
   const audioStream = await elevenLabs.textToSpeech.convert(voiceId, {
-    text: cleanText,
+    text,
     model_id: model,
     output_format: 'mp3_44100_128',
     voice_settings: {
@@ -298,7 +286,7 @@ export async function generatePodcastDialogue(
           const buffer = await generateDialogueSegment(
             line.text,
             voiceId,
-            script.model || 'eleven_multilingual_v2'
+            script.model || 'eleven_v3'
           )
           console.log(`[Podcast] Line ${globalIndex + 1}: generated ${buffer.length} bytes`)
           return { index: globalIndex, buffer, success: true }

@@ -55,7 +55,7 @@ interface UpdateSettingsRequest {
 const VALID_VOICES: TTSVoice[] = ['alloy', 'echo', 'fable', 'nova', 'onyx', 'shimmer']
 const VALID_MODELS: TTSModel[] = ['tts-1', 'tts-1-hd']
 const VALID_PROVIDERS: TTSProvider[] = ['openai', 'elevenlabs']
-const VALID_ELEVENLABS_MODELS: ElevenLabsModel[] = ['eleven_multilingual_v2', 'eleven_turbo_v2_5', 'eleven_turbo_v2']
+const VALID_ELEVENLABS_MODELS: ElevenLabsModel[] = ['eleven_v3', 'eleven_multilingual_v2', 'eleven_turbo_v2_5', 'eleven_turbo_v2']
 
 /**
  * PUT /api/admin/tts-settings
