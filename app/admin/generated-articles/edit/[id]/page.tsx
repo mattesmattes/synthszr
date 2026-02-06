@@ -117,6 +117,10 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   const [translationStatus, setTranslationStatus] = useState<'idle' | 'queuing' | 'processing' | 'success' | 'error'>('idle')
   const [translationMessage, setTranslationMessage] = useState<string>('')
 
+  // Podcast script generation status
+  const [podcastStatus, setPodcastStatus] = useState<'idle' | 'generating' | 'success' | 'error'>('idle')
+  const [podcastMessage, setPodcastMessage] = useState<string>('')
+
   // Metadata section collapsed state
   const [metadataOpen, setMetadataOpen] = useState(false)
 
@@ -647,6 +651,74 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
           setTranslationMessage(`${queueResult.queued} Übersetzungen eingereiht (Verarbeitung läuft)`)
         }
       })
+
+      // Generate podcast scripts for all locales (runs in parallel with translations)
+      console.log(`[Podcast] Triggering podcast script generation for post ${id}`)
+      setPodcastStatus('generating')
+      setPodcastMessage('Podcast-Scripts werden generiert...')
+
+      // Generate scripts for DE and EN (the main podcast locales)
+      const podcastLocales = ['de', 'en'] as const
+      const podcastPromises = podcastLocales.map(async (locale) => {
+        try {
+          const res = await fetch('/api/podcast/generate-script', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              postId: id,
+              locale,
+              durationMinutes: 30, // Default 30 minutes
+            }),
+          })
+
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
+            console.error(`[Podcast] Script generation failed for ${locale}:`, errorData.error)
+            return { locale, success: false, error: errorData.error }
+          }
+
+          const data = await res.json()
+          console.log(`[Podcast] Script generated for ${locale}: ${data.lineCount} lines, ~${data.estimatedDuration} min`)
+
+          // Store the script in post_podcasts table for later TTS generation
+          const { error: saveError } = await supabase
+            .from('post_podcasts')
+            .upsert({
+              post_id: id,
+              locale,
+              script_content: data.script,
+              status: 'pending', // Ready for TTS generation
+              duration_seconds: data.estimatedDuration * 60,
+            }, { onConflict: 'post_id,locale' })
+
+          if (saveError) {
+            console.error(`[Podcast] Failed to save script for ${locale}:`, saveError)
+            return { locale, success: false, error: saveError.message }
+          }
+
+          return { locale, success: true }
+        } catch (err) {
+          console.error(`[Podcast] Script generation error for ${locale}:`, err)
+          return { locale, success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+        }
+      })
+
+      // Wait for all podcast scripts to complete
+      Promise.all(podcastPromises).then((results) => {
+        const successful = results.filter(r => r.success).length
+        const failed = results.filter(r => !r.success)
+
+        if (failed.length > 0) {
+          console.error('[Podcast] Some scripts failed:', failed)
+          setPodcastStatus('error')
+          setPodcastMessage(`${successful}/${podcastLocales.length} Scripts generiert`)
+        } else {
+          console.log(`[Podcast] All ${successful} scripts generated successfully`)
+          setPodcastStatus('success')
+          setPodcastMessage(`${successful} Scripts generiert`)
+        }
+      })
     }
 
     // Re-index thumbnails on EVERY save to match current article order
@@ -756,6 +828,19 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                   {translationStatus === 'success' && <CheckCircle2 className="h-3 w-3" />}
                   {translationStatus === 'error' && <AlertCircle className="h-3 w-3" />}
                   <span>{translationMessage}</span>
+                </div>
+              )}
+              {/* Podcast Script Status Indicator */}
+              {podcastStatus !== 'idle' && (
+                <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded ${
+                  podcastStatus === 'error' ? 'bg-orange-100 text-orange-700' :
+                  podcastStatus === 'success' ? 'bg-green-100 text-green-700' :
+                  'bg-purple-100 text-purple-700'
+                }`}>
+                  {podcastStatus === 'generating' && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {podcastStatus === 'success' && <CheckCircle2 className="h-3 w-3" />}
+                  {podcastStatus === 'error' && <AlertCircle className="h-3 w-3" />}
+                  <span>🎙️ {podcastMessage}</span>
                 </div>
               )}
             </div>
