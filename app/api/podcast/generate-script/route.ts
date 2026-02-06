@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
 
       // If not German, try to get translation
       if (locale !== 'de') {
-        const { data: translation } = await supabase
+        const { data: translation, error: translationError } = await supabase
           .from('content_translations')
           .select('title, content')
           .eq('generated_post_id', body.postId)
@@ -221,12 +221,17 @@ export async function POST(request: NextRequest) {
           .eq('translation_status', 'completed')
           .single()
 
+        console.log(`[Podcast Script] Translation query for postId=${body.postId}, locale=${locale}:`,
+          translation ? `found (title: ${translation.title?.substring(0, 50)}...)` : `not found (error: ${translationError?.message})`)
+
         if (translation) {
           postTitle = translation.title || postTitle
           postContent = extractTextFromTiptap(translation.content)
+          console.log(`[Podcast Script] Using ${locale} translation, content length: ${postContent.length}`)
         } else {
           // Fall back to German content
           postContent = extractTextFromTiptap(generatedPost.content)
+          console.log(`[Podcast Script] Falling back to German content, length: ${postContent.length}`)
         }
       } else {
         postContent = extractTextFromTiptap(generatedPost.content)
