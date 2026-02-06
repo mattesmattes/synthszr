@@ -264,7 +264,7 @@ export async function getTTSSettings(): Promise<TTSSettings> {
     // ElevenLabs defaults - Lily for news, Daniel for Synthszr Take
     elevenlabs_news_voice_en: (settingsMap.elevenlabs_news_voice_en as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
     elevenlabs_synthszr_voice_en: (settingsMap.elevenlabs_synthszr_voice_en as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
-    elevenlabs_model: (settingsMap.elevenlabs_model as string) || 'eleven_v3',
+    elevenlabs_model: (settingsMap.elevenlabs_model as string) || 'eleven_multilingual_v2',
     // Podcast legacy (backwards compatible)
     podcast_host_voice_id: (settingsMap.podcast_host_voice_id as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
     podcast_guest_voice_id: (settingsMap.podcast_guest_voice_id as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
