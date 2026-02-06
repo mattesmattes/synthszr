@@ -4,6 +4,19 @@
  */
 
 import { ElevenLabsClient } from 'elevenlabs'
+import { execSync } from 'child_process'
+import { writeFileSync, readFileSync, unlinkSync, mkdirSync, existsSync } from 'fs'
+import { join } from 'path'
+import { tmpdir } from 'os'
+
+// Try to get ffmpeg path from ffmpeg-static, fall back to system ffmpeg
+let ffmpegPath: string
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ffmpegPath = require('ffmpeg-static')
+} catch {
+  ffmpegPath = 'ffmpeg' // Use system ffmpeg as fallback
+}
 
 // ElevenLabs voice IDs for recommended voices
 // These are pre-selected voices good for news/podcast content
@@ -316,34 +329,95 @@ export async function generatePodcastDialogue(
     const successfulSegments = audioSegments.filter(b => b && b.length > 0).length
     console.log(`[Podcast] Generated ${successfulSegments}/${validLines.length} audio segments`)
 
-    // Assemble final audio with silences between speaker changes
-    const audioBuffers: Buffer[] = []
-    let previousSpeaker: 'HOST' | 'GUEST' | null = null
-
-    for (let i = 0; i < validLines.length; i++) {
-      const line = validLines[i]
-
-      // Add pause between different speakers for natural conversation flow
-      if (previousSpeaker && previousSpeaker !== line.speaker) {
-        audioBuffers.push(silenceBuffer)
-      }
-
-      audioBuffers.push(audioSegments[i])
-      previousSpeaker = line.speaker
+    // Use ffmpeg to properly concatenate MP3 files
+    const tempDir = join(tmpdir(), `podcast-${Date.now()}`)
+    if (!existsSync(tempDir)) {
+      mkdirSync(tempDir, { recursive: true })
     }
 
-    // Concatenate all audio segments
-    const combinedAudio = Buffer.concat(audioBuffers)
+    try {
+      // Write each segment to a temp file
+      const segmentFiles: string[] = []
+      let previousSpeaker: 'HOST' | 'GUEST' | null = null
 
-    // Estimate duration (MP3 at 128kbps = 16KB per second)
-    const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
+      for (let i = 0; i < validLines.length; i++) {
+        const line = validLines[i]
+        const segment = audioSegments[i]
 
-    console.log(`[Podcast] Generated ${validLines.length} segments, ~${durationSeconds}s total`)
+        if (!segment || segment.length === 0) continue
 
-    return {
-      success: true,
-      audioBuffer: combinedAudio,
-      durationSeconds,
+        // Add silence file between different speakers
+        if (previousSpeaker && previousSpeaker !== line.speaker) {
+          const silenceFile = join(tempDir, `silence_${i}.mp3`)
+          writeFileSync(silenceFile, silenceBuffer)
+          segmentFiles.push(silenceFile)
+        }
+
+        const segmentFile = join(tempDir, `segment_${String(i).padStart(3, '0')}.mp3`)
+        writeFileSync(segmentFile, segment)
+        segmentFiles.push(segmentFile)
+        previousSpeaker = line.speaker
+      }
+
+      // Create ffmpeg concat file list
+      const listFile = join(tempDir, 'filelist.txt')
+      const listContent = segmentFiles.map(f => `file '${f}'`).join('\n')
+      writeFileSync(listFile, listContent)
+
+      // Concatenate with ffmpeg
+      const outputFile = join(tempDir, 'output.mp3')
+      console.log(`[Podcast] Concatenating ${segmentFiles.length} files with ffmpeg...`)
+
+      execSync(`${ffmpegPath} -y -f concat -safe 0 -i "${listFile}" -c copy "${outputFile}"`, {
+        stdio: 'pipe',
+        timeout: 60000,
+      })
+
+      const combinedAudio = readFileSync(outputFile)
+
+      // Estimate duration (MP3 at 128kbps = 16KB per second)
+      const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
+
+      console.log(`[Podcast] Generated ${validLines.length} segments, ~${durationSeconds}s total`)
+
+      // Cleanup temp files
+      for (const file of segmentFiles) {
+        try { unlinkSync(file) } catch { /* ignore */ }
+      }
+      try { unlinkSync(listFile) } catch { /* ignore */ }
+      try { unlinkSync(outputFile) } catch { /* ignore */ }
+
+      return {
+        success: true,
+        audioBuffer: combinedAudio,
+        durationSeconds,
+      }
+    } catch (ffmpegError) {
+      console.error('[Podcast] FFmpeg concatenation failed:', ffmpegError)
+
+      // Fallback to simple Buffer.concat (may have issues but better than nothing)
+      const audioBuffers: Buffer[] = []
+      let previousSpeaker: 'HOST' | 'GUEST' | null = null
+
+      for (let i = 0; i < validLines.length; i++) {
+        const line = validLines[i]
+        if (previousSpeaker && previousSpeaker !== line.speaker) {
+          audioBuffers.push(silenceBuffer)
+        }
+        if (audioSegments[i] && audioSegments[i].length > 0) {
+          audioBuffers.push(audioSegments[i])
+        }
+        previousSpeaker = line.speaker
+      }
+
+      const combinedAudio = Buffer.concat(audioBuffers)
+      const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
+
+      return {
+        success: true,
+        audioBuffer: combinedAudio,
+        durationSeconds,
+      }
     }
   } catch (error) {
     console.error('[Podcast] Generation failed:', error)
