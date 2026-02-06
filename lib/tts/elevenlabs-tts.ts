@@ -4,19 +4,6 @@
  */
 
 import { ElevenLabsClient } from 'elevenlabs'
-import { execSync } from 'child_process'
-import { writeFileSync, readFileSync, unlinkSync, mkdirSync, existsSync } from 'fs'
-import { join } from 'path'
-import { tmpdir } from 'os'
-
-// Try to get ffmpeg path from ffmpeg-static, fall back to system ffmpeg
-let ffmpegPath: string
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  ffmpegPath = require('ffmpeg-static')
-} catch {
-  ffmpegPath = 'ffmpeg' // Use system ffmpeg as fallback
-}
 
 // ElevenLabs voice IDs for recommended voices
 // These are pre-selected voices good for news/podcast content
@@ -251,6 +238,91 @@ function generateSilenceBuffer(): Buffer {
 }
 
 /**
+ * Find the start of MPEG audio data in an MP3 buffer, skipping ID3 tags
+ */
+function findMpegAudioStart(buffer: Buffer): number {
+  let offset = 0
+
+  // Check for ID3v2 header at the beginning
+  if (buffer.length >= 10 &&
+      buffer[0] === 0x49 && // 'I'
+      buffer[1] === 0x44 && // 'D'
+      buffer[2] === 0x33) { // '3'
+    // ID3v2 tag found, calculate size
+    // Size is stored in 4 bytes as syncsafe integers (7 bits per byte)
+    const size = ((buffer[6] & 0x7F) << 21) |
+                 ((buffer[7] & 0x7F) << 14) |
+                 ((buffer[8] & 0x7F) << 7) |
+                 (buffer[9] & 0x7F)
+    offset = 10 + size
+  }
+
+  // Find first valid MPEG frame sync (0xFF followed by 0xE0-0xFF)
+  while (offset < buffer.length - 1) {
+    if (buffer[offset] === 0xFF && (buffer[offset + 1] & 0xE0) === 0xE0) {
+      return offset
+    }
+    offset++
+  }
+
+  return 0 // Fallback to beginning
+}
+
+/**
+ * Find the end of MPEG audio data, excluding ID3v1 tag if present
+ */
+function findMpegAudioEnd(buffer: Buffer): number {
+  // ID3v1 tag is exactly 128 bytes at the end, starting with "TAG"
+  if (buffer.length >= 128) {
+    const tagStart = buffer.length - 128
+    if (buffer[tagStart] === 0x54 && // 'T'
+        buffer[tagStart + 1] === 0x41 && // 'A'
+        buffer[tagStart + 2] === 0x47) { // 'G'
+      return tagStart
+    }
+  }
+
+  return buffer.length
+}
+
+/**
+ * Extract raw MPEG audio frames from an MP3 buffer
+ * Strips ID3v2 header and ID3v1 footer
+ */
+function extractMpegFrames(buffer: Buffer): Buffer {
+  const start = findMpegAudioStart(buffer)
+  const end = findMpegAudioEnd(buffer)
+
+  if (start >= end || start >= buffer.length) {
+    return buffer // Return as-is if we can't parse it
+  }
+
+  return buffer.subarray(start, end)
+}
+
+/**
+ * Concatenate multiple MP3 buffers properly
+ * Strips ID3 tags from subsequent files and combines raw MPEG audio frames
+ */
+function concatenateMp3Buffers(buffers: Buffer[]): Buffer {
+  if (buffers.length === 0) return Buffer.alloc(0)
+  if (buffers.length === 1) return buffers[0]
+
+  const extractedFrames: Buffer[] = []
+
+  for (let i = 0; i < buffers.length; i++) {
+    const buffer = buffers[i]
+    if (!buffer || buffer.length === 0) continue
+
+    // Extract MPEG frames, stripping ID3 tags
+    const frames = extractMpegFrames(buffer)
+    extractedFrames.push(frames)
+  }
+
+  return Buffer.concat(extractedFrames)
+}
+
+/**
  * Generate complete podcast audio from a script
  *
  * @param script - The podcast script with speaker assignments
@@ -329,95 +401,38 @@ export async function generatePodcastDialogue(
     const successfulSegments = audioSegments.filter(b => b && b.length > 0).length
     console.log(`[Podcast] Generated ${successfulSegments}/${validLines.length} audio segments`)
 
-    // Use ffmpeg to properly concatenate MP3 files
-    const tempDir = join(tmpdir(), `podcast-${Date.now()}`)
-    if (!existsSync(tempDir)) {
-      mkdirSync(tempDir, { recursive: true })
+    // Build ordered list of audio buffers with silence between speaker changes
+    const audioBuffers: Buffer[] = []
+    let previousSpeaker: 'HOST' | 'GUEST' | null = null
+
+    for (let i = 0; i < validLines.length; i++) {
+      const line = validLines[i]
+      const segment = audioSegments[i]
+
+      if (!segment || segment.length === 0) continue
+
+      // Add silence between different speakers
+      if (previousSpeaker && previousSpeaker !== line.speaker) {
+        audioBuffers.push(silenceBuffer)
+      }
+
+      audioBuffers.push(segment)
+      previousSpeaker = line.speaker
     }
 
-    try {
-      // Write each segment to a temp file
-      const segmentFiles: string[] = []
-      let previousSpeaker: 'HOST' | 'GUEST' | null = null
+    // Use proper MP3 concatenation (strips ID3 tags from subsequent files)
+    console.log(`[Podcast] Concatenating ${audioBuffers.length} audio buffers...`)
+    const combinedAudio = concatenateMp3Buffers(audioBuffers)
 
-      for (let i = 0; i < validLines.length; i++) {
-        const line = validLines[i]
-        const segment = audioSegments[i]
+    // Estimate duration (MP3 at 128kbps = 16KB per second)
+    const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
 
-        if (!segment || segment.length === 0) continue
+    console.log(`[Podcast] Generated ${validLines.length} segments, ${combinedAudio.length} bytes, ~${durationSeconds}s total`)
 
-        // Add silence file between different speakers
-        if (previousSpeaker && previousSpeaker !== line.speaker) {
-          const silenceFile = join(tempDir, `silence_${i}.mp3`)
-          writeFileSync(silenceFile, silenceBuffer)
-          segmentFiles.push(silenceFile)
-        }
-
-        const segmentFile = join(tempDir, `segment_${String(i).padStart(3, '0')}.mp3`)
-        writeFileSync(segmentFile, segment)
-        segmentFiles.push(segmentFile)
-        previousSpeaker = line.speaker
-      }
-
-      // Create ffmpeg concat file list
-      const listFile = join(tempDir, 'filelist.txt')
-      const listContent = segmentFiles.map(f => `file '${f}'`).join('\n')
-      writeFileSync(listFile, listContent)
-
-      // Concatenate with ffmpeg
-      const outputFile = join(tempDir, 'output.mp3')
-      console.log(`[Podcast] Concatenating ${segmentFiles.length} files with ffmpeg...`)
-
-      execSync(`${ffmpegPath} -y -f concat -safe 0 -i "${listFile}" -c copy "${outputFile}"`, {
-        stdio: 'pipe',
-        timeout: 60000,
-      })
-
-      const combinedAudio = readFileSync(outputFile)
-
-      // Estimate duration (MP3 at 128kbps = 16KB per second)
-      const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
-
-      console.log(`[Podcast] Generated ${validLines.length} segments, ~${durationSeconds}s total`)
-
-      // Cleanup temp files
-      for (const file of segmentFiles) {
-        try { unlinkSync(file) } catch { /* ignore */ }
-      }
-      try { unlinkSync(listFile) } catch { /* ignore */ }
-      try { unlinkSync(outputFile) } catch { /* ignore */ }
-
-      return {
-        success: true,
-        audioBuffer: combinedAudio,
-        durationSeconds,
-      }
-    } catch (ffmpegError) {
-      console.error('[Podcast] FFmpeg concatenation failed:', ffmpegError)
-
-      // Fallback to simple Buffer.concat (may have issues but better than nothing)
-      const audioBuffers: Buffer[] = []
-      let previousSpeaker: 'HOST' | 'GUEST' | null = null
-
-      for (let i = 0; i < validLines.length; i++) {
-        const line = validLines[i]
-        if (previousSpeaker && previousSpeaker !== line.speaker) {
-          audioBuffers.push(silenceBuffer)
-        }
-        if (audioSegments[i] && audioSegments[i].length > 0) {
-          audioBuffers.push(audioSegments[i])
-        }
-        previousSpeaker = line.speaker
-      }
-
-      const combinedAudio = Buffer.concat(audioBuffers)
-      const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
-
-      return {
-        success: true,
-        audioBuffer: combinedAudio,
-        durationSeconds,
-      }
+    return {
+      success: true,
+      audioBuffer: combinedAudio,
+      durationSeconds,
     }
   } catch (error) {
     console.error('[Podcast] Generation failed:', error)
