@@ -375,15 +375,17 @@ export async function generatePodcastDialogue(
           : script.guestVoiceId
 
         try {
+          const startTime = Date.now()
           const buffer = await generateDialogueSegment(
             line.text,
             voiceId,
             script.model || 'eleven_v3'
           )
-          console.log(`[Podcast] Line ${globalIndex + 1}: generated ${buffer.length} bytes`)
+          const elapsed = Date.now() - startTime
+          console.log(`[Podcast] Line ${globalIndex + 1}/${validLines.length}: ${buffer.length} bytes in ${elapsed}ms (${line.speaker})`)
           return { index: globalIndex, buffer, success: true }
         } catch (error) {
-          console.error(`[Podcast] Line ${globalIndex + 1} failed:`, error)
+          console.error(`[Podcast] Line ${globalIndex + 1} FAILED:`, error instanceof Error ? error.message : error)
           return { index: globalIndex, buffer: Buffer.alloc(0), success: false }
         }
       })
@@ -399,7 +401,9 @@ export async function generatePodcastDialogue(
 
     // Check how many segments we got
     const successfulSegments = audioSegments.filter(b => b && b.length > 0).length
-    console.log(`[Podcast] Generated ${successfulSegments}/${validLines.length} audio segments`)
+    const failedSegments = validLines.length - successfulSegments
+    const totalBytes = audioSegments.reduce((sum, b) => sum + (b?.length || 0), 0)
+    console.log(`[Podcast] Generated ${successfulSegments}/${validLines.length} segments (${failedSegments} failed), total ${totalBytes} bytes`)
 
     // Build ordered list of audio buffers with silence between speaker changes
     const audioBuffers: Buffer[] = []
@@ -421,13 +425,14 @@ export async function generatePodcastDialogue(
     }
 
     // Use proper MP3 concatenation (strips ID3 tags from subsequent files)
-    console.log(`[Podcast] Concatenating ${audioBuffers.length} audio buffers...`)
+    const bufferSizes = audioBuffers.map(b => b.length)
+    console.log(`[Podcast] Concatenating ${audioBuffers.length} buffers: [${bufferSizes.slice(0, 5).join(', ')}${bufferSizes.length > 5 ? '...' : ''}]`)
     const combinedAudio = concatenateMp3Buffers(audioBuffers)
 
     // Estimate duration (MP3 at 128kbps = 16KB per second)
     const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
 
-    console.log(`[Podcast] Generated ${validLines.length} segments, ${combinedAudio.length} bytes, ~${durationSeconds}s total`)
+    console.log(`[Podcast] FINAL: ${combinedAudio.length} bytes, ~${durationSeconds}s (from ${audioBuffers.length} buffers)`)
 
     return {
       success: true,
