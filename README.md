@@ -3,7 +3,8 @@
 [![Security Scan](https://github.com/mattesmattes/synthszr/actions/workflows/security.yml/badge.svg)](https://github.com/mattesmattes/synthszr/actions/workflows/security.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-AI-powered financial analysis and newsletter generation platform.
+AI-powered newsletter aggregator with a twist.
+Arcitecture overview: https://synthszr.vercel.app/docs/architecture
 
 ## Quick Start
 
