@@ -10,8 +10,8 @@ import { MPEGDecoder } from 'mpg123-decoder'
 const lamejs = require('lamejs')
 
 // Production URL for fetching static audio files
-// VERCEL_URL points to preview deployments which may require auth
-const PRODUCTION_URL = 'https://synthszr.com'
+// Use www subdomain to avoid redirect (synthszr.com → www.synthszr.com)
+const PRODUCTION_URL = 'https://www.synthszr.com'
 
 const getBaseUrl = () => {
   // In production, always use the public production URL
