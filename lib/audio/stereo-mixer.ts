@@ -43,11 +43,29 @@ export interface MixResult {
  */
 async function loadSegment(
   audioContext: AudioContext,
-  url: string
+  url: string,
+  index: number
 ): Promise<AudioBuffer> {
-  const response = await fetch(url)
+  console.log(`[StereoMixer] Fetching segment ${index}: ${url.substring(0, 80)}...`)
+
+  const response = await fetch(url, {
+    mode: 'cors',
+    credentials: 'omit',
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch segment ${index}: ${response.status} ${response.statusText}`)
+  }
+
   const arrayBuffer = await response.arrayBuffer()
-  return audioContext.decodeAudioData(arrayBuffer)
+  console.log(`[StereoMixer] Segment ${index} fetched: ${arrayBuffer.byteLength} bytes`)
+
+  try {
+    return await audioContext.decodeAudioData(arrayBuffer)
+  } catch (decodeError) {
+    console.error(`[StereoMixer] Failed to decode segment ${index}:`, decodeError)
+    throw new Error(`Failed to decode audio segment ${index}`)
+  }
 }
 
 /**
@@ -67,9 +85,9 @@ export async function mixToStereo(options: MixerOptions): Promise<MixResult> {
   console.log(`[StereoMixer] Loading ${segmentUrls.length} segments...`)
   const decodedSegments: AudioBuffer[] = []
   for (let i = 0; i < segmentUrls.length; i++) {
-    const buffer = await loadSegment(audioContext, segmentUrls[i])
+    const buffer = await loadSegment(audioContext, segmentUrls[i], i)
     decodedSegments.push(buffer)
-    console.log(`[StereoMixer] Segment ${i}: ${buffer.duration.toFixed(2)}s, ${buffer.numberOfChannels}ch`)
+    console.log(`[StereoMixer] Segment ${i} decoded: ${buffer.duration.toFixed(2)}s, ${buffer.numberOfChannels}ch`)
   }
 
   // Calculate total duration based on actual decoded audio

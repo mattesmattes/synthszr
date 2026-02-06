@@ -82,9 +82,18 @@ export function StereoPodcastPlayer({
         audioContextRef.current = new AudioContext()
       }
 
+      // Resume audio context if suspended (browser autoplay policy)
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume()
+      }
+
       // Stop any existing playback
       if (sourceRef.current) {
-        sourceRef.current.stop()
+        try {
+          sourceRef.current.stop()
+        } catch {
+          // Ignore if already stopped
+        }
       }
 
       // Create and start new source
@@ -105,7 +114,8 @@ export function StereoPodcastPlayer({
       // Start progress animation
       animationFrameRef.current = requestAnimationFrame(updateProgress)
     } catch (err) {
-      console.error('Playback error:', err)
+      console.error('[StereoPodcastPlayer] Playback error:', err)
+      setError(err instanceof Error ? err.message : 'Playback failed')
     }
   }, [loadAndMix, updateProgress])
 
