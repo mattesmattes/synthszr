@@ -142,12 +142,24 @@ export interface PodcastScript {
 }
 
 /**
+ * Metadata for a single audio segment
+ */
+export interface SegmentMetadata {
+  index: number
+  speaker: 'HOST' | 'GUEST'
+  text: string
+  startTime: number // Calculated start time in seconds
+  durationEstimate: number // Estimated duration in seconds
+}
+
+/**
  * Result of podcast generation
  */
 export interface PodcastGenerationResult {
   success: boolean
   audioBuffer?: Buffer
   segmentBuffers?: Buffer[] // Individual segments for client-side processing
+  segmentMetadata?: SegmentMetadata[] // Metadata for stereo mixing
   durationSeconds?: number
   error?: string
   debug?: {
@@ -517,9 +529,12 @@ export async function generatePodcastDialogue(
     const totalBytes = audioSegments.reduce((sum, b) => sum + (b?.length || 0), 0)
     console.log(`[Podcast] Generated ${successfulSegments}/${validLines.length} segments (${failedSegments} failed), total ${totalBytes} bytes`)
 
-    // Build ordered list of audio buffers with silence between speaker changes
+    // Build ordered list of audio buffers and metadata for stereo mixing
     const finalBuffers: Buffer[] = []
+    const segmentMetadata: SegmentMetadata[] = []
     let previousSpeaker: 'HOST' | 'GUEST' | null = null
+    let currentTime = 0
+    const SILENCE_DURATION = 0.3 // 300ms silence between speakers
 
     for (let i = 0; i < validLines.length; i++) {
       const line = validLines[i]
@@ -530,9 +545,23 @@ export async function generatePodcastDialogue(
       // Add silence between different speakers
       if (previousSpeaker && previousSpeaker !== line.speaker) {
         finalBuffers.push(silenceBuffer)
+        currentTime += SILENCE_DURATION
       }
 
+      // Estimate segment duration (MP3 at 128kbps = 16KB per second)
+      const segmentDuration = segment.length / (128 * 1024 / 8)
+
+      // Add metadata for stereo mixing
+      segmentMetadata.push({
+        index: segmentMetadata.length,
+        speaker: line.speaker,
+        text: line.text,
+        startTime: currentTime,
+        durationEstimate: segmentDuration,
+      })
+
       finalBuffers.push(segment)
+      currentTime += segmentDuration
       previousSpeaker = line.speaker
     }
 
@@ -549,7 +578,8 @@ export async function generatePodcastDialogue(
     return {
       success: true,
       audioBuffer: combinedAudio,
-      segmentBuffers: finalBuffers.filter(b => b && b.length > 0), // For client-side processing
+      segmentBuffers: audioSegments.filter(b => b && b.length > 0), // Only dialogue segments, no silence
+      segmentMetadata, // For stereo mixing
       durationSeconds,
       debug: {
         totalLines: validLines.length,

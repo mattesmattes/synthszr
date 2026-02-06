@@ -141,6 +141,7 @@ export async function POST(request: NextRequest) {
       success: true,
       audioUrl: blob.url,
       segmentUrls: segmentUrls.length > 0 ? segmentUrls : undefined,
+      segmentMetadata: result.segmentMetadata, // For stereo mixing (HOST=left, GUEST=right)
       durationSeconds: result.durationSeconds,
       lineCount: lines.length,
       warnings: warnings.length > 0 ? warnings : undefined,
