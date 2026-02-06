@@ -106,18 +106,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate unique filename
+    // Generate unique filename (now WAV format for consistent audio)
     const timestamp = Date.now()
     const safeTitle = (body.title || 'podcast')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .slice(0, 50)
-    const fileName = `podcasts/${safeTitle}-${timestamp}.mp3`
+    const fileName = `podcasts/${safeTitle}-${timestamp}.wav`
 
     // Upload to Vercel Blob
     const blob = await put(fileName, result.audioBuffer, {
       access: 'public',
-      contentType: 'audio/mpeg',
+      contentType: 'audio/wav',
     })
 
     console.log(`[Podcast] Uploaded to ${blob.url} (${result.durationSeconds}s)`)

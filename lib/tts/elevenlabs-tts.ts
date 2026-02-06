@@ -181,7 +181,7 @@ export type EmotionTag = typeof EMOTION_TAGS[number]
 
 /**
  * Generate a single dialogue segment with ElevenLabs
- * Includes voice settings optimized for conversational speech
+ * Returns PCM audio (16-bit signed, 44.1kHz, mono) for consistent concatenation
  */
 async function generateDialogueSegment(
   text: string,
@@ -199,7 +199,8 @@ async function generateDialogueSegment(
 
   console.log(`[TTS] Request: model=${model}, voiceId=${voiceId}, textLength=${text.length}`)
 
-  // Use direct fetch instead of SDK for eleven_v3 compatibility
+  // Use PCM format for consistent audio that can be properly concatenated
+  // pcm_44100 returns 16-bit signed, little-endian, mono
   const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
     method: 'POST',
     headers: {
@@ -209,7 +210,7 @@ async function generateDialogueSegment(
     body: JSON.stringify({
       text,
       model_id: model,
-      output_format: 'mp3_44100_128',
+      output_format: 'pcm_44100',
     }),
   })
 
@@ -224,211 +225,62 @@ async function generateDialogueSegment(
 
 /**
  * Generate a short silence buffer (for natural pauses between speakers)
- * Creates a ~300ms pause using a minimal valid MP3 frame
+ * Creates ~300ms pause as PCM data (16-bit signed, 44.1kHz, mono)
  */
 function generateSilenceBuffer(): Buffer {
-  // Minimal valid MP3 silence frame (MPEG Audio Layer 3, 128kbps, 44.1kHz)
-  // This creates approximately 300ms of silence
-  const silenceFrames: number[] = []
-
-  // MP3 frame header for 128kbps, 44.1kHz, stereo
-  const frameHeader = [0xFF, 0xFB, 0x90, 0x00]
-  const frameData = new Array(417 - 4).fill(0) // Frame size for 128kbps @ 44.1kHz
-
-  // Add ~12 frames for ~300ms of silence
-  for (let i = 0; i < 12; i++) {
-    silenceFrames.push(...frameHeader, ...frameData)
-  }
-
-  return Buffer.from(silenceFrames)
+  // 44100 samples/sec * 0.3 sec * 2 bytes/sample = 26460 bytes
+  const sampleCount = Math.round(44100 * 0.3)
+  return Buffer.alloc(sampleCount * 2) // 16-bit = 2 bytes per sample, filled with zeros
 }
 
 /**
- * Find the start of MPEG audio data in an MP3 buffer, skipping ID3 tags
+ * Create a WAV file header for PCM data
+ * PCM format: 16-bit signed, little-endian, mono, 44.1kHz
  */
-function findMpegAudioStart(buffer: Buffer): number {
-  let offset = 0
+function createWavHeader(dataLength: number): Buffer {
+  const header = Buffer.alloc(44)
+  const sampleRate = 44100
+  const numChannels = 1
+  const bitsPerSample = 16
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8)
+  const blockAlign = numChannels * (bitsPerSample / 8)
 
-  // Check for ID3v2 header at the beginning
-  if (buffer.length >= 10 &&
-      buffer[0] === 0x49 && // 'I'
-      buffer[1] === 0x44 && // 'D'
-      buffer[2] === 0x33) { // '3'
-    // ID3v2 tag found, calculate size
-    // Size is stored in 4 bytes as syncsafe integers (7 bits per byte)
-    const size = ((buffer[6] & 0x7F) << 21) |
-                 ((buffer[7] & 0x7F) << 14) |
-                 ((buffer[8] & 0x7F) << 7) |
-                 (buffer[9] & 0x7F)
-    offset = 10 + size
-  }
+  // RIFF header
+  header.write('RIFF', 0)
+  header.writeUInt32LE(36 + dataLength, 4) // File size - 8
+  header.write('WAVE', 8)
 
-  // Find first valid MPEG frame sync (0xFF followed by 0xE0-0xFF)
-  while (offset < buffer.length - 1) {
-    if (buffer[offset] === 0xFF && (buffer[offset + 1] & 0xE0) === 0xE0) {
-      return offset
-    }
-    offset++
-  }
+  // fmt chunk
+  header.write('fmt ', 12)
+  header.writeUInt32LE(16, 16) // Chunk size
+  header.writeUInt16LE(1, 20) // Audio format (1 = PCM)
+  header.writeUInt16LE(numChannels, 22)
+  header.writeUInt32LE(sampleRate, 24)
+  header.writeUInt32LE(byteRate, 28)
+  header.writeUInt16LE(blockAlign, 32)
+  header.writeUInt16LE(bitsPerSample, 34)
 
-  return 0 // Fallback to beginning
-}
-
-/**
- * Find the end of MPEG audio data, excluding ID3v1 tag if present
- */
-function findMpegAudioEnd(buffer: Buffer): number {
-  // ID3v1 tag is exactly 128 bytes at the end, starting with "TAG"
-  if (buffer.length >= 128) {
-    const tagStart = buffer.length - 128
-    if (buffer[tagStart] === 0x54 && // 'T'
-        buffer[tagStart + 1] === 0x41 && // 'A'
-        buffer[tagStart + 2] === 0x47) { // 'G'
-      return tagStart
-    }
-  }
-
-  return buffer.length
-}
-
-/**
- * Check if an MPEG frame is a Xing/Info header frame (contains no audio)
- */
-function isXingFrame(buffer: Buffer, offset: number): boolean {
-  if (offset + 36 > buffer.length) return false
-
-  // Check for "Xing" or "Info" tag at various offsets depending on MPEG version and channel mode
-  // For MPEG1 Layer3: offset 32 (stereo) or 17 (mono) after frame header
-  const xingOffsets = [17, 21, 32, 36]
-
-  for (const xingOffset of xingOffsets) {
-    if (offset + 4 + xingOffset + 4 <= buffer.length) {
-      const tag = buffer.toString('ascii', offset + 4 + xingOffset, offset + 4 + xingOffset + 4)
-      if (tag === 'Xing' || tag === 'Info') {
-        return true
-      }
-    }
-  }
-  return false
-}
-
-/**
- * Extract raw MPEG audio frames from an MP3 buffer
- * Strips ID3v2 header, ID3v1 footer, and Xing/Info headers
- */
-function extractMpegFrames(buffer: Buffer): Buffer {
-  const start = findMpegAudioStart(buffer)
-  const end = findMpegAudioEnd(buffer)
-
-  if (start >= end || start >= buffer.length) {
-    return buffer // Return as-is if we can't parse it
-  }
-
-  // Check if first frame is a Xing/Info header and skip it
-  let audioStart = start
-  if (isXingFrame(buffer, start)) {
-    // Skip the Xing frame (typically 417 bytes for 128kbps mono)
-    audioStart = start + 417
-    // Find next valid frame sync
-    while (audioStart < end - 1) {
-      if (buffer[audioStart] === 0xFF && (buffer[audioStart + 1] & 0xE0) === 0xE0) {
-        break
-      }
-      audioStart++
-    }
-  }
-
-  return buffer.subarray(audioStart, end)
-}
-
-/**
- * Create a Xing header for proper browser MP3 playback
- * The Xing header contains total frames and bytes, enabling accurate seeking
- */
-function createXingHeader(totalFrames: number, totalBytes: number): Buffer {
-  // Create a minimal MP3 frame with Xing header
-  // MP3 frame header: FF FB 90 C4 (MPEG1 Layer3 128kbps 44.1kHz mono)
-  const frameSize = 417 // Frame size for 128kbps mono
-  const header = Buffer.alloc(frameSize)
-
-  // MP3 frame header
-  header[0] = 0xFF
-  header[1] = 0xFB
-  header[2] = 0x90
-  header[3] = 0xC4
-
-  // Side info (mono) - 17 bytes of zeros
-  // Xing header starts at offset 21 for mono
-  const xingOffset = 21
-
-  // "Info" tag (for CBR) - use Info instead of Xing
-  header.write('Info', xingOffset)
-
-  // Flags: frames + bytes present (0x03)
-  header.writeUInt32BE(0x00000003, xingOffset + 4)
-
-  // Total frames
-  header.writeUInt32BE(totalFrames, xingOffset + 8)
-
-  // Total bytes
-  header.writeUInt32BE(totalBytes, xingOffset + 12)
+  // data chunk
+  header.write('data', 36)
+  header.writeUInt32LE(dataLength, 40)
 
   return header
 }
 
 /**
- * Count MPEG frames in a buffer
+ * Concatenate PCM buffers and convert to WAV format
+ * All buffers are expected to be 16-bit signed, 44.1kHz, mono PCM
  */
-function countMpegFrames(buffer: Buffer): number {
-  let count = 0
-  let offset = 0
-
-  while (offset < buffer.length - 1) {
-    // Find frame sync
-    if (buffer[offset] === 0xFF && (buffer[offset + 1] & 0xE0) === 0xE0) {
-      count++
-      // Skip frame (assuming 128kbps mono @ 44.1kHz = 417 bytes per frame)
-      offset += 417
-    } else {
-      offset++
-    }
-  }
-
-  return count
-}
-
-/**
- * Concatenate multiple MP3 buffers properly
- * Strips ID3 tags from subsequent files and adds Xing header for browser compatibility
- */
-function concatenateMp3Buffers(buffers: Buffer[]): Buffer {
+function concatenatePcmToWav(buffers: Buffer[]): Buffer {
   if (buffers.length === 0) return Buffer.alloc(0)
-  if (buffers.length === 1) return buffers[0]
 
-  const extractedFrames: Buffer[] = []
+  // Filter out empty buffers and concatenate
+  const validBuffers = buffers.filter(b => b && b.length > 0)
+  const pcmData = Buffer.concat(validBuffers)
 
-  for (let i = 0; i < buffers.length; i++) {
-    const buffer = buffers[i]
-    if (!buffer || buffer.length === 0) continue
-
-    // Extract MPEG frames, stripping ID3 tags
-    const frames = extractMpegFrames(buffer)
-    extractedFrames.push(frames)
-  }
-
-  // Concatenate all frames
-  const audioData = Buffer.concat(extractedFrames)
-
-  // Count total frames for Xing header
-  const totalFrames = countMpegFrames(audioData)
-  const totalBytes = audioData.length + 417 // Include Xing frame
-
-  // Create Xing header and prepend it
-  const xingFrame = createXingHeader(totalFrames + 1, totalBytes)
-
-  console.log(`[MP3] Created Xing header: ${totalFrames} frames, ${totalBytes} bytes`)
-
-  return Buffer.concat([xingFrame, audioData])
+  // Create WAV header and combine with PCM data
+  const wavHeader = createWavHeader(pcmData.length)
+  return Buffer.concat([wavHeader, pcmData])
 }
 
 /**
@@ -532,13 +384,14 @@ export async function generatePodcastDialogue(
       previousSpeaker = line.speaker
     }
 
-    // Use proper MP3 concatenation (strips ID3 tags from subsequent files)
+    // Concatenate PCM buffers and convert to WAV
     const bufferSizes = finalBuffers.map(b => b.length)
-    console.log(`[Podcast] Concatenating ${finalBuffers.length} buffers: [${bufferSizes.slice(0, 5).join(', ')}${bufferSizes.length > 5 ? '...' : ''}]`)
-    const combinedAudio = concatenateMp3Buffers(finalBuffers)
+    console.log(`[Podcast] Concatenating ${finalBuffers.length} PCM buffers: [${bufferSizes.slice(0, 5).join(', ')}${bufferSizes.length > 5 ? '...' : ''}]`)
+    const combinedAudio = concatenatePcmToWav(finalBuffers)
 
-    // Estimate duration (MP3 at 128kbps = 16KB per second)
-    const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
+    // Calculate duration from PCM data (44100 samples/sec * 2 bytes/sample = 88200 bytes/sec)
+    const pcmDataLength = combinedAudio.length - 44 // Subtract WAV header
+    const durationSeconds = Math.round(pcmDataLength / 88200)
 
     console.log(`[Podcast] FINAL: ${combinedAudio.length} bytes, ~${durationSeconds}s (from ${finalBuffers.length} buffers)`)
 
