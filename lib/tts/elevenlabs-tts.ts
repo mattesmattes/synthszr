@@ -177,40 +177,36 @@ export type EmotionTag = typeof EMOTION_TAGS[number]
  * Generate a single dialogue segment with ElevenLabs
  * Includes voice settings optimized for conversational speech
  */
-/**
- * Strip emotion tags like [cheerfully], [thoughtfully] etc from text
- * These tags are not supported by most ElevenLabs models
- */
-function stripEmotionTags(text: string): string {
-  // Remove emotion tags: [cheerfully], [thoughtfully], etc.
-  return text.replace(/\s*\[[^\]]+\]\s*/g, ' ').trim()
-}
-
 async function generateDialogueSegment(
   text: string,
   voiceId: string,
-  model: ElevenLabsModel = 'eleven_multilingual_v2' // Use stable model as default
+  model: ElevenLabsModel = 'eleven_v3' // v3 supports audio tags like [cheerfully]
 ): Promise<Buffer> {
   const elevenLabs = getClient()
 
-  // Strip emotion tags - they're not interpreted by the TTS and would be read aloud
-  const cleanText = stripEmotionTags(text)
-
-  if (!cleanText) {
+  if (!text.trim()) {
     return Buffer.alloc(0)
   }
 
-  const audioStream = await elevenLabs.textToSpeech.convert(voiceId, {
-    text: cleanText,
-    model_id: model,
-    output_format: 'mp3_44100_128',
-    voice_settings: {
-      stability: 0.4,
-      similarity_boost: 0.8,
-      style: 0.2,
-      use_speaker_boost: true,
-    },
-  })
+  // eleven_v3 interprets audio tags like [cheerfully], [whispers], [sighs]
+  // Note: eleven_v3 may not support all voice_settings, so we only include them for other models
+  const audioStream = model === 'eleven_v3'
+    ? await elevenLabs.textToSpeech.convert(voiceId, {
+        text,
+        model_id: model,
+        output_format: 'mp3_44100_128',
+      })
+    : await elevenLabs.textToSpeech.convert(voiceId, {
+        text,
+        model_id: model,
+        output_format: 'mp3_44100_128',
+        voice_settings: {
+          stability: 0.4,
+          similarity_boost: 0.8,
+          style: 0.2,
+          use_speaker_boost: true,
+        },
+      })
 
   const chunks: Uint8Array[] = []
   for await (const chunk of audioStream) {
@@ -297,7 +293,7 @@ export async function generatePodcastDialogue(
           const buffer = await generateDialogueSegment(
             line.text,
             voiceId,
-            script.model || 'eleven_multilingual_v2'
+            script.model || 'eleven_v3'
           )
           console.log(`[Podcast] Line ${globalIndex + 1}: generated ${buffer.length} bytes`)
           return { index: globalIndex, buffer, success: true }
