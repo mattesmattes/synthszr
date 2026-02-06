@@ -9,14 +9,16 @@ import { MPEGDecoder } from 'mpg123-decoder'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const lamejs = require('lamejs')
 
-// Base URL for fetching audio files (works in both local and Vercel)
+// Production URL for fetching static audio files
+// VERCEL_URL points to preview deployments which may require auth
+const PRODUCTION_URL = 'https://synthszr.com'
+
 const getBaseUrl = () => {
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`
+  // In production, always use the public production URL
+  if (process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production') {
+    return PRODUCTION_URL
   }
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return process.env.NEXT_PUBLIC_SITE_URL
-  }
+  // For local development
   return 'http://localhost:3000'
 }
 
