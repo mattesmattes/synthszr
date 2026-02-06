@@ -8,7 +8,6 @@ import { SwipeNavigation } from "@/components/swipe-navigation"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 import { AudioPlayer } from "@/components/audio-player"
-import { PodcastPlayer } from "@/components/podcast-player"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
@@ -308,13 +307,10 @@ export default async function PostPage({ params }: PageProps) {
                     className="h-20 md:h-24 w-auto"
                   />
                 </Link>
-                {/* Audio Players - directly under logo */}
+                {/* Audio Player - directly under logo */}
                 <div className="relative z-10 mt-3 flex items-center gap-2">
                   <Suspense fallback={null}>
                     <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
-                  </Suspense>
-                  <Suspense fallback={null}>
-                    <PodcastPlayer postId={post.id} locale={locale} />
                   </Suspense>
                 </div>
               </div>
