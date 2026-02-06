@@ -6,10 +6,19 @@
  */
 
 import { MPEGDecoder } from 'mpg123-decoder'
-import { promises as fs } from 'fs'
-import path from 'path'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const lamejs = require('lamejs')
+
+// Base URL for fetching audio files (works in both local and Vercel)
+const getBaseUrl = () => {
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`
+  }
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL
+  }
+  return 'http://localhost:3000'
+}
 
 export interface AudioSegment {
   buffer: Buffer
@@ -286,15 +295,20 @@ function applyCrossfade(
  * Load the podcast intro MP3 file
  */
 async function loadIntro(): Promise<Float32Array[]> {
-  const introPath = path.join(process.cwd(), 'public', 'audio', 'podcast-intro.mp3')
+  const introUrl = `${getBaseUrl()}/audio/podcast-intro.mp3`
 
   try {
-    const introBuffer = await fs.readFile(introPath)
-    const pcm = await decodeMP3(Buffer.from(introBuffer))
+    console.log(`[Crossfade] Fetching intro from ${introUrl}`)
+    const response = await fetch(introUrl)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch intro: ${response.status}`)
+    }
+    const arrayBuffer = await response.arrayBuffer()
+    const pcm = await decodeMP3(Buffer.from(arrayBuffer))
     console.log(`[Crossfade] Loaded intro: ${(pcm[0].length / SAMPLE_RATE).toFixed(1)}s`)
     return pcm
   } catch (err) {
-    console.error(`[Crossfade] Failed to load intro from ${introPath}:`, err)
+    console.error(`[Crossfade] Failed to load intro from ${introUrl}:`, err)
     throw err
   }
 }
@@ -368,15 +382,20 @@ function applyIntroWithCrossfade(
  * Load the podcast outro MP3 file
  */
 async function loadOutro(): Promise<Float32Array[]> {
-  const outroPath = path.join(process.cwd(), 'public', 'audio', 'podcast-outro.mp3')
+  const outroUrl = `${getBaseUrl()}/audio/podcast-outro.mp3`
 
   try {
-    const outroBuffer = await fs.readFile(outroPath)
-    const pcm = await decodeMP3(Buffer.from(outroBuffer))
+    console.log(`[Crossfade] Fetching outro from ${outroUrl}`)
+    const response = await fetch(outroUrl)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch outro: ${response.status}`)
+    }
+    const arrayBuffer = await response.arrayBuffer()
+    const pcm = await decodeMP3(Buffer.from(arrayBuffer))
     console.log(`[Crossfade] Loaded outro: ${(pcm[0].length / SAMPLE_RATE).toFixed(1)}s`)
     return pcm
   } catch (err) {
-    console.error(`[Crossfade] Failed to load outro from ${outroPath}:`, err)
+    console.error(`[Crossfade] Failed to load outro from ${outroUrl}:`, err)
     throw err
   }
 }
