@@ -763,7 +763,7 @@ export default function AudioPage() {
                 Podcast-Einstellungen
               </CardTitle>
               <CardDescription>
-                Konfiguriere die ElevenLabs Text-to-Dialogue API für natürliche Podcast-Gespräche
+                Wähle zwischen OpenAI TTS (~10x günstiger) oder ElevenLabs (mit Emotion-Tags)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -774,22 +774,126 @@ export default function AudioPage() {
                 </div>
               ) : ttsSettings ? (
                 <>
-                  {/* Language Mapping Info */}
-                  <Alert className="bg-muted/50">
-                    <Info className="h-4 w-4" />
-                    <AlertDescription className="text-sm">
-                      <strong>TTS-Sprache pro Locale:</strong>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {PODCAST_LOCALES.map((loc) => (
-                          <Badge key={loc.code} variant={loc.ttsLang === 'de' ? 'default' : 'secondary'}>
-                            {loc.name} → {loc.ttsLang === 'de' ? 'Deutsch' : 'English'} TTS
-                          </Badge>
-                        ))}
+                  {/* Provider Selection - TOP PRIORITY */}
+                  <div className="space-y-3 p-4 bg-primary/5 rounded-lg border-2 border-primary/20">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base font-semibold">TTS Provider</Label>
+                        <p className="text-sm text-muted-foreground">
+                          OpenAI: ~$0.20/Podcast | ElevenLabs: ~$3.00/Podcast
+                        </p>
                       </div>
-                    </AlertDescription>
-                  </Alert>
+                      <Select
+                        value={podcastProvider}
+                        onValueChange={(v) => setPodcastProvider(v as PodcastProvider)}
+                      >
+                        <SelectTrigger className="w-56">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="openai">
+                            OpenAI TTS (~10x günstiger)
+                          </SelectItem>
+                          <SelectItem value="elevenlabs">
+                            ElevenLabs (Emotion-Tags)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  {/* Model Selection for Podcast */}
+                    {podcastProvider === 'openai' && (
+                      <Alert className="bg-yellow-500/10 border-yellow-500/30">
+                        <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                        <AlertDescription className="text-sm">
+                          OpenAI TTS unterstützt keine Emotion-Tags. Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code> werden automatisch entfernt.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+
+                  {/* OpenAI Settings */}
+                  {podcastProvider === 'openai' && (
+                    <>
+                      <div className="space-y-2 pb-4 border-b">
+                        <Label className="text-base">OpenAI Model</Label>
+                        <Select
+                          value={openaiModel}
+                          onValueChange={(v) => setOpenaiModel(v as TTSModel)}
+                        >
+                          <SelectTrigger className="w-48">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="tts-1">tts-1 (schnell, günstiger)</SelectItem>
+                            <SelectItem value="tts-1-hd">tts-1-hd (HD Qualität)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-4 pb-4 border-b">
+                        <Label className="text-base">OpenAI Stimmen</Label>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label className="text-sm">Host (News)</Label>
+                            <Select
+                              value={openaiHostVoice}
+                              onValueChange={(v) => setOpenaiHostVoice(v as TTSVoice)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {OPENAI_PODCAST_VOICES.map((voice) => (
+                                  <SelectItem key={voice.id} value={voice.id}>
+                                    {voice.name} - {voice.description}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">Guest (Synthszr)</Label>
+                            <Select
+                              value={openaiGuestVoice}
+                              onValueChange={(v) => setOpenaiGuestVoice(v as TTSVoice)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {OPENAI_PODCAST_VOICES.map((voice) => (
+                                  <SelectItem key={voice.id} value={voice.id}>
+                                    {voice.name} - {voice.description}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* ElevenLabs Settings */}
+                  {podcastProvider === 'elevenlabs' && (
+                    <>
+                      {/* Language Mapping Info */}
+                      <Alert className="bg-muted/50">
+                        <Info className="h-4 w-4" />
+                        <AlertDescription className="text-sm">
+                          <strong>TTS-Sprache pro Locale:</strong>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {PODCAST_LOCALES.map((loc) => (
+                              <Badge key={loc.code} variant={loc.ttsLang === 'de' ? 'default' : 'secondary'}>
+                                {loc.name} → {loc.ttsLang === 'de' ? 'Deutsch' : 'English'} TTS
+                              </Badge>
+                            ))}
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+
+                      {/* Model Selection for Podcast */}
                   <div className="space-y-2 pb-4 border-b">
                     <div className="flex items-center justify-between">
                       <div>
@@ -930,6 +1034,8 @@ export default function AudioPage() {
                       </div>
                     </div>
                   </div>
+                    </>
+                  )}
 
                   {/* Duration Slider */}
                   <div className="space-y-4 pb-4 border-b">
@@ -1086,109 +1192,6 @@ export default function AudioPage() {
                 <p className="text-xs text-muted-foreground">
                   Format: <code className="bg-muted px-1 rounded">HOST:</code> oder <code className="bg-muted px-1 rounded">GUEST:</code> gefolgt von optionalen Emotion-Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code>
                 </p>
-              </div>
-
-              {/* Provider Selection */}
-              <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium">TTS Provider</Label>
-                    <p className="text-xs text-muted-foreground">
-                      OpenAI: ~$0.20/Podcast | ElevenLabs: ~$3.00/Podcast
-                    </p>
-                  </div>
-                  <Select
-                    value={podcastProvider}
-                    onValueChange={(v) => setPodcastProvider(v as PodcastProvider)}
-                  >
-                    <SelectTrigger className="w-48">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="openai">
-                        OpenAI TTS (~10x günstiger)
-                      </SelectItem>
-                      <SelectItem value="elevenlabs">
-                        ElevenLabs (Emotion-Tags)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* OpenAI-specific options */}
-                {podcastProvider === 'openai' && (
-                  <div className="space-y-3 pt-3 border-t">
-                    <Alert className="bg-yellow-500/10 border-yellow-500/30">
-                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                      <AlertDescription className="text-sm">
-                        OpenAI TTS unterstützt keine Emotion-Tags. Tags wie <code>[cheerfully]</code> werden automatisch entfernt.
-                      </AlertDescription>
-                    </Alert>
-
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Model</Label>
-                        <Select
-                          value={openaiModel}
-                          onValueChange={(v) => setOpenaiModel(v as TTSModel)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="tts-1">tts-1 (schnell)</SelectItem>
-                            <SelectItem value="tts-1-hd">tts-1-hd (HD)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs">Host Voice</Label>
-                        <Select
-                          value={openaiHostVoice}
-                          onValueChange={(v) => setOpenaiHostVoice(v as TTSVoice)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {OPENAI_PODCAST_VOICES.map((voice) => (
-                              <SelectItem key={voice.id} value={voice.id}>
-                                {voice.name} - {voice.description}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs">Guest Voice</Label>
-                        <Select
-                          value={openaiGuestVoice}
-                          onValueChange={(v) => setOpenaiGuestVoice(v as TTSVoice)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {OPENAI_PODCAST_VOICES.map((voice) => (
-                              <SelectItem key={voice.id} value={voice.id}>
-                                {voice.name} - {voice.description}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ElevenLabs uses settings from above */}
-                {podcastProvider === 'elevenlabs' && (
-                  <p className="text-xs text-muted-foreground pt-2">
-                    Verwendet die Stimmen aus den Podcast-Einstellungen oben.
-                  </p>
-                )}
               </div>
 
               {/* Generate Button & Status */}
