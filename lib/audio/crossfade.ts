@@ -546,7 +546,9 @@ export async function concatenateWithCrossfade(
       // First segment: apply intro if enabled, otherwise just add it
       if (includeIntro) {
         const intro = await loadIntro()
+        console.log(`[Crossfade] First segment PCM length: ${segment.pcm[0].length} samples (${(segment.pcm[0].length / SAMPLE_RATE).toFixed(1)}s)`)
         resultChannels = applyIntroWithCrossfade(intro, segment.pcm, introCrossfadeSec)
+        console.log(`[Crossfade] After intro applied, resultChannels length: ${resultChannels[0].length} samples (${(resultChannels[0].length / SAMPLE_RATE).toFixed(1)}s)`)
       } else {
         resultChannels = [segment.pcm[0], segment.pcm[1]]
       }
@@ -621,8 +623,15 @@ export async function concatenateWithCrossfade(
   console.log(`[Crossfade] Final audio with intro/outro: ${finalDurationS.toFixed(1)}s`)
 
   // Encode to MP3
+  console.log(`[Crossfade] Starting MP3 encoding of ${resultChannels[0].length} samples...`)
   const mp3Buffer = encodeMP3(resultChannels[0], resultChannels[1])
-  console.log(`[Crossfade] Encoded MP3: ${(mp3Buffer.length / 1024).toFixed(0)} KB`)
+  const expectedRawSize = resultChannels[0].length * 2 * 2 // stereo 16-bit
+  const compressionRatio = expectedRawSize / mp3Buffer.length
+  console.log(`[Crossfade] Encoded MP3: ${(mp3Buffer.length / 1024).toFixed(0)} KB (raw would be ${(expectedRawSize / 1024 / 1024).toFixed(1)} MB, ratio: ${compressionRatio.toFixed(1)}x)`)
+
+  // Verify it looks like MP3 (should start with ID3 or 0xFF 0xFB)
+  const header = mp3Buffer.slice(0, 3).toString('hex')
+  console.log(`[Crossfade] MP3 header bytes: ${header} (expect 494433 for ID3 or fffb for MP3 frame)`)
 
   return mp3Buffer
 }
