@@ -292,8 +292,29 @@ function findMpegAudioEnd(buffer: Buffer): number {
 }
 
 /**
+ * Check if an MPEG frame is a Xing/Info header frame (contains no audio)
+ */
+function isXingFrame(buffer: Buffer, offset: number): boolean {
+  if (offset + 36 > buffer.length) return false
+
+  // Check for "Xing" or "Info" tag at various offsets depending on MPEG version and channel mode
+  // For MPEG1 Layer3: offset 32 (stereo) or 17 (mono) after frame header
+  const xingOffsets = [17, 21, 32, 36]
+
+  for (const xingOffset of xingOffsets) {
+    if (offset + 4 + xingOffset + 4 <= buffer.length) {
+      const tag = buffer.toString('ascii', offset + 4 + xingOffset, offset + 4 + xingOffset + 4)
+      if (tag === 'Xing' || tag === 'Info') {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+/**
  * Extract raw MPEG audio frames from an MP3 buffer
- * Strips ID3v2 header and ID3v1 footer
+ * Strips ID3v2 header, ID3v1 footer, and Xing/Info headers
  */
 function extractMpegFrames(buffer: Buffer): Buffer {
   const start = findMpegAudioStart(buffer)
@@ -303,7 +324,21 @@ function extractMpegFrames(buffer: Buffer): Buffer {
     return buffer // Return as-is if we can't parse it
   }
 
-  return buffer.subarray(start, end)
+  // Check if first frame is a Xing/Info header and skip it
+  let audioStart = start
+  if (isXingFrame(buffer, start)) {
+    // Skip the Xing frame (typically 417 bytes for 128kbps mono)
+    audioStart = start + 417
+    // Find next valid frame sync
+    while (audioStart < end - 1) {
+      if (buffer[audioStart] === 0xFF && (buffer[audioStart + 1] & 0xE0) === 0xE0) {
+        break
+      }
+      audioStart++
+    }
+  }
+
+  return buffer.subarray(audioStart, end)
 }
 
 /**
