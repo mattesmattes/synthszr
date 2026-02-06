@@ -189,17 +189,34 @@ async function generateDialogueSegment(
   }
 
   // eleven_v3 interprets audio tags like [cheerfully], [whispers], [sighs]
-  const audioStream = await elevenLabs.textToSpeech.convert(voiceId, {
+  // Note: eleven_v3 may not support all voice_settings, so we only include them for other models
+  const requestOptions: {
+    text: string
+    model_id: string
+    output_format: string
+    voice_settings?: {
+      stability: number
+      similarity_boost: number
+      style: number
+      use_speaker_boost: boolean
+    }
+  } = {
     text,
     model_id: model,
     output_format: 'mp3_44100_128',
-    voice_settings: {
-      stability: 0.4, // Lower stability for more expressive speech
+  }
+
+  // Only add voice_settings for non-v3 models
+  if (model !== 'eleven_v3') {
+    requestOptions.voice_settings = {
+      stability: 0.4,
       similarity_boost: 0.8,
-      style: 0.2, // Add some style exaggeration for podcast feel
+      style: 0.2,
       use_speaker_boost: true,
-    },
-  })
+    }
+  }
+
+  const audioStream = await elevenLabs.textToSpeech.convert(voiceId, requestOptions)
 
   const chunks: Uint8Array[] = []
   for await (const chunk of audioStream) {
