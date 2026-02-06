@@ -182,38 +182,38 @@ async function generateDialogueSegment(
   voiceId: string,
   model: ElevenLabsModel = 'eleven_v3' // v3 supports audio tags like [cheerfully]
 ): Promise<Buffer> {
-  const elevenLabs = getClient()
-
   if (!text.trim()) {
     return Buffer.alloc(0)
   }
 
-  // eleven_v3 interprets audio tags like [cheerfully], [whispers], [sighs]
-  // Note: eleven_v3 may not support all voice_settings, so we only include them for other models
-  const audioStream = model === 'eleven_v3'
-    ? await elevenLabs.textToSpeech.convert(voiceId, {
-        text,
-        model_id: model,
-        output_format: 'mp3_44100_128',
-      })
-    : await elevenLabs.textToSpeech.convert(voiceId, {
-        text,
-        model_id: model,
-        output_format: 'mp3_44100_128',
-        voice_settings: {
-          stability: 0.4,
-          similarity_boost: 0.8,
-          style: 0.2,
-          use_speaker_boost: true,
-        },
-      })
-
-  const chunks: Uint8Array[] = []
-  for await (const chunk of audioStream) {
-    chunks.push(chunk)
+  const apiKey = process.env.ELEVENLABS_API_KEY
+  if (!apiKey) {
+    throw new Error('ELEVENLABS_API_KEY environment variable is not set')
   }
 
-  return Buffer.concat(chunks)
+  console.log(`[TTS] Request: model=${model}, voiceId=${voiceId}, textLength=${text.length}`)
+
+  // Use direct fetch instead of SDK for eleven_v3 compatibility
+  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text,
+      model_id: model,
+      output_format: 'mp3_44100_128',
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
+  }
+
+  const arrayBuffer = await response.arrayBuffer()
+  return Buffer.from(arrayBuffer)
 }
 
 /**
