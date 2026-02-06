@@ -6,17 +6,8 @@
  */
 
 import { MPEGDecoder } from 'mpg123-decoder'
-
-// Lazy-load lamejs to avoid bundling issues in serverless
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let lamejsModule: any = null
-async function getLamejs(): Promise<any> {
-  if (!lamejsModule) {
-    // Dynamic import to avoid bundling issues with internal require() calls
-    lamejsModule = await import('lamejs')
-  }
-  return lamejsModule
-}
+// @breezystack/lamejs is an ESM-compatible fork that works in serverless
+import { Mp3Encoder } from '@breezystack/lamejs'
 
 // Production URL for fetching static audio files
 // Use www subdomain to avoid redirect (synthszr.com → www.synthszr.com)
@@ -113,9 +104,8 @@ async function decodeMP3(mp3Buffer: Buffer): Promise<Float32Array[]> {
 /**
  * Encode PCM samples to MP3
  */
-async function encodeMP3(leftChannel: Float32Array, rightChannel: Float32Array): Promise<Buffer> {
-  const lamejs = await getLamejs()
-  const mp3encoder = new lamejs.Mp3Encoder(CHANNELS, SAMPLE_RATE, BITRATE)
+function encodeMP3(leftChannel: Float32Array, rightChannel: Float32Array): Buffer {
+  const mp3encoder = new Mp3Encoder(CHANNELS, SAMPLE_RATE, BITRATE)
 
   const left = new Int16Array(leftChannel.length)
   const right = new Int16Array(rightChannel.length)
@@ -623,7 +613,7 @@ export async function concatenateWithCrossfade(
   console.log(`[Crossfade] Final audio with intro/outro: ${finalDurationS.toFixed(1)}s`)
 
   // Encode to MP3
-  const mp3Buffer = await encodeMP3(resultChannels[0], resultChannels[1])
+  const mp3Buffer = encodeMP3(resultChannels[0], resultChannels[1])
   console.log(`[Crossfade] Encoded MP3: ${(mp3Buffer.length / 1024).toFixed(0)} KB`)
 
   return mp3Buffer
