@@ -171,10 +171,10 @@ export default function AudioPage() {
   const [ttsSuccess, setTtsSuccess] = useState(false)
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null)
   const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null)
-  const [activeTab, setActiveTab] = useState('reading')
+  const [activeTab, setActiveTab] = useState('podcast')
 
   // Podcast-specific state
-  const [podcastDuration, setPodcastDuration] = useState(15)
+  const [podcastDuration, setPodcastDuration] = useState(25)
   const [podcastScript, setPodcastScript] = useState(EXAMPLE_PODCAST_SCRIPT)
   const [podcastGenerating, setPodcastGenerating] = useState(false)
   const [podcastAudioUrl, setPodcastAudioUrl] = useState<string | null>(null)
@@ -184,10 +184,10 @@ export default function AudioPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   // Podcast provider selection (OpenAI is ~10x cheaper but no emotion tags)
-  const [podcastProvider, setPodcastProvider] = useState<PodcastProvider>('elevenlabs')
-  const [openaiHostVoice, setOpenaiHostVoice] = useState<TTSVoice>('nova')
-  const [openaiGuestVoice, setOpenaiGuestVoice] = useState<TTSVoice>('onyx')
-  const [openaiModel, setOpenaiModel] = useState<TTSModel>('tts-1')
+  const [podcastProvider, setPodcastProvider] = useState<PodcastProvider>('openai')
+  const [openaiHostVoice, setOpenaiHostVoice] = useState<TTSVoice>('shimmer')
+  const [openaiGuestVoice, setOpenaiGuestVoice] = useState<TTSVoice>('fable')
+  const [openaiModel, setOpenaiModel] = useState<TTSModel>('tts-1-hd')
 
   // Stereo mixing data
   const [segmentUrls, setSegmentUrls] = useState<string[]>([])
@@ -196,7 +196,7 @@ export default function AudioPage() {
   // Post selection for script generation
   const [recentPosts, setRecentPosts] = useState<Array<{ id: string; title: string; slug: string; created_at: string }>>([])
   const [selectedPostId, setSelectedPostId] = useState<string>('')
-  const [selectedLocale, setSelectedLocale] = useState<'de' | 'en' | 'cs' | 'nds'>('de')
+  const [selectedLocale, setSelectedLocale] = useState<'de' | 'en' | 'cs' | 'nds'>('en')
   const [scriptGenerating, setScriptGenerating] = useState(false)
   const [customPrompt, setCustomPrompt] = useState(PODCAST_SCRIPT_PROMPT)
 
@@ -210,7 +210,12 @@ export default function AudioPage() {
       const res = await fetch('/api/admin/posts?limit=20&published=true')
       if (res.ok) {
         const data = await res.json()
-        setRecentPosts(data.posts || [])
+        const posts = data.posts || []
+        setRecentPosts(posts)
+        // Pre-select the newest post
+        if (posts.length > 0 && !selectedPostId) {
+          setSelectedPostId(posts[0].id)
+        }
       }
     } catch (error) {
       console.error('Error fetching posts:', error)
