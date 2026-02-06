@@ -225,16 +225,19 @@ async function generateDialogueSegment(
 
 /**
  * Generate a short silence buffer (for natural pauses between speakers)
- * Creates a ~300ms pause using a minimal valid MP3 frame
+ * Creates a ~300ms pause using minimal valid MP3 frames (mono to match ElevenLabs output)
  */
 function generateSilenceBuffer(): Buffer {
-  // Minimal valid MP3 silence frame (MPEG Audio Layer 3, 128kbps, 44.1kHz)
+  // Minimal valid MP3 silence frame (MPEG Audio Layer 3, 128kbps, 44.1kHz, MONO)
   // This creates approximately 300ms of silence
   const silenceFrames: number[] = []
 
-  // MP3 frame header for 128kbps, 44.1kHz, stereo
-  const frameHeader = [0xFF, 0xFB, 0x90, 0x00]
-  const frameData = new Array(417 - 4).fill(0) // Frame size for 128kbps @ 44.1kHz
+  // MP3 frame header for 128kbps, 44.1kHz, MONO
+  // 0xFF 0xFB = Frame sync + MPEG1 Layer3
+  // 0x90 = Bitrate 128kbps, Sample rate 44.1kHz, No padding
+  // 0xC0 = Mono mode (bits 7-6 = 11), no mode ext, no copyright, no original, no emphasis
+  const frameHeader = [0xFF, 0xFB, 0x90, 0xC0]
+  const frameData = new Array(417 - 4).fill(0) // Frame size for 128kbps mono @ 44.1kHz
 
   // Add ~12 frames for ~300ms of silence
   for (let i = 0; i < 12; i++) {
