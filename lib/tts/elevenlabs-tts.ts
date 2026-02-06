@@ -139,6 +139,10 @@ export interface PodcastScript {
   hostVoiceId: string
   guestVoiceId: string
   model?: ElevenLabsModel
+  // Provider selection (default: elevenlabs)
+  provider?: PodcastProvider
+  // OpenAI-specific settings
+  openaiModel?: OpenAIModel
 }
 
 /**
@@ -193,6 +197,29 @@ export const EMOTION_TAGS = [
 export type EmotionTag = typeof EMOTION_TAGS[number]
 
 /**
+ * Strip emotion tags from text (for providers that don't support them, like OpenAI)
+ * "[cheerfully] Hello world!" -> "Hello world!"
+ */
+export function stripEmotionTags(text: string): string {
+  return text.replace(/\[(?:cheerfully|thoughtfully|seriously|excitedly|skeptically|laughing|sighing|whispering|interrupting|curiously|dramatically|calmly|enthusiastically)\]\s*/gi, '').trim()
+}
+
+/**
+ * TTS provider for podcast generation
+ */
+export type PodcastProvider = 'elevenlabs' | 'openai'
+
+/**
+ * OpenAI TTS voice IDs
+ */
+export type OpenAIVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer'
+
+/**
+ * OpenAI TTS model
+ */
+export type OpenAIModel = 'tts-1' | 'tts-1-hd'
+
+/**
  * Generate a single dialogue segment with ElevenLabs
  * Includes voice settings optimized for conversational speech
  */
@@ -229,6 +256,52 @@ async function generateDialogueSegment(
   if (!response.ok) {
     const errorText = await response.text()
     throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
+  }
+
+  const arrayBuffer = await response.arrayBuffer()
+  return Buffer.from(arrayBuffer)
+}
+
+/**
+ * Generate a dialogue segment using OpenAI TTS
+ * Emotion tags are automatically stripped since OpenAI doesn't support them
+ */
+async function generateDialogueSegmentOpenAI(
+  text: string,
+  voiceId: OpenAIVoice,
+  model: OpenAIModel = 'tts-1'
+): Promise<Buffer> {
+  // Strip emotion tags - OpenAI doesn't support them
+  const cleanText = stripEmotionTags(text)
+
+  if (!cleanText.trim()) {
+    return Buffer.alloc(0)
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY environment variable is not set')
+  }
+
+  console.log(`[TTS-OpenAI] Request: model=${model}, voice=${voiceId}, textLength=${cleanText.length} (original: ${text.length})`)
+
+  const response = await fetch('https://api.openai.com/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      voice: voiceId,
+      input: cleanText,
+      response_format: 'mp3',
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`OpenAI TTS API error: ${response.status} - ${errorText}`)
   }
 
   const arrayBuffer = await response.arrayBuffer()
@@ -479,16 +552,26 @@ export async function generatePodcastDialogue(
     }
 
     const silenceBuffer = generateSilenceBuffer()
+    const provider = script.provider || 'elevenlabs'
 
-    // Verify API key is set
-    const apiKey = process.env.ELEVENLABS_API_KEY
-    if (!apiKey) {
-      console.error('[Podcast] ELEVENLABS_API_KEY is not set!')
-      return { success: false, error: 'ELEVENLABS_API_KEY environment variable is not set' }
+    // Verify API key is set based on provider
+    if (provider === 'elevenlabs') {
+      const apiKey = process.env.ELEVENLABS_API_KEY
+      if (!apiKey) {
+        console.error('[Podcast] ELEVENLABS_API_KEY is not set!')
+        return { success: false, error: 'ELEVENLABS_API_KEY environment variable is not set' }
+      }
+      console.log(`[Podcast] ElevenLabs API key present: ${apiKey.slice(0, 8)}...${apiKey.slice(-4)}`)
+    } else {
+      const apiKey = process.env.OPENAI_API_KEY
+      if (!apiKey) {
+        console.error('[Podcast] OPENAI_API_KEY is not set!')
+        return { success: false, error: 'OPENAI_API_KEY environment variable is not set' }
+      }
+      console.log(`[Podcast] OpenAI API key present: ${apiKey.slice(0, 8)}...${apiKey.slice(-4)}`)
     }
-    console.log(`[Podcast] API key present: ${apiKey.slice(0, 8)}...${apiKey.slice(-4)} (${apiKey.length} chars)`)
 
-    console.log(`[Podcast] Generating ${validLines.length} lines SEQUENTIALLY`)
+    console.log(`[Podcast] Generating ${validLines.length} lines with ${provider.toUpperCase()}`)
 
     // Generate all audio segments sequentially to avoid rate limiting
     const audioSegments: Buffer[] = []
@@ -502,11 +585,24 @@ export async function generatePodcastDialogue(
 
       try {
         const startTime = Date.now()
-        const buffer = await generateDialogueSegment(
-          line.text,
-          voiceId,
-          script.model || 'eleven_v3'
-        )
+        let buffer: Buffer
+
+        if (provider === 'openai') {
+          // OpenAI: emotion tags are stripped automatically
+          buffer = await generateDialogueSegmentOpenAI(
+            line.text,
+            voiceId as OpenAIVoice,
+            script.openaiModel || 'tts-1'
+          )
+        } else {
+          // ElevenLabs: emotion tags are preserved
+          buffer = await generateDialogueSegment(
+            line.text,
+            voiceId,
+            script.model || 'eleven_v3'
+          )
+        }
+
         const elapsed = Date.now() - startTime
         console.log(`[Podcast] Line ${i + 1}/${validLines.length}: ${buffer.length} bytes in ${elapsed}ms (${line.speaker})`)
         audioSegments.push(buffer)

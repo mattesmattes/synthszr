@@ -33,6 +33,8 @@ import {
   validateScriptEmotions,
   type PodcastLine,
   type ElevenLabsModel,
+  type PodcastProvider,
+  type OpenAIModel,
 } from '@/lib/tts/elevenlabs-tts'
 
 interface GeneratePodcastRequest {
@@ -41,6 +43,9 @@ interface GeneratePodcastRequest {
   guestVoiceId?: string
   title?: string
   model?: ElevenLabsModel
+  // Provider selection
+  provider?: PodcastProvider
+  openaiModel?: OpenAIModel
 }
 
 export async function POST(request: NextRequest) {
@@ -82,14 +87,19 @@ export async function POST(request: NextRequest) {
     // Get voice settings from database or use overrides
     const settings = await getTTSSettings()
 
+    // Determine provider (default: elevenlabs, can be overridden)
+    const provider = body.provider || 'elevenlabs'
+
     const hostVoiceId = body.hostVoiceId || settings.podcast_host_voice_id
     const guestVoiceId = body.guestVoiceId || settings.podcast_guest_voice_id
     const model = body.model || (settings.elevenlabs_model as ElevenLabsModel)
+    const openaiModel = body.openaiModel || 'tts-1'
 
     // Estimate duration before generation
     const estimatedDuration = estimatePodcastDuration(lines)
     console.log(`[Podcast] Generating podcast with ${lines.length} lines, estimated ${estimatedDuration}s`)
-    console.log(`[Podcast] Using model: ${model}, host: ${hostVoiceId}, guest: ${guestVoiceId}`)
+    console.log(`[Podcast] Provider: ${provider}, model: ${provider === 'openai' ? openaiModel : model}`)
+    console.log(`[Podcast] Voices - host: ${hostVoiceId}, guest: ${guestVoiceId}`)
 
     // Generate the podcast audio
     const result = await generatePodcastDialogue({
@@ -97,6 +107,8 @@ export async function POST(request: NextRequest) {
       hostVoiceId,
       guestVoiceId,
       model,
+      provider,
+      openaiModel,
     })
 
     if (!result.success || !result.audioBuffer) {
