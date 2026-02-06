@@ -338,6 +338,7 @@ export default function AudioPage() {
           script: podcastScript,
           hostVoiceId: ttsSettings?.podcast_host_voice_id,
           guestVoiceId: ttsSettings?.podcast_guest_voice_id,
+          model: ttsSettings?.elevenlabs_model || 'eleven_v3',
           title: `test-podcast-${Date.now()}`,
         }),
       })
