@@ -742,6 +742,34 @@ export default function AudioPage() {
                     </AlertDescription>
                   </Alert>
 
+                  {/* Model Selection for Podcast */}
+                  <div className="space-y-2 pb-4 border-b">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">ElevenLabs Model</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Eleven v3 unterstützt Audio-Tags wie [cheerfully], [whispers], [sighs]
+                        </p>
+                      </div>
+                      <Select
+                        value={ttsSettings.elevenlabs_model || 'eleven_v3'}
+                        onValueChange={(value: ElevenLabsModel) =>
+                          setTtsSettings({ ...ttsSettings, elevenlabs_model: value })
+                        }
+                      >
+                        <SelectTrigger className="w-64">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="eleven_v3">Eleven v3 (empfohlen)</SelectItem>
+                          <SelectItem value="eleven_multilingual_v2">Multilingual v2</SelectItem>
+                          <SelectItem value="eleven_turbo_v2_5">Turbo v2.5 (schnell)</SelectItem>
+                          <SelectItem value="eleven_turbo_v2">Turbo v2</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
                   {/* German Voices Section */}
                   <div className="space-y-4 pb-4 border-b">
                     <div className="flex items-center gap-2">
