@@ -197,6 +197,28 @@ export const EMOTION_TAGS = [
 export type EmotionTag = typeof EMOTION_TAGS[number]
 
 /**
+ * Pronunciation replacements for TTS
+ * Maps brand names and technical terms to their phonetic equivalents
+ */
+const TTS_PRONUNCIATIONS: Record<string, string> = {
+  'Synthszr': 'Synthesizer',
+  'synthszr': 'synthesizer',
+  'SYNTHSZR': 'SYNTHESIZER',
+}
+
+/**
+ * Prepare text for TTS by applying pronunciation replacements
+ * This ensures brand names like "Synthszr" are pronounced correctly
+ */
+function prepareTTSText(text: string): string {
+  let result = text
+  for (const [from, to] of Object.entries(TTS_PRONUNCIATIONS)) {
+    result = result.replaceAll(from, to)
+  }
+  return result
+}
+
+/**
  * Strip emotion tags from text (for providers that don't support them, like OpenAI)
  * "[cheerfully] Hello world!" -> "Hello world!"
  */
@@ -237,7 +259,10 @@ async function generateDialogueSegment(
     throw new Error('ELEVENLABS_API_KEY environment variable is not set')
   }
 
-  console.log(`[TTS] Request: model=${model}, voiceId=${voiceId}, textLength=${text.length}`)
+  // Apply pronunciation replacements (e.g., "Synthszr" -> "Synthesizer")
+  const ttsText = prepareTTSText(text)
+
+  console.log(`[TTS] Request: model=${model}, voiceId=${voiceId}, textLength=${ttsText.length}`)
 
   // Use direct fetch instead of SDK for eleven_v3 compatibility
   const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
@@ -247,7 +272,7 @@ async function generateDialogueSegment(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      text,
+      text: ttsText,
       model_id: model,
       output_format: 'mp3_44100_128',
     }),
@@ -272,7 +297,8 @@ async function generateDialogueSegmentOpenAI(
   model: OpenAIModel = 'tts-1'
 ): Promise<Buffer> {
   // Strip emotion tags - OpenAI doesn't support them
-  const cleanText = stripEmotionTags(text)
+  // Then apply pronunciation replacements (e.g., "Synthszr" -> "Synthesizer")
+  const cleanText = prepareTTSText(stripEmotionTags(text))
 
   if (!cleanText.trim()) {
     return Buffer.alloc(0)
