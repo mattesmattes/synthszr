@@ -310,11 +310,11 @@ async function generateDialogueSegmentOpenAI(
 
 /**
  * Generate a short silence buffer (for natural pauses between speakers)
- * Creates a ~300ms pause using minimal valid MP3 frames (mono to match ElevenLabs output)
+ * Creates a ~50ms pause using minimal valid MP3 frames (mono to match ElevenLabs output)
  */
 function generateSilenceBuffer(): Buffer {
   // Minimal valid MP3 silence frame (MPEG Audio Layer 3, 128kbps, 44.1kHz, MONO)
-  // This creates approximately 300ms of silence
+  // Each frame is ~26ms at 128kbps
   const silenceFrames: number[] = []
 
   // MP3 frame header for 128kbps, 44.1kHz, MONO
@@ -324,8 +324,8 @@ function generateSilenceBuffer(): Buffer {
   const frameHeader = [0xFF, 0xFB, 0x90, 0xC0]
   const frameData = new Array(417 - 4).fill(0) // Frame size for 128kbps mono @ 44.1kHz
 
-  // Add ~12 frames for ~300ms of silence
-  for (let i = 0; i < 12; i++) {
+  // Add 2 frames for ~50ms of silence (natural breath pause)
+  for (let i = 0; i < 2; i++) {
     silenceFrames.push(...frameHeader, ...frameData)
   }
 
@@ -629,8 +629,12 @@ export async function generatePodcastDialogue(
     const finalBuffers: Buffer[] = []
     const segmentMetadata: SegmentMetadata[] = []
     let previousSpeaker: 'HOST' | 'GUEST' | null = null
+    let previousEndTime = 0
     let currentTime = 0
-    const SILENCE_DURATION = 0.3 // 300ms silence between speakers
+
+    // Timing constants for natural conversation flow
+    const NORMAL_GAP = 0.05      // 50ms - minimal natural pause
+    const INTERRUPTION_OVERLAP = -0.3  // -300ms - speaker starts before previous ends
 
     for (let i = 0; i < validLines.length; i++) {
       const line = validLines[i]
@@ -638,14 +642,28 @@ export async function generatePodcastDialogue(
 
       if (!segment || segment.length === 0) continue
 
-      // Add silence between different speakers
-      if (previousSpeaker && previousSpeaker !== line.speaker) {
-        finalBuffers.push(silenceBuffer)
-        currentTime += SILENCE_DURATION
-      }
-
       // Estimate segment duration (MP3 at 128kbps = 16KB per second)
       const segmentDuration = segment.length / (128 * 1024 / 8)
+
+      // Check for interruption tag (only works with ElevenLabs, stripped for OpenAI)
+      const isInterruption = line.text.toLowerCase().includes('[interrupting]')
+
+      // Calculate start time based on conversation flow
+      if (previousSpeaker && previousSpeaker !== line.speaker) {
+        if (isInterruption && provider === 'elevenlabs') {
+          // Overlap with previous speaker for interruption effect
+          currentTime = Math.max(0, previousEndTime + INTERRUPTION_OVERLAP)
+          // Don't add silence buffer for overlapping speech
+        } else {
+          // Normal speaker change - minimal gap
+          currentTime = previousEndTime + NORMAL_GAP
+          // Add tiny silence buffer for clean transition
+          finalBuffers.push(silenceBuffer)
+        }
+      } else if (previousSpeaker === line.speaker) {
+        // Same speaker continues - no gap needed
+        currentTime = previousEndTime
+      }
 
       // Add metadata for stereo mixing
       segmentMetadata.push({
@@ -657,7 +675,7 @@ export async function generatePodcastDialogue(
       })
 
       finalBuffers.push(segment)
-      currentTime += segmentDuration
+      previousEndTime = currentTime + segmentDuration
       previousSpeaker = line.speaker
     }
 
