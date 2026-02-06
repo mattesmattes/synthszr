@@ -652,73 +652,62 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         }
       })
 
-      // Generate podcast scripts for all locales (runs in parallel with translations)
-      console.log(`[Podcast] Triggering podcast script generation for post ${id}`)
+      // Generate podcast script for EN (runs in parallel with translations)
+      // Only EN for now since all audio playback uses English version
+      console.log(`[Podcast] Triggering podcast script generation for post ${id} (EN only)`)
       setPodcastStatus('generating')
-      setPodcastMessage('Podcast-Scripts werden generiert...')
+      setPodcastMessage('Podcast-Script wird generiert...')
 
-      // Generate scripts for DE and EN (the main podcast locales)
-      const podcastLocales = ['de', 'en'] as const
-      const podcastPromises = podcastLocales.map(async (locale) => {
-        try {
-          const res = await fetch('/api/podcast/generate-script', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              postId: id,
-              locale,
-              durationMinutes: 30, // Default 30 minutes
-            }),
-          })
-
+      // Generate script for EN only
+      fetch('/api/podcast/generate-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          postId: id,
+          locale: 'en',
+          durationMinutes: 30, // Default 30 minutes
+        }),
+      })
+        .then(async (res) => {
           if (!res.ok) {
             const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
-            console.error(`[Podcast] Script generation failed for ${locale}:`, errorData.error)
-            return { locale, success: false, error: errorData.error }
+            console.error(`[Podcast] Script generation failed:`, errorData.error)
+            setPodcastStatus('error')
+            setPodcastMessage('Script-Generierung fehlgeschlagen')
+            return
           }
 
           const data = await res.json()
-          console.log(`[Podcast] Script generated for ${locale}: ${data.lineCount} lines, ~${data.estimatedDuration} min`)
+          console.log(`[Podcast] Script generated: ${data.lineCount} lines, ~${data.estimatedDuration} min`)
 
           // Store the script in post_podcasts table for later TTS generation
           const { error: saveError } = await supabase
             .from('post_podcasts')
             .upsert({
               post_id: id,
-              locale,
+              locale: 'en',
               script_content: data.script,
               status: 'pending', // Ready for TTS generation
               duration_seconds: data.estimatedDuration * 60,
             }, { onConflict: 'post_id,locale' })
 
           if (saveError) {
-            console.error(`[Podcast] Failed to save script for ${locale}:`, saveError)
-            return { locale, success: false, error: saveError.message }
+            console.error(`[Podcast] Failed to save script:`, saveError)
+            setPodcastStatus('error')
+            setPodcastMessage('Script-Speicherung fehlgeschlagen')
+            return
           }
 
-          return { locale, success: true }
-        } catch (err) {
-          console.error(`[Podcast] Script generation error for ${locale}:`, err)
-          return { locale, success: false, error: err instanceof Error ? err.message : 'Unknown error' }
-        }
-      })
-
-      // Wait for all podcast scripts to complete
-      Promise.all(podcastPromises).then((results) => {
-        const successful = results.filter(r => r.success).length
-        const failed = results.filter(r => !r.success)
-
-        if (failed.length > 0) {
-          console.error('[Podcast] Some scripts failed:', failed)
-          setPodcastStatus('error')
-          setPodcastMessage(`${successful}/${podcastLocales.length} Scripts generiert`)
-        } else {
-          console.log(`[Podcast] All ${successful} scripts generated successfully`)
+          console.log(`[Podcast] Script saved successfully`)
           setPodcastStatus('success')
-          setPodcastMessage(`${successful} Scripts generiert`)
-        }
-      })
+          setPodcastMessage('Script generiert')
+        })
+        .catch((err) => {
+          console.error(`[Podcast] Script generation error:`, err)
+          setPodcastStatus('error')
+          setPodcastMessage('Script-Generierung fehlgeschlagen')
+        })
     }
 
     // Re-index thumbnails on EVERY save to match current article order

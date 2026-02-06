@@ -7,11 +7,11 @@ import { cn } from '@/lib/utils'
 
 interface AudioPlayerProps {
   postId: string
-  locale?: 'de' | 'en'
+  locale?: 'de' | 'en' // Kept for API compatibility, but always uses EN internally
   className?: string
 }
 
-export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerProps) {
+export function AudioPlayer({ postId, className }: AudioPlayerProps) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'disabled'>('idle')
   const [isPlaying, setIsPlaying] = useState(false)
@@ -21,32 +21,67 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
   const searchParams = useSearchParams()
   const shouldAutoplay = searchParams.get('autoplay') === 'true'
 
-  // Fetch audio status on mount
+  // Fetch podcast audio status on mount (always EN)
   useEffect(() => {
     const fetchAudioStatus = async () => {
       try {
-        const response = await fetch(`/api/tts/${postId}?locale=${locale}`)
+        // Use podcast endpoint - always EN for now
+        const response = await fetch(`/api/podcast/${postId}?locale=en`)
         const data = await response.json()
 
-        if (data.enabled === false) {
-          setStatus('disabled')
-          return
-        }
-
-        if (data.audioUrl) {
+        // Podcast endpoint returns { exists, audioUrl, status }
+        if (data.exists && data.audioUrl) {
           setAudioUrl(data.audioUrl)
           setStatus('ready')
+        } else if (data.status === 'generating') {
+          // Podcast is being generated, poll for completion
+          setStatus('loading')
+          pollForPodcast()
         } else {
           setStatus('idle')
         }
       } catch (err) {
-        console.error('[AudioPlayer] Failed to fetch audio status:', err)
+        console.error('[AudioPlayer] Failed to fetch podcast status:', err)
         setStatus('idle')
       }
     }
 
+    // Poll for podcast completion when generating
+    const pollForPodcast = async () => {
+      const maxAttempts = 60 // 5 minutes max (5s intervals)
+      let attempts = 0
+
+      const poll = async () => {
+        attempts++
+        try {
+          const response = await fetch(`/api/podcast/${postId}?locale=en`)
+          const data = await response.json()
+
+          if (data.exists && data.audioUrl) {
+            setAudioUrl(data.audioUrl)
+            setStatus('ready')
+            return
+          }
+
+          if (data.status === 'generating' && attempts < maxAttempts) {
+            setTimeout(poll, 5000) // Poll every 5 seconds
+          } else if (data.status === 'failed') {
+            setStatus('error')
+          }
+        } catch {
+          if (attempts < maxAttempts) {
+            setTimeout(poll, 5000)
+          } else {
+            setStatus('error')
+          }
+        }
+      }
+
+      poll()
+    }
+
     fetchAudioStatus()
-  }, [postId, locale])
+  }, [postId])
 
   // Track if we should autoplay when audio becomes available
   const pendingAutoplayRef = useRef(false)
@@ -64,31 +99,58 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
         // Will be retried in onCanPlay
       })
     }
-    // If no audio yet, trigger generation
+    // If no audio yet, trigger generation (always use EN for podcast)
     else if (status === 'idle' && !audioUrl) {
       setAutoplayTriggered(true)
       pendingAutoplayRef.current = true
       setStatus('loading')
 
-      fetch(`/api/tts/${postId}?locale=${locale}&generate=true`)
+      // Trigger podcast generation - always use EN
+      fetch(`/api/podcast/${postId}?locale=en&generate=true`)
         .then(res => res.json())
         .then(data => {
           if (data.audioUrl) {
             setAudioUrl(data.audioUrl)
             setStatus('ready')
-            // Autoplay will be triggered by onCanPlay
+          } else if (data.status === 'generating') {
+            // Poll for completion
+            pollForCompletion()
           } else {
             setStatus('error')
             pendingAutoplayRef.current = false
           }
         })
         .catch(err => {
-          console.error('[AudioPlayer] Auto-generation error:', err)
+          console.error('[AudioPlayer] Podcast generation error:', err)
           setStatus('error')
           pendingAutoplayRef.current = false
         })
     }
-  }, [shouldAutoplay, autoplayTriggered, status, audioUrl, postId, locale])
+
+    // Helper to poll for podcast completion
+    function pollForCompletion() {
+      const poll = async () => {
+        try {
+          const res = await fetch(`/api/podcast/${postId}?locale=en`)
+          const data = await res.json()
+
+          if (data.exists && data.audioUrl) {
+            setAudioUrl(data.audioUrl)
+            setStatus('ready')
+          } else if (data.status === 'generating') {
+            setTimeout(poll, 5000)
+          } else {
+            setStatus('error')
+            pendingAutoplayRef.current = false
+          }
+        } catch {
+          setStatus('error')
+          pendingAutoplayRef.current = false
+        }
+      }
+      poll()
+    }
+  }, [shouldAutoplay, autoplayTriggered, status, audioUrl, postId])
 
   // Called when audio is ready to play
   const handleCanPlay = useCallback(() => {
@@ -104,16 +166,17 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
   const togglePlayback = useCallback(async () => {
     if (status === 'disabled') return
 
-    // If no audio URL yet, generate it
+    // If no audio URL yet, trigger podcast generation (always EN)
     if (!audioUrl && status !== 'loading') {
       setStatus('loading')
 
       try {
-        const response = await fetch(`/api/tts/${postId}?locale=${locale}&generate=true`)
+        // Trigger podcast generation - always use EN
+        const response = await fetch(`/api/podcast/${postId}?locale=en&generate=true`)
         const data = await response.json()
 
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to generate audio')
+        if (!response.ok && data.status !== 'generating') {
+          throw new Error(data.error || 'Failed to generate podcast')
         }
 
         if (data.audioUrl) {
@@ -123,11 +186,31 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
           setTimeout(() => {
             audioRef.current?.play()
           }, 100)
+        } else if (data.status === 'generating') {
+          // Poll for completion
+          const poll = async () => {
+            const res = await fetch(`/api/podcast/${postId}?locale=en`)
+            const pollData = await res.json()
+
+            if (pollData.exists && pollData.audioUrl) {
+              setAudioUrl(pollData.audioUrl)
+              setStatus('ready')
+              // Auto-play when ready
+              setTimeout(() => {
+                audioRef.current?.play()
+              }, 100)
+            } else if (pollData.status === 'generating') {
+              setTimeout(poll, 5000)
+            } else if (pollData.status === 'failed') {
+              setStatus('error')
+            }
+          }
+          poll()
         } else {
           throw new Error('No audio URL returned')
         }
       } catch (err) {
-        console.error('[AudioPlayer] Generation error:', err)
+        console.error('[AudioPlayer] Podcast generation error:', err)
         setStatus('error')
       }
       return
@@ -141,7 +224,7 @@ export function AudioPlayer({ postId, locale = 'de', className }: AudioPlayerPro
         audioRef.current.play()
       }
     }
-  }, [audioUrl, status, postId, locale, isPlaying])
+  }, [audioUrl, status, postId, isPlaying])
 
   // Audio event handlers
   const handlePlay = useCallback(() => setIsPlaying(true), [])
