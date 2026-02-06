@@ -105,7 +105,9 @@ async function decodeMP3(mp3Buffer: Buffer): Promise<Float32Array[]> {
  * Encode PCM samples to MP3
  */
 function encodeMP3(leftChannel: Float32Array, rightChannel: Float32Array): Buffer {
+  console.log(`[Crossfade] Mp3Encoder available: ${typeof Mp3Encoder}`)
   const mp3encoder = new Mp3Encoder(CHANNELS, SAMPLE_RATE, BITRATE)
+  console.log(`[Crossfade] Encoder instance created: ${typeof mp3encoder}, encodeBuffer: ${typeof mp3encoder.encodeBuffer}`)
 
   const left = new Int16Array(leftChannel.length)
   const right = new Int16Array(rightChannel.length)
@@ -132,7 +134,9 @@ function encodeMP3(leftChannel: Float32Array, rightChannel: Float32Array): Buffe
     mp3Data.push(final)
   }
 
+  console.log(`[Crossfade] MP3 encoding complete: ${mp3Data.length} chunks collected`)
   const totalLength = mp3Data.reduce((acc, buf) => acc + buf.length, 0)
+  console.log(`[Crossfade] Total MP3 bytes: ${totalLength}`)
   const result = new Uint8Array(totalLength)
   let offset = 0
   for (const buf of mp3Data) {
