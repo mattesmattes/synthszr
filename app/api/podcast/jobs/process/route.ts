@@ -18,8 +18,8 @@ import {
 } from '@/lib/tts/elevenlabs-tts'
 import { concatenateWithCrossfade, type AudioSegment } from '@/lib/audio/crossfade'
 
-// Maximum duration for this function (Vercel Pro supports up to 15 minutes)
-export const maxDuration = 900
+// Maximum duration for this function (Vercel Pro max is 800 seconds)
+export const maxDuration = 800
 
 // Parallel TTS batch size (to speed up generation while respecting rate limits)
 const TTS_BATCH_SIZE = 5
