@@ -234,9 +234,9 @@ export default function AudioPage() {
           postId: selectedPostId,
           locale: selectedLocale,
           durationMinutes: podcastDuration,
-          // Only send customPrompt if user has modified it from default
-          // Otherwise let API use locale-specific default prompts (DE/EN)
-          ...(customPrompt !== PODCAST_SCRIPT_PROMPT && { customPrompt }),
+          // Never send customPrompt when generating from post - let API use
+          // its built-in locale-specific prompts (DE/EN templates)
+          // customPrompt is only for manual script editing
         }),
       })
 
