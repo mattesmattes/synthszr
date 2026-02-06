@@ -354,49 +354,45 @@ export async function generatePodcastDialogue(
     }
 
     const silenceBuffer = generateSilenceBuffer()
-    const BATCH_SIZE = 5 // Generate 5 lines in parallel to avoid rate limiting
 
-    console.log(`[Podcast] Generating ${validLines.length} lines in parallel batches of ${BATCH_SIZE}`)
+    // Verify API key is set
+    const apiKey = process.env.ELEVENLABS_API_KEY
+    if (!apiKey) {
+      console.error('[Podcast] ELEVENLABS_API_KEY is not set!')
+      return { success: false, error: 'ELEVENLABS_API_KEY environment variable is not set' }
+    }
+    console.log(`[Podcast] API key present: ${apiKey.slice(0, 8)}...${apiKey.slice(-4)} (${apiKey.length} chars)`)
 
-    // Generate all audio segments in parallel batches
-    const audioSegments: Buffer[] = new Array(validLines.length)
+    console.log(`[Podcast] Generating ${validLines.length} lines SEQUENTIALLY`)
 
-    for (let batchStart = 0; batchStart < validLines.length; batchStart += BATCH_SIZE) {
-      const batch = validLines.slice(batchStart, batchStart + BATCH_SIZE)
-      const batchNum = Math.floor(batchStart / BATCH_SIZE) + 1
-      const totalBatches = Math.ceil(validLines.length / BATCH_SIZE)
+    // Generate all audio segments sequentially to avoid rate limiting
+    const audioSegments: Buffer[] = []
 
-      console.log(`[Podcast] Batch ${batchNum}/${totalBatches}: generating lines ${batchStart + 1}-${batchStart + batch.length}`)
+    for (let i = 0; i < validLines.length; i++) {
+      const line = validLines[i]
+      const voiceId = line.speaker === 'HOST'
+        ? script.hostVoiceId
+        : script.guestVoiceId
 
-      const batchPromises = batch.map(async (line, idx) => {
-        const globalIndex = batchStart + idx
-        const voiceId = line.speaker === 'HOST'
-          ? script.hostVoiceId
-          : script.guestVoiceId
+      try {
+        const startTime = Date.now()
+        const buffer = await generateDialogueSegment(
+          line.text,
+          voiceId,
+          script.model || 'eleven_v3'
+        )
+        const elapsed = Date.now() - startTime
+        console.log(`[Podcast] Line ${i + 1}/${validLines.length}: ${buffer.length} bytes in ${elapsed}ms (${line.speaker})`)
+        audioSegments.push(buffer)
 
-        try {
-          const startTime = Date.now()
-          const buffer = await generateDialogueSegment(
-            line.text,
-            voiceId,
-            script.model || 'eleven_v3'
-          )
-          const elapsed = Date.now() - startTime
-          console.log(`[Podcast] Line ${globalIndex + 1}/${validLines.length}: ${buffer.length} bytes in ${elapsed}ms (${line.speaker})`)
-          return { index: globalIndex, buffer, success: true }
-        } catch (error) {
-          console.error(`[Podcast] Line ${globalIndex + 1} FAILED:`, error instanceof Error ? error.message : error)
-          return { index: globalIndex, buffer: Buffer.alloc(0), success: false }
+        // Small delay between requests to avoid rate limiting
+        if (i < validLines.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100))
         }
-      })
-
-      const batchResults = await Promise.all(batchPromises)
-
-      for (const result of batchResults) {
-        audioSegments[result.index] = result.buffer
+      } catch (error) {
+        console.error(`[Podcast] Line ${i + 1} FAILED:`, error instanceof Error ? error.message : error)
+        audioSegments.push(Buffer.alloc(0))
       }
-
-      console.log(`[Podcast] Batch ${batchNum}/${totalBatches} complete`)
     }
 
     // Check how many segments we got
@@ -406,7 +402,7 @@ export async function generatePodcastDialogue(
     console.log(`[Podcast] Generated ${successfulSegments}/${validLines.length} segments (${failedSegments} failed), total ${totalBytes} bytes`)
 
     // Build ordered list of audio buffers with silence between speaker changes
-    const audioBuffers: Buffer[] = []
+    const finalBuffers: Buffer[] = []
     let previousSpeaker: 'HOST' | 'GUEST' | null = null
 
     for (let i = 0; i < validLines.length; i++) {
@@ -417,22 +413,22 @@ export async function generatePodcastDialogue(
 
       // Add silence between different speakers
       if (previousSpeaker && previousSpeaker !== line.speaker) {
-        audioBuffers.push(silenceBuffer)
+        finalBuffers.push(silenceBuffer)
       }
 
-      audioBuffers.push(segment)
+      finalBuffers.push(segment)
       previousSpeaker = line.speaker
     }
 
     // Use proper MP3 concatenation (strips ID3 tags from subsequent files)
-    const bufferSizes = audioBuffers.map(b => b.length)
-    console.log(`[Podcast] Concatenating ${audioBuffers.length} buffers: [${bufferSizes.slice(0, 5).join(', ')}${bufferSizes.length > 5 ? '...' : ''}]`)
-    const combinedAudio = concatenateMp3Buffers(audioBuffers)
+    const bufferSizes = finalBuffers.map(b => b.length)
+    console.log(`[Podcast] Concatenating ${finalBuffers.length} buffers: [${bufferSizes.slice(0, 5).join(', ')}${bufferSizes.length > 5 ? '...' : ''}]`)
+    const combinedAudio = concatenateMp3Buffers(finalBuffers)
 
     // Estimate duration (MP3 at 128kbps = 16KB per second)
     const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
 
-    console.log(`[Podcast] FINAL: ${combinedAudio.length} bytes, ~${durationSeconds}s (from ${audioBuffers.length} buffers)`)
+    console.log(`[Podcast] FINAL: ${combinedAudio.length} bytes, ~${durationSeconds}s (from ${finalBuffers.length} buffers)`)
 
     return {
       success: true,
