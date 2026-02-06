@@ -34,11 +34,15 @@ const LOCALE_TO_TTS_LANG: Record<string, 'de' | 'en'> = {
 }
 
 // Default podcast script prompt template - GERMAN
-const DEFAULT_SCRIPT_PROMPT_DE = `Du bist ein erfahrener Podcast-Skriptautor. Erstelle ein lebendiges, natürliches Gespräch auf DEUTSCH zwischen einem Host und einem Gast für einen Finance/Tech-Podcast.
+const DEFAULT_SCRIPT_PROMPT_DE = `Du bist ein erfahrener Podcast-Skriptautor. Erstelle ein lebendiges, natürliches Gespräch auf DEUTSCH zwischen einem Host und einem Gast für den "Synthesizer Daily" Podcast.
+
+**WICHTIG - Podcast-Name und Begrüßung:**
+- Der Podcast heißt IMMER "Synthesizer Daily" - NIEMALS andere Namen wie "TechFinance Daily" oder ähnliche Fantasienamen verwenden!
+- Die Begrüßung MUSS den Wochentag und das Datum enthalten: "Willkommen bei Synthesizer Daily am {weekday}, den {date}..."
 
 **Rollen:**
 - HOST: Moderiert das Gespräch, stellt Fragen, fasst zusammen
-- GUEST: Synthszr - der AI-Analyst mit pointierten Meinungen
+- GUEST: Synthesizer - der AI-Analyst mit pointierten Meinungen
 
 **Output-Format (WICHTIG - exakt dieses Format verwenden):**
 HOST: [emotion] Dialog text here...
@@ -55,13 +59,16 @@ GUEST: [emotion] Response text here...
 - [curiously] - neugierig
 - [interrupting] - unterbrechend (für Überlappung)
 
-**Stilregeln für natürliche Dialoge:**
+**Stilregeln für natürliche, lebendige Dialoge:**
 1. Nutze Füllwörter: "Also...", "Hmm...", "Weißt du...", "Naja..."
-2. Unterbrechungen mit [interrupting]: GUEST kann HOST unterbrechen
-3. Reaktionen: "Genau!", "Interessant!", "Warte mal..."
-4. Pausen mit "..." für Denkpausen
-5. Variiere die Satzlänge - kurze Einwürfe, längere Erklärungen
-6. Der GUEST (Synthszr) sollte die "Synthszr Take" Meinungen einbringen
+2. WICHTIG - Häufige Unterbrechungen: Nutze [interrupting] oft! Beide Sprecher sollen sich gegenseitig unterbrechen, wie in einem echten Gespräch
+3. Kurze Reaktionen WÄHREND der andere spricht: "Mhm!", "Ja!", "Genau!", "Ach wirklich?", "Oh!"
+4. Satzfragmente und abgebrochene Sätze: "Das ist doch—" "[interrupting] Genau das meine ich!"
+5. Überlappende Zustimmung: Wenn einer erklärt, wirft der andere kurze Bestätigungen ein
+6. Pausen mit "..." für Denkpausen
+7. Variiere die Satzlänge stark - sehr kurze Einwürfe (1-3 Wörter) zwischen längeren Erklärungen
+8. Der GUEST (Synthszr) sollte die "Synthszr Take" Meinungen einbringen
+9. Mindestens 30% der Zeilen sollten [interrupting] oder sehr kurze Reaktionen sein
 
 **WICHTIG - Verabschiedung am Ende:**
 Der Podcast MUSS mit einer freundlichen Verabschiedung enden, die folgende Elemente enthält:
@@ -82,14 +89,18 @@ WICHTIG: Das gesamte Skript MUSS auf DEUTSCH sein!
 Erstelle jetzt das Podcast-Skript. Beginne direkt mit "HOST:" - keine Einleitung.`
 
 // Default podcast script prompt template - ENGLISH
-const DEFAULT_SCRIPT_PROMPT_EN = `You are an experienced podcast script writer. Create a lively, natural conversation in ENGLISH between a host and a guest for a Finance/Tech podcast.
+const DEFAULT_SCRIPT_PROMPT_EN = `You are an experienced podcast script writer. Create a lively, natural conversation in ENGLISH between a host and a guest for the "Synthesizer Daily" podcast.
 
 **CRITICAL LANGUAGE REQUIREMENT:**
 The source content below may be in German or another language. You MUST translate all content and create the entire podcast script in ENGLISH. Do not use any German words or phrases in your output.
 
+**IMPORTANT - Podcast Name and Greeting:**
+- The podcast is ALWAYS called "Synthesizer Daily" - NEVER use other names like "TechFinance Daily" or similar fantasy names!
+- The greeting MUST include the weekday and date: "Welcome to Synthesizer Daily on {weekday}, {date}..."
+
 **Roles:**
 - HOST: Moderates the conversation, asks questions, summarizes
-- GUEST: Synthszr - the AI analyst with pointed opinions
+- GUEST: Synthesizer - the AI analyst with pointed opinions
 
 **Output Format (IMPORTANT - use exactly this format):**
 HOST: [emotion] Dialog text here...
@@ -106,13 +117,16 @@ GUEST: [emotion] Response text here...
 - [curiously] - curious
 - [interrupting] - interrupting (for overlap effect)
 
-**Style Rules for Natural Dialogue:**
+**Style Rules for Natural, Lively Dialogue:**
 1. Use filler words: "Well...", "Hmm...", "You know...", "I mean..."
-2. Interruptions with [interrupting]: GUEST can interrupt HOST
-3. Reactions: "Exactly!", "Interesting!", "Wait..."
-4. Pauses with "..." for thinking
-5. Vary sentence length - short interjections, longer explanations
-6. GUEST (Synthszr) should bring in the "Synthszr Take" opinions
+2. IMPORTANT - Frequent interruptions: Use [interrupting] often! Both speakers should interrupt each other, like in a real conversation
+3. Short reactions WHILE the other speaks: "Mhm!", "Yeah!", "Exactly!", "Oh really?", "Oh!"
+4. Sentence fragments and cut-off sentences: "That's just—" "[interrupting] Exactly what I mean!"
+5. Overlapping agreement: When one explains, the other throws in short confirmations
+6. Pauses with "..." for thinking
+7. Vary sentence length dramatically - very short interjections (1-3 words) between longer explanations
+8. GUEST (Synthszr) should bring in the "Synthszr Take" opinions
+9. At least 30% of lines should be [interrupting] or very short reactions
 
 **IMPORTANT - Closing/Outro:**
 The podcast MUST end with a friendly farewell that includes:
@@ -270,11 +284,23 @@ export async function POST(request: NextRequest) {
 
     // Build the prompt - use language-appropriate template
     const defaultPrompt = ttsLang === 'de' ? DEFAULT_SCRIPT_PROMPT_DE : DEFAULT_SCRIPT_PROMPT_EN
+
+    // Generate weekday and date for podcast greeting
+    const now = new Date()
+    const weekday = now.toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-US', { weekday: 'long' })
+    const date = now.toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-US', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    })
+
     const prompt = (body.customPrompt || defaultPrompt)
       .replace('{duration}', String(durationMinutes))
       .replace('{wordCount}', String(wordCount))
       .replace('{title}', postTitle)
       .replace('{content}', postContent)
+      .replace('{weekday}', weekday)
+      .replace('{date}', date)
 
     // Generate script with Claude
     const anthropic = new Anthropic()

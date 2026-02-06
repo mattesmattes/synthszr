@@ -13,11 +13,10 @@ import { createClient } from '@/lib/supabase/server'
 import { put } from '@vercel/blob'
 import {
   parseScriptText,
-  type PodcastLine,
   type OpenAIVoice,
-  type ElevenLabsModel,
   type SegmentMetadata,
 } from '@/lib/tts/elevenlabs-tts'
+import { concatenateWithCrossfade, type AudioSegment } from '@/lib/audio/crossfade'
 
 // Maximum duration for this function (5 minutes on Pro, adjust as needed)
 export const maxDuration = 300
@@ -164,10 +163,10 @@ export async function POST(request: NextRequest) {
     }
 
     const provider = job.provider || 'elevenlabs'
-    const segmentBuffers: Buffer[] = []
+    const segments: AudioSegment[] = []
     const segmentMetadata: SegmentMetadata[] = []
 
-    console.log(`[Podcast Jobs] Generating ${lines.length} segments with ${provider}`)
+    console.log(`[Podcast Jobs] Generating ${lines.length} segments with ${provider} (smart crossfade)`)
 
     // Generate each segment
     for (let i = 0; i < lines.length; i++) {
@@ -184,9 +183,14 @@ export async function POST(request: NextRequest) {
       }
 
       const elapsed = Date.now() - startTime
-      console.log(`[Podcast Jobs] Line ${i + 1}/${lines.length}: ${buffer.length} bytes in ${elapsed}ms`)
+      console.log(`[Podcast Jobs] Line ${i + 1}/${lines.length}: ${line.speaker} | ${buffer.length} bytes in ${elapsed}ms`)
 
-      segmentBuffers.push(buffer)
+      // Store segment with speaker and text for smart crossfade analysis
+      segments.push({
+        buffer,
+        speaker: line.speaker as 'HOST' | 'GUEST',
+        text: line.text
+      })
 
       // Calculate duration estimate (MP3 at 128kbps)
       const segmentDuration = buffer.length / (128 * 1024 / 8)
@@ -217,7 +221,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Upload segments to Vercel Blob
+    // Upload individual segments to Vercel Blob
     const timestamp = Date.now()
     const safeTitle = (job.title || 'podcast')
       .toLowerCase()
@@ -225,17 +229,23 @@ export async function POST(request: NextRequest) {
       .slice(0, 50)
 
     const segmentUrls: string[] = []
-    for (let i = 0; i < segmentBuffers.length; i++) {
+    for (let i = 0; i < segments.length; i++) {
       const fileName = `podcasts/${safeTitle}-${timestamp}-seg${i.toString().padStart(3, '0')}.mp3`
-      const blob = await put(fileName, segmentBuffers[i], {
+      const blob = await put(fileName, segments[i].buffer, {
         access: 'public',
         contentType: 'audio/mpeg',
       })
       segmentUrls.push(blob.url)
     }
 
-    // Also create combined audio (simple concatenation)
-    const combinedBuffer = Buffer.concat(segmentBuffers)
+    // Create combined audio with smart PCM crossfade for natural dialogue flow
+    // Include intro and outro music with 4-second crossfades
+    const combinedBuffer = await concatenateWithCrossfade(segments, {
+      includeIntro: true,
+      introCrossfadeSec: 4,
+      includeOutro: true,
+      outroCrossfadeSec: 4
+    })
     const combinedFileName = `podcasts/${safeTitle}-${timestamp}.mp3`
     const combinedBlob = await put(combinedFileName, combinedBuffer, {
       access: 'public',
