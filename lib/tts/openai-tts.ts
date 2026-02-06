@@ -274,7 +274,7 @@ export async function getTTSSettings(): Promise<TTSSettings> {
     // Podcast English voices - Lily as host, Daniel as guest
     podcast_host_voice_en: (settingsMap.podcast_host_voice_en as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
     podcast_guest_voice_en: (settingsMap.podcast_guest_voice_en as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
-    podcast_duration_minutes: (settingsMap.podcast_duration_minutes as number) || 15,
+    podcast_duration_minutes: (settingsMap.podcast_duration_minutes as number) || 30,
     // Podcast script prompt (null means use default)
     podcast_script_prompt: (settingsMap.podcast_script_prompt as string) || null,
   }

@@ -220,7 +220,7 @@ export async function POST(request: NextRequest) {
 
     // Get TTS settings for duration
     const settings = await getTTSSettings()
-    const durationMinutes = body.durationMinutes || settings.podcast_duration_minutes || 15
+    const durationMinutes = body.durationMinutes || settings.podcast_duration_minutes || 30
     const wordCount = Math.round(durationMinutes * 150)
 
     // Fetch post content

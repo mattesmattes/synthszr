@@ -174,7 +174,7 @@ export default function AudioPage() {
   const [activeTab, setActiveTab] = useState('podcast')
 
   // Podcast-specific state
-  const [podcastDuration, setPodcastDuration] = useState(25)
+  const [podcastDuration, setPodcastDuration] = useState(30)
   const [podcastScript, setPodcastScript] = useState(EXAMPLE_PODCAST_SCRIPT)
   const [podcastGenerating, setPodcastGenerating] = useState(false)
   const [podcastAudioUrl, setPodcastAudioUrl] = useState<string | null>(null)
@@ -186,7 +186,7 @@ export default function AudioPage() {
   // Podcast provider selection (OpenAI is ~10x cheaper but no emotion tags)
   const [podcastProvider, setPodcastProvider] = useState<PodcastProvider>('openai')
   const [openaiHostVoice, setOpenaiHostVoice] = useState<TTSVoice>('shimmer')
-  const [openaiGuestVoice, setOpenaiGuestVoice] = useState<TTSVoice>('fable')
+  const [openaiGuestVoice, setOpenaiGuestVoice] = useState<TTSVoice>('alloy')
   const [openaiModel, setOpenaiModel] = useState<TTSModel>('tts-1-hd')
 
   // Stereo mixing data

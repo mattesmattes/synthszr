@@ -105,9 +105,23 @@ async function decodeMP3(mp3Buffer: Buffer): Promise<Float32Array[]> {
  * Encode PCM samples to MP3
  */
 function encodeMP3(leftChannel: Float32Array, rightChannel: Float32Array): Buffer {
-  console.log(`[Crossfade] Mp3Encoder available: ${typeof Mp3Encoder}`)
-  const mp3encoder = new Mp3Encoder(CHANNELS, SAMPLE_RATE, BITRATE)
-  console.log(`[Crossfade] Encoder instance created: ${typeof mp3encoder}, encodeBuffer: ${typeof mp3encoder.encodeBuffer}`)
+  const inputSamples = leftChannel.length
+  const expectedRawBytes = inputSamples * 2 * 2 // stereo 16-bit
+  console.log(`[Crossfade] MP3 encode input: ${inputSamples} samples (${(expectedRawBytes / 1024 / 1024).toFixed(1)} MB raw)`)
+
+  console.log(`[Crossfade] Mp3Encoder type: ${typeof Mp3Encoder}`)
+  if (typeof Mp3Encoder !== 'function') {
+    throw new Error(`Mp3Encoder is not a function, got: ${typeof Mp3Encoder}`)
+  }
+
+  let mp3encoder: InstanceType<typeof Mp3Encoder>
+  try {
+    mp3encoder = new Mp3Encoder(CHANNELS, SAMPLE_RATE, BITRATE)
+    console.log(`[Crossfade] Mp3Encoder created. encodeBuffer: ${typeof mp3encoder.encodeBuffer}, flush: ${typeof mp3encoder.flush}`)
+  } catch (err) {
+    console.error(`[Crossfade] Failed to create Mp3Encoder:`, err)
+    throw new Error(`Mp3Encoder constructor failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
 
   const left = new Int16Array(leftChannel.length)
   const right = new Int16Array(rightChannel.length)
@@ -119,29 +133,72 @@ function encodeMP3(leftChannel: Float32Array, rightChannel: Float32Array): Buffe
 
   const mp3Data: Uint8Array[] = []
   const blockSize = 1152
+  let blocksProcessed = 0
+  let totalEncodedBytes = 0
 
   for (let i = 0; i < left.length; i += blockSize) {
     const leftChunk = left.subarray(i, i + blockSize)
     const rightChunk = right.subarray(i, i + blockSize)
-    const mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk)
-    if (mp3buf.length > 0) {
-      mp3Data.push(mp3buf)
+
+    try {
+      const mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk)
+      blocksProcessed++
+      if (mp3buf && mp3buf.length > 0) {
+        mp3Data.push(mp3buf)
+        totalEncodedBytes += mp3buf.length
+      }
+    } catch (err) {
+      console.error(`[Crossfade] encodeBuffer failed at block ${blocksProcessed}:`, err)
+      throw new Error(`MP3 encoding failed at block ${blocksProcessed}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
-  const final = mp3encoder.flush()
-  if (final.length > 0) {
-    mp3Data.push(final)
+  console.log(`[Crossfade] Encoded ${blocksProcessed} blocks, ${mp3Data.length} chunks, ${totalEncodedBytes} bytes so far`)
+
+  try {
+    const final = mp3encoder.flush()
+    if (final && final.length > 0) {
+      mp3Data.push(final)
+      totalEncodedBytes += final.length
+      console.log(`[Crossfade] Flush added ${final.length} bytes`)
+    }
+  } catch (err) {
+    console.error(`[Crossfade] flush() failed:`, err)
+    throw new Error(`MP3 flush failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
-  console.log(`[Crossfade] MP3 encoding complete: ${mp3Data.length} chunks collected`)
   const totalLength = mp3Data.reduce((acc, buf) => acc + buf.length, 0)
-  console.log(`[Crossfade] Total MP3 bytes: ${totalLength}`)
+  console.log(`[Crossfade] Final MP3: ${totalLength} bytes (${(totalLength / 1024).toFixed(0)} KB)`)
+
+  // Validate we got reasonable compression (MP3 should be ~10x smaller than raw PCM)
+  const compressionRatio = expectedRawBytes / totalLength
+  console.log(`[Crossfade] Compression ratio: ${compressionRatio.toFixed(1)}x (expected ~10x for 128kbps)`)
+
+  if (totalLength === 0) {
+    throw new Error('MP3 encoding produced 0 bytes - encoder may have failed silently')
+  }
+
+  if (compressionRatio < 2) {
+    console.error(`[Crossfade] WARNING: Compression ratio too low (${compressionRatio.toFixed(1)}x). Output may not be valid MP3!`)
+    throw new Error(`MP3 encoding failed - output is ${totalLength} bytes but should be ~${Math.floor(expectedRawBytes / 10)} bytes. Compression ratio: ${compressionRatio.toFixed(1)}x`)
+  }
+
   const result = new Uint8Array(totalLength)
   let offset = 0
   for (const buf of mp3Data) {
     result.set(buf, offset)
     offset += buf.length
+  }
+
+  // Verify MP3 header (should start with ID3 tag or MP3 sync word 0xFF 0xFB/0xFA/0xF3/0xF2)
+  const header = result.slice(0, 4)
+  const isID3 = header[0] === 0x49 && header[1] === 0x44 && header[2] === 0x33 // "ID3"
+  const isMP3Frame = header[0] === 0xFF && (header[1] & 0xE0) === 0xE0 // MP3 sync word
+
+  console.log(`[Crossfade] MP3 header: ${Array.from(header).map(b => b.toString(16).padStart(2, '0')).join(' ')} (ID3: ${isID3}, MP3Frame: ${isMP3Frame})`)
+
+  if (!isID3 && !isMP3Frame) {
+    throw new Error(`Invalid MP3 output - header bytes ${Array.from(header).map(b => b.toString(16)).join(' ')} don't match MP3 format`)
   }
 
   return Buffer.from(result)
@@ -626,16 +683,10 @@ export async function concatenateWithCrossfade(
 
   console.log(`[Crossfade] Final audio with intro/outro: ${finalDurationS.toFixed(1)}s`)
 
-  // Encode to MP3
+  // Encode to MP3 (includes validation)
   console.log(`[Crossfade] Starting MP3 encoding of ${resultChannels[0].length} samples...`)
   const mp3Buffer = encodeMP3(resultChannels[0], resultChannels[1])
-  const expectedRawSize = resultChannels[0].length * 2 * 2 // stereo 16-bit
-  const compressionRatio = expectedRawSize / mp3Buffer.length
-  console.log(`[Crossfade] Encoded MP3: ${(mp3Buffer.length / 1024).toFixed(0)} KB (raw would be ${(expectedRawSize / 1024 / 1024).toFixed(1)} MB, ratio: ${compressionRatio.toFixed(1)}x)`)
-
-  // Verify it looks like MP3 (should start with ID3 or 0xFF 0xFB)
-  const header = mp3Buffer.slice(0, 3).toString('hex')
-  console.log(`[Crossfade] MP3 header bytes: ${header} (expect 494433 for ID3 or fffb for MP3 frame)`)
+  console.log(`[Crossfade] ✓ MP3 encoding successful: ${(mp3Buffer.length / 1024).toFixed(0)} KB`)
 
   return mp3Buffer
 }

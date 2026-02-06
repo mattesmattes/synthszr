@@ -206,7 +206,7 @@ async function generatePodcastForPost(
 
     // Get settings
     const settings = await getTTSSettings()
-    const durationMinutes = settings.podcast_duration_minutes || 15
+    const durationMinutes = settings.podcast_duration_minutes || 30
     const wordCount = Math.round(durationMinutes * 150)
 
     // Fetch post content
