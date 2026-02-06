@@ -149,6 +149,12 @@ export interface PodcastGenerationResult {
   audioBuffer?: Buffer
   durationSeconds?: number
   error?: string
+  debug?: {
+    totalLines: number
+    successfulLines: number
+    failedLines: number
+    errors: string[]
+  }
 }
 
 /**
@@ -367,6 +373,7 @@ export async function generatePodcastDialogue(
 
     // Generate all audio segments sequentially to avoid rate limiting
     const audioSegments: Buffer[] = []
+    const errors: string[] = []
 
     for (let i = 0; i < validLines.length; i++) {
       const line = validLines[i]
@@ -390,7 +397,9 @@ export async function generatePodcastDialogue(
           await new Promise(resolve => setTimeout(resolve, 100))
         }
       } catch (error) {
-        console.error(`[Podcast] Line ${i + 1} FAILED:`, error instanceof Error ? error.message : error)
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        console.error(`[Podcast] Line ${i + 1} FAILED:`, errorMsg)
+        errors.push(`Line ${i + 1}: ${errorMsg}`)
         audioSegments.push(Buffer.alloc(0))
       }
     }
@@ -434,6 +443,12 @@ export async function generatePodcastDialogue(
       success: true,
       audioBuffer: combinedAudio,
       durationSeconds,
+      debug: {
+        totalLines: validLines.length,
+        successfulLines: successfulSegments,
+        failedLines: failedSegments,
+        errors: errors.slice(0, 10), // First 10 errors
+      },
     }
   } catch (error) {
     console.error('[Podcast] Generation failed:', error)

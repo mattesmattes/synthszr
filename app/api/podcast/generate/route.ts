@@ -128,6 +128,7 @@ export async function POST(request: NextRequest) {
       durationSeconds: result.durationSeconds,
       lineCount: lines.length,
       warnings: warnings.length > 0 ? warnings : undefined,
+      debug: result.debug,
     })
   } catch (error) {
     console.error('[Podcast] Generation error:', error)
