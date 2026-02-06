@@ -106,25 +106,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate unique filename (now WAV format for consistent audio)
+    // Generate unique filename
     const timestamp = Date.now()
     const safeTitle = (body.title || 'podcast')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .slice(0, 50)
-    const fileName = `podcasts/${safeTitle}-${timestamp}.wav`
 
-    // Upload to Vercel Blob
+    // Upload individual segments for client-side concatenation (avoids mono/stereo issues)
+    const segmentUrls: string[] = []
+    if (result.segmentBuffers && result.segmentBuffers.length > 0) {
+      console.log(`[Podcast] Uploading ${result.segmentBuffers.length} individual segments...`)
+      for (let i = 0; i < result.segmentBuffers.length; i++) {
+        const segmentFileName = `podcasts/${safeTitle}-${timestamp}-seg${i.toString().padStart(3, '0')}.mp3`
+        const segmentBlob = await put(segmentFileName, result.segmentBuffers[i], {
+          access: 'public',
+          contentType: 'audio/mpeg',
+        })
+        segmentUrls.push(segmentBlob.url)
+      }
+      console.log(`[Podcast] Uploaded ${segmentUrls.length} segments`)
+    }
+
+    // Also upload combined audio (may have mono/stereo issues but works in some players)
+    const fileName = `podcasts/${safeTitle}-${timestamp}.mp3`
     const blob = await put(fileName, result.audioBuffer, {
       access: 'public',
-      contentType: 'audio/wav',
+      contentType: 'audio/mpeg',
     })
 
-    console.log(`[Podcast] Uploaded to ${blob.url} (${result.durationSeconds}s)`)
+    console.log(`[Podcast] Uploaded combined to ${blob.url} (${result.durationSeconds}s)`)
 
     return NextResponse.json({
       success: true,
       audioUrl: blob.url,
+      segmentUrls: segmentUrls.length > 0 ? segmentUrls : undefined,
       durationSeconds: result.durationSeconds,
       lineCount: lines.length,
       warnings: warnings.length > 0 ? warnings : undefined,
