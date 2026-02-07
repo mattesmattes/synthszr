@@ -293,15 +293,15 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
               <filter id="glass-warp" x="-20%" y="-20%" width="140%" height="140%">
                 <feTurbulence
                   type="fractalNoise"
-                  baseFrequency="0.04 0.03"
-                  numOctaves="2"
-                  seed="5"
+                  baseFrequency="0.015 0.012"
+                  numOctaves="3"
+                  seed="3"
                   result="noise"
                 />
                 <feDisplacementMap
                   in="SourceGraphic"
                   in2="noise"
-                  scale="18"
+                  scale="30"
                   xChannelSelector="R"
                   yChannelSelector="G"
                 />
@@ -320,13 +320,13 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
             <div
               className="absolute -inset-2 rounded-full"
               style={{
-                backdropFilter: 'url(#glass-warp) blur(12px) saturate(1.8) brightness(1.05)',
-                WebkitBackdropFilter: 'url(#glass-warp) blur(12px) saturate(1.8) brightness(1.05)',
+                backdropFilter: 'url(#glass-warp) blur(6px) saturate(1.6) brightness(1.08)',
+                WebkitBackdropFilter: 'url(#glass-warp) blur(6px) saturate(1.6) brightness(1.08)',
               }}
             />
 
-            {/* Layer 2: Base tint — semi-transparent so distortion is visible */}
-            <div className="absolute inset-0 rounded-full bg-white/25 dark:bg-white/10" />
+            {/* Layer 2: Base tint — very light to let refraction show through */}
+            <div className="absolute inset-0 rounded-full bg-white/15 dark:bg-white/8" />
 
             {/* Layer 3: Edge refraction — light bends stronger at curved glass edges */}
             <div
