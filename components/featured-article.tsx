@@ -52,8 +52,8 @@ export function FeaturedArticle({
                 style={{ imageRendering: 'pixelated' }}
               />
             </a>
-            {/* Logo centered on top - explicit mobile width constraint */}
-            <a href={postUrl} className="relative z-10">
+            {/* Logo centered on top - w-full on mobile so img w-[70%] resolves against cover width */}
+            <a href={postUrl} className="relative z-10 w-full flex justify-center md:w-auto">
               <img
                 src="/synthszr-logo.svg"
                 alt="Synthszr"
