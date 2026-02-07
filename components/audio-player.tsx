@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'next/navigation'
-import { Play, Pause, Loader2 } from 'lucide-react'
+import { Play, Pause, Loader2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface AudioPlayerProps {
@@ -11,15 +12,65 @@ interface AudioPlayerProps {
   className?: string
 }
 
+function formatTime(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return '0:00'
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
 export function AudioPlayer({ postId, className }: AudioPlayerProps) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'disabled'>('idle')
   const [isPlaying, setIsPlaying] = useState(false)
   const [autoplayTriggered, setAutoplayTriggered] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [coverVisible, setCoverVisible] = useState(true)
+  const [showFlyingNav, setShowFlyingNav] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const coverButtonRef = useRef<HTMLButtonElement | null>(null)
   const searchParams = useSearchParams()
   const shouldAutoplay = searchParams.get('autoplay') === 'true'
+
+  // Mount guard for createPortal
+  useEffect(() => setMounted(true), [])
+
+  // IntersectionObserver to track cover button visibility
+  useEffect(() => {
+    const button = coverButtonRef.current
+    if (!button) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setCoverVisible(entry.isIntersecting)
+      },
+      { threshold: 0 }
+    )
+
+    observer.observe(button)
+    return () => observer.disconnect()
+  }, [status])
+
+  // Show flying nav when playing and cover is scrolled out of view
+  useEffect(() => {
+    if (isPlaying && !coverVisible) {
+      setShowFlyingNav(true)
+    } else if (coverVisible) {
+      setShowFlyingNav(false)
+    }
+  }, [isPlaying, coverVisible])
+
+  // Hide flying nav when playback ends
+  useEffect(() => {
+    if (!isPlaying && !coverVisible) {
+      // Small delay so the pause state is visible before hiding
+      const t = setTimeout(() => setShowFlyingNav(false), 2000)
+      return () => clearTimeout(t)
+    }
+  }, [isPlaying, coverVisible])
 
   // Fetch podcast audio status on mount (always EN)
   useEffect(() => {
@@ -154,7 +205,10 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
   // Audio event handlers
   const handlePlay = useCallback(() => setIsPlaying(true), [])
   const handlePause = useCallback(() => setIsPlaying(false), [])
-  const handleEnded = useCallback(() => setIsPlaying(false), [])
+  const handleEnded = useCallback(() => {
+    setIsPlaying(false)
+    setCurrentTime(0)
+  }, [])
   const handleError = useCallback((e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
     const audio = e.currentTarget
     console.error('[AudioPlayer] Audio error:', {
@@ -167,10 +221,39 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
     setStatus('error')
   }, [])
 
+  const handleTimeUpdate = useCallback(() => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime)
+    }
+  }, [])
+
+  const handleLoadedMetadata = useCallback(() => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration)
+    }
+  }, [])
+
+  // Seek on progress bar click
+  const handleProgressClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current || !duration) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const ratio = Math.max(0, Math.min(1, x / rect.width))
+    audioRef.current.currentTime = ratio * duration
+  }, [duration])
+
+  // Close flying nav and stop playback
+  const handleClose = useCallback(() => {
+    audioRef.current?.pause()
+    setShowFlyingNav(false)
+  }, [])
+
   // Don't render if TTS is disabled or no podcast available
   if (status === 'disabled' || status === 'idle') {
     return null
   }
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
     <>
@@ -184,12 +267,15 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
           onEnded={handleEnded}
           onCanPlay={handleCanPlay}
           onError={handleError}
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleLoadedMetadata}
           preload="auto"
         />
       )}
 
-      {/* Play/Pause icon button - white circle with dark icon */}
+      {/* Cover play/pause button */}
       <button
+        ref={coverButtonRef}
         onClick={togglePlayback}
         disabled={status === 'loading'}
         className={cn(
@@ -206,6 +292,71 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
           <Play className="h-6 w-6 text-black fill-black ml-0.5" />
         )}
       </button>
+
+      {/* Flying Navigation — liquid glass mini player */}
+      {showFlyingNav && mounted && createPortal(
+        <div
+          className="flying-player-enter fixed top-3 left-0 right-0 flex justify-center z-50 pointer-events-none"
+          role="region"
+          aria-label="Podcast Player"
+        >
+          <div className={cn(
+            'flex items-center gap-3 pl-1.5 pr-2 py-1.5 rounded-full pointer-events-auto',
+            // Liquid glass effect
+            'bg-white/40 dark:bg-white/10',
+            'backdrop-blur-2xl backdrop-saturate-150',
+            'border border-white/50 dark:border-white/15',
+            'shadow-[0_4px_24px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.6)]',
+            'dark:shadow-[0_4px_24px_rgba(0,0,0,0.3),0_1px_2px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.08)]',
+          )}>
+            {/* Play/Pause */}
+            <button
+              onClick={togglePlayback}
+              className="flex items-center justify-center w-8 h-8 rounded-full bg-black/80 dark:bg-white/90 hover:bg-black dark:hover:bg-white transition-colors shrink-0"
+              aria-label={isPlaying ? 'Pause' : 'Play'}
+            >
+              {isPlaying ? (
+                <Pause className="h-3.5 w-3.5 text-white dark:text-black fill-white dark:fill-black" />
+              ) : (
+                <Play className="h-3.5 w-3.5 text-white dark:text-black fill-white dark:fill-black ml-0.5" />
+              )}
+            </button>
+
+            {/* Progress bar */}
+            <div
+              onClick={handleProgressClick}
+              className="relative w-28 sm:w-40 h-1 bg-black/10 dark:bg-white/15 rounded-full cursor-pointer group"
+            >
+              <div
+                className="absolute inset-y-0 left-0 bg-black/60 dark:bg-white/70 rounded-full transition-[width] duration-150 ease-linear"
+                style={{ width: `${progress}%` }}
+              />
+              {/* Seek knob on hover */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-black dark:bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm pointer-events-none"
+                style={{ left: `calc(${progress}% - 5px)` }}
+              />
+            </div>
+
+            {/* Time display */}
+            <span className="text-[10px] font-mono text-black/50 dark:text-white/50 tabular-nums whitespace-nowrap select-none">
+              {formatTime(currentTime)}
+              <span className="mx-px opacity-50">/</span>
+              {formatTime(duration)}
+            </span>
+
+            {/* Close */}
+            <button
+              onClick={handleClose}
+              className="flex items-center justify-center w-6 h-6 rounded-full hover:bg-black/8 dark:hover:bg-white/10 transition-colors shrink-0"
+              aria-label="Close player"
+            >
+              <X className="h-3 w-3 text-black/40 dark:text-white/40" />
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </>
   )
 }

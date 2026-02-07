@@ -514,3 +514,22 @@
 .animate-shimmer-slide {
   animation: shimmer-slide 1s ease-in-out 0.6s forwards;
 }
+
+/* ===== Flying Player Animations ===== */
+
+@keyframes flying-player-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-100%) scale(0.85);
+    filter: blur(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0px);
+  }
+}
+
+.flying-player-enter {
+  animation: flying-player-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
