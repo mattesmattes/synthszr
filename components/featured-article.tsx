@@ -52,12 +52,12 @@ export function FeaturedArticle({
                 style={{ imageRendering: 'pixelated' }}
               />
             </a>
-            {/* Logo centered on top - w-full on mobile so img w-[70%] resolves against cover width */}
+            {/* Logo centered on top - w-full on mobile so percentage resolves against cover width */}
             <a href={postUrl} className="relative z-10 w-full flex justify-center md:w-auto">
               <img
                 src="/synthszr-logo.svg"
                 alt="Synthszr"
-                className="h-auto w-[70%] max-w-[300px] md:h-24 md:w-auto md:max-w-[400px]"
+                className="h-auto w-[80%] md:h-24 md:w-auto md:max-w-[400px]"
               />
             </a>
             {/* Audio Player - directly under logo */}

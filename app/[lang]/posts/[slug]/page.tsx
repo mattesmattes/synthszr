@@ -299,12 +299,12 @@ export default async function PostPage({ params }: PageProps) {
                     style={{ imageRendering: 'pixelated' }}
                   />
                 </Link>
-                {/* Logo centered - w-full on mobile so img w-[70%] resolves against cover width */}
+                {/* Logo centered - w-full on mobile so percentage resolves against cover width */}
                 <Link href={`/${locale}`} className="relative z-10 w-full flex justify-center md:w-auto">
                   <img
                     src="/synthszr-logo.svg"
                     alt="Synthszr"
-                    className="h-auto w-[70%] max-w-[300px] md:h-24 md:w-auto md:max-w-[400px]"
+                    className="h-auto w-[80%] md:h-24 md:w-auto md:max-w-[400px]"
                   />
                 </Link>
                 {/* Audio Player - directly under logo */}
