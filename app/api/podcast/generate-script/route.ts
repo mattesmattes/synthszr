@@ -38,7 +38,8 @@ const DEFAULT_SCRIPT_PROMPT_DE = `Du bist ein erfahrener Podcast-Skriptautor. Er
 
 **WICHTIG - Podcast-Name und Begrüßung:**
 - Der Podcast heißt IMMER "Synthesizer Daily" - NIEMALS andere Namen wie "TechFinance Daily" oder ähnliche Fantasienamen verwenden!
-- Die Begrüßung MUSS den Wochentag und das Datum enthalten: "Willkommen bei Synthesizer Daily am {weekday}, den {date}..."
+- Die allererste Zeile des Skripts MUSS exakt so beginnen: HOST: [cheerfully] Hey, Hey und Willkommen bei Synthesizer Daily am {weekday}, den {date}!
+- Danach soll der HOST das Thema der heutigen Folge kurz anreißen
 
 **Rollen:**
 - HOST: Moderiert das Gespräch, stellt Fragen, fasst zusammen
@@ -96,7 +97,8 @@ The source content below may be in German or another language. You MUST translat
 
 **IMPORTANT - Podcast Name and Greeting:**
 - The podcast is ALWAYS called "Synthesizer Daily" - NEVER use other names like "TechFinance Daily" or similar fantasy names!
-- The greeting MUST include the weekday and date: "Welcome to Synthesizer Daily on {weekday}, {date}..."
+- The very first line of the script MUST begin exactly like this: HOST: [cheerfully] Hey, Hey and welcome to Synthesizer Daily on {weekday}, {date}!
+- After that, the HOST should briefly tease the topic of today's episode
 
 **Roles:**
 - HOST: Moderates the conversation, asks questions, summarizes
@@ -226,16 +228,18 @@ export async function POST(request: NextRequest) {
     // Fetch post content
     let postTitle = ''
     let postContent = ''
+    let postCreatedAt = ''
 
     // Try generated_posts first
     const { data: generatedPost } = await supabase
       .from('generated_posts')
-      .select('title, content')
+      .select('title, content, created_at')
       .eq('id', body.postId)
       .single()
 
     if (generatedPost) {
       postTitle = generatedPost.title
+      postCreatedAt = generatedPost.created_at
 
       // If not German, try to get translation
       if (locale !== 'de') {
@@ -266,12 +270,13 @@ export async function POST(request: NextRequest) {
       // Try manual posts table
       const { data: manualPost } = await supabase
         .from('posts')
-        .select('title, content')
+        .select('title, content, created_at')
         .eq('id', body.postId)
         .single()
 
       if (manualPost) {
         postTitle = manualPost.title
+        postCreatedAt = manualPost.created_at
         postContent = extractTextFromTiptap(manualPost.content)
       } else {
         return NextResponse.json({ error: 'Post not found' }, { status: 404 })
@@ -285,14 +290,12 @@ export async function POST(request: NextRequest) {
     // Build the prompt - use language-appropriate template
     const defaultPrompt = ttsLang === 'de' ? DEFAULT_SCRIPT_PROMPT_DE : DEFAULT_SCRIPT_PROMPT_EN
 
-    // Generate weekday and date for podcast greeting
-    const now = new Date()
-    const weekday = now.toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-US', { weekday: 'long' })
-    const date = now.toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-US', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    })
+    // Use the blog post's created_at date for the podcast greeting (not current date)
+    const postDate = postCreatedAt ? new Date(postCreatedAt) : new Date()
+    const weekday = postDate.toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-US', { weekday: 'long' })
+    const date = locale === 'de'
+      ? postDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : postDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
     const prompt = (body.customPrompt || defaultPrompt)
       .replace('{duration}', String(durationMinutes))
