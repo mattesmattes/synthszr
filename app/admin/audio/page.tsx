@@ -186,7 +186,7 @@ export default function AudioPage() {
   // Podcast provider selection (OpenAI is ~10x cheaper but no emotion tags)
   const [podcastProvider, setPodcastProvider] = useState<PodcastProvider>('openai')
   const [openaiHostVoice, setOpenaiHostVoice] = useState<TTSVoice>('shimmer')
-  const [openaiGuestVoice, setOpenaiGuestVoice] = useState<TTSVoice>('alloy')
+  const [openaiGuestVoice, setOpenaiGuestVoice] = useState<TTSVoice>('fable')
   const [openaiModel, setOpenaiModel] = useState<TTSModel>('tts-1-hd')
 
   // Stereo mixing data
@@ -369,6 +369,7 @@ export default function AudioPage() {
 
     try {
       // Build request body based on provider
+      // Include postId and sourceLocale so the job processor can auto-link to post_podcasts
       const requestBody = podcastProvider === 'openai'
         ? {
             script: podcastScript,
@@ -376,7 +377,9 @@ export default function AudioPage() {
             guestVoiceId: openaiGuestVoice,
             provider: 'openai' as const,
             model: openaiModel,
-            title: `test-podcast-${Date.now()}`,
+            title: selectedPostId ? `podcast-${selectedPostId}` : `test-podcast-${Date.now()}`,
+            postId: selectedPostId || undefined,
+            sourceLocale: selectedLocale,
           }
         : {
             script: podcastScript,
@@ -384,7 +387,9 @@ export default function AudioPage() {
             guestVoiceId: ttsSettings?.podcast_guest_voice_id,
             model: ttsSettings?.elevenlabs_model || 'eleven_v3',
             provider: 'elevenlabs' as const,
-            title: `test-podcast-${Date.now()}`,
+            title: selectedPostId ? `podcast-${selectedPostId}` : `test-podcast-${Date.now()}`,
+            postId: selectedPostId || undefined,
+            sourceLocale: selectedLocale,
           }
 
       // Create job

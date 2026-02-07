@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { put } from '@vercel/blob'
 import {
   parseScriptText,
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}))
   const requestedJobId = body.jobId as string | undefined
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Get job to process
   let job
@@ -341,11 +341,39 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', job.id)
 
+    // Auto-link to post_podcasts for ALL locales if this job has a post_id
+    // This ensures the podcast is immediately available in the frontend for de, en, cs, nds
+    if (job.post_id) {
+      const SUPPORTED_LOCALES = ['de', 'en', 'cs', 'nds']
+
+      console.log(`[Podcast Jobs] Linking job ${job.id} to post ${job.post_id} for all locales`)
+
+      for (const locale of SUPPORTED_LOCALES) {
+        const { error: upsertError } = await supabase
+          .from('post_podcasts')
+          .upsert({
+            post_id: job.post_id,
+            locale,
+            status: 'completed',
+            audio_url: combinedBlob.url,
+            duration_seconds: totalDuration,
+            script_content: job.script,
+          }, { onConflict: 'post_id,locale' })
+
+        if (upsertError) {
+          console.error(`[Podcast Jobs] Failed to link locale ${locale}:`, upsertError)
+        }
+      }
+
+      console.log(`[Podcast Jobs] Linked to post_podcasts for locales: ${SUPPORTED_LOCALES.join(', ')}`)
+    }
+
     return NextResponse.json({
       success: true,
       jobId: job.id,
       audioUrl: combinedBlob.url,
       durationSeconds: totalDuration,
+      linkedToPost: job.post_id || null,
     })
   } catch (error) {
     console.error(`[Podcast Jobs] Job ${job.id} failed:`, error)

@@ -18,6 +18,8 @@ interface CreateJobRequest {
   provider?: 'elevenlabs' | 'openai'
   model?: string
   title?: string
+  postId?: string        // generated_posts.id - links to post_podcasts on completion
+  sourceLocale?: string  // Locale used for script generation (de, en, cs, nds)
 }
 
 export async function POST(request: NextRequest) {
@@ -64,6 +66,8 @@ export async function POST(request: NextRequest) {
         title: body.title,
         total_lines: lines.length,
         status: 'pending',
+        post_id: body.postId || null,           // Link to generated_posts for auto-sync
+        source_locale: body.sourceLocale || 'en',
       })
       .select()
       .single()

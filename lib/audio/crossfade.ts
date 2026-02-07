@@ -79,13 +79,18 @@ const SHORT_REACTIONS = new Set([
 
 /**
  * Decode MP3 buffer to PCM samples
+ * Returns channels resampled to SAMPLE_RATE if needed
  */
 async function decodeMP3(mp3Buffer: Buffer): Promise<Float32Array[]> {
   const decoder = new MPEGDecoder()
   await decoder.ready
 
   const result = decoder.decode(new Uint8Array(mp3Buffer))
-  const channels: Float32Array[] = []
+  const sourceSampleRate = result.sampleRate
+
+  console.log(`[Crossfade] Decoded MP3: ${result.channelData.length} channels, ${sourceSampleRate} Hz, ${result.channelData[0]?.length} samples`)
+
+  let channels: Float32Array[] = []
 
   for (let i = 0; i < result.channelData.length; i++) {
     channels.push(result.channelData[i])
@@ -98,7 +103,34 @@ async function decodeMP3(mp3Buffer: Buffer): Promise<Float32Array[]> {
     channels.push(new Float32Array(channels[0]))
   }
 
+  // Resample if source sample rate differs from target
+  if (sourceSampleRate !== SAMPLE_RATE) {
+    console.log(`[Crossfade] Resampling from ${sourceSampleRate} Hz to ${SAMPLE_RATE} Hz`)
+    channels = channels.map(channel => resampleChannel(channel, sourceSampleRate, SAMPLE_RATE))
+  }
+
   return channels
+}
+
+/**
+ * Simple linear resampling
+ */
+function resampleChannel(input: Float32Array, fromRate: number, toRate: number): Float32Array {
+  const ratio = fromRate / toRate
+  const outputLength = Math.floor(input.length / ratio)
+  const output = new Float32Array(outputLength)
+
+  for (let i = 0; i < outputLength; i++) {
+    const srcIndex = i * ratio
+    const srcIndexFloor = Math.floor(srcIndex)
+    const srcIndexCeil = Math.min(srcIndexFloor + 1, input.length - 1)
+    const t = srcIndex - srcIndexFloor
+
+    // Linear interpolation
+    output[i] = input[srcIndexFloor] * (1 - t) + input[srcIndexCeil] * t
+  }
+
+  return output
 }
 
 /**
@@ -560,12 +592,8 @@ export async function concatenateWithCrossfade(
   }
 
   console.log(`[Crossfade] Processing ${segments.length} segments with smart algorithm...`)
-  if (includeIntro) {
-    console.log(`[Crossfade] Including intro with ${introCrossfadeSec}s crossfade`)
-  }
-  if (includeOutro) {
-    console.log(`[Crossfade] Including outro with ${outroCrossfadeSec}s crossfade`)
-  }
+  console.log(`[Crossfade] Options: includeIntro=${includeIntro}, includeOutro=${includeOutro}`)
+  console.log(`[Crossfade] Crossfade durations: intro=${introCrossfadeSec}s, outro=${outroCrossfadeSec}s`)
 
   // Decode and analyze all segments
   const analyzed: AnalyzedSegment[] = []
@@ -606,7 +634,9 @@ export async function concatenateWithCrossfade(
     if (i === 0) {
       // First segment: apply intro if enabled, otherwise just add it
       if (includeIntro) {
+        console.log(`[Crossfade] Loading intro music...`)
         const intro = await loadIntro()
+        console.log(`[Crossfade] Intro loaded: ${intro[0].length} samples (${(intro[0].length / SAMPLE_RATE).toFixed(1)}s)`)
         console.log(`[Crossfade] First segment PCM length: ${segment.pcm[0].length} samples (${(segment.pcm[0].length / SAMPLE_RATE).toFixed(1)}s)`)
         resultChannels = applyIntroWithCrossfade(intro, segment.pcm, introCrossfadeSec)
         console.log(`[Crossfade] After intro applied, resultChannels length: ${resultChannels[0].length} samples (${(resultChannels[0].length / SAMPLE_RATE).toFixed(1)}s)`)
@@ -676,9 +706,13 @@ export async function concatenateWithCrossfade(
 
   // Apply outro if enabled
   if (includeOutro) {
+    console.log(`[Crossfade] Loading outro music...`)
     const outro = await loadOutro()
+    console.log(`[Crossfade] Outro loaded: ${outro[0].length} samples (${(outro[0].length / SAMPLE_RATE).toFixed(1)}s)`)
+    console.log(`[Crossfade] Applying outro crossfade...`)
     resultChannels = applyOutroWithCrossfade(resultChannels, outro, outroCrossfadeSec)
     finalDurationS = resultChannels[0].length / SAMPLE_RATE
+    console.log(`[Crossfade] After outro: ${finalDurationS.toFixed(1)}s`)
   }
 
   console.log(`[Crossfade] Final audio with intro/outro: ${finalDurationS.toFixed(1)}s`)

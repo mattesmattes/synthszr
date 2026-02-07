@@ -31,3 +31,4 @@ next-env.d.ts
 .env*.local
 supabase/.temp/
 premarket-api-integration.json
+podcast/

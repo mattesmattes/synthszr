@@ -30,7 +30,9 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
         const data = await response.json()
 
         // Podcast endpoint returns { exists, audioUrl, status }
+        console.log('[AudioPlayer] Podcast API response:', data)
         if (data.exists && data.audioUrl) {
+          console.log('[AudioPlayer] Setting audio URL:', data.audioUrl)
           setAudioUrl(data.audioUrl)
           setStatus('ready')
         } else if (data.status === 'generating') {
@@ -99,58 +101,13 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
         // Will be retried in onCanPlay
       })
     }
-    // If no audio yet, trigger generation (always use EN for podcast)
+    // If no audio yet and autoplay was requested, just mark as triggered (no auto-generation)
     else if (status === 'idle' && !audioUrl) {
       setAutoplayTriggered(true)
-      pendingAutoplayRef.current = true
-      setStatus('loading')
-
-      // Trigger podcast generation - always use EN
-      fetch(`/api/podcast/${postId}?locale=en&generate=true`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.audioUrl) {
-            setAudioUrl(data.audioUrl)
-            setStatus('ready')
-          } else if (data.status === 'generating') {
-            // Poll for completion
-            pollForCompletion()
-          } else {
-            setStatus('error')
-            pendingAutoplayRef.current = false
-          }
-        })
-        .catch(err => {
-          console.error('[AudioPlayer] Podcast generation error:', err)
-          setStatus('error')
-          pendingAutoplayRef.current = false
-        })
+      // Don't trigger generation - podcast should be pre-generated in admin
+      console.log('[AudioPlayer] Autoplay requested but no podcast available')
     }
-
-    // Helper to poll for podcast completion
-    function pollForCompletion() {
-      const poll = async () => {
-        try {
-          const res = await fetch(`/api/podcast/${postId}?locale=en`)
-          const data = await res.json()
-
-          if (data.exists && data.audioUrl) {
-            setAudioUrl(data.audioUrl)
-            setStatus('ready')
-          } else if (data.status === 'generating') {
-            setTimeout(poll, 5000)
-          } else {
-            setStatus('error')
-            pendingAutoplayRef.current = false
-          }
-        } catch {
-          setStatus('error')
-          pendingAutoplayRef.current = false
-        }
-      }
-      poll()
-    }
-  }, [shouldAutoplay, autoplayTriggered, status, audioUrl, postId])
+  }, [shouldAutoplay, autoplayTriggered, status, audioUrl])
 
   // Called when audio is ready to play
   const handleCanPlay = useCallback(() => {
@@ -166,54 +123,16 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
   const togglePlayback = useCallback(async () => {
     if (status === 'disabled') return
 
-    // If no audio URL yet, trigger podcast generation (always EN)
-    if (!audioUrl && status !== 'loading') {
-      setStatus('loading')
+    // If no audio URL yet, just show idle state - podcast should be generated in admin
+    if (!audioUrl && status === 'idle') {
+      console.log('[AudioPlayer] No podcast available for this post')
+      // Don't auto-generate - podcasts should be pre-generated in admin
+      return
+    }
 
-      try {
-        // Trigger podcast generation - always use EN
-        // Trigger podcast generation if not exists
-        const response = await fetch(`/api/podcast/${postId}?locale=en&generate=true`)
-        const data = await response.json()
-
-        if (!response.ok && data.status !== 'generating') {
-          throw new Error(data.error || 'Failed to generate podcast')
-        }
-
-        if (data.audioUrl) {
-          setAudioUrl(data.audioUrl)
-          setStatus('ready')
-          // Auto-play after generation
-          setTimeout(() => {
-            audioRef.current?.play()
-          }, 100)
-        } else if (data.status === 'generating') {
-          // Poll for completion
-          const poll = async () => {
-            const res = await fetch(`/api/podcast/${postId}?locale=en`)
-            const pollData = await res.json()
-
-            if (pollData.exists && pollData.audioUrl) {
-              setAudioUrl(pollData.audioUrl)
-              setStatus('ready')
-              // Auto-play when ready
-              setTimeout(() => {
-                audioRef.current?.play()
-              }, 100)
-            } else if (pollData.status === 'generating') {
-              setTimeout(poll, 5000)
-            } else if (pollData.status === 'failed') {
-              setStatus('error')
-            }
-          }
-          poll()
-        } else {
-          throw new Error('No audio URL returned')
-        }
-      } catch (err) {
-        console.error('[AudioPlayer] Podcast generation error:', err)
-        setStatus('error')
-      }
+    // If generating, just wait
+    if (status === 'loading') {
+      console.log('[AudioPlayer] Podcast is still generating, please wait...')
       return
     }
 
@@ -222,18 +141,34 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
       if (isPlaying) {
         audioRef.current.pause()
       } else {
-        audioRef.current.play()
+        console.log('[AudioPlayer] Playing audio:', audioUrl, 'readyState:', audioRef.current.readyState)
+        audioRef.current.play().catch(err => {
+          console.error('[AudioPlayer] Play failed:', err)
+        })
       }
+    } else {
+      console.warn('[AudioPlayer] audioRef.current is null, audioUrl:', audioUrl)
     }
-  }, [audioUrl, status, postId, isPlaying])
+  }, [audioUrl, status, isPlaying])
 
   // Audio event handlers
   const handlePlay = useCallback(() => setIsPlaying(true), [])
   const handlePause = useCallback(() => setIsPlaying(false), [])
   const handleEnded = useCallback(() => setIsPlaying(false), [])
+  const handleError = useCallback((e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
+    const audio = e.currentTarget
+    console.error('[AudioPlayer] Audio error:', {
+      src: audio.src,
+      error: audio.error?.message,
+      code: audio.error?.code,
+      networkState: audio.networkState,
+      readyState: audio.readyState,
+    })
+    setStatus('error')
+  }, [])
 
-  // Don't render if TTS is disabled
-  if (status === 'disabled') {
+  // Don't render if TTS is disabled or no podcast available
+  if (status === 'disabled' || status === 'idle') {
     return null
   }
 
@@ -248,6 +183,7 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
           onPause={handlePause}
           onEnded={handleEnded}
           onCanPlay={handleCanPlay}
+          onError={handleError}
           preload="auto"
         />
       )}

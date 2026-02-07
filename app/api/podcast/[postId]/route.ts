@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { put } from '@vercel/blob'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
 import {
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const shouldGenerate = searchParams.get('generate') === 'true'
   const forceRegenerate = searchParams.get('force') === 'true'
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Check if podcast exists
   const { data: existingPodcast } = await supabase
@@ -159,8 +159,29 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   // If generate flag is set, trigger generation
   if (shouldGenerate || forceRegenerate) {
     console.log(`[Podcast] Starting generation for post ${postId}, locale ${locale}`)
+
+    // Mark as generating BEFORE starting background task (to avoid race condition)
+    const { error: upsertError } = await supabase
+      .from('post_podcasts')
+      .upsert({
+        post_id: postId,
+        locale,
+        status: 'generating',
+        audio_url: null,
+      }, { onConflict: 'post_id,locale' })
+
+    if (upsertError) {
+      console.error(`[Podcast] Failed to mark as generating:`, upsertError)
+      return NextResponse.json({
+        error: 'Failed to start generation',
+        details: upsertError.message
+      }, { status: 500 })
+    }
+
     // Start generation in background
-    generatePodcastForPost(postId, locale).catch(console.error)
+    generatePodcastForPost(postId, locale).catch(err => {
+      console.error(`[Podcast] Background generation failed:`, err)
+    })
 
     return NextResponse.json({
       exists: false,
@@ -204,7 +225,7 @@ async function generatePodcastForPost(
   postId: string,
   locale: string
 ): Promise<{ success: boolean; audioUrl?: string; duration?: number; error?: string }> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const ttsLang = LOCALE_TO_TTS_LANG[locale] || 'en'
 
   try {
