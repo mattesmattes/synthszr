@@ -287,21 +287,21 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
           role="region"
           aria-label="Podcast Player"
         >
-          {/* SVG filter for glass refraction distortion */}
+          {/* SVG filter for glass refraction — applied inside backdrop-filter chain */}
           <svg className="absolute w-0 h-0" aria-hidden="true">
             <defs>
-              <filter id="glass-refraction" x="-10%" y="-10%" width="120%" height="120%">
+              <filter id="glass-warp" x="-20%" y="-20%" width="140%" height="140%">
                 <feTurbulence
                   type="fractalNoise"
-                  baseFrequency="0.015"
-                  numOctaves="3"
-                  seed="2"
+                  baseFrequency="0.04 0.03"
+                  numOctaves="2"
+                  seed="5"
                   result="noise"
                 />
                 <feDisplacementMap
                   in="SourceGraphic"
                   in2="noise"
-                  scale="6"
+                  scale="18"
                   xChannelSelector="R"
                   yChannelSelector="G"
                 />
@@ -316,13 +316,12 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
             'shadow-[0_4px_24px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)]',
             'dark:shadow-[0_4px_24px_rgba(0,0,0,0.4),0_1px_2px_rgba(0,0,0,0.2)]',
           )}>
-            {/* Layer 1: Backdrop blur — glass base with visible background distortion */}
+            {/* Layer 1: Backdrop with SVG warp + blur — distortion applied to captured backdrop */}
             <div
               className="absolute -inset-2 rounded-full"
               style={{
-                backdropFilter: 'blur(16px) saturate(1.8) brightness(1.05)',
-                WebkitBackdropFilter: 'blur(16px) saturate(1.8) brightness(1.05)',
-                filter: 'url(#glass-refraction)',
+                backdropFilter: 'url(#glass-warp) blur(12px) saturate(1.8) brightness(1.05)',
+                WebkitBackdropFilter: 'url(#glass-warp) blur(12px) saturate(1.8) brightness(1.05)',
               }}
             />
 
