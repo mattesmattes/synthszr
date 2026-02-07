@@ -289,7 +289,7 @@ export default async function PostPage({ params }: PageProps) {
           {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
           {post.cover_image_url && (
             <div className="relative mb-8 rounded-lg overflow-hidden -mx-6">
-              <div className="relative flex flex-col items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-square md:aspect-[11/6] bg-neon-cyan">
+              <div className="relative flex flex-col items-center justify-center mx-auto w-[704px] max-w-full aspect-square md:aspect-[11/6] bg-neon-cyan">
                 {/* Clickable background to home */}
                 <Link href={`/${locale}`} className="absolute inset-0 z-0">
                   <img
