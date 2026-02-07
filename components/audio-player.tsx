@@ -287,6 +287,28 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
           role="region"
           aria-label="Podcast Player"
         >
+          {/* SVG filter for glass refraction distortion */}
+          <svg className="absolute w-0 h-0" aria-hidden="true">
+            <defs>
+              <filter id="glass-refraction" x="-10%" y="-10%" width="120%" height="120%">
+                <feTurbulence
+                  type="fractalNoise"
+                  baseFrequency="0.015"
+                  numOctaves="3"
+                  seed="2"
+                  result="noise"
+                />
+                <feDisplacementMap
+                  in="SourceGraphic"
+                  in2="noise"
+                  scale="6"
+                  xChannelSelector="R"
+                  yChannelSelector="G"
+                />
+              </filter>
+            </defs>
+          </svg>
+
           <div className={cn(
             'relative rounded-full pointer-events-auto overflow-hidden',
             // Outer shell: border + shadow
@@ -294,48 +316,60 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
             'shadow-[0_4px_24px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)]',
             'dark:shadow-[0_4px_24px_rgba(0,0,0,0.4),0_1px_2px_rgba(0,0,0,0.2)]',
           )}>
-            {/* Layer 1: Backdrop blur + refraction distortion — low blur so background texture is visible through the glass */}
+            {/* Layer 1: Backdrop blur — glass base with visible background distortion */}
             <div
-              className="absolute inset-0 rounded-full"
+              className="absolute -inset-2 rounded-full"
               style={{
-                backdropFilter: 'blur(12px) saturate(1.8) brightness(1.08)',
-                WebkitBackdropFilter: 'blur(12px) saturate(1.8) brightness(1.08)',
-                transform: 'scale(1.12)',
+                backdropFilter: 'blur(16px) saturate(1.8) brightness(1.05)',
+                WebkitBackdropFilter: 'blur(16px) saturate(1.8) brightness(1.05)',
+                filter: 'url(#glass-refraction)',
               }}
             />
 
-            {/* Layer 2: Base tint — kept very translucent so refraction distortion shows through */}
-            <div className="absolute inset-0 rounded-full bg-white/15 dark:bg-white/5" />
+            {/* Layer 2: Base tint — semi-transparent so distortion is visible */}
+            <div className="absolute inset-0 rounded-full bg-white/25 dark:bg-white/10" />
 
-            {/* Layer 3: Caustic refraction highlights — light concentrates at curved glass edges */}
+            {/* Layer 3: Edge refraction — light bends stronger at curved glass edges */}
             <div
               className="absolute inset-0 rounded-full pointer-events-none"
               style={{
-                background: `linear-gradient(180deg,
-                  rgba(255,255,255,0.85) 0%,
-                  rgba(255,255,255,0.2) 12%,
-                  transparent 30%,
-                  transparent 70%,
-                  rgba(255,255,255,0.08) 88%,
-                  rgba(255,255,255,0.35) 100%
+                background: `radial-gradient(ellipse 80% 80% at 50% 50%,
+                  transparent 50%,
+                  rgba(255,255,255,0.3) 70%,
+                  rgba(255,255,255,0.5) 85%,
+                  rgba(255,255,255,0.7) 100%
                 )`,
               }}
             />
 
-            {/* Layer 4: Chromatic aberration — visible prisma split at glass edges */}
+            {/* Layer 4: Caustic highlight — light concentrates at top of curved glass */}
+            <div
+              className="absolute inset-0 rounded-full pointer-events-none"
+              style={{
+                background: `linear-gradient(180deg,
+                  rgba(255,255,255,0.7) 0%,
+                  rgba(255,255,255,0.15) 15%,
+                  transparent 35%,
+                  transparent 75%,
+                  rgba(255,255,255,0.1) 100%
+                )`,
+              }}
+            />
+
+            {/* Layer 5: Chromatic aberration — prismatic color split at glass edges */}
             <div
               className="absolute inset-0 rounded-full pointer-events-none"
               style={{
                 boxShadow: `
-                  inset 4px 0 12px -2px rgba(0,120,255,0.25),
-                  inset -4px 0 12px -2px rgba(255,70,0,0.2),
-                  inset 0 3px 8px -2px rgba(255,255,255,0.6),
-                  inset 0 -2px 6px -1px rgba(0,0,0,0.06)
+                  inset 5px 0 14px -2px rgba(0,120,255,0.3),
+                  inset -5px 0 14px -2px rgba(255,70,0,0.25),
+                  inset 0 3px 10px -2px rgba(255,255,255,0.6),
+                  inset 0 -2px 8px -1px rgba(0,0,0,0.08)
                 `,
               }}
             />
 
-            {/* Layer 5: Specular highlight — sharp reflection on the glass surface */}
+            {/* Layer 6: Specular highlight — sharp light reflection on glass surface */}
             <div
               className="absolute inset-x-4 top-[1px] h-[1px] rounded-full pointer-events-none"
               style={{
