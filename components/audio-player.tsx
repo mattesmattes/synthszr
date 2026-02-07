@@ -287,92 +287,78 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
           role="region"
           aria-label="Podcast Player"
         >
-          {/* SVG filter for glass refraction — applied inside backdrop-filter chain */}
-          <svg className="absolute w-0 h-0" aria-hidden="true">
-            <defs>
-              <filter id="glass-warp" x="-20%" y="-20%" width="140%" height="140%">
-                <feTurbulence
-                  type="fractalNoise"
-                  baseFrequency="0.015 0.012"
-                  numOctaves="3"
-                  seed="3"
-                  result="noise"
-                />
-                <feDisplacementMap
-                  in="SourceGraphic"
-                  in2="noise"
-                  scale="30"
-                  xChannelSelector="R"
-                  yChannelSelector="G"
-                />
-              </filter>
-            </defs>
-          </svg>
-
           <div className={cn(
             'relative rounded-full pointer-events-auto overflow-hidden',
-            // Outer shell: border + shadow
-            'border border-white/50 dark:border-white/15',
-            'shadow-[0_4px_24px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)]',
-            'dark:shadow-[0_4px_24px_rgba(0,0,0,0.4),0_1px_2px_rgba(0,0,0,0.2)]',
+            // Outer shell: prominent glass border + depth shadow
+            'border border-white/60 dark:border-white/20',
+            'shadow-[0_2px_16px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.3),0_8px_32px_rgba(0,0,0,0.08)]',
+            'dark:shadow-[0_2px_16px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.3)]',
           )}>
-            {/* Layer 1: Backdrop with SVG warp + blur — distortion applied to captured backdrop */}
+            {/* Layer 1: Backdrop blur — frosted glass base */}
             <div
-              className="absolute -inset-2 rounded-full"
+              className="absolute inset-0 rounded-full"
               style={{
-                backdropFilter: 'url(#glass-warp) blur(6px) saturate(1.6) brightness(1.08)',
-                WebkitBackdropFilter: 'url(#glass-warp) blur(6px) saturate(1.6) brightness(1.08)',
+                backdropFilter: 'blur(16px) saturate(1.8) brightness(1.1) contrast(1.05)',
+                WebkitBackdropFilter: 'blur(16px) saturate(1.8) brightness(1.1) contrast(1.05)',
               }}
             />
 
-            {/* Layer 2: Base tint — very light to let refraction show through */}
-            <div className="absolute inset-0 rounded-full bg-white/15 dark:bg-white/8" />
-
-            {/* Layer 3: Edge refraction — light bends stronger at curved glass edges */}
+            {/* Layer 2: Glass tint with depth gradient — thicker glass at edges */}
             <div
               className="absolute inset-0 rounded-full pointer-events-none"
               style={{
-                background: `radial-gradient(ellipse 80% 80% at 50% 50%,
-                  transparent 50%,
-                  rgba(255,255,255,0.3) 70%,
-                  rgba(255,255,255,0.5) 85%,
+                background: `radial-gradient(ellipse 90% 90% at 50% 45%,
+                  rgba(255,255,255,0.12) 0%,
+                  rgba(255,255,255,0.18) 40%,
+                  rgba(255,255,255,0.35) 70%,
+                  rgba(255,255,255,0.55) 90%,
                   rgba(255,255,255,0.7) 100%
                 )`,
               }}
             />
 
-            {/* Layer 4: Caustic highlight — light concentrates at top of curved glass */}
+            {/* Layer 3: Top caustic band — concentrated light at top edge of curved glass */}
             <div
               className="absolute inset-0 rounded-full pointer-events-none"
               style={{
-                background: `linear-gradient(180deg,
-                  rgba(255,255,255,0.7) 0%,
-                  rgba(255,255,255,0.15) 15%,
-                  transparent 35%,
-                  transparent 75%,
-                  rgba(255,255,255,0.1) 100%
+                background: `linear-gradient(172deg,
+                  rgba(255,255,255,0.9) 0%,
+                  rgba(255,255,255,0.45) 6%,
+                  rgba(255,255,255,0.08) 18%,
+                  transparent 30%,
+                  transparent 85%,
+                  rgba(0,0,0,0.03) 100%
                 )`,
               }}
             />
 
-            {/* Layer 5: Chromatic aberration — prismatic color split at glass edges */}
+            {/* Layer 4: Chromatic aberration — visible color fringing at glass edges */}
             <div
               className="absolute inset-0 rounded-full pointer-events-none"
               style={{
                 boxShadow: `
-                  inset 5px 0 14px -2px rgba(0,120,255,0.3),
-                  inset -5px 0 14px -2px rgba(255,70,0,0.25),
-                  inset 0 3px 10px -2px rgba(255,255,255,0.6),
-                  inset 0 -2px 8px -1px rgba(0,0,0,0.08)
+                  inset 6px 0 18px -4px rgba(0,130,255,0.25),
+                  inset -6px 0 18px -4px rgba(255,80,0,0.2),
+                  inset 0 6px 16px -4px rgba(255,255,255,0.7),
+                  inset 0 -4px 12px -4px rgba(0,0,0,0.06),
+                  inset 0 0 30px 0 rgba(255,255,255,0.05)
                 `,
               }}
             />
 
-            {/* Layer 6: Specular highlight — sharp light reflection on glass surface */}
+            {/* Layer 5: Sharp specular reflection line */}
             <div
-              className="absolute inset-x-4 top-[1px] h-[1px] rounded-full pointer-events-none"
+              className="absolute inset-x-3 top-[1px] h-[1px] rounded-full pointer-events-none"
               style={{
-                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.9) 25%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.9) 75%, transparent 100%)',
+                background: 'linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.95) 20%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.95) 80%, transparent 95%)',
+              }}
+            />
+
+            {/* Layer 6: Bottom rim light — secondary reflection on underside */}
+            <div
+              className="absolute inset-x-6 bottom-[1px] h-[1px] rounded-full pointer-events-none opacity-40"
+              style={{
+                background: 'linear-gradient(90deg, transparent 10%, rgba(255,255,255,0.6) 30%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0.6) 70%, transparent 90%)',
               }}
             />
 
