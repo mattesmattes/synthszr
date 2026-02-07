@@ -54,23 +54,10 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
     return () => observer.disconnect()
   }, [status])
 
-  // Show flying nav when playing and cover is scrolled out of view
+  // Show flying nav whenever cover button scrolls out of view
   useEffect(() => {
-    if (isPlaying && !coverVisible) {
-      setShowFlyingNav(true)
-    } else if (coverVisible) {
-      setShowFlyingNav(false)
-    }
-  }, [isPlaying, coverVisible])
-
-  // Hide flying nav when playback ends
-  useEffect(() => {
-    if (!isPlaying && !coverVisible) {
-      // Small delay so the pause state is visible before hiding
-      const t = setTimeout(() => setShowFlyingNav(false), 2000)
-      return () => clearTimeout(t)
-    }
-  }, [isPlaying, coverVisible])
+    setShowFlyingNav(!coverVisible)
+  }, [coverVisible])
 
   // Fetch podcast audio status on mount (always EN)
   useEffect(() => {
@@ -307,43 +294,43 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
             'shadow-[0_4px_24px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)]',
             'dark:shadow-[0_4px_24px_rgba(0,0,0,0.4),0_1px_2px_rgba(0,0,0,0.2)]',
           )}>
-            {/* Layer 1: Backdrop blur + refraction distortion (scaled up = lens magnification) */}
+            {/* Layer 1: Backdrop blur + refraction distortion — low blur so background texture is visible through the glass */}
             <div
               className="absolute inset-0 rounded-full"
               style={{
-                backdropFilter: 'blur(40px) saturate(1.6) brightness(1.05)',
-                WebkitBackdropFilter: 'blur(40px) saturate(1.6) brightness(1.05)',
-                transform: 'scale(1.04)',
+                backdropFilter: 'blur(12px) saturate(1.8) brightness(1.08)',
+                WebkitBackdropFilter: 'blur(12px) saturate(1.8) brightness(1.08)',
+                transform: 'scale(1.12)',
               }}
             />
 
-            {/* Layer 2: Base tint */}
-            <div className="absolute inset-0 rounded-full bg-white/35 dark:bg-white/8" />
+            {/* Layer 2: Base tint — kept very translucent so refraction distortion shows through */}
+            <div className="absolute inset-0 rounded-full bg-white/15 dark:bg-white/5" />
 
             {/* Layer 3: Caustic refraction highlights — light concentrates at curved glass edges */}
             <div
               className="absolute inset-0 rounded-full pointer-events-none"
               style={{
                 background: `linear-gradient(180deg,
-                  rgba(255,255,255,0.7) 0%,
-                  rgba(255,255,255,0.15) 15%,
-                  transparent 35%,
-                  transparent 65%,
-                  rgba(255,255,255,0.06) 85%,
-                  rgba(255,255,255,0.25) 100%
+                  rgba(255,255,255,0.85) 0%,
+                  rgba(255,255,255,0.2) 12%,
+                  transparent 30%,
+                  transparent 70%,
+                  rgba(255,255,255,0.08) 88%,
+                  rgba(255,255,255,0.35) 100%
                 )`,
               }}
             />
 
-            {/* Layer 4: Chromatic aberration — glass refracts wavelengths differently at edges */}
+            {/* Layer 4: Chromatic aberration — visible prisma split at glass edges */}
             <div
               className="absolute inset-0 rounded-full pointer-events-none"
               style={{
                 boxShadow: `
-                  inset 3px 0 8px -3px rgba(0,140,255,0.12),
-                  inset -3px 0 8px -3px rgba(255,90,0,0.10),
-                  inset 0 2px 6px -2px rgba(255,255,255,0.5),
-                  inset 0 -1px 4px -1px rgba(0,0,0,0.04)
+                  inset 4px 0 12px -2px rgba(0,120,255,0.25),
+                  inset -4px 0 12px -2px rgba(255,70,0,0.2),
+                  inset 0 3px 8px -2px rgba(255,255,255,0.6),
+                  inset 0 -2px 6px -1px rgba(0,0,0,0.06)
                 `,
               }}
             />
@@ -352,7 +339,7 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
             <div
               className="absolute inset-x-4 top-[1px] h-[1px] rounded-full pointer-events-none"
               style={{
-                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.8) 30%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0.8) 70%, transparent 100%)',
+                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.9) 25%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.9) 75%, transparent 100%)',
               }}
             />
 
