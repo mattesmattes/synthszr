@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2, ImageIcon, Newspaper, X, ChevronDown, Settings2, Sparkles, CheckCircle2, AlertCircle, Languages } from 'lucide-react'
+import { ArrowLeft, Loader2, ImageIcon, Newspaper, X, ChevronDown, Settings2, Sparkles, CheckCircle2, AlertCircle, Languages, ListPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -875,9 +875,41 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="excerpt" className="font-mono text-xs">
-                    Excerpt <span className="text-muted-foreground">({excerpt.length}/200)</span>
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="excerpt" className="font-mono text-xs">
+                      Excerpt <span className="text-muted-foreground">({excerpt.length}/200)</span>
+                    </Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        // Extract H2 headings from TipTap JSON content
+                        const headings: string[] = []
+                        function walk(node: Record<string, unknown>) {
+                          if (node.type === 'heading' && (node.attrs as Record<string, unknown>)?.level === 2) {
+                            const text = ((node.content as Record<string, unknown>[]) || [])
+                              .map(c => (c.text as string) || '').join('')
+                            if (text && !text.toLowerCase().includes('synthszr')) headings.push(text)
+                          }
+                          if (Array.isArray(node.content)) {
+                            (node.content as Record<string, unknown>[]).forEach(walk)
+                          }
+                        }
+                        walk(content)
+                        const bullets = headings.slice(0, 3).map(h => {
+                          const truncated = h.length > 65 ? h.slice(0, 62) + '...' : h
+                          return `• ${truncated}`
+                        })
+                        if (bullets.length >= 3) {
+                          setExcerpt(bullets.join('\n'))
+                        }
+                      }}
+                    >
+                      <ListPlus className="h-3 w-3 mr-1" />
+                      3 Bullets
+                    </Button>
+                  </div>
                   <Textarea
                     id="excerpt"
                     value={excerpt}
