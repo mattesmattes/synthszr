@@ -198,6 +198,9 @@ export default function CreateArticlePage() {
   const [selectedModel, setSelectedModel] = useState<AIModel>('gemini-2.5-pro')
   const [usedModel, setUsedModel] = useState<AIModel | null>(null)
 
+  // Cached H2 headings from generated article (survives auto-save reset)
+  const [cachedH2Headings, setCachedH2Headings] = useState<string[]>([])
+
   // Editable metadata fields
   const [metadata, setMetadata] = useState<ArticleMetadata>({
     title: '',
@@ -228,12 +231,18 @@ export default function CreateArticlePage() {
   // Track if we just finished generating (to trigger auto-save)
   const [justFinishedGenerating, setJustFinishedGenerating] = useState(false)
 
-  // Parse metadata when generation finishes and trigger auto-save
+  // Parse metadata when generation finishes, cache H2 headings, and trigger auto-save
   useEffect(() => {
     if (!generating && articleContent) {
       const parsed = parseArticleContent(articleContent)
       if (parsed.metadata.title) {
         setMetadata(parsed.metadata)
+        // Cache H2 headings so the "3 Bullets" button works even after auto-save resets articleContent
+        const h2Matches = parsed.body.match(/^##\s+(.+)$/gm) || []
+        const h2Titles = h2Matches
+          .map(h => h.replace(/^##\s+/, '').trim())
+          .filter(h => !h.toLowerCase().includes('synthszr'))
+        if (h2Titles.length > 0) setCachedH2Headings(h2Titles)
         setJustFinishedGenerating(true)
       }
     }
@@ -1056,23 +1065,17 @@ export default function CreateArticlePage() {
                       <AlignLeft className="h-3.5 w-3.5" />
                       Excerpt (SEO-Beschreibung)
                     </Label>
-                    {parsedContent.body && (
+                    {cachedH2Headings.length >= 3 && (
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
                         onClick={() => {
-                          const h2Matches = parsedContent.body.match(/^##\s+(.+)$/gm) || []
-                          const h2Titles = h2Matches
-                            .map(h => h.replace(/^##\s+/, '').trim())
-                            .filter(h => !h.toLowerCase().includes('synthszr'))
-                          const bullets = h2Titles.slice(0, 3).map(h => {
+                          const bullets = cachedH2Headings.slice(0, 3).map(h => {
                             const truncated = h.length > 65 ? h.slice(0, 62) + '...' : h
                             return `• ${truncated}`
                           })
-                          if (bullets.length >= 3) {
-                            setMetadata({ ...metadata, excerpt: bullets.join('\n') })
-                          }
+                          setMetadata({ ...metadata, excerpt: bullets.join('\n') })
                         }}
                       >
                         <ListPlus className="h-3 w-3 mr-1" />
