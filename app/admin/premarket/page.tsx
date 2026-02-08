@@ -62,6 +62,23 @@ export default function PremarketPage() {
   const [selectedItem, setSelectedItem] = useState<PremarketItem | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshResult, setRefreshResult] = useState<string | null>(null)
+  const [cacheStatus, setCacheStatus] = useState<{
+    total: number
+    expired: number
+    expiringSoon: number
+    fresh: number
+    expiredCompanies: string[]
+  } | null>(null)
+
+  // Fetch cache status on mount
+  useEffect(() => {
+    fetch('/api/admin/refresh-stock-ratings', { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) setCacheStatus(data)
+      })
+      .catch(() => {})
+  }, [])
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -174,6 +191,10 @@ export default function PremarketPage() {
                   } else {
                     setRefreshResult(`Fehler: ${data.error}`)
                   }
+                  // Reload cache status after refresh
+                  const statusRes = await fetch('/api/admin/refresh-stock-ratings', { credentials: 'include' })
+                  const statusData = await statusRes.json()
+                  if (statusData.ok) setCacheStatus(statusData)
                 } catch {
                   setRefreshResult('Netzwerkfehler')
                 } finally {
@@ -188,6 +209,42 @@ export default function PremarketPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Stock Cache Status */}
+      {cacheStatus && cacheStatus.expired > 0 && (
+        <Card className="mb-4 border-destructive/50">
+          <CardContent className="py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 text-sm">
+                <Badge variant="destructive">{cacheStatus.expired} abgelaufen</Badge>
+                {cacheStatus.expiringSoon > 0 && (
+                  <Badge variant="outline" className="text-yellow-700 border-yellow-400">{cacheStatus.expiringSoon} bald</Badge>
+                )}
+                <span className="text-muted-foreground">{cacheStatus.fresh} aktuell · {cacheStatus.total} gesamt</span>
+              </div>
+            </div>
+            {cacheStatus.expiredCompanies.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Abgelaufen: {cacheStatus.expiredCompanies.join(', ')}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {cacheStatus && cacheStatus.expired === 0 && cacheStatus.total > 0 && (
+        <Card className="mb-4 border-green-200">
+          <CardContent className="py-3">
+            <div className="flex items-center gap-3 text-sm">
+              <Badge className="bg-green-100 text-green-800">Alle aktuell</Badge>
+              {cacheStatus.expiringSoon > 0 && (
+                <Badge variant="outline" className="text-yellow-700 border-yellow-400">{cacheStatus.expiringSoon} bald ablaufend</Badge>
+              )}
+              <span className="text-muted-foreground">{cacheStatus.total} Einträge</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Refresh Result */}
       {refreshResult && (

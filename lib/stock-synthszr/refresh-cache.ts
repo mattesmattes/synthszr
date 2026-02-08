@@ -8,6 +8,53 @@ const MAX_REFRESH_PER_RUN = 5
 /** Refresh entries expiring within this window (in days) */
 const REFRESH_WINDOW_DAYS = 3
 
+export interface CacheStatusResult {
+  total: number
+  expired: number
+  expiringSoon: number
+  fresh: number
+  expiredCompanies: string[]
+}
+
+/**
+ * Get stock_synthszr_cache status: how many entries are expired, expiring soon, or fresh.
+ */
+export async function getCacheStatus(): Promise<CacheStatusResult> {
+  const supabase = createAdminClient()
+  const now = new Date()
+  const soonWindow = new Date(now.getTime() + REFRESH_WINDOW_DAYS * MS_PER_DAY)
+
+  // Get all cache entries
+  const { data: entries, error } = await supabase
+    .from('stock_synthszr_cache')
+    .select('company, expires_at')
+    .order('expires_at', { ascending: true })
+
+  if (error || !entries) {
+    console.error('[CacheStatus] Query error:', error?.message)
+    return { total: 0, expired: 0, expiringSoon: 0, fresh: 0, expiredCompanies: [] }
+  }
+
+  let expired = 0
+  let expiringSoon = 0
+  let fresh = 0
+  const expiredCompanies: string[] = []
+
+  for (const entry of entries) {
+    const expiresAt = new Date(entry.expires_at)
+    if (expiresAt < now) {
+      expired++
+      expiredCompanies.push(entry.company)
+    } else if (expiresAt < soonWindow) {
+      expiringSoon++
+    } else {
+      fresh++
+    }
+  }
+
+  return { total: entries.length, expired, expiringSoon, fresh, expiredCompanies }
+}
+
 interface RefreshResult {
   refreshed: number
   errors: number
