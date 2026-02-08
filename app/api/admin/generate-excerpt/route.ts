@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-5.2-mini',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
