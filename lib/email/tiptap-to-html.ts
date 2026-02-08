@@ -5,6 +5,7 @@
 
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { isExcludedCompanyName } from '@/lib/data/company-exclusions'
+import { sanitizeUrl } from '@/lib/utils/url-sanitizer'
 
 export interface TiptapNode {
   type: string
@@ -824,9 +825,12 @@ function renderContent(content?: TiptapNode[]): string {
             case 'italic':
               text = `<em>${text}</em>`
               break
-            case 'link':
-              text = `<a href="${mark.attrs?.href || '#'}">${text}</a>`
+            case 'link': {
+              const rawHref = mark.attrs?.href || '#'
+              const cleanHref = sanitizeUrl(rawHref) || rawHref
+              text = `<a href="${cleanHref}">${text}</a>`
               break
+            }
           }
         }
       }

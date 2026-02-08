@@ -17,6 +17,7 @@ import { PremarketSynthszrLayer } from "./premarket-synthszr-layer"
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies"
 import { COMPANY_ALIASES } from "@/lib/data/company-aliases"
 import { isExcludedCompanyName } from "@/lib/data/company-exclusions"
+import { sanitizeUrl } from "@/lib/utils/url-sanitizer"
 
 interface BatchQuoteResult {
   company: string
@@ -1057,9 +1058,9 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
           faviconImg.className = 'inline-block w-5 h-5 mr-2 align-middle opacity-70'
           faviconImg.style.marginTop = '-2px'
 
-          // Create link wrapper
+          // Create link wrapper (sanitize URL to remove tracking params)
           const linkWrapper = document.createElement('a')
-          linkWrapper.href = sourceUrl
+          linkWrapper.href = sanitizeUrl(sourceUrl) || sourceUrl
           linkWrapper.target = '_blank'
           linkWrapper.rel = 'noopener noreferrer'
           linkWrapper.className = 'no-underline hover:opacity-80 transition-opacity'
@@ -1161,6 +1162,19 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
     }
 
     const processContent = async () => {
+      // Sanitize all outbound link hrefs (remove tracking params, subscriber IDs)
+      if (containerRef.current) {
+        const allLinks = containerRef.current.querySelectorAll('a[href]')
+        allLinks.forEach((a: Element) => {
+          const href = a.getAttribute('href')
+          if (href && href.startsWith('http')) {
+            const clean = sanitizeUrl(href)
+            if (clean && clean !== href) {
+              a.setAttribute('href', clean)
+            }
+          }
+        })
+      }
       processNewsHeadings() // Process news headings (adds favicons, removes source links, inserts thumbnails)
       processMattesSyntheseText()
       // Process Synthszr rating links BEFORE hiding {Company} tags
