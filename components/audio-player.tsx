@@ -28,6 +28,7 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
   const [duration, setDuration] = useState(0)
   const [coverVisible, setCoverVisible] = useState(true)
   const [showFlyingNav, setShowFlyingNav] = useState(false)
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -54,10 +55,10 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
     return () => observer.disconnect()
   }, [status])
 
-  // Show flying nav whenever cover button scrolls out of view
+  // Show flying nav whenever cover button scrolls out of view OR autoplay was blocked
   useEffect(() => {
-    setShowFlyingNav(!coverVisible)
-  }, [coverVisible])
+    setShowFlyingNav(!coverVisible || autoplayBlocked)
+  }, [coverVisible, autoplayBlocked])
 
   // Fetch podcast audio status on mount (always EN)
   useEffect(() => {
@@ -130,16 +131,17 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
   useEffect(() => {
     if (!shouldAutoplay || autoplayTriggered) return
 
-    // If audio is ready, start playback (will be triggered by onCanPlay if not yet loaded)
+    // If audio is ready, attempt playback
     if (status === 'ready' && audioUrl) {
       setAutoplayTriggered(true)
       pendingAutoplayRef.current = true
       audioRef.current?.play().catch(() => {
-        // Will be retried in onCanPlay
+        // Browser blocked autoplay — show flying player so user can tap play
+        console.log('[AudioPlayer] Autoplay blocked by browser, showing player')
+        setAutoplayBlocked(true)
       })
     }
     // Only give up if there's definitively no podcast (error/disabled)
-    // Don't set autoplayTriggered during 'idle' or 'loading' — the fetch may still resolve
     else if (status === 'error' || status === 'disabled') {
       setAutoplayTriggered(true)
       console.log('[AudioPlayer] Autoplay requested but no podcast available')
@@ -150,8 +152,10 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
   const handleCanPlay = useCallback(() => {
     if (pendingAutoplayRef.current) {
       pendingAutoplayRef.current = false
-      audioRef.current?.play().catch((err) => {
-        console.log('[AudioPlayer] Autoplay blocked by browser:', err)
+      audioRef.current?.play().catch(() => {
+        // Browser blocked autoplay — show flying player so user can tap play
+        console.log('[AudioPlayer] Autoplay blocked by browser, showing player')
+        setAutoplayBlocked(true)
       })
     }
   }, [])
@@ -189,7 +193,11 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
   }, [audioUrl, status, isPlaying])
 
   // Audio event handlers
-  const handlePlay = useCallback(() => setIsPlaying(true), [])
+  const handlePlay = useCallback(() => {
+    setIsPlaying(true)
+    // Clear autoplay blocked state — user has interacted, normal scroll behavior resumes
+    setAutoplayBlocked(false)
+  }, [])
   const handlePause = useCallback(() => setIsPlaying(false), [])
   const handleEnded = useCallback(() => {
     setIsPlaying(false)
