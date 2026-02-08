@@ -312,6 +312,15 @@ export async function POST(request: NextRequest) {
 
 4. **COMPANY TAGGING:** Wenn eine News thematisch zu einem Unternehmen passt (auch wenn es NICHT explizit genannt wird), ergänze am Ende der News "{Company}" Tags. Maximal 3 Tags pro News.
 
+5. **EXCERPT FORMAT:** Der EXCERPT im Metadaten-Block MUSS exakt 3 Bullet Points haben:
+   - Jeder Bullet beginnt mit • und headlinet pointiert je einen der ersten 3 Artikel
+   - Max 65 Zeichen pro Bullet
+   - Beispiel:
+     EXCERPT:
+     • OpenAI lanciert GPT-5.2 mit neuem Reasoning-Modus
+     • Nvidia-Aktie bricht nach Quartalszahlen ein
+     • EU beschließt härtere KI-Regulierung ab 2027
+
 **WICHTIG:** Diese Regeln haben Priorität. Halte dich strikt daran. ALLE ${selectedItems.length} News MÜSSEN im Artikel erscheinen.
 `
 
