@@ -60,6 +60,8 @@ export default function PremarketPage() {
   const [withSynthesis, setWithSynthesis] = useState(true)
   const [offset, setOffset] = useState(0)
   const [selectedItem, setSelectedItem] = useState<PremarketItem | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshResult, setRefreshResult] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -148,13 +150,56 @@ export default function PremarketPage() {
                 Nur mit AI-Synthese
               </Label>
             </div>
-            <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Aktualisieren
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                setRefreshResult(null)
+                // Refresh premarket data
+                fetchData()
+                // Refresh expired stock ratings in background
+                setRefreshing(true)
+                try {
+                  const res = await fetch('/api/admin/refresh-stock-ratings', {
+                    method: 'POST',
+                    credentials: 'include',
+                  })
+                  const data = await res.json()
+                  if (data.ok) {
+                    if (data.refreshed > 0 || data.errors > 0) {
+                      setRefreshResult(`${data.refreshed} Ratings aktualisiert${data.errors > 0 ? `, ${data.errors} Fehler` : ''}`)
+                    } else {
+                      setRefreshResult('Alle Ratings aktuell')
+                    }
+                  } else {
+                    setRefreshResult(`Fehler: ${data.error}`)
+                  }
+                } catch {
+                  setRefreshResult('Netzwerkfehler')
+                } finally {
+                  setRefreshing(false)
+                }
+              }}
+              disabled={loading || refreshing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${(loading || refreshing) ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Aktualisiere Ratings...' : 'Aktualisieren'}
             </Button>
           </div>
         </CardContent>
       </Card>
+
+      {/* Refresh Result */}
+      {refreshResult && (
+        <Card className="mb-4 border-primary/30">
+          <CardContent className="py-3 flex items-center justify-between">
+            <p className="text-sm">{refreshResult}</p>
+            <Button variant="ghost" size="sm" onClick={() => setRefreshResult(null)} className="h-6 px-2 text-xs">
+              Schliessen
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Error State */}
       {error && (

@@ -65,11 +65,12 @@ export async function POST(request: NextRequest) {
     for (const company of companies) {
       if (typeof company !== 'string' || !company.trim()) continue
 
+      // Return most recent entry regardless of expiry — stale ratings are better than none.
+      // The cron job (refreshExpiringStockRatings) keeps entries fresh in the background.
       const { data: cached } = await supabase
         .from('stock_synthszr_cache')
         .select('company, data, created_at')
         .ilike('company', company.trim())
-        .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false })
         .limit(1)
         .single<CacheRow>()

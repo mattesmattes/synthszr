@@ -124,12 +124,12 @@ export async function POST(request: NextRequest) {
           // Look up ticker info using centralized helper
           const tickerInfo = getCompanyTicker(company.trim())
 
-          // Fetch rating from cache
+          // Fetch rating from cache — return most recent entry regardless of expiry.
+          // Stale ratings are better than none; cron refreshes them in the background.
           const { data: cached } = await supabase
             .from('stock_synthszr_cache')
             .select('company, data, created_at')
             .ilike('company', company.trim())
-            .gt('expires_at', new Date().toISOString())
             .order('created_at', { ascending: false })
             .limit(1)
             .single<CacheRow>()
