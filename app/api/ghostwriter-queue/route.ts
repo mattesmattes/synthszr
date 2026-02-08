@@ -291,7 +291,30 @@ export async function POST(request: NextRequest) {
     }
 
     const fullPrompt = promptText + vocabularyContext
-    const fullContent = digestContent + sourceReference
+
+    // Enforcement rules appended at the end of content (last thing the LLM sees)
+    const enforcementRules = `
+
+---
+
+## QUALITÄTS-CHECKLISTE (MUSS EINGEHALTEN WERDEN):
+
+1. **ANZAHL NEWS:** Es wurden ${selectedItems.length} News bereitgestellt. Verarbeite ALLE ${selectedItems.length} — keine weglassen!
+   - Jede News bekommt eine eigene Zwischenüberschrift (##)
+   - Jeder News-Artikel MUSS exakt 5-7 Sätze haben
+
+2. **ZWEI TAKES PRO NEWS:** Jede News MUSS zwei aufeinanderfolgende Takes haben:
+   a) "Synthszr Take:" — Neutral-positiver Take (3-5 Sätze). Konstruktiv-analytische Einordnung.
+   b) "Synthszr Contra:" — Negativ-zynischer Gegentake (2-4 Sätze). Skeptisch, provokant, Risiken benennen.
+
+3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
+
+4. **COMPANY TAGGING:** Wenn eine News thematisch zu einem Unternehmen passt (auch wenn es NICHT explizit genannt wird), ergänze am Ende der News "{Company}" Tags. Maximal 3 Tags pro News.
+
+**WICHTIG:** Diese Regeln haben Priorität. Halte dich strikt daran. ALLE ${selectedItems.length} News MÜSSEN im Artikel erscheinen.
+`
+
+    const fullContent = digestContent + sourceReference + enforcementRules
 
     console.log(`[Ghostwriter-Queue] Full content length: ${fullContent.length} chars`)
     console.log(`[Ghostwriter-Queue] Content preview (first 500 chars):`, fullContent.slice(0, 500))
