@@ -18,6 +18,7 @@ import {
   Type,
   AlignLeft,
   Bot,
+  ListPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -1050,10 +1051,35 @@ export default function CreateArticlePage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="excerpt" className="flex items-center gap-1.5 text-sm">
-                    <AlignLeft className="h-3.5 w-3.5" />
-                    Excerpt (SEO-Beschreibung)
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="excerpt" className="flex items-center gap-1.5 text-sm">
+                      <AlignLeft className="h-3.5 w-3.5" />
+                      Excerpt (SEO-Beschreibung)
+                    </Label>
+                    {parsedContent.body && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          const h2Matches = parsedContent.body.match(/^##\s+(.+)$/gm) || []
+                          const h2Titles = h2Matches
+                            .map(h => h.replace(/^##\s+/, '').trim())
+                            .filter(h => !h.toLowerCase().includes('synthszr'))
+                          const bullets = h2Titles.slice(0, 3).map(h => {
+                            const truncated = h.length > 65 ? h.slice(0, 62) + '...' : h
+                            return `• ${truncated}`
+                          })
+                          if (bullets.length >= 3) {
+                            setMetadata({ ...metadata, excerpt: bullets.join('\n') })
+                          }
+                        }}
+                      >
+                        <ListPlus className="h-3 w-3 mr-1" />
+                        3 Bullets generieren
+                      </Button>
+                    )}
+                  </div>
                   <Textarea
                     id="excerpt"
                     value={metadata.excerpt}
