@@ -136,19 +136,32 @@ export function CompaniesListClient({ companies, locale }: CompaniesListClientPr
           )
         )
 
-        // Fetch premarket ratings
-        const premarketResponse = premarketCompanies.length > 0
-          ? await fetch('/api/premarket/batch-ratings', {
+        // Chunk premarket companies into batches of 20 (same as public)
+        const premarketChunks: string[][] = []
+        for (let i = 0; i < premarketCompanies.length; i += BATCH_SIZE) {
+          premarketChunks.push(premarketCompanies.slice(i, i + BATCH_SIZE).map(c => c.slug))
+        }
+
+        // Fetch all premarket rating chunks in parallel
+        const premarketResponses = await Promise.all(
+          premarketChunks.map(chunk =>
+            fetch('/api/premarket/batch-ratings', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ companies: premarketCompanies.map(c => c.slug) }),
+              body: JSON.stringify({ companies: chunk }),
             }).then(r => r.json())
-          : { ok: true, ratings: [] }
+          )
+        )
 
         // Combine all public quotes from all chunks
         const allPublicQuotes: BatchQuoteResult[] = publicResponses
           .filter(r => r.ok)
           .flatMap(r => r.quotes || [])
+
+        // Combine all premarket ratings from all chunks
+        const allPremarketRatings: PremarketRatingResult[] = premarketResponses
+          .filter(r => r.ok)
+          .flatMap(r => r.ratings || [])
 
         // Build lookup maps
         const publicQuotesMap = new Map<string, BatchQuoteResult>(
@@ -156,8 +169,7 @@ export function CompaniesListClient({ companies, locale }: CompaniesListClientPr
         )
 
         const premarketRatingsMap = new Map<string, PremarketRatingResult>(
-          (premarketResponse.ok && premarketResponse.ratings || [])
-            .map((r: PremarketRatingResult) => [r.company.toLowerCase(), r])
+          allPremarketRatings.map((r: PremarketRatingResult) => [r.company.toLowerCase(), r])
         )
 
         // Enrich companies with rating data
@@ -216,25 +228,10 @@ export function CompaniesListClient({ companies, locale }: CompaniesListClientPr
           }
         }
 
-        // Generate missing premarket company ratings
-        for (const company of premarketWithoutRating) {
-          try {
-            console.log(`[companies] Fetching missing premarket rating for: ${company.slug}`)
-            const response = await fetch(`/api/premarket?company=${encodeURIComponent(company.slug)}`)
-            if (response.ok) {
-              const data = await response.json()
-              if (data.ok && data.data?.final_recommendation?.rating) {
-                setEnrichedCompanies(prev => prev.map(c =>
-                  c.slug === company.slug
-                    ? { ...c, rating: data.data.final_recommendation.rating }
-                    : c
-                ))
-              }
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000))
-          } catch (error) {
-            console.error(`[companies] Failed to fetch premarket rating for ${company.slug}:`, error)
-          }
+        // Premarket ratings without a match have no on-demand generation —
+        // they rely on the batch-ratings endpoint which queries glitch.green directly.
+        if (premarketWithoutRating.length > 0) {
+          console.log(`[companies] ${premarketWithoutRating.length} premarket companies without rating`)
         }
       } catch (error) {
         console.error('[companies] Failed to fetch ratings:', error)
