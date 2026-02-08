@@ -224,15 +224,13 @@ export function NewsletterEmail({
             <>
               <Section style={coverSection}>
                 <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
-                  <div style={coverImageContainer}>
-                    <Img
-                      src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=604&logo=true&skipTransform=true`}
-                      alt={subject}
-                      width="302"
-                      height="302"
-                      style={coverImage}
-                    />
-                  </div>
+                  <Img
+                    src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=1200&logo=true&skipTransform=true`}
+                    alt={subject}
+                    width="600"
+                    height="600"
+                    style={coverImage}
+                  />
                 </Link>
               </Section>
 
@@ -354,20 +352,10 @@ const coverSection = {
   textAlign: 'center' as const,
 }
 
-const coverImageContainer = {
-  backgroundColor: '#CCFF00',
-  width: '302px',
-  height: '302px',
-  overflow: 'hidden' as const,
-  margin: '0 auto',
-  borderRadius: '0',
-}
-
 const coverImage = {
-  width: '302px',
-  height: '302px',
+  width: '100%',
+  height: 'auto',
   display: 'block',
-  objectFit: 'cover' as const,
 }
 
 const playerPillSection = {
