@@ -219,17 +219,6 @@ export function NewsletterEmail({
       {previewText && <Preview>{previewText}</Preview>}
       <Body style={main}>
         <Container style={container}>
-          {/* Header with Logo */}
-          <Section style={headerSection}>
-            <Img
-              src={`${baseUrl}/logo-nl.png`}
-              alt="Synthszr"
-              width="100"
-              height="29"
-              style={logo}
-            />
-          </Section>
-
           {/* Cover Image with Logo - clicks to article with autoplay */}
           {coverImageUrl && (
             <>
@@ -251,7 +240,9 @@ export function NewsletterEmail({
               <Section style={playerPillSection}>
                 <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
                   <div style={playerPill}>
-                    <span style={playerPlayIcon}>&#9654;</span>
+                    <div style={playerCircle}>
+                      <span style={playerCircleIcon}>&#9654;</span>
+                    </div>
                     <span style={playerText}>{strings.listenPodcast}</span>
                   </div>
                 </Link>
@@ -358,15 +349,6 @@ const container = {
   maxWidth: '600px',
 }
 
-const headerSection = {
-  padding: '32px 32px 24px',
-  textAlign: 'center' as const,
-}
-
-const logo = {
-  margin: '0 auto',
-}
-
 const coverSection = {
   padding: '0',
   textAlign: 'center' as const,
@@ -389,33 +371,44 @@ const coverImage = {
 }
 
 const playerPillSection = {
-  padding: '16px 0 0',
+  padding: '16px 32px 0',
   textAlign: 'center' as const,
 }
 
 const playerPill = {
   display: 'inline-block',
-  backgroundColor: '#f3f4f6',
+  backgroundColor: '#ffffff',
   border: '1px solid #e5e7eb',
-  borderRadius: '20px',
-  padding: '8px 20px',
+  borderRadius: '28px',
+  padding: '6px 24px 6px 6px',
   textDecoration: 'none',
 }
 
-const playerPlayIcon = {
-  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '12px',
-  color: '#1a1a1a',
-  marginRight: '8px',
+const playerCircle = {
+  display: 'inline-block',
+  width: '40px',
+  height: '40px',
+  backgroundColor: '#000000',
+  borderRadius: '50%',
+  textAlign: 'center' as const,
+  lineHeight: '42px',
   verticalAlign: 'middle',
+  marginRight: '12px',
+}
+
+const playerCircleIcon = {
+  color: '#ffffff',
+  fontSize: '16px',
+  paddingLeft: '3px',
 }
 
 const playerText = {
   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '13px',
+  fontSize: '14px',
   fontWeight: '500' as const,
-  color: '#1a1a1a',
+  color: '#374151',
   verticalAlign: 'middle',
+  letterSpacing: '0.2px',
 }
 
 const contentSection = {
