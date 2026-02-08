@@ -196,7 +196,7 @@ async function* streamClaude(
 
   const stream = anthropic.messages.stream({
     model: modelId,
-    max_tokens: 8192,
+    max_tokens: 16384,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
   })
@@ -219,6 +219,7 @@ async function* streamOpenAI(
 
   const stream = await openai.chat.completions.create({
     model,
+    max_completion_tokens: 16384,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userMessage },
@@ -284,7 +285,10 @@ export async function* streamMetaphorDeduplication(
   duplicates: Map<string, number[]>,
   model: AIModel = 'gemini-2.5-pro'
 ): AsyncGenerator<string, void, unknown> {
-  if (duplicates.size === 0) {
+  if (duplicates.size === 0 || originalText.length > 8000) {
+    if (originalText.length > 8000) {
+      console.log(`[Ghostwriter] Skipping deduplication for long text (${originalText.length} chars) - risk of prompt echo`)
+    }
     yield originalText
     return
   }
@@ -332,6 +336,7 @@ ${originalText}`
 
     const stream = await openai.chat.completions.create({
       model,
+      max_completion_tokens: 16384,
       messages: [
         { role: 'system', content: deduplicationSystem },
         { role: 'user', content: deduplicationPrompt },
@@ -368,7 +373,7 @@ ${originalText}`
 
     const stream = anthropic.messages.stream({
       model: modelId,
-      max_tokens: 8192,
+      max_tokens: 16384,
       system: deduplicationSystem,
       messages: [{ role: 'user', content: deduplicationPrompt }],
     })
