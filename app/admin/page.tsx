@@ -28,6 +28,7 @@ import {
   RefreshCw,
   ShieldCheck,
   ShieldAlert,
+  ListPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -810,10 +811,41 @@ export default function AdminPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-excerpt" className="flex items-center gap-1.5 text-sm">
-                <AlignLeft className="h-3.5 w-3.5" />
-                Excerpt (SEO-Beschreibung)
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit-excerpt" className="flex items-center gap-1.5 text-sm">
+                  <AlignLeft className="h-3.5 w-3.5" />
+                  Excerpt (SEO-Beschreibung)
+                </Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    const headings: string[] = []
+                    function walk(node: Record<string, unknown>) {
+                      if (node.type === 'heading' && (node.attrs as Record<string, unknown>)?.level === 2) {
+                        const text = ((node.content as Record<string, unknown>[]) || [])
+                          .map((c: Record<string, unknown>) => (c.text as string) || '').join('')
+                        if (text && !text.toLowerCase().includes('synthszr')) headings.push(text)
+                      }
+                      if (Array.isArray(node.content)) {
+                        (node.content as Record<string, unknown>[]).forEach(walk)
+                      }
+                    }
+                    walk(editForm.content)
+                    const bullets = headings.slice(0, 3).map(h => {
+                      const truncated = h.length > 65 ? h.slice(0, 62) + '...' : h
+                      return `• ${truncated}`
+                    })
+                    if (bullets.length >= 3) {
+                      setEditForm({ ...editForm, excerpt: bullets.join('\n') })
+                    }
+                  }}
+                >
+                  <ListPlus className="h-3 w-3 mr-1" />
+                  3 Bullets
+                </Button>
+              </div>
               <Textarea
                 id="edit-excerpt"
                 value={editForm.excerpt}
