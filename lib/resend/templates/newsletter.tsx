@@ -38,6 +38,7 @@ const UI_STRINGS: Record<LanguageCode, {
   unsubscribe: string
   imprint: string
   privacy: string
+  listenPodcast: string
 }> = {
   de: {
     footer: 'Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.',
@@ -46,6 +47,7 @@ const UI_STRINGS: Record<LanguageCode, {
     unsubscribe: 'Abbestellen',
     imprint: 'Impressum',
     privacy: 'Datenschutz',
+    listenPodcast: 'Podcast anhören',
   },
   en: {
     footer: 'You are receiving this email because you subscribed to the Synthszr Newsletter.',
@@ -54,6 +56,7 @@ const UI_STRINGS: Record<LanguageCode, {
     unsubscribe: 'Unsubscribe',
     imprint: 'Imprint',
     privacy: 'Privacy',
+    listenPodcast: 'Listen to podcast',
   },
   fr: {
     footer: 'Vous recevez cet e-mail car vous êtes abonné à la newsletter Synthszr.',
@@ -62,6 +65,7 @@ const UI_STRINGS: Record<LanguageCode, {
     unsubscribe: 'Se désabonner',
     imprint: 'Mentions légales',
     privacy: 'Confidentialité',
+    listenPodcast: 'Écouter le podcast',
   },
   es: {
     footer: 'Recibes este correo porque te suscribiste al boletín de Synthszr.',
@@ -70,6 +74,7 @@ const UI_STRINGS: Record<LanguageCode, {
     unsubscribe: 'Cancelar suscripción',
     imprint: 'Aviso legal',
     privacy: 'Privacidad',
+    listenPodcast: 'Escuchar podcast',
   },
   it: {
     footer: 'Ricevi questa email perché sei iscritto alla newsletter di Synthszr.',
@@ -78,6 +83,7 @@ const UI_STRINGS: Record<LanguageCode, {
     unsubscribe: 'Annulla iscrizione',
     imprint: 'Note legali',
     privacy: 'Privacy',
+    listenPodcast: 'Ascolta il podcast',
   },
   pt: {
     footer: 'Você está recebendo este e-mail porque assinou a newsletter Synthszr.',
@@ -86,6 +92,7 @@ const UI_STRINGS: Record<LanguageCode, {
     unsubscribe: 'Cancelar inscrição',
     imprint: 'Informações legais',
     privacy: 'Privacidade',
+    listenPodcast: 'Ouvir podcast',
   },
   nl: {
     footer: 'Je ontvangt deze e-mail omdat je je hebt aangemeld voor de Synthszr nieuwsbrief.',
@@ -94,6 +101,7 @@ const UI_STRINGS: Record<LanguageCode, {
     unsubscribe: 'Afmelden',
     imprint: 'Impressum',
     privacy: 'Privacy',
+    listenPodcast: 'Luister naar podcast',
   },
   pl: {
     footer: 'Otrzymujesz ten e-mail, ponieważ subskrybujesz newsletter Synthszr.',
@@ -102,6 +110,7 @@ const UI_STRINGS: Record<LanguageCode, {
     unsubscribe: 'Wypisz się',
     imprint: 'Impressum',
     privacy: 'Prywatność',
+    listenPodcast: 'Słuchaj podcastu',
   },
   cs: {
     footer: 'Tento e-mail vám přišel, protože jste přihlášeni k odběru newsletteru Synthszr.',
@@ -110,6 +119,7 @@ const UI_STRINGS: Record<LanguageCode, {
     unsubscribe: 'Odhlásit odběr',
     imprint: 'Impressum',
     privacy: 'Ochrana soukromí',
+    listenPodcast: 'Poslechnout podcast',
   },
   nds: {
     footer: 'Du kriggst disse E-Mail, wiel du den Synthszr Newsletter abonneert hest.',
@@ -118,6 +128,7 @@ const UI_STRINGS: Record<LanguageCode, {
     unsubscribe: 'Afmellen',
     imprint: 'Impressum',
     privacy: 'Datenschutz',
+    listenPodcast: 'Podcast anhören',
   },
 }
 
@@ -219,21 +230,33 @@ export function NewsletterEmail({
             />
           </Section>
 
-          {/* Cover Image with Play Button - clicks to article with autoplay */}
+          {/* Cover Image with Logo - clicks to article with autoplay */}
           {coverImageUrl && (
-            <Section style={coverSection}>
-              <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
-                <div style={coverImageContainer}>
-                  <Img
-                    src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=604&playButton=true&skipTransform=true`}
-                    alt={subject}
-                    width="302"
-                    height="302"
-                    style={coverImage}
-                  />
-                </div>
-              </Link>
-            </Section>
+            <>
+              <Section style={coverSection}>
+                <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
+                  <div style={coverImageContainer}>
+                    <Img
+                      src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=604&logo=true&skipTransform=true`}
+                      alt={subject}
+                      width="302"
+                      height="302"
+                      style={coverImage}
+                    />
+                  </div>
+                </Link>
+              </Section>
+
+              {/* Audio Player Pill */}
+              <Section style={playerPillSection}>
+                <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
+                  <div style={playerPill}>
+                    <span style={playerPlayIcon}>&#9654;</span>
+                    <span style={playerText}>{strings.listenPodcast}</span>
+                  </div>
+                </Link>
+              </Section>
+            </>
           )}
 
           {/* Main Content */}
@@ -365,7 +388,35 @@ const coverImage = {
   objectFit: 'cover' as const,
 }
 
+const playerPillSection = {
+  padding: '16px 0 0',
+  textAlign: 'center' as const,
+}
 
+const playerPill = {
+  display: 'inline-block',
+  backgroundColor: '#f3f4f6',
+  border: '1px solid #e5e7eb',
+  borderRadius: '20px',
+  padding: '8px 20px',
+  textDecoration: 'none',
+}
+
+const playerPlayIcon = {
+  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+  fontSize: '12px',
+  color: '#1a1a1a',
+  marginRight: '8px',
+  verticalAlign: 'middle',
+}
+
+const playerText = {
+  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+  fontSize: '13px',
+  fontWeight: '500' as const,
+  color: '#1a1a1a',
+  verticalAlign: 'middle',
+}
 
 const contentSection = {
   padding: '32px',

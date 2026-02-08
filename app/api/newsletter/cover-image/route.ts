@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import sharp from 'sharp'
 import { parseIntParam } from '@/lib/validation/query-params'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 
 // Neon yellow RGB values
 const NEON_YELLOW = { r: 204, g: 255, b: 0 }
@@ -13,7 +15,8 @@ const NEON_YELLOW = { r: 204, g: 255, b: 0 }
  * Query params:
  * - url: The original image URL
  * - size: Output size in pixels (default: 1104 = 2x display size for sharp dithering at 552px)
- * - playButton: If 'true', adds a play button overlay in the center
+ * - logo: If 'true', adds the Synthszr logo overlay centered on the image
+ * - playButton: If 'true', adds a play button overlay in the center (legacy)
  * - skipTransform: If 'true', skips color transformation (for already-processed images)
  */
 export async function GET(request: NextRequest) {
@@ -21,6 +24,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const imageUrl = searchParams.get('url')
     const size = parseIntParam(searchParams.get('size'), 1104, 100, 4000)
+    const addLogo = searchParams.get('logo') === 'true'
     const addPlayButton = searchParams.get('playButton') === 'true'
     const skipTransform = searchParams.get('skipTransform') === 'true'
 
@@ -111,7 +115,29 @@ export async function GET(request: NextRequest) {
         .toBuffer()
     }
 
-    // Add play button overlay if requested
+    // Add logo overlay if requested
+    if (addLogo) {
+      const logoSvgRaw = readFileSync(join(process.cwd(), 'public', 'synthszr-logo.svg'), 'utf-8')
+      // Original viewBox: 0 0 464.93 103.82 → aspect ratio ~4.475
+      const logoWidth = Math.round(size * 0.65)
+      const logoHeight = Math.round(logoWidth / 4.475)
+      // Replace viewBox-only SVG with explicit width/height for sharp
+      const logoSvg = logoSvgRaw
+        .replace(/<svg([^>]*)>/, `<svg$1 width="${logoWidth}" height="${logoHeight}">`)
+
+      finalImage = await sharp(finalImage)
+        .composite([
+          {
+            input: Buffer.from(logoSvg),
+            top: Math.round((size - logoHeight) / 2),
+            left: Math.round((size - logoWidth) / 2),
+          },
+        ])
+        .png()
+        .toBuffer()
+    }
+
+    // Add play button overlay if requested (legacy)
     if (addPlayButton) {
       // Scale play button to image size (80px at 302px = ~26% of image)
       const buttonSize = Math.round(size * 0.26)
