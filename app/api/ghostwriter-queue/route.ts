@@ -303,9 +303,9 @@ export async function POST(request: NextRequest) {
    - Jede News bekommt eine eigene Zwischenüberschrift (##)
    - Jeder News-Artikel MUSS exakt 5-7 Sätze haben
 
-2. **ZWEI TAKES PRO NEWS:** Jede News MUSS zwei aufeinanderfolgende Takes haben:
-   a) "Synthszr Take:" — Neutral-positiver Take (3-5 Sätze). Konstruktiv-analytische Einordnung.
-   b) "Synthszr Contra:" — Negativ-zynischer Gegentake (2-4 Sätze). Skeptisch, provokant, Risiken benennen.
+2. **SYNTHSZR TAKE:** Jede News MUSS einen "Synthszr Take:" haben (5-7 Sätze).
+   - Analytisch begründete Einordnung, darf positiv oder negativ bewerten
+   - KEINE typischen KI-Formulierungen: keine Kontrastpaare, keine Parallelkonstruktionen, keine Phrasen wie "Es bleibt abzuwarten"
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 

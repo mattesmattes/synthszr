@@ -393,8 +393,8 @@ export async function POST(request: NextRequest) {
           synthesisContext += '\n---\n\n'
         }
 
-        synthesisContext += 'Schreibe zu jedem Artikel mit Recherche-Hintergrund einen "Synthszr Take:" (neutral-positiv) und einen "Synthszr Contra:" (negativ-zynisch), '
-        synthesisContext += 'die die aktuelle News im Licht der historischen Verbindung reflektieren und einordnen.'
+        synthesisContext += 'Schreibe zu jedem Artikel mit Recherche-Hintergrund einen "Synthszr Take:", '
+        synthesisContext += 'der die aktuelle News im Licht der historischen Verbindung reflektiert und einordnet.'
       }
     } catch (error) {
       console.log('[Ghostwriter] No syntheses available (table may not exist yet)')
@@ -517,9 +517,10 @@ export async function POST(request: NextRequest) {
    - Satz 3-4: Kontext und Bedeutung
    - Satz 5-7: Einordnung und weiterführender Gedanke
 
-2. **ZWEI TAKES PRO NEWS:** Jede News MUSS zwei aufeinanderfolgende Takes haben:
-   a) "Synthszr Take:" — Neutral-positiver Take (3-5 Sätze). Basiert auf der mitgelieferten Hintergrund-Recherche.
-   b) "Synthszr Contra:" — Negativ-zynischer Gegentake (2-4 Sätze). Skeptisch, provokant, Risiken benennen.
+2. **SYNTHSZR TAKE:** Jede News MUSS einen "Synthszr Take:" haben (5-7 Sätze).
+   - Analytisch begründete Einordnung, darf positiv oder negativ bewerten
+   - Basiert auf der mitgelieferten Hintergrund-Recherche
+   - KEINE typischen KI-Formulierungen: keine Kontrastpaare, keine Parallelkonstruktionen, keine Phrasen
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 

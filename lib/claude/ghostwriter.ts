@@ -77,12 +77,14 @@ CATEGORY: [AI & Tech, Marketing, Design, Business, Code, oder Synthese]
 
 Danach folgt der Artikel-Content in Markdown.
 
-STILREGEL — VERMEIDE TYPISCHE KI-SPRACHMUSTER:
-- KEINE Kontrastpaare: Vermeide "nicht nur... sondern auch", "einerseits... andererseits", "zwar... aber", "weniger... mehr"
-- KEINE Parallelkonstruktionen: Vermeide gleichförmige Satzanfänge oder rhythmische Aufzählungen mit gleicher Struktur
-- KEINE Gedankenstriche als Stilmittel: Verwende Gedankenstriche (—/–) höchstens 1x pro Artikel, nie als rhetorische Pause oder Einschub-Muster
-- KEINE salbungsvollen Formulierungen: Vermeide "Es zeigt sich", "Es wird deutlich", "Man darf gespannt sein"
-- Schreibe asymmetrisch: Variiere Satzlänge und -struktur bewusst ungleichmäßig`
+STILREGEL — VERMEIDE TYPISCHE KI-SPRACHMUSTER (HÖCHSTE PRIORITÄT):
+Diese Regeln gelten für den GESAMTEN Text inkl. Synthszr Takes:
+- KEINE Kontrastpaare: "nicht nur... sondern auch", "einerseits... andererseits", "zwar... aber", "weniger... mehr", "sowohl... als auch"
+- KEINE Parallelkonstruktionen: Keine gleichförmigen Satzanfänge, keine rhythmischen Aufzählungen mit identischer Struktur (z.B. "X zeigt... Y zeigt... Z zeigt...")
+- KEINE Gedankenstriche als Stilmittel: Höchstens 1x pro Artikel, nie als rhetorische Pause oder Einschub-Muster
+- KEINE Phrasen: "Es zeigt sich", "Es wird deutlich", "Man darf gespannt sein", "Es bleibt abzuwarten", "Zusammenfassend lässt sich sagen", "In einer Zeit, in der..."
+- KEINE Überleitungen mit "Dabei": "Dabei ist...", "Dabei zeigt sich..."
+- Schreibe asymmetrisch: Variiere Satzlänge und -struktur bewusst ungleichmäßig. Kein Satz darf den gleichen Aufbau haben wie der vorherige.`
 
 /**
  * Stream ghostwriter blog post generation using the specified AI model
