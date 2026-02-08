@@ -325,6 +325,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       /mattes synthese:?/gi,
       /mattes' synthese:?/gi,
       /synthszr take:?/gi,
+      /synthszr contra:?/gi,
       /synthszr vote:?/gi,
       /synthszr meent:?/gi,        // NDS (Low German)
       /pohled synthszr:?/gi,       // Czech (actual translation)
@@ -337,6 +338,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       return lower.includes('mattes synthese') ||
              lower.includes("mattes' synthese") ||
              lower.includes('synthszr take') ||
+             lower.includes('synthszr contra') ||
              lower.includes('synthszr vote') ||
              lower.includes('synthszr meent') ||       // NDS
              lower.includes('pohled synthszr') ||      // Czech
@@ -551,6 +553,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
         const isSynthszrTakeNode = (node: unknown): boolean => {
           const text = getNodeText(node).toLowerCase()
           return text.includes('synthszr take') ||
+                 text.includes('synthszr contra') ||
                  text.includes('mattes synthese') ||
                  text.includes('synthszr vote') ||
                  text.includes('synthszr meent') ||    // NDS
@@ -613,6 +616,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
         // Stop if we hit another Synthszr Take
         const prevText = (prevElement as HTMLElement).innerText || prevElement.textContent || ''
         if (prevText.toLowerCase().includes('synthszr take') ||
+            prevText.toLowerCase().includes('synthszr contra') ||
             prevText.toLowerCase().includes('mattes synthese')) break
         // Collect text from paragraphs
         if (prevElement.tagName === 'P') {
@@ -959,7 +963,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
     h2s.forEach((h2) => {
       // Skip "Mattes Synthese" / "Synthszr Take" headings entirely
       const headingText = h2.textContent?.toLowerCase() || ''
-      if (headingText.includes('mattes synthese') || headingText.includes("mattes' synthese") || headingText.includes('synthszr take')) return
+      if (headingText.includes('mattes synthese') || headingText.includes("mattes' synthese") || headingText.includes('synthszr take') || headingText.includes('synthszr contra')) return
 
       // Get queue item ID for thumbnail matching
       // PRIORITY ORDER for queueItemId:

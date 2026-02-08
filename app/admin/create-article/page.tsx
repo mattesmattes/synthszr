@@ -87,11 +87,13 @@ interface SourceDistribution {
   percentage: number
 }
 
-type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro' | 'gemini-3-pro-preview'
+type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro' | 'gemini-3-pro-preview' | 'gpt-5.2' | 'gpt-5.2-mini'
 
 const AI_MODELS: { value: AIModel; label: string; description: string }[] = [
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Schnell, großer Kontext (1M+ Token)' },
   { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview', description: 'Neuestes Gemini, experimentell' },
+  { value: 'gpt-5.2', label: 'GPT-5.2', description: 'OpenAI Flagship, Reasoning + Writing' },
+  { value: 'gpt-5.2-mini', label: 'GPT-5.2 Mini', description: 'OpenAI schnell, kosteneffizient' },
   { value: 'claude-sonnet-4', label: 'Claude Sonnet 4', description: 'Ausgewogen, gute Qualität' },
   { value: 'claude-opus-4', label: 'Claude Opus 4', description: 'Höchste Qualität, langsamer' },
 ]

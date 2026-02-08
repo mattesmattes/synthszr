@@ -320,7 +320,7 @@ export async function generateEmailContentWithVotes(
   doc.content.forEach((node, index) => {
     if (node.type === 'paragraph') {
       const text = extractTextFromNode(node)
-      if (/synthszr take:?/i.test(text)) {
+      if (/synthszr (take|contra):?/i.test(text)) {
         // Get text from surrounding paragraphs too (news context)
         let contextText = text
         // Look at previous 3 nodes for context
@@ -427,7 +427,7 @@ export async function generateEmailContentWithVotes(
   doc.content.forEach((node, index) => {
     if (node.type === 'heading' && (node.attrs?.level === 2 || node.attrs?.level === '2')) {
       const headingText = extractTextFromNode(node).toLowerCase()
-      if (!headingText.includes('synthszr take') && !headingText.includes('mattes synthese')) {
+      if (!headingText.includes('synthszr take') && !headingText.includes('synthszr contra') && !headingText.includes('mattes synthese')) {
         // Close previous article section
         if (currentArticleStart !== null) {
           articleSections.push({ startIndex: currentArticleStart, endIndex: index - 1 })
@@ -490,8 +490,8 @@ export async function generateEmailContentWithVotes(
     // Check if this is an H2 heading (article heading)
     if (node.type === 'heading' && (node.attrs?.level === 2 || node.attrs?.level === '2')) {
       const headingText = extractTextFromNode(node).toLowerCase()
-      // Skip "Synthszr Take" and "Mattes Synthese" headings
-      if (!headingText.includes('synthszr take') && !headingText.includes('mattes synthese')) {
+      // Skip "Synthszr Take", "Synthszr Contra" and "Mattes Synthese" headings
+      if (!headingText.includes('synthszr take') && !headingText.includes('synthszr contra') && !headingText.includes('mattes synthese')) {
         const thumbnail = thumbnailMap.get(articleIndex)
         if (thumbnail?.image_url) {
           // Use dynamically calculated vote color from article section
@@ -695,11 +695,11 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string 
     lastSentenceStart = match.index + match[0].length
   }
 
-  // If no sentence boundary found, try to highlight everything after "Synthszr Take:"
+  // If no sentence boundary found, try to highlight everything after "Synthszr Take/Contra:"
   if (lastSentenceStart === 0) {
-    const synthszrMatch = plainText.match(/synthszr take:?\s*/i)
+    const synthszrMatch = plainText.match(/synthszr (?:take|contra):?\s*/i)
     if (synthszrMatch) {
-      // Highlight everything after "Synthszr Take:"
+      // Highlight everything after "Synthszr Take/Contra:"
       const afterLabel = plainText.slice(synthszrMatch.index! + synthszrMatch[0].length)
       if (afterLabel.trim()) {
         const escapedAfterLabel = afterLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -738,7 +738,7 @@ function convertNodeToHtml(node: TiptapNode): string {
     case 'paragraph': {
       const textContent = extractTextFromNode(node)
       // Check if this paragraph contains "Synthszr Take:" - highlight the last sentence
-      if (/synthszr take:?/i.test(textContent)) {
+      if (/synthszr (take|contra):?/i.test(textContent)) {
         const content = renderContentWithLastSentenceHighlight(node.content)
         return `<p>${content}</p>`
       }
@@ -801,11 +801,11 @@ function renderContent(content?: TiptapNode[]): string {
       // Remove {Company} explicit tags from display
       text = stripExplicitCompanyTags(text)
 
-      // Check if text contains "Synthszr Take:" and style it
-      const synthszrPattern = /(Synthszr Take:?)/gi
+      // Check if text contains "Synthszr Take:" or "Synthszr Contra:" and style it
+      const synthszrPattern = /(Synthszr (?:Take|Contra):?)/gi
       const hasBoldMark = node.marks?.some(m => m.type === 'bold')
 
-      // If "Synthszr Take:" is not already bold, wrap it with styling
+      // If "Synthszr Take/Contra:" is not already bold, wrap it with styling
       if (!hasBoldMark && synthszrPattern.test(text)) {
         text = text.replace(synthszrPattern, '<strong style="background-color: #FFFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">$1</strong>')
       }
@@ -816,7 +816,7 @@ function renderContent(content?: TiptapNode[]): string {
           switch (mark.type) {
             case 'bold':
               // Check if this is "Synthszr Take:" - add background styling
-              if (/synthszr take:?/i.test(text)) {
+              if (/synthszr (take|contra):?/i.test(text)) {
                 text = `<strong style="background-color: #FFFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">${text}</strong>`
               } else {
                 text = `<strong>${text}</strong>`

@@ -12,7 +12,7 @@ import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication,
 import { getBalancedSelection, getSelectedItems, selectItemsForArticle } from '@/lib/news-queue/service'
 import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
 
-const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview']
+const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview', 'gpt-5.2', 'gpt-5.2-mini']
 
 export async function POST(request: NextRequest) {
   const session = await getSession()

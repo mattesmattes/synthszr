@@ -197,8 +197,9 @@ export function extractCompaniesPerArticle(
       const headlineText = extractTextFromNode(node)
       const lowerHeadline = headlineText.toLowerCase()
 
-      // Skip "Synthszr Take" or "Mattes Synthese" headings - these are commentary, not articles
+      // Skip "Synthszr Take", "Synthszr Contra" or "Mattes Synthese" headings - these are commentary, not articles
       if (lowerHeadline.includes('synthszr take') ||
+          lowerHeadline.includes('synthszr contra') ||
           lowerHeadline.includes('mattes synthese') ||
           lowerHeadline.includes("mattes' synthese")) {
         continue

@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import {
   getActiveLearnedPatterns,
   findSimilarEditExamples,
@@ -50,13 +51,15 @@ const UNIQUE_METAPHORS = [
   'eisberg',
 ]
 
-export type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro' | 'gemini-3-pro-preview'
+export type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro' | 'gemini-3-pro-preview' | 'gpt-5.2' | 'gpt-5.2-mini'
 
 export const AI_MODEL_LABELS: Record<AIModel, string> = {
   'claude-opus-4': 'Claude Opus 4',
   'claude-sonnet-4': 'Claude Sonnet 4',
   'gemini-2.5-pro': 'Gemini 2.5 Pro',
   'gemini-3-pro-preview': 'Gemini 3 Pro Preview',
+  'gpt-5.2': 'GPT-5.2',
+  'gpt-5.2-mini': 'GPT-5.2 Mini',
 }
 
 // Minimaler System-Prompt - nur für Parsing-Anforderungen
@@ -72,7 +75,14 @@ EXCERPT: [1-2 Sätze, max 160 Zeichen]
 CATEGORY: [AI & Tech, Marketing, Design, Business, Code, oder Synthese]
 ---
 
-Danach folgt der Artikel-Content in Markdown.`
+Danach folgt der Artikel-Content in Markdown.
+
+STILREGEL — VERMEIDE TYPISCHE KI-SPRACHMUSTER:
+- KEINE Kontrastpaare: Vermeide "nicht nur... sondern auch", "einerseits... andererseits", "zwar... aber", "weniger... mehr"
+- KEINE Parallelkonstruktionen: Vermeide gleichförmige Satzanfänge oder rhythmische Aufzählungen mit gleicher Struktur
+- KEINE Gedankenstriche als Stilmittel: Verwende Gedankenstriche (—/–) höchstens 1x pro Artikel, nie als rhetorische Pause oder Einschub-Muster
+- KEINE salbungsvollen Formulierungen: Vermeide "Es zeigt sich", "Es wird deutlich", "Man darf gespannt sein"
+- Schreibe asymmetrisch: Variiere Satzlänge und -struktur bewusst ungleichmäßig`
 
 /**
  * Stream ghostwriter blog post generation using the specified AI model
@@ -129,9 +139,11 @@ export async function* streamGhostwriter(
 
   console.log(`[Ghostwriter] Using model: ${model}`)
 
-  if (model === 'gemini-2.5-pro' || model === 'gemini-3-pro-preview') {
+  if (model === 'gpt-5.2' || model === 'gpt-5.2-mini') {
+    yield* streamOpenAI(userMessage, model)
+  } else if (model === 'gemini-2.5-pro' || model === 'gemini-3-pro-preview') {
     yield* streamGemini(userMessage, model)
-  } else {
+  } else if (model === 'claude-opus-4' || model === 'claude-sonnet-4') {
     yield* streamClaude(userMessage, model)
   }
 
@@ -193,6 +205,30 @@ async function* streamClaude(
     if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
       yield event.delta.text
     }
+  }
+}
+
+/**
+ * Stream from OpenAI (GPT-5.2 or GPT-5.2 Mini)
+ */
+async function* streamOpenAI(
+  userMessage: string,
+  model: 'gpt-5.2' | 'gpt-5.2-mini'
+): AsyncGenerator<string, void, unknown> {
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+  const stream = await openai.chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userMessage },
+    ],
+    stream: true,
+  })
+
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content
+    if (text) yield text
   }
 }
 
@@ -289,10 +325,28 @@ ${originalText}`
 
   console.log(`[Ghostwriter] Deduplicating ${duplicates.size} repeated metaphors...`)
 
-  if (model === 'gemini-2.5-pro' || model === 'gemini-3-pro-preview') {
+  const deduplicationSystem = 'Du überarbeitest Texte. Gib NUR den überarbeiteten Text aus - KEINE Einleitung, KEINE Kommentare, KEINE Erklärungen. Starte direkt mit dem Text.'
+
+  if (model === 'gpt-5.2' || model === 'gpt-5.2-mini') {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+    const stream = await openai.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: deduplicationSystem },
+        { role: 'user', content: deduplicationPrompt },
+      ],
+      stream: true,
+    })
+
+    for await (const chunk of stream) {
+      const text = chunk.choices[0]?.delta?.content
+      if (text) yield text
+    }
+  } else if (model === 'gemini-2.5-pro' || model === 'gemini-3-pro-preview') {
     const geminiModel = genAI.getGenerativeModel({
       model: model,
-      systemInstruction: 'Du überarbeitest Texte. Gib NUR den überarbeiteten Text aus - KEINE Einleitung, KEINE Kommentare, KEINE Erklärungen. Starte direkt mit dem Text.',
+      systemInstruction: deduplicationSystem,
     })
 
     const result = await geminiModel.generateContentStream(deduplicationPrompt)
@@ -315,7 +369,7 @@ ${originalText}`
     const stream = anthropic.messages.stream({
       model: modelId,
       max_tokens: 8192,
-      system: 'Du überarbeitest Texte. Gib NUR den überarbeiteten Text aus - KEINE Einleitung, KEINE Kommentare, KEINE Erklärungen. Starte direkt mit dem Text.',
+      system: deduplicationSystem,
       messages: [{ role: 'user', content: deduplicationPrompt }],
     })
 

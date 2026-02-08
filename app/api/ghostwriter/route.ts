@@ -5,7 +5,7 @@ import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication,
 import { getSynthesesForDigest } from '@/lib/synthesis/pipeline'
 import { sanitizeUrl, isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
 
-const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview']
+const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview', 'gpt-5.2', 'gpt-5.2-mini']
 
 // Canonical URLs for newsletter sources that may not have direct article URLs
 const NEWSLETTER_CANONICAL_URLS: Record<string, string> = {
@@ -393,8 +393,8 @@ export async function POST(request: NextRequest) {
           synthesisContext += '\n---\n\n'
         }
 
-        synthesisContext += 'Schreibe zu jedem Artikel mit Recherche-Hintergrund einen "Mattes Synthese" Kommentar, '
-        synthesisContext += 'der die aktuelle News im Licht der historischen Verbindung reflektiert und einordnet.'
+        synthesisContext += 'Schreibe zu jedem Artikel mit Recherche-Hintergrund einen "Synthszr Take:" (neutral-positiv) und einen "Synthszr Contra:" (negativ-zynisch), '
+        synthesisContext += 'die die aktuelle News im Licht der historischen Verbindung reflektieren und einordnen.'
       }
     } catch (error) {
       console.log('[Ghostwriter] No syntheses available (table may not exist yet)')
@@ -517,10 +517,9 @@ export async function POST(request: NextRequest) {
    - Satz 3-4: Kontext und Bedeutung
    - Satz 5-7: Einordnung und weiterführender Gedanke
 
-2. **MATTES SYNTHESE:** Jeder Kommentar MUSS auf der mitgelieferten Hintergrund-Recherche basieren.
-   - Nimm Bezug auf die historische Verbindung
-   - Zeige, dass du den größeren Kontext verstehst
-   - Formuliere eine eigenständige These
+2. **ZWEI TAKES PRO NEWS:** Jede News MUSS zwei aufeinanderfolgende Takes haben:
+   a) "Synthszr Take:" — Neutral-positiver Take (3-5 Sätze). Basiert auf der mitgelieferten Hintergrund-Recherche.
+   b) "Synthszr Contra:" — Negativ-zynischer Gegentake (2-4 Sätze). Skeptisch, provokant, Risiken benennen.
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 
