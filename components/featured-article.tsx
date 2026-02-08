@@ -86,9 +86,9 @@ export function FeaturedArticle({
 
       {excerpt && (
         excerpt.includes('•') ? (
-          <ul className="mb-6 space-y-1 text-lg text-muted-foreground leading-relaxed list-none pl-5">
+          <ul className="mb-6 space-y-1 text-lg text-muted-foreground leading-relaxed list-none pl-0">
             {excerpt.split('\n').filter(l => l.trim().startsWith('•')).map((line, i) => (
-              <li key={i} className="-indent-5">{line.trim()}</li>
+              <li key={i}>{line.trim()}</li>
             ))}
           </ul>
         ) : (

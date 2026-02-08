@@ -251,15 +251,14 @@ export function NewsletterEmail({
             {/* Excerpt */}
             {previewText && (
               previewText.includes('•') ? (
-                <table cellPadding="0" cellSpacing="0" style={{ margin: '0 0 24px', width: '100%' }}>
-                  <tbody>
-                    {previewText.split('\n').filter(l => l.trim().startsWith('•')).map((line, i) => (
-                      <tr key={i}>
-                        <td style={excerptBullet}>{line.trim()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <>
+                  {(() => {
+                    const bullets = previewText.split('\n').filter(l => l.trim().startsWith('•'))
+                    return bullets.map((line, i) => (
+                      <Text key={i} style={i < bullets.length - 1 ? excerptBulletLine : excerpt}>{line.trim()}</Text>
+                    ))
+                  })()}
+                </>
               ) : (
                 <Text style={excerpt}>{previewText}</Text>
               )
@@ -402,15 +401,9 @@ const excerpt = {
   margin: '0 0 24px',
 }
 
-const excerptBullet: React.CSSProperties = {
-  fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '18px',
-  lineHeight: '1.6',
-  color: '#6b7280',
-  fontStyle: 'italic',
-  paddingLeft: '20px',
-  textIndent: '-20px',
-  paddingBottom: '4px',
+const excerptBulletLine = {
+  ...excerpt,
+  margin: '0 0 4px',
 }
 
 const contentStyle = {
