@@ -28,21 +28,22 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
   const [duration, setDuration] = useState(0)
   const [coverVisible, setCoverVisible] = useState(true)
   const [showFlyingNav, setShowFlyingNav] = useState(false)
-  const [autoplayBlocked, setAutoplayBlocked] = useState(false)
+  const [flyingNavMilky, setFlyingNavMilky] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const coverButtonRef = useRef<HTMLButtonElement | null>(null)
+  const coverRef = useRef<HTMLDivElement | null>(null)
+  const hasTransitionedRef = useRef(false)
   const searchParams = useSearchParams()
   const shouldAutoplay = searchParams.get('autoplay') === 'true'
 
   // Mount guard for createPortal
   useEffect(() => setMounted(true), [])
 
-  // IntersectionObserver to track cover button visibility
+  // IntersectionObserver to track cover element visibility
   useEffect(() => {
-    const button = coverButtonRef.current
-    if (!button) return
+    const el = coverRef.current
+    if (!el) return
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -51,14 +52,25 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
       { threshold: 0 }
     )
 
-    observer.observe(button)
+    observer.observe(el)
     return () => observer.disconnect()
   }, [status])
 
-  // Show flying nav whenever cover button scrolls out of view OR autoplay was blocked
+  // Show flying nav whenever cover scrolls out of view
   useEffect(() => {
-    setShowFlyingNav(!coverVisible || autoplayBlocked)
-  }, [coverVisible, autoplayBlocked])
+    setShowFlyingNav(!coverVisible)
+  }, [coverVisible])
+
+  // Milky → transparent transition for flying nav (newsletter clickout)
+  useEffect(() => {
+    if (shouldAutoplay && showFlyingNav && !hasTransitionedRef.current) {
+      hasTransitionedRef.current = true
+      setFlyingNavMilky(true)
+      // Brief pause, then start CSS transition to transparent
+      const timer = setTimeout(() => setFlyingNavMilky(false), 600)
+      return () => clearTimeout(timer)
+    }
+  }, [shouldAutoplay, showFlyingNav])
 
   // Fetch podcast audio status on mount (always EN)
   useEffect(() => {
@@ -136,9 +148,8 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
       setAutoplayTriggered(true)
       pendingAutoplayRef.current = true
       audioRef.current?.play().catch(() => {
-        // Browser blocked autoplay — show flying player so user can tap play
-        console.log('[AudioPlayer] Autoplay blocked by browser, showing player')
-        setAutoplayBlocked(true)
+        // Browser blocked — cover player is visible for user to tap
+        console.log('[AudioPlayer] Autoplay blocked by browser — cover player visible for tap')
       })
     }
     // Only give up if there's definitively no podcast (error/disabled)
@@ -153,9 +164,7 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
     if (pendingAutoplayRef.current) {
       pendingAutoplayRef.current = false
       audioRef.current?.play().catch(() => {
-        // Browser blocked autoplay — show flying player so user can tap play
-        console.log('[AudioPlayer] Autoplay blocked by browser, showing player')
-        setAutoplayBlocked(true)
+        console.log('[AudioPlayer] Autoplay blocked by browser — cover player visible for tap')
       })
     }
   }, [])
@@ -193,11 +202,7 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
   }, [audioUrl, status, isPlaying])
 
   // Audio event handlers
-  const handlePlay = useCallback(() => {
-    setIsPlaying(true)
-    // Clear autoplay blocked state — user has interacted, normal scroll behavior resumes
-    setAutoplayBlocked(false)
-  }, [])
+  const handlePlay = useCallback(() => setIsPlaying(true), [])
   const handlePause = useCallback(() => setIsPlaying(false), [])
   const handleEnded = useCallback(() => {
     setIsPlaying(false)
@@ -249,6 +254,144 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
+  // Shared player content (used by both cover pill and flying nav)
+  const playerContent = (opts: { showClose?: boolean }) => (
+    <div className="relative z-10 flex items-center gap-3 pl-1.5 pr-2 py-1.5">
+      {/* Play/Pause */}
+      <button
+        onClick={togglePlayback}
+        disabled={status === 'loading'}
+        className="flex items-center justify-center w-8 h-8 rounded-full bg-black/80 dark:bg-white/90 hover:bg-black dark:hover:bg-white transition-colors shrink-0 disabled:opacity-50"
+        aria-label={isPlaying ? 'Pause' : 'Play'}
+      >
+        {status === 'loading' ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-white dark:text-black" />
+        ) : isPlaying ? (
+          <Pause className="h-3.5 w-3.5 text-white dark:text-black fill-white dark:fill-black" />
+        ) : (
+          <Play className="h-3.5 w-3.5 text-white dark:text-black fill-white dark:fill-black ml-0.5" />
+        )}
+      </button>
+
+      {/* Progress bar */}
+      <div
+        onClick={handleProgressClick}
+        className="relative w-28 sm:w-40 h-1 bg-black/10 dark:bg-white/15 rounded-full cursor-pointer group"
+      >
+        <div
+          className="absolute inset-y-0 left-0 bg-black/60 dark:bg-white/70 rounded-full transition-[width] duration-150 ease-linear"
+          style={{ width: `${progress}%` }}
+        />
+        {/* Seek knob on hover */}
+        <div
+          className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-black dark:bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm pointer-events-none"
+          style={{ left: `calc(${progress}% - 5px)` }}
+        />
+      </div>
+
+      {/* Time display */}
+      <span className="text-[10px] font-mono text-black/50 dark:text-white/50 tabular-nums whitespace-nowrap select-none">
+        {formatTime(currentTime)}
+        <span className="mx-px opacity-50">/</span>
+        {formatTime(duration)}
+      </span>
+
+      {/* Close (flying nav only) */}
+      {opts.showClose && (
+        <button
+          onClick={handleClose}
+          className="flex items-center justify-center w-6 h-6 rounded-full hover:bg-black/8 dark:hover:bg-white/10 transition-colors shrink-0"
+          aria-label="Close player"
+        >
+          <X className="h-3 w-3 text-black/40 dark:text-white/40" />
+        </button>
+      )}
+    </div>
+  )
+
+  // Glass layers shared by cover pill and flying nav
+  const glassLayers = (milkyOpacity: number) => (
+    <>
+      {/* Layer 1: Backdrop blur — frosted glass base */}
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{
+          backdropFilter: 'blur(16px) saturate(1.8) brightness(1.1) contrast(1.05)',
+          WebkitBackdropFilter: 'blur(16px) saturate(1.8) brightness(1.1) contrast(1.05)',
+        }}
+      />
+
+      {/* Layer 2: Glass tint with depth gradient — thicker glass at edges */}
+      <div
+        className="absolute inset-0 rounded-full pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse 90% 90% at 50% 45%,
+            rgba(255,255,255,0.12) 0%,
+            rgba(255,255,255,0.18) 40%,
+            rgba(255,255,255,0.35) 70%,
+            rgba(255,255,255,0.55) 90%,
+            rgba(255,255,255,0.7) 100%
+          )`,
+        }}
+      />
+
+      {/* Layer 3: Top caustic band */}
+      <div
+        className="absolute inset-0 rounded-full pointer-events-none"
+        style={{
+          background: `linear-gradient(172deg,
+            rgba(255,255,255,0.9) 0%,
+            rgba(255,255,255,0.45) 6%,
+            rgba(255,255,255,0.08) 18%,
+            transparent 30%,
+            transparent 85%,
+            rgba(0,0,0,0.03) 100%
+          )`,
+        }}
+      />
+
+      {/* Layer 4: Chromatic aberration */}
+      <div
+        className="absolute inset-0 rounded-full pointer-events-none"
+        style={{
+          boxShadow: `
+            inset 6px 0 18px -4px rgba(0,130,255,0.25),
+            inset -6px 0 18px -4px rgba(255,80,0,0.2),
+            inset 0 6px 16px -4px rgba(255,255,255,0.7),
+            inset 0 -4px 12px -4px rgba(0,0,0,0.06),
+            inset 0 0 30px 0 rgba(255,255,255,0.05)
+          `,
+        }}
+      />
+
+      {/* Milky overlay — controls opaqueness */}
+      <div
+        className="absolute inset-0 rounded-full pointer-events-none"
+        style={{
+          background: 'rgba(255,255,255,0.88)',
+          opacity: milkyOpacity,
+          transition: 'opacity 1.5s ease-out',
+        }}
+      />
+
+      {/* Layer 5: Sharp specular reflection line */}
+      <div
+        className="absolute inset-x-3 top-[1px] h-[1px] rounded-full pointer-events-none"
+        style={{
+          background: 'linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.95) 20%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.95) 80%, transparent 95%)',
+        }}
+      />
+
+      {/* Layer 6: Bottom rim light */}
+      <div
+        className="absolute inset-x-6 bottom-[1px] h-[1px] rounded-full pointer-events-none opacity-40"
+        style={{
+          background: 'linear-gradient(90deg, transparent 10%, rgba(255,255,255,0.6) 30%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0.6) 70%, transparent 90%)',
+        }}
+      />
+    </>
+  )
+
   return (
     <>
       {/* Hidden audio element */}
@@ -267,25 +410,40 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
         />
       )}
 
-      {/* Cover play/pause button */}
-      <button
-        ref={coverButtonRef}
-        onClick={togglePlayback}
-        disabled={status === 'loading'}
-        className={cn(
-          'flex items-center justify-center w-12 h-12 rounded-full bg-white/90 hover:bg-white transition-all shadow-lg disabled:opacity-50',
-          className
-        )}
-        aria-label={isPlaying ? 'Pause' : 'Play'}
-      >
-        {status === 'loading' ? (
-          <Loader2 className="h-6 w-6 animate-spin text-black" />
-        ) : isPlaying ? (
-          <Pause className="h-6 w-6 text-black fill-black" />
+      {/* Cover: full player pill (newsletter clickout) or simple button (normal) */}
+      <div ref={coverRef}>
+        {shouldAutoplay ? (
+          // Full player pill with milky glass on the cover
+          <div className={cn(
+            'relative rounded-full overflow-hidden',
+            'border border-white/60 dark:border-white/20',
+            'shadow-[0_2px_16px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.3),0_8px_32px_rgba(0,0,0,0.08)]',
+            'dark:shadow-[0_2px_16px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.3)]',
+          )}>
+            {glassLayers(1)}
+            {playerContent({ showClose: false })}
+          </div>
         ) : (
-          <Play className="h-6 w-6 text-black fill-black ml-0.5" />
+          // Normal small circular play/pause button
+          <button
+            onClick={togglePlayback}
+            disabled={status === 'loading'}
+            className={cn(
+              'flex items-center justify-center w-12 h-12 rounded-full bg-white/90 hover:bg-white transition-all shadow-lg disabled:opacity-50',
+              className
+            )}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+          >
+            {status === 'loading' ? (
+              <Loader2 className="h-6 w-6 animate-spin text-black" />
+            ) : isPlaying ? (
+              <Pause className="h-6 w-6 text-black fill-black" />
+            ) : (
+              <Play className="h-6 w-6 text-black fill-black ml-0.5" />
+            )}
+          </button>
         )}
-      </button>
+      </div>
 
       {/* Flying Navigation — liquid glass mini player */}
       {showFlyingNav && mounted && createPortal(
@@ -296,126 +454,12 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
         >
           <div className={cn(
             'relative rounded-full pointer-events-auto overflow-hidden',
-            // Outer shell: prominent glass border + depth shadow
             'border border-white/60 dark:border-white/20',
             'shadow-[0_2px_16px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.3),0_8px_32px_rgba(0,0,0,0.08)]',
             'dark:shadow-[0_2px_16px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.3)]',
           )}>
-            {/* Layer 1: Backdrop blur — frosted glass base */}
-            <div
-              className="absolute inset-0 rounded-full"
-              style={{
-                backdropFilter: 'blur(16px) saturate(1.8) brightness(1.1) contrast(1.05)',
-                WebkitBackdropFilter: 'blur(16px) saturate(1.8) brightness(1.1) contrast(1.05)',
-              }}
-            />
-
-            {/* Layer 2: Glass tint with depth gradient — thicker glass at edges */}
-            <div
-              className="absolute inset-0 rounded-full pointer-events-none"
-              style={{
-                background: `radial-gradient(ellipse 90% 90% at 50% 45%,
-                  rgba(255,255,255,0.12) 0%,
-                  rgba(255,255,255,0.18) 40%,
-                  rgba(255,255,255,0.35) 70%,
-                  rgba(255,255,255,0.55) 90%,
-                  rgba(255,255,255,0.7) 100%
-                )`,
-              }}
-            />
-
-            {/* Layer 3: Top caustic band — concentrated light at top edge of curved glass */}
-            <div
-              className="absolute inset-0 rounded-full pointer-events-none"
-              style={{
-                background: `linear-gradient(172deg,
-                  rgba(255,255,255,0.9) 0%,
-                  rgba(255,255,255,0.45) 6%,
-                  rgba(255,255,255,0.08) 18%,
-                  transparent 30%,
-                  transparent 85%,
-                  rgba(0,0,0,0.03) 100%
-                )`,
-              }}
-            />
-
-            {/* Layer 4: Chromatic aberration — visible color fringing at glass edges */}
-            <div
-              className="absolute inset-0 rounded-full pointer-events-none"
-              style={{
-                boxShadow: `
-                  inset 6px 0 18px -4px rgba(0,130,255,0.25),
-                  inset -6px 0 18px -4px rgba(255,80,0,0.2),
-                  inset 0 6px 16px -4px rgba(255,255,255,0.7),
-                  inset 0 -4px 12px -4px rgba(0,0,0,0.06),
-                  inset 0 0 30px 0 rgba(255,255,255,0.05)
-                `,
-              }}
-            />
-
-            {/* Layer 5: Sharp specular reflection line */}
-            <div
-              className="absolute inset-x-3 top-[1px] h-[1px] rounded-full pointer-events-none"
-              style={{
-                background: 'linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.95) 20%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.95) 80%, transparent 95%)',
-              }}
-            />
-
-            {/* Layer 6: Bottom rim light — secondary reflection on underside */}
-            <div
-              className="absolute inset-x-6 bottom-[1px] h-[1px] rounded-full pointer-events-none opacity-40"
-              style={{
-                background: 'linear-gradient(90deg, transparent 10%, rgba(255,255,255,0.6) 30%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0.6) 70%, transparent 90%)',
-              }}
-            />
-
-            {/* Content */}
-            <div className="relative z-10 flex items-center gap-3 pl-1.5 pr-2 py-1.5">
-              {/* Play/Pause */}
-              <button
-                onClick={togglePlayback}
-                className="flex items-center justify-center w-8 h-8 rounded-full bg-black/80 dark:bg-white/90 hover:bg-black dark:hover:bg-white transition-colors shrink-0"
-                aria-label={isPlaying ? 'Pause' : 'Play'}
-              >
-                {isPlaying ? (
-                  <Pause className="h-3.5 w-3.5 text-white dark:text-black fill-white dark:fill-black" />
-                ) : (
-                  <Play className="h-3.5 w-3.5 text-white dark:text-black fill-white dark:fill-black ml-0.5" />
-                )}
-              </button>
-
-              {/* Progress bar */}
-              <div
-                onClick={handleProgressClick}
-                className="relative w-28 sm:w-40 h-1 bg-black/10 dark:bg-white/15 rounded-full cursor-pointer group"
-              >
-                <div
-                  className="absolute inset-y-0 left-0 bg-black/60 dark:bg-white/70 rounded-full transition-[width] duration-150 ease-linear"
-                  style={{ width: `${progress}%` }}
-                />
-                {/* Seek knob on hover */}
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-black dark:bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm pointer-events-none"
-                  style={{ left: `calc(${progress}% - 5px)` }}
-                />
-              </div>
-
-              {/* Time display */}
-              <span className="text-[10px] font-mono text-black/50 dark:text-white/50 tabular-nums whitespace-nowrap select-none">
-                {formatTime(currentTime)}
-                <span className="mx-px opacity-50">/</span>
-                {formatTime(duration)}
-              </span>
-
-              {/* Close */}
-              <button
-                onClick={handleClose}
-                className="flex items-center justify-center w-6 h-6 rounded-full hover:bg-black/8 dark:hover:bg-white/10 transition-colors shrink-0"
-                aria-label="Close player"
-              >
-                <X className="h-3 w-3 text-black/40 dark:text-white/40" />
-              </button>
-            </div>
+            {glassLayers(flyingNavMilky ? 1 : 0)}
+            {playerContent({ showClose: true })}
           </div>
         </div>,
         document.body
