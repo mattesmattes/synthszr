@@ -24,12 +24,14 @@ KRITISCHE STRUKTURVORGABEN (NICHT VERHANDELBAR - HÖCHSTE PRIORITÄT):
    - Satz 5-7: Einordnung und weiterführender Gedanke
    - NICHT MEHR als 7 Sätze! Kürze wenn nötig.
 
-3. SYNTHSZR TAKE: 5-7 Sätze pro Take
+3. SYNTHSZR TAKE: MINDESTENS 5 Sätze, MAXIMAL 8 Sätze pro Take
    - Direkt nach jeder News als "Synthszr Take:"
+   - Der Take ist LÄNGER als die News selbst — er ist das analytische Herzstück
    - Basiert auf der mitgelieferten Synthese-Recherche (wenn vorhanden)
    - Eigene analytische Perspektive, keine Wiederholung der News
    - Darf positiv ODER negativ bewerten — je nach Nachrichtenlage
    - Bewertung muss analytisch begründet sein, nie pauschal
+   - WICHTIG: Ein Take mit nur 2-3 Sätzen ist ZU KURZ. Mindestens 5!
 
 4. QUELLENLINK: Genau EIN Link pro News, INLINE am Satzende
    - Format: ...letzter Satz der News. → [Quellenname](URL)

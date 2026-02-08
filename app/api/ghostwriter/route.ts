@@ -517,7 +517,8 @@ export async function POST(request: NextRequest) {
    - Satz 3-4: Kontext und Bedeutung
    - Satz 5-7: Einordnung und weiterführender Gedanke
 
-2. **SYNTHSZR TAKE:** Jede News MUSS einen "Synthszr Take:" haben (5-7 Sätze).
+2. **SYNTHSZR TAKE LÄNGE:** Jeder "Synthszr Take:" MUSS MINDESTENS 5 Sätze haben (Ziel: 5-8 Sätze). Ein Take mit 2-3 Sätzen ist ZU KURZ!
+   - Der Take ist das analytische Herzstück — er muss LÄNGER sein als die News selbst
    - Analytisch begründete Einordnung, darf positiv oder negativ bewerten
    - Basiert auf der mitgelieferten Hintergrund-Recherche
    - KEINE typischen KI-Formulierungen: keine Kontrastpaare, keine Parallelkonstruktionen, keine Phrasen

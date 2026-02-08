@@ -303,7 +303,8 @@ export async function POST(request: NextRequest) {
    - Jede News bekommt eine eigene Zwischenüberschrift (##)
    - Jeder News-Artikel MUSS exakt 5-7 Sätze haben
 
-2. **SYNTHSZR TAKE:** Jede News MUSS einen "Synthszr Take:" haben (5-7 Sätze).
+2. **SYNTHSZR TAKE LÄNGE:** Jeder "Synthszr Take:" MUSS MINDESTENS 5 Sätze haben (Ziel: 5-8 Sätze). Ein Take mit 2-3 Sätzen ist ZU KURZ!
+   - Der Take ist das analytische Herzstück — er muss LÄNGER sein als die News selbst
    - Analytisch begründete Einordnung, darf positiv oder negativ bewerten
    - KEINE typischen KI-Formulierungen: keine Kontrastpaare, keine Parallelkonstruktionen, keine Phrasen wie "Es bleibt abzuwarten"
 
