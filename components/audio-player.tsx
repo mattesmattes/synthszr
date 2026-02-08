@@ -130,19 +130,18 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
   useEffect(() => {
     if (!shouldAutoplay || autoplayTriggered) return
 
-    // If audio is ready, mark for autoplay (will be triggered by onCanPlay)
+    // If audio is ready, start playback (will be triggered by onCanPlay if not yet loaded)
     if (status === 'ready' && audioUrl) {
       setAutoplayTriggered(true)
       pendingAutoplayRef.current = true
-      // Also try immediate play in case audio is already loaded
       audioRef.current?.play().catch(() => {
         // Will be retried in onCanPlay
       })
     }
-    // If no audio yet and autoplay was requested, just mark as triggered (no auto-generation)
-    else if (status === 'idle' && !audioUrl) {
+    // Only give up if there's definitively no podcast (error/disabled)
+    // Don't set autoplayTriggered during 'idle' or 'loading' — the fetch may still resolve
+    else if (status === 'error' || status === 'disabled') {
       setAutoplayTriggered(true)
-      // Don't trigger generation - podcast should be pre-generated in admin
       console.log('[AudioPlayer] Autoplay requested but no podcast available')
     }
   }, [shouldAutoplay, autoplayTriggered, status, audioUrl])
