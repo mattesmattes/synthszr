@@ -134,6 +134,7 @@ export default function AdminPage() {
   const [editingPost, setEditingPost] = useState<CombinedPost | null>(null)
   const [deletingPost, setDeletingPost] = useState<CombinedPost | null>(null)
   const [saving, setSaving] = useState(false)
+  const [generatingExcerpt, setGeneratingExcerpt] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [changingStatus, setChangingStatus] = useState<string | null>(null)
 
@@ -820,29 +821,64 @@ export default function AdminPage() {
                   variant="ghost"
                   size="sm"
                   className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    const headings: string[] = []
-                    function walk(node: Record<string, unknown>) {
-                      if (node.type === 'heading' && (node.attrs as Record<string, unknown>)?.level === 2) {
-                        const text = ((node.content as Record<string, unknown>[]) || [])
-                          .map((c: Record<string, unknown>) => (c.text as string) || '').join('')
-                        if (text && !text.toLowerCase().includes('synthszr')) headings.push(text)
-                      }
+                  disabled={generatingExcerpt}
+                  onClick={async () => {
+                    // Extract first 3 article sections (H2 heading + paragraph text) from TipTap JSON
+                    const sections: { heading: string; text: string }[] = []
+                    const nodes = (editForm.content.content as Record<string, unknown>[]) || []
+                    let currentHeading = ''
+                    let currentText = ''
+
+                    function extractText(node: Record<string, unknown>): string {
+                      if (node.text) return node.text as string
                       if (Array.isArray(node.content)) {
-                        (node.content as Record<string, unknown>[]).forEach(walk)
+                        return (node.content as Record<string, unknown>[]).map(extractText).join('')
+                      }
+                      return ''
+                    }
+
+                    for (const node of nodes) {
+                      if (node.type === 'heading' && (node.attrs as Record<string, unknown>)?.level === 2) {
+                        // Save previous section
+                        if (currentHeading && !currentHeading.toLowerCase().includes('synthszr')) {
+                          sections.push({ heading: currentHeading, text: currentText.trim() })
+                        }
+                        currentHeading = extractText(node)
+                        currentText = ''
+                      } else if (currentHeading) {
+                        currentText += extractText(node) + ' '
                       }
                     }
-                    walk(editForm.content)
-                    const bullets = headings.slice(0, 3).map(h => {
-                      const truncated = h.length > 65 ? h.slice(0, 62) + '...' : h
-                      return `• ${truncated}`
-                    })
-                    if (bullets.length >= 3) {
-                      setEditForm({ ...editForm, excerpt: bullets.join('\n') })
+                    // Push last section
+                    if (currentHeading && !currentHeading.toLowerCase().includes('synthszr')) {
+                      sections.push({ heading: currentHeading, text: currentText.trim() })
+                    }
+
+                    if (sections.length < 3) return
+
+                    setGeneratingExcerpt(true)
+                    try {
+                      const res = await fetch('/api/admin/generate-excerpt', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sections: sections.slice(0, 3) }),
+                      })
+                      const data = await res.json()
+                      if (data.excerpt) {
+                        setEditForm({ ...editForm, excerpt: data.excerpt })
+                      }
+                    } catch (err) {
+                      console.error('Excerpt generation failed:', err)
+                    } finally {
+                      setGeneratingExcerpt(false)
                     }
                   }}
                 >
-                  <ListPlus className="h-3 w-3 mr-1" />
+                  {generatingExcerpt ? (
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <ListPlus className="h-3 w-3 mr-1" />
+                  )}
                   3 Bullets
                 </Button>
               </div>
