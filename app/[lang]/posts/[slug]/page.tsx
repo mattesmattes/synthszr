@@ -324,7 +324,17 @@ export default async function PostPage({ params }: PageProps) {
               </span>
             </div>
             <h1 className="text-3xl font-bold tracking-tight md:text-2xl">{post.title}</h1>
-            {post.excerpt && <p className="mt-4 text-lg text-muted-foreground md:text-sm">{post.excerpt}</p>}
+            {post.excerpt && (
+              post.excerpt.includes('•') ? (
+                <ul className="mt-4 space-y-1 text-lg text-muted-foreground md:text-sm list-none pl-0">
+                  {post.excerpt.split('\n').filter((l: string) => l.trim().startsWith('•')).map((line: string, i: number) => (
+                    <li key={i}>{line.trim()}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-4 text-lg text-muted-foreground md:text-sm">{post.excerpt}</p>
+              )
+            )}
           </header>
 
           <div className="prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-xl prose-h2:text-lg prose-h2:mt-8 prose-h2:mb-3 prose-p:mb-5 prose-blockquote:border-l-2 prose-blockquote:border-accent prose-blockquote:pl-6 prose-blockquote:italic">

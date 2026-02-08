@@ -71,7 +71,10 @@ Der Artikel MUSS mit diesen Metadaten beginnen (in genau diesem Format):
 
 ---
 TITLE: [Titel]
-EXCERPT: [1-2 Sätze, max 160 Zeichen]
+EXCERPT:
+• [Headline Artikel 1, max 65 Zeichen]
+• [Headline Artikel 2, max 65 Zeichen]
+• [Headline Artikel 3, max 65 Zeichen]
 CATEGORY: [AI & Tech, Marketing, Design, Business, Code, oder Synthese]
 ---
 

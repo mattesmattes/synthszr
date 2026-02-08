@@ -138,8 +138,11 @@ function parseArticleContent(content: string): { metadata: ArticleMetadata; body
 
   // Parse frontmatter fields
   const titleMatch = frontmatter.match(/TITLE:\s*(.+)/i)
-  const excerptMatch = frontmatter.match(/EXCERPT:\s*(.+)/i)
   const categoryMatch = frontmatter.match(/CATEGORY:\s*(.+)/i)
+
+  // Excerpt can be multi-line (bullet points between EXCERPT: and CATEGORY:)
+  const excerptMatch = frontmatter.match(/EXCERPT:\s*\n?([\s\S]*?)(?=\nCATEGORY:)/i)
+    || frontmatter.match(/EXCERPT:\s*(.+)/i)
 
   if (titleMatch) metadata.title = titleMatch[1].trim()
   if (excerptMatch) metadata.excerpt = excerptMatch[1].trim()
