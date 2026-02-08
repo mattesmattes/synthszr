@@ -326,9 +326,9 @@ export default async function PostPage({ params }: PageProps) {
             <h1 className="text-3xl font-bold tracking-tight md:text-2xl">{post.title}</h1>
             {post.excerpt && (
               post.excerpt.includes('•') ? (
-                <ul className="mt-4 space-y-1 text-lg text-muted-foreground md:text-sm list-none pl-0">
+                <ul className="mt-4 space-y-1 text-lg text-muted-foreground md:text-sm list-none pl-5">
                   {post.excerpt.split('\n').filter((l: string) => l.trim().startsWith('•')).map((line: string, i: number) => (
-                    <li key={i}>{line.trim()}</li>
+                    <li key={i} className="-indent-5">{line.trim()}</li>
                   ))}
                 </ul>
               ) : (

@@ -249,7 +249,21 @@ export function NewsletterEmail({
             <Heading style={heading}>{subject}</Heading>
 
             {/* Excerpt */}
-            {previewText && <Text style={excerpt}>{previewText}</Text>}
+            {previewText && (
+              previewText.includes('•') ? (
+                <table cellPadding="0" cellSpacing="0" style={{ margin: '0 0 24px', width: '100%' }}>
+                  <tbody>
+                    {previewText.split('\n').filter(l => l.trim().startsWith('•')).map((line, i) => (
+                      <tr key={i}>
+                        <td style={excerptBullet}>{line.trim()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <Text style={excerpt}>{previewText}</Text>
+              )
+            )}
 
             <Hr style={hr} />
 
@@ -386,6 +400,17 @@ const excerpt = {
   color: '#6b7280',
   fontStyle: 'italic',
   margin: '0 0 24px',
+}
+
+const excerptBullet: React.CSSProperties = {
+  fontFamily: "'Source Serif 4', Georgia, serif",
+  fontSize: '18px',
+  lineHeight: '1.6',
+  color: '#6b7280',
+  fontStyle: 'italic',
+  paddingLeft: '20px',
+  textIndent: '-20px',
+  paddingBottom: '4px',
 }
 
 const contentStyle = {
