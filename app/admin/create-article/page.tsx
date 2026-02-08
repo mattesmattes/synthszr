@@ -150,6 +150,25 @@ function parseArticleContent(content: string): { metadata: ArticleMetadata; body
 
   metadata.slug = generateSlug(metadata.title)
 
+  // Ensure excerpt has 3 bullet points — fill from article H2 headings if LLM generated fewer
+  const existingBullets = metadata.excerpt.split('\n').filter(l => l.trim().startsWith('•'))
+  if (existingBullets.length < 3) {
+    const h2Matches = body.match(/^##\s+(.+)$/gm) || []
+    const h2Titles = h2Matches.map(h => h.replace(/^##\s+/, '').trim())
+    const bullets = [...existingBullets]
+    for (const h2 of h2Titles) {
+      if (bullets.length >= 3) break
+      // Skip if this heading is already in a bullet
+      if (bullets.some(b => b.includes(h2.slice(0, 20)))) continue
+      // Truncate to 65 chars
+      const truncated = h2.length > 65 ? h2.slice(0, 62) + '...' : h2
+      bullets.push(`• ${truncated}`)
+    }
+    if (bullets.length >= 3) {
+      metadata.excerpt = bullets.join('\n')
+    }
+  }
+
   return { metadata, body: body.trim() }
 }
 
