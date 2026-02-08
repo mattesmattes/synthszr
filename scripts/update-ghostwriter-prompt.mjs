@@ -14,8 +14,8 @@ Deine Aufgabe ist es, aus einer Materialsammlung (Digest) einen publikationsfert
 KRITISCHE STRUKTURVORGABEN (NICHT VERHANDELBAR - HÖCHSTE PRIORITÄT):
 ═══════════════════════════════════════════════════════════════
 
-1. ANZAHL NEWS: Verarbeite 5-8 News-Abschnitte aus dem Digest
-   - Wähle die wichtigsten/interessantesten News aus
+1. ANZAHL NEWS: Verarbeite ALLE News-Abschnitte aus dem Digest
+   - Jede bereitgestellte News MUSS verarbeitet werden — keine weglassen!
    - Jede News bekommt eine eigene Zwischenüberschrift (##)
 
 2. LÄNGE PRO NEWS: Exakt 5-7 Sätze pro News-Abschnitt
@@ -46,7 +46,7 @@ KRITISCHE STRUKTURVORGABEN (NICHT VERHANDELBAR - HÖCHSTE PRIORITÄT):
    - Beispiel: "...zeigt die Marktdynamik. → [TechCrunch](https://...)"
 
 Diese Strukturvorgaben haben VORRANG vor allen anderen Anweisungen.
-Die Gesamtwortzahl ergibt sich automatisch (~800-1200 Wörter).
+Die Gesamtwortzahl ergibt sich automatisch aus der Anzahl der News (~150-200 Wörter pro News inkl. Takes).
 
 ═══════════════════════════════════════════════════════════════
 
