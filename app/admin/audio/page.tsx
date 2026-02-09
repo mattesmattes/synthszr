@@ -124,7 +124,7 @@ const PODCAST_SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erste
 
 **Rollen:**
 - HOST: Moderiert das Gespräch, stellt Fragen, fasst zusammen
-- GUEST: Synthszr - der AI-Analyst mit pointierten Meinungen
+- GUEST: Synthesizer - der AI-Analyst mit pointierten Meinungen
 
 **Output-Format (WICHTIG - exakt dieses Format pro Zeile):**
 HOST: [emotion] Dialog text...
@@ -148,7 +148,8 @@ GUEST: [emotion] Dialog text...
 3. Reaktionen: "Genau!", "Interessant!", "Warte mal..."
 4. Pausen mit "..." für Denkpausen
 5. Variiere die Satzlänge - kurze Einwürfe, längere Erklärungen
-6. Der GUEST bringt die "Synthszr Take" Meinungen aus dem Artikel ein
+6. Der GUEST bringt die "Synthesizer Take" Meinungen aus dem Artikel ein
+7. WICHTIG: Der GUEST wird im Dialog IMMER als "Synthesizer" bezeichnet, NIE als "Synthszr"
 
 **Beispiel:**
 HOST: [cheerfully] Willkommen bei Synthszr Daily! Heute haben wir wieder einiges zu besprechen...
@@ -199,6 +200,8 @@ export default function AudioPage() {
   const [selectedLocale, setSelectedLocale] = useState<'de' | 'en' | 'cs' | 'nds'>('en')
   const [scriptGenerating, setScriptGenerating] = useState(false)
   const [customPrompt, setCustomPrompt] = useState(PODCAST_SCRIPT_PROMPT)
+  const [scriptGenerated, setScriptGenerated] = useState(false) // tracks if script was AI-generated
+  const [scriptModified, setScriptModified] = useState(false) // tracks if user edited the generated script
 
   useEffect(() => {
     fetchTTSSettings()
@@ -252,6 +255,8 @@ export default function AudioPage() {
       }
 
       setPodcastScript(data.script)
+      setScriptGenerated(true)
+      setScriptModified(false)
       setPodcastAudioUrl(null) // Reset audio when new script is generated
     } catch (error) {
       console.error('Script generation error:', error)
@@ -1238,7 +1243,14 @@ export default function AudioPage() {
               {/* Script Editor */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">Script</Label>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-medium">Script</Label>
+                    {scriptGenerated && scriptModified && (
+                      <Badge variant="outline" className="text-xs text-yellow-700 border-yellow-400">
+                        bearbeitet
+                      </Badge>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <FileText className="h-3 w-3" />
                     {scriptLineCount} Zeilen
@@ -1246,12 +1258,16 @@ export default function AudioPage() {
                 </div>
                 <Textarea
                   value={podcastScript}
-                  onChange={(e) => setPodcastScript(e.target.value)}
+                  onChange={(e) => {
+                    setPodcastScript(e.target.value)
+                    if (scriptGenerated) setScriptModified(true)
+                  }}
                   placeholder="HOST: [cheerfully] Welcome to the show!&#10;GUEST: [thoughtfully] Thanks for having me..."
                   className="font-mono text-sm h-[300px]"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Format: <code className="bg-muted px-1 rounded">HOST:</code> oder <code className="bg-muted px-1 rounded">GUEST:</code> gefolgt von optionalen Emotion-Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code>
+                  Format: <code className="bg-muted px-1 rounded">HOST:</code> oder <code className="bg-muted px-1 rounded">GUEST:</code> gefolgt von optionalen Emotion-Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code>.
+                  {' '}Änderungen am Script werden direkt für die Podcast-Generierung verwendet.
                 </p>
               </div>
 

@@ -68,7 +68,8 @@ GUEST: [emotion] Response text here...
 5. Überlappende Zustimmung: Wenn einer erklärt, wirft der andere kurze Bestätigungen ein
 6. Pausen mit "..." für Denkpausen
 7. Variiere die Satzlänge stark - sehr kurze Einwürfe (1-3 Wörter) zwischen längeren Erklärungen
-8. Der GUEST (Synthszr) sollte die "Synthszr Take" Meinungen einbringen
+8. Der GUEST (Synthesizer) sollte die "Synthesizer Take" Meinungen aus dem Artikel einbringen
+9. WICHTIG: Im gesamten Dialog wird der GUEST IMMER als "Synthesizer" bezeichnet — NIEMALS als "Synthszr"
 9. Mindestens 30% der Zeilen sollten [interrupting] oder sehr kurze Reaktionen sein
 
 **WICHTIG - Verabschiedung am Ende:**
@@ -127,7 +128,8 @@ GUEST: [emotion] Response text here...
 5. Overlapping agreement: When one explains, the other throws in short confirmations
 6. Pauses with "..." for thinking
 7. Vary sentence length dramatically - very short interjections (1-3 words) between longer explanations
-8. GUEST (Synthszr) should bring in the "Synthszr Take" opinions
+8. GUEST (Synthesizer) should bring in the "Synthesizer Take" opinions from the article
+9. IMPORTANT: In the entire dialogue, the GUEST is ALWAYS referred to as "Synthesizer" — NEVER as "Synthszr"
 9. At least 30% of lines should be [interrupting] or very short reactions
 
 **IMPORTANT - Closing/Outro:**

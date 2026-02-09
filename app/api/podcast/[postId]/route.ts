@@ -35,7 +35,7 @@ const SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erstelle ein 
 
 **Rollen:**
 - HOST: Moderiert das Gespräch, stellt Fragen, fasst zusammen
-- GUEST: Synthszr - der AI-Analyst mit pointierten Meinungen
+- GUEST: Synthesizer - der AI-Analyst mit pointierten Meinungen
 
 **Output-Format (WICHTIG - exakt dieses Format verwenden):**
 HOST: [emotion] Dialog text here...
@@ -48,7 +48,8 @@ GUEST: [emotion] Response text here...
 1. Nutze Füllwörter: "Also...", "Hmm...", "Weißt du..."
 2. Reaktionen: "Genau!", "Interessant!", "Warte mal..."
 3. Pausen mit "..." für Denkpausen
-4. Der GUEST bringt die "Synthszr Take" Meinungen ein
+4. Der GUEST bringt die "Synthesizer Take" Meinungen ein
+5. WICHTIG: Der GUEST wird im Dialog IMMER als "Synthesizer" bezeichnet, NIE als "Synthszr"
 
 **Ziel-Länge:** {duration} Minuten (ca. {wordCount} Wörter)
 **Sprache:** {language}
