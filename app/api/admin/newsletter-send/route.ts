@@ -229,6 +229,7 @@ export async function POST(request: NextRequest) {
     // This avoids Vercel function timeout issues with sequential sending
     let successCount = 0
     let failCount = 0
+    let batchCount = 0
     const BATCH_SIZE = 100
 
     for (const [locale, localeSubscribers] of subscribersByLocale) {
@@ -281,13 +282,19 @@ export async function POST(request: NextRequest) {
         })
 
         try {
+          // Rate limit: Resend allows 2 requests/second — wait 600ms between batches
+          if (batchCount > 0) {
+            await new Promise(resolve => setTimeout(resolve, 600))
+          }
+          batchCount++
+
           // Send batch (Resend batch API)
           const result = await getResend().batch.send(batchEmails)
 
           // Count successes and failures
           if (result.data) {
             successCount += result.data.length
-            console.log(`[Newsletter] Batch ${Math.floor(i / BATCH_SIZE) + 1}: Sent ${result.data.length} emails for locale ${locale}`)
+            console.log(`[Newsletter] Batch ${batchCount}: Sent ${result.data.length} emails for locale ${locale}`)
           }
           if (result.error) {
             console.error(`[Newsletter] Batch error:`, result.error)
@@ -296,11 +303,6 @@ export async function POST(request: NextRequest) {
         } catch (error) {
           console.error(`[Newsletter] Batch send failed:`, error)
           failCount += batch.length
-        }
-
-        // Small delay between batches to be safe with rate limits
-        if (i + BATCH_SIZE < localeSubscribers.length) {
-          await new Promise(resolve => setTimeout(resolve, 1000))
         }
       }
     }
