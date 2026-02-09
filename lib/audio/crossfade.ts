@@ -56,6 +56,13 @@ const SAMPLE_RATE = 44100
 const CHANNELS = 2
 const BITRATE = 128
 
+// Stereo panning configuration (matches stereo-mixer.ts)
+// 0.0 = full left, 1.0 = full right
+const STEREO_POSITION = {
+  HOST: 0.35,   // 65% left, 35% right (slightly left of center)
+  GUEST: 0.65,  // 35% left, 65% right (slightly right of center)
+} as const
+
 // Overlap settings (in milliseconds)
 const OVERLAP_SHORT_REACTION = 250  // "Mhm!", "Ja!", "Genau!" - heavy overlap
 const OVERLAP_INTERRUPTING = 180    // [interrupting] tag
@@ -76,6 +83,27 @@ const SHORT_REACTIONS = new Set([
   'sure', 'okay', 'interesting', 'interesting!', 'really', 'really?',
   'wow', 'absolutely', 'definitely', 'of course', 'true', 'true!',
 ])
+
+/**
+ * Apply stereo panning to PCM channels based on speaker identity.
+ * Uses constant-power panning to maintain perceived loudness.
+ */
+function applyStereoPosition(pcm: Float32Array[], speaker: 'HOST' | 'GUEST'): Float32Array[] {
+  const pan = STEREO_POSITION[speaker]
+  const leftGain = Math.cos(pan * Math.PI / 2)
+  const rightGain = Math.sin(pan * Math.PI / 2)
+
+  const mono = pcm[0] // TTS output is mono (both channels identical)
+  const left = new Float32Array(mono.length)
+  const right = new Float32Array(mono.length)
+
+  for (let i = 0; i < mono.length; i++) {
+    left[i] = mono[i] * leftGain
+    right[i] = mono[i] * rightGain
+  }
+
+  return [left, right]
+}
 
 /**
  * Decode MP3 buffer to PCM samples
@@ -600,7 +628,9 @@ export async function concatenateWithCrossfade(
 
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i]
-    const pcm = await decodeMP3(seg.buffer)
+    const rawPcm = await decodeMP3(seg.buffer)
+    // Apply stereo panning: HOST slightly left, GUEST slightly right
+    const pcm = applyStereoPosition(rawPcm, seg.speaker)
     const textAnalysis = analyzeText(seg.text)
     const silenceAtEndMs = detectTrailingSilence(pcm)
 
