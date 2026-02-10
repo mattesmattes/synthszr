@@ -125,6 +125,7 @@ interface PersonalityState {
   flirtation_tendency: number
   self_irony: number
   inside_joke_count: number
+  host_name: string | null
   memorable_moments: Array<{ episode: number; text: string; type?: string }>
   last_episode_at: string | null
   created_at: string
@@ -1633,6 +1634,11 @@ export default function AudioPage() {
                     <Badge variant="default" className="text-sm">
                       Episode #{personality ? personality.episode_count : 0}
                     </Badge>
+                    {personality?.host_name && (
+                      <Badge variant="outline" className="text-sm border-blue-500/50 text-blue-600">
+                        Host: {personality.host_name}
+                      </Badge>
+                    )}
                     <Badge variant="secondary" className="text-sm">
                       {PHASE_LABELS[personality?.relationship_phase || 'strangers']}
                     </Badge>

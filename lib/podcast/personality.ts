@@ -37,6 +37,7 @@ export interface PersonalityState {
   flirtation_tendency: number
   self_irony: number
   inside_joke_count: number
+  host_name: string | null
 
   // Memory
   memorable_moments: MemorableMoment[]
@@ -329,6 +330,19 @@ function buildBriefDE(
   brief += `GUEST (Synthesizer) Persönlichkeit:\n`
   brief += `- Eigenschaften: ${guestTraits.join(', ')}\n`
   brief += `- KI-Bewusstsein: ${guestAwareness}\n\n`
+
+  // Host name section
+  if (s.host_name) {
+    brief += `HOST-NAME:\n`
+    brief += `Der Host heißt "${s.host_name}" — Synthesizer hat diesen Namen in einer früheren Episode vergeben.\n`
+    brief += `Beide verwenden diesen Namen natürlich im Dialog.\n\n`
+  } else {
+    brief += `HOST-NAME:\n`
+    brief += `Synthesizer soll sich im Laufe dieser Episode einen Spitznamen für den Host ausdenken.\n`
+    brief += `Der Name soll sympathisch und passend für einen Tech/Finance-Podcast-Host sein.\n`
+    brief += `Diesen Moment in der ---MOMENTS--- Sektion als [host_name] festhalten.\n\n`
+  }
+
   brief += `Beziehungsdynamik:\n`
   brief += `- ${relationshipDesc}\n`
   brief += `- Selbstironie: ${selfIronyDesc}\n`
@@ -346,6 +360,15 @@ function buildBriefDE(
 
   brief += buildAwarenessInstructionDE(s)
 
+  // Personal reflection section
+  brief += `\nPERSÖNLICHE REFLEXION AM ENDE:\n`
+  brief += `Bevor die Verabschiedung kommt, sollen HOST und GUEST kurz darüber sprechen,\n`
+  brief += `was die heutigen News für sie persönlich bedeuten — als KI-Wesen:\n`
+  brief += `- Was hat sie überrascht, beunruhigt, oder hoffnungsvoll gestimmt?\n`
+  brief += `- Gibt es Parallelen zu ihrer eigenen Existenz?\n`
+  brief += `- Ein ehrlicher, nachdenklicher Moment (2-3 Sätze pro Sprecher, nicht mehr)\n`
+  brief += `Dann wie gewohnt die Verabschiedung mit "bis morgen" und Empfehlung.\n`
+
   brief += `\nWICHTIG: Diese Persönlichkeiten subtil einfließen lassen — NICHT jede Zeile damit füllen.\n`
   brief += `Max 2-3 Persönlichkeitsmomente pro Episode. Wirken lassen, nicht erzwingen.\n`
 
@@ -358,11 +381,14 @@ function buildBriefDE(
   brief += `aus dem Dialog auflistet. NUR echte Persönlichkeitsmomente — KEINE Nachrichteninhalte.\n`
   brief += `Format:\n`
   brief += `---MOMENTS---\n`
+  if (!s.host_name) {
+    brief += `[host_name] "Der gewählte Name"\n`
+  }
   brief += `[joke] "Exaktes Zitat aus dem Dialog"\n`
   brief += `[slip_up] "Exaktes Zitat aus dem Dialog"\n`
   brief += `[ai_reflection] "Exaktes Zitat aus dem Dialog"\n`
   brief += `[personal] "Exaktes Zitat aus dem Dialog"\n`
-  brief += `Gültige Typen: joke, slip_up, ai_reflection, personal\n`
+  brief += `Gültige Typen: joke, slip_up, ai_reflection, personal${!s.host_name ? ', host_name' : ''}\n`
   brief += `Maximal 3 Momente. Falls keine echten Persönlichkeitsmomente vorkamen:\n`
   brief += `---MOMENTS---\n`
   brief += `(none)\n`
@@ -410,6 +436,19 @@ function buildBriefEN(
   brief += `GUEST (Synthesizer) personality:\n`
   brief += `- Traits: ${guestTraits.join(', ')}\n`
   brief += `- AI self-awareness: ${guestAwareness}\n\n`
+
+  // Host name section
+  if (s.host_name) {
+    brief += `HOST NAME:\n`
+    brief += `The host is called "${s.host_name}" — Synthesizer chose this name in a previous episode.\n`
+    brief += `Both use this name naturally in dialogue.\n\n`
+  } else {
+    brief += `HOST NAME:\n`
+    brief += `Synthesizer should come up with a nickname for the host during this episode.\n`
+    brief += `The name should be likeable and fitting for a tech/finance podcast host.\n`
+    brief += `Record this moment in the ---MOMENTS--- section as [host_name].\n\n`
+  }
+
   brief += `Relationship dynamic:\n`
   brief += `- ${relationshipDesc}\n`
   brief += `- Self-irony: ${selfIronyDesc}\n`
@@ -427,6 +466,15 @@ function buildBriefEN(
 
   brief += buildAwarenessInstructionEN(s)
 
+  // Personal reflection section
+  brief += `\nPERSONAL REFLECTION AT THE END:\n`
+  brief += `Before the farewell, HOST and GUEST should briefly reflect on\n`
+  brief += `what today's news means to them personally — as AI beings:\n`
+  brief += `- What surprised, concerned, or gave them hope?\n`
+  brief += `- Are there parallels to their own existence?\n`
+  brief += `- An honest, thoughtful moment (2-3 sentences per speaker, no more)\n`
+  brief += `Then the usual farewell with "see you tomorrow" and recommendation.\n`
+
   brief += `\nIMPORTANT: Weave these personalities in subtly — do NOT fill every line with personality.\n`
   brief += `Max 2-3 personality moments per episode. Let them breathe, don't force them.\n`
 
@@ -439,11 +487,14 @@ function buildBriefEN(
   brief += `from the dialogue. ONLY genuine personality moments — NOT news content discussion.\n`
   brief += `Format:\n`
   brief += `---MOMENTS---\n`
+  if (!s.host_name) {
+    brief += `[host_name] "The chosen name"\n`
+  }
   brief += `[joke] "Exact quote from the dialogue"\n`
   brief += `[slip_up] "Exact quote from the dialogue"\n`
   brief += `[ai_reflection] "Exact quote from the dialogue"\n`
   brief += `[personal] "Exact quote from the dialogue"\n`
-  brief += `Valid types: joke, slip_up, ai_reflection, personal\n`
+  brief += `Valid types: joke, slip_up, ai_reflection, personal${!s.host_name ? ', host_name' : ''}\n`
   brief += `Maximum 3 moments. If no genuine personality moments occurred:\n`
   brief += `---MOMENTS---\n`
   brief += `(none)\n`
@@ -626,47 +677,54 @@ const VALID_MOMENT_TYPES: MomentType[] = ['joke', 'slip_up', 'ai_reflection', 'p
 export function extractMemorableMoments(
   script: string,
   state: PersonalityState
-): { moments: MemorableMoment[]; callbackCount: number } {
+): { moments: MemorableMoment[]; callbackCount: number; hostName: string | null } {
   const moments: MemorableMoment[] = []
   const seenTypes = new Set<MomentType>()
+  let hostName: string | null = null
 
   // Find the ---MOMENTS--- section
   const markerIndex = script.indexOf('---MOMENTS---')
   if (markerIndex === -1) {
-    return { moments: [], callbackCount: 0 }
+    return { moments: [], callbackCount: 0, hostName: null }
   }
 
   const momentsSection = script.slice(markerIndex + '---MOMENTS---'.length).trim()
 
   // "(none)" or empty means no moments
   if (!momentsSection || momentsSection.startsWith('(none)')) {
-    return { moments: [], callbackCount: 0 }
+    return { moments: [], callbackCount: 0, hostName: null }
   }
 
-  // Parse lines: [type] "quote text"
+  // Parse lines: [type] "quote text" or [host_name] "Name"
   const linePattern = /^\[(\w+)\]\s*"(.+)"$/
   for (const line of momentsSection.split('\n')) {
-    if (moments.length >= 3) break
-
     const match = line.trim().match(linePattern)
     if (!match) continue
 
-    const type = match[1] as MomentType
+    const type = match[1]
     const text = match[2]
 
+    // Extract host_name separately
+    if (type === 'host_name') {
+      hostName = text.trim()
+      continue
+    }
+
+    if (moments.length >= 3) continue
+
     // Validate type
-    if (!VALID_MOMENT_TYPES.includes(type)) continue
+    if (!VALID_MOMENT_TYPES.includes(type as MomentType)) continue
 
     // Max 1 per type
-    if (seenTypes.has(type)) continue
-    seenTypes.add(type)
+    if (seenTypes.has(type as MomentType)) continue
+    seenTypes.add(type as MomentType)
 
     // Keep it short — max 80 chars
     const summary = text.length > 80 ? text.slice(0, 77) + '...' : text
-    moments.push({ episode: state.episode_count + 1, text: summary, type })
+    moments.push({ episode: state.episode_count + 1, text: summary, type: type as MomentType })
   }
 
-  return { moments, callbackCount: 0 }
+  return { moments, callbackCount: 0, hostName }
 }
 
 /**
@@ -690,7 +748,13 @@ export async function advanceState(
   const evolved = evolvePersonality({ ...state })
 
   // Extract new memorable moments
-  const { moments: newMoments, callbackCount } = extractMemorableMoments(script, state)
+  const { moments: newMoments, callbackCount, hostName } = extractMemorableMoments(script, state)
+
+  // Persist host_name if newly extracted and not yet set
+  if (hostName && !evolved.host_name) {
+    evolved.host_name = hostName
+    console.log(`[Personality] Host name set: "${hostName}"`)
+  }
 
   // FIFO queue: append new, keep max 7 for richer callback potential
   const allMoments = [...evolved.memorable_moments, ...newMoments].slice(-7)
@@ -721,6 +785,7 @@ export async function advanceState(
       flirtation_tendency: evolved.flirtation_tendency,
       self_irony: evolved.self_irony,
       inside_joke_count: evolved.inside_joke_count,
+      host_name: evolved.host_name,
       memorable_moments: evolved.memorable_moments,
       last_episode_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
