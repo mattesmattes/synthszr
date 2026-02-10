@@ -543,8 +543,14 @@ function applyOutroWithCrossfade(
   const podcastLength = podcast[0].length
   const outroLength = outro[0].length
 
+  // Dialog fadeout only in the last 2 seconds of the crossfade region
+  const dialogFadeoutSec = 2
+  const dialogFadeoutSamples = Math.floor(dialogFadeoutSec * SAMPLE_RATE)
+
   // Point where crossfade starts (end of podcast minus crossfade duration)
   const crossfadeStart = Math.max(0, podcastLength - crossfadeSamples)
+  // Point where dialog starts fading (crossfade end minus dialogFadeoutSec)
+  const dialogFadeStart = crossfadeSamples - dialogFadeoutSamples
 
   // Total length: podcast up to crossfade + crossfade region + rest of outro
   const totalLength = crossfadeStart + crossfadeSamples + Math.max(0, outroLength - crossfadeSamples)
@@ -563,20 +569,26 @@ function applyOutroWithCrossfade(
   for (let i = 0; i < crossfadeSamples; i++) {
     const t = i / crossfadeSamples
 
-    // Podcast fades out
-    const podcastFade = Math.pow(1 - t, 1.5)
-    // Outro fades in
+    // Outro fades in smoothly over the full crossfade duration
     const outroFade = Math.pow(t, 0.8)
 
-    // Normalize to prevent clipping
-    const total = podcastFade + outroFade
-    const normPodcast = podcastFade / Math.max(total, 1)
-    const normOutro = outroFade / Math.max(total, 1)
+    // Dialog stays at full volume, then fades out exponentially in last 2s
+    let podcastFade: number
+    if (i < dialogFadeStart) {
+      podcastFade = 1.0
+    } else {
+      const fadeT = (i - dialogFadeStart) / dialogFadeoutSamples
+      podcastFade = Math.pow(1 - fadeT, 2.5)
+    }
+
+    // Clamp combined volume to prevent clipping
+    const combined = podcastFade + outroFade
+    const scale = combined > 1.0 ? 1.0 / combined : 1.0
 
     for (let ch = 0; ch < 2; ch++) {
       const podcastVal = crossfadeStart + i < podcastLength ? podcast[ch][crossfadeStart + i] : 0
       const outroVal = i < outroLength ? outro[ch][i] : 0
-      result[ch][crossfadeStart + i] = (podcastVal * normPodcast) + (outroVal * normOutro)
+      result[ch][crossfadeStart + i] = (podcastVal * podcastFade + outroVal * outroFade) * scale
     }
   }
 
@@ -592,7 +604,7 @@ function applyOutroWithCrossfade(
 
   const maxValStart = Math.max(...result[0].slice(0, 50000).map(Math.abs))
   const maxValEnd = Math.max(...result[0].slice(-50000).map(Math.abs))
-  console.log(`[Crossfade] Applied outro with ${crossfadeSec}s crossfade. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, start amp: ${maxValStart.toFixed(4)}, end amp: ${maxValEnd.toFixed(4)}`)
+  console.log(`[Crossfade] Applied outro with ${crossfadeSec}s transition (dialog fadeout: last ${dialogFadeoutSec}s). Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, start amp: ${maxValStart.toFixed(4)}, end amp: ${maxValEnd.toFixed(4)}`)
 
   return result
 }
@@ -608,7 +620,7 @@ export async function concatenateWithCrossfade(
     includeIntro = false,
     introCrossfadeSec = 4,
     includeOutro = false,
-    outroCrossfadeSec = 4
+    outroCrossfadeSec = 8
   } = options
 
   if (segments.length === 0) {
