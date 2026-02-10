@@ -52,11 +52,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Determine file extension and content type
+    const isWav = file.name?.toLowerCase().endsWith('.wav') || file.type === 'audio/wav'
+    const ext = isWav ? 'wav' : 'mp3'
+    const contentType = isWav ? 'audio/wav' : 'audio/mpeg'
+
     // Upload to Vercel Blob
     const blob = await put(
-      `podcast-audio/${type}/${name}-${Date.now()}.mp3`,
+      `podcast-audio/${type}/${name}-${Date.now()}.${ext}`,
       file,
-      { access: 'public', contentType: 'audio/mpeg' }
+      { access: 'public', contentType }
     )
 
     const supabase = await createClient()

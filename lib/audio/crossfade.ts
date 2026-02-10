@@ -163,6 +163,121 @@ function applyStereoPosition(pcm: Float32Array[], speaker: 'HOST' | 'GUEST', ste
 }
 
 /**
+ * Decode WAV buffer to PCM samples.
+ * Supports 16-bit, 24-bit, and 32-bit float PCM.
+ */
+function decodeWAV(wavBuffer: Buffer): { channels: Float32Array[]; sampleRate: number } {
+  const view = new DataView(wavBuffer.buffer, wavBuffer.byteOffset, wavBuffer.byteLength)
+
+  // Validate RIFF header
+  const riff = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3))
+  if (riff !== 'RIFF') throw new Error('Not a valid WAV file: missing RIFF header')
+
+  const wave = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11))
+  if (wave !== 'WAVE') throw new Error('Not a valid WAV file: missing WAVE identifier')
+
+  // Find fmt and data chunks
+  let offset = 12
+  let audioFormat = 0
+  let numChannels = 0
+  let sampleRate = 0
+  let bitsPerSample = 0
+  let dataOffset = 0
+  let dataSize = 0
+
+  while (offset < wavBuffer.length - 8) {
+    const chunkId = String.fromCharCode(
+      view.getUint8(offset), view.getUint8(offset + 1),
+      view.getUint8(offset + 2), view.getUint8(offset + 3)
+    )
+    const chunkSize = view.getUint32(offset + 4, true)
+
+    if (chunkId === 'fmt ') {
+      audioFormat = view.getUint16(offset + 8, true)
+      numChannels = view.getUint16(offset + 10, true)
+      sampleRate = view.getUint32(offset + 12, true)
+      bitsPerSample = view.getUint16(offset + 22, true)
+    } else if (chunkId === 'data') {
+      dataOffset = offset + 8
+      dataSize = chunkSize
+      break
+    }
+
+    offset += 8 + chunkSize
+    if (chunkSize % 2 !== 0) offset++ // WAV chunks are word-aligned
+  }
+
+  if (dataOffset === 0) throw new Error('WAV file missing data chunk')
+  if (audioFormat !== 1 && audioFormat !== 3) {
+    throw new Error(`Unsupported WAV format: ${audioFormat} (only PCM=1 and IEEE float=3 supported)`)
+  }
+
+  const bytesPerSample = bitsPerSample / 8
+  const totalSamples = Math.floor(dataSize / bytesPerSample)
+  const samplesPerChannel = Math.floor(totalSamples / numChannels)
+
+  console.log(`[Crossfade] WAV: ${numChannels}ch, ${sampleRate}Hz, ${bitsPerSample}-bit, ${samplesPerChannel} samples/ch`)
+
+  const channels: Float32Array[] = Array.from({ length: numChannels }, () => new Float32Array(samplesPerChannel))
+
+  let pos = dataOffset
+  for (let i = 0; i < samplesPerChannel; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      if (audioFormat === 3 && bitsPerSample === 32) {
+        // IEEE 32-bit float
+        channels[ch][i] = view.getFloat32(pos, true)
+      } else if (bitsPerSample === 16) {
+        channels[ch][i] = view.getInt16(pos, true) / 32768
+      } else if (bitsPerSample === 24) {
+        const b0 = view.getUint8(pos)
+        const b1 = view.getUint8(pos + 1)
+        const b2 = view.getUint8(pos + 2)
+        const val = (b2 << 16) | (b1 << 8) | b0
+        channels[ch][i] = (val > 0x7FFFFF ? val - 0x1000000 : val) / 8388608
+      } else {
+        throw new Error(`Unsupported bit depth: ${bitsPerSample}`)
+      }
+      pos += bytesPerSample
+    }
+  }
+
+  return { channels, sampleRate }
+}
+
+/**
+ * Detect audio format from buffer magic bytes and decode accordingly.
+ * Supports MP3 and WAV.
+ */
+async function decodeAudio(buffer: Buffer): Promise<Float32Array[]> {
+  // Check magic bytes: RIFF = WAV, 0xFF 0xFB/ID3 = MP3
+  const isWAV = buffer.length > 4 &&
+    buffer[0] === 0x52 && buffer[1] === 0x49 &&
+    buffer[2] === 0x46 && buffer[3] === 0x46 // "RIFF"
+
+  if (isWAV) {
+    console.log(`[Crossfade] Detected WAV format`)
+    const { channels, sampleRate } = decodeWAV(buffer)
+
+    // Ensure stereo
+    let result = channels
+    if (result.length === 1) {
+      result = [result[0], new Float32Array(result[0])]
+    }
+
+    // Resample if needed
+    if (sampleRate !== SAMPLE_RATE) {
+      console.log(`[Crossfade] Resampling WAV from ${sampleRate} Hz to ${SAMPLE_RATE} Hz`)
+      result = result.map(ch => resampleChannel(ch, sampleRate, SAMPLE_RATE))
+    }
+
+    return result
+  }
+
+  // Default: MP3
+  return decodeMP3(buffer)
+}
+
+/**
  * Decode MP3 buffer to PCM samples
  * Returns channels resampled to SAMPLE_RATE if needed
  */
@@ -485,7 +600,7 @@ function applyCrossfade(
 }
 
 /**
- * Load the podcast intro MP3 file
+ * Load the podcast intro audio file (MP3 or WAV)
  */
 async function loadIntro(url?: string): Promise<Float32Array[]> {
   const introUrl = url || `${getBaseUrl()}/audio/podcast-intro.mp3`
@@ -498,8 +613,7 @@ async function loadIntro(url?: string): Promise<Float32Array[]> {
     }
     const arrayBuffer = await response.arrayBuffer()
     console.log(`[Crossfade] Intro fetched: ${arrayBuffer.byteLength} bytes`)
-    const pcm = await decodeMP3(Buffer.from(arrayBuffer))
-    // Log audio stats to verify data is valid
+    const pcm = await decodeAudio(Buffer.from(arrayBuffer))
     const maxVal = Math.max(...pcm[0].slice(0, 10000).map(Math.abs))
     console.log(`[Crossfade] Loaded intro: ${(pcm[0].length / SAMPLE_RATE).toFixed(1)}s, max amplitude: ${maxVal.toFixed(4)}`)
     return pcm
@@ -782,7 +896,7 @@ function applyOutroWithEnvelope(
 }
 
 /**
- * Load the podcast outro MP3 file
+ * Load the podcast outro audio file (MP3 or WAV)
  */
 async function loadOutro(url?: string): Promise<Float32Array[]> {
   const outroUrl = url || `${getBaseUrl()}/audio/podcast-outro.mp3`
@@ -795,7 +909,7 @@ async function loadOutro(url?: string): Promise<Float32Array[]> {
     }
     const arrayBuffer = await response.arrayBuffer()
     console.log(`[Crossfade] Outro fetched: ${arrayBuffer.byteLength} bytes`)
-    const pcm = await decodeMP3(Buffer.from(arrayBuffer))
+    const pcm = await decodeAudio(Buffer.from(arrayBuffer))
     const maxVal = Math.max(...pcm[0].slice(0, 10000).map(Math.abs))
     console.log(`[Crossfade] Loaded outro: ${(pcm[0].length / SAMPLE_RATE).toFixed(1)}s, max amplitude: ${maxVal.toFixed(4)}`)
     return pcm
