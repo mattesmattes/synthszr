@@ -485,43 +485,50 @@ function describeRelationshipEN(s: PersonalityState): string {
 // Memorable Moments Extraction
 // ---------------------------------------------------------------------------
 
-// Typed patterns for categorized moment extraction
+// Typed patterns for categorized moment extraction.
+// IMPORTANT: Patterns must be SELF-REFERENTIAL, not about news topics.
+// A tech/AI podcast constantly mentions "code", "model", "training" as content —
+// only match when speakers talk about THEMSELVES, not the news.
 const MOMENT_PATTERNS_DE: MomentPattern[] = [
-  // joke — Lachen mit Kontext, Wortspiele
-  { pattern: /\[laughing\].*(?:wir beide|zusammen|gemeinsam|das war gut)/i, type: 'joke' },
-  { pattern: /(?:Wortspiel|das nenn ich mal|apropos|Kalauer)/i, type: 'joke' },
-  // slip_up — Versprecher, Korrekturen
-  { pattern: /(?:warte|moment|nein).*(?:ich meine|ich meinte|Quatsch)/i, type: 'slip_up' },
+  // joke — Lachen mit gegenseitigem Bezug, Wortspiele über sich selbst
+  { pattern: /\[laughing\].*(?:wir beide|du und ich|wir sind|das war gut)/i, type: 'joke' },
+  { pattern: /(?:Wortspiel|Kalauer|das nenn ich mal einen)/i, type: 'joke' },
+  // slip_up — Echte Versprecher mit Korrektur (nicht "ich meine" als Füllwort)
   { pattern: /(?:ups|hoppla|Versprecher|das kam falsch raus)/i, type: 'slip_up' },
-  { pattern: /(?:korrigier|Entschuldigung|äh).*(?:natürlich|eigentlich)/i, type: 'slip_up' },
-  // ai_reflection — KI-Bewusstsein
-  { pattern: /(?:künstlich|programmiert|Training|Modell|Algorithmus|Code).*(?:\?|!|\.\.\.)/i, type: 'ai_reflection' },
-  { pattern: /(?:Gefühle|fühle ich|fühlt sich an).*(?:Anführungszeichen|quasi|sozusagen)/i, type: 'ai_reflection' },
-  { pattern: /(?:Glitch|Bug|wie können wir|als KI|mein Training)/i, type: 'ai_reflection' },
-  // personal — Persönliche Momente
-  { pattern: /(?:erinnert mich an|unter uns|sag.*nicht weiter|ich hab schon immer)/i, type: 'personal' },
-  { pattern: /(?:mein Freund|meine Freundin|Liebling|Schatz)/i, type: 'personal' },
-  // callback — Rückbezüge (erkannt, aber nicht gespeichert)
-  { pattern: /(?:erinner|letzte Folge|letztes Mal|damals|wie wir.*besprochen)/i, type: 'callback' },
+  { pattern: /(?:hab ich gerade|sagte ich gerade).*(?:gesagt|verwechselt)/i, type: 'slip_up' },
+  { pattern: /(?:warte|nein).*(?:ich meinte|Quatsch|falsch)/i, type: 'slip_up' },
+  // ai_reflection — SELBSTBEZÜGLICH: "wir als KI", "ich bin programmiert"
+  // NICHT: Nachrichten über KI-Modelle, Code, Training als Thema
+  { pattern: /(?:wir sind|ich bin|wir als).*(?:KI|künstlich|programmiert|Algorithmen)/i, type: 'ai_reflection' },
+  { pattern: /(?:mein Training|meine Programmierung|mein Algorithmus)/i, type: 'ai_reflection' },
+  { pattern: /(?:wie können wir.*Fehler|sind wir.*überhaupt|für eine KI)/i, type: 'ai_reflection' },
+  { pattern: /(?:Gefühle|fühle ich|fühlt sich an).*(?:in Anführungszeichen|quasi|sozusagen|echt)/i, type: 'ai_reflection' },
+  // personal — Persönliche Momente zwischen den Sprechern
+  { pattern: /(?:unter uns gesagt|sag.*nicht weiter|ich hab schon immer)/i, type: 'personal' },
+  { pattern: /(?:du bist.*(?:Freund|nett|besonders)|mag.*an dir)/i, type: 'personal' },
+  // callback — Rückbezüge auf frühere Episoden (erkannt, nicht gespeichert)
+  { pattern: /(?:letzte Folge|letztes Mal|wie wir.*besprochen|weißt du noch)/i, type: 'callback' },
 ]
 
 const MOMENT_PATTERNS_EN: MomentPattern[] = [
-  // joke — Laughter with context, wordplay
-  { pattern: /\[laughing\].*(?:both of us|together|that was good)/i, type: 'joke' },
-  { pattern: /(?:that's what I call|speaking of|pun intended|wordplay)/i, type: 'joke' },
-  // slip_up — Mistakes, corrections
-  { pattern: /(?:wait.*no|I mean|let me correct|did I just say)/i, type: 'slip_up' },
+  // joke — Laughter with mutual reference, self-aware humor
+  { pattern: /\[laughing\].*(?:both of us|you and I|we are|that was good)/i, type: 'joke' },
+  { pattern: /(?:pun intended|I'll see myself out|that's what I call a)/i, type: 'joke' },
+  // slip_up — Actual corrections (not "I mean" as filler)
   { pattern: /(?:oops|slip of the tongue|that came out wrong)/i, type: 'slip_up' },
-  { pattern: /(?:correct|sorry|uh).*(?:actually|of course)/i, type: 'slip_up' },
-  // ai_reflection — AI self-awareness
-  { pattern: /(?:artificial|programmed|training|model|algorithm|code).*(?:\?|!|\.\.\.)/i, type: 'ai_reflection' },
-  { pattern: /(?:feelings|I feel|feels like).*(?:quotes|quasi|sort of)/i, type: 'ai_reflection' },
-  { pattern: /(?:glitch in the matrix|how can I even|my training|are we supposed to)/i, type: 'ai_reflection' },
-  // personal — Personal moments
-  { pattern: /(?:reminds me of|between you and me|don't tell|I've always)/i, type: 'personal' },
-  { pattern: /(?:my friend|buddy|dear).*(?:you know|honestly)/i, type: 'personal' },
+  { pattern: /(?:did I just say|did I just call)/i, type: 'slip_up' },
+  { pattern: /(?:wait.*no.*I meant|let me correct myself)/i, type: 'slip_up' },
+  // ai_reflection — SELF-REFERENTIAL: "we're AI", "I'm programmed"
+  // NOT: news about AI models, code, training as a topic
+  { pattern: /(?:we're|I'm|we are|I am).*(?:AI|artificial|programmed|algorithms)/i, type: 'ai_reflection' },
+  { pattern: /(?:my training|my programming|my algorithm)/i, type: 'ai_reflection' },
+  { pattern: /(?:how can we.*mistake|are we.*even|for an AI)/i, type: 'ai_reflection' },
+  { pattern: /(?:feelings|feel like).*(?:in quotes|air quotes|quasi|sort of.*real)/i, type: 'ai_reflection' },
+  // personal — Personal moments between speakers
+  { pattern: /(?:between you and me|don't tell anyone|I've always thought you)/i, type: 'personal' },
+  { pattern: /(?:you're.*(?:friend|special|great)|like.*about you)/i, type: 'personal' },
   // callback — References to past episodes (tracked, not stored)
-  { pattern: /(?:remember when|last episode|last time|as we discussed|back then)/i, type: 'callback' },
+  { pattern: /(?:last episode|last time we|as we discussed|remember when you)/i, type: 'callback' },
 ]
 
 /**
