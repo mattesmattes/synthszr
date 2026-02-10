@@ -248,7 +248,7 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
         <input
           ref={fileInputRef}
           type="file"
-          accept="audio/mpeg,audio/wav,audio/x-wav,.mp3,.wav"
+          accept=".mp3,.wav,audio/*"
           onChange={handleFileSelect}
           className="hidden"
         />
