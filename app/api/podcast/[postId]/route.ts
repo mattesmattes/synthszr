@@ -364,7 +364,7 @@ async function generatePodcastForPost(
       includeIntro: true,
       introCrossfadeSec: 4,
       includeOutro: true,
-      outroCrossfadeSec: 20,
+      outroCrossfadeSec: 10,
     })
 
     // Estimate duration (MP3 at 128kbps = 16KB per second)

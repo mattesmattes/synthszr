@@ -543,7 +543,7 @@ function applyOutroWithCrossfade(
   const podcastLength = podcast[0].length
   const outroLength = outro[0].length
 
-  // Outro timing: rise to 30% in first 3s, hold, then exponential to 100% in last 4s
+  // Outro timing: rise to 20% in first 3s, hold, then exponential to 20% max in last 4s
   const outroRiseSec = 3
   const outroFinalSec = 4
   const outroRiseSamples = Math.floor(outroRiseSec * SAMPLE_RATE)
@@ -570,19 +570,15 @@ function applyOutroWithCrossfade(
   for (let i = 0; i < crossfadeSamples; i++) {
     const t = i / crossfadeSamples
 
-    // Outro: rise to 30% in first 3s, hold at 30%, exponential to 100% in last 4s
+    // Outro: rise to 20% in first 3s, hold at 20%, stay at 20% in last 4s
     let outroFade: number
     if (i < outroRiseSamples) {
-      // 0→3s: smooth ease-in to 30%
+      // 0→3s: smooth ease-in to 20%
       const rt = i / outroRiseSamples
-      outroFade = 0.30 * Math.pow(rt, 1.5)
-    } else if (i < outroFinalStart) {
-      // 3s→16s: hold at 30%
-      outroFade = 0.30
+      outroFade = 0.20 * Math.pow(rt, 1.5)
     } else {
-      // 16→20s: exponential rise from 30% to 100%
-      const ft = (i - outroFinalStart) / outroFinalSamples
-      outroFade = 0.30 + 0.70 * Math.pow(ft, 2.0)
+      // 3s→end: hold at 20%
+      outroFade = 0.20
     }
 
     // Dialog stays at full volume throughout
@@ -627,7 +623,7 @@ export async function concatenateWithCrossfade(
     includeIntro = false,
     introCrossfadeSec = 4,
     includeOutro = false,
-    outroCrossfadeSec = 20
+    outroCrossfadeSec = 10
   } = options
 
   if (segments.length === 0) {
