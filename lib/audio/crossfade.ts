@@ -611,7 +611,7 @@ function applyOutroWithCrossfade(
 
   const maxValStart = Math.max(...result[0].slice(0, 50000).map(Math.abs))
   const maxValEnd = Math.max(...result[0].slice(-50000).map(Math.abs))
-  console.log(`[Crossfade] Applied outro with ${crossfadeSec}s transition (dialog fadeout: last ${dialogFadeoutSec}s). Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, start amp: ${maxValStart.toFixed(4)}, end amp: ${maxValEnd.toFixed(4)}`)
+  console.log(`[Crossfade] Applied outro with ${crossfadeSec}s transition. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, start amp: ${maxValStart.toFixed(4)}, end amp: ${maxValEnd.toFixed(4)}`)
 
   return result
 }
