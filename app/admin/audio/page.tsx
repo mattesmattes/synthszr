@@ -126,6 +126,7 @@ interface PersonalityState {
   self_irony: number
   inside_joke_count: number
   host_name: string | null
+  relationship_paused: boolean
   memorable_moments: Array<{ episode: number; text: string; type?: string }>
   last_episode_at: string | null
   created_at: string
@@ -642,6 +643,30 @@ export default function AudioPage() {
       setPersonalityLoading(false)
     }
   }, [personalityLocale])
+
+  const updateRelationship = useCallback(async (updates: Record<string, unknown>) => {
+    if (!personality) return
+    // Optimistic update
+    setPersonalityMap(prev => ({
+      ...prev,
+      [personalityLocale]: { ...prev[personalityLocale], ...updates },
+    }))
+    try {
+      const res = await fetch('/api/admin/podcast-personality', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locale: personalityLocale, updates }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setPersonalityMap(prev => ({ ...prev, [personalityLocale]: data.personality }))
+      } else {
+        fetchPersonality() // Revert on error
+      }
+    } catch {
+      fetchPersonality() // Revert on error
+    }
+  }, [personality, personalityLocale, fetchPersonality])
 
   async function fetchAudioFiles() {
     try {
@@ -1661,9 +1686,14 @@ export default function AudioPage() {
                   {/* Stats Grid */}
                   <div className="grid gap-4 sm:grid-cols-2">
                     {/* Comfort Meter */}
-                    <div className="space-y-2 p-4 rounded-lg border">
+                    <div className={`space-y-2 p-4 rounded-lg border ${personality?.relationship_paused ? 'opacity-50' : ''}`}>
                       <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">Komfort-Level</Label>
+                        <div className="flex items-center gap-2">
+                          <Label className="text-sm font-medium">Komfort-Level</Label>
+                          {personality?.relationship_paused && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-600 border-amber-300">pausiert</Badge>
+                          )}
+                        </div>
                         <span className="text-sm font-mono text-muted-foreground">
                           {Math.round((personality?.mutual_comfort ?? 0.2) * 100)}%
                         </span>
@@ -1680,9 +1710,14 @@ export default function AudioPage() {
                     </div>
 
                     {/* Flirtation Meter */}
-                    <div className="space-y-2 p-4 rounded-lg border">
+                    <div className={`space-y-2 p-4 rounded-lg border ${personality?.relationship_paused ? 'opacity-50' : ''}`}>
                       <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">Flirt-Tendenz</Label>
+                        <div className="flex items-center gap-2">
+                          <Label className="text-sm font-medium">Flirt-Tendenz</Label>
+                          {personality?.relationship_paused && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-600 border-amber-300">pausiert</Badge>
+                          )}
+                        </div>
                         <span className="text-sm font-mono text-muted-foreground">
                           {Math.round((personality?.flirtation_tendency ?? 0) * 100)}%
                         </span>
@@ -1715,6 +1750,42 @@ export default function AudioPage() {
                       <p className="text-xs text-muted-foreground">
                         Wie stark sich die beiden über sich selbst und ihre KI-Natur lustig machen
                       </p>
+                    </div>
+
+                    {/* Relationship Controls */}
+                    <div className="space-y-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+                      <Label className="text-sm font-semibold">Beziehungssteuerung</Label>
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="pause-toggle" className="text-sm">Beziehung pausieren</Label>
+                          <p className="text-xs text-muted-foreground">Friert Komfort + Flirt ein</p>
+                        </div>
+                        <Switch
+                          id="pause-toggle"
+                          checked={personality?.relationship_paused ?? false}
+                          onCheckedChange={(checked) => {
+                            updateRelationship({ relationship_paused: checked })
+                          }}
+                          disabled={!personality}
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700"
+                        disabled={!personality}
+                        onClick={() => {
+                          if (!personality) return
+                          const newComfort = Math.max(0, Math.round((personality.mutual_comfort - 0.1) * 1000) / 1000)
+                          const newFlirt = Math.max(0, Math.round((personality.flirtation_tendency - 0.05) * 1000) / 1000)
+                          if (window.confirm(`Cooldown: Komfort ${Math.round(personality.mutual_comfort * 100)}% → ${Math.round(newComfort * 100)}%, Flirt ${Math.round(personality.flirtation_tendency * 100)}% → ${Math.round(newFlirt * 100)}%`)) {
+                            updateRelationship({ mutual_comfort: newComfort, flirtation_tendency: newFlirt })
+                          }
+                        }}
+                      >
+                        <RotateCcw className="h-3 w-3 mr-1" />
+                        Cooldown (-10% / -5%)
+                      </Button>
                     </div>
                   </div>
 
