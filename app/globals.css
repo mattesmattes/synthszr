@@ -549,12 +549,12 @@
 
 .ai-glow-active {
   animation:
-    ai-glow-cycle 4s linear infinite,
-    ai-glow-pulse 2s ease-in-out infinite;
+    ai-glow-cycle 6s linear infinite,
+    ai-glow-pulse 3s ease-in-out infinite;
   box-shadow:
-    0 0 8px 1px var(--ai-glow-1),
-    0 0 20px 2px var(--ai-glow-2),
-    0 0 40px 4px var(--ai-glow-3) !important;
+    0 0 6px 0px var(--ai-glow-1),
+    0 0 14px 0px var(--ai-glow-2),
+    0 0 28px 1px var(--ai-glow-3) !important;
 }
 
 /* ===== Flying Player Animations ===== */

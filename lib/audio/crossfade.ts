@@ -59,8 +59,8 @@ const BITRATE = 128
 // Stereo panning configuration (matches stereo-mixer.ts)
 // 0.0 = full left, 1.0 = full right
 const STEREO_POSITION = {
-  HOST: 0.35,   // 65% left, 35% right (slightly left of center)
-  GUEST: 0.65,  // 35% left, 65% right (slightly right of center)
+  HOST: 0.19,   // 81% left, 19% right (clearly left of center)
+  GUEST: 0.81,  // 19% left, 81% right (clearly right of center)
 } as const
 
 // Overlap settings (in milliseconds)
