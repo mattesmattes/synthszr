@@ -517,47 +517,33 @@
 
 /* ===== AI Glow / Rainbow Spectrum for Audio Player ===== */
 
-@property --ai-glow-1 {
-  syntax: "<color>";
-  initial-value: rgba(255, 50, 50, 0.3);
+@property --ai-glow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
   inherits: false;
 }
 
-@property --ai-glow-2 {
-  syntax: "<color>";
-  initial-value: rgba(0, 200, 80, 0.3);
-  inherits: false;
-}
-
-@property --ai-glow-3 {
-  syntax: "<color>";
-  initial-value: rgba(30, 100, 255, 0.3);
-  inherits: false;
-}
-
-@keyframes ai-glow-cycle {
-  0%        { --ai-glow-1: rgba(255, 50, 50, 0.3);  --ai-glow-2: rgba(0, 200, 80, 0.3);   --ai-glow-3: rgba(30, 100, 255, 0.3); }
-  16%       { --ai-glow-1: rgba(255, 200, 0, 0.3);   --ai-glow-2: rgba(0, 180, 220, 0.3);  --ai-glow-3: rgba(150, 50, 255, 0.3); }
-  33%       { --ai-glow-1: rgba(0, 200, 80, 0.3);    --ai-glow-2: rgba(30, 100, 255, 0.3);  --ai-glow-3: rgba(255, 50, 50, 0.3); }
-  50%       { --ai-glow-1: rgba(0, 180, 220, 0.3);   --ai-glow-2: rgba(150, 50, 255, 0.3);  --ai-glow-3: rgba(255, 200, 0, 0.3); }
-  66%       { --ai-glow-1: rgba(30, 100, 255, 0.3);   --ai-glow-2: rgba(255, 50, 50, 0.3);  --ai-glow-3: rgba(0, 200, 80, 0.3); }
-  83%       { --ai-glow-1: rgba(150, 50, 255, 0.3);   --ai-glow-2: rgba(255, 200, 0, 0.3);  --ai-glow-3: rgba(0, 180, 220, 0.3); }
-  100%      { --ai-glow-1: rgba(255, 50, 50, 0.3);  --ai-glow-2: rgba(0, 200, 80, 0.3);   --ai-glow-3: rgba(30, 100, 255, 0.3); }
-}
-
-@keyframes ai-glow-pulse {
-  0%, 100%  { --ai-glow-intensity: 1; }
-  50%       { --ai-glow-intensity: 1.2; }
+@keyframes ai-glow-shift {
+  to { --ai-glow-angle: 360deg; }
 }
 
 .ai-glow-active {
-  animation:
-    ai-glow-cycle 6s linear infinite,
-    ai-glow-pulse 3s ease-in-out infinite;
-  box-shadow:
-    0 0 5px 0px var(--ai-glow-1),
-    0 0 10px 0px var(--ai-glow-2),
-    0 0 20px 0px var(--ai-glow-3) !important;
+  position: relative;
+}
+
+.ai-glow-active::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  background: linear-gradient(
+    calc(90deg + var(--ai-glow-angle)),
+    #ff4040, #ff8c00, #ffd000, #00c850, #00b4dc, #3264ff, #9632ff, #ff4040
+  );
+  filter: blur(12px);
+  opacity: 0.3;
+  z-index: -1;
+  animation: ai-glow-shift 6s linear infinite;
 }
 
 /* ===== Flying Player Animations ===== */

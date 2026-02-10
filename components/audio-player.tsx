@@ -414,24 +414,25 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
       <div ref={coverRef}>
         {shouldAutoplay ? (
           // Full player pill with milky glass on the cover
-          <div className={cn(
-            'relative rounded-full overflow-hidden',
-            'border border-white/60 dark:border-white/20',
-            'shadow-[0_2px_16px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.3),0_8px_32px_rgba(0,0,0,0.08)]',
-            'dark:shadow-[0_2px_16px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.3)]',
-            'ai-glow-active',
-          )}>
-            {glassLayers(1)}
-            {playerContent({ showClose: false })}
+          <div className="relative rounded-full ai-glow-active">
+            <div className={cn(
+              'relative rounded-full overflow-hidden',
+              'border border-white/60 dark:border-white/20',
+              'shadow-[0_2px_16px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.3),0_8px_32px_rgba(0,0,0,0.08)]',
+              'dark:shadow-[0_2px_16px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.3)]',
+            )}>
+              {glassLayers(1)}
+              {playerContent({ showClose: false })}
+            </div>
           </div>
         ) : (
           // Normal small circular play/pause button
+          <div className="relative rounded-full ai-glow-active">
           <button
             onClick={togglePlayback}
             disabled={status === 'loading'}
             className={cn(
               'relative flex items-center justify-center w-12 h-12 rounded-full bg-white/90 hover:bg-white transition-all shadow-lg disabled:opacity-50',
-              'ai-glow-active',
               className
             )}
             aria-label={isPlaying ? 'Pause' : 'Play'}
@@ -444,6 +445,7 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
               <Play className="h-6 w-6 text-black fill-black ml-0.5" />
             )}
           </button>
+          </div>
         )}
       </div>
 
@@ -454,15 +456,16 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
           role="region"
           aria-label="Podcast Player"
         >
-          <div className={cn(
-            'relative rounded-full pointer-events-auto overflow-hidden',
-            'border border-white/60 dark:border-white/20',
-            'shadow-[0_2px_16px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.3),0_8px_32px_rgba(0,0,0,0.08)]',
-            'dark:shadow-[0_2px_16px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.3)]',
-            'ai-glow-active',
-          )}>
-            {glassLayers(flyingNavMilky ? 1 : 0)}
-            {playerContent({ showClose: true })}
+          <div className="relative rounded-full pointer-events-auto ai-glow-active">
+            <div className={cn(
+              'relative rounded-full overflow-hidden',
+              'border border-white/60 dark:border-white/20',
+              'shadow-[0_2px_16px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.3),0_8px_32px_rgba(0,0,0,0.08)]',
+              'dark:shadow-[0_2px_16px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.3)]',
+            )}>
+              {glassLayers(flyingNavMilky ? 1 : 0)}
+              {playerContent({ showClose: true })}
+            </div>
           </div>
         </div>,
         document.body
