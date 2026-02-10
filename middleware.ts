@@ -103,6 +103,10 @@ function getLocaleFromPathname(pathname: string): LocaleType | null {
  * Check if path should be localized
  */
 function shouldLocalize(pathname: string): boolean {
+  // Exclude static file requests (catches anything the matcher regex missed)
+  if (/\.(?:png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|css|js|json|xml|txt|mp3|mp4|wav|ogg|webm|m4a)$/i.test(pathname)) {
+    return false
+  }
   return !NON_LOCALIZED_PREFIXES.some(prefix => pathname.startsWith(prefix))
 }
 
