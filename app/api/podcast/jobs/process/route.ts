@@ -314,7 +314,7 @@ export async function POST(request: NextRequest) {
       includeIntro: true,
       introCrossfadeSec: 4,
       includeOutro: true,
-      outroCrossfadeSec: 4
+      outroCrossfadeSec: 20
     })
     const combinedFileName = `podcasts/${safeTitle}-${timestamp}.mp3`
     const combinedBlob = await put(combinedFileName, combinedBuffer, {
