@@ -123,6 +123,7 @@ interface PersonalityState {
   guest_self_awareness: number
   mutual_comfort: number
   flirtation_tendency: number
+  self_irony: number
   inside_joke_count: number
   memorable_moments: Array<{ episode: number; text: string; type?: string }>
   last_episode_at: string | null
@@ -1688,6 +1689,25 @@ export default function AudioPage() {
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Wie oft persönliche Momente aufkommen — werden dann als &quot;nur KI&quot; abgewürgt
+                      </p>
+                    </div>
+
+                    {/* Self-Irony Meter */}
+                    <div className="space-y-2 p-4 rounded-lg border">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Selbstironie</Label>
+                        <span className="text-sm font-mono text-muted-foreground">
+                          {Math.round((personality?.self_irony ?? 0.5) * 100)}%
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-violet-400 transition-all duration-500"
+                          style={{ width: `${(personality?.self_irony ?? 0.5) * 100}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Wie stark sich die beiden über sich selbst und ihre KI-Natur lustig machen
                       </p>
                     </div>
                   </div>

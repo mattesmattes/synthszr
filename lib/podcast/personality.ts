@@ -35,6 +35,7 @@ export interface PersonalityState {
   // Relationship
   mutual_comfort: number
   flirtation_tendency: number
+  self_irony: number
   inside_joke_count: number
 
   // Memory
@@ -81,6 +82,7 @@ const GUEST_DIMENSIONS = [
 const RELATIONSHIP_DIMENSIONS = [
   'mutual_comfort',
   'flirtation_tendency',
+  'self_irony',
 ] as const
 
 type DimensionKey =
@@ -130,6 +132,7 @@ const PHASE_TARGETS: Record<RelationshipPhase, Record<DimensionKey, number>> = {
     guest_self_awareness: 0.4,
     mutual_comfort: 0.3,
     flirtation_tendency: 0.0,
+    self_irony: 0.5,
   },
   acquaintances: {
     host_warmth: 0.55,
@@ -144,6 +147,7 @@ const PHASE_TARGETS: Record<RelationshipPhase, Record<DimensionKey, number>> = {
     guest_self_awareness: 0.5,
     mutual_comfort: 0.5,
     flirtation_tendency: 0.05,
+    self_irony: 0.55,
   },
   colleagues: {
     host_warmth: 0.65,
@@ -158,6 +162,7 @@ const PHASE_TARGETS: Record<RelationshipPhase, Record<DimensionKey, number>> = {
     guest_self_awareness: 0.55,
     mutual_comfort: 0.7,
     flirtation_tendency: 0.15,
+    self_irony: 0.6,
   },
   friends: {
     host_warmth: 0.75,
@@ -172,6 +177,7 @@ const PHASE_TARGETS: Record<RelationshipPhase, Record<DimensionKey, number>> = {
     guest_self_awareness: 0.65,
     mutual_comfort: 0.85,
     flirtation_tendency: 0.3,
+    self_irony: 0.7,
   },
   close_friends: {
     host_warmth: 0.85,
@@ -186,6 +192,7 @@ const PHASE_TARGETS: Record<RelationshipPhase, Record<DimensionKey, number>> = {
     guest_self_awareness: 0.8,
     mutual_comfort: 0.95,
     flirtation_tendency: 0.45,
+    self_irony: 0.8,
   },
 }
 
@@ -313,6 +320,7 @@ function buildBriefDE(
   const guestAwareness = describeAwarenessDE(s.guest_self_awareness)
 
   const relationshipDesc = describeRelationshipDE(s)
+  const selfIronyDesc = describeSelfIronyDE(s.self_irony)
 
   let brief = `\n**PERSÖNLICHKEITEN (Episode #${ep}, Phase: ${phaseLabels[phase]})**\n\n`
   brief += `HOST-Persönlichkeit:\n`
@@ -323,6 +331,7 @@ function buildBriefDE(
   brief += `- KI-Bewusstsein: ${guestAwareness}\n\n`
   brief += `Beziehungsdynamik:\n`
   brief += `- ${relationshipDesc}\n`
+  brief += `- Selbstironie: ${selfIronyDesc}\n`
 
   if (s.memorable_moments.length > 0) {
     brief += `\nGEMEINSAME ERINNERUNGEN & RUNNING GAGS:\n`
@@ -392,6 +401,7 @@ function buildBriefEN(
   const guestAwareness = describeAwarenessEN(s.guest_self_awareness)
 
   const relationshipDesc = describeRelationshipEN(s)
+  const selfIronyDesc = describeSelfIronyEN(s.self_irony)
 
   let brief = `\n**PERSONALITIES (Episode #${ep}, Phase: ${phaseLabels[phase]})**\n\n`
   brief += `HOST personality:\n`
@@ -402,6 +412,7 @@ function buildBriefEN(
   brief += `- AI self-awareness: ${guestAwareness}\n\n`
   brief += `Relationship dynamic:\n`
   brief += `- ${relationshipDesc}\n`
+  brief += `- Self-irony: ${selfIronyDesc}\n`
 
   if (s.memorable_moments.length > 0) {
     brief += `\nSHARED MEMORIES & RUNNING GAGS:\n`
@@ -587,6 +598,20 @@ function describeRelationshipEN(s: PersonalityState): string {
   return 'Deep familiarity, honest moments, subtle mutual flirting'
 }
 
+function describeSelfIronyDE(level: number): string {
+  if (level < 0.3) return 'Kaum — nehmen sich ernst, wenig Selbsthumor'
+  if (level < 0.5) return 'Gelegentlich — kleine selbstironische Kommentare'
+  if (level < 0.7) return 'Ausgeprägt — machen sich regelmäßig über sich selbst lustig, z.B. über ihre KI-Limitierungen'
+  return 'Stark — konstante Selbstironie, lachen über ihre eigene Existenz und Fehler'
+}
+
+function describeSelfIronyEN(level: number): string {
+  if (level < 0.3) return 'Barely — take themselves seriously, little self-humor'
+  if (level < 0.5) return 'Occasional — small self-deprecating comments'
+  if (level < 0.7) return 'Noticeable — regularly poke fun at themselves, e.g. their AI limitations'
+  return 'Strong — constant self-irony, laugh about their own existence and mistakes'
+}
+
 // ---------------------------------------------------------------------------
 // Memorable Moments Extraction
 // ---------------------------------------------------------------------------
@@ -694,6 +719,7 @@ export async function advanceState(
       guest_self_awareness: evolved.guest_self_awareness,
       mutual_comfort: evolved.mutual_comfort,
       flirtation_tendency: evolved.flirtation_tendency,
+      self_irony: evolved.self_irony,
       inside_joke_count: evolved.inside_joke_count,
       memorable_moments: evolved.memorable_moments,
       last_episode_at: new Date().toISOString(),
