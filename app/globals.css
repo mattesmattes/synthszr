@@ -527,6 +527,16 @@
   to { --ai-glow-angle: 360deg; }
 }
 
+@keyframes ai-glow-morph {
+  0%        { transform: scaleX(1.00) scaleY(1.00) rotate(0deg)    translateX(0px)  translateY(0px); }
+  15%       { transform: scaleX(1.06) scaleY(0.96) rotate(0.4deg)  translateX(2px)  translateY(-1px); }
+  30%       { transform: scaleX(0.97) scaleY(1.05) rotate(-0.3deg) translateX(-1px) translateY(2px); }
+  50%       { transform: scaleX(1.04) scaleY(0.97) rotate(0.2deg)  translateX(-2px) translateY(-1px); }
+  65%       { transform: scaleX(0.96) scaleY(1.04) rotate(-0.4deg) translateX(1px)  translateY(1px); }
+  80%       { transform: scaleX(1.03) scaleY(0.98) rotate(0.3deg)  translateX(2px)  translateY(-2px); }
+  100%      { transform: scaleX(1.00) scaleY(1.00) rotate(0deg)    translateX(0px)  translateY(0px); }
+}
+
 .ai-glow-active {
   position: relative;
 }
@@ -543,7 +553,9 @@
   filter: blur(12px);
   opacity: 0.3;
   z-index: -1;
-  animation: ai-glow-shift 6s linear infinite;
+  animation:
+    ai-glow-shift 6s linear infinite,
+    ai-glow-morph 8s ease-in-out infinite;
 }
 
 /* ===== Flying Player Animations ===== */
