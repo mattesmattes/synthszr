@@ -200,12 +200,18 @@ const PHASE_LABELS: Record<string, string> = {
 // PersonalityMap Component
 // ---------------------------------------------------------------------------
 
+function formatDate(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
 function PersonalityMap({ personality }: { personality: PersonalityState | null }) {
-  const W = 420
-  const H = 420
-  const PAD = 60
-  const innerW = W - PAD * 2
-  const innerH = H - PAD * 2
+  const W = 800
+  const H = 400
+  const PAD_X = 70
+  const PAD_Y = 40
+  const innerW = W - PAD_X * 2
+  const innerH = H - PAD_Y * 2
 
   const state = personality || DEFAULT_PERSONALITY as PersonalityState
 
@@ -215,8 +221,8 @@ function PersonalityMap({ personality }: { personality: PersonalityState | null 
   const ghostGuest = calcPosition(DEFAULT_PERSONALITY, 'guest')
 
   // Map 0..1 to SVG coordinates
-  const toSvgX = (v: number) => PAD + v * innerW
-  const toSvgY = (v: number) => PAD + (1 - v) * innerH // Invert Y
+  const toSvgX = (v: number) => PAD_X + v * innerW
+  const toSvgY = (v: number) => PAD_Y + (1 - v) * innerH // Invert Y
 
   const hx = toSvgX(hostPos.x)
   const hy = toSvgY(hostPos.y)
@@ -234,34 +240,39 @@ function PersonalityMap({ personality }: { personality: PersonalityState | null 
   const mx = (hx + gx) / 2
   const my = (hy + gy) / 2
 
+  // Tooltip texts
+  const startDate = personality ? formatDate(personality.created_at) : null
+  const lastDate = personality ? formatDate(personality.last_episode_at) : null
+  const epCount = personality?.episode_count ?? 0
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-md mx-auto" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
       {/* Background */}
-      <rect x={PAD} y={PAD} width={innerW} height={innerH} fill="hsl(var(--muted))" rx={8} opacity={0.3} />
+      <rect x={PAD_X} y={PAD_Y} width={innerW} height={innerH} fill="hsl(var(--muted))" rx={8} opacity={0.3} />
 
       {/* Grid lines */}
       {[0.25, 0.5, 0.75].map((v) => (
         <g key={v}>
-          <line x1={toSvgX(v)} y1={PAD} x2={toSvgX(v)} y2={H - PAD} stroke="hsl(var(--border))" strokeWidth={0.5} strokeDasharray="4 4" />
-          <line x1={PAD} y1={toSvgY(v)} x2={W - PAD} y2={toSvgY(v)} stroke="hsl(var(--border))" strokeWidth={0.5} strokeDasharray="4 4" />
+          <line x1={toSvgX(v)} y1={PAD_Y} x2={toSvgX(v)} y2={H - PAD_Y} stroke="hsl(var(--border))" strokeWidth={0.5} strokeDasharray="4 4" />
+          <line x1={PAD_X} y1={toSvgY(v)} x2={W - PAD_X} y2={toSvgY(v)} stroke="hsl(var(--border))" strokeWidth={0.5} strokeDasharray="4 4" />
         </g>
       ))}
 
       {/* Center axes */}
-      <line x1={toSvgX(0.5)} y1={PAD} x2={toSvgX(0.5)} y2={H - PAD} stroke="hsl(var(--foreground))" strokeWidth={1} opacity={0.15} />
-      <line x1={PAD} y1={toSvgY(0.5)} x2={W - PAD} y2={toSvgY(0.5)} stroke="hsl(var(--foreground))" strokeWidth={1} opacity={0.15} />
+      <line x1={toSvgX(0.5)} y1={PAD_Y} x2={toSvgX(0.5)} y2={H - PAD_Y} stroke="hsl(var(--foreground))" strokeWidth={1} opacity={0.15} />
+      <line x1={PAD_X} y1={toSvgY(0.5)} x2={W - PAD_X} y2={toSvgY(0.5)} stroke="hsl(var(--foreground))" strokeWidth={1} opacity={0.15} />
 
       {/* Axis labels */}
-      <text x={PAD - 8} y={H / 2} textAnchor="end" fontSize={10} fill="hsl(var(--muted-foreground))" dominantBaseline="middle" style={{ letterSpacing: '0.05em' }}>
+      <text x={PAD_X - 8} y={H / 2} textAnchor="end" fontSize={11} fill="hsl(var(--muted-foreground))" dominantBaseline="middle" style={{ letterSpacing: '0.05em' }}>
         Rational
       </text>
-      <text x={W - PAD + 8} y={H / 2} textAnchor="start" fontSize={10} fill="hsl(var(--muted-foreground))" dominantBaseline="middle" style={{ letterSpacing: '0.05em' }}>
+      <text x={W - PAD_X + 8} y={H / 2} textAnchor="start" fontSize={11} fill="hsl(var(--muted-foreground))" dominantBaseline="middle" style={{ letterSpacing: '0.05em' }}>
         Emotional
       </text>
-      <text x={W / 2} y={PAD - 12} textAnchor="middle" fontSize={10} fill="hsl(var(--muted-foreground))" style={{ letterSpacing: '0.05em' }}>
+      <text x={W / 2} y={PAD_Y - 14} textAnchor="middle" fontSize={11} fill="hsl(var(--muted-foreground))" style={{ letterSpacing: '0.05em' }}>
         Expressiv
       </text>
-      <text x={W / 2} y={H - PAD + 18} textAnchor="middle" fontSize={10} fill="hsl(var(--muted-foreground))" style={{ letterSpacing: '0.05em' }}>
+      <text x={W / 2} y={H - PAD_Y + 20} textAnchor="middle" fontSize={11} fill="hsl(var(--muted-foreground))" style={{ letterSpacing: '0.05em' }}>
         Reserviert
       </text>
 
@@ -274,8 +285,14 @@ function PersonalityMap({ personality }: { personality: PersonalityState | null 
       )}
 
       {/* Ghost dots (starting positions) */}
-      <circle cx={ghx} cy={ghy} r={6} fill="none" stroke="#f59e0b" strokeWidth={1.5} opacity={0.25} />
-      <circle cx={ggx} cy={ggy} r={6} fill="none" stroke="#06b6d4" strokeWidth={1.5} opacity={0.25} />
+      <g>
+        <circle cx={ghx} cy={ghy} r={6} fill="none" stroke="#f59e0b" strokeWidth={1.5} opacity={0.25} />
+        {startDate && <title>HOST Start — {startDate}</title>}
+      </g>
+      <g>
+        <circle cx={ggx} cy={ggy} r={6} fill="none" stroke="#06b6d4" strokeWidth={1.5} opacity={0.25} />
+        {startDate && <title>GUEST Start — {startDate}</title>}
+      </g>
 
       {/* Connecting line between current positions */}
       <line
@@ -287,24 +304,30 @@ function PersonalityMap({ personality }: { personality: PersonalityState | null 
       />
 
       {/* Phase label on connecting line */}
-      <rect x={mx - 30} y={my - 8} width={60} height={16} rx={4} fill="hsl(var(--background))" stroke="hsl(var(--border))" strokeWidth={0.5} />
-      <text x={mx} y={my + 1} textAnchor="middle" fontSize={8} fill="hsl(var(--muted-foreground))" dominantBaseline="middle">
+      <rect x={mx - 36} y={my - 9} width={72} height={18} rx={4} fill="hsl(var(--background))" stroke="hsl(var(--border))" strokeWidth={0.5} />
+      <text x={mx} y={my + 1} textAnchor="middle" fontSize={9} fill="hsl(var(--muted-foreground))" dominantBaseline="middle">
         {PHASE_LABELS[phase] || phase}
       </text>
 
       {/* Current HOST dot */}
-      <circle cx={hx} cy={hy} r={10} fill="#f59e0b" opacity={0.9} />
-      <text x={hx} y={hy + 1} textAnchor="middle" dominantBaseline="middle" fontSize={7} fill="white" fontWeight="bold">H</text>
+      <g className="cursor-default">
+        <circle cx={hx} cy={hy} r={10} fill="#f59e0b" opacity={0.9} />
+        <text x={hx} y={hy + 1} textAnchor="middle" dominantBaseline="middle" fontSize={7} fill="white" fontWeight="bold">H</text>
+        <title>{`HOST — Episode #${epCount}${lastDate ? `\n${lastDate}` : ''}`}</title>
+      </g>
       <text x={hx} y={hy - 16} textAnchor="middle" fontSize={9} fill="#f59e0b" fontWeight="600">HOST</text>
 
       {/* Current GUEST dot */}
-      <circle cx={gx} cy={gy} r={10} fill="#06b6d4" opacity={0.9} />
-      <text x={gx} y={gy + 1} textAnchor="middle" dominantBaseline="middle" fontSize={7} fill="white" fontWeight="bold">G</text>
+      <g className="cursor-default">
+        <circle cx={gx} cy={gy} r={10} fill="#06b6d4" opacity={0.9} />
+        <text x={gx} y={gy + 1} textAnchor="middle" dominantBaseline="middle" fontSize={7} fill="white" fontWeight="bold">G</text>
+        <title>{`GUEST — Episode #${epCount}${lastDate ? `\n${lastDate}` : ''}`}</title>
+      </g>
       <text x={gx} y={gy - 16} textAnchor="middle" fontSize={9} fill="#06b6d4" fontWeight="600">GUEST</text>
 
       {/* No data overlay */}
       {!personality && (
-        <text x={W / 2} y={H / 2 + 50} textAnchor="middle" fontSize={11} fill="hsl(var(--muted-foreground))" opacity={0.6}>
+        <text x={W / 2} y={H / 2 + 50} textAnchor="middle" fontSize={12} fill="hsl(var(--muted-foreground))" opacity={0.6}>
           Startpositionen — noch keine Episoden
         </text>
       )}
