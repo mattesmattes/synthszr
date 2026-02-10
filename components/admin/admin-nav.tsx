@@ -91,7 +91,7 @@ const navGroups: NavGroup[] = [
         icon: Globe
       },
       {
-        label: 'Audio',
+        label: 'Podcast Studio',
         href: '/admin/audio',
         icon: Headphones
       }

@@ -312,6 +312,29 @@ export async function POST(request: NextRequest) {
     // Read mixing settings from DB and apply to crossfade
     const ttsSettings = await getTTSSettings()
     const crossfadeOptions = mixingSettingsToCrossfadeOptions(ttsSettings.mixing_settings)
+
+    // Load active intro/outro URLs from podcast_audio_files
+    const { data: activeIntro } = await supabase
+      .from('podcast_audio_files')
+      .select('url')
+      .eq('type', 'intro')
+      .eq('is_active', true)
+      .single()
+
+    const { data: activeOutro } = await supabase
+      .from('podcast_audio_files')
+      .select('url')
+      .eq('type', 'outro')
+      .eq('is_active', true)
+      .single()
+
+    if (activeIntro?.url) {
+      crossfadeOptions.introUrl = activeIntro.url
+    }
+    if (activeOutro?.url) {
+      crossfadeOptions.outroUrl = activeOutro.url
+    }
+
     const combinedBuffer = await concatenateWithCrossfade(segments, crossfadeOptions)
     const combinedFileName = `podcasts/${safeTitle}-${timestamp}.mp3`
     const combinedBlob = await put(combinedFileName, combinedBuffer, {
