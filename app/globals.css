@@ -519,32 +519,32 @@
 
 @property --ai-glow-1 {
   syntax: "<color>";
-  initial-value: #ff0080;
+  initial-value: rgba(255, 0, 128, 0.5);
   inherits: false;
 }
 
 @property --ai-glow-2 {
   syntax: "<color>";
-  initial-value: #40e0d0;
+  initial-value: rgba(64, 224, 208, 0.5);
   inherits: false;
 }
 
 @property --ai-glow-3 {
   syntax: "<color>";
-  initial-value: #7b68ee;
+  initial-value: rgba(123, 104, 238, 0.5);
   inherits: false;
 }
 
 @keyframes ai-glow-cycle {
-  0%        { --ai-glow-1: #ff0080; --ai-glow-2: #40e0d0; --ai-glow-3: #7b68ee; }
-  33%       { --ai-glow-1: #ff8c00; --ai-glow-2: #7b68ee; --ai-glow-3: #ff0080; }
-  66%       { --ai-glow-1: #40e0d0; --ai-glow-2: #ff0080; --ai-glow-3: #ff8c00; }
-  100%      { --ai-glow-1: #ff0080; --ai-glow-2: #40e0d0; --ai-glow-3: #7b68ee; }
+  0%        { --ai-glow-1: rgba(255, 0, 128, 0.5); --ai-glow-2: rgba(64, 224, 208, 0.5); --ai-glow-3: rgba(123, 104, 238, 0.5); }
+  33%       { --ai-glow-1: rgba(255, 140, 0, 0.5); --ai-glow-2: rgba(123, 104, 238, 0.5); --ai-glow-3: rgba(255, 0, 128, 0.5); }
+  66%       { --ai-glow-1: rgba(64, 224, 208, 0.5); --ai-glow-2: rgba(255, 0, 128, 0.5); --ai-glow-3: rgba(255, 140, 0, 0.5); }
+  100%      { --ai-glow-1: rgba(255, 0, 128, 0.5); --ai-glow-2: rgba(64, 224, 208, 0.5); --ai-glow-3: rgba(123, 104, 238, 0.5); }
 }
 
 @keyframes ai-glow-pulse {
   0%, 100%  { --ai-glow-intensity: 1; }
-  50%       { --ai-glow-intensity: 1.4; }
+  50%       { --ai-glow-intensity: 1.2; }
 }
 
 .ai-glow-active {
@@ -552,9 +552,9 @@
     ai-glow-cycle 6s linear infinite,
     ai-glow-pulse 3s ease-in-out infinite;
   box-shadow:
-    0 0 6px 0px var(--ai-glow-1),
-    0 0 14px 0px var(--ai-glow-2),
-    0 0 28px 1px var(--ai-glow-3) !important;
+    0 0 5px 0px var(--ai-glow-1),
+    0 0 10px 0px var(--ai-glow-2),
+    0 0 20px 0px var(--ai-glow-3) !important;
 }
 
 /* ===== Flying Player Animations ===== */
