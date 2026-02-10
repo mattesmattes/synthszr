@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { upload } from '@vercel/blob/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Play, Pause, Star, Pencil, Trash2, Upload, Loader2 } from 'lucide-react'
@@ -130,18 +131,34 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
     setUploading(true)
     setUploadError(null)
     try {
-      const formData = new FormData()
-      formData.append('file', pendingFile)
-      formData.append('name', pendingName.trim())
-      formData.append('type', type)
+      // 1. Upload directly to Vercel Blob (bypasses 4.5MB serverless limit)
+      const isWav = pendingFile.name?.toLowerCase().endsWith('.wav')
+      const ext = isWav ? 'wav' : 'mp3'
+      const blob = await upload(
+        `podcast-audio/${type}/${pendingName.trim()}-${Date.now()}.${ext}`,
+        pendingFile,
+        {
+          access: 'public',
+          handleUploadUrl: '/api/admin/audio-files/upload',
+        },
+      )
+
+      // 2. Register in database
       const res = await fetch('/api/admin/audio-files', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: pendingName.trim(),
+          type,
+          url: blob.url,
+          file_size: pendingFile.size,
+        }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => null)
-        throw new Error(data?.error || `Upload fehlgeschlagen (${res.status})`)
+        throw new Error(data?.error || `DB-Eintrag fehlgeschlagen (${res.status})`)
       }
+
       setPendingFile(null)
       setPendingName('')
       onRefresh()

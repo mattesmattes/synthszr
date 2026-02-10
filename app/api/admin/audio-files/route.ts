@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { del, put } from '@vercel/blob'
+import { del } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 
@@ -25,7 +25,7 @@ export async function GET() {
   return NextResponse.json({ files })
 }
 
-// Upload a new audio file
+// Register an uploaded audio file (blob URL already exists from client upload)
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) {
@@ -33,14 +33,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const formData = await request.formData()
-    const file = formData.get('file') as File | null
-    const name = formData.get('name') as string | null
-    const type = formData.get('type') as string | null
+    const { name, type, url, file_size } = await request.json()
 
-    if (!file || !name || !type) {
+    if (!name || !type || !url) {
       return NextResponse.json(
-        { error: 'file, name, and type are required' },
+        { error: 'name, type, and url are required' },
         { status: 400 }
       )
     }
@@ -52,30 +49,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Determine file extension and content type
-    const isWav = file.name?.toLowerCase().endsWith('.wav') || file.type === 'audio/wav'
-    const ext = isWav ? 'wav' : 'mp3'
-    const contentType = isWav ? 'audio/wav' : 'audio/mpeg'
-
-    // Upload to Vercel Blob
-    const blob = await put(
-      `podcast-audio/${type}/${name}-${Date.now()}.${ext}`,
-      file,
-      { access: 'public', contentType }
-    )
-
     const supabase = await createClient()
 
     const { data: record, error } = await supabase
       .from('podcast_audio_files')
-      .insert({ name, type, url: blob.url, file_size: file.size })
+      .insert({ name, type, url, file_size: file_size ?? null })
       .select()
       .single()
 
     if (error) {
       // Clean up blob if DB insert fails
       try {
-        await del(blob.url)
+        await del(url)
       } catch (e) {
         console.error('Failed to clean up blob after DB error:', e)
       }
