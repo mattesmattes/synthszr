@@ -45,6 +45,7 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
   const [pendingName, setPendingName] = useState('')
   const [uploading, setUploading] = useState(false)
   const [mutating, setMutating] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   const handlePlay = (file: AudioFile) => {
     if (playingId === file.id) {
@@ -127,18 +128,25 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
   const handleUpload = async () => {
     if (!pendingFile || !pendingName.trim()) return
     setUploading(true)
+    setUploadError(null)
     try {
       const formData = new FormData()
       formData.append('file', pendingFile)
       formData.append('name', pendingName.trim())
       formData.append('type', type)
-      await fetch('/api/admin/audio-files', {
+      const res = await fetch('/api/admin/audio-files', {
         method: 'POST',
         body: formData,
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || `Upload fehlgeschlagen (${res.status})`)
+      }
       setPendingFile(null)
       setPendingName('')
       onRefresh()
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload fehlgeschlagen')
     } finally {
       setUploading(false)
     }
@@ -147,6 +155,7 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
   const handleCancelUpload = () => {
     setPendingFile(null)
     setPendingName('')
+    setUploadError(null)
   }
 
   return (
@@ -299,6 +308,9 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
             <Upload className="h-3.5 w-3.5 mr-1.5" />
             Audio auswählen
           </Button>
+        )}
+        {uploadError && (
+          <p className="text-xs text-destructive mt-1">{uploadError}</p>
         )}
       </div>
     </div>
