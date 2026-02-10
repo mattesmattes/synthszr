@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users, SlidersHorizontal, RotateCcw } from 'lucide-react'
+import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users, SlidersHorizontal, RotateCcw, Database, MessageSquare, BrainCircuit, ArrowRight, TrendingUp, BookOpen } from 'lucide-react'
 import { StereoPodcastPlayer } from '@/components/stereo-podcast-player'
 import type { SegmentMetadata } from '@/lib/audio/stereo-mixer'
 import { Badge } from '@/components/ui/badge'
@@ -393,6 +393,130 @@ function PersonalityMap({ personality }: { personality: PersonalityState | null 
         </text>
       )}
     </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Personality Pipeline Visualization
+// ---------------------------------------------------------------------------
+
+function PipelineStep({ icon, title, description, active, detail }: {
+  icon: React.ReactNode
+  title: string
+  description: string
+  active?: boolean
+  detail?: string
+}) {
+  return (
+    <div className={`flex items-start gap-3 p-3 rounded-lg border ${active ? 'border-green-500/50 bg-green-500/5' : 'border-border'}`}>
+      <div className={`shrink-0 mt-0.5 ${active ? 'text-green-500' : 'text-muted-foreground'}`}>
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{title}</span>
+          {active && <span className="text-[10px] text-green-600 font-mono">AKTIV</span>}
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+        {detail && (
+          <p className="text-xs font-mono text-foreground/60 mt-1 bg-muted/50 px-2 py-1 rounded">{detail}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PipelineArrow() {
+  return (
+    <div className="flex justify-center py-0.5">
+      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 rotate-90" />
+    </div>
+  )
+}
+
+function PersonalityPipeline({ personality }: { personality: PersonalityState | null }) {
+  const ep = personality?.episode_count ?? 0
+  const phase = personality?.relationship_phase ?? 'strangers'
+  const hasMemories = (personality?.memorable_moments?.length ?? 0) > 0
+  const comfort = personality?.mutual_comfort ?? 0.2
+
+  // Determine next phase threshold
+  const thresholds: Record<string, { next: string; threshold: number }> = {
+    strangers: { next: 'Bekannte', threshold: 0.3 },
+    acquaintances: { next: 'Kollegen', threshold: 0.5 },
+    colleagues: { next: 'Freunde', threshold: 0.7 },
+    friends: { next: 'Enge Freunde', threshold: 0.85 },
+    close_friends: { next: '—', threshold: 1.0 },
+  }
+  const nextInfo = thresholds[phase] ?? thresholds.strangers
+
+  const phaseOrder = ['strangers', 'acquaintances', 'colleagues', 'friends', 'close_friends']
+  const currentIdx = phaseOrder.indexOf(phase)
+  const currentThreshold = [0, 0.3, 0.5, 0.7, 0.85][currentIdx] ?? 0
+  const nextThreshold = nextInfo.threshold
+  const bracketProgress = phase === 'close_friends'
+    ? 100
+    : Math.min(100, Math.max(0, Math.round(((comfort - currentThreshold) / (nextThreshold - currentThreshold)) * 100)))
+
+  return (
+    <div className="space-y-1">
+      <PipelineStep
+        icon={<Database className="h-4 w-4" />}
+        title="1. State laden"
+        description="PersonalityState wird aus podcast_personality_state geladen (pro Locale)"
+        active={ep > 0}
+        detail={ep > 0 ? `Episode #${ep} · Phase: ${PHASE_LABELS[phase]} · Comfort: ${Math.round(comfort * 100)}%` : 'Noch keine Episoden — Defaults werden verwendet'}
+      />
+      <PipelineArrow />
+      <PipelineStep
+        icon={<MessageSquare className="h-4 w-4" />}
+        title="2. Personality Brief generieren"
+        description="buildPersonalityBrief() erzeugt HOST/GUEST-Traits, KI-Bewusstsein, Beziehungsdynamik als Prompt-Block"
+        active={ep > 0}
+        detail={ep > 0 ? `Traits: Warmth=${Math.round((personality?.host_warmth ?? 0.5) * 100)}%, Humor=${Math.round((personality?.host_humor ?? 0.4) * 100)}%, ...` : undefined}
+      />
+      <PipelineArrow />
+      <PipelineStep
+        icon={<BrainCircuit className="h-4 w-4" />}
+        title="3. Prompt zusammenfügen"
+        description="Standard-Script-Prompt + Personality Brief → fullPrompt an Claude/Gemini"
+        active
+        detail="fullPrompt = scriptPrompt + personalityBrief"
+      />
+      <PipelineArrow />
+      <PipelineStep
+        icon={<FileText className="h-4 w-4" />}
+        title="4. Script generieren"
+        description="AI generiert HOST/GUEST-Dialog mit eingewobenen Persönlichkeitsmomenten (max 2-3 pro Episode)"
+        active
+      />
+      <PipelineArrow />
+      <PipelineStep
+        icon={<BookOpen className="h-4 w-4" />}
+        title="5. Moments extrahieren"
+        description="extractMemorableMoments() durchsucht das Script nach KI-Bewusstseins-Momenten, Erinnerungen, Inside-Jokes"
+        active={hasMemories}
+        detail={hasMemories ? `${personality!.memorable_moments.length} Momente gespeichert (FIFO, max 5)` : 'Noch keine Momente extrahiert'}
+      />
+      <PipelineArrow />
+      <PipelineStep
+        icon={<TrendingUp className="h-4 w-4" />}
+        title="6. Personality evolvieren"
+        description="advanceState() → Random Walk (drift=0.1, noise=0.03) in Richtung Phase-Targets. Prüft Phasenübergang."
+        active={ep > 0}
+        detail={phase !== 'close_friends'
+          ? `Nächste Phase: ${nextInfo.next} bei Comfort ≥ ${Math.round(nextInfo.threshold * 100)}% (aktuell: ${Math.round(comfort * 100)}% — ${bracketProgress}% der Strecke)`
+          : 'Maximale Phase erreicht'}
+      />
+      <PipelineArrow />
+      <PipelineStep
+        icon={<Database className="h-4 w-4" />}
+        title="7. State speichern"
+        description="Evolvierter State wird zurück in podcast_personality_state geschrieben → bereit für nächste Episode"
+        active={ep > 0}
+        detail={personality?.last_episode_at ? `Letztes Update: ${formatDate(personality.last_episode_at)}` : undefined}
+      />
+    </div>
   )
 }
 
@@ -1580,6 +1704,22 @@ export default function AudioPage() {
                   )}
                 </>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Pipeline Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="h-4 w-4" />
+                Personality-Pipeline
+              </CardTitle>
+              <CardDescription>
+                Datenfluss pro Episode: Wie die Persönlichkeiten ins Script gelangen und sich weiterentwickeln
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PersonalityPipeline personality={personality} />
             </CardContent>
           </Card>
         </TabsContent>
