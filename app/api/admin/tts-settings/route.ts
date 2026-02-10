@@ -50,6 +50,8 @@ interface UpdateSettingsRequest {
   podcast_duration_minutes?: number
   // Podcast script prompt
   podcast_script_prompt?: string
+  // Mixing settings (JSON string)
+  mixing_settings?: string
 }
 
 const VALID_VOICES: TTSVoice[] = ['alloy', 'echo', 'fable', 'nova', 'onyx', 'shimmer']
@@ -176,6 +178,11 @@ export async function PUT(request: NextRequest) {
     // Podcast script prompt (can be any string)
     if (body.podcast_script_prompt !== undefined) {
       updates.push({ key: 'podcast_script_prompt', value: body.podcast_script_prompt })
+    }
+
+    // Mixing settings (stored as JSON string)
+    if (body.mixing_settings !== undefined) {
+      updates.push({ key: 'mixing_settings', value: body.mixing_settings })
     }
 
     // Apply updates

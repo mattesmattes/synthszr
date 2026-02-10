@@ -31,12 +31,48 @@ export interface AudioSegment {
 export interface CrossfadeOptions {
   /** Add intro music at the beginning */
   includeIntro?: boolean
-  /** Crossfade duration for intro in seconds (default: 4) */
+  /** Crossfade duration for intro in seconds (default: 4, kept for backward compat) */
   introCrossfadeSec?: number
   /** Add outro music at the end */
   includeOutro?: boolean
-  /** Crossfade duration for outro in seconds (default: 4) */
+  /** Crossfade duration for outro in seconds (default: 10) */
   outroCrossfadeSec?: number
+
+  // Fine-grained intro settings
+  /** Phase 1: Intro at full volume, no dialog (seconds, default 3) */
+  introFullSec?: number
+  /** Phase 2: Intro as bed music duration (seconds, default 7) */
+  introBedSec?: number
+  /** Bed volume during intro (0–1, default 0.20) */
+  introBedVolume?: number
+  /** Phase 3: Intro fade from bed to silence (seconds, default 3) */
+  introFadeoutSec?: number
+  /** Dialog fade-in at start of phase 2 (seconds, default 1) */
+  introDialogFadeInSec?: number
+
+  // Fine-grained outro settings
+  /** Outro ease-in to bed volume (seconds, default 3) */
+  outroRiseSec?: number
+  /** Bed volume during outro hold (0–1, default 0.20) */
+  outroBedVolume?: number
+  /** When crossfade from bed to 100% starts (seconds from crossfade start, default 7) */
+  outroFinalStartSec?: number
+
+  // Stereo positioning (0 = full left, 1 = full right)
+  /** HOST stereo position (default 0.35 = 65% left) */
+  stereoHost?: number
+  /** GUEST stereo position (default 0.65 = 65% right) */
+  stereoGuest?: number
+
+  // Dialog overlap settings (milliseconds)
+  /** Short reactions like "Ja!", "Genau!" (default 250) */
+  overlapReactionMs?: number
+  /** [interrupting] tag (default 180) */
+  overlapInterruptMs?: number
+  /** Quick answer after question (default 80) */
+  overlapQuestionMs?: number
+  /** Normal speaker change (default 50) */
+  overlapSpeakerChangeMs?: number
 }
 
 interface AnalyzedSegment {
@@ -56,20 +92,18 @@ const SAMPLE_RATE = 44100
 const CHANNELS = 2
 const BITRATE = 128
 
-// Stereo panning configuration (matches stereo-mixer.ts)
+// Stereo panning defaults (matches stereo-mixer.ts)
 // 0.0 = full left, 1.0 = full right
-const STEREO_POSITION = {
-  HOST: 0.35,   // 65% left, 35% right (slightly left of center)
-  GUEST: 0.65,  // 35% left, 65% right (slightly right of center)
-} as const
+const DEFAULT_STEREO_HOST = 0.35    // 65% left, 35% right
+const DEFAULT_STEREO_GUEST = 0.65   // 35% left, 65% right
 
-// Overlap settings (in milliseconds)
-const OVERLAP_SHORT_REACTION = 250  // "Mhm!", "Ja!", "Genau!" - heavy overlap
-const OVERLAP_INTERRUPTING = 180    // [interrupting] tag
-const OVERLAP_AFTER_QUESTION = 80   // Quick answer after question
-const OVERLAP_SPEAKER_CHANGE = 50   // Normal speaker change
+// Overlap defaults (in milliseconds)
+const DEFAULT_OVERLAP_SHORT_REACTION = 250
+const DEFAULT_OVERLAP_INTERRUPTING = 180
+const DEFAULT_OVERLAP_AFTER_QUESTION = 80
+const DEFAULT_OVERLAP_SPEAKER_CHANGE = 50
 const OVERLAP_SAME_SPEAKER = 0      // Same speaker continues - no overlap
-const MIN_SEGMENT_FOR_OVERLAP = 300 // Don't overlap if segment < 300ms
+const MIN_SEGMENT_FOR_OVERLAP = 300  // Don't overlap if segment < 300ms
 
 // Short reaction patterns (German & English)
 const SHORT_REACTIONS = new Set([
@@ -88,8 +122,8 @@ const SHORT_REACTIONS = new Set([
  * Apply stereo panning to PCM channels based on speaker identity.
  * Uses constant-power panning to maintain perceived loudness.
  */
-function applyStereoPosition(pcm: Float32Array[], speaker: 'HOST' | 'GUEST'): Float32Array[] {
-  const pan = STEREO_POSITION[speaker]
+function applyStereoPosition(pcm: Float32Array[], speaker: 'HOST' | 'GUEST', stereoPositions?: { HOST: number; GUEST: number }): Float32Array[] {
+  const pan = stereoPositions?.[speaker] ?? (speaker === 'HOST' ? DEFAULT_STEREO_HOST : DEFAULT_STEREO_GUEST)
   const leftGain = Math.cos(pan * Math.PI / 2)
   const rightGain = Math.sin(pan * Math.PI / 2)
 
@@ -322,10 +356,23 @@ function analyzeText(text: string): {
 /**
  * Calculate optimal overlap duration between two segments
  */
+interface OverlapSettings {
+  reactionMs: number
+  interruptMs: number
+  questionMs: number
+  speakerChangeMs: number
+}
+
 function calculateOverlap(
   current: AnalyzedSegment,
-  next: AnalyzedSegment
+  next: AnalyzedSegment,
+  overlapOpts?: OverlapSettings
 ): number {
+  const reactionMs = overlapOpts?.reactionMs ?? DEFAULT_OVERLAP_SHORT_REACTION
+  const interruptMs = overlapOpts?.interruptMs ?? DEFAULT_OVERLAP_INTERRUPTING
+  const questionMs = overlapOpts?.questionMs ?? DEFAULT_OVERLAP_AFTER_QUESTION
+  const speakerChangeMs = overlapOpts?.speakerChangeMs ?? DEFAULT_OVERLAP_SPEAKER_CHANGE
+
   const currentDurationMs = (current.pcm[0].length / SAMPLE_RATE) * 1000
   const nextDurationMs = (next.pcm[0].length / SAMPLE_RATE) * 1000
 
@@ -342,27 +389,27 @@ function calculateOverlap(
   // Priority 1: Short reactions get heavy overlap
   if (next.isShortReaction) {
     console.log(`[Crossfade] Short reaction detected: "${next.text.substring(0, 30)}..."`)
-    return Math.min(OVERLAP_SHORT_REACTION, currentDurationMs * 0.3, nextDurationMs * 0.5)
+    return Math.min(reactionMs, currentDurationMs * 0.3, nextDurationMs * 0.5)
   }
 
   // Priority 2: Explicit interrupting tag
   if (next.isInterrupting) {
     console.log(`[Crossfade] Interrupting tag detected`)
-    return Math.min(OVERLAP_INTERRUPTING, currentDurationMs * 0.25)
+    return Math.min(interruptMs, currentDurationMs * 0.25)
   }
 
   // Priority 3: Quick answer after question
   if (current.isQuestion) {
-    return Math.min(OVERLAP_AFTER_QUESTION, currentDurationMs * 0.1)
+    return Math.min(questionMs, currentDurationMs * 0.1)
   }
 
   // Priority 4: Trail-off suggests natural interruption point
   if (current.endsWithTrailOff) {
-    return Math.min(OVERLAP_INTERRUPTING, currentDurationMs * 0.2)
+    return Math.min(interruptMs, currentDurationMs * 0.2)
   }
 
   // Default: Normal speaker change with light overlap
-  return Math.min(OVERLAP_SPEAKER_CHANGE, currentDurationMs * 0.05)
+  return Math.min(speakerChangeMs, currentDurationMs * 0.05)
 }
 
 /**
@@ -449,22 +496,32 @@ async function loadIntro(): Promise<Float32Array[]> {
  *
  * Total intro presence: 13s
  */
+interface IntroOptions {
+  fullSec: number
+  bedSec: number
+  bedVolume: number
+  fadeoutSec: number
+  dialogFadeInSec: number
+}
+
 function applyIntroWithCrossfade(
   intro: Float32Array[],
   firstSegment: Float32Array[],
-  _crossfadeSec: number
+  opts: IntroOptions
 ): Float32Array[] {
   const introLength = intro[0].length
   const segmentLength = firstSegment[0].length
 
   // Phase 1: Intro at full volume, no dialog
-  const phase1Sec = 3
-  // Phase 2: Intro at 20% as bed music, dialog plays
-  const phase2Sec = 7
-  // Phase 3: Intro fades from 20% to 0%, dialog continues
-  const phase3Sec = 3
+  const phase1Sec = opts.fullSec
+  // Phase 2: Intro at bed volume, dialog plays
+  const phase2Sec = opts.bedSec
+  // Phase 3: Intro fades from bed volume to 0%, dialog continues
+  const phase3Sec = opts.fadeoutSec
   // How quickly dialog fades in at start of phase 2
-  const dialogFadeInSec = 1
+  const dialogFadeInSec = opts.dialogFadeInSec
+  // Bed volume (0–1)
+  const bedVol = opts.bedVolume
 
   const phase1Samples = Math.floor(phase1Sec * SAMPLE_RATE)
   const phase2Samples = Math.floor(phase2Sec * SAMPLE_RATE)
@@ -495,7 +552,7 @@ function applyIntroWithCrossfade(
   // Phase 2: Intro at 20% bed + dialog fades in then full (3s → 10s)
   for (let i = 0; i < phase2Samples; i++) {
     const introIdx = phase1End + i
-    const introVal = introIdx < introLength ? 0.20 : 0
+    const introVal = introIdx < introLength ? bedVol : 0
 
     // Dialog fades in over first 1s of phase 2, then stays at full
     let dialogGain: number
@@ -519,7 +576,7 @@ function applyIntroWithCrossfade(
   for (let i = 0; i < phase3Samples; i++) {
     const ft = i / phase3Samples
     const introIdx = phase1End + phase2Samples + i
-    const introGain = 0.20 * (1 - Math.pow(ft, 1.5))
+    const introGain = bedVol * (1 - Math.pow(ft, 1.5))
 
     const segIdx = phase2Samples + i
 
@@ -544,7 +601,7 @@ function applyIntroWithCrossfade(
   }
 
   const maxVal = Math.max(...result[0].slice(0, 50000).map(Math.abs))
-  console.log(`[Crossfade] Applied intro: ${phase1Sec}s full + ${phase2Sec}s bed@20% + ${phase3Sec}s fadeout. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, max amplitude: ${maxVal.toFixed(4)}`)
+  console.log(`[Crossfade] Applied intro: ${phase1Sec}s full + ${phase2Sec}s bed@${Math.round(bedVol * 100)}% + ${phase3Sec}s fadeout. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, max amplitude: ${maxVal.toFixed(4)}`)
 
   return result
 }
@@ -578,21 +635,26 @@ async function loadOutro(): Promise<Float32Array[]> {
  * During the last N seconds of the podcast, outro fades in while speech fades out
  * Then outro continues playing fully
  */
+interface OutroOptions {
+  crossfadeSec: number
+  riseSec: number
+  bedVolume: number
+  finalStartSec: number
+}
+
 function applyOutroWithCrossfade(
   podcast: Float32Array[],
   outro: Float32Array[],
-  crossfadeSec: number
+  opts: OutroOptions
 ): Float32Array[] {
-  const crossfadeSamples = Math.floor(crossfadeSec * SAMPLE_RATE)
+  const crossfadeSamples = Math.floor(opts.crossfadeSec * SAMPLE_RATE)
   const podcastLength = podcast[0].length
   const outroLength = outro[0].length
 
-  // Outro timing: ease-in to 20% in 3s, hold at 20%, crossfade to 100% from 7s to 10s
-  const outroRiseSec = 3
-  const outroFinalStartSec = 7
-  const outroRiseSamples = Math.floor(outroRiseSec * SAMPLE_RATE)
-  const outroFinalStartSamples = Math.floor(outroFinalStartSec * SAMPLE_RATE)
+  const outroRiseSamples = Math.floor(opts.riseSec * SAMPLE_RATE)
+  const outroFinalStartSamples = Math.floor(opts.finalStartSec * SAMPLE_RATE)
   const outroFinalSamples = crossfadeSamples - outroFinalStartSamples
+  const bedVol = opts.bedVolume
 
   // Point where crossfade starts (end of podcast minus crossfade duration)
   const crossfadeStart = Math.max(0, podcastLength - crossfadeSamples)
@@ -614,19 +676,15 @@ function applyOutroWithCrossfade(
   for (let i = 0; i < crossfadeSamples; i++) {
     const t = i / crossfadeSamples
 
-    // Outro: ease-in to 20% in 3s, hold at 20%, crossfade to 100% from 7→10s
     let outroFade: number
     if (i < outroRiseSamples) {
-      // 0→3s: smooth ease-in to 20%
       const rt = i / outroRiseSamples
-      outroFade = 0.20 * Math.pow(rt, 1.5)
+      outroFade = bedVol * Math.pow(rt, 1.5)
     } else if (i < outroFinalStartSamples) {
-      // 3→7s: hold at 20%
-      outroFade = 0.20
+      outroFade = bedVol
     } else {
-      // 7→10s: crossfade from 20% to 100%
       const ft = (i - outroFinalStartSamples) / outroFinalSamples
-      outroFade = 0.20 + 0.80 * Math.pow(ft, 2.0)
+      outroFade = bedVol + (1 - bedVol) * Math.pow(ft, 2.0)
     }
 
     // Dialog stays at full volume throughout
@@ -655,7 +713,7 @@ function applyOutroWithCrossfade(
 
   const maxValStart = Math.max(...result[0].slice(0, 50000).map(Math.abs))
   const maxValEnd = Math.max(...result[0].slice(-50000).map(Math.abs))
-  console.log(`[Crossfade] Applied outro with ${crossfadeSec}s transition. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, start amp: ${maxValStart.toFixed(4)}, end amp: ${maxValEnd.toFixed(4)}`)
+  console.log(`[Crossfade] Applied outro with ${opts.crossfadeSec}s transition (rise ${opts.riseSec}s, bed@${Math.round(bedVol * 100)}%, final@${opts.finalStartSec}s). Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, start amp: ${maxValStart.toFixed(4)}, end amp: ${maxValEnd.toFixed(4)}`)
 
   return result
 }
@@ -669,10 +727,35 @@ export async function concatenateWithCrossfade(
 ): Promise<Buffer> {
   const {
     includeIntro = false,
-    introCrossfadeSec = 4,
     includeOutro = false,
-    outroCrossfadeSec = 10
+    // Intro settings
+    introFullSec = 3,
+    introBedSec = 7,
+    introBedVolume = 0.20,
+    introFadeoutSec = 3,
+    introDialogFadeInSec = 1,
+    // Outro settings
+    outroCrossfadeSec = 10,
+    outroRiseSec: _outroRiseSec = 3,
+    outroBedVolume = 0.20,
+    outroFinalStartSec: _outroFinalStartSec = 7,
+    // Stereo
+    stereoHost = DEFAULT_STEREO_HOST,
+    stereoGuest = DEFAULT_STEREO_GUEST,
+    // Overlaps
+    overlapReactionMs = DEFAULT_OVERLAP_SHORT_REACTION,
+    overlapInterruptMs = DEFAULT_OVERLAP_INTERRUPTING,
+    overlapQuestionMs = DEFAULT_OVERLAP_AFTER_QUESTION,
+    overlapSpeakerChangeMs = DEFAULT_OVERLAP_SPEAKER_CHANGE,
   } = options
+
+  const stereoPositions = { HOST: stereoHost, GUEST: stereoGuest }
+  const overlapOpts: OverlapSettings = {
+    reactionMs: overlapReactionMs,
+    interruptMs: overlapInterruptMs,
+    questionMs: overlapQuestionMs,
+    speakerChangeMs: overlapSpeakerChangeMs,
+  }
 
   if (segments.length === 0) {
     return Buffer.alloc(0)
@@ -684,7 +767,7 @@ export async function concatenateWithCrossfade(
 
   console.log(`[Crossfade] Processing ${segments.length} segments with smart algorithm...`)
   console.log(`[Crossfade] Options: includeIntro=${includeIntro}, includeOutro=${includeOutro}`)
-  console.log(`[Crossfade] Crossfade durations: intro=${introCrossfadeSec}s, outro=${outroCrossfadeSec}s`)
+  console.log(`[Crossfade] Intro: ${introFullSec}s full + ${introBedSec}s bed@${Math.round(introBedVolume*100)}% + ${introFadeoutSec}s fade | Outro: ${outroCrossfadeSec}s crossfade`)
 
   // Decode and analyze all segments
   const analyzed: AnalyzedSegment[] = []
@@ -693,7 +776,7 @@ export async function concatenateWithCrossfade(
     const seg = segments[i]
     const rawPcm = await decodeMP3(seg.buffer)
     // Apply stereo panning: HOST slightly left, GUEST slightly right
-    const pcm = applyStereoPosition(rawPcm, seg.speaker)
+    const pcm = applyStereoPosition(rawPcm, seg.speaker, stereoPositions)
     const textAnalysis = analyzeText(seg.text)
     const silenceAtEndMs = detectTrailingSilence(pcm)
 
@@ -731,13 +814,19 @@ export async function concatenateWithCrossfade(
         const intro = await loadIntro()
         console.log(`[Crossfade] Intro loaded: ${intro[0].length} samples (${(intro[0].length / SAMPLE_RATE).toFixed(1)}s)`)
         console.log(`[Crossfade] First segment PCM length: ${segment.pcm[0].length} samples (${(segment.pcm[0].length / SAMPLE_RATE).toFixed(1)}s)`)
-        resultChannels = applyIntroWithCrossfade(intro, segment.pcm, introCrossfadeSec)
+        resultChannels = applyIntroWithCrossfade(intro, segment.pcm, {
+          fullSec: introFullSec,
+          bedSec: introBedSec,
+          bedVolume: introBedVolume,
+          fadeoutSec: introFadeoutSec,
+          dialogFadeInSec: introDialogFadeInSec,
+        })
         console.log(`[Crossfade] After intro applied, resultChannels length: ${resultChannels[0].length} samples (${(resultChannels[0].length / SAMPLE_RATE).toFixed(1)}s)`)
       } else {
         resultChannels = [segment.pcm[0], segment.pcm[1]]
       }
     } else {
-      const overlapMs = calculateOverlap(analyzed[i - 1], segment)
+      const overlapMs = calculateOverlap(analyzed[i - 1], segment, overlapOpts)
       const overlapSamples = Math.floor((overlapMs / 1000) * SAMPLE_RATE)
 
       if (overlapSamples > 0 && resultChannels[0].length >= overlapSamples && segment.pcm[0].length >= overlapSamples) {
@@ -803,7 +892,12 @@ export async function concatenateWithCrossfade(
     const outro = await loadOutro()
     console.log(`[Crossfade] Outro loaded: ${outro[0].length} samples (${(outro[0].length / SAMPLE_RATE).toFixed(1)}s)`)
     console.log(`[Crossfade] Applying outro crossfade...`)
-    resultChannels = applyOutroWithCrossfade(resultChannels, outro, outroCrossfadeSec)
+    resultChannels = applyOutroWithCrossfade(resultChannels, outro, {
+      crossfadeSec: outroCrossfadeSec,
+      riseSec: _outroRiseSec,
+      bedVolume: outroBedVolume,
+      finalStartSec: _outroFinalStartSec,
+    })
     finalDurationS = resultChannels[0].length / SAMPLE_RATE
     console.log(`[Crossfade] After outro: ${finalDurationS.toFixed(1)}s`)
   }
@@ -816,4 +910,56 @@ export async function concatenateWithCrossfade(
   console.log(`[Crossfade] ✓ MP3 encoding successful: ${(mp3Buffer.length / 1024).toFixed(0)} KB`)
 
   return mp3Buffer
+}
+
+/**
+ * Convert MixingSettings (from DB, percentages) to CrossfadeOptions (0-1 values)
+ */
+export function mixingSettingsToCrossfadeOptions(
+  mixing: {
+    intro_enabled?: boolean
+    intro_full_sec?: number
+    intro_bed_sec?: number
+    intro_bed_volume?: number
+    intro_fadeout_sec?: number
+    intro_dialog_fadein_sec?: number
+    outro_enabled?: boolean
+    outro_crossfade_sec?: number
+    outro_rise_sec?: number
+    outro_bed_volume?: number
+    outro_final_start_sec?: number
+    stereo_host?: number
+    stereo_guest?: number
+    overlap_reaction_ms?: number
+    overlap_interrupt_ms?: number
+    overlap_question_ms?: number
+    overlap_speaker_ms?: number
+  } | null | undefined
+): CrossfadeOptions {
+  if (!mixing) {
+    return {
+      includeIntro: true,
+      includeOutro: true,
+    }
+  }
+
+  return {
+    includeIntro: mixing.intro_enabled ?? true,
+    introFullSec: mixing.intro_full_sec ?? 3,
+    introBedSec: mixing.intro_bed_sec ?? 7,
+    introBedVolume: (mixing.intro_bed_volume ?? 20) / 100,
+    introFadeoutSec: mixing.intro_fadeout_sec ?? 3,
+    introDialogFadeInSec: mixing.intro_dialog_fadein_sec ?? 1,
+    includeOutro: mixing.outro_enabled ?? true,
+    outroCrossfadeSec: mixing.outro_crossfade_sec ?? 10,
+    outroRiseSec: mixing.outro_rise_sec ?? 3,
+    outroBedVolume: (mixing.outro_bed_volume ?? 20) / 100,
+    outroFinalStartSec: mixing.outro_final_start_sec ?? 7,
+    stereoHost: (mixing.stereo_host ?? 35) / 100,
+    stereoGuest: (mixing.stereo_guest ?? 65) / 100,
+    overlapReactionMs: mixing.overlap_reaction_ms ?? 250,
+    overlapInterruptMs: mixing.overlap_interrupt_ms ?? 180,
+    overlapQuestionMs: mixing.overlap_question_ms ?? 80,
+    overlapSpeakerChangeMs: mixing.overlap_speaker_ms ?? 50,
+  }
 }

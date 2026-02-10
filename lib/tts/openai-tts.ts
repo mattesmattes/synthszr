@@ -40,6 +40,28 @@ export interface TTSSettings {
   podcast_duration_minutes: number
   // Podcast script prompt
   podcast_script_prompt: string | null
+  // Mixing settings (JSON blob)
+  mixing_settings: MixingSettings | null
+}
+
+export interface MixingSettings {
+  intro_enabled: boolean
+  intro_full_sec: number
+  intro_bed_sec: number
+  intro_bed_volume: number     // percentage 0-100
+  intro_fadeout_sec: number
+  intro_dialog_fadein_sec: number
+  outro_enabled: boolean
+  outro_crossfade_sec: number
+  outro_rise_sec: number
+  outro_bed_volume: number     // percentage 0-100
+  outro_final_start_sec: number
+  stereo_host: number          // 0-100 (0=left, 100=right)
+  stereo_guest: number         // 0-100
+  overlap_reaction_ms: number
+  overlap_interrupt_ms: number
+  overlap_question_ms: number
+  overlap_speaker_ms: number
 }
 
 export interface ContentSection {
@@ -244,6 +266,7 @@ export async function getTTSSettings(): Promise<TTSSettings> {
       'podcast_guest_voice_en',
       'podcast_duration_minutes',
       'podcast_script_prompt',
+      'mixing_settings',
     ])
 
   const settingsMap: Record<string, unknown> = {}
@@ -277,6 +300,12 @@ export async function getTTSSettings(): Promise<TTSSettings> {
     podcast_duration_minutes: (settingsMap.podcast_duration_minutes as number) || 30,
     // Podcast script prompt (null means use default)
     podcast_script_prompt: (settingsMap.podcast_script_prompt as string) || null,
+    // Mixing settings (stored as JSON string)
+    mixing_settings: settingsMap.mixing_settings
+      ? (typeof settingsMap.mixing_settings === 'string'
+        ? JSON.parse(settingsMap.mixing_settings)
+        : settingsMap.mixing_settings as MixingSettings)
+      : null,
   }
 }
 

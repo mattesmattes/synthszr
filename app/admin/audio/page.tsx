@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users } from 'lucide-react'
+import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users, SlidersHorizontal, RotateCcw } from 'lucide-react'
 import { StereoPodcastPlayer } from '@/components/stereo-podcast-player'
 import type { SegmentMetadata } from '@/lib/audio/stereo-mixer'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Slider } from '@/components/ui/slider'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,47 @@ interface TTSSettings {
   podcast_guest_voice_en: string
   podcast_duration_minutes: number
   podcast_script_prompt: string | null
+  mixing_settings: MixingSettings | null
+}
+
+interface MixingSettings {
+  intro_enabled: boolean
+  intro_full_sec: number
+  intro_bed_sec: number
+  intro_bed_volume: number
+  intro_fadeout_sec: number
+  intro_dialog_fadein_sec: number
+  outro_enabled: boolean
+  outro_crossfade_sec: number
+  outro_rise_sec: number
+  outro_bed_volume: number
+  outro_final_start_sec: number
+  stereo_host: number
+  stereo_guest: number
+  overlap_reaction_ms: number
+  overlap_interrupt_ms: number
+  overlap_question_ms: number
+  overlap_speaker_ms: number
+}
+
+const DEFAULT_MIXING: MixingSettings = {
+  intro_enabled: true,
+  intro_full_sec: 3,
+  intro_bed_sec: 7,
+  intro_bed_volume: 20,
+  intro_fadeout_sec: 3,
+  intro_dialog_fadein_sec: 1,
+  outro_enabled: true,
+  outro_crossfade_sec: 10,
+  outro_rise_sec: 3,
+  outro_bed_volume: 20,
+  outro_final_start_sec: 7,
+  stereo_host: 35,
+  stereo_guest: 65,
+  overlap_reaction_ms: 250,
+  overlap_interrupt_ms: 180,
+  overlap_question_ms: 80,
+  overlap_speaker_ms: 50,
 }
 
 interface PersonalityState {
@@ -375,6 +417,11 @@ export default function AudioPage() {
   const [scriptGenerated, setScriptGenerated] = useState(false)
   const [scriptModified, setScriptModified] = useState(false)
 
+  // Mixing state
+  const [mixing, setMixing] = useState<MixingSettings>({ ...DEFAULT_MIXING })
+  const [mixingSaving, setMixingSaving] = useState(false)
+  const [mixingSuccess, setMixingSuccess] = useState(false)
+
   // Personality state
   const [personality, setPersonality] = useState<PersonalityState | null>(null)
   const [personalityLoading, setPersonalityLoading] = useState(false)
@@ -452,6 +499,9 @@ export default function AudioPage() {
         if (data.podcast_script_prompt) {
           setCustomPrompt(data.podcast_script_prompt)
         }
+        if (data.mixing_settings) {
+          setMixing({ ...DEFAULT_MIXING, ...data.mixing_settings })
+        }
       }
     } catch (error) {
       console.error('Error fetching TTS settings:', error)
@@ -486,6 +536,33 @@ export default function AudioPage() {
       console.error('Error saving TTS settings:', error)
     } finally {
       setTtsSaving(false)
+    }
+  }
+
+  function updateMixing(key: keyof MixingSettings, value: number | boolean) {
+    setMixing(prev => ({ ...prev, [key]: value }))
+  }
+
+  async function saveMixingSettings() {
+    setMixingSaving(true)
+    setMixingSuccess(false)
+    try {
+      const res = await fetch('/api/admin/tts-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...ttsSettings,
+          mixing_settings: JSON.stringify(mixing),
+        }),
+      })
+      if (res.ok) {
+        setMixingSuccess(true)
+        setTimeout(() => setMixingSuccess(false), 3000)
+      }
+    } catch (error) {
+      console.error('Error saving mixing settings:', error)
+    } finally {
+      setMixingSaving(false)
     }
   }
 
@@ -869,6 +946,173 @@ export default function AudioPage() {
         {/* RECORDING TAB                                                    */}
         {/* ================================================================ */}
         <TabsContent value="recording" className="space-y-6">
+          {/* Audio Mixer */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <SlidersHorizontal className="h-5 w-5" />
+                    Audio Mixer
+                  </CardTitle>
+                  <CardDescription>
+                    Intro, Dialog und Outro — Lautstärke, Timing und Stereo-Positionierung
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setMixing({ ...DEFAULT_MIXING })}>
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Reset
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {/* Intro Channel */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1 h-8 rounded-full bg-emerald-500" />
+                    <div>
+                      <h3 className="font-semibold text-sm">INTRO</h3>
+                      <p className="text-xs text-muted-foreground">Jingle vor dem Dialog</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="intro-enabled" className="text-xs text-muted-foreground">Aktiv</Label>
+                    <Switch id="intro-enabled" checked={mixing.intro_enabled} onCheckedChange={(v) => updateMixing('intro_enabled', v)} />
+                  </div>
+                </div>
+
+                {mixing.intro_enabled && (
+                  <>
+                    {/* Intro Timeline Preview */}
+                    <div className="px-2">
+                      <IntroTimeline
+                        fullSec={mixing.intro_full_sec}
+                        bedSec={mixing.intro_bed_sec}
+                        bedVolume={mixing.intro_bed_volume}
+                        fadeoutSec={mixing.intro_fadeout_sec}
+                        dialogFadeInSec={mixing.intro_dialog_fadein_sec}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      <MixerSlider label="Intro voll" value={mixing.intro_full_sec} min={0} max={10} step={0.5} unit="s"
+                        onChange={(v) => updateMixing('intro_full_sec', v)} />
+                      <MixerSlider label="Bed-Dauer" value={mixing.intro_bed_sec} min={0} max={20} step={0.5} unit="s"
+                        onChange={(v) => updateMixing('intro_bed_sec', v)} />
+                      <MixerSlider label="Bed-Volume" value={mixing.intro_bed_volume} min={0} max={50} step={1} unit="%"
+                        onChange={(v) => updateMixing('intro_bed_volume', v)} />
+                      <MixerSlider label="Fadeout" value={mixing.intro_fadeout_sec} min={0} max={10} step={0.5} unit="s"
+                        onChange={(v) => updateMixing('intro_fadeout_sec', v)} />
+                      <MixerSlider label="Dialog Fade-In" value={mixing.intro_dialog_fadein_sec} min={0} max={5} step={0.1} unit="s"
+                        onChange={(v) => updateMixing('intro_dialog_fadein_sec', v)} />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="border-t" />
+
+              {/* Dialog Channel */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-1 h-8 rounded-full bg-blue-500" />
+                  <div>
+                    <h3 className="font-semibold text-sm">DIALOG</h3>
+                    <p className="text-xs text-muted-foreground">Stereo-Positionierung und Sprecherwechsel-Overlaps</p>
+                  </div>
+                </div>
+
+                {/* Stereo Visualization */}
+                <div className="p-4 bg-muted/30 rounded-lg border space-y-3">
+                  <Label className="text-xs font-medium">Stereo-Positionierung</Label>
+                  <StereoSlider label="HOST" value={mixing.stereo_host} color="#f59e0b"
+                    onChange={(v) => updateMixing('stereo_host', v)} />
+                  <StereoSlider label="GUEST" value={mixing.stereo_guest} color="#06b6d4"
+                    onChange={(v) => updateMixing('stereo_guest', v)} />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <MixerSlider label="Kurze Reaktion" value={mixing.overlap_reaction_ms} min={0} max={500} step={10} unit="ms"
+                    description="Ja!, Genau!, Mhm..."
+                    onChange={(v) => updateMixing('overlap_reaction_ms', v)} />
+                  <MixerSlider label="Unterbrechung" value={mixing.overlap_interrupt_ms} min={0} max={500} step={10} unit="ms"
+                    description="[interrupting] Tag"
+                    onChange={(v) => updateMixing('overlap_interrupt_ms', v)} />
+                  <MixerSlider label="Nach Frage" value={mixing.overlap_question_ms} min={0} max={500} step={10} unit="ms"
+                    description="Schnelle Antwort nach ?"
+                    onChange={(v) => updateMixing('overlap_question_ms', v)} />
+                  <MixerSlider label="Sprecherwechsel" value={mixing.overlap_speaker_ms} min={0} max={500} step={10} unit="ms"
+                    description="Normaler Wechsel"
+                    onChange={(v) => updateMixing('overlap_speaker_ms', v)} />
+                </div>
+              </div>
+
+              <div className="border-t" />
+
+              {/* Outro Channel */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1 h-8 rounded-full bg-purple-500" />
+                    <div>
+                      <h3 className="font-semibold text-sm">OUTRO</h3>
+                      <p className="text-xs text-muted-foreground">Jingle nach dem Dialog</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="outro-enabled" className="text-xs text-muted-foreground">Aktiv</Label>
+                    <Switch id="outro-enabled" checked={mixing.outro_enabled} onCheckedChange={(v) => updateMixing('outro_enabled', v)} />
+                  </div>
+                </div>
+
+                {mixing.outro_enabled && (
+                  <>
+                    {/* Outro Timeline Preview */}
+                    <div className="px-2">
+                      <OutroTimeline
+                        crossfadeSec={mixing.outro_crossfade_sec}
+                        riseSec={mixing.outro_rise_sec}
+                        bedVolume={mixing.outro_bed_volume}
+                        finalStartSec={mixing.outro_final_start_sec}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <MixerSlider label="Crossfade gesamt" value={mixing.outro_crossfade_sec} min={3} max={20} step={0.5} unit="s"
+                        onChange={(v) => updateMixing('outro_crossfade_sec', v)} />
+                      <MixerSlider label="Anstieg" value={mixing.outro_rise_sec} min={0} max={10} step={0.5} unit="s"
+                        description="Outro-Musik blendet ein"
+                        onChange={(v) => updateMixing('outro_rise_sec', v)} />
+                      <MixerSlider label="Bed-Volume" value={mixing.outro_bed_volume} min={0} max={50} step={1} unit="%"
+                        onChange={(v) => updateMixing('outro_bed_volume', v)} />
+                      <MixerSlider label="Finale ab" value={mixing.outro_final_start_sec} min={1} max={15} step={0.5} unit="s"
+                        description="Crossfade auf 100%"
+                        onChange={(v) => updateMixing('outro_final_start_sec', v)} />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Save Button */}
+              <div className="flex items-center gap-4 pt-2 border-t">
+                <Button onClick={saveMixingSettings} disabled={mixingSaving}>
+                  {mixingSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Mixer speichern
+                </Button>
+                {mixingSuccess && (
+                  <span className="text-sm text-green-600 flex items-center gap-1">
+                    <CheckCircle className="h-4 w-4" />
+                    Gespeichert
+                  </span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* TTS Voice Settings */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1278,6 +1522,194 @@ export default function AudioPage() {
 
 // ---------------------------------------------------------------------------
 // Small Dimension Bar Component
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Mixer Components
+// ---------------------------------------------------------------------------
+
+function MixerSlider({ label, value, min, max, step, unit, description, onChange }: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  unit: string
+  description?: string
+  onChange: (v: number) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="text-xs font-medium">{label}</span>
+          {description && <p className="text-[10px] text-muted-foreground">{description}</p>}
+        </div>
+        <span className="text-xs font-mono tabular-nums text-muted-foreground">{value}{unit}</span>
+      </div>
+      <Slider value={[value]} min={min} max={max} step={step} onValueChange={(v) => onChange(v[0])} className="w-full" />
+    </div>
+  )
+}
+
+function StereoSlider({ label, value, color, onChange }: {
+  label: string
+  value: number
+  color: string
+  onChange: (v: number) => void
+}) {
+  const leftPct = 100 - value
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">L {leftPct}%</span>
+        <span className="font-medium" style={{ color }}>{label}</span>
+        <span className="text-muted-foreground">R {value}%</span>
+      </div>
+      <div className="relative">
+        <Slider value={[value]} min={0} max={100} step={1} onValueChange={(v) => onChange(v[0])} className="w-full" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-px h-3 bg-muted-foreground/30 pointer-events-none" />
+      </div>
+    </div>
+  )
+}
+
+function IntroTimeline({ fullSec, bedSec, bedVolume, fadeoutSec, dialogFadeInSec }: {
+  fullSec: number; bedSec: number; bedVolume: number; fadeoutSec: number; dialogFadeInSec: number
+}) {
+  const total = fullSec + bedSec + fadeoutSec
+  if (total === 0) return null
+  const W = 600
+  const H = 80
+  const PAD = 4
+
+  // Build intro volume path (top section)
+  const toX = (sec: number) => PAD + (sec / total) * (W - PAD * 2)
+  const toY = (vol: number) => PAD + (1 - vol) * (H / 2 - PAD)
+
+  const bedV = bedVolume / 100
+  const introPath = [
+    `M ${toX(0)} ${toY(1)}`,                         // Start at 100%
+    `L ${toX(fullSec)} ${toY(1)}`,                    // Full volume
+    `L ${toX(fullSec)} ${toY(bedV)}`,                 // Drop to bed
+    `L ${toX(fullSec + bedSec)} ${toY(bedV)}`,        // Hold bed
+    `C ${toX(fullSec + bedSec + fadeoutSec * 0.3)} ${toY(bedV * 0.5)}, ${toX(fullSec + bedSec + fadeoutSec * 0.7)} ${toY(0.02)}, ${toX(total)} ${toY(0)}`, // Fade
+    `L ${toX(total)} ${toY(0)}`,
+    `L ${toX(0)} ${toY(0)}`,
+    'Z',
+  ].join(' ')
+
+  // Dialog volume path (bottom section)
+  const dToY = (vol: number) => H / 2 + PAD + (1 - vol) * (H / 2 - PAD * 2)
+  const dialogStart = fullSec
+  const dialogFadeEnd = fullSec + dialogFadeInSec
+  const dialogPath = [
+    `M ${toX(0)} ${dToY(0)}`,
+    `L ${toX(dialogStart)} ${dToY(0)}`,
+    `C ${toX(dialogStart + dialogFadeInSec * 0.3)} ${dToY(0.5)}, ${toX(dialogFadeEnd - dialogFadeInSec * 0.2)} ${dToY(0.9)}, ${toX(dialogFadeEnd)} ${dToY(1)}`,
+    `L ${toX(total)} ${dToY(1)}`,
+    `L ${toX(total)} ${dToY(0)}`,
+    `L ${toX(0)} ${dToY(0)}`,
+    'Z',
+  ].join(' ')
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+      {/* Intro volume envelope */}
+      <path d={introPath} fill="#10b981" opacity={0.2} stroke="#10b981" strokeWidth={1.5} />
+      {/* Dialog volume envelope */}
+      <path d={dialogPath} fill="#3b82f6" opacity={0.15} stroke="#3b82f6" strokeWidth={1.5} />
+
+      {/* Phase dividers */}
+      <line x1={toX(fullSec)} y1={0} x2={toX(fullSec)} y2={H} stroke="hsl(var(--border))" strokeWidth={1} strokeDasharray="3 3" />
+      <line x1={toX(fullSec + bedSec)} y1={0} x2={toX(fullSec + bedSec)} y2={H} stroke="hsl(var(--border))" strokeWidth={1} strokeDasharray="3 3" />
+
+      {/* Center divider */}
+      <line x1={PAD} y1={H / 2} x2={W - PAD} y2={H / 2} stroke="hsl(var(--border))" strokeWidth={0.5} />
+
+      {/* Labels */}
+      <text x={toX(fullSec / 2)} y={H / 2 - 4} textAnchor="middle" fontSize={9} fill="#10b981" opacity={0.8}>Intro 100%</text>
+      <text x={toX(fullSec + bedSec / 2)} y={H / 2 - 4} textAnchor="middle" fontSize={9} fill="#10b981" opacity={0.8}>Bed {bedVolume}%</text>
+      <text x={toX(fullSec + bedSec + fadeoutSec / 2)} y={H / 2 - 4} textAnchor="middle" fontSize={9} fill="#10b981" opacity={0.6}>Fade</text>
+      <text x={toX(fullSec + bedSec / 2)} y={H / 2 + 14} textAnchor="middle" fontSize={9} fill="#3b82f6" opacity={0.8}>Dialog</text>
+
+      {/* Time markers */}
+      <text x={toX(0)} y={H - 1} fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>0s</text>
+      <text x={toX(fullSec)} y={H - 1} textAnchor="middle" fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>{fullSec}s</text>
+      <text x={toX(fullSec + bedSec)} y={H - 1} textAnchor="middle" fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>{fullSec + bedSec}s</text>
+      <text x={toX(total)} y={H - 1} textAnchor="end" fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>{total}s</text>
+    </svg>
+  )
+}
+
+function OutroTimeline({ crossfadeSec, riseSec, bedVolume, finalStartSec }: {
+  crossfadeSec: number; riseSec: number; bedVolume: number; finalStartSec: number
+}) {
+  const total = crossfadeSec
+  if (total <= 0) return null
+  const W = 600
+  const H = 80
+  const PAD = 4
+
+  const toX = (sec: number) => PAD + (sec / total) * (W - PAD * 2)
+  const toY = (vol: number) => PAD + (1 - vol) * (H / 2 - PAD)
+
+  const bedV = bedVolume / 100
+  const finalSec = Math.max(finalStartSec, riseSec)
+
+  // Outro music volume path (top)
+  const outroPath = [
+    `M ${toX(0)} ${toY(0)}`,
+    `C ${toX(riseSec * 0.3)} ${toY(bedV * 0.3)}, ${toX(riseSec * 0.7)} ${toY(bedV * 0.8)}, ${toX(riseSec)} ${toY(bedV)}`,
+    `L ${toX(finalSec)} ${toY(bedV)}`,
+    `C ${toX(finalSec + (total - finalSec) * 0.3)} ${toY(bedV + 0.3)}, ${toX(finalSec + (total - finalSec) * 0.7)} ${toY(0.9)}, ${toX(total)} ${toY(1)}`,
+    `L ${toX(total)} ${toY(0)}`,
+    `L ${toX(0)} ${toY(0)}`,
+    'Z',
+  ].join(' ')
+
+  // Dialog fade path (bottom) - stays full, fades near end
+  const dToY = (vol: number) => H / 2 + PAD + (1 - vol) * (H / 2 - PAD * 2)
+  const dialogPath = [
+    `M ${toX(0)} ${dToY(1)}`,
+    `L ${toX(finalSec)} ${dToY(1)}`,
+    `C ${toX(finalSec + (total - finalSec) * 0.4)} ${dToY(0.6)}, ${toX(finalSec + (total - finalSec) * 0.8)} ${dToY(0.1)}, ${toX(total)} ${dToY(0)}`,
+    `L ${toX(total)} ${dToY(0)}`,
+    `L ${toX(0)} ${dToY(0)}`,
+    'Z',
+  ].join(' ')
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+      {/* Outro volume envelope */}
+      <path d={outroPath} fill="#a855f7" opacity={0.2} stroke="#a855f7" strokeWidth={1.5} />
+      {/* Dialog volume envelope */}
+      <path d={dialogPath} fill="#3b82f6" opacity={0.15} stroke="#3b82f6" strokeWidth={1.5} />
+
+      {/* Phase dividers */}
+      <line x1={toX(riseSec)} y1={0} x2={toX(riseSec)} y2={H} stroke="hsl(var(--border))" strokeWidth={1} strokeDasharray="3 3" />
+      <line x1={toX(finalSec)} y1={0} x2={toX(finalSec)} y2={H} stroke="hsl(var(--border))" strokeWidth={1} strokeDasharray="3 3" />
+
+      {/* Center divider */}
+      <line x1={PAD} y1={H / 2} x2={W - PAD} y2={H / 2} stroke="hsl(var(--border))" strokeWidth={0.5} />
+
+      {/* Labels */}
+      <text x={toX(riseSec / 2)} y={H / 2 - 4} textAnchor="middle" fontSize={9} fill="#a855f7" opacity={0.8}>Anstieg</text>
+      <text x={toX((riseSec + finalSec) / 2)} y={H / 2 - 4} textAnchor="middle" fontSize={9} fill="#a855f7" opacity={0.8}>Bed {bedVolume}%</text>
+      <text x={toX((finalSec + total) / 2)} y={H / 2 - 4} textAnchor="middle" fontSize={9} fill="#a855f7" opacity={0.8}>Crossfade</text>
+      <text x={toX((riseSec + finalSec) / 2)} y={H / 2 + 14} textAnchor="middle" fontSize={9} fill="#3b82f6" opacity={0.8}>Dialog</text>
+
+      {/* Time markers */}
+      <text x={toX(0)} y={H - 1} fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>0s</text>
+      <text x={toX(riseSec)} y={H - 1} textAnchor="middle" fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>{riseSec}s</text>
+      <text x={toX(finalSec)} y={H - 1} textAnchor="middle" fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>{finalSec}s</text>
+      <text x={toX(total)} y={H - 1} textAnchor="end" fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>{total}s</text>
+    </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Personality Helpers
 // ---------------------------------------------------------------------------
 
 function DimensionBar({ label, value }: { label: string; value: number }) {

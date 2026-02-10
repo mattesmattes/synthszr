@@ -16,7 +16,8 @@ import {
   type OpenAIVoice,
   type SegmentMetadata,
 } from '@/lib/tts/elevenlabs-tts'
-import { concatenateWithCrossfade, type AudioSegment } from '@/lib/audio/crossfade'
+import { concatenateWithCrossfade, mixingSettingsToCrossfadeOptions, type AudioSegment } from '@/lib/audio/crossfade'
+import { getTTSSettings } from '@/lib/tts/openai-tts'
 
 // Maximum duration for this function (Vercel Pro max is 800 seconds)
 export const maxDuration = 800
@@ -308,14 +309,10 @@ export async function POST(request: NextRequest) {
       segmentUrls.push(blob.url)
     }
 
-    // Create combined audio with smart PCM crossfade for natural dialogue flow
-    // Include intro and outro music with 4-second crossfades
-    const combinedBuffer = await concatenateWithCrossfade(segments, {
-      includeIntro: true,
-      introCrossfadeSec: 4,
-      includeOutro: true,
-      outroCrossfadeSec: 10
-    })
+    // Read mixing settings from DB and apply to crossfade
+    const ttsSettings = await getTTSSettings()
+    const crossfadeOptions = mixingSettingsToCrossfadeOptions(ttsSettings.mixing_settings)
+    const combinedBuffer = await concatenateWithCrossfade(segments, crossfadeOptions)
     const combinedFileName = `podcasts/${safeTitle}-${timestamp}.mp3`
     const combinedBlob = await put(combinedFileName, combinedBuffer, {
       access: 'public',

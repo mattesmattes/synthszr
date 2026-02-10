@@ -19,7 +19,7 @@ import {
   parseScriptText,
   type ElevenLabsModel,
 } from '@/lib/tts/elevenlabs-tts'
-import { concatenateWithCrossfade, type AudioSegment } from '@/lib/audio/crossfade'
+import { concatenateWithCrossfade, mixingSettingsToCrossfadeOptions, type AudioSegment } from '@/lib/audio/crossfade'
 import { getPersonalityState, buildPersonalityBrief, advanceState } from '@/lib/podcast/personality'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -368,13 +368,9 @@ async function generatePodcastForPost(
 
     console.log(`[Podcast] Processing ${segments.length} segments with crossfade + intro/outro...`)
 
-    // Use crossfade module with intro and outro
-    const combinedAudio = await concatenateWithCrossfade(segments, {
-      includeIntro: true,
-      introCrossfadeSec: 4,
-      includeOutro: true,
-      outroCrossfadeSec: 10,
-    })
+    // Use crossfade module with mixing settings from DB
+    const crossfadeOptions = mixingSettingsToCrossfadeOptions(settings.mixing_settings)
+    const combinedAudio = await concatenateWithCrossfade(segments, crossfadeOptions)
 
     // Estimate duration (MP3 at 128kbps = 16KB per second)
     const durationSeconds = Math.round(combinedAudio.length / (128 * 1024 / 8))
