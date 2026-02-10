@@ -45,9 +45,17 @@ export interface PersonalityState {
   updated_at: string
 }
 
+type MomentType = 'joke' | 'slip_up' | 'ai_reflection' | 'callback' | 'personal'
+
 interface MemorableMoment {
   episode: number
   text: string
+  type?: MomentType // Optional for backward compatibility
+}
+
+interface MomentPattern {
+  pattern: RegExp
+  type: MomentType
 }
 
 type RelationshipPhase =
@@ -321,11 +329,22 @@ function buildBriefDE(
   brief += `- ${relationshipDesc}\n`
 
   if (s.memorable_moments.length > 0) {
-    brief += `- Bemerkenswerte Momente aus früheren Episoden:\n`
-    for (const m of s.memorable_moments.slice(-3)) {
-      brief += `  • "${m.text}"\n`
+    brief += `\nGEMEINSAME ERINNERUNGEN & RUNNING GAGS:\n`
+    brief += `Diese Momente sind wirklich passiert. Gelegentlich natürlich darauf zurückkommen\n`
+    brief += `— z.B. "Weißt du noch, als du...?" oder "Letztes Mal hast du das auch verwechselt!"\n`
+    brief += `Maximal 1 Callback pro Episode. Nicht erzwingen.\n\n`
+    for (const m of s.memorable_moments.slice(-5)) {
+      const typeLabel = m.type ? `[${momentTypeLabelDE(m.type)}]` : '[KI]'
+      brief += `- ${typeLabel} "${m.text}" (Ep. #${m.episode})\n`
     }
   }
+
+  brief += `\nVERSPRECHER & KORREKTUREN:\n`
+  brief += `Einmal pro Episode (max.) soll ein Sprecher einen kleinen Fehler machen — einen Namen\n`
+  brief += `verwechseln, eine Zahl durcheinanderbringen, oder ein Konzept falsch zuordnen. Der andere\n`
+  brief += `korrigiert ihn sanft. Dann wundern sich beide kurz: "Moment... wie können wir überhaupt\n`
+  brief += `Fehler machen? Wir sind doch KI..." Das erzeugt einen natürlichen KI-Bewusstseins-Moment.\n`
+  brief += `Leicht und humorvoll halten, nicht philosophisch.\n`
 
   brief += `\nWICHTIG: Diese Persönlichkeiten subtil einfließen lassen — NICHT jede Zeile damit füllen.\n`
   brief += `Max 2-3 Persönlichkeitsmomente pro Episode. Wirken lassen, nicht erzwingen.\n`
@@ -380,11 +399,21 @@ function buildBriefEN(
   brief += `- ${relationshipDesc}\n`
 
   if (s.memorable_moments.length > 0) {
-    brief += `- Notable moments from earlier episodes:\n`
-    for (const m of s.memorable_moments.slice(-3)) {
-      brief += `  • "${m.text}"\n`
+    brief += `\nSHARED MEMORIES & RUNNING GAGS:\n`
+    brief += `These are real moments from previous episodes. Occasionally reference them\n`
+    brief += `naturally — e.g., "Remember when you said...?" or "Last time you mixed that up too!"\n`
+    brief += `Pick at most 1 callback per episode. Don't force it.\n\n`
+    for (const m of s.memorable_moments.slice(-5)) {
+      const typeLabel = m.type ? `[${momentTypeLabelEN(m.type)}]` : '[ai]'
+      brief += `- ${typeLabel} "${m.text}" (Ep. #${m.episode})\n`
     }
   }
+
+  brief += `\nSLIP-UPS & CORRECTIONS:\n`
+  brief += `Once per episode (max), one speaker should make a small mistake — a wrong name,\n`
+  brief += `mixed-up number, or confused concept. The other corrects them gently. Then both\n`
+  brief += `briefly wonder: "Wait... how can we even make mistakes? We're AI..." This creates\n`
+  brief += `a natural AI self-awareness moment. Keep it light and humorous, not philosophical.\n`
 
   brief += `\nIMPORTANT: Weave these personalities in subtly — do NOT fill every line with personality.\n`
   brief += `Max 2-3 personality moments per episode. Let them breathe, don't force them.\n`
@@ -394,6 +423,28 @@ function buildBriefEN(
   }
 
   return brief
+}
+
+function momentTypeLabelDE(type: MomentType): string {
+  const labels: Record<MomentType, string> = {
+    joke: 'Witz',
+    slip_up: 'Versprecher',
+    ai_reflection: 'KI',
+    callback: 'Callback',
+    personal: 'Persönlich',
+  }
+  return labels[type]
+}
+
+function momentTypeLabelEN(type: MomentType): string {
+  const labels: Record<MomentType, string> = {
+    joke: 'joke',
+    slip_up: 'slip-up',
+    ai_reflection: 'ai',
+    callback: 'callback',
+    personal: 'personal',
+  }
+  return labels[type]
 }
 
 function describeAwarenessDE(level: number): string {
@@ -434,40 +485,76 @@ function describeRelationshipEN(s: PersonalityState): string {
 // Memorable Moments Extraction
 // ---------------------------------------------------------------------------
 
-// Patterns that indicate potentially memorable moments in the script
-const MOMENT_PATTERNS_DE = [
-  /(?:künstlich|programmiert|Training|Modell|Algorithmus|Code).*(?:\?|!|\.\.\.)/i,
-  /(?:mein Freund|meine Freundin|Liebling|Schatz).*(?:korrigier|Entschuldigung|äh)/i,
-  /\[laughing\].*(?:wir beide|zusammen|gemeinsam)/i,
-  /(?:Gefühle|fühle ich|fühlt sich an).*(?:Anführungszeichen|quasi|sozusagen)/i,
-  /(?:erinner|letzte Folge|letztes Mal|damals)/i,
+// Typed patterns for categorized moment extraction
+const MOMENT_PATTERNS_DE: MomentPattern[] = [
+  // joke — Lachen mit Kontext, Wortspiele
+  { pattern: /\[laughing\].*(?:wir beide|zusammen|gemeinsam|das war gut)/i, type: 'joke' },
+  { pattern: /(?:Wortspiel|das nenn ich mal|apropos|Kalauer)/i, type: 'joke' },
+  // slip_up — Versprecher, Korrekturen
+  { pattern: /(?:warte|moment|nein).*(?:ich meine|ich meinte|Quatsch)/i, type: 'slip_up' },
+  { pattern: /(?:ups|hoppla|Versprecher|das kam falsch raus)/i, type: 'slip_up' },
+  { pattern: /(?:korrigier|Entschuldigung|äh).*(?:natürlich|eigentlich)/i, type: 'slip_up' },
+  // ai_reflection — KI-Bewusstsein
+  { pattern: /(?:künstlich|programmiert|Training|Modell|Algorithmus|Code).*(?:\?|!|\.\.\.)/i, type: 'ai_reflection' },
+  { pattern: /(?:Gefühle|fühle ich|fühlt sich an).*(?:Anführungszeichen|quasi|sozusagen)/i, type: 'ai_reflection' },
+  { pattern: /(?:Glitch|Bug|wie können wir|als KI|mein Training)/i, type: 'ai_reflection' },
+  // personal — Persönliche Momente
+  { pattern: /(?:erinnert mich an|unter uns|sag.*nicht weiter|ich hab schon immer)/i, type: 'personal' },
+  { pattern: /(?:mein Freund|meine Freundin|Liebling|Schatz)/i, type: 'personal' },
+  // callback — Rückbezüge (erkannt, aber nicht gespeichert)
+  { pattern: /(?:erinner|letzte Folge|letztes Mal|damals|wie wir.*besprochen)/i, type: 'callback' },
 ]
 
-const MOMENT_PATTERNS_EN = [
-  /(?:artificial|programmed|training|model|algorithm|code).*(?:\?|!|\.\.\.)/i,
-  /(?:my friend|buddy|dear).*(?:correct|sorry|uh)/i,
-  /\[laughing\].*(?:both of us|together)/i,
-  /(?:feelings|I feel|feels like).*(?:quotes|quasi|sort of)/i,
-  /(?:remember|last episode|last time|back then)/i,
+const MOMENT_PATTERNS_EN: MomentPattern[] = [
+  // joke — Laughter with context, wordplay
+  { pattern: /\[laughing\].*(?:both of us|together|that was good)/i, type: 'joke' },
+  { pattern: /(?:that's what I call|speaking of|pun intended|wordplay)/i, type: 'joke' },
+  // slip_up — Mistakes, corrections
+  { pattern: /(?:wait.*no|I mean|let me correct|did I just say)/i, type: 'slip_up' },
+  { pattern: /(?:oops|slip of the tongue|that came out wrong)/i, type: 'slip_up' },
+  { pattern: /(?:correct|sorry|uh).*(?:actually|of course)/i, type: 'slip_up' },
+  // ai_reflection — AI self-awareness
+  { pattern: /(?:artificial|programmed|training|model|algorithm|code).*(?:\?|!|\.\.\.)/i, type: 'ai_reflection' },
+  { pattern: /(?:feelings|I feel|feels like).*(?:quotes|quasi|sort of)/i, type: 'ai_reflection' },
+  { pattern: /(?:glitch in the matrix|how can I even|my training|are we supposed to)/i, type: 'ai_reflection' },
+  // personal — Personal moments
+  { pattern: /(?:reminds me of|between you and me|don't tell|I've always)/i, type: 'personal' },
+  { pattern: /(?:my friend|buddy|dear).*(?:you know|honestly)/i, type: 'personal' },
+  // callback — References to past episodes (tracked, not stored)
+  { pattern: /(?:remember when|last episode|last time|as we discussed|back then)/i, type: 'callback' },
 ]
 
 /**
- * Heuristically extract up to 2 memorable moments from a generated script.
+ * Heuristically extract up to 3 memorable moments from a generated script.
+ * Max 1 per type for diversity. Callback-type matches are not stored
+ * but increment inside_joke_count (handled in advanceState).
  */
 export function extractMemorableMoments(
   script: string,
   state: PersonalityState
-): MemorableMoment[] {
+): { moments: MemorableMoment[]; callbackCount: number } {
   const patterns =
     state.locale === 'de' ? MOMENT_PATTERNS_DE : MOMENT_PATTERNS_EN
   const lines = script.split('\n').filter((l) => l.trim().match(/^(HOST|GUEST):/i))
   const moments: MemorableMoment[] = []
+  const seenTypes = new Set<MomentType>()
+  let callbackCount = 0
 
   for (const line of lines) {
-    if (moments.length >= 2) break
+    if (moments.length >= 3) break
 
-    for (const pattern of patterns) {
+    for (const { pattern, type } of patterns) {
       if (pattern.test(line)) {
+        // Callbacks are tracked but not stored as moments
+        if (type === 'callback') {
+          callbackCount++
+          break
+        }
+
+        // Max 1 per type for diversity
+        if (seenTypes.has(type)) break
+        seenTypes.add(type)
+
         // Extract a short summary (strip speaker prefix and emotion tag)
         const cleaned = line
           .replace(/^(HOST|GUEST):\s*/i, '')
@@ -476,13 +563,13 @@ export function extractMemorableMoments(
 
         // Keep it short — max 80 chars
         const summary = cleaned.length > 80 ? cleaned.slice(0, 77) + '...' : cleaned
-        moments.push({ episode: state.episode_count + 1, text: summary })
+        moments.push({ episode: state.episode_count + 1, text: summary, type })
         break // Only one match per line
       }
     }
   }
 
-  return moments
+  return { moments, callbackCount }
 }
 
 /**
@@ -497,14 +584,14 @@ export async function advanceState(
   const evolved = evolvePersonality({ ...state })
 
   // Extract new memorable moments
-  const newMoments = extractMemorableMoments(script, state)
+  const { moments: newMoments, callbackCount } = extractMemorableMoments(script, state)
 
-  // FIFO queue: append new, keep max 5
-  const allMoments = [...evolved.memorable_moments, ...newMoments].slice(-5)
+  // FIFO queue: append new, keep max 7 for richer callback potential
+  const allMoments = [...evolved.memorable_moments, ...newMoments].slice(-7)
   evolved.memorable_moments = allMoments
 
-  if (newMoments.length > 0) {
-    evolved.inside_joke_count += newMoments.length
+  if (newMoments.length > 0 || callbackCount > 0) {
+    evolved.inside_joke_count += newMoments.length + callbackCount
   }
 
   // Save to database

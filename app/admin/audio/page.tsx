@@ -124,7 +124,7 @@ interface PersonalityState {
   mutual_comfort: number
   flirtation_tendency: number
   inside_joke_count: number
-  memorable_moments: Array<{ episode: number; text: string }>
+  memorable_moments: Array<{ episode: number; text: string; type?: string }>
   last_episode_at: string | null
   created_at: string
   updated_at: string
@@ -494,9 +494,9 @@ function PersonalityPipeline({ personality }: { personality: PersonalityState | 
       <PipelineStep
         icon={<BookOpen className="h-4 w-4" />}
         title="5. Moments extrahieren"
-        description="extractMemorableMoments() durchsucht das Script nach KI-Bewusstseins-Momenten, Erinnerungen, Inside-Jokes"
+        description="extractMemorableMoments() durchsucht das Script nach Witzen, Versprechern, KI-Momenten, persönlichen Momenten"
         active={hasMemories}
-        detail={hasMemories ? `${personality!.memorable_moments.length} Momente gespeichert (FIFO, max 5)` : 'Noch keine Momente extrahiert'}
+        detail={hasMemories ? `${personality!.memorable_moments.length} Momente gespeichert (FIFO, max 7)` : 'Noch keine Momente extrahiert'}
       />
       <PipelineArrow />
       <PipelineStep
@@ -518,6 +518,18 @@ function PersonalityPipeline({ personality }: { personality: PersonalityState | 
       />
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Moment Type Badges
+// ---------------------------------------------------------------------------
+
+const MOMENT_TYPE_STYLES: Record<string, { label: string; color: string }> = {
+  joke: { label: 'Witz', color: 'bg-yellow-500/20 text-yellow-700' },
+  slip_up: { label: 'Versprecher', color: 'bg-orange-500/20 text-orange-700' },
+  ai_reflection: { label: 'KI', color: 'bg-blue-500/20 text-blue-700' },
+  personal: { label: 'Persönlich', color: 'bg-pink-500/20 text-pink-700' },
+  callback: { label: 'Callback', color: 'bg-green-500/20 text-green-700' },
 }
 
 // ---------------------------------------------------------------------------
@@ -1712,12 +1724,16 @@ export default function AudioPage() {
                     <div className="space-y-3 p-4 rounded-lg border">
                       <Label className="text-sm font-semibold">Bemerkenswerte Momente</Label>
                       <div className="space-y-2">
-                        {personality.memorable_moments.map((m, i) => (
-                          <div key={i} className="flex items-start gap-2 text-sm">
-                            <Badge variant="outline" className="text-xs shrink-0 mt-0.5">#{m.episode}</Badge>
-                            <span className="text-muted-foreground italic">&ldquo;{m.text}&rdquo;</span>
-                          </div>
-                        ))}
+                        {personality.memorable_moments.map((m, i) => {
+                          const typeStyle = MOMENT_TYPE_STYLES[m.type ?? 'ai_reflection']
+                          return (
+                            <div key={i} className="flex items-start gap-2 text-sm">
+                              <Badge variant="outline" className="text-xs shrink-0 mt-0.5">#{m.episode}</Badge>
+                              <Badge className={`text-xs shrink-0 mt-0.5 border-0 ${typeStyle.color}`}>{typeStyle.label}</Badge>
+                              <span className="text-muted-foreground italic">&ldquo;{m.text}&rdquo;</span>
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   )}
