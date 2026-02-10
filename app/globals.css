@@ -516,46 +516,44 @@
 }
 
 /* ===== AI Glow / Rainbow Spectrum for Audio Player ===== */
+/* Uses box-shadow (never paints under the element → preserves glass transparency) */
 
-@property --ai-glow-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
+@property --glow-c1 { syntax: "<color>"; initial-value: rgba(255,64,64,0.25); inherits: false; }
+@property --glow-c2 { syntax: "<color>"; initial-value: rgba(255,200,0,0.25); inherits: false; }
+@property --glow-c3 { syntax: "<color>"; initial-value: rgba(0,200,80,0.25); inherits: false; }
+@property --glow-c4 { syntax: "<color>"; initial-value: rgba(0,160,255,0.25); inherits: false; }
+@property --glow-c5 { syntax: "<color>"; initial-value: rgba(150,50,255,0.25); inherits: false; }
+@property --glow-ya { syntax: "<length>"; initial-value: 0px; inherits: false; }
+@property --glow-yb { syntax: "<length>"; initial-value: 0px; inherits: false; }
 
-@keyframes ai-glow-shift {
-  to { --ai-glow-angle: 360deg; }
+@keyframes ai-glow-spectrum {
+  0%   { --glow-c1: rgba(255,64,64,0.25);  --glow-c2: rgba(255,200,0,0.25); --glow-c3: rgba(0,200,80,0.25);  --glow-c4: rgba(0,160,255,0.25); --glow-c5: rgba(150,50,255,0.25); }
+  20%  { --glow-c1: rgba(255,200,0,0.25);  --glow-c2: rgba(0,200,80,0.25);  --glow-c3: rgba(0,160,255,0.25); --glow-c4: rgba(150,50,255,0.25); --glow-c5: rgba(255,64,64,0.25); }
+  40%  { --glow-c1: rgba(0,200,80,0.25);   --glow-c2: rgba(0,160,255,0.25); --glow-c3: rgba(150,50,255,0.25); --glow-c4: rgba(255,64,64,0.25);  --glow-c5: rgba(255,200,0,0.25); }
+  60%  { --glow-c1: rgba(0,160,255,0.25);  --glow-c2: rgba(150,50,255,0.25); --glow-c3: rgba(255,64,64,0.25); --glow-c4: rgba(255,200,0,0.25); --glow-c5: rgba(0,200,80,0.25); }
+  80%  { --glow-c1: rgba(150,50,255,0.25); --glow-c2: rgba(255,64,64,0.25);  --glow-c3: rgba(255,200,0,0.25); --glow-c4: rgba(0,200,80,0.25);  --glow-c5: rgba(0,160,255,0.25); }
+  100% { --glow-c1: rgba(255,64,64,0.25);  --glow-c2: rgba(255,200,0,0.25); --glow-c3: rgba(0,200,80,0.25);  --glow-c4: rgba(0,160,255,0.25); --glow-c5: rgba(150,50,255,0.25); }
 }
 
 @keyframes ai-glow-morph {
-  0%        { transform: scaleX(1.00) scaleY(1.00) rotate(0deg)    translateX(0px)  translateY(0px); }
-  15%       { transform: scaleX(1.06) scaleY(0.96) rotate(0.4deg)  translateX(2px)  translateY(-1px); }
-  30%       { transform: scaleX(0.97) scaleY(1.05) rotate(-0.3deg) translateX(-1px) translateY(2px); }
-  50%       { transform: scaleX(1.04) scaleY(0.97) rotate(0.2deg)  translateX(-2px) translateY(-1px); }
-  65%       { transform: scaleX(0.96) scaleY(1.04) rotate(-0.4deg) translateX(1px)  translateY(1px); }
-  80%       { transform: scaleX(1.03) scaleY(0.98) rotate(0.3deg)  translateX(2px)  translateY(-2px); }
-  100%      { transform: scaleX(1.00) scaleY(1.00) rotate(0deg)    translateX(0px)  translateY(0px); }
+  0%        { --glow-ya: 0px;  --glow-yb: 0px; }
+  15%       { --glow-ya: 3px;  --glow-yb: -2px; }
+  35%       { --glow-ya: -2px; --glow-yb: 3px; }
+  55%       { --glow-ya: 2px;  --glow-yb: -1px; }
+  75%       { --glow-ya: -1px; --glow-yb: 2px; }
+  100%      { --glow-ya: 0px;  --glow-yb: 0px; }
 }
 
 .ai-glow-active {
-  position: relative;
-}
-
-.ai-glow-active::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: inherit;
-  background: linear-gradient(
-    calc(90deg + var(--ai-glow-angle)),
-    #ff4040, #ff8c00, #ffd000, #00c850, #00b4dc, #3264ff, #9632ff, #ff4040
-  );
-  filter: blur(12px);
-  opacity: 0.3;
-  z-index: -1;
   animation:
-    ai-glow-shift 6s linear infinite,
+    ai-glow-spectrum 6s linear infinite,
     ai-glow-morph 8s ease-in-out infinite;
+  box-shadow:
+    -40px var(--glow-ya) 18px -8px var(--glow-c1),
+    -20px var(--glow-yb) 18px -8px var(--glow-c2),
+    0px var(--glow-ya) 18px -8px var(--glow-c3),
+    20px var(--glow-yb) 18px -8px var(--glow-c4),
+    40px var(--glow-ya) 18px -8px var(--glow-c5) !important;
 }
 
 /* ===== Flying Player Animations ===== */
