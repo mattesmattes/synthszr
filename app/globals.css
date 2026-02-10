@@ -519,27 +519,30 @@
 
 @property --ai-glow-1 {
   syntax: "<color>";
-  initial-value: rgba(255, 0, 128, 0.3);
+  initial-value: rgba(255, 50, 50, 0.3);
   inherits: false;
 }
 
 @property --ai-glow-2 {
   syntax: "<color>";
-  initial-value: rgba(64, 224, 208, 0.3);
+  initial-value: rgba(0, 200, 80, 0.3);
   inherits: false;
 }
 
 @property --ai-glow-3 {
   syntax: "<color>";
-  initial-value: rgba(123, 104, 238, 0.3);
+  initial-value: rgba(30, 100, 255, 0.3);
   inherits: false;
 }
 
 @keyframes ai-glow-cycle {
-  0%        { --ai-glow-1: rgba(255, 0, 128, 0.3); --ai-glow-2: rgba(64, 224, 208, 0.3); --ai-glow-3: rgba(123, 104, 238, 0.3); }
-  33%       { --ai-glow-1: rgba(255, 140, 0, 0.3); --ai-glow-2: rgba(123, 104, 238, 0.3); --ai-glow-3: rgba(255, 0, 128, 0.3); }
-  66%       { --ai-glow-1: rgba(64, 224, 208, 0.3); --ai-glow-2: rgba(255, 0, 128, 0.3); --ai-glow-3: rgba(255, 140, 0, 0.3); }
-  100%      { --ai-glow-1: rgba(255, 0, 128, 0.3); --ai-glow-2: rgba(64, 224, 208, 0.3); --ai-glow-3: rgba(123, 104, 238, 0.3); }
+  0%        { --ai-glow-1: rgba(255, 50, 50, 0.3);  --ai-glow-2: rgba(0, 200, 80, 0.3);   --ai-glow-3: rgba(30, 100, 255, 0.3); }
+  16%       { --ai-glow-1: rgba(255, 200, 0, 0.3);   --ai-glow-2: rgba(0, 180, 220, 0.3);  --ai-glow-3: rgba(150, 50, 255, 0.3); }
+  33%       { --ai-glow-1: rgba(0, 200, 80, 0.3);    --ai-glow-2: rgba(30, 100, 255, 0.3);  --ai-glow-3: rgba(255, 50, 50, 0.3); }
+  50%       { --ai-glow-1: rgba(0, 180, 220, 0.3);   --ai-glow-2: rgba(150, 50, 255, 0.3);  --ai-glow-3: rgba(255, 200, 0, 0.3); }
+  66%       { --ai-glow-1: rgba(30, 100, 255, 0.3);   --ai-glow-2: rgba(255, 50, 50, 0.3);  --ai-glow-3: rgba(0, 200, 80, 0.3); }
+  83%       { --ai-glow-1: rgba(150, 50, 255, 0.3);   --ai-glow-2: rgba(255, 200, 0, 0.3);  --ai-glow-3: rgba(0, 180, 220, 0.3); }
+  100%      { --ai-glow-1: rgba(255, 50, 50, 0.3);  --ai-glow-2: rgba(0, 200, 80, 0.3);   --ai-glow-3: rgba(30, 100, 255, 0.3); }
 }
 
 @keyframes ai-glow-pulse {
