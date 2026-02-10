@@ -58,6 +58,16 @@ export interface CrossfadeOptions {
   /** When crossfade from bed to 100% starts (seconds from crossfade start, default 7) */
   outroFinalStartSec?: number
 
+  // Curve type controls
+  /** Intro fadeout curve shape (default: exponential) */
+  introFadeoutCurve?: 'linear' | 'exponential'
+  /** Dialog fade-in curve shape (default: exponential) */
+  introDialogCurve?: 'linear' | 'exponential'
+  /** Outro rise curve shape (default: exponential) */
+  outroRiseCurve?: 'linear' | 'exponential'
+  /** Outro final curve shape (default: exponential) */
+  outroFinalCurve?: 'linear' | 'exponential'
+
   // Stereo positioning (0 = full left, 1 = full right)
   /** HOST stereo position (default 0.35 = 65% left) */
   stereoHost?: number
@@ -502,6 +512,8 @@ interface IntroOptions {
   bedVolume: number
   fadeoutSec: number
   dialogFadeInSec: number
+  fadeoutCurve: 'linear' | 'exponential'
+  dialogCurve: 'linear' | 'exponential'
 }
 
 function applyIntroWithCrossfade(
@@ -557,7 +569,9 @@ function applyIntroWithCrossfade(
     // Dialog fades in over first 1s of phase 2, then stays at full
     let dialogGain: number
     if (i < dialogFadeInSamples) {
-      dialogGain = Math.pow(i / dialogFadeInSamples, 0.7)
+      dialogGain = opts.dialogCurve === 'linear'
+        ? (i / dialogFadeInSamples)
+        : Math.pow(i / dialogFadeInSamples, 0.7)
     } else {
       dialogGain = 1.0
     }
@@ -576,7 +590,9 @@ function applyIntroWithCrossfade(
   for (let i = 0; i < phase3Samples; i++) {
     const ft = i / phase3Samples
     const introIdx = phase1End + phase2Samples + i
-    const introGain = bedVol * (1 - Math.pow(ft, 1.5))
+    const introGain = opts.fadeoutCurve === 'linear'
+      ? bedVol * (1 - ft)
+      : bedVol * (1 - Math.pow(ft, 1.5))
 
     const segIdx = phase2Samples + i
 
@@ -640,6 +656,8 @@ interface OutroOptions {
   riseSec: number
   bedVolume: number
   finalStartSec: number
+  riseCurve: 'linear' | 'exponential'
+  finalCurve: 'linear' | 'exponential'
 }
 
 function applyOutroWithCrossfade(
@@ -679,12 +697,16 @@ function applyOutroWithCrossfade(
     let outroFade: number
     if (i < outroRiseSamples) {
       const rt = i / outroRiseSamples
-      outroFade = bedVol * Math.pow(rt, 1.5)
+      outroFade = opts.riseCurve === 'linear'
+        ? bedVol * rt
+        : bedVol * Math.pow(rt, 1.5)
     } else if (i < outroFinalStartSamples) {
       outroFade = bedVol
     } else {
       const ft = (i - outroFinalStartSamples) / outroFinalSamples
-      outroFade = bedVol + (1 - bedVol) * Math.pow(ft, 2.0)
+      outroFade = opts.finalCurve === 'linear'
+        ? bedVol + (1 - bedVol) * ft
+        : bedVol + (1 - bedVol) * Math.pow(ft, 2.0)
     }
 
     // Dialog stays at full volume throughout
@@ -734,11 +756,15 @@ export async function concatenateWithCrossfade(
     introBedVolume = 0.20,
     introFadeoutSec = 3,
     introDialogFadeInSec = 1,
+    introFadeoutCurve = 'exponential',
+    introDialogCurve = 'exponential',
     // Outro settings
     outroCrossfadeSec = 10,
     outroRiseSec: _outroRiseSec = 3,
     outroBedVolume = 0.20,
     outroFinalStartSec: _outroFinalStartSec = 7,
+    outroRiseCurve = 'exponential',
+    outroFinalCurve = 'exponential',
     // Stereo
     stereoHost = DEFAULT_STEREO_HOST,
     stereoGuest = DEFAULT_STEREO_GUEST,
@@ -820,6 +846,8 @@ export async function concatenateWithCrossfade(
           bedVolume: introBedVolume,
           fadeoutSec: introFadeoutSec,
           dialogFadeInSec: introDialogFadeInSec,
+          fadeoutCurve: introFadeoutCurve as 'linear' | 'exponential',
+          dialogCurve: introDialogCurve as 'linear' | 'exponential',
         })
         console.log(`[Crossfade] After intro applied, resultChannels length: ${resultChannels[0].length} samples (${(resultChannels[0].length / SAMPLE_RATE).toFixed(1)}s)`)
       } else {
@@ -897,6 +925,8 @@ export async function concatenateWithCrossfade(
       riseSec: _outroRiseSec,
       bedVolume: outroBedVolume,
       finalStartSec: _outroFinalStartSec,
+      riseCurve: outroRiseCurve as 'linear' | 'exponential',
+      finalCurve: outroFinalCurve as 'linear' | 'exponential',
     })
     finalDurationS = resultChannels[0].length / SAMPLE_RATE
     console.log(`[Crossfade] After outro: ${finalDurationS.toFixed(1)}s`)
@@ -928,6 +958,10 @@ export function mixingSettingsToCrossfadeOptions(
     outro_rise_sec?: number
     outro_bed_volume?: number
     outro_final_start_sec?: number
+    outro_rise_curve?: string
+    outro_final_curve?: string
+    intro_fadeout_curve?: string
+    intro_dialog_curve?: string
     stereo_host?: number
     stereo_guest?: number
     overlap_reaction_ms?: number
@@ -955,6 +989,10 @@ export function mixingSettingsToCrossfadeOptions(
     outroRiseSec: mixing.outro_rise_sec ?? 3,
     outroBedVolume: (mixing.outro_bed_volume ?? 20) / 100,
     outroFinalStartSec: mixing.outro_final_start_sec ?? 7,
+    introFadeoutCurve: (mixing.intro_fadeout_curve as 'linear' | 'exponential') || 'exponential',
+    introDialogCurve: (mixing.intro_dialog_curve as 'linear' | 'exponential') || 'exponential',
+    outroRiseCurve: (mixing.outro_rise_curve as 'linear' | 'exponential') || 'exponential',
+    outroFinalCurve: (mixing.outro_final_curve as 'linear' | 'exponential') || 'exponential',
     stereoHost: (mixing.stereo_host ?? 35) / 100,
     stereoGuest: (mixing.stereo_guest ?? 65) / 100,
     overlapReactionMs: mixing.overlap_reaction_ms ?? 250,

@@ -47,6 +47,8 @@ interface TTSSettings {
   mixing_settings: MixingSettings | null
 }
 
+type CurveType = 'linear' | 'exponential'
+
 interface MixingSettings {
   intro_enabled: boolean
   intro_full_sec: number
@@ -54,11 +56,15 @@ interface MixingSettings {
   intro_bed_volume: number
   intro_fadeout_sec: number
   intro_dialog_fadein_sec: number
+  intro_fadeout_curve: CurveType
+  intro_dialog_curve: CurveType
   outro_enabled: boolean
   outro_crossfade_sec: number
   outro_rise_sec: number
   outro_bed_volume: number
   outro_final_start_sec: number
+  outro_rise_curve: CurveType
+  outro_final_curve: CurveType
   stereo_host: number
   stereo_guest: number
   overlap_reaction_ms: number
@@ -74,11 +80,15 @@ const DEFAULT_MIXING: MixingSettings = {
   intro_bed_volume: 20,
   intro_fadeout_sec: 3,
   intro_dialog_fadein_sec: 1,
+  intro_fadeout_curve: 'exponential',
+  intro_dialog_curve: 'exponential',
   outro_enabled: true,
   outro_crossfade_sec: 10,
   outro_rise_sec: 3,
   outro_bed_volume: 20,
   outro_final_start_sec: 7,
+  outro_rise_curve: 'exponential',
+  outro_final_curve: 'exponential',
   stereo_host: 35,
   stereo_guest: 65,
   overlap_reaction_ms: 250,
@@ -539,7 +549,7 @@ export default function AudioPage() {
     }
   }
 
-  function updateMixing(key: keyof MixingSettings, value: number | boolean) {
+  function updateMixing(key: keyof MixingSettings, value: number | boolean | string) {
     setMixing(prev => ({ ...prev, [key]: value }))
   }
 
@@ -994,6 +1004,9 @@ export default function AudioPage() {
                         bedVolume={mixing.intro_bed_volume}
                         fadeoutSec={mixing.intro_fadeout_sec}
                         dialogFadeInSec={mixing.intro_dialog_fadein_sec}
+                        fadeoutCurve={mixing.intro_fadeout_curve}
+                        dialogCurve={mixing.intro_dialog_curve}
+                        onChange={(key, value) => updateMixing(key as keyof MixingSettings, value)}
                       />
                     </div>
 
@@ -1077,6 +1090,9 @@ export default function AudioPage() {
                         riseSec={mixing.outro_rise_sec}
                         bedVolume={mixing.outro_bed_volume}
                         finalStartSec={mixing.outro_final_start_sec}
+                        riseCurve={mixing.outro_rise_curve}
+                        finalCurve={mixing.outro_final_curve}
+                        onChange={(key, value) => updateMixing(key as keyof MixingSettings, value)}
                       />
                     </div>
 
@@ -1574,26 +1590,88 @@ function StereoSlider({ label, value, color, onChange }: {
   )
 }
 
-function IntroTimeline({ fullSec, bedSec, bedVolume, fadeoutSec, dialogFadeInSec }: {
+function IntroTimeline({ fullSec, bedSec, bedVolume, fadeoutSec, dialogFadeInSec, fadeoutCurve, dialogCurve, onChange }: {
   fullSec: number; bedSec: number; bedVolume: number; fadeoutSec: number; dialogFadeInSec: number
+  fadeoutCurve: CurveType; dialogCurve: CurveType
+  onChange: (key: string, value: number | string) => void
 }) {
   const total = fullSec + bedSec + fadeoutSec
   if (total === 0) return null
   const W = 600
   const H = 80
   const PAD = 4
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [dragging, setDragging] = useState<string | null>(null)
 
-  // Build intro volume path (top section)
   const toX = (sec: number) => PAD + (sec / total) * (W - PAD * 2)
   const toY = (vol: number) => PAD + (1 - vol) * (H / 2 - PAD)
 
+  function svgPoint(clientX: number, clientY: number) {
+    const svg = svgRef.current!
+    const rect = svg.getBoundingClientRect()
+    return {
+      x: ((clientX - rect.left) / rect.width) * W,
+      y: ((clientY - rect.top) / rect.height) * H,
+    }
+  }
+
+  function xToSec(x: number) {
+    return Math.max(0, ((x - PAD) / (W - PAD * 2)) * total)
+  }
+
+  function yToVol(y: number) {
+    return Math.max(0, Math.min(1, 1 - (y - PAD) / (H / 2 - PAD)))
+  }
+
+  function handlePointerDown(e: React.PointerEvent, handleId: string) {
+    (e.target as Element).setPointerCapture(e.pointerId)
+    setDragging(handleId)
+    e.preventDefault()
+  }
+
+  function handlePointerMove(e: React.PointerEvent) {
+    if (!dragging) return
+    const pt = svgPoint(e.clientX, e.clientY)
+
+    if (dragging === 'intro_full_sec') {
+      const sec = Math.max(0, Math.min(xToSec(pt.x), 10))
+      onChange('intro_full_sec', Math.round(sec * 2) / 2)
+    } else if (dragging === 'intro_bed_volume') {
+      const vol = yToVol(pt.y)
+      onChange('intro_bed_volume', Math.max(0, Math.min(50, Math.round(vol * 100))))
+    } else if (dragging === 'intro_bed_sec') {
+      const sec = Math.max(0, Math.min(xToSec(pt.x) - fullSec, 20))
+      onChange('intro_bed_sec', Math.round(sec * 2) / 2)
+    } else if (dragging === 'intro_dialog_fadein_sec') {
+      const sec = Math.max(0.1, Math.min(xToSec(pt.x) - fullSec, 5))
+      onChange('intro_dialog_fadein_sec', Math.round(sec * 10) / 10)
+    }
+  }
+
+  function handlePointerUp(e: React.PointerEvent) {
+    if (dragging) {
+      (e.target as Element).releasePointerCapture(e.pointerId)
+      setDragging(null)
+    }
+  }
+
   const bedV = bedVolume / 100
+
+  // Intro fadeout path: exponential uses bezier curve, linear uses straight line
+  const fadeStartX = toX(fullSec + bedSec)
+  const fadeStartY = toY(bedV)
+  const fadeEndX = toX(total)
+  const fadeEndY = toY(0)
+  const fadePath = fadeoutCurve === 'exponential'
+    ? `C ${toX(fullSec + bedSec + fadeoutSec * 0.3)} ${toY(bedV * 0.5)}, ${toX(fullSec + bedSec + fadeoutSec * 0.7)} ${toY(0.02)}, ${fadeEndX} ${fadeEndY}`
+    : `L ${fadeEndX} ${fadeEndY}`
+
   const introPath = [
-    `M ${toX(0)} ${toY(1)}`,                         // Start at 100%
-    `L ${toX(fullSec)} ${toY(1)}`,                    // Full volume
-    `L ${toX(fullSec)} ${toY(bedV)}`,                 // Drop to bed
-    `L ${toX(fullSec + bedSec)} ${toY(bedV)}`,        // Hold bed
-    `C ${toX(fullSec + bedSec + fadeoutSec * 0.3)} ${toY(bedV * 0.5)}, ${toX(fullSec + bedSec + fadeoutSec * 0.7)} ${toY(0.02)}, ${toX(total)} ${toY(0)}`, // Fade
+    `M ${toX(0)} ${toY(1)}`,
+    `L ${toX(fullSec)} ${toY(1)}`,
+    `L ${toX(fullSec)} ${toY(bedV)}`,
+    `L ${toX(fullSec + bedSec)} ${toY(bedV)}`,
+    fadePath,
     `L ${toX(total)} ${toY(0)}`,
     `L ${toX(0)} ${toY(0)}`,
     'Z',
@@ -1603,18 +1681,46 @@ function IntroTimeline({ fullSec, bedSec, bedVolume, fadeoutSec, dialogFadeInSec
   const dToY = (vol: number) => H / 2 + PAD + (1 - vol) * (H / 2 - PAD * 2)
   const dialogStart = fullSec
   const dialogFadeEnd = fullSec + dialogFadeInSec
+  const dialogRisePath = dialogCurve === 'exponential'
+    ? `C ${toX(dialogStart + dialogFadeInSec * 0.3)} ${dToY(0.5)}, ${toX(dialogFadeEnd - dialogFadeInSec * 0.2)} ${dToY(0.9)}, ${toX(dialogFadeEnd)} ${dToY(1)}`
+    : `L ${toX(dialogFadeEnd)} ${dToY(1)}`
+
   const dialogPath = [
     `M ${toX(0)} ${dToY(0)}`,
     `L ${toX(dialogStart)} ${dToY(0)}`,
-    `C ${toX(dialogStart + dialogFadeInSec * 0.3)} ${dToY(0.5)}, ${toX(dialogFadeEnd - dialogFadeInSec * 0.2)} ${dToY(0.9)}, ${toX(dialogFadeEnd)} ${dToY(1)}`,
+    dialogRisePath,
     `L ${toX(total)} ${dToY(1)}`,
     `L ${toX(total)} ${dToY(0)}`,
     `L ${toX(0)} ${dToY(0)}`,
     'Z',
   ].join(' ')
 
+  // Handle positions
+  const h1 = { x: toX(fullSec), y: toY(1) }                        // fullSec end
+  const h2 = { x: toX(fullSec + bedSec / 2), y: toY(bedV) }        // bed volume
+  const h3 = { x: toX(fullSec + bedSec), y: toY(bedV) }            // bed end
+  const h4 = { x: toX(fullSec + bedSec + fadeoutSec / 2), y: (fadeStartY + fadeEndY) / 2 } // fadeout curve midpoint
+  const h5 = { x: toX(dialogFadeEnd), y: dToY(1) }                 // dialog fade-in end
+  const h6 = { x: toX(dialogStart + dialogFadeInSec / 2), y: (dToY(0) + dToY(1)) / 2 }   // dialog curve midpoint
+
+  const handleR = 5
+  const activeGlow = dragging ? 'url(#handleGlow)' : undefined
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full select-none"
+      style={{ fontFamily: 'var(--font-mono, monospace)', cursor: dragging ? 'grabbing' : 'default' }}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+    >
+      <defs>
+        <filter id="handleGlow">
+          <feDropShadow dx={0} dy={0} stdDeviation={2} floodColor="white" floodOpacity={0.8} />
+        </filter>
+      </defs>
+
       {/* Intro volume envelope */}
       <path d={introPath} fill="#10b981" opacity={0.2} stroke="#10b981" strokeWidth={1.5} />
       {/* Dialog volume envelope */}
@@ -1638,37 +1744,132 @@ function IntroTimeline({ fullSec, bedSec, bedVolume, fadeoutSec, dialogFadeInSec
       <text x={toX(fullSec)} y={H - 1} textAnchor="middle" fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>{fullSec}s</text>
       <text x={toX(fullSec + bedSec)} y={H - 1} textAnchor="middle" fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>{fullSec + bedSec}s</text>
       <text x={toX(total)} y={H - 1} textAnchor="end" fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>{total}s</text>
+
+      {/* H1: Full sec end (horizontal drag) */}
+      <circle cx={h1.x} cy={h1.y} r={handleR} fill="#10b981" stroke="white" strokeWidth={2}
+        style={{ cursor: dragging === 'intro_full_sec' ? 'grabbing' : 'ew-resize' }}
+        filter={dragging === 'intro_full_sec' ? activeGlow : undefined}
+        onPointerDown={(e) => handlePointerDown(e, 'intro_full_sec')} />
+
+      {/* H2: Bed volume (vertical drag) */}
+      <circle cx={h2.x} cy={h2.y} r={handleR} fill="#10b981" stroke="white" strokeWidth={2}
+        style={{ cursor: dragging === 'intro_bed_volume' ? 'grabbing' : 'ns-resize' }}
+        filter={dragging === 'intro_bed_volume' ? activeGlow : undefined}
+        onPointerDown={(e) => handlePointerDown(e, 'intro_bed_volume')} />
+
+      {/* H3: Bed sec end (horizontal drag) */}
+      <circle cx={h3.x} cy={h3.y} r={handleR} fill="#10b981" stroke="white" strokeWidth={2}
+        style={{ cursor: dragging === 'intro_bed_sec' ? 'grabbing' : 'ew-resize' }}
+        filter={dragging === 'intro_bed_sec' ? activeGlow : undefined}
+        onPointerDown={(e) => handlePointerDown(e, 'intro_bed_sec')} />
+
+      {/* H4: Fadeout curve toggle (double-click) */}
+      <circle cx={h4.x} cy={h4.y} r={handleR} fill="#10b981" stroke="white" strokeWidth={2}
+        style={{ cursor: 'pointer' }}
+        onDoubleClick={() => onChange('intro_fadeout_curve', fadeoutCurve === 'exponential' ? 'linear' : 'exponential')} />
+      <text x={h4.x + 8} y={h4.y + 3} fontSize={8} fill="#10b981" opacity={0.7}>{fadeoutCurve === 'exponential' ? '∿' : '╲'}</text>
+
+      {/* H5: Dialog fade-in end (horizontal drag) */}
+      <circle cx={h5.x} cy={h5.y} r={handleR} fill="#3b82f6" stroke="white" strokeWidth={2}
+        style={{ cursor: dragging === 'intro_dialog_fadein_sec' ? 'grabbing' : 'ew-resize' }}
+        filter={dragging === 'intro_dialog_fadein_sec' ? activeGlow : undefined}
+        onPointerDown={(e) => handlePointerDown(e, 'intro_dialog_fadein_sec')} />
+
+      {/* H6: Dialog curve toggle (double-click) */}
+      <circle cx={h6.x} cy={h6.y} r={handleR} fill="#3b82f6" stroke="white" strokeWidth={2}
+        style={{ cursor: 'pointer' }}
+        onDoubleClick={() => onChange('intro_dialog_curve', dialogCurve === 'exponential' ? 'linear' : 'exponential')} />
+      <text x={h6.x + 8} y={h6.y + 3} fontSize={8} fill="#3b82f6" opacity={0.7}>{dialogCurve === 'exponential' ? '∿' : '╱'}</text>
     </svg>
   )
 }
 
-function OutroTimeline({ crossfadeSec, riseSec, bedVolume, finalStartSec }: {
+function OutroTimeline({ crossfadeSec, riseSec, bedVolume, finalStartSec, riseCurve, finalCurve, onChange }: {
   crossfadeSec: number; riseSec: number; bedVolume: number; finalStartSec: number
+  riseCurve: CurveType; finalCurve: CurveType
+  onChange: (key: string, value: number | string) => void
 }) {
   const total = crossfadeSec
   if (total <= 0) return null
   const W = 600
   const H = 80
   const PAD = 4
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [dragging, setDragging] = useState<string | null>(null)
 
   const toX = (sec: number) => PAD + (sec / total) * (W - PAD * 2)
   const toY = (vol: number) => PAD + (1 - vol) * (H / 2 - PAD)
 
+  function svgPoint(clientX: number, clientY: number) {
+    const svg = svgRef.current!
+    const rect = svg.getBoundingClientRect()
+    return {
+      x: ((clientX - rect.left) / rect.width) * W,
+      y: ((clientY - rect.top) / rect.height) * H,
+    }
+  }
+
+  function xToSec(x: number) {
+    return Math.max(0, ((x - PAD) / (W - PAD * 2)) * total)
+  }
+
+  function yToVol(y: number) {
+    return Math.max(0, Math.min(1, 1 - (y - PAD) / (H / 2 - PAD)))
+  }
+
+  function handlePointerDown(e: React.PointerEvent, handleId: string) {
+    (e.target as Element).setPointerCapture(e.pointerId)
+    setDragging(handleId)
+    e.preventDefault()
+  }
+
+  function handlePointerMove(e: React.PointerEvent) {
+    if (!dragging) return
+    const pt = svgPoint(e.clientX, e.clientY)
+
+    if (dragging === 'outro_rise_sec') {
+      const sec = Math.max(0, Math.min(xToSec(pt.x), 10))
+      onChange('outro_rise_sec', Math.round(sec * 2) / 2)
+    } else if (dragging === 'outro_bed_volume') {
+      const vol = yToVol(pt.y)
+      onChange('outro_bed_volume', Math.max(0, Math.min(50, Math.round(vol * 100))))
+    } else if (dragging === 'outro_final_start_sec') {
+      const sec = Math.max(riseSec, Math.min(xToSec(pt.x), crossfadeSec))
+      onChange('outro_final_start_sec', Math.round(sec * 2) / 2)
+    }
+  }
+
+  function handlePointerUp(e: React.PointerEvent) {
+    if (dragging) {
+      (e.target as Element).releasePointerCapture(e.pointerId)
+      setDragging(null)
+    }
+  }
+
   const bedV = bedVolume / 100
   const finalSec = Math.max(finalStartSec, riseSec)
 
-  // Outro music volume path (top)
+  // Rise path: 0% → bed volume
+  const risePathStr = riseCurve === 'exponential'
+    ? `C ${toX(riseSec * 0.3)} ${toY(bedV * 0.3)}, ${toX(riseSec * 0.7)} ${toY(bedV * 0.8)}, ${toX(riseSec)} ${toY(bedV)}`
+    : `L ${toX(riseSec)} ${toY(bedV)}`
+
+  // Final path: bed → 100%
+  const finalPathStr = finalCurve === 'exponential'
+    ? `C ${toX(finalSec + (total - finalSec) * 0.3)} ${toY(bedV + 0.3)}, ${toX(finalSec + (total - finalSec) * 0.7)} ${toY(0.9)}, ${toX(total)} ${toY(1)}`
+    : `L ${toX(total)} ${toY(1)}`
+
   const outroPath = [
     `M ${toX(0)} ${toY(0)}`,
-    `C ${toX(riseSec * 0.3)} ${toY(bedV * 0.3)}, ${toX(riseSec * 0.7)} ${toY(bedV * 0.8)}, ${toX(riseSec)} ${toY(bedV)}`,
+    risePathStr,
     `L ${toX(finalSec)} ${toY(bedV)}`,
-    `C ${toX(finalSec + (total - finalSec) * 0.3)} ${toY(bedV + 0.3)}, ${toX(finalSec + (total - finalSec) * 0.7)} ${toY(0.9)}, ${toX(total)} ${toY(1)}`,
+    finalPathStr,
     `L ${toX(total)} ${toY(0)}`,
     `L ${toX(0)} ${toY(0)}`,
     'Z',
   ].join(' ')
 
-  // Dialog fade path (bottom) - stays full, fades near end
+  // Dialog fade path (bottom)
   const dToY = (vol: number) => H / 2 + PAD + (1 - vol) * (H / 2 - PAD * 2)
   const dialogPath = [
     `M ${toX(0)} ${dToY(1)}`,
@@ -1679,8 +1880,31 @@ function OutroTimeline({ crossfadeSec, riseSec, bedVolume, finalStartSec }: {
     'Z',
   ].join(' ')
 
+  // Handle positions
+  const h1 = { x: toX(riseSec), y: toY(bedV) }                     // rise end
+  const h2 = { x: toX((riseSec + finalSec) / 2), y: toY(bedV) }    // bed volume mid
+  const h3 = { x: toX(finalSec), y: toY(bedV) }                    // final start
+  const h4 = { x: toX(riseSec / 2), y: (toY(0) + toY(bedV)) / 2 } // rise curve midpoint
+  const h5 = { x: toX(finalSec + (total - finalSec) / 2), y: (toY(bedV) + toY(1)) / 2 } // final curve midpoint
+
+  const handleR = 5
+  const activeGlow = dragging ? 'url(#outroHandleGlow)' : undefined
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full select-none"
+      style={{ fontFamily: 'var(--font-mono, monospace)', cursor: dragging ? 'grabbing' : 'default' }}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+    >
+      <defs>
+        <filter id="outroHandleGlow">
+          <feDropShadow dx={0} dy={0} stdDeviation={2} floodColor="white" floodOpacity={0.8} />
+        </filter>
+      </defs>
+
       {/* Outro volume envelope */}
       <path d={outroPath} fill="#a855f7" opacity={0.2} stroke="#a855f7" strokeWidth={1.5} />
       {/* Dialog volume envelope */}
@@ -1704,6 +1928,36 @@ function OutroTimeline({ crossfadeSec, riseSec, bedVolume, finalStartSec }: {
       <text x={toX(riseSec)} y={H - 1} textAnchor="middle" fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>{riseSec}s</text>
       <text x={toX(finalSec)} y={H - 1} textAnchor="middle" fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>{finalSec}s</text>
       <text x={toX(total)} y={H - 1} textAnchor="end" fontSize={8} fill="hsl(var(--muted-foreground))" opacity={0.5}>{total}s</text>
+
+      {/* H1: Rise end (horizontal drag) */}
+      <circle cx={h1.x} cy={h1.y} r={handleR} fill="#a855f7" stroke="white" strokeWidth={2}
+        style={{ cursor: dragging === 'outro_rise_sec' ? 'grabbing' : 'ew-resize' }}
+        filter={dragging === 'outro_rise_sec' ? activeGlow : undefined}
+        onPointerDown={(e) => handlePointerDown(e, 'outro_rise_sec')} />
+
+      {/* H2: Bed volume (vertical drag) */}
+      <circle cx={h2.x} cy={h2.y} r={handleR} fill="#a855f7" stroke="white" strokeWidth={2}
+        style={{ cursor: dragging === 'outro_bed_volume' ? 'grabbing' : 'ns-resize' }}
+        filter={dragging === 'outro_bed_volume' ? activeGlow : undefined}
+        onPointerDown={(e) => handlePointerDown(e, 'outro_bed_volume')} />
+
+      {/* H3: Final start (horizontal drag) */}
+      <circle cx={h3.x} cy={h3.y} r={handleR} fill="#a855f7" stroke="white" strokeWidth={2}
+        style={{ cursor: dragging === 'outro_final_start_sec' ? 'grabbing' : 'ew-resize' }}
+        filter={dragging === 'outro_final_start_sec' ? activeGlow : undefined}
+        onPointerDown={(e) => handlePointerDown(e, 'outro_final_start_sec')} />
+
+      {/* H4: Rise curve toggle (double-click) */}
+      <circle cx={h4.x} cy={h4.y} r={handleR} fill="#a855f7" stroke="white" strokeWidth={2}
+        style={{ cursor: 'pointer' }}
+        onDoubleClick={() => onChange('outro_rise_curve', riseCurve === 'exponential' ? 'linear' : 'exponential')} />
+      <text x={h4.x + 8} y={h4.y + 3} fontSize={8} fill="#a855f7" opacity={0.7}>{riseCurve === 'exponential' ? '∿' : '╱'}</text>
+
+      {/* H5: Final curve toggle (double-click) */}
+      <circle cx={h5.x} cy={h5.y} r={handleR} fill="#a855f7" stroke="white" strokeWidth={2}
+        style={{ cursor: 'pointer' }}
+        onDoubleClick={() => onChange('outro_final_curve', finalCurve === 'exponential' ? 'linear' : 'exponential')} />
+      <text x={h5.x + 8} y={h5.y + 3} fontSize={8} fill="#a855f7" opacity={0.7}>{finalCurve === 'exponential' ? '∿' : '╱'}</text>
     </svg>
   )
 }
