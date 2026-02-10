@@ -448,59 +448,68 @@ function applyIntroWithCrossfade(
   firstSegment: Float32Array[],
   crossfadeSec: number
 ): Float32Array[] {
-  const crossfadeSamples = Math.floor(crossfadeSec * SAMPLE_RATE)
   const introLength = intro[0].length
   const segmentLength = firstSegment[0].length
 
-  // Point where crossfade starts (end of intro minus crossfade duration)
-  const crossfadeStart = Math.max(0, introLength - crossfadeSamples)
+  // Intro plays 3s at full volume, then fades out over 3s (total 6s)
+  // Dialog fades in starting at second 3
+  const introFullSec = 3
+  const introFadeSec = 3
+  const introTotalSec = introFullSec + introFadeSec
+  const introFullSamples = Math.floor(introFullSec * SAMPLE_RATE)
+  const introFadeSamples = Math.floor(introFadeSec * SAMPLE_RATE)
+  const introTotalSamples = introFullSamples + introFadeSamples
 
-  // Total length: intro up to crossfade start + crossfade region + rest of first segment
-  const totalLength = crossfadeStart + crossfadeSamples + Math.max(0, segmentLength - crossfadeSamples)
+  // Ensure intro is long enough, otherwise use what we have
+  const introUsable = Math.min(introLength, introTotalSamples)
+  const introFullEnd = Math.min(introFullSamples, introUsable)
+
+  // Total length: intro full section + fade section (with dialog) + rest of dialog
+  const totalLength = introFullEnd + Math.max(introFadeSamples, segmentLength)
 
   const result: Float32Array[] = [
     new Float32Array(totalLength),
     new Float32Array(totalLength)
   ]
 
-  // Copy intro up to crossfade start
+  // Phase 1: Intro at full volume (0→3s, no dialog)
   for (let ch = 0; ch < 2; ch++) {
-    result[ch].set(intro[ch].slice(0, crossfadeStart), 0)
+    result[ch].set(intro[ch].slice(0, introFullEnd), 0)
   }
 
-  // Apply crossfade region
-  for (let i = 0; i < crossfadeSamples; i++) {
-    const t = i / crossfadeSamples
+  // Phase 2: Intro fades out + dialog fades in (3→6s)
+  for (let i = 0; i < introFadeSamples; i++) {
+    const ft = i / introFadeSamples
 
-    // Intro fades out (exponential for smooth fade)
-    const introFade = Math.pow(1 - t, 2)
-    // First segment fades in
-    const segmentFade = Math.pow(t, 0.7)
+    // Intro fades out exponentially
+    const introFade = Math.pow(1 - ft, 2)
+    // Dialog fades in
+    const segmentFade = Math.pow(ft, 0.7)
 
-    // Normalize to prevent clipping
-    const total = introFade + segmentFade
-    const normIntro = introFade / Math.max(total, 1)
-    const normSegment = segmentFade / Math.max(total, 1)
+    // Clamp to prevent clipping
+    const combined = introFade + segmentFade
+    const scale = combined > 1.0 ? 1.0 / combined : 1.0
 
     for (let ch = 0; ch < 2; ch++) {
-      const introVal = crossfadeStart + i < introLength ? intro[ch][crossfadeStart + i] : 0
+      const introIdx = introFullEnd + i
+      const introVal = introIdx < introLength ? intro[ch][introIdx] : 0
       const segVal = i < segmentLength ? firstSegment[ch][i] : 0
-      result[ch][crossfadeStart + i] = (introVal * normIntro) + (segVal * normSegment)
+      result[ch][introFullEnd + i] = (introVal * introFade + segVal * segmentFade) * scale
     }
   }
 
-  // Add remaining segment after crossfade
-  if (segmentLength > crossfadeSamples) {
+  // Phase 3: Remaining dialog after fade region
+  if (segmentLength > introFadeSamples) {
     for (let ch = 0; ch < 2; ch++) {
       result[ch].set(
-        firstSegment[ch].slice(crossfadeSamples),
-        crossfadeStart + crossfadeSamples
+        firstSegment[ch].slice(introFadeSamples),
+        introFullEnd + introFadeSamples
       )
     }
   }
 
   const maxVal = Math.max(...result[0].slice(0, 50000).map(Math.abs))
-  console.log(`[Crossfade] Applied intro with ${crossfadeSec}s crossfade. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, max amplitude: ${maxVal.toFixed(4)}`)
+  console.log(`[Crossfade] Applied intro: ${introFullSec}s full + ${introFadeSec}s fade. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, max amplitude: ${maxVal.toFixed(4)}`)
 
   return result
 }
@@ -543,12 +552,12 @@ function applyOutroWithCrossfade(
   const podcastLength = podcast[0].length
   const outroLength = outro[0].length
 
-  // Outro timing: rise to 20% in first 3s, hold, then exponential to 20% max in last 4s
+  // Outro timing: ease-in to 20% in 3s, hold at 20%, crossfade to 100% from 7s to 10s
   const outroRiseSec = 3
-  const outroFinalSec = 4
+  const outroFinalStartSec = 7
   const outroRiseSamples = Math.floor(outroRiseSec * SAMPLE_RATE)
-  const outroFinalSamples = Math.floor(outroFinalSec * SAMPLE_RATE)
-  const outroFinalStart = crossfadeSamples - outroFinalSamples
+  const outroFinalStartSamples = Math.floor(outroFinalStartSec * SAMPLE_RATE)
+  const outroFinalSamples = crossfadeSamples - outroFinalStartSamples
 
   // Point where crossfade starts (end of podcast minus crossfade duration)
   const crossfadeStart = Math.max(0, podcastLength - crossfadeSamples)
@@ -570,15 +579,19 @@ function applyOutroWithCrossfade(
   for (let i = 0; i < crossfadeSamples; i++) {
     const t = i / crossfadeSamples
 
-    // Outro: rise to 20% in first 3s, hold at 20%, stay at 20% in last 4s
+    // Outro: ease-in to 20% in 3s, hold at 20%, crossfade to 100% from 7→10s
     let outroFade: number
     if (i < outroRiseSamples) {
       // 0→3s: smooth ease-in to 20%
       const rt = i / outroRiseSamples
       outroFade = 0.20 * Math.pow(rt, 1.5)
-    } else {
-      // 3s→end: hold at 20%
+    } else if (i < outroFinalStartSamples) {
+      // 3→7s: hold at 20%
       outroFade = 0.20
+    } else {
+      // 7→10s: crossfade from 20% to 100%
+      const ft = (i - outroFinalStartSamples) / outroFinalSamples
+      outroFade = 0.20 + 0.80 * Math.pow(ft, 2.0)
     }
 
     // Dialog stays at full volume throughout
