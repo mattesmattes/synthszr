@@ -51,17 +51,26 @@ export interface MixingSettings {
   intro_bed_volume: number     // percentage 0-100
   intro_fadeout_sec: number
   intro_dialog_fadein_sec: number
+  intro_fadeout_curve?: 'linear' | 'exponential'
+  intro_dialog_curve?: 'linear' | 'exponential'
   outro_enabled: boolean
   outro_crossfade_sec: number
   outro_rise_sec: number
   outro_bed_volume: number     // percentage 0-100
   outro_final_start_sec: number
+  outro_rise_curve?: 'linear' | 'exponential'
+  outro_final_curve?: 'linear' | 'exponential'
   stereo_host: number          // 0-100 (0=left, 100=right)
   stereo_guest: number         // 0-100
   overlap_reaction_ms: number
   overlap_interrupt_ms: number
   overlap_question_ms: number
   overlap_speaker_ms: number
+  // Envelope-based mixing (takes precedence over parametric when present)
+  intro_music_envelope?: import('@/lib/audio/envelope').AudioEnvelope
+  intro_dialog_envelope?: import('@/lib/audio/envelope').AudioEnvelope
+  outro_music_envelope?: import('@/lib/audio/envelope').AudioEnvelope
+  outro_dialog_envelope?: import('@/lib/audio/envelope').AudioEnvelope
 }
 
 export interface ContentSection {

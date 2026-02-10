@@ -6,6 +6,8 @@
  */
 
 import { MPEGDecoder } from 'mpg123-decoder'
+import type { AudioEnvelope } from './envelope'
+import { sampleEnvelope } from './envelope'
 // @breezystack/lamejs is an ESM-compatible fork that works in serverless
 import { Mp3Encoder } from '@breezystack/lamejs'
 
@@ -67,6 +69,17 @@ export interface CrossfadeOptions {
   outroRiseCurve?: 'linear' | 'exponential'
   /** Outro final curve shape (default: exponential) */
   outroFinalCurve?: 'linear' | 'exponential'
+
+  /** Custom intro audio URL (Vercel Blob). Falls back to static file. */
+  introUrl?: string
+  /** Custom outro audio URL (Vercel Blob). Falls back to static file. */
+  outroUrl?: string
+
+  // Envelope-based mixing (takes precedence over parametric when present)
+  introMusicEnvelope?: AudioEnvelope
+  introDialogEnvelope?: AudioEnvelope
+  outroMusicEnvelope?: AudioEnvelope
+  outroDialogEnvelope?: AudioEnvelope
 
   // Stereo positioning (0 = full left, 1 = full right)
   /** HOST stereo position (default 0.35 = 65% left) */
@@ -474,8 +487,8 @@ function applyCrossfade(
 /**
  * Load the podcast intro MP3 file
  */
-async function loadIntro(): Promise<Float32Array[]> {
-  const introUrl = `${getBaseUrl()}/audio/podcast-intro.mp3`
+async function loadIntro(url?: string): Promise<Float32Array[]> {
+  const introUrl = url || `${getBaseUrl()}/audio/podcast-intro.mp3`
 
   try {
     console.log(`[Crossfade] Fetching intro from ${introUrl}`)
@@ -623,10 +636,156 @@ function applyIntroWithCrossfade(
 }
 
 /**
+ * Apply intro using envelope curves for music and dialog gain.
+ * Each sample's gain is determined by sampling the envelope at that time position.
+ */
+function applyIntroWithEnvelope(
+  intro: Float32Array[],
+  firstSegment: Float32Array[],
+  musicEnv: AudioEnvelope,
+  dialogEnv: AudioEnvelope,
+): Float32Array[] {
+  const introLength = intro[0].length
+  const segmentLength = firstSegment[0].length
+
+  // Determine total intro duration from envelope end time
+  const musicEnd = musicEnv.points[musicEnv.points.length - 1].sec
+  const dialogEnd = dialogEnv.points[dialogEnv.points.length - 1].sec
+  const introTotalSec = Math.max(musicEnd, dialogEnd)
+  const introTotalSamples = Math.ceil(introTotalSec * SAMPLE_RATE)
+
+  // Music plays from 0 to introTotalSamples
+  // Dialog starts at t=0 of the envelope but is overlaid with intro music
+  // After intro finishes, remaining dialog continues
+
+  // Find where dialog gain first reaches 1.0 (full volume) to know dialog start offset
+  // Dialog in envelope starts at its own t=0 which corresponds to the start of the intro
+  const totalLength = Math.max(introTotalSamples, introTotalSamples - 0 + segmentLength)
+
+  const result: Float32Array[] = [
+    new Float32Array(totalLength),
+    new Float32Array(totalLength),
+  ]
+
+  // Find where dialog should start playing (where dialog envelope first goes above 0)
+  let dialogStartSample = 0
+  for (let i = 0; i < introTotalSamples; i++) {
+    const t = i / SAMPLE_RATE
+    if (sampleEnvelope(dialogEnv, t) > 0.001) {
+      dialogStartSample = i
+      break
+    }
+  }
+
+  // Mix intro music + dialog for the intro duration
+  for (let i = 0; i < introTotalSamples; i++) {
+    const timeSec = i / SAMPLE_RATE
+    const musicGain = sampleEnvelope(musicEnv, timeSec)
+    const dialogGain = sampleEnvelope(dialogEnv, timeSec)
+
+    // Dialog PCM index: offset so dialog starts playing when envelope says so
+    const dialogIdx = i - dialogStartSample
+
+    for (let ch = 0; ch < 2; ch++) {
+      const mVal = i < introLength ? intro[ch][i] * musicGain : 0
+      const dVal = dialogIdx >= 0 && dialogIdx < segmentLength ? firstSegment[ch][dialogIdx] * dialogGain : 0
+      const combined = Math.abs(mVal) + Math.abs(dVal)
+      const scale = combined > 1.0 ? 1.0 / combined : 1.0
+      result[ch][i] = (mVal + dVal) * scale
+    }
+  }
+
+  // Remaining dialog after intro ends
+  const dialogConsumed = introTotalSamples - dialogStartSample
+  if (segmentLength > dialogConsumed) {
+    for (let ch = 0; ch < 2; ch++) {
+      const remaining = firstSegment[ch].slice(dialogConsumed)
+      result[ch].set(remaining, introTotalSamples)
+    }
+  }
+
+  // Trim to actual content length
+  const actualLength = introTotalSamples + Math.max(0, segmentLength - dialogConsumed)
+  const trimmed: Float32Array[] = [
+    result[0].slice(0, actualLength),
+    result[1].slice(0, actualLength),
+  ]
+
+  console.log(`[Crossfade] Applied intro with envelope: ${introTotalSec.toFixed(1)}s intro, dialog starts at ${(dialogStartSample / SAMPLE_RATE).toFixed(1)}s. Result: ${(actualLength / SAMPLE_RATE).toFixed(1)}s`)
+
+  return trimmed
+}
+
+/**
+ * Apply outro using envelope curves for music and dialog gain.
+ */
+function applyOutroWithEnvelope(
+  podcast: Float32Array[],
+  outro: Float32Array[],
+  musicEnv: AudioEnvelope,
+  dialogEnv: AudioEnvelope,
+): Float32Array[] {
+  const podcastLength = podcast[0].length
+  const outroLength = outro[0].length
+
+  // Envelope duration determines crossfade length
+  const musicEnd = musicEnv.points[musicEnv.points.length - 1].sec
+  const dialogEnd = dialogEnv.points[dialogEnv.points.length - 1].sec
+  const crossfadeSec = Math.max(musicEnd, dialogEnd)
+  const crossfadeSamples = Math.ceil(crossfadeSec * SAMPLE_RATE)
+
+  // Point where crossfade starts
+  const crossfadeStart = Math.max(0, podcastLength - crossfadeSamples)
+
+  // Total: podcast up to crossfade + crossfade + remaining outro
+  const totalLength = crossfadeStart + crossfadeSamples + Math.max(0, outroLength - crossfadeSamples)
+
+  const result: Float32Array[] = [
+    new Float32Array(totalLength),
+    new Float32Array(totalLength),
+  ]
+
+  // Copy podcast up to crossfade
+  for (let ch = 0; ch < 2; ch++) {
+    result[ch].set(podcast[ch].slice(0, crossfadeStart), 0)
+  }
+
+  // Apply crossfade region with envelope-controlled gains
+  for (let i = 0; i < crossfadeSamples; i++) {
+    const timeSec = i / SAMPLE_RATE
+    const outroGain = sampleEnvelope(musicEnv, timeSec)
+    const dialogGain = sampleEnvelope(dialogEnv, timeSec)
+
+    const combined = outroGain + dialogGain
+    const scale = combined > 1.0 ? 1.0 / combined : 1.0
+
+    for (let ch = 0; ch < 2; ch++) {
+      const podcastVal = crossfadeStart + i < podcastLength ? podcast[ch][crossfadeStart + i] * dialogGain : 0
+      const outroVal = i < outroLength ? outro[ch][i] * outroGain : 0
+      result[ch][crossfadeStart + i] = (podcastVal + outroVal) * scale
+    }
+  }
+
+  // Add remaining outro after crossfade
+  if (outroLength > crossfadeSamples) {
+    for (let ch = 0; ch < 2; ch++) {
+      result[ch].set(
+        outro[ch].slice(crossfadeSamples),
+        crossfadeStart + crossfadeSamples,
+      )
+    }
+  }
+
+  console.log(`[Crossfade] Applied outro with envelope: ${crossfadeSec.toFixed(1)}s crossfade. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s`)
+
+  return result
+}
+
+/**
  * Load the podcast outro MP3 file
  */
-async function loadOutro(): Promise<Float32Array[]> {
-  const outroUrl = `${getBaseUrl()}/audio/podcast-outro.mp3`
+async function loadOutro(url?: string): Promise<Float32Array[]> {
+  const outroUrl = url || `${getBaseUrl()}/audio/podcast-outro.mp3`
 
   try {
     console.log(`[Crossfade] Fetching outro from ${outroUrl}`)
@@ -773,6 +932,9 @@ export async function concatenateWithCrossfade(
     overlapInterruptMs = DEFAULT_OVERLAP_INTERRUPTING,
     overlapQuestionMs = DEFAULT_OVERLAP_AFTER_QUESTION,
     overlapSpeakerChangeMs = DEFAULT_OVERLAP_SPEAKER_CHANGE,
+    // Custom audio URLs
+    introUrl,
+    outroUrl,
   } = options
 
   const stereoPositions = { HOST: stereoHost, GUEST: stereoGuest }
@@ -837,18 +999,25 @@ export async function concatenateWithCrossfade(
       // First segment: apply intro if enabled, otherwise just add it
       if (includeIntro) {
         console.log(`[Crossfade] Loading intro music...`)
-        const intro = await loadIntro()
+        const intro = await loadIntro(introUrl)
         console.log(`[Crossfade] Intro loaded: ${intro[0].length} samples (${(intro[0].length / SAMPLE_RATE).toFixed(1)}s)`)
         console.log(`[Crossfade] First segment PCM length: ${segment.pcm[0].length} samples (${(segment.pcm[0].length / SAMPLE_RATE).toFixed(1)}s)`)
-        resultChannels = applyIntroWithCrossfade(intro, segment.pcm, {
-          fullSec: introFullSec,
-          bedSec: introBedSec,
-          bedVolume: introBedVolume,
-          fadeoutSec: introFadeoutSec,
-          dialogFadeInSec: introDialogFadeInSec,
-          fadeoutCurve: introFadeoutCurve as 'linear' | 'exponential',
-          dialogCurve: introDialogCurve as 'linear' | 'exponential',
-        })
+
+        if (options.introMusicEnvelope && options.introDialogEnvelope) {
+          console.log(`[Crossfade] Using envelope-based intro mixing`)
+          resultChannels = applyIntroWithEnvelope(intro, segment.pcm,
+            options.introMusicEnvelope, options.introDialogEnvelope)
+        } else {
+          resultChannels = applyIntroWithCrossfade(intro, segment.pcm, {
+            fullSec: introFullSec,
+            bedSec: introBedSec,
+            bedVolume: introBedVolume,
+            fadeoutSec: introFadeoutSec,
+            dialogFadeInSec: introDialogFadeInSec,
+            fadeoutCurve: introFadeoutCurve as 'linear' | 'exponential',
+            dialogCurve: introDialogCurve as 'linear' | 'exponential',
+          })
+        }
         console.log(`[Crossfade] After intro applied, resultChannels length: ${resultChannels[0].length} samples (${(resultChannels[0].length / SAMPLE_RATE).toFixed(1)}s)`)
       } else {
         resultChannels = [segment.pcm[0], segment.pcm[1]]
@@ -917,17 +1086,24 @@ export async function concatenateWithCrossfade(
   // Apply outro if enabled
   if (includeOutro) {
     console.log(`[Crossfade] Loading outro music...`)
-    const outro = await loadOutro()
+    const outro = await loadOutro(outroUrl)
     console.log(`[Crossfade] Outro loaded: ${outro[0].length} samples (${(outro[0].length / SAMPLE_RATE).toFixed(1)}s)`)
     console.log(`[Crossfade] Applying outro crossfade...`)
-    resultChannels = applyOutroWithCrossfade(resultChannels, outro, {
-      crossfadeSec: outroCrossfadeSec,
-      riseSec: _outroRiseSec,
-      bedVolume: outroBedVolume,
-      finalStartSec: _outroFinalStartSec,
-      riseCurve: outroRiseCurve as 'linear' | 'exponential',
-      finalCurve: outroFinalCurve as 'linear' | 'exponential',
-    })
+
+    if (options.outroMusicEnvelope && options.outroDialogEnvelope) {
+      console.log(`[Crossfade] Using envelope-based outro mixing`)
+      resultChannels = applyOutroWithEnvelope(resultChannels, outro,
+        options.outroMusicEnvelope, options.outroDialogEnvelope)
+    } else {
+      resultChannels = applyOutroWithCrossfade(resultChannels, outro, {
+        crossfadeSec: outroCrossfadeSec,
+        riseSec: _outroRiseSec,
+        bedVolume: outroBedVolume,
+        finalStartSec: _outroFinalStartSec,
+        riseCurve: outroRiseCurve as 'linear' | 'exponential',
+        finalCurve: outroFinalCurve as 'linear' | 'exponential',
+      })
+    }
     finalDurationS = resultChannels[0].length / SAMPLE_RATE
     console.log(`[Crossfade] After outro: ${finalDurationS.toFixed(1)}s`)
   }
@@ -968,6 +1144,12 @@ export function mixingSettingsToCrossfadeOptions(
     overlap_interrupt_ms?: number
     overlap_question_ms?: number
     overlap_speaker_ms?: number
+    intro_url?: string
+    outro_url?: string
+    intro_music_envelope?: AudioEnvelope
+    intro_dialog_envelope?: AudioEnvelope
+    outro_music_envelope?: AudioEnvelope
+    outro_dialog_envelope?: AudioEnvelope
   } | null | undefined
 ): CrossfadeOptions {
   if (!mixing) {
@@ -999,5 +1181,11 @@ export function mixingSettingsToCrossfadeOptions(
     overlapInterruptMs: mixing.overlap_interrupt_ms ?? 180,
     overlapQuestionMs: mixing.overlap_question_ms ?? 80,
     overlapSpeakerChangeMs: mixing.overlap_speaker_ms ?? 50,
+    introUrl: mixing.intro_url,
+    outroUrl: mixing.outro_url,
+    introMusicEnvelope: mixing.intro_music_envelope,
+    introDialogEnvelope: mixing.intro_dialog_envelope,
+    outroMusicEnvelope: mixing.outro_music_envelope,
+    outroDialogEnvelope: mixing.outro_dialog_envelope,
   }
 }
