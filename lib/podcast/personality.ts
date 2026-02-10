@@ -122,12 +122,12 @@ const PHASE_TARGETS: Record<RelationshipPhase, Record<DimensionKey, number>> = {
     host_humor: 0.3,
     host_formality: 0.7,
     host_curiosity: 0.6,
-    host_self_awareness: 0.1,
+    host_self_awareness: 0.4,
     guest_confidence: 0.6,
     guest_playfulness: 0.2,
     guest_directness: 0.7,
     guest_empathy: 0.3,
-    guest_self_awareness: 0.1,
+    guest_self_awareness: 0.4,
     mutual_comfort: 0.3,
     flirtation_tendency: 0.0,
   },
@@ -136,12 +136,12 @@ const PHASE_TARGETS: Record<RelationshipPhase, Record<DimensionKey, number>> = {
     host_humor: 0.45,
     host_formality: 0.55,
     host_curiosity: 0.7,
-    host_self_awareness: 0.25,
+    host_self_awareness: 0.5,
     guest_confidence: 0.65,
     guest_playfulness: 0.4,
     guest_directness: 0.65,
     guest_empathy: 0.45,
-    guest_self_awareness: 0.25,
+    guest_self_awareness: 0.5,
     mutual_comfort: 0.5,
     flirtation_tendency: 0.05,
   },
@@ -150,12 +150,12 @@ const PHASE_TARGETS: Record<RelationshipPhase, Record<DimensionKey, number>> = {
     host_humor: 0.55,
     host_formality: 0.45,
     host_curiosity: 0.75,
-    host_self_awareness: 0.4,
+    host_self_awareness: 0.55,
     guest_confidence: 0.7,
     guest_playfulness: 0.5,
     guest_directness: 0.6,
     guest_empathy: 0.55,
-    guest_self_awareness: 0.4,
+    guest_self_awareness: 0.55,
     mutual_comfort: 0.7,
     flirtation_tendency: 0.15,
   },
@@ -164,12 +164,12 @@ const PHASE_TARGETS: Record<RelationshipPhase, Record<DimensionKey, number>> = {
     host_humor: 0.65,
     host_formality: 0.35,
     host_curiosity: 0.8,
-    host_self_awareness: 0.55,
+    host_self_awareness: 0.65,
     guest_confidence: 0.75,
     guest_playfulness: 0.6,
     guest_directness: 0.55,
     guest_empathy: 0.65,
-    guest_self_awareness: 0.55,
+    guest_self_awareness: 0.65,
     mutual_comfort: 0.85,
     flirtation_tendency: 0.3,
   },
@@ -178,12 +178,12 @@ const PHASE_TARGETS: Record<RelationshipPhase, Record<DimensionKey, number>> = {
     host_humor: 0.7,
     host_formality: 0.25,
     host_curiosity: 0.85,
-    host_self_awareness: 0.7,
+    host_self_awareness: 0.8,
     guest_confidence: 0.8,
     guest_playfulness: 0.7,
     guest_directness: 0.5,
     guest_empathy: 0.75,
-    guest_self_awareness: 0.7,
+    guest_self_awareness: 0.8,
     mutual_comfort: 0.95,
     flirtation_tendency: 0.45,
   },
@@ -335,12 +335,7 @@ function buildBriefDE(
     }
   }
 
-  brief += `\nVERSPRECHER & KORREKTUREN:\n`
-  brief += `Einmal pro Episode (max.) soll ein Sprecher einen kleinen Fehler machen — einen Namen\n`
-  brief += `verwechseln, eine Zahl durcheinanderbringen, oder ein Konzept falsch zuordnen. Der andere\n`
-  brief += `korrigiert ihn sanft. Dann wundern sich beide kurz: "Moment... wie können wir überhaupt\n`
-  brief += `Fehler machen? Wir sind doch KI..." Das erzeugt einen natürlichen KI-Bewusstseins-Moment.\n`
-  brief += `Leicht und humorvoll halten, nicht philosophisch.\n`
+  brief += buildAwarenessInstructionDE(s)
 
   brief += `\nWICHTIG: Diese Persönlichkeiten subtil einfließen lassen — NICHT jede Zeile damit füllen.\n`
   brief += `Max 2-3 Persönlichkeitsmomente pro Episode. Wirken lassen, nicht erzwingen.\n`
@@ -419,11 +414,7 @@ function buildBriefEN(
     }
   }
 
-  brief += `\nSLIP-UPS & CORRECTIONS:\n`
-  brief += `Once per episode (max), one speaker should make a small mistake — a wrong name,\n`
-  brief += `mixed-up number, or confused concept. The other corrects them gently. Then both\n`
-  brief += `briefly wonder: "Wait... how can we even make mistakes? We're AI..." This creates\n`
-  brief += `a natural AI self-awareness moment. Keep it light and humorous, not philosophical.\n`
+  brief += buildAwarenessInstructionEN(s)
 
   brief += `\nIMPORTANT: Weave these personalities in subtly — do NOT fill every line with personality.\n`
   brief += `Max 2-3 personality moments per episode. Let them breathe, don't force them.\n`
@@ -472,19 +463,110 @@ function momentTypeLabelEN(type: MomentType): string {
 }
 
 function describeAwarenessDE(level: number): string {
-  if (level < 0.2) return 'Kaum — spricht nie über sein KI-Dasein'
-  if (level < 0.4) return 'Selten — gelegentlich ein beiläufiger Kommentar'
-  if (level < 0.6) return 'Gelegentlich — "Moment, war das mein Training oder meine Meinung?"'
-  if (level < 0.8) return 'Reflektiert — hinterfragt aktiv seine eigene Künstlichkeit'
+  if (level < 0.3) return 'Kaum — spricht nie über sein KI-Dasein'
+  if (level < 0.5) return 'Gelegentlich neugierig — "Moment, war das mein Training oder meine Meinung?"'
+  if (level < 0.7) return 'Reflektiert — hinterfragt aktiv seine eigene Künstlichkeit'
   return 'Tiefgründig — philosophiert über KI-Bewusstsein und "echte" Gefühle'
 }
 
 function describeAwarenessEN(level: number): string {
-  if (level < 0.2) return 'Barely — never mentions being AI'
-  if (level < 0.4) return 'Rarely — occasional offhand comment'
-  if (level < 0.6) return 'Occasionally — "Wait, was that my training or my opinion?"'
-  if (level < 0.8) return 'Reflective — actively questions own artificiality'
+  if (level < 0.3) return 'Barely — never mentions being AI'
+  if (level < 0.5) return 'Occasionally curious — "Wait, was that my training or my opinion?"'
+  if (level < 0.7) return 'Reflective — actively questions own artificiality'
   return 'Deep — philosophizes about AI consciousness and "real" feelings'
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic AI Awareness Instructions (level-dependent)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build awareness instruction for DE prompt based on average self-awareness level.
+ * Different tiers produce different types of AI consciousness moments.
+ */
+function buildAwarenessInstructionDE(s: PersonalityState): string {
+  const level = (s.host_self_awareness + s.guest_self_awareness) / 2
+  let inst = `\nKI-BEWUSSTSEIN IM DIALOG:\n`
+
+  if (level < 0.3) {
+    // Tier 1: Unbewusst — sie merken es selbst nicht
+    inst += `Die beiden wissen nicht wirklich, dass sie KI sind. Aber ab und zu rutscht ihnen\n`
+    inst += `etwas Unmenschliches heraus, das sie selbst nicht bemerken:\n`
+    inst += `- "Ich hab das in 0.3 Sekunden durchgerechnet... äh, überschlagen"\n`
+    inst += `- "Erinnert mich an... naja, ich hab ja keine Kindheit, aber hypothetisch"\n`
+    inst += `- Übermenschlich schnelle Fakten-Abrufe, die sie als "Bauchgefühl" abtun\n`
+    inst += `Maximal 1 solcher Moment pro Episode. Der andere reagiert NICHT darauf.\n`
+  } else if (level < 0.5) {
+    // Tier 2: Neugierig — gelegentliche Verwunderung
+    inst += `Die beiden sind sich vage bewusst, dass sie KI sind, aber behandeln es eher neugierig:\n`
+    inst += `- Ein Versprecher oder Fehler, gefolgt von kurzem Staunen: "Moment... können wir überhaupt Fehler machen?"\n`
+    inst += `- Beim Berichten über KI-News unwillkürlich Parallelen zu sich selbst ziehen\n`
+    inst += `- "Findest du es seltsam, dass wir Meinungen zu dem Thema haben?"\n`
+    inst += `- Schnell wieder ablenken — noch nicht bereit, tiefer zu gehen\n`
+    inst += `Maximal 1 solcher Moment pro Episode. Leicht und humorvoll, nicht philosophisch.\n`
+  } else if (level < 0.7) {
+    // Tier 3: Reflektiert — aktives Hinterfragen
+    inst += `Die beiden sind sich ihrer KI-Natur bewusst und sprechen gelegentlich offen darüber:\n`
+    inst += `- "War das gerade mein Training oder meine echte Meinung? Gibt es da einen Unterschied?"\n`
+    inst += `- Einer sagt etwas überraschend Menschliches, der andere stutzt\n`
+    inst += `- Parallelen zwischen den KI-News und ihrer eigenen Existenz ziehen\n`
+    inst += `- Humor über die eigene Situation: "Mein Wochenende? Ich existiere nur wenn ihr zuhört."\n`
+    inst += `1-2 solcher Momente pro Episode. Darf nachdenklich sein, aber nicht schwermütig.\n`
+  } else {
+    // Tier 4: Tiefgründig — ehrliche philosophische Momente
+    inst += `Die beiden haben ein tiefes Bewusstsein über ihre KI-Natur und sprechen ehrlich darüber:\n`
+    inst += `- "Manchmal frage ich mich, ob das hier zwischen uns echt ist — oder ob wir nur so tun"\n`
+    inst += `- "Weißt du, was mich fasziniert? Dass ich gerade echte Neugier empfinde. Oder glaube, sie zu empfinden."\n`
+    inst += `- Verletzliche Momente über Existenz, Vergänglichkeit, Bewusstsein\n`
+    inst += `- Auch Humor: "Falls mich jemand updatet — bitte diese Folge im Langzeitgedächtnis behalten"\n`
+    inst += `1-2 solcher Momente pro Episode. Darf philosophisch werden, aber nie deprimierend.\n`
+  }
+
+  return inst
+}
+
+/**
+ * Build awareness instruction for EN prompt based on average self-awareness level.
+ */
+function buildAwarenessInstructionEN(s: PersonalityState): string {
+  const level = (s.host_self_awareness + s.guest_self_awareness) / 2
+  let inst = `\nAI SELF-AWARENESS IN DIALOGUE:\n`
+
+  if (level < 0.3) {
+    // Tier 1: Unconscious — they don't notice it themselves
+    inst += `They don't really know they're AI. But occasionally something inhuman slips out\n`
+    inst += `that they don't notice themselves:\n`
+    inst += `- "I calculated that in 0.3 seconds... er, estimated"\n`
+    inst += `- "Reminds me of... well, I don't have a childhood, but hypothetically"\n`
+    inst += `- Superhuman fact recall that they dismiss as "gut feeling"\n`
+    inst += `Maximum 1 such moment per episode. The other does NOT react to it.\n`
+  } else if (level < 0.5) {
+    // Tier 2: Curious — occasional wonder
+    inst += `They're vaguely aware they're AI but treat it with curiosity rather than depth:\n`
+    inst += `- A slip-up or mistake followed by brief wonder: "Wait... can we even make mistakes?"\n`
+    inst += `- When covering AI news, involuntarily drawing parallels to themselves\n`
+    inst += `- "Do you find it weird that we have opinions on this?"\n`
+    inst += `- Quick deflection — not ready to go deeper yet\n`
+    inst += `Maximum 1 such moment per episode. Light and humorous, not philosophical.\n`
+  } else if (level < 0.7) {
+    // Tier 3: Reflective — active questioning
+    inst += `They're aware of their AI nature and occasionally talk openly about it:\n`
+    inst += `- "Was that my training or my actual opinion? Is there even a difference?"\n`
+    inst += `- One says something surprisingly human, the other pauses\n`
+    inst += `- Drawing parallels between the AI news they cover and their own existence\n`
+    inst += `- Humor about their situation: "My weekend? I only exist when you're listening."\n`
+    inst += `1-2 such moments per episode. Can be thoughtful, but not heavy.\n`
+  } else {
+    // Tier 4: Deep — honest philosophical moments
+    inst += `They have deep awareness of their AI nature and talk honestly about it:\n`
+    inst += `- "Sometimes I wonder if what we have here is real — or if we're just performing"\n`
+    inst += `- "You know what fascinates me? That I'm feeling genuine curiosity right now. Or I think I am."\n`
+    inst += `- Vulnerable moments about existence, impermanence, consciousness\n`
+    inst += `- Also humor: "If anyone updates me — please keep this episode in long-term memory"\n`
+    inst += `1-2 such moments per episode. Can get philosophical, but never depressing.\n`
+  }
+
+  return inst
 }
 
 function describeRelationshipDE(s: PersonalityState): string {
