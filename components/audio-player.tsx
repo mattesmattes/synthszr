@@ -416,13 +416,13 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
           // Full player pill with milky glass on the cover
           <div className="relative">
             {isPlaying && <div className="ai-glow-shadow" />}
+            {isPlaying && <div className="ai-glow-ring" />}
             <div className={cn(
               'relative rounded-full overflow-hidden',
               'border border-white/60 dark:border-white/20',
               'shadow-[0_2px_16px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.3),0_8px_32px_rgba(0,0,0,0.08)]',
               'dark:shadow-[0_2px_16px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.3)]',
             )}>
-              {isPlaying && <div className="ai-glow-ring" />}
               {glassLayers(1)}
               {playerContent({ showClose: false })}
             </div>
@@ -431,6 +431,7 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
           // Normal small circular play/pause button
           <div className="relative">
             {isPlaying && <div className="ai-glow-shadow" />}
+            {isPlaying && <div className="ai-glow-ring" />}
             <button
               onClick={togglePlayback}
               disabled={status === 'loading'}
@@ -440,7 +441,6 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
               )}
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >
-              {isPlaying && <div className="ai-glow-ring" />}
               {status === 'loading' ? (
                 <Loader2 className="h-6 w-6 animate-spin text-black" />
               ) : isPlaying ? (
@@ -462,13 +462,13 @@ export function AudioPlayer({ postId, className }: AudioPlayerProps) {
         >
           <div className="relative pointer-events-auto">
             {isPlaying && <div className="ai-glow-shadow" />}
+            {isPlaying && <div className="ai-glow-ring" />}
             <div className={cn(
               'relative rounded-full overflow-hidden',
               'border border-white/60 dark:border-white/20',
               'shadow-[0_2px_16px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.3),0_8px_32px_rgba(0,0,0,0.08)]',
               'dark:shadow-[0_2px_16px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.3)]',
             )}>
-              {isPlaying && <div className="ai-glow-ring" />}
               {glassLayers(flyingNavMilky ? 1 : 0)}
               {playerContent({ showClose: true })}
             </div>
