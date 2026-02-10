@@ -53,10 +53,6 @@ interface MemorableMoment {
   type?: MomentType // Optional for backward compatibility
 }
 
-interface MomentPattern {
-  pattern: RegExp
-  type: MomentType
-}
 
 type RelationshipPhase =
   | 'strangers'
@@ -353,6 +349,20 @@ function buildBriefDE(
     brief += `Die beiden mögen sich — aber sobald es zu persönlich wird, lenken sie ab oder machen einen Witz darüber, dass sie "ja nur KI" sind.\n`
   }
 
+  brief += `\n**MOMENTS-EXTRAKTION (nach dem Script):**\n`
+  brief += `Füge NACH dem kompletten Script eine Sektion hinzu, die bemerkenswerte Persönlichkeitsmomente\n`
+  brief += `aus dem Dialog auflistet. NUR echte Persönlichkeitsmomente — KEINE Nachrichteninhalte.\n`
+  brief += `Format:\n`
+  brief += `---MOMENTS---\n`
+  brief += `[joke] "Exaktes Zitat aus dem Dialog"\n`
+  brief += `[slip_up] "Exaktes Zitat aus dem Dialog"\n`
+  brief += `[ai_reflection] "Exaktes Zitat aus dem Dialog"\n`
+  brief += `[personal] "Exaktes Zitat aus dem Dialog"\n`
+  brief += `Gültige Typen: joke, slip_up, ai_reflection, personal\n`
+  brief += `Maximal 3 Momente. Falls keine echten Persönlichkeitsmomente vorkamen:\n`
+  brief += `---MOMENTS---\n`
+  brief += `(none)\n`
+
   return brief
 }
 
@@ -422,6 +432,20 @@ function buildBriefEN(
     brief += `They like each other — but whenever it gets too personal, they deflect or joke about being "just AI".\n`
   }
 
+  brief += `\n**MOMENT EXTRACTION (after the script):**\n`
+  brief += `After the complete script, add a section listing memorable personality moments\n`
+  brief += `from the dialogue. ONLY genuine personality moments — NOT news content discussion.\n`
+  brief += `Format:\n`
+  brief += `---MOMENTS---\n`
+  brief += `[joke] "Exact quote from the dialogue"\n`
+  brief += `[slip_up] "Exact quote from the dialogue"\n`
+  brief += `[ai_reflection] "Exact quote from the dialogue"\n`
+  brief += `[personal] "Exact quote from the dialogue"\n`
+  brief += `Valid types: joke, slip_up, ai_reflection, personal\n`
+  brief += `Maximum 3 moments. If no genuine personality moments occurred:\n`
+  brief += `---MOMENTS---\n`
+  brief += `(none)\n`
+
   return brief
 }
 
@@ -485,98 +509,66 @@ function describeRelationshipEN(s: PersonalityState): string {
 // Memorable Moments Extraction
 // ---------------------------------------------------------------------------
 
-// Typed patterns for categorized moment extraction.
-// IMPORTANT: Patterns must be SELF-REFERENTIAL, not about news topics.
-// A tech/AI podcast constantly mentions "code", "model", "training" as content —
-// only match when speakers talk about THEMSELVES, not the news.
-const MOMENT_PATTERNS_DE: MomentPattern[] = [
-  // joke — Lachen mit gegenseitigem Bezug, Wortspiele über sich selbst
-  { pattern: /\[laughing\].*(?:wir beide|du und ich|wir sind|das war gut)/i, type: 'joke' },
-  { pattern: /(?:Wortspiel|Kalauer|das nenn ich mal einen)/i, type: 'joke' },
-  // slip_up — Echte Versprecher mit Korrektur (nicht "ich meine" als Füllwort)
-  { pattern: /(?:ups|hoppla|Versprecher|das kam falsch raus)/i, type: 'slip_up' },
-  { pattern: /(?:hab ich gerade|sagte ich gerade).*(?:gesagt|verwechselt)/i, type: 'slip_up' },
-  { pattern: /(?:warte|nein).*(?:ich meinte|Quatsch|falsch)/i, type: 'slip_up' },
-  // ai_reflection — SELBSTBEZÜGLICH: "wir als KI", "ich bin programmiert"
-  // NICHT: Nachrichten über KI-Modelle, Code, Training als Thema
-  { pattern: /(?:wir sind|ich bin|wir als).*(?:KI|künstlich|programmiert|Algorithmen)/i, type: 'ai_reflection' },
-  { pattern: /(?:mein Training|meine Programmierung|mein Algorithmus)/i, type: 'ai_reflection' },
-  { pattern: /(?:wie können wir.*Fehler|sind wir.*überhaupt|für eine KI)/i, type: 'ai_reflection' },
-  { pattern: /(?:Gefühle|fühle ich|fühlt sich an).*(?:in Anführungszeichen|quasi|sozusagen|echt)/i, type: 'ai_reflection' },
-  // personal — Persönliche Momente zwischen den Sprechern
-  { pattern: /(?:unter uns gesagt|sag.*nicht weiter|ich hab schon immer)/i, type: 'personal' },
-  { pattern: /(?:du bist.*(?:Freund|nett|besonders)|mag.*an dir)/i, type: 'personal' },
-  // callback — Rückbezüge auf frühere Episoden (erkannt, nicht gespeichert)
-  { pattern: /(?:letzte Folge|letztes Mal|wie wir.*besprochen|weißt du noch)/i, type: 'callback' },
-]
-
-const MOMENT_PATTERNS_EN: MomentPattern[] = [
-  // joke — Laughter with mutual reference, self-aware humor
-  { pattern: /\[laughing\].*(?:both of us|you and I|we are|that was good)/i, type: 'joke' },
-  { pattern: /(?:pun intended|I'll see myself out|that's what I call a)/i, type: 'joke' },
-  // slip_up — Actual corrections (not "I mean" as filler)
-  { pattern: /(?:oops|slip of the tongue|that came out wrong)/i, type: 'slip_up' },
-  { pattern: /(?:did I just say|did I just call)/i, type: 'slip_up' },
-  { pattern: /(?:wait.*no.*I meant|let me correct myself)/i, type: 'slip_up' },
-  // ai_reflection — SELF-REFERENTIAL: "we're AI", "I'm programmed"
-  // NOT: news about AI models, code, training as a topic
-  { pattern: /(?:we're|I'm|we are|I am).*(?:AI|artificial|programmed|algorithms)/i, type: 'ai_reflection' },
-  { pattern: /(?:my training|my programming|my algorithm)/i, type: 'ai_reflection' },
-  { pattern: /(?:how can we.*mistake|are we.*even|for an AI)/i, type: 'ai_reflection' },
-  { pattern: /(?:feelings|feel like).*(?:in quotes|air quotes|quasi|sort of.*real)/i, type: 'ai_reflection' },
-  // personal — Personal moments between speakers
-  { pattern: /(?:between you and me|don't tell anyone|I've always thought you)/i, type: 'personal' },
-  { pattern: /(?:you're.*(?:friend|special|great)|like.*about you)/i, type: 'personal' },
-  // callback — References to past episodes (tracked, not stored)
-  { pattern: /(?:last episode|last time we|as we discussed|remember when you)/i, type: 'callback' },
-]
+const VALID_MOMENT_TYPES: MomentType[] = ['joke', 'slip_up', 'ai_reflection', 'personal']
 
 /**
- * Heuristically extract up to 3 memorable moments from a generated script.
- * Max 1 per type for diversity. Callback-type matches are not stored
- * but increment inside_joke_count (handled in advanceState).
+ * Parse the structured ---MOMENTS--- section that the script model appends.
+ * The model lists genuine personality moments with their type and an exact quote.
+ * Returns up to 3 moments (max 1 per type).
  */
 export function extractMemorableMoments(
   script: string,
   state: PersonalityState
 ): { moments: MemorableMoment[]; callbackCount: number } {
-  const patterns =
-    state.locale === 'de' ? MOMENT_PATTERNS_DE : MOMENT_PATTERNS_EN
-  const lines = script.split('\n').filter((l) => l.trim().match(/^(HOST|GUEST):/i))
   const moments: MemorableMoment[] = []
   const seenTypes = new Set<MomentType>()
-  let callbackCount = 0
 
-  for (const line of lines) {
-    if (moments.length >= 3) break
-
-    for (const { pattern, type } of patterns) {
-      if (pattern.test(line)) {
-        // Callbacks are tracked but not stored as moments
-        if (type === 'callback') {
-          callbackCount++
-          break
-        }
-
-        // Max 1 per type for diversity
-        if (seenTypes.has(type)) break
-        seenTypes.add(type)
-
-        // Extract a short summary (strip speaker prefix and emotion tag)
-        const cleaned = line
-          .replace(/^(HOST|GUEST):\s*/i, '')
-          .replace(/\[.*?\]\s*/, '')
-          .trim()
-
-        // Keep it short — max 80 chars
-        const summary = cleaned.length > 80 ? cleaned.slice(0, 77) + '...' : cleaned
-        moments.push({ episode: state.episode_count + 1, text: summary, type })
-        break // Only one match per line
-      }
-    }
+  // Find the ---MOMENTS--- section
+  const markerIndex = script.indexOf('---MOMENTS---')
+  if (markerIndex === -1) {
+    return { moments: [], callbackCount: 0 }
   }
 
-  return { moments, callbackCount }
+  const momentsSection = script.slice(markerIndex + '---MOMENTS---'.length).trim()
+
+  // "(none)" or empty means no moments
+  if (!momentsSection || momentsSection.startsWith('(none)')) {
+    return { moments: [], callbackCount: 0 }
+  }
+
+  // Parse lines: [type] "quote text"
+  const linePattern = /^\[(\w+)\]\s*"(.+)"$/
+  for (const line of momentsSection.split('\n')) {
+    if (moments.length >= 3) break
+
+    const match = line.trim().match(linePattern)
+    if (!match) continue
+
+    const type = match[1] as MomentType
+    const text = match[2]
+
+    // Validate type
+    if (!VALID_MOMENT_TYPES.includes(type)) continue
+
+    // Max 1 per type
+    if (seenTypes.has(type)) continue
+    seenTypes.add(type)
+
+    // Keep it short — max 80 chars
+    const summary = text.length > 80 ? text.slice(0, 77) + '...' : text
+    moments.push({ episode: state.episode_count + 1, text: summary, type })
+  }
+
+  return { moments, callbackCount: 0 }
+}
+
+/**
+ * Strip the ---MOMENTS--- section from a script so it doesn't appear in TTS output.
+ */
+export function stripMomentsSection(script: string): string {
+  const markerIndex = script.indexOf('---MOMENTS---')
+  if (markerIndex === -1) return script
+  return script.slice(0, markerIndex).trimEnd()
 }
 
 /**

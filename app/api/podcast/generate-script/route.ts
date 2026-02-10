@@ -23,7 +23,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/session'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
-import { getPersonalityState, buildPersonalityBrief, advanceState } from '@/lib/podcast/personality'
+import { getPersonalityState, buildPersonalityBrief, advanceState, stripMomentsSection } from '@/lib/podcast/personality'
 import Anthropic from '@anthropic-ai/sdk'
 
 // TTS language mapping for podcast generation
@@ -339,21 +339,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'AI generated empty script' }, { status: 500 })
     }
 
-    // Evolve personality state after successful generation
+    // Evolve personality state after successful generation (uses full content incl. MOMENTS section)
     await advanceState(personalityState, scriptContent)
 
+    // Strip ---MOMENTS--- section before returning to client (not needed for TTS)
+    const cleanScript = stripMomentsSection(scriptContent)
+
     // Count lines and estimate duration
-    const lines = scriptContent.split('\n').filter(line =>
+    const lines = cleanScript.split('\n').filter(line =>
       line.trim().match(/^(HOST|GUEST):/i)
     )
-    const totalWords = scriptContent.split(/\s+/).length
+    const totalWords = cleanScript.split(/\s+/).length
     const estimatedDuration = Math.round(totalWords / 150)
 
     console.log(`[Podcast Script] Generated ${lines.length} lines, ~${estimatedDuration}min`)
 
     return NextResponse.json({
       success: true,
-      script: scriptContent,
+      script: cleanScript,
       lineCount: lines.length,
       wordCount: totalWords,
       estimatedDuration,
