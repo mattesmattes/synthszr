@@ -587,14 +587,14 @@ export async function generatePodcastDialogue(
         console.error('[Podcast] ELEVENLABS_API_KEY is not set!')
         return { success: false, error: 'ELEVENLABS_API_KEY environment variable is not set' }
       }
-      console.log(`[Podcast] ElevenLabs API key present: ${apiKey.slice(0, 8)}...${apiKey.slice(-4)}`)
+      console.log('[Podcast] ElevenLabs API key present')
     } else {
       const apiKey = process.env.OPENAI_API_KEY
       if (!apiKey) {
         console.error('[Podcast] OPENAI_API_KEY is not set!')
         return { success: false, error: 'OPENAI_API_KEY environment variable is not set' }
       }
-      console.log(`[Podcast] OpenAI API key present: ${apiKey.slice(0, 8)}...${apiKey.slice(-4)}`)
+      console.log('[Podcast] OpenAI API key present')
     }
 
     console.log(`[Podcast] Generating ${validLines.length} lines with ${provider.toUpperCase()}`)

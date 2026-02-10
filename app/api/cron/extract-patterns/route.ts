@@ -3,6 +3,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import { generateEmbedding, cosineSimilarity } from '@/lib/embeddings/generator'
 import { parseIntParam, parseFloatParam } from '@/lib/validation/query-params'
+import { requireCronOrAdmin } from '@/lib/auth/session'
 
 // Lazy initialization to avoid build-time errors
 let supabase: SupabaseClient | null = null
@@ -57,6 +58,9 @@ interface ExtractedPattern {
  * 5. Stores new patterns
  */
 export async function POST(request: NextRequest) {
+  const authError = await requireCronOrAdmin(request)
+  if (authError) return authError
+
   try {
     const { searchParams } = new URL(request.url)
     const daysBack = parseIntParam(searchParams.get('days'), 30, 1, 365)
@@ -362,7 +366,10 @@ async function findContradictingPattern(
  *
  * Get extraction stats
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authError = await requireCronOrAdmin(request)
+  if (authError) return authError
+
   try {
     const { count: totalPatterns } = await getSupabase()
       .from('learned_patterns')

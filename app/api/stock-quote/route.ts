@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 
 // Common company name to ticker symbol mapping
 const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string }> = {
@@ -154,6 +155,12 @@ interface RealTimeQuote {
 }
 
 export async function GET(request: NextRequest) {
+  // Rate limit: 30 requests per minute per IP
+  const ip = getClientIP(request)
+  const limiter = rateLimiters.standard()
+  const rl = await checkRateLimit(`stock-quote:${ip}`, limiter ?? undefined)
+  if (!rl.success) return rateLimitResponse(rl)
+
   const { searchParams } = new URL(request.url)
   const company = searchParams.get('company')?.toLowerCase().trim()
 

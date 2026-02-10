@@ -176,10 +176,9 @@ const navGroups: NavGroup[] = [
         icon: Settings
       },
       {
-        label: 'Architecture Docs',
-        href: '/docs/architecture',
-        icon: FileCode,
-        external: true
+        label: 'Security Docs',
+        href: '/admin/docs/architecture',
+        icon: FileCode
       }
     ]
   }

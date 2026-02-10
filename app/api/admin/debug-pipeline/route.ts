@@ -20,11 +20,10 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
   const debug: Record<string, unknown> = {}
 
-  // Check environment
+  // Check environment (never expose key material)
   debug.env = {
     hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-    serviceRoleKeyPrefix: process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 10),
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 30),
+    hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
   }
 
   // Step 0: Test admin client works

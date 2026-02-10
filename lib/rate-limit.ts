@@ -54,7 +54,11 @@ export async function checkRateLimit(
   const limiter = customLimiter || getRateLimiter()
 
   if (!limiter) {
-    // Allow request through — warning already logged once on startup
+    // In production, deny by default when Redis is not configured
+    if (process.env.NODE_ENV === 'production') {
+      return { success: false, remaining: 0, reset: Date.now() + 60000, limit: 0 }
+    }
+    // In development, allow through (warning already logged once on startup)
     return { success: true, remaining: 0, reset: Date.now() + 60000, limit: 0 }
   }
 

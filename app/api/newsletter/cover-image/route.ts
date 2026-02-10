@@ -32,6 +32,32 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 })
     }
 
+    // SSRF protection: only allow HTTPS URLs from trusted image hosts
+    let parsedUrl: URL
+    try {
+      parsedUrl = new URL(imageUrl)
+    } catch {
+      return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
+    }
+
+    if (parsedUrl.protocol !== 'https:') {
+      return NextResponse.json({ error: 'Only HTTPS URLs allowed' }, { status: 400 })
+    }
+
+    const allowedHosts = [
+      'supabase.co',
+      'supabase.com',
+      'githubusercontent.com',
+      'unsplash.com',
+      'images.unsplash.com',
+      'synthszr.com',
+      'vercel.app',
+    ]
+    const isAllowedHost = allowedHosts.some(host => parsedUrl.hostname.endsWith(host))
+    if (!isAllowedHost) {
+      return NextResponse.json({ error: 'Image host not allowed' }, { status: 403 })
+    }
+
     // Fetch the original image
     const response = await fetch(imageUrl)
     if (!response.ok) {
