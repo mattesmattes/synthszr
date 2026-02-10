@@ -1,21 +1,23 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
-import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones } from 'lucide-react'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users } from 'lucide-react'
 import { StereoPodcastPlayer } from '@/components/stereo-podcast-player'
 import type { SegmentMetadata } from '@/lib/audio/stereo-mixer'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
 
+// ---------------------------------------------------------------------------
 // Types
+// ---------------------------------------------------------------------------
+
 type TTSVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer'
 type TTSModel = 'tts-1' | 'tts-1-hd'
 type TTSProvider = 'openai' | 'elevenlabs'
@@ -30,24 +32,47 @@ interface TTSSettings {
   tts_synthszr_voice_en: TTSVoice
   tts_model: TTSModel
   tts_enabled: boolean
-  // ElevenLabs settings
   elevenlabs_news_voice_en: string
   elevenlabs_synthszr_voice_en: string
   elevenlabs_model: ElevenLabsModel
-  // Podcast settings - German voices
-  podcast_host_voice_id: string      // Legacy, now used for German
-  podcast_guest_voice_id: string     // Legacy, now used for German
+  podcast_host_voice_id: string
+  podcast_guest_voice_id: string
   podcast_host_voice_de: string
   podcast_guest_voice_de: string
-  // Podcast settings - English voices (used for EN, CS, NDS, etc.)
   podcast_host_voice_en: string
   podcast_guest_voice_en: string
   podcast_duration_minutes: number
-  // Podcast script prompt
   podcast_script_prompt: string | null
 }
 
-// Supported podcast locales and their TTS language mapping
+interface PersonalityState {
+  id: string
+  locale: string
+  episode_count: number
+  relationship_phase: string
+  host_warmth: number
+  host_humor: number
+  host_formality: number
+  host_curiosity: number
+  host_self_awareness: number
+  guest_confidence: number
+  guest_playfulness: number
+  guest_directness: number
+  guest_empathy: number
+  guest_self_awareness: number
+  mutual_comfort: number
+  flirtation_tendency: number
+  inside_joke_count: number
+  memorable_moments: Array<{ episode: number; text: string }>
+  last_episode_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
 type PodcastLocale = 'de' | 'en' | 'cs' | 'nds'
 const PODCAST_LOCALES: { code: PodcastLocale; name: string; ttsLang: 'de' | 'en' }[] = [
   { code: 'de', name: 'Deutsch', ttsLang: 'de' },
@@ -56,25 +81,6 @@ const PODCAST_LOCALES: { code: PodcastLocale; name: string; ttsLang: 'de' | 'en'
   { code: 'nds', name: 'Plattdüütsch', ttsLang: 'en' },
 ]
 
-// ElevenLabs voice presets for Reading
-const ELEVENLABS_VOICES = {
-  news: [
-    { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Warm, professional female' },
-    { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Gigi', description: 'Energetic, youthful female' },
-    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', description: 'Soft, friendly female' },
-    { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Authoritative British male' },
-    { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', description: 'Natural, conversational male' },
-    { id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill', description: 'Deep, trustworthy male' },
-  ],
-  synthszr: [
-    { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Authoritative British male' },
-    { id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill', description: 'Deep, trustworthy male' },
-    { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', description: 'Natural, conversational male' },
-    { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Warm, professional female' },
-  ],
-}
-
-// ElevenLabs voice presets for Podcast (conversational) - English
 const PODCAST_VOICES_EN = [
   { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'Warm, professional female' },
   { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Gigi', description: 'Energetic, youthful female' },
@@ -88,7 +94,6 @@ const PODCAST_VOICES_EN = [
   { id: 'j46AY0iVY3oHcnZbgEJg', name: 'Custom 2', description: 'Custom voice' },
 ]
 
-// ElevenLabs voice presets for Podcast - German
 const PODCAST_VOICES_DE = [
   { id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda', description: 'Warm, professional female' },
   { id: 'ThT5KcBeYPX3keUQqHPh', name: 'Dorothy', description: 'Clear, articulate female' },
@@ -99,7 +104,6 @@ const PODCAST_VOICES_DE = [
   { id: 'j46AY0iVY3oHcnZbgEJg', name: 'Custom 2', description: 'Custom voice' },
 ]
 
-// OpenAI TTS voices for podcast (no emotion tag support, but ~10x cheaper)
 const OPENAI_PODCAST_VOICES: Array<{ id: TTSVoice; name: string; description: string }> = [
   { id: 'nova', name: 'Nova', description: 'Warm, engaging female' },
   { id: 'shimmer', name: 'Shimmer', description: 'Expressive female' },
@@ -109,7 +113,6 @@ const OPENAI_PODCAST_VOICES: Array<{ id: TTSVoice; name: string; description: st
   { id: 'onyx', name: 'Onyx', description: 'Deep, authoritative male' },
 ]
 
-// Example test script for podcast generation
 const EXAMPLE_PODCAST_SCRIPT = `HOST: [cheerfully] Good morning and welcome to Synthszr Daily! I'm your host, and today we have some exciting market news to discuss.
 GUEST: [thoughtfully] Thanks for having me. And yes... the markets are definitely giving us a lot to talk about today.
 HOST: [curiously] Let's dive right in. What caught your attention this morning?
@@ -119,7 +122,6 @@ GUEST: [skeptically] Look... the market has been pricing in rate cuts for months
 HOST: [cheerfully] Great insights as always! That's all the time we have for today.
 GUEST: [laughing] Until next time!`
 
-// Example podcast script prompt
 const PODCAST_SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erstelle ein lebendiges, natürliches Gespräch zwischen einem Host und einem Gast für einen Finance/Tech-Podcast.
 
 **Rollen:**
@@ -165,14 +167,161 @@ HOST: [curiously] Interessant! Kannst du das genauer erklären?
 
 Erstelle jetzt das Podcast-Skript. Beginne direkt mit "HOST:" - keine Einleitung oder Erklärung.`
 
+// ---------------------------------------------------------------------------
+// Personality Map Helpers
+// ---------------------------------------------------------------------------
+
+const DEFAULT_PERSONALITY: Partial<PersonalityState> = {
+  host_warmth: 0.5, host_humor: 0.4, host_formality: 0.6, host_curiosity: 0.7, host_self_awareness: 0.2,
+  guest_confidence: 0.6, guest_playfulness: 0.3, guest_directness: 0.7, guest_empathy: 0.4, guest_self_awareness: 0.2,
+  mutual_comfort: 0.2, flirtation_tendency: 0.0,
+}
+
+function calcPosition(state: Partial<PersonalityState>, role: 'host' | 'guest'): { x: number; y: number } {
+  if (role === 'host') {
+    const x = ((state.host_warmth ?? 0.5) + (state.host_curiosity ?? 0.7) + (1 - (state.host_formality ?? 0.6))) / 3
+    const y = ((state.host_humor ?? 0.4) + (state.host_self_awareness ?? 0.2) + (1 - (state.host_formality ?? 0.6))) / 3
+    return { x, y }
+  }
+  const x = ((state.guest_empathy ?? 0.4) + (state.guest_playfulness ?? 0.3) + (1 - (state.guest_directness ?? 0.7))) / 3
+  const y = ((state.guest_confidence ?? 0.6) + (state.guest_playfulness ?? 0.3) + (state.guest_self_awareness ?? 0.2)) / 3
+  return { x, y }
+}
+
+const PHASE_LABELS: Record<string, string> = {
+  strangers: 'Fremde',
+  acquaintances: 'Bekannte',
+  colleagues: 'Kollegen',
+  friends: 'Freunde',
+  close_friends: 'Enge Freunde',
+}
+
+// ---------------------------------------------------------------------------
+// PersonalityMap Component
+// ---------------------------------------------------------------------------
+
+function PersonalityMap({ personality }: { personality: PersonalityState | null }) {
+  const W = 420
+  const H = 420
+  const PAD = 60
+  const innerW = W - PAD * 2
+  const innerH = H - PAD * 2
+
+  const state = personality || DEFAULT_PERSONALITY as PersonalityState
+
+  const hostPos = calcPosition(state, 'host')
+  const guestPos = calcPosition(state, 'guest')
+  const ghostHost = calcPosition(DEFAULT_PERSONALITY, 'host')
+  const ghostGuest = calcPosition(DEFAULT_PERSONALITY, 'guest')
+
+  // Map 0..1 to SVG coordinates
+  const toSvgX = (v: number) => PAD + v * innerW
+  const toSvgY = (v: number) => PAD + (1 - v) * innerH // Invert Y
+
+  const hx = toSvgX(hostPos.x)
+  const hy = toSvgY(hostPos.y)
+  const gx = toSvgX(guestPos.x)
+  const gy = toSvgY(guestPos.y)
+  const ghx = toSvgX(ghostHost.x)
+  const ghy = toSvgY(ghostHost.y)
+  const ggx = toSvgX(ghostGuest.x)
+  const ggy = toSvgY(ghostGuest.y)
+
+  const phase = state.relationship_phase || 'strangers'
+  const isClose = phase === 'friends' || phase === 'close_friends'
+
+  // Midpoint for phase label
+  const mx = (hx + gx) / 2
+  const my = (hy + gy) / 2
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-md mx-auto" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+      {/* Background */}
+      <rect x={PAD} y={PAD} width={innerW} height={innerH} fill="hsl(var(--muted))" rx={8} opacity={0.3} />
+
+      {/* Grid lines */}
+      {[0.25, 0.5, 0.75].map((v) => (
+        <g key={v}>
+          <line x1={toSvgX(v)} y1={PAD} x2={toSvgX(v)} y2={H - PAD} stroke="hsl(var(--border))" strokeWidth={0.5} strokeDasharray="4 4" />
+          <line x1={PAD} y1={toSvgY(v)} x2={W - PAD} y2={toSvgY(v)} stroke="hsl(var(--border))" strokeWidth={0.5} strokeDasharray="4 4" />
+        </g>
+      ))}
+
+      {/* Center axes */}
+      <line x1={toSvgX(0.5)} y1={PAD} x2={toSvgX(0.5)} y2={H - PAD} stroke="hsl(var(--foreground))" strokeWidth={1} opacity={0.15} />
+      <line x1={PAD} y1={toSvgY(0.5)} x2={W - PAD} y2={toSvgY(0.5)} stroke="hsl(var(--foreground))" strokeWidth={1} opacity={0.15} />
+
+      {/* Axis labels */}
+      <text x={PAD - 8} y={H / 2} textAnchor="end" fontSize={10} fill="hsl(var(--muted-foreground))" dominantBaseline="middle" style={{ letterSpacing: '0.05em' }}>
+        Rational
+      </text>
+      <text x={W - PAD + 8} y={H / 2} textAnchor="start" fontSize={10} fill="hsl(var(--muted-foreground))" dominantBaseline="middle" style={{ letterSpacing: '0.05em' }}>
+        Emotional
+      </text>
+      <text x={W / 2} y={PAD - 12} textAnchor="middle" fontSize={10} fill="hsl(var(--muted-foreground))" style={{ letterSpacing: '0.05em' }}>
+        Expressiv
+      </text>
+      <text x={W / 2} y={H - PAD + 18} textAnchor="middle" fontSize={10} fill="hsl(var(--muted-foreground))" style={{ letterSpacing: '0.05em' }}>
+        Reserviert
+      </text>
+
+      {/* Ghost trails (start → current) */}
+      {personality && (
+        <>
+          <line x1={ghx} y1={ghy} x2={hx} y2={hy} stroke="#f59e0b" strokeWidth={1} opacity={0.2} strokeDasharray="3 3" />
+          <line x1={ggx} y1={ggy} x2={gx} y2={gy} stroke="#06b6d4" strokeWidth={1} opacity={0.2} strokeDasharray="3 3" />
+        </>
+      )}
+
+      {/* Ghost dots (starting positions) */}
+      <circle cx={ghx} cy={ghy} r={6} fill="none" stroke="#f59e0b" strokeWidth={1.5} opacity={0.25} />
+      <circle cx={ggx} cy={ggy} r={6} fill="none" stroke="#06b6d4" strokeWidth={1.5} opacity={0.25} />
+
+      {/* Connecting line between current positions */}
+      <line
+        x1={hx} y1={hy} x2={gx} y2={gy}
+        stroke="hsl(var(--foreground))"
+        strokeWidth={isClose ? 2 : 1}
+        strokeDasharray={isClose ? 'none' : '6 4'}
+        opacity={0.3}
+      />
+
+      {/* Phase label on connecting line */}
+      <rect x={mx - 30} y={my - 8} width={60} height={16} rx={4} fill="hsl(var(--background))" stroke="hsl(var(--border))" strokeWidth={0.5} />
+      <text x={mx} y={my + 1} textAnchor="middle" fontSize={8} fill="hsl(var(--muted-foreground))" dominantBaseline="middle">
+        {PHASE_LABELS[phase] || phase}
+      </text>
+
+      {/* Current HOST dot */}
+      <circle cx={hx} cy={hy} r={10} fill="#f59e0b" opacity={0.9} />
+      <text x={hx} y={hy + 1} textAnchor="middle" dominantBaseline="middle" fontSize={7} fill="white" fontWeight="bold">H</text>
+      <text x={hx} y={hy - 16} textAnchor="middle" fontSize={9} fill="#f59e0b" fontWeight="600">HOST</text>
+
+      {/* Current GUEST dot */}
+      <circle cx={gx} cy={gy} r={10} fill="#06b6d4" opacity={0.9} />
+      <text x={gx} y={gy + 1} textAnchor="middle" dominantBaseline="middle" fontSize={7} fill="white" fontWeight="bold">G</text>
+      <text x={gx} y={gy - 16} textAnchor="middle" fontSize={9} fill="#06b6d4" fontWeight="600">GUEST</text>
+
+      {/* No data overlay */}
+      {!personality && (
+        <text x={W / 2} y={H / 2 + 50} textAnchor="middle" fontSize={11} fill="hsl(var(--muted-foreground))" opacity={0.6}>
+          Startpositionen — noch keine Episoden
+        </text>
+      )}
+    </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main Page Component
+// ---------------------------------------------------------------------------
+
 export default function AudioPage() {
   const [ttsSettings, setTtsSettings] = useState<TTSSettings | null>(null)
   const [ttsLoading, setTtsLoading] = useState(true)
   const [ttsSaving, setTtsSaving] = useState(false)
   const [ttsSuccess, setTtsSuccess] = useState(false)
-  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null)
-  const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null)
-  const [activeTab, setActiveTab] = useState('podcast')
+  const [activeTab, setActiveTab] = useState('episode')
 
   // Podcast-specific state
   const [podcastDuration, setPodcastDuration] = useState(30)
@@ -184,7 +333,7 @@ export default function AudioPage() {
   const [isPlaying, setIsPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Podcast provider selection (OpenAI is ~10x cheaper but no emotion tags)
+  // Provider & voice state
   const [podcastProvider, setPodcastProvider] = useState<PodcastProvider>('openai')
   const [openaiHostVoice, setOpenaiHostVoice] = useState<TTSVoice>('shimmer')
   const [openaiGuestVoice, setOpenaiGuestVoice] = useState<TTSVoice>('fable')
@@ -197,15 +346,59 @@ export default function AudioPage() {
   // Post selection for script generation
   const [recentPosts, setRecentPosts] = useState<Array<{ id: string; title: string; slug: string; created_at: string }>>([])
   const [selectedPostId, setSelectedPostId] = useState<string>('')
-  const [selectedLocale, setSelectedLocale] = useState<'de' | 'en' | 'cs' | 'nds'>('en')
+  const [selectedLocale, setSelectedLocale] = useState<PodcastLocale>('en')
   const [scriptGenerating, setScriptGenerating] = useState(false)
   const [customPrompt, setCustomPrompt] = useState(PODCAST_SCRIPT_PROMPT)
-  const [scriptGenerated, setScriptGenerated] = useState(false) // tracks if script was AI-generated
-  const [scriptModified, setScriptModified] = useState(false) // tracks if user edited the generated script
+  const [scriptGenerated, setScriptGenerated] = useState(false)
+  const [scriptModified, setScriptModified] = useState(false)
+
+  // Personality state
+  const [personality, setPersonality] = useState<PersonalityState | null>(null)
+  const [personalityLoading, setPersonalityLoading] = useState(false)
+
+  // Job-based podcast generation state
+  const [podcastJobId, setPodcastJobId] = useState<string | null>(null)
+  const [podcastProgress, setPodcastProgress] = useState(0)
+  const [podcastCurrentLine, setPodcastCurrentLine] = useState(0)
+  const [podcastTotalLines, setPodcastTotalLines] = useState(0)
+
+  // Estimated word count
+  const estimatedWordCount = Math.round(podcastDuration * 150)
+
+  // Script line count
+  const scriptLineCount = podcastScript.split('\n').filter(line =>
+    line.trim().match(/^(HOST|GUEST):/i)
+  ).length
+
+  // ---------------------------------------------------------------------------
+  // Data Fetching
+  // ---------------------------------------------------------------------------
 
   useEffect(() => {
     fetchTTSSettings()
     fetchRecentPosts()
+  }, [])
+
+  // Fetch personality when Character tab becomes active
+  useEffect(() => {
+    if (activeTab === 'character' && !personality && !personalityLoading) {
+      fetchPersonality()
+    }
+  }, [activeTab])
+
+  const fetchPersonality = useCallback(async () => {
+    setPersonalityLoading(true)
+    try {
+      const res = await fetch('/api/admin/podcast-personality?locale=de')
+      if (res.ok) {
+        const data = await res.json()
+        setPersonality(data.personality)
+      }
+    } catch (err) {
+      console.error('Error fetching personality:', err)
+    } finally {
+      setPersonalityLoading(false)
+    }
   }, [])
 
   async function fetchRecentPosts() {
@@ -215,54 +408,12 @@ export default function AudioPage() {
         const data = await res.json()
         const posts = data.posts || []
         setRecentPosts(posts)
-        // Pre-select the newest post
         if (posts.length > 0 && !selectedPostId) {
           setSelectedPostId(posts[0].id)
         }
       }
     } catch (error) {
       console.error('Error fetching posts:', error)
-    }
-  }
-
-  async function generateScriptFromPost() {
-    if (!selectedPostId) {
-      setPodcastError('Bitte wähle einen Post aus')
-      return
-    }
-
-    setScriptGenerating(true)
-    setPodcastError(null)
-
-    try {
-      const res = await fetch('/api/podcast/generate-script', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          postId: selectedPostId,
-          locale: selectedLocale,
-          durationMinutes: podcastDuration,
-          // Never send customPrompt when generating from post - let API use
-          // its built-in locale-specific prompts (DE/EN templates)
-          // customPrompt is only for manual script editing
-        }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Script-Generierung fehlgeschlagen')
-      }
-
-      setPodcastScript(data.script)
-      setScriptGenerated(true)
-      setScriptModified(false)
-      setPodcastAudioUrl(null) // Reset audio when new script is generated
-    } catch (error) {
-      console.error('Script generation error:', error)
-      setPodcastError(error instanceof Error ? error.message : 'Unbekannter Fehler')
-    } finally {
-      setScriptGenerating(false)
     }
   }
 
@@ -275,7 +426,6 @@ export default function AudioPage() {
         if (data.podcast_duration_minutes) {
           setPodcastDuration(data.podcast_duration_minutes)
         }
-        // Load saved prompt or keep default
         if (data.podcast_script_prompt) {
           setCustomPrompt(data.podcast_script_prompt)
         }
@@ -286,6 +436,10 @@ export default function AudioPage() {
       setTtsLoading(false)
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Actions
+  // ---------------------------------------------------------------------------
 
   async function saveTTSSettings() {
     if (!ttsSettings) return
@@ -312,60 +466,42 @@ export default function AudioPage() {
     }
   }
 
-  async function previewVoice(voice: TTSVoice, locale: 'de' | 'en') {
-    if (previewAudio) {
-      previewAudio.pause()
-      previewAudio.src = ''
+  async function generateScriptFromPost() {
+    if (!selectedPostId) {
+      setPodcastError('Bitte wähle einen Post aus')
+      return
     }
-
-    const voiceKey = `${voice}-${locale}`
-    setPreviewingVoice(voiceKey)
-
+    setScriptGenerating(true)
+    setPodcastError(null)
     try {
-      const sampleText = locale === 'de'
-        ? 'Dies ist eine Vorschau der ausgewählten Stimme für den deutschen Newsletter.'
-        : 'This is a preview of the selected voice for the English newsletter.'
-
-      const res = await fetch('/api/admin/tts-settings', {
+      const res = await fetch('/api/podcast/generate-script', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: sampleText, voice, model: ttsSettings?.tts_model || 'tts-1' }),
+        body: JSON.stringify({
+          postId: selectedPostId,
+          locale: selectedLocale,
+          durationMinutes: podcastDuration,
+        }),
       })
-
-      if (res.ok) {
-        const data = await res.json()
-        if (data.audioBase64) {
-          const audio = new Audio(`data:audio/mpeg;base64,${data.audioBase64}`)
-          setPreviewAudio(audio)
-          audio.onended = () => setPreviewingVoice(null)
-          audio.play()
-        }
-      }
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Script-Generierung fehlgeschlagen')
+      setPodcastScript(data.script)
+      setScriptGenerated(true)
+      setScriptModified(false)
+      setPodcastAudioUrl(null)
     } catch (error) {
-      console.error('Error previewing voice:', error)
+      console.error('Script generation error:', error)
+      setPodcastError(error instanceof Error ? error.message : 'Unbekannter Fehler')
     } finally {
-      if (previewingVoice === voiceKey) {
-        setTimeout(() => setPreviewingVoice(null), 100)
-      }
+      setScriptGenerating(false)
     }
   }
 
-  // Calculate estimated word count based on duration
-  const estimatedWordCount = Math.round(podcastDuration * 150) // ~150 words per minute for natural speech
-
-  // Job-based podcast generation state
-  const [podcastJobId, setPodcastJobId] = useState<string | null>(null)
-  const [podcastProgress, setPodcastProgress] = useState(0)
-  const [podcastCurrentLine, setPodcastCurrentLine] = useState(0)
-  const [podcastTotalLines, setPodcastTotalLines] = useState(0)
-
-  // Podcast generation using background job system
   async function generatePodcast() {
     if (!podcastScript.trim()) {
       setPodcastError('Bitte gib ein Script ein')
       return
     }
-
     setPodcastGenerating(true)
     setPodcastError(null)
     setPodcastAudioUrl(null)
@@ -373,8 +509,6 @@ export default function AudioPage() {
     setPodcastCurrentLine(0)
 
     try {
-      // Build request body based on provider
-      // Include postId and sourceLocale so the job processor can auto-link to post_podcasts
       const requestBody = podcastProvider === 'openai'
         ? {
             script: podcastScript,
@@ -397,27 +531,19 @@ export default function AudioPage() {
             sourceLocale: selectedLocale,
           }
 
-      // Create job
       const createRes = await fetch('/api/podcast/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(requestBody),
       })
-
       const createData = await createRes.json()
-
-      if (!createRes.ok) {
-        throw new Error(createData.error || 'Job-Erstellung fehlgeschlagen')
-      }
+      if (!createRes.ok) throw new Error(createData.error || 'Job-Erstellung fehlgeschlagen')
 
       const jobId = createData.jobId
       setPodcastJobId(jobId)
       setPodcastTotalLines(createData.totalLines)
 
-      console.log(`[Podcast] Job ${jobId} created, triggering processing...`)
-
-      // Trigger processing (don't await - let it run in background)
       fetch('/api/podcast/jobs/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -425,19 +551,12 @@ export default function AudioPage() {
         body: JSON.stringify({ jobId }),
       }).catch(err => console.error('[Podcast] Process trigger failed:', err))
 
-      // Poll for job status
       let completed = false
       while (!completed) {
-        await new Promise(resolve => setTimeout(resolve, 2000)) // Poll every 2 seconds
-
-        const statusRes = await fetch(`/api/podcast/jobs/${jobId}`, {
-          credentials: 'include',
-        })
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        const statusRes = await fetch(`/api/podcast/jobs/${jobId}`, { credentials: 'include' })
         const status = await statusRes.json()
-
-        if (!statusRes.ok) {
-          throw new Error(status.error || 'Status-Abfrage fehlgeschlagen')
-        }
+        if (!statusRes.ok) throw new Error(status.error || 'Status-Abfrage fehlgeschlagen')
 
         setPodcastProgress(status.progress || 0)
         setPodcastCurrentLine(status.currentLine || 0)
@@ -447,7 +566,6 @@ export default function AudioPage() {
           completed = true
           setPodcastAudioUrl(status.audioUrl)
           setPodcastDurationSeconds(status.durationSeconds)
-
           if (status.segmentUrls && status.segmentMetadata) {
             setSegmentUrls(status.segmentUrls)
             setSegmentMetadata(status.segmentMetadata)
@@ -455,12 +573,9 @@ export default function AudioPage() {
             setSegmentUrls([])
             setSegmentMetadata([])
           }
-
-          console.log(`[Podcast] Job ${jobId} completed!`)
         } else if (status.status === 'failed') {
           throw new Error(status.errorMessage || 'Podcast-Generierung fehlgeschlagen')
         }
-        // Continue polling if still processing
       }
     } catch (error) {
       console.error('Podcast generation error:', error)
@@ -471,10 +586,8 @@ export default function AudioPage() {
     }
   }
 
-  // Audio playback
   function togglePlayback() {
     if (!audioRef.current) return
-
     if (isPlaying) {
       audioRef.current.pause()
     } else {
@@ -483,10 +596,9 @@ export default function AudioPage() {
     setIsPlaying(!isPlaying)
   }
 
-  // Count lines in script
-  const scriptLineCount = podcastScript.split('\n').filter(line =>
-    line.trim().match(/^(HOST|GUEST):/i)
-  ).length
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
 
   return (
     <div className="p-8">
@@ -496,742 +608,75 @@ export default function AudioPage() {
           Audio
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Sprachausgabe und Podcast-Einstellungen für Blog-Artikel
+          Podcast-Episoden, Aufnahme-Einstellungen und Charakter-Entwicklung
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="reading" className="flex items-center gap-2">
-            <Volume2 className="h-4 w-4" />
-            Reading
+        <TabsList className="grid w-full max-w-lg grid-cols-3">
+          <TabsTrigger value="episode" className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4" />
+            Episode
           </TabsTrigger>
-          <TabsTrigger value="podcast" className="flex items-center gap-2">
+          <TabsTrigger value="recording" className="flex items-center gap-2">
             <Mic className="h-4 w-4" />
-            Podcast
+            Recording
+          </TabsTrigger>
+          <TabsTrigger value="character" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Character
           </TabsTrigger>
         </TabsList>
 
-        {/* Reading Tab - TTS Settings */}
-        <TabsContent value="reading" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Volume2 className="h-5 w-5" />
-                Sprachausgabe (TTS)
-              </CardTitle>
-              <CardDescription>
-                Text-to-Speech Einstellungen für Blog-Artikel mit dualer Stimme
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {ttsLoading ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm text-muted-foreground">Lade TTS-Einstellungen...</span>
-                </div>
-              ) : ttsSettings ? (
-                <>
-                  {/* TTS Enabled */}
-                  <div className="flex items-center justify-between pb-4 border-b">
-                    <div>
-                      <Label className="text-base">TTS aktivieren</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Audio-Version für Blogposts generieren
-                      </p>
-                    </div>
-                    <Switch
-                      checked={ttsSettings.tts_enabled}
-                      onCheckedChange={(enabled) =>
-                        setTtsSettings({ ...ttsSettings, tts_enabled: enabled })
-                      }
-                    />
-                  </div>
-
-                  {ttsSettings.tts_enabled && (
-                    <>
-                      {/* TTS Provider Selection */}
-                      <div className="space-y-3 pb-4 border-b">
-                        <div>
-                          <Label className="text-base">TTS-Anbieter</Label>
-                          <p className="text-sm text-muted-foreground">
-                            OpenAI ist günstiger, ElevenLabs hat höhere Qualität
-                          </p>
-                        </div>
-                        <Select
-                          value={ttsSettings.tts_provider || 'openai'}
-                          onValueChange={(value: TTSProvider) =>
-                            setTtsSettings({ ...ttsSettings, tts_provider: value })
-                          }
-                        >
-                          <SelectTrigger className="w-56">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="openai">OpenAI TTS</SelectItem>
-                            <SelectItem value="elevenlabs">ElevenLabs</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* OpenAI Settings */}
-                      {(ttsSettings.tts_provider === 'openai' || !ttsSettings.tts_provider) && (
-                        <>
-                          {/* TTS Model */}
-                          <div className="space-y-3 pb-4 border-b">
-                            <div>
-                              <Label className="text-base">OpenAI TTS-Modell</Label>
-                              <p className="text-sm text-muted-foreground">
-                                tts-1 ist schneller, tts-1-hd hat höhere Qualität
-                              </p>
-                            </div>
-                            <Select
-                              value={ttsSettings.tts_model}
-                              onValueChange={(value: TTSModel) =>
-                                setTtsSettings({ ...ttsSettings, tts_model: value })
-                              }
-                            >
-                              <SelectTrigger className="w-48">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="tts-1">tts-1 (Standard)</SelectItem>
-                                <SelectItem value="tts-1-hd">tts-1-hd (HD)</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          {/* OpenAI English Voices */}
-                          <div className="space-y-4 pb-4 border-b">
-                            <div>
-                              <Label className="text-base">OpenAI Stimmen (Englisch)</Label>
-                              <p className="text-sm text-muted-foreground">
-                                Stimmen für alle Sprachversionen (EN TTS Qualität ist besser)
-                              </p>
-                            </div>
-
-                            {/* News Voice EN */}
-                            <div className="flex items-center gap-4">
-                              <div className="flex-1">
-                                <Label className="text-sm">Nachrichten</Label>
-                                <Select
-                                  value={ttsSettings.tts_news_voice_en}
-                                  onValueChange={(value: TTSVoice) =>
-                                    setTtsSettings({ ...ttsSettings, tts_news_voice_en: value })
-                                  }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="nova">Nova (empfohlen)</SelectItem>
-                                    <SelectItem value="shimmer">Shimmer</SelectItem>
-                                    <SelectItem value="alloy">Alloy</SelectItem>
-                                    <SelectItem value="echo">Echo</SelectItem>
-                                    <SelectItem value="fable">Fable</SelectItem>
-                                    <SelectItem value="onyx">Onyx</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => previewVoice(ttsSettings.tts_news_voice_en, 'en')}
-                                disabled={previewingVoice === `${ttsSettings.tts_news_voice_en}-en`}
-                              >
-                                {previewingVoice === `${ttsSettings.tts_news_voice_en}-en` ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Play className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </div>
-
-                            {/* Synthszr Voice EN */}
-                            <div className="flex items-center gap-4">
-                              <div className="flex-1">
-                                <Label className="text-sm">Synthszr Take</Label>
-                                <Select
-                                  value={ttsSettings.tts_synthszr_voice_en}
-                                  onValueChange={(value: TTSVoice) =>
-                                    setTtsSettings({ ...ttsSettings, tts_synthszr_voice_en: value })
-                                  }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="onyx">Onyx (empfohlen)</SelectItem>
-                                    <SelectItem value="echo">Echo</SelectItem>
-                                    <SelectItem value="fable">Fable</SelectItem>
-                                    <SelectItem value="alloy">Alloy</SelectItem>
-                                    <SelectItem value="nova">Nova</SelectItem>
-                                    <SelectItem value="shimmer">Shimmer</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => previewVoice(ttsSettings.tts_synthszr_voice_en, 'en')}
-                                disabled={previewingVoice === `${ttsSettings.tts_synthszr_voice_en}-en`}
-                              >
-                                {previewingVoice === `${ttsSettings.tts_synthszr_voice_en}-en` ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Play className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* ElevenLabs Settings */}
-                      {ttsSettings.tts_provider === 'elevenlabs' && (
-                        <>
-                          {/* ElevenLabs Model */}
-                          <div className="space-y-3 pb-4 border-b">
-                            <div>
-                              <Label className="text-base">ElevenLabs Modell</Label>
-                              <p className="text-sm text-muted-foreground">
-                                Multilingual v2 für beste Qualität, Turbo für schnellere Generierung
-                              </p>
-                            </div>
-                            <Select
-                              value={ttsSettings.elevenlabs_model || 'eleven_v3'}
-                              onValueChange={(value: ElevenLabsModel) =>
-                                setTtsSettings({ ...ttsSettings, elevenlabs_model: value })
-                              }
-                            >
-                              <SelectTrigger className="w-64">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="eleven_v3">Eleven v3 (empfohlen für Podcast)</SelectItem>
-                                <SelectItem value="eleven_multilingual_v2">Multilingual v2</SelectItem>
-                                <SelectItem value="eleven_turbo_v2_5">Turbo v2.5 (schnell)</SelectItem>
-                                <SelectItem value="eleven_turbo_v2">Turbo v2</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          {/* ElevenLabs Voices */}
-                          <div className="space-y-4 pb-4 border-b">
-                            <div>
-                              <Label className="text-base">ElevenLabs Stimmen</Label>
-                              <p className="text-sm text-muted-foreground">
-                                Hochwertige Stimmen für alle Sprachversionen
-                              </p>
-                            </div>
-
-                            {/* News Voice */}
-                            <div className="flex items-center gap-4">
-                              <div className="flex-1">
-                                <Label className="text-sm">Nachrichten</Label>
-                                <Select
-                                  value={ttsSettings.elevenlabs_news_voice_en || 'pFZP5JQG7iQjIQuC4Bku'}
-                                  onValueChange={(value: string) =>
-                                    setTtsSettings({ ...ttsSettings, elevenlabs_news_voice_en: value })
-                                  }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {ELEVENLABS_VOICES.news.map((voice) => (
-                                      <SelectItem key={voice.id} value={voice.id}>
-                                        {voice.name} - {voice.description}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-
-                            {/* Synthszr Voice */}
-                            <div className="flex items-center gap-4">
-                              <div className="flex-1">
-                                <Label className="text-sm">Synthszr Take</Label>
-                                <Select
-                                  value={ttsSettings.elevenlabs_synthszr_voice_en || 'onwK4e9ZLuTAKqWW03F9'}
-                                  onValueChange={(value: string) =>
-                                    setTtsSettings({ ...ttsSettings, elevenlabs_synthszr_voice_en: value })
-                                  }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {ELEVENLABS_VOICES.synthszr.map((voice) => (
-                                      <SelectItem key={voice.id} value={voice.id}>
-                                        {voice.name} - {voice.description}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                          </div>
-
-                          <Alert>
-                            <AlertTriangle className="h-4 w-4" />
-                            <AlertDescription>
-                              ElevenLabs erfordert einen API-Key (ELEVENLABS_API_KEY in .env.local)
-                            </AlertDescription>
-                          </Alert>
-                        </>
-                      )}
-                    </>
-                  )}
-
-                  {/* Save Button */}
-                  <div className="flex items-center gap-4">
-                    <Button onClick={saveTTSSettings} disabled={ttsSaving}>
-                      {ttsSaving ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="mr-2 h-4 w-4" />
-                      )}
-                      Einstellungen speichern
-                    </Button>
-                    {ttsSuccess && (
-                      <span className="text-sm text-green-600 flex items-center gap-1">
-                        <CheckCircle className="h-4 w-4" />
-                        Gespeichert
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="text-xs text-muted-foreground">
-                    {ttsSettings.tts_provider === 'elevenlabs'
-                      ? 'Audio wird mit ElevenLabs generiert. Höhere Qualität, aber teurer (~$0.50+ pro Artikel).'
-                      : 'Audio wird mit OpenAI TTS generiert. Geschätzte Kosten: ~$0.30 pro Artikel.'
-                    }
-                    {' '}Nachrichten-Content wird mit der ersten Stimme, Synthszr Take Abschnitte mit der zweiten Stimme vorgelesen.
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  TTS-Einstellungen konnten nicht geladen werden.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Podcast Tab */}
-        <TabsContent value="podcast" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mic className="h-5 w-5" />
-                Podcast-Einstellungen
-              </CardTitle>
-              <CardDescription>
-                Wähle zwischen OpenAI TTS (~10x günstiger) oder ElevenLabs (mit Emotion-Tags)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {ttsLoading ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm text-muted-foreground">Lade Einstellungen...</span>
-                </div>
-              ) : ttsSettings ? (
-                <>
-                  {/* Provider Selection - TOP PRIORITY */}
-                  <div className="space-y-3 p-4 bg-primary/5 rounded-lg border-2 border-primary/20">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-base font-semibold">TTS Provider</Label>
-                        <p className="text-sm text-muted-foreground">
-                          OpenAI: ~$0.20/Podcast | ElevenLabs: ~$3.00/Podcast
-                        </p>
-                      </div>
-                      <Select
-                        value={podcastProvider}
-                        onValueChange={(v) => setPodcastProvider(v as PodcastProvider)}
-                      >
-                        <SelectTrigger className="w-56">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="openai">
-                            OpenAI TTS (~10x günstiger)
-                          </SelectItem>
-                          <SelectItem value="elevenlabs">
-                            ElevenLabs (Emotion-Tags)
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {podcastProvider === 'openai' && (
-                      <Alert className="bg-yellow-500/10 border-yellow-500/30">
-                        <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                        <AlertDescription className="text-sm">
-                          OpenAI TTS unterstützt keine Emotion-Tags. Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code> werden automatisch entfernt.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-
-                  {/* OpenAI Settings */}
-                  {podcastProvider === 'openai' && (
-                    <>
-                      <div className="space-y-2 pb-4 border-b">
-                        <Label className="text-base">OpenAI Model</Label>
-                        <Select
-                          value={openaiModel}
-                          onValueChange={(v) => setOpenaiModel(v as TTSModel)}
-                        >
-                          <SelectTrigger className="w-48">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="tts-1">tts-1 (schnell, günstiger)</SelectItem>
-                            <SelectItem value="tts-1-hd">tts-1-hd (HD Qualität)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-4 pb-4 border-b">
-                        <Label className="text-base">OpenAI Stimmen</Label>
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label className="text-sm">Host (News)</Label>
-                            <Select
-                              value={openaiHostVoice}
-                              onValueChange={(v) => setOpenaiHostVoice(v as TTSVoice)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {OPENAI_PODCAST_VOICES.map((voice) => (
-                                  <SelectItem key={voice.id} value={voice.id}>
-                                    {voice.name} - {voice.description}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label className="text-sm">Guest (Synthszr)</Label>
-                            <Select
-                              value={openaiGuestVoice}
-                              onValueChange={(v) => setOpenaiGuestVoice(v as TTSVoice)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {OPENAI_PODCAST_VOICES.map((voice) => (
-                                  <SelectItem key={voice.id} value={voice.id}>
-                                    {voice.name} - {voice.description}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* ElevenLabs Settings */}
-                  {podcastProvider === 'elevenlabs' && (
-                    <>
-                      {/* Language Mapping Info */}
-                      <Alert className="bg-muted/50">
-                        <Info className="h-4 w-4" />
-                        <AlertDescription className="text-sm">
-                          <strong>TTS-Sprache pro Locale:</strong>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {PODCAST_LOCALES.map((loc) => (
-                              <Badge key={loc.code} variant={loc.ttsLang === 'de' ? 'default' : 'secondary'}>
-                                {loc.name} → {loc.ttsLang === 'de' ? 'Deutsch' : 'English'} TTS
-                              </Badge>
-                            ))}
-                          </div>
-                        </AlertDescription>
-                      </Alert>
-
-                      {/* Model Selection for Podcast */}
-                  <div className="space-y-2 pb-4 border-b">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-base">ElevenLabs Model</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Eleven v3 unterstützt Audio-Tags wie [cheerfully], [whispers], [sighs]
-                        </p>
-                      </div>
-                      <Select
-                        value={ttsSettings.elevenlabs_model || 'eleven_v3'}
-                        onValueChange={(value: ElevenLabsModel) =>
-                          setTtsSettings({ ...ttsSettings, elevenlabs_model: value })
-                        }
-                      >
-                        <SelectTrigger className="w-64">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="eleven_v3">Eleven v3 (empfohlen)</SelectItem>
-                          <SelectItem value="eleven_multilingual_v2">Multilingual v2</SelectItem>
-                          <SelectItem value="eleven_turbo_v2_5">Turbo v2.5 (schnell)</SelectItem>
-                          <SelectItem value="eleven_turbo_v2">Turbo v2</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* German Voices Section */}
-                  <div className="space-y-4 pb-4 border-b">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="default">DE</Badge>
-                      <Label className="text-base">Deutsche Stimmen</Label>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Verwendet für: Deutsch (de)
-                    </p>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {/* Host Voice DE */}
-                      <div className="space-y-2">
-                        <Label className="text-sm">Host (News)</Label>
-                        <Select
-                          value={ttsSettings.podcast_host_voice_de || ttsSettings.podcast_host_voice_id || 'XrExE9yKIg1WjnnlVkGX'}
-                          onValueChange={(value: string) =>
-                            setTtsSettings({ ...ttsSettings, podcast_host_voice_de: value })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PODCAST_VOICES_DE.map((voice) => (
-                              <SelectItem key={voice.id} value={voice.id}>
-                                {voice.name} - {voice.description}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Guest Voice DE */}
-                      <div className="space-y-2">
-                        <Label className="text-sm">Guest (Synthszr)</Label>
-                        <Select
-                          value={ttsSettings.podcast_guest_voice_de || ttsSettings.podcast_guest_voice_id || 'g5CIjZEefAph4nQFvHAz'}
-                          onValueChange={(value: string) =>
-                            setTtsSettings({ ...ttsSettings, podcast_guest_voice_de: value })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PODCAST_VOICES_DE.map((voice) => (
-                              <SelectItem key={voice.id} value={voice.id}>
-                                {voice.name} - {voice.description}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* English Voices Section */}
-                  <div className="space-y-4 pb-4 border-b">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">EN</Badge>
-                      <Label className="text-base">Englische Stimmen</Label>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Verwendet für: English (en), Čeština (cs), Plattdüütsch (nds)
-                    </p>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {/* Host Voice EN */}
-                      <div className="space-y-2">
-                        <Label className="text-sm">Host (News)</Label>
-                        <Select
-                          value={ttsSettings.podcast_host_voice_en || 'pFZP5JQG7iQjIQuC4Bku'}
-                          onValueChange={(value: string) =>
-                            setTtsSettings({ ...ttsSettings, podcast_host_voice_en: value })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PODCAST_VOICES_EN.map((voice) => (
-                              <SelectItem key={voice.id} value={voice.id}>
-                                {voice.name} - {voice.description}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Guest Voice EN */}
-                      <div className="space-y-2">
-                        <Label className="text-sm">Guest (Synthszr)</Label>
-                        <Select
-                          value={ttsSettings.podcast_guest_voice_en || 'onwK4e9ZLuTAKqWW03F9'}
-                          onValueChange={(value: string) =>
-                            setTtsSettings({ ...ttsSettings, podcast_guest_voice_en: value })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PODCAST_VOICES_EN.map((voice) => (
-                              <SelectItem key={voice.id} value={voice.id}>
-                                {voice.name} - {voice.description}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                    </>
-                  )}
-
-                  {/* Duration Slider */}
-                  <div className="space-y-4 pb-4 border-b">
-                    <div>
-                      <Label className="text-base">Podcast-Länge</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Ziel-Dauer des generierten Podcasts
-                      </p>
-                    </div>
-                    <div className="space-y-3">
-                      <Slider
-                        value={[podcastDuration]}
-                        onValueChange={(value) => setPodcastDuration(value[0])}
-                        min={5}
-                        max={30}
-                        step={1}
-                        className="w-full max-w-md"
-                      />
-                      <div className="flex items-center justify-between max-w-md">
-                        <span className="text-sm text-muted-foreground">5 Min</span>
-                        <Badge variant="secondary" className="text-sm">
-                          {podcastDuration} Minuten
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">30 Min</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Geschätzte Wortanzahl: ~{estimatedWordCount.toLocaleString()} Wörter
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Save Button */}
-                  <div className="flex items-center gap-4">
-                    <Button onClick={saveTTSSettings} disabled={ttsSaving}>
-                      {ttsSaving ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="mr-2 h-4 w-4" />
-                      )}
-                      Einstellungen speichern
-                    </Button>
-                    {ttsSuccess && (
-                      <span className="text-sm text-green-600 flex items-center gap-1">
-                        <CheckCircle className="h-4 w-4" />
-                        Gespeichert
-                      </span>
-                    )}
-                  </div>
-
-                  <Alert className="bg-blue-500/5 border-blue-500/20">
-                    <Info className="h-4 w-4 text-blue-500" />
-                    <AlertDescription className="text-sm">
-                      Der Podcast verwendet die ElevenLabs <strong>Text-to-Dialogue API</strong> für natürliche
-                      Gespräche mit automatischen Übergängen, Pausen und Unterbrechungen.
-                    </AlertDescription>
-                  </Alert>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Einstellungen konnten nicht geladen werden.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Podcast Test & Preview */}
+        {/* ================================================================ */}
+        {/* EPISODE TAB                                                      */}
+        {/* ================================================================ */}
+        <TabsContent value="episode" className="space-y-6">
+          {/* Episode Script */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Sparkles className="h-5 w-5" />
-                Podcast testen
+                Episode Script
               </CardTitle>
               <CardDescription>
                 Generiere ein Podcast-Script aus einem Blog-Post oder teste mit einem eigenen Script
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Post Selection for Script Generation */}
+              {/* Post Selection */}
               <div className="space-y-3 p-4 bg-muted/30 rounded-lg border">
                 <Label className="text-sm font-medium">Script aus Post generieren</Label>
                 <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto]">
-                  <Select
-                    value={selectedPostId}
-                    onValueChange={setSelectedPostId}
-                  >
+                  <Select value={selectedPostId} onValueChange={setSelectedPostId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Post auswählen..." />
                     </SelectTrigger>
                     <SelectContent>
                       {recentPosts.map((post) => (
                         <SelectItem key={post.id} value={post.id}>
-                          <span className="truncate max-w-[300px] block">
-                            {post.title}
-                          </span>
+                          <span className="truncate max-w-[300px] block">{post.title}</span>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
 
-                  <Select
-                    value={selectedLocale}
-                    onValueChange={(v) => setSelectedLocale(v as 'de' | 'en' | 'cs' | 'nds')}
-                  >
+                  <Select value={selectedLocale} onValueChange={(v) => setSelectedLocale(v as PodcastLocale)}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {PODCAST_LOCALES.map((loc) => (
-                        <SelectItem key={loc.code} value={loc.code}>
-                          {loc.name}
-                        </SelectItem>
+                        <SelectItem key={loc.code} value={loc.code}>{loc.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
 
-                  <Button
-                    onClick={generateScriptFromPost}
-                    disabled={scriptGenerating || !selectedPostId}
-                    variant="secondary"
-                  >
+                  <Button onClick={generateScriptFromPost} disabled={scriptGenerating || !selectedPostId} variant="secondary">
                     {scriptGenerating ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Generiere...
-                      </>
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generiere...</>
                     ) : (
-                      <>
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        Script generieren
-                      </>
+                      <><Sparkles className="mr-2 h-4 w-4" />Script generieren</>
                     )}
                   </Button>
                 </div>
@@ -1246,9 +691,7 @@ export default function AudioPage() {
                   <div className="flex items-center gap-2">
                     <Label className="text-sm font-medium">Script</Label>
                     {scriptGenerated && scriptModified && (
-                      <Badge variant="outline" className="text-xs text-yellow-700 border-yellow-400">
-                        bearbeitet
-                      </Badge>
+                      <Badge variant="outline" className="text-xs text-yellow-700 border-yellow-400">bearbeitet</Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1267,50 +710,32 @@ export default function AudioPage() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Format: <code className="bg-muted px-1 rounded">HOST:</code> oder <code className="bg-muted px-1 rounded">GUEST:</code> gefolgt von optionalen Emotion-Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code>.
-                  {' '}Änderungen am Script werden direkt für die Podcast-Generierung verwendet.
                 </p>
               </div>
 
               {/* Generate Button & Status */}
               <div className="flex items-center gap-4">
-                <Button
-                  onClick={generatePodcast}
-                  disabled={podcastGenerating || !podcastScript.trim()}
-                  className="min-w-[180px]"
-                >
+                <Button onClick={generatePodcast} disabled={podcastGenerating || !podcastScript.trim()} className="min-w-[180px]">
                   {podcastGenerating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Generiere...
-                    </>
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generiere...</>
                   ) : (
-                    <>
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      Podcast generieren
-                    </>
+                    <><Sparkles className="mr-2 h-4 w-4" />Podcast generieren</>
                   )}
                 </Button>
 
                 {podcastGenerating && podcastTotalLines > 0 && (
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        Zeile {podcastCurrentLine} / {podcastTotalLines}
-                      </span>
+                      <span className="text-muted-foreground">Zeile {podcastCurrentLine} / {podcastTotalLines}</span>
                       <span className="font-medium">{podcastProgress}%</span>
                     </div>
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary transition-all duration-300"
-                        style={{ width: `${podcastProgress}%` }}
-                      />
+                      <div className="h-full bg-primary transition-all duration-300" style={{ width: `${podcastProgress}%` }} />
                     </div>
                   </div>
                 )}
                 {podcastGenerating && podcastTotalLines === 0 && (
-                  <span className="text-sm text-muted-foreground">
-                    Starte Job...
-                  </span>
+                  <span className="text-sm text-muted-foreground">Starte Job...</span>
                 )}
               </div>
 
@@ -1322,10 +747,9 @@ export default function AudioPage() {
                 </Alert>
               )}
 
-              {/* Audio Player - Stereo or Mono fallback */}
+              {/* Audio Player */}
               {podcastAudioUrl && (
                 <div className="space-y-4">
-                  {/* Stereo Player (65/35 positioning) */}
                   {segmentUrls.length > 0 && segmentMetadata.length > 0 ? (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-sm">
@@ -1333,27 +757,14 @@ export default function AudioPage() {
                         <span className="font-medium text-green-600">Stereo Player</span>
                         <span className="text-muted-foreground">(HOST 65% links, GUEST 65% rechts)</span>
                       </div>
-                      <StereoPodcastPlayer
-                        segmentUrls={segmentUrls}
-                        segmentMetadata={segmentMetadata}
-                        title="test-podcast"
-                      />
+                      <StereoPodcastPlayer segmentUrls={segmentUrls} segmentMetadata={segmentMetadata} title="test-podcast" />
                     </div>
                   ) : (
                     <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={togglePlayback}
-                            className="h-10 w-10"
-                          >
-                            {isPlaying ? (
-                              <Pause className="h-5 w-5" />
-                            ) : (
-                              <Play className="h-5 w-5" />
-                            )}
+                          <Button variant="outline" size="icon" onClick={togglePlayback} className="h-10 w-10">
+                            {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
                           </Button>
                           <div>
                             <p className="text-sm font-medium">Podcast Preview (Mono)</p>
@@ -1363,12 +774,7 @@ export default function AudioPage() {
                             </p>
                           </div>
                         </div>
-                        <a
-                          href={podcastAudioUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-500 hover:underline"
-                        >
+                        <a href={podcastAudioUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">
                           MP3 herunterladen
                         </a>
                       </div>
@@ -1411,31 +817,16 @@ export default function AudioPage() {
                     <p className="text-sm font-medium">Verfügbare Emotion-Tags:</p>
                     <div className="flex flex-wrap gap-2">
                       {['[cheerfully]', '[thoughtfully]', '[seriously]', '[excitedly]', '[skeptically]', '[laughing]', '[sighing]', '[whispering]', '[interrupting]'].map((tag) => (
-                        <Badge key={tag} variant="outline" className="font-mono text-xs">
-                          {tag}
-                        </Badge>
+                        <Badge key={tag} variant="outline" className="font-mono text-xs">{tag}</Badge>
                       ))}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCustomPrompt(PODCAST_SCRIPT_PROMPT)}
-                      disabled={customPrompt === PODCAST_SCRIPT_PROMPT}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setCustomPrompt(PODCAST_SCRIPT_PROMPT)} disabled={customPrompt === PODCAST_SCRIPT_PROMPT}>
                       Zurücksetzen
                     </Button>
-                    <Button
-                      size="sm"
-                      onClick={saveTTSSettings}
-                      disabled={ttsSaving}
-                    >
-                      {ttsSaving ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="mr-2 h-4 w-4" />
-                      )}
+                    <Button size="sm" onClick={saveTTSSettings} disabled={ttsSaving}>
+                      {ttsSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                       Prompt speichern
                     </Button>
                   </div>
@@ -1450,7 +841,435 @@ export default function AudioPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ================================================================ */}
+        {/* RECORDING TAB                                                    */}
+        {/* ================================================================ */}
+        <TabsContent value="recording" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mic className="h-5 w-5" />
+                Podcast-Einstellungen
+              </CardTitle>
+              <CardDescription>
+                Wähle zwischen OpenAI TTS (~10x günstiger) oder ElevenLabs (mit Emotion-Tags)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {ttsLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm text-muted-foreground">Lade Einstellungen...</span>
+                </div>
+              ) : ttsSettings ? (
+                <>
+                  {/* Provider Selection */}
+                  <div className="space-y-3 p-4 bg-primary/5 rounded-lg border-2 border-primary/20">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base font-semibold">TTS Provider</Label>
+                        <p className="text-sm text-muted-foreground">
+                          OpenAI: ~$0.20/Podcast | ElevenLabs: ~$3.00/Podcast
+                        </p>
+                      </div>
+                      <Select value={podcastProvider} onValueChange={(v) => setPodcastProvider(v as PodcastProvider)}>
+                        <SelectTrigger className="w-56">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="openai">OpenAI TTS (~10x günstiger)</SelectItem>
+                          <SelectItem value="elevenlabs">ElevenLabs (Emotion-Tags)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {podcastProvider === 'openai' && (
+                      <Alert className="bg-yellow-500/10 border-yellow-500/30">
+                        <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                        <AlertDescription className="text-sm">
+                          OpenAI TTS unterstützt keine Emotion-Tags. Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code> werden automatisch entfernt.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+
+                  {/* OpenAI Settings */}
+                  {podcastProvider === 'openai' && (
+                    <>
+                      <div className="space-y-2 pb-4 border-b">
+                        <Label className="text-base">OpenAI Model</Label>
+                        <Select value={openaiModel} onValueChange={(v) => setOpenaiModel(v as TTSModel)}>
+                          <SelectTrigger className="w-48">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="tts-1">tts-1 (schnell, günstiger)</SelectItem>
+                            <SelectItem value="tts-1-hd">tts-1-hd (HD Qualität)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-4 pb-4 border-b">
+                        <Label className="text-base">OpenAI Stimmen</Label>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label className="text-sm">Host (News)</Label>
+                            <Select value={openaiHostVoice} onValueChange={(v) => setOpenaiHostVoice(v as TTSVoice)}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {OPENAI_PODCAST_VOICES.map((voice) => (
+                                  <SelectItem key={voice.id} value={voice.id}>{voice.name} - {voice.description}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-sm">Guest (Synthszr)</Label>
+                            <Select value={openaiGuestVoice} onValueChange={(v) => setOpenaiGuestVoice(v as TTSVoice)}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {OPENAI_PODCAST_VOICES.map((voice) => (
+                                  <SelectItem key={voice.id} value={voice.id}>{voice.name} - {voice.description}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* ElevenLabs Settings */}
+                  {podcastProvider === 'elevenlabs' && (
+                    <>
+                      <Alert className="bg-muted/50">
+                        <Info className="h-4 w-4" />
+                        <AlertDescription className="text-sm">
+                          <strong>TTS-Sprache pro Locale:</strong>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {PODCAST_LOCALES.map((loc) => (
+                              <Badge key={loc.code} variant={loc.ttsLang === 'de' ? 'default' : 'secondary'}>
+                                {loc.name} → {loc.ttsLang === 'de' ? 'Deutsch' : 'English'} TTS
+                              </Badge>
+                            ))}
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+
+                      <div className="space-y-2 pb-4 border-b">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label className="text-base">ElevenLabs Model</Label>
+                            <p className="text-sm text-muted-foreground">
+                              Eleven v3 unterstützt Audio-Tags wie [cheerfully], [whispers], [sighs]
+                            </p>
+                          </div>
+                          <Select
+                            value={ttsSettings.elevenlabs_model || 'eleven_v3'}
+                            onValueChange={(value: ElevenLabsModel) => setTtsSettings({ ...ttsSettings, elevenlabs_model: value })}
+                          >
+                            <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="eleven_v3">Eleven v3 (empfohlen)</SelectItem>
+                              <SelectItem value="eleven_multilingual_v2">Multilingual v2</SelectItem>
+                              <SelectItem value="eleven_turbo_v2_5">Turbo v2.5 (schnell)</SelectItem>
+                              <SelectItem value="eleven_turbo_v2">Turbo v2</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* German Voices */}
+                      <div className="space-y-4 pb-4 border-b">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="default">DE</Badge>
+                          <Label className="text-base">Deutsche Stimmen</Label>
+                        </div>
+                        <p className="text-sm text-muted-foreground">Verwendet für: Deutsch (de)</p>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label className="text-sm">Host (News)</Label>
+                            <Select
+                              value={ttsSettings.podcast_host_voice_de || ttsSettings.podcast_host_voice_id || 'XrExE9yKIg1WjnnlVkGX'}
+                              onValueChange={(value: string) => setTtsSettings({ ...ttsSettings, podcast_host_voice_de: value })}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {PODCAST_VOICES_DE.map((voice) => (
+                                  <SelectItem key={voice.id} value={voice.id}>{voice.name} - {voice.description}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-sm">Guest (Synthszr)</Label>
+                            <Select
+                              value={ttsSettings.podcast_guest_voice_de || ttsSettings.podcast_guest_voice_id || 'g5CIjZEefAph4nQFvHAz'}
+                              onValueChange={(value: string) => setTtsSettings({ ...ttsSettings, podcast_guest_voice_de: value })}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {PODCAST_VOICES_DE.map((voice) => (
+                                  <SelectItem key={voice.id} value={voice.id}>{voice.name} - {voice.description}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* English Voices */}
+                      <div className="space-y-4 pb-4 border-b">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">EN</Badge>
+                          <Label className="text-base">Englische Stimmen</Label>
+                        </div>
+                        <p className="text-sm text-muted-foreground">Verwendet für: English (en), Čeština (cs), Plattdüütsch (nds)</p>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label className="text-sm">Host (News)</Label>
+                            <Select
+                              value={ttsSettings.podcast_host_voice_en || 'pFZP5JQG7iQjIQuC4Bku'}
+                              onValueChange={(value: string) => setTtsSettings({ ...ttsSettings, podcast_host_voice_en: value })}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {PODCAST_VOICES_EN.map((voice) => (
+                                  <SelectItem key={voice.id} value={voice.id}>{voice.name} - {voice.description}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-sm">Guest (Synthszr)</Label>
+                            <Select
+                              value={ttsSettings.podcast_guest_voice_en || 'onwK4e9ZLuTAKqWW03F9'}
+                              onValueChange={(value: string) => setTtsSettings({ ...ttsSettings, podcast_guest_voice_en: value })}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {PODCAST_VOICES_EN.map((voice) => (
+                                  <SelectItem key={voice.id} value={voice.id}>{voice.name} - {voice.description}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Duration Slider */}
+                  <div className="space-y-4 pb-4 border-b">
+                    <div>
+                      <Label className="text-base">Podcast-Länge</Label>
+                      <p className="text-sm text-muted-foreground">Ziel-Dauer des generierten Podcasts</p>
+                    </div>
+                    <div className="space-y-3">
+                      <Slider
+                        value={[podcastDuration]}
+                        onValueChange={(value) => setPodcastDuration(value[0])}
+                        min={5}
+                        max={30}
+                        step={1}
+                        className="w-full max-w-md"
+                      />
+                      <div className="flex items-center justify-between max-w-md">
+                        <span className="text-sm text-muted-foreground">5 Min</span>
+                        <Badge variant="secondary" className="text-sm">{podcastDuration} Minuten</Badge>
+                        <span className="text-sm text-muted-foreground">30 Min</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Geschätzte Wortanzahl: ~{estimatedWordCount.toLocaleString()} Wörter
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="flex items-center gap-4">
+                    <Button onClick={saveTTSSettings} disabled={ttsSaving}>
+                      {ttsSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      Einstellungen speichern
+                    </Button>
+                    {ttsSuccess && (
+                      <span className="text-sm text-green-600 flex items-center gap-1">
+                        <CheckCircle className="h-4 w-4" />
+                        Gespeichert
+                      </span>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Einstellungen konnten nicht geladen werden.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ================================================================ */}
+        {/* CHARACTER TAB                                                    */}
+        {/* ================================================================ */}
+        <TabsContent value="character" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Podcast-Persönlichkeiten
+              </CardTitle>
+              <CardDescription>
+                HOST und GUEST entwickeln sich von Episode zu Episode weiter. Persönlichkeitsdimensionen driften per Random Walk zu phasenbasierten Zielen.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {personalityLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm text-muted-foreground">Lade Persönlichkeitsdaten...</span>
+                </div>
+              ) : (
+                <>
+                  {/* Status Bar */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Badge variant="default" className="text-sm">
+                      Episode #{personality ? personality.episode_count : 0}
+                    </Badge>
+                    <Badge variant="secondary" className="text-sm">
+                      {PHASE_LABELS[personality?.relationship_phase || 'strangers']}
+                    </Badge>
+                    {personality && personality.inside_joke_count > 0 && (
+                      <Badge variant="outline" className="text-sm">
+                        {personality.inside_joke_count} Inside Jokes
+                      </Badge>
+                    )}
+                    <Button variant="ghost" size="sm" onClick={fetchPersonality} className="ml-auto">
+                      <Loader2 className={`h-3 w-3 mr-1 ${personalityLoading ? 'animate-spin' : ''}`} />
+                      Aktualisieren
+                    </Button>
+                  </div>
+
+                  {/* Personality Map */}
+                  <div className="border rounded-lg p-4 bg-background">
+                    <PersonalityMap personality={personality} />
+                  </div>
+
+                  {/* Stats Grid */}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {/* Comfort Meter */}
+                    <div className="space-y-2 p-4 rounded-lg border">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Komfort-Level</Label>
+                        <span className="text-sm font-mono text-muted-foreground">
+                          {Math.round((personality?.mutual_comfort ?? 0.2) * 100)}%
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-green-500 transition-all duration-500"
+                          style={{ width: `${(personality?.mutual_comfort ?? 0.2) * 100}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Bestimmt den Phasenübergang (Fremde → Bekannte → Kollegen → ...)
+                      </p>
+                    </div>
+
+                    {/* Flirtation Meter */}
+                    <div className="space-y-2 p-4 rounded-lg border">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Flirt-Tendenz</Label>
+                        <span className="text-sm font-mono text-muted-foreground">
+                          {Math.round((personality?.flirtation_tendency ?? 0) * 100)}%
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-pink-400 transition-all duration-500"
+                          style={{ width: `${(personality?.flirtation_tendency ?? 0) * 100}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Wie oft persönliche Momente aufkommen — werden dann als &quot;nur KI&quot; abgewürgt
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Dimension Details */}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-3 p-4 rounded-lg border">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-amber-500" />
+                        <Label className="text-sm font-semibold">HOST</Label>
+                      </div>
+                      <DimensionBar label="Wärme" value={personality?.host_warmth ?? 0.5} />
+                      <DimensionBar label="Humor" value={personality?.host_humor ?? 0.4} />
+                      <DimensionBar label="Formalität" value={personality?.host_formality ?? 0.6} />
+                      <DimensionBar label="Neugier" value={personality?.host_curiosity ?? 0.7} />
+                      <DimensionBar label="KI-Bewusstsein" value={personality?.host_self_awareness ?? 0.2} />
+                    </div>
+
+                    <div className="space-y-3 p-4 rounded-lg border">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-cyan-500" />
+                        <Label className="text-sm font-semibold">GUEST</Label>
+                      </div>
+                      <DimensionBar label="Selbstvertrauen" value={personality?.guest_confidence ?? 0.6} />
+                      <DimensionBar label="Verspieltheit" value={personality?.guest_playfulness ?? 0.3} />
+                      <DimensionBar label="Direktheit" value={personality?.guest_directness ?? 0.7} />
+                      <DimensionBar label="Empathie" value={personality?.guest_empathy ?? 0.4} />
+                      <DimensionBar label="KI-Bewusstsein" value={personality?.guest_self_awareness ?? 0.2} />
+                    </div>
+                  </div>
+
+                  {/* Memorable Moments */}
+                  {personality && personality.memorable_moments.length > 0 && (
+                    <div className="space-y-3 p-4 rounded-lg border">
+                      <Label className="text-sm font-semibold">Bemerkenswerte Momente</Label>
+                      <div className="space-y-2">
+                        {personality.memorable_moments.map((m, i) => (
+                          <div key={i} className="flex items-start gap-2 text-sm">
+                            <Badge variant="outline" className="text-xs shrink-0 mt-0.5">#{m.episode}</Badge>
+                            <span className="text-muted-foreground italic">&ldquo;{m.text}&rdquo;</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!personality && (
+                    <Alert className="bg-muted/50">
+                      <Info className="h-4 w-4" />
+                      <AlertDescription className="text-sm">
+                        Noch keine Episoden generiert. Die Persönlichkeiten starten bei den Standardwerten und entwickeln sich ab der ersten Episode.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Small Dimension Bar Component
+// ---------------------------------------------------------------------------
+
+function DimensionBar({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className="text-xs font-mono text-muted-foreground">{(value * 100).toFixed(0)}%</span>
+      </div>
+      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+        <div
+          className="h-full bg-foreground/30 rounded-full transition-all duration-500"
+          style={{ width: `${value * 100}%` }}
+        />
+      </div>
     </div>
   )
 }

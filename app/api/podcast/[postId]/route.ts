@@ -20,6 +20,7 @@ import {
   type ElevenLabsModel,
 } from '@/lib/tts/elevenlabs-tts'
 import { concatenateWithCrossfade, type AudioSegment } from '@/lib/audio/crossfade'
+import { getPersonalityState, buildPersonalityBrief, advanceState } from '@/lib/podcast/personality'
 import Anthropic from '@anthropic-ai/sdk'
 
 // TTS language mapping
@@ -294,13 +295,18 @@ async function generatePodcastForPost(
       .replace('{title}', postTitle)
       .replace('{content}', postContent)
 
-    console.log(`[Podcast] Generating script for post ${postId} in ${locale}`)
+    // Inject personality brief
+    const personalityState = await getPersonalityState(ttsLang)
+    const personalityBrief = buildPersonalityBrief(personalityState)
+    const fullPrompt = prompt + '\n\n' + personalityBrief
+
+    console.log(`[Podcast] Generating script for post ${postId} in ${locale} (episode #${personalityState.episode_count + 1}, phase: ${personalityState.relationship_phase})`)
 
     const anthropic = new Anthropic()
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8000,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content: fullPrompt }],
     })
 
     const script = message.content
@@ -311,6 +317,9 @@ async function generatePodcastForPost(
     if (!script.trim()) {
       throw new Error('AI generated empty script')
     }
+
+    // Evolve personality state after successful generation
+    await advanceState(personalityState, script)
 
     // Parse script
     const lines = parseScriptText(script)

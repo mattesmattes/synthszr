@@ -441,75 +441,110 @@ async function loadIntro(): Promise<Float32Array[]> {
 
 /**
  * Apply intro with crossfade to first segment
- * Intro plays fully, but during the last N seconds, the first segment starts and intro fades out
+ *
+ * Three phases:
+ * 1. Intro at full volume, no dialog (3s)
+ * 2. Intro drops to 20% as bed music, dialog fades in over 1s then plays full (7s)
+ * 3. Intro fades from 20% to 0% while dialog continues (3s)
+ *
+ * Total intro presence: 13s
  */
 function applyIntroWithCrossfade(
   intro: Float32Array[],
   firstSegment: Float32Array[],
-  crossfadeSec: number
+  _crossfadeSec: number
 ): Float32Array[] {
   const introLength = intro[0].length
   const segmentLength = firstSegment[0].length
 
-  // Intro plays 3s at full volume, then fades out over 3s (total 6s)
-  // Dialog fades in starting at second 3
-  const introFullSec = 3
-  const introFadeSec = 3
-  const introTotalSec = introFullSec + introFadeSec
-  const introFullSamples = Math.floor(introFullSec * SAMPLE_RATE)
-  const introFadeSamples = Math.floor(introFadeSec * SAMPLE_RATE)
-  const introTotalSamples = introFullSamples + introFadeSamples
+  // Phase 1: Intro at full volume, no dialog
+  const phase1Sec = 3
+  // Phase 2: Intro at 20% as bed music, dialog plays
+  const phase2Sec = 7
+  // Phase 3: Intro fades from 20% to 0%, dialog continues
+  const phase3Sec = 3
+  // How quickly dialog fades in at start of phase 2
+  const dialogFadeInSec = 1
+
+  const phase1Samples = Math.floor(phase1Sec * SAMPLE_RATE)
+  const phase2Samples = Math.floor(phase2Sec * SAMPLE_RATE)
+  const phase3Samples = Math.floor(phase3Sec * SAMPLE_RATE)
+  const dialogFadeInSamples = Math.floor(dialogFadeInSec * SAMPLE_RATE)
+  const introTotalSamples = phase1Samples + phase2Samples + phase3Samples
 
   // Ensure intro is long enough, otherwise use what we have
   const introUsable = Math.min(introLength, introTotalSamples)
-  const introFullEnd = Math.min(introFullSamples, introUsable)
+  const phase1End = Math.min(phase1Samples, introUsable)
 
-  // Total length: intro full section + fade section (with dialog) + rest of dialog
-  const totalLength = introFullEnd + Math.max(introFadeSamples, segmentLength)
+  // Dialog starts at phase 2
+  const dialogDuration = phase2Samples + phase3Samples + Math.max(0, segmentLength - phase2Samples - phase3Samples)
+
+  // Total length: phase 1 (intro only) + max(dialog length, phase2 + phase3)
+  const totalLength = phase1End + Math.max(phase2Samples + phase3Samples, segmentLength)
 
   const result: Float32Array[] = [
     new Float32Array(totalLength),
     new Float32Array(totalLength)
   ]
 
-  // Phase 1: Intro at full volume (0→3s, no dialog)
+  // Phase 1: Intro at full volume (0 → 3s, no dialog)
   for (let ch = 0; ch < 2; ch++) {
-    result[ch].set(intro[ch].slice(0, introFullEnd), 0)
+    result[ch].set(intro[ch].slice(0, phase1End), 0)
   }
 
-  // Phase 2: Intro fades out + dialog fades in (3→6s)
-  for (let i = 0; i < introFadeSamples; i++) {
-    const ft = i / introFadeSamples
+  // Phase 2: Intro at 20% bed + dialog fades in then full (3s → 10s)
+  for (let i = 0; i < phase2Samples; i++) {
+    const introIdx = phase1End + i
+    const introVal = introIdx < introLength ? 0.20 : 0
 
-    // Intro fades out exponentially
-    const introFade = Math.pow(1 - ft, 2)
-    // Dialog fades in
-    const segmentFade = Math.pow(ft, 0.7)
-
-    // Clamp to prevent clipping
-    const combined = introFade + segmentFade
-    const scale = combined > 1.0 ? 1.0 / combined : 1.0
+    // Dialog fades in over first 1s of phase 2, then stays at full
+    let dialogGain: number
+    if (i < dialogFadeInSamples) {
+      dialogGain = Math.pow(i / dialogFadeInSamples, 0.7)
+    } else {
+      dialogGain = 1.0
+    }
 
     for (let ch = 0; ch < 2; ch++) {
-      const introIdx = introFullEnd + i
-      const introVal = introIdx < introLength ? intro[ch][introIdx] : 0
-      const segVal = i < segmentLength ? firstSegment[ch][i] : 0
-      result[ch][introFullEnd + i] = (introVal * introFade + segVal * segmentFade) * scale
+      const iVal = introIdx < introLength ? intro[ch][introIdx] * introVal : 0
+      const dVal = i < segmentLength ? firstSegment[ch][i] * dialogGain : 0
+      // Clamp
+      const combined = Math.abs(iVal) + Math.abs(dVal)
+      const scale = combined > 1.0 ? 1.0 / combined : 1.0
+      result[ch][phase1End + i] = (iVal + dVal) * scale
     }
   }
 
-  // Phase 3: Remaining dialog after fade region
-  if (segmentLength > introFadeSamples) {
+  // Phase 3: Intro fades from 20% → 0%, dialog at full (10s → 13s)
+  for (let i = 0; i < phase3Samples; i++) {
+    const ft = i / phase3Samples
+    const introIdx = phase1End + phase2Samples + i
+    const introGain = 0.20 * (1 - Math.pow(ft, 1.5))
+
+    const segIdx = phase2Samples + i
+
+    for (let ch = 0; ch < 2; ch++) {
+      const iVal = introIdx < introLength ? intro[ch][introIdx] * introGain : 0
+      const dVal = segIdx < segmentLength ? firstSegment[ch][segIdx] : 0
+      const combined = Math.abs(iVal) + Math.abs(dVal)
+      const scale = combined > 1.0 ? 1.0 / combined : 1.0
+      result[ch][phase1End + phase2Samples + i] = (iVal + dVal) * scale
+    }
+  }
+
+  // Phase 4: Remaining dialog after all intro phases
+  const dialogConsumed = phase2Samples + phase3Samples
+  if (segmentLength > dialogConsumed) {
     for (let ch = 0; ch < 2; ch++) {
       result[ch].set(
-        firstSegment[ch].slice(introFadeSamples),
-        introFullEnd + introFadeSamples
+        firstSegment[ch].slice(dialogConsumed),
+        phase1End + dialogConsumed
       )
     }
   }
 
   const maxVal = Math.max(...result[0].slice(0, 50000).map(Math.abs))
-  console.log(`[Crossfade] Applied intro: ${introFullSec}s full + ${introFadeSec}s fade. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, max amplitude: ${maxVal.toFixed(4)}`)
+  console.log(`[Crossfade] Applied intro: ${phase1Sec}s full + ${phase2Sec}s bed@20% + ${phase3Sec}s fadeout. Result: ${(totalLength / SAMPLE_RATE).toFixed(1)}s, max amplitude: ${maxVal.toFixed(4)}`)
 
   return result
 }

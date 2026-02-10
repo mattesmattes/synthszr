@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/session'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
+import { getPersonalityState, buildPersonalityBrief, advanceState } from '@/lib/podcast/personality'
 import Anthropic from '@anthropic-ai/sdk'
 
 // TTS language mapping for podcast generation
@@ -307,10 +308,15 @@ export async function POST(request: NextRequest) {
       .replace('{weekday}', weekday)
       .replace('{date}', date)
 
+    // Inject personality brief
+    const personalityState = await getPersonalityState(ttsLang)
+    const personalityBrief = buildPersonalityBrief(personalityState)
+    const fullPrompt = prompt + '\n\n' + personalityBrief
+
     // Generate script with Claude
     const anthropic = new Anthropic()
 
-    console.log(`[Podcast Script] Generating ${durationMinutes}min script for post ${body.postId} in ${locale}`)
+    console.log(`[Podcast Script] Generating ${durationMinutes}min script for post ${body.postId} in ${locale} (episode #${personalityState.episode_count + 1}, phase: ${personalityState.relationship_phase})`)
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -318,7 +324,7 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: 'user',
-          content: prompt,
+          content: fullPrompt,
         },
       ],
     })
@@ -332,6 +338,9 @@ export async function POST(request: NextRequest) {
     if (!scriptContent.trim()) {
       return NextResponse.json({ error: 'AI generated empty script' }, { status: 500 })
     }
+
+    // Evolve personality state after successful generation
+    await advanceState(personalityState, scriptContent)
 
     // Count lines and estimate duration
     const lines = scriptContent.split('\n').filter(line =>
