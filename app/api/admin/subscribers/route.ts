@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PATCH: Update subscriber status (e.g., activate pending subscriber)
+// PATCH: Update subscriber (activate or edit email)
 export async function PATCH(request: NextRequest) {
   const session = await getSession()
   if (!session) {
@@ -76,20 +76,15 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { id, status } = body
+    const { id, status, email } = body
 
     if (!id || typeof id !== 'string') {
       return NextResponse.json({ error: 'Subscriber ID required' }, { status: 400 })
     }
 
-    // Only allow setting to active (manual activation)
-    if (status !== 'active') {
-      return NextResponse.json({ error: 'Only activation is supported' }, { status: 400 })
-    }
-
     const supabase = createAdminClient()
 
-    // Verify subscriber exists and is pending
+    // Verify subscriber exists
     const { data: existing, error: fetchError } = await supabase
       .from('subscribers')
       .select('id, status, email')
@@ -100,28 +95,65 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Subscriber not found' }, { status: 404 })
     }
 
-    if (existing.status !== 'pending') {
-      return NextResponse.json({ error: 'Subscriber is not pending' }, { status: 400 })
+    // Email update
+    if (email && typeof email === 'string') {
+      const trimmed = email.trim().toLowerCase()
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        return NextResponse.json({ error: 'Ungültige E-Mail-Adresse' }, { status: 400 })
+      }
+
+      // Check for duplicate
+      const { data: dup } = await supabase
+        .from('subscribers')
+        .select('id')
+        .eq('email', trimmed)
+        .neq('id', id)
+        .maybeSingle()
+
+      if (dup) {
+        return NextResponse.json({ error: 'E-Mail-Adresse bereits vergeben' }, { status: 409 })
+      }
+
+      const { error: updateError } = await supabase
+        .from('subscribers')
+        .update({ email: trimmed, updated_at: new Date().toISOString() })
+        .eq('id', id)
+
+      if (updateError) {
+        console.error('Update email error:', updateError)
+        return NextResponse.json({ error: 'Failed to update email' }, { status: 500 })
+      }
+
+      console.log(`[Admin] Updated subscriber email: ${existing.email} → ${trimmed}`)
+      return NextResponse.json({ success: true, email: trimmed })
     }
 
-    // Activate the subscriber
-    const { error: updateError } = await supabase
-      .from('subscribers')
-      .update({
-        status: 'active',
-        confirmed_at: new Date().toISOString(),
-        confirmation_token: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
+    // Status activation
+    if (status === 'active') {
+      if (existing.status !== 'pending') {
+        return NextResponse.json({ error: 'Subscriber is not pending' }, { status: 400 })
+      }
 
-    if (updateError) {
-      console.error('Activate subscriber error:', updateError)
-      return NextResponse.json({ error: 'Failed to activate subscriber' }, { status: 500 })
+      const { error: updateError } = await supabase
+        .from('subscribers')
+        .update({
+          status: 'active',
+          confirmed_at: new Date().toISOString(),
+          confirmation_token: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+
+      if (updateError) {
+        console.error('Activate subscriber error:', updateError)
+        return NextResponse.json({ error: 'Failed to activate subscriber' }, { status: 500 })
+      }
+
+      console.log(`[Admin] Manually activated subscriber: ${existing.email}`)
+      return NextResponse.json({ success: true, email: existing.email })
     }
 
-    console.log(`[Admin] Manually activated subscriber: ${existing.email}`)
-    return NextResponse.json({ success: true, email: existing.email })
+    return NextResponse.json({ error: 'No valid update field provided' }, { status: 400 })
   } catch (error) {
     console.error('Subscribers PATCH error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

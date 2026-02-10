@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download, Search, UserCheck } from 'lucide-react'
+import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download, Search, UserCheck, Pencil, Check, X } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -39,6 +39,9 @@ export default function SubscribersPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [activatingId, setActivatingId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editEmail, setEditEmail] = useState('')
+  const [savingEmail, setSavingEmail] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
@@ -98,6 +101,30 @@ export default function SubscribersPage() {
       console.error('Activate error:', error)
     } finally {
       setActivatingId(null)
+    }
+  }
+
+  async function saveEmail(id: string) {
+    const trimmed = editEmail.trim().toLowerCase()
+    if (!trimmed) return
+    setSavingEmail(true)
+    try {
+      const res = await fetch('/api/admin/subscribers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, email: trimmed }),
+      })
+      if (res.ok) {
+        setEditingId(null)
+        fetchSubscribers()
+      } else {
+        const error = await res.json()
+        alert(error.error || 'E-Mail-Update fehlgeschlagen')
+      }
+    } catch (error) {
+      console.error('Save email error:', error)
+    } finally {
+      setSavingEmail(false)
     }
   }
 
@@ -248,16 +275,57 @@ export default function SubscribersPage() {
               {data.subscribers.map((subscriber) => (
                 <div
                   key={subscriber.id}
-                  className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 transition-colors"
+                  className="group flex items-center gap-3 px-3 py-2 hover:bg-muted/50 transition-colors"
                 >
                   <div className="shrink-0">
                     {statusIcon(subscriber.status)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-sm font-medium truncate">{subscriber.email}</span>
-                    </div>
+                    {editingId === subscriber.id ? (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="email"
+                          value={editEmail}
+                          onChange={(e) => setEditEmail(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveEmail(subscriber.id)
+                            if (e.key === 'Escape') setEditingId(null)
+                          }}
+                          className="h-6 text-sm px-2"
+                          autoFocus
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => saveEmail(subscriber.id)}
+                          disabled={savingEmail}
+                          className="h-6 w-6 text-green-600 shrink-0"
+                        >
+                          {savingEmail ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingId(null)}
+                          className="h-6 w-6 shrink-0"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-sm font-medium truncate">{subscriber.email}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => { setEditingId(subscriber.id); setEditEmail(subscriber.email) }}
+                          className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        >
+                          <Pencil className="h-2.5 w-2.5" />
+                        </Button>
+                      </div>
+                    )}
                     <div className="text-[10px] text-muted-foreground">
                       Angemeldet: {new Date(subscriber.created_at).toLocaleString('de-DE')}
                       {subscriber.confirmed_at && (
