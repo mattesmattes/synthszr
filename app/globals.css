@@ -517,56 +517,44 @@
 
 /* ===== AI Glow / Rainbow Spectrum for Audio Player ===== */
 
-@keyframes ai-rainbow-rotate {
-  0%   { --ai-angle: 0deg; }
-  100% { --ai-angle: 360deg; }
-}
-
-@keyframes ai-glow-pulse {
-  0%, 100% { opacity: 0.7; transform: scale(1); }
-  50%      { opacity: 1;   transform: scale(1.03); }
-}
-
-@property --ai-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
+@property --ai-glow-1 {
+  syntax: "<color>";
+  initial-value: #ff0080;
   inherits: false;
 }
 
-.ai-glow-ring {
-  position: absolute;
-  inset: -2px;
-  border-radius: 9999px;
-  padding: 2px;
-  background: conic-gradient(
-    from var(--ai-angle),
-    #ff0080, #ff8c00, #40e0d0, #7b68ee, #ff0080
-  );
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation:
-    ai-rainbow-rotate 3s linear infinite,
-    ai-glow-pulse 2s ease-in-out infinite;
-  pointer-events: none;
+@property --ai-glow-2 {
+  syntax: "<color>";
+  initial-value: #40e0d0;
+  inherits: false;
 }
 
-.ai-glow-shadow {
-  position: absolute;
-  inset: -4px;
-  border-radius: 9999px;
-  background: conic-gradient(
-    from var(--ai-angle),
-    #ff0080, #ff8c00, #40e0d0, #7b68ee, #ff0080
-  );
-  filter: blur(12px);
-  opacity: 0.4;
+@property --ai-glow-3 {
+  syntax: "<color>";
+  initial-value: #7b68ee;
+  inherits: false;
+}
+
+@keyframes ai-glow-cycle {
+  0%        { --ai-glow-1: #ff0080; --ai-glow-2: #40e0d0; --ai-glow-3: #7b68ee; }
+  33%       { --ai-glow-1: #ff8c00; --ai-glow-2: #7b68ee; --ai-glow-3: #ff0080; }
+  66%       { --ai-glow-1: #40e0d0; --ai-glow-2: #ff0080; --ai-glow-3: #ff8c00; }
+  100%      { --ai-glow-1: #ff0080; --ai-glow-2: #40e0d0; --ai-glow-3: #7b68ee; }
+}
+
+@keyframes ai-glow-pulse {
+  0%, 100%  { --ai-glow-intensity: 1; }
+  50%       { --ai-glow-intensity: 1.4; }
+}
+
+.ai-glow-active {
   animation:
-    ai-rainbow-rotate 3s linear infinite,
+    ai-glow-cycle 4s linear infinite,
     ai-glow-pulse 2s ease-in-out infinite;
-  pointer-events: none;
-  z-index: -1;
+  box-shadow:
+    0 0 8px 1px var(--ai-glow-1),
+    0 0 20px 2px var(--ai-glow-2),
+    0 0 40px 4px var(--ai-glow-3) !important;
 }
 
 /* ===== Flying Player Animations ===== */
