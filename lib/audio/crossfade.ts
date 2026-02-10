@@ -569,8 +569,18 @@ function applyOutroWithCrossfade(
   for (let i = 0; i < crossfadeSamples; i++) {
     const t = i / crossfadeSamples
 
-    // Outro fades in smoothly over the full crossfade duration
-    const outroFade = Math.pow(t, 0.8)
+    // Outro: gentle rise to 25% at halfway, then linear to 100% at end
+    const halfwaySamples = crossfadeSamples / 2
+    let outroFade: number
+    if (i < halfwaySamples) {
+      // 0→4s: smooth ease-in to 25%
+      const ht = i / halfwaySamples
+      outroFade = 0.25 * Math.pow(ht, 1.5)
+    } else {
+      // 4→8s: linear from 25% to 100%
+      const lt = (i - halfwaySamples) / halfwaySamples
+      outroFade = 0.25 + 0.75 * lt
+    }
 
     // Dialog stays at full volume, then fades out exponentially in last 2s
     let podcastFade: number
