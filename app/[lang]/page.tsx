@@ -6,6 +6,7 @@ import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 import { createClient } from "@/lib/supabase/server"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
+import { LOCALE_STRINGS } from "@/lib/i18n/config"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
 
@@ -131,14 +132,14 @@ export default async function Page({ params }: PageProps) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString(locale === 'de' ? "de-DE" : locale, {
+    return new Date(date).toLocaleDateString(LOCALE_STRINGS[locale] ?? 'en-US', {
       day: "2-digit",
       month: "2-digit",
     })
   }
 
   const formatDateFull = (date: string) => {
-    return new Date(date).toLocaleDateString(locale === 'de' ? "de-DE" : locale, {
+    return new Date(date).toLocaleDateString(LOCALE_STRINGS[locale] ?? 'en-US', {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",

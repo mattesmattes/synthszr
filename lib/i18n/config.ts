@@ -48,7 +48,7 @@ export const LANGUAGE_NAMES: Record<LanguageCode, { name: string; native: string
 }
 
 /** Locale strings for toLocaleDateString() */
-const LOCALE_STRINGS: Record<LanguageCode, string> = {
+export const LOCALE_STRINGS: Record<LanguageCode, string> = {
   de: 'de-DE',
   en: 'en-US',
   fr: 'fr-FR',
