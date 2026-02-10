@@ -3,10 +3,25 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
-  const locale = searchParams.get('locale') || 'de'
+  const locale = searchParams.get('locale')
 
   const supabase = createAdminClient()
 
+  if (!locale || locale === 'all') {
+    // Return all locales
+    const { data, error } = await supabase
+      .from('podcast_personality_state')
+      .select('*')
+      .order('episode_count', { ascending: false })
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ personalities: data || [] })
+  }
+
+  // Single locale
   const { data, error } = await supabase
     .from('podcast_personality_state')
     .select('*')

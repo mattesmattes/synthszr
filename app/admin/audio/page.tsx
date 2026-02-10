@@ -565,9 +565,11 @@ export default function AudioPage() {
   const [mixingSaving, setMixingSaving] = useState(false)
   const [mixingSuccess, setMixingSuccess] = useState(false)
 
-  // Personality state
-  const [personality, setPersonality] = useState<PersonalityState | null>(null)
+  // Personality state (per locale)
+  const [personalityMap, setPersonalityMap] = useState<Record<string, PersonalityState>>({})
+  const [personalityLocale, setPersonalityLocale] = useState<string>('en')
   const [personalityLoading, setPersonalityLoading] = useState(false)
+  const personality = personalityMap[personalityLocale] ?? null
 
   // Audio files state
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
@@ -598,7 +600,7 @@ export default function AudioPage() {
 
   // Fetch personality when Character tab becomes active
   useEffect(() => {
-    if (activeTab === 'character' && !personality && !personalityLoading) {
+    if (activeTab === 'character' && Object.keys(personalityMap).length === 0 && !personalityLoading) {
       fetchPersonality()
     }
   }, [activeTab])
@@ -606,17 +608,26 @@ export default function AudioPage() {
   const fetchPersonality = useCallback(async () => {
     setPersonalityLoading(true)
     try {
-      const res = await fetch('/api/admin/podcast-personality?locale=de')
+      const res = await fetch('/api/admin/podcast-personality?locale=all')
       if (res.ok) {
         const data = await res.json()
-        setPersonality(data.personality)
+        const map: Record<string, PersonalityState> = {}
+        for (const p of (data.personalities || [])) {
+          map[p.locale] = p
+        }
+        setPersonalityMap(map)
+        // Auto-select first locale with data
+        const locales = Object.keys(map)
+        if (locales.length > 0 && !map[personalityLocale]) {
+          setPersonalityLocale(locales[0])
+        }
       }
     } catch (err) {
       console.error('Error fetching personality:', err)
     } finally {
       setPersonalityLoading(false)
     }
-  }, [])
+  }, [personalityLocale])
 
   async function fetchAudioFiles() {
     try {
@@ -1587,8 +1598,25 @@ export default function AudioPage() {
                 </div>
               ) : (
                 <>
-                  {/* Status Bar */}
+                  {/* Locale Switcher + Status Bar */}
                   <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1 mr-2">
+                      {PODCAST_LOCALES.map((loc) => {
+                        const hasData = !!personalityMap[loc.code]
+                        return (
+                          <Button
+                            key={loc.code}
+                            variant={personalityLocale === loc.code ? 'default' : 'outline'}
+                            size="sm"
+                            className="h-7 px-2.5 text-xs"
+                            onClick={() => setPersonalityLocale(loc.code)}
+                          >
+                            {loc.code.toUpperCase()}
+                            {hasData && <span className="ml-1 text-[9px] opacity-60">({personalityMap[loc.code].episode_count})</span>}
+                          </Button>
+                        )
+                      })}
+                    </div>
                     <Badge variant="default" className="text-sm">
                       Episode #{personality ? personality.episode_count : 0}
                     </Badge>
