@@ -237,12 +237,13 @@ export function NewsletterEmail({
               {/* Audio Player Pill */}
               <Section style={playerPillSection}>
                 <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
-                  <div style={playerPill}>
-                    <div style={playerCircle}>
-                      <span style={playerCircleIcon}>&#9654;</span>
-                    </div>
-                    <span style={playerText}>{strings.listenPodcast}</span>
-                  </div>
+                  <Img
+                    src={`${baseUrl}/player.gif`}
+                    alt={strings.listenPodcast}
+                    width="300"
+                    height="52"
+                    style={playerGif}
+                  />
                 </Link>
               </Section>
             </>
@@ -364,40 +365,10 @@ const playerPillSection = {
   textAlign: 'center' as const,
 }
 
-const playerPill = {
+const playerGif = {
   display: 'inline-block',
-  backgroundColor: '#ffffff',
-  border: '1px solid #e5e7eb',
+  height: 'auto',
   borderRadius: '28px',
-  padding: '6px 24px 6px 6px',
-  textDecoration: 'none',
-}
-
-const playerCircle = {
-  display: 'inline-block',
-  width: '40px',
-  height: '40px',
-  backgroundColor: '#000000',
-  borderRadius: '50%',
-  textAlign: 'center' as const,
-  lineHeight: '42px',
-  verticalAlign: 'middle',
-  marginRight: '12px',
-}
-
-const playerCircleIcon = {
-  color: '#ffffff',
-  fontSize: '16px',
-  paddingLeft: '3px',
-}
-
-const playerText = {
-  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  fontSize: '14px',
-  fontWeight: '500' as const,
-  color: '#374151',
-  verticalAlign: 'middle',
-  letterSpacing: '0.2px',
 }
 
 const contentSection = {
