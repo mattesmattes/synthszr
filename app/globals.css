@@ -7,7 +7,7 @@
   /* SF Pro System Font Stack for Admin */
   --font-sf-pro: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
-  --background: #ffffff;
+  --background: oklch(0.98 0 0);
   --foreground: oklch(0.12 0 0);
   --card: oklch(0.98 0 0);
   --card-foreground: oklch(0.12 0 0);
