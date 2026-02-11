@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
       'images.unsplash.com',
       'synthszr.com',
       'vercel.app',
+      'vercel-storage.com',
     ]
     const isAllowedHost = allowedHosts.some(host => parsedUrl.hostname.endsWith(host))
     if (!isAllowedHost) {
