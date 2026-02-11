@@ -79,7 +79,12 @@ Der Podcast MUSS mit einer freundlichen Verabschiedung enden, die folgende Eleme
 - Bitte an die Hörer, den Podcast Freunden weiterzuempfehlen
 Beispiel: "Wir sehen uns morgen wieder! Und wenn euch die Folge gefallen hat, empfehlt uns gerne weiter."
 
-**Ziel-Länge:** {duration} Minuten (ca. {wordCount} Wörter)
+**KRITISCH — Ziel-Länge: {duration} Minuten = MINDESTENS {wordCount} Wörter:**
+- Das Skript MUSS mindestens {wordCount} Wörter lang sein. Das ist eine harte Mindestanforderung.
+- Gehe JEDEN Artikel-Abschnitt einzeln und ausführlich durch. Nicht zusammenfassen — DISKUTIEREN.
+- Pro Thema: Kontext erklären, Meinungen austauschen, Gegenargumente bringen, Analogien nutzen, Implikationen besprechen.
+- Wenn der Artikel 5+ Themen enthält, widme JEDEM Thema mindestens 500 Wörter Dialog.
+- Erzeuge NIEMALS ein Skript unter {wordCount} Wörtern. Lieber etwas zu lang als zu kurz.
 
 **Blog-Artikel Content für diese Episode:**
 ---
@@ -89,6 +94,7 @@ Titel: {title}
 ---
 
 WICHTIG: Das gesamte Skript MUSS auf DEUTSCH sein!
+ERINNERUNG: Das Skript MUSS mindestens {wordCount} Wörter haben. Zähle mit und stelle sicher, dass du die Ziel-Länge erreichst. Gehe lieber zu ausführlich auf die Themen ein, als zu knapp.
 Erstelle jetzt das Podcast-Skript. Beginne direkt mit "HOST:" - keine Einleitung.`
 
 // Default podcast script prompt template - ENGLISH
@@ -139,7 +145,12 @@ The podcast MUST end with a friendly farewell that includes:
 - Ask listeners to recommend the podcast to their friends
 Example: "We'll see you again tomorrow! And if you enjoyed this episode, please share it with your friends."
 
-**Target Length:** {duration} minutes (approx. {wordCount} words)
+**CRITICAL — Target Length: {duration} minutes = AT LEAST {wordCount} words:**
+- The script MUST be at least {wordCount} words long. This is a hard minimum requirement.
+- Go through EVERY article section individually and in depth. Don't summarize — DISCUSS.
+- Per topic: explain context, exchange opinions, present counterarguments, use analogies, discuss implications.
+- If the article has 5+ topics, dedicate AT LEAST 500 words of dialogue to EACH topic.
+- NEVER produce a script under {wordCount} words. Better too long than too short.
 
 **Blog Article Content for this Episode (translate to English if not already in English):**
 ---
@@ -148,7 +159,9 @@ Title: {title}
 {content}
 ---
 
-REMEMBER: Output the ENTIRE script in ENGLISH only. Start directly with "HOST:" - no introduction.`
+REMEMBER: Output the ENTIRE script in ENGLISH only.
+REMINDER: The script MUST have at least {wordCount} words. Keep track and ensure you hit the target length. It's better to be too detailed than too brief.
+Start directly with "HOST:" - no introduction.`
 
 // Legacy alias for backwards compatibility
 const DEFAULT_SCRIPT_PROMPT = DEFAULT_SCRIPT_PROMPT_DE
