@@ -54,11 +54,8 @@ export async function checkRateLimit(
   const limiter = customLimiter || getRateLimiter()
 
   if (!limiter) {
-    // In production, deny by default when Redis is not configured
-    if (process.env.NODE_ENV === 'production') {
-      return { success: false, remaining: 0, reset: Date.now() + 60000, limit: 0 }
-    }
-    // In development, allow through (warning already logged once on startup)
+    // No Redis configured — allow through but warning was logged on startup
+    // To enable rate limiting, set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN
     return { success: true, remaining: 0, reset: Date.now() + 60000, limit: 0 }
   }
 
