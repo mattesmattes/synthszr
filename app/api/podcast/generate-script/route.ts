@@ -227,6 +227,8 @@ export async function POST(request: NextRequest) {
     const settings = await getTTSSettings()
     const durationMinutes = body.durationMinutes || settings.podcast_duration_minutes || 30
     const wordCount = Math.round(durationMinutes * 150)
+    // ~1.5 tokens per German word + overhead for HOST:/GUEST: tags, emotion tags, MOMENTS section
+    const maxTokens = Math.max(8000, Math.round(wordCount * 2.2))
 
     // Fetch post content
     let postTitle = ''
@@ -318,9 +320,11 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Podcast Script] Generating ${durationMinutes}min script for post ${body.postId} in ${locale} (episode #${personalityState.episode_count + 1}, phase: ${personalityState.relationship_phase})`)
 
+    console.log(`[Podcast Script] Target: ${wordCount} words, max_tokens: ${maxTokens}`)
+
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
+      max_tokens: maxTokens,
       messages: [
         {
           role: 'user',

@@ -1579,14 +1579,14 @@ export default function AudioPage() {
                         value={[podcastDuration]}
                         onValueChange={(value) => setPodcastDuration(value[0])}
                         min={5}
-                        max={30}
+                        max={35}
                         step={1}
                         className="w-full max-w-md"
                       />
                       <div className="flex items-center justify-between max-w-md">
                         <span className="text-sm text-muted-foreground">5 Min</span>
                         <Badge variant="secondary" className="text-sm">{podcastDuration} Minuten</Badge>
-                        <span className="text-sm text-muted-foreground">30 Min</span>
+                        <span className="text-sm text-muted-foreground">35 Min</span>
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Geschätzte Wortanzahl: ~{estimatedWordCount.toLocaleString()} Wörter
