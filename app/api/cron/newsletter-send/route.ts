@@ -194,11 +194,11 @@ export async function GET(request: NextRequest) {
       previewTextByLocale.set(locale, excerptToUse || '')
     }
 
-    // Send to all subscribers (sequentially with preference tokens)
+    // Use Resend Batch API to send emails efficiently (up to 100 per batch)
     let successCount = 0
     let failCount = 0
-    let subscriberIndex = 0
-    const totalSubscribers = subscribers.length
+    let batchCount = 0
+    const BATCH_SIZE = 100
 
     for (const [locale, localeSubscribers] of subscribersByLocale) {
       const emailContent = contentByLocale.get(locale)!
@@ -209,65 +209,64 @@ export async function GET(request: NextRequest) {
       const localePrefix = locale !== 'de' ? `/${locale}` : ''
       const localizedPostUrl = `${BASE_URL}${localePrefix}/posts/${post.slug}`
 
-      for (const subscriber of localeSubscribers) {
-        try {
+      // Pre-render HTML once per locale with placeholders for subscriber-specific URLs
+      const baseHtml = await render(
+        NewsletterEmail({
+          subject: localizedSubject,
+          previewText: localizedPreviewText,
+          content: emailContent,
+          postUrl: localizedPostUrl,
+          unsubscribeUrl: '{{UNSUBSCRIBE_URL}}',
+          preferencesUrl: '{{PREFERENCES_URL}}',
+          footerText,
+          baseUrl: BASE_URL,
+          locale: locale as LanguageCode,
+        })
+      )
+
+      // Process subscribers in batches
+      for (let i = 0; i < localeSubscribers.length; i += BATCH_SIZE) {
+        const batch = localeSubscribers.slice(i, i + BATCH_SIZE)
+
+        // Build batch email requests
+        const batchEmails = batch.map(subscriber => {
           const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
+          const preferencesUrl = `${BASE_URL}/newsletter/preferences?token=${subscriber.id}`
 
-          // Generate preferences token for this subscriber (with 5s timeout)
-          let preferencesUrl: string | undefined
-          const prefController = new AbortController()
-          const prefTimeoutId = setTimeout(() => prefController.abort(), 5000)
-          try {
-            const prefResponse = await fetch(`${BASE_URL}/api/newsletter/preferences`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ subscriberId: subscriber.id }),
-              signal: prefController.signal,
-            })
-            clearTimeout(prefTimeoutId)
-            if (prefResponse.ok) {
-              const { token } = await prefResponse.json()
-              preferencesUrl = `${BASE_URL}/newsletter/preferences?token=${token}`
-            }
-          } catch (prefError) {
-            clearTimeout(prefTimeoutId)
-            if (prefError instanceof Error && prefError.name === 'AbortError') {
-              console.warn(`[Newsletter Cron] Preferences token timeout for ${subscriber.email}`)
-            } else {
-              console.warn(`Failed to generate preferences token for ${subscriber.email}:`, prefError)
-            }
-          }
+          // Replace placeholders with subscriber-specific URLs
+          const html = baseHtml
+            .replace('{{UNSUBSCRIBE_URL}}', unsubscribeUrl)
+            .replace('{{PREFERENCES_URL}}', preferencesUrl)
 
-          const html = await render(
-            NewsletterEmail({
-              subject: localizedSubject,
-              previewText: localizedPreviewText,
-              content: emailContent,
-              postUrl: localizedPostUrl,
-              unsubscribeUrl,
-              preferencesUrl,
-              footerText,
-              baseUrl: BASE_URL,
-              locale: locale as LanguageCode,
-            })
-          )
-
-          await getResend().emails.send({
+          return {
             from: FROM_EMAIL,
             to: subscriber.email,
             subject: localizedSubject,
             html,
-          })
-          successCount++
+          }
+        })
 
-          // 500ms delay between emails to stay under rate limit
-          subscriberIndex++
-          if (subscriberIndex < totalSubscribers) {
-            await new Promise(resolve => setTimeout(resolve, 500))
+        try {
+          // Rate limit: wait 1s between batches to stay well under Resend limits
+          if (batchCount > 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          }
+          batchCount++
+
+          // Send batch (Resend batch API — single request for up to 100 emails)
+          const result = await getResend().batch.send(batchEmails)
+
+          if (result.data) {
+            successCount += result.data.length
+            console.log(`[Newsletter Cron] Batch ${batchCount}: Sent ${result.data.length} emails for locale ${locale}`)
+          }
+          if (result.error) {
+            console.error(`[Newsletter Cron] Batch error:`, result.error)
+            failCount += batch.length
           }
         } catch (error) {
-          console.error(`Failed to send to ${subscriber.email}:`, error)
-          failCount++
+          console.error(`[Newsletter Cron] Batch send failed:`, error)
+          failCount += batch.length
         }
       }
     }
