@@ -176,7 +176,7 @@ const navGroups: NavGroup[] = [
         icon: Settings
       },
       {
-        label: 'Security Docs',
+        label: 'Architecture',
         href: '/admin/docs/architecture',
         icon: FileCode
       }
