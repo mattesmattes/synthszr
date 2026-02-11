@@ -23,7 +23,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/session'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
-import { getPersonalityState, buildPersonalityBrief, advanceState, stripMomentsSection } from '@/lib/podcast/personality'
+import { getPersonalityState, buildPersonalityBrief, stripMomentsSection } from '@/lib/podcast/personality'
 import Anthropic from '@anthropic-ai/sdk'
 
 // TTS language mapping for podcast generation
@@ -356,8 +356,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'AI generated empty script' }, { status: 500 })
     }
 
-    // Evolve personality state after successful generation (uses full content incl. MOMENTS section)
-    await advanceState(personalityState, scriptContent)
+    // NOTE: Personality evolution (advanceState) happens in jobs/process/route.ts
+    // AFTER the podcast audio is successfully generated — not here at script generation time.
+    // This prevents test scripts from advancing the personality state.
 
     // Strip ---MOMENTS--- section before returning to client (not needed for TTS)
     const cleanScript = stripMomentsSection(scriptContent)

@@ -18,6 +18,7 @@ import {
 } from '@/lib/tts/elevenlabs-tts'
 import { concatenateWithCrossfade, mixingSettingsToCrossfadeOptions, type AudioSegment } from '@/lib/audio/crossfade'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
+import { getPersonalityState, advanceState } from '@/lib/podcast/personality'
 
 // Maximum duration for this function (Vercel Pro max is 800 seconds)
 export const maxDuration = 800
@@ -386,6 +387,19 @@ export async function POST(request: NextRequest) {
       }
 
       console.log(`[Podcast Jobs] Linked to post_podcasts for locales: ${SUPPORTED_LOCALES.join(', ')}`)
+    }
+
+    // Evolve personality state AFTER successful audio generation
+    // This ensures test scripts (script-only, no audio) don't advance the personality.
+    const LOCALE_TO_TTS_LANG: Record<string, string> = { de: 'de', en: 'en', cs: 'en', nds: 'en' }
+    const personalityLocale = LOCALE_TO_TTS_LANG[job.source_locale] || 'en'
+    try {
+      const personalityState = await getPersonalityState(personalityLocale)
+      await advanceState(personalityState, job.script)
+      console.log(`[Podcast Jobs] Personality advanced for locale "${personalityLocale}" (episode #${personalityState.episode_count + 1})`)
+    } catch (personalityError) {
+      // Non-fatal: don't fail the job if personality evolution fails
+      console.error(`[Podcast Jobs] Personality evolution failed (non-fatal):`, personalityError)
     }
 
     return NextResponse.json({
