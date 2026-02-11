@@ -177,8 +177,9 @@ const navGroups: NavGroup[] = [
       },
       {
         label: 'Architecture',
-        href: '/admin/docs/architecture',
-        icon: FileCode
+        href: '/docs/architecture',
+        icon: FileCode,
+        external: true
       }
     ]
   }

@@ -1,1330 +1,685 @@
-import { Metadata } from 'next'
-
-export const metadata: Metadata = {
-  title: 'Architecture | Synthszr',
-  description: 'Technical architecture documentation for the Synthszr content automation platform',
-  robots: 'noindex, nofollow',
-}
-
-// Diagram Components
-function FlowBox({ children, variant = 'default', className = '' }: {
-  children: React.ReactNode
-  variant?: 'default' | 'primary' | 'success' | 'warning' | 'muted'
-  className?: string
-}) {
-  const variants = {
-    default: 'border-zinc-700 bg-zinc-800/80',
-    primary: 'border-blue-600 bg-blue-950/50',
-    success: 'border-emerald-600 bg-emerald-950/50',
-    warning: 'border-amber-600 bg-amber-950/50',
-    muted: 'border-zinc-700/50 bg-zinc-900/50 text-zinc-500',
-  }
-  return (
-    <div className={`rounded-lg border p-3 text-center text-sm ${variants[variant]} ${className}`}>
-      {children}
-    </div>
-  )
-}
-
-function Arrow({ direction = 'down' }: { direction?: 'down' | 'right' | 'left' }) {
-  const arrows = {
-    down: '↓',
-    right: '→',
-    left: '←',
-  }
-  return <div className="text-zinc-500 text-xl font-light py-1">{arrows[direction]}</div>
-}
-
-function DiagramContainer({ children, title }: { children: React.ReactNode; title?: string }) {
-  return (
-    <div className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/30 p-6">
-      {title && <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-zinc-500">{title}</div>}
-      {children}
-    </div>
-  )
-}
+import {
+  Shield, AlertTriangle, CheckCircle2, Lock, Globe, Server, Database,
+  Mic, Brain, Radio, Music, Newspaper, BookOpen, Languages, TrendingUp,
+  PenTool, ListTodo, Mail, Layers
+} from 'lucide-react'
 
 export default function ArchitecturePage() {
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <div className="mx-auto max-w-5xl px-6 py-16">
-        {/* Header */}
-        <header className="mb-16">
-          <div className="mb-4 font-mono text-sm text-zinc-500">
-            docs / architecture
-          </div>
-          <h1 className="mb-4 text-4xl font-bold tracking-tight">
-            Synthszr Architecture
-          </h1>
-          <p className="text-lg text-zinc-400">
-            Technical documentation for the automated content creation pipeline.
-            This document covers the system architecture, data flow, scheduled processes,
-            stock analysis integration, and security measures.
-          </p>
-        </header>
-
-        {/* Table of Contents */}
-        <nav className="mb-16 rounded-lg border border-zinc-800 bg-zinc-900/50 p-6">
-          <h2 className="mb-4 font-mono text-sm font-semibold uppercase tracking-wider text-zinc-500">
-            Contents
-          </h2>
-          <ul className="grid grid-cols-2 gap-2 text-sm">
-            <li><a href="#overview" className="text-zinc-300 hover:text-white">1. System Overview</a></li>
-            <li><a href="#pipeline" className="text-zinc-300 hover:text-white">2. Content Pipeline</a></li>
-            <li><a href="#scheduler" className="text-zinc-300 hover:text-white">3. Scheduler & Cron Jobs</a></li>
-            <li><a href="#newsletter-fetch" className="text-zinc-300 hover:text-white">4. Newsletter Fetching</a></li>
-            <li><a href="#analysis" className="text-zinc-300 hover:text-white">5. Daily Analysis & Synthesis</a></li>
-            <li><a href="#news-queue" className="text-zinc-300 hover:text-white">6. News Queue & Article Selection</a></li>
-            <li><a href="#post-generation" className="text-zinc-300 hover:text-white">7. AI Post Generation</a></li>
-            <li><a href="#edit-learning" className="text-zinc-300 hover:text-white">8. Edit Learning System</a></li>
-            <li><a href="#stock-synthszr" className="text-zinc-300 hover:text-white">9. Stock Values & Stock-Synthszr</a></li>
-            <li><a href="#translations" className="text-zinc-300 hover:text-white">10. Translation System (i18n)</a></li>
-            <li><a href="#data-model" className="text-zinc-300 hover:text-white">11. Data Model</a></li>
-            <li><a href="#security" className="text-zinc-300 hover:text-white">12. Security & Tech Debt</a></li>
-            <li><a href="#api-routes" className="text-zinc-300 hover:text-white">13. API Routes</a></li>
-          </ul>
-        </nav>
-
-        {/* Section 1: Overview */}
-        <section id="overview" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">1. System Overview</h2>
-          <p className="mb-6 text-zinc-400">
-            Synthszr is an automated content creation platform that transforms newsletter content
-            into synthesized blog posts. The system runs on a daily schedule, collecting content
-            from various newsletter sources, analyzing trends, generating syntheses, and producing
-            AI-written blog posts.
-          </p>
-
-          <DiagramContainer title="High-Level Architecture">
-            <div className="grid grid-cols-5 gap-4 items-center">
-              {/* Sources */}
-              <div className="space-y-2">
-                <FlowBox variant="muted">Gmail API</FlowBox>
-                <FlowBox variant="muted">Article Scraper</FlowBox>
-                <FlowBox variant="muted">EODHD API</FlowBox>
-              </div>
-
-              <div className="flex justify-center">
-                <Arrow direction="right" />
-              </div>
-
-              {/* Processing */}
-              <div className="space-y-2">
-                <FlowBox variant="primary">Daily Repo</FlowBox>
-                <FlowBox variant="primary">AI Analysis</FlowBox>
-                <FlowBox variant="primary">Stock-Synthszr</FlowBox>
-              </div>
-
-              <div className="flex justify-center">
-                <Arrow direction="right" />
-              </div>
-
-              {/* Output */}
-              <div className="space-y-2">
-                <FlowBox variant="success">Blog Posts</FlowBox>
-                <FlowBox variant="success">Digests</FlowBox>
-                <FlowBox variant="success">Ratings</FlowBox>
-              </div>
-            </div>
-          </DiagramContainer>
-
-          <h3 className="mb-3 text-lg font-semibold">Tech Stack</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <div className="font-semibold text-zinc-200 mb-2">Core</div>
-              <ul className="space-y-1 text-zinc-400">
-                <li>• Next.js 16 (App Router)</li>
-                <li>• Supabase (PostgreSQL)</li>
-                <li>• Vercel (Hosting & Cron)</li>
-                <li>• Vercel Blob (Images)</li>
-              </ul>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <div className="font-semibold text-zinc-200 mb-2">AI & APIs</div>
-              <ul className="space-y-1 text-zinc-400">
-                <li>• Claude (Anthropic) - Analysis</li>
-                <li>• GPT-5 (OpenAI) - Stock-Synthszr</li>
-                <li>• Gemini (Google) - Images</li>
-                <li>• EODHD - Stock Quotes</li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* Section 2: Pipeline */}
-        <section id="pipeline" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">2. Content Pipeline</h2>
-          <p className="mb-6 text-zinc-400">
-            The content pipeline runs daily at 04:00 UTC and consists of four sequential stages.
-            Each stage depends on the successful completion of the previous one.
-          </p>
-
-          <DiagramContainer title="Daily Pipeline Flow (04:00 UTC)">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex-1">
-                <FlowBox variant="primary">
-                  <div className="font-semibold">Stage 1</div>
-                  <div className="text-xs mt-1">Newsletter Fetch</div>
-                </FlowBox>
-                <div className="text-xs text-center mt-2 text-zinc-500">→ daily_repo</div>
-              </div>
-
-              <div className="text-2xl text-zinc-600">→</div>
-
-              <div className="flex-1">
-                <FlowBox variant="primary">
-                  <div className="font-semibold">Stage 2</div>
-                  <div className="text-xs mt-1">Daily Analysis</div>
-                </FlowBox>
-                <div className="text-xs text-center mt-2 text-zinc-500">→ daily_digests</div>
-              </div>
-
-              <div className="text-2xl text-zinc-600">→</div>
-
-              <div className="flex-1">
-                <FlowBox variant="primary">
-                  <div className="font-semibold">Stage 3</div>
-                  <div className="text-xs mt-1">Post Generation</div>
-                </FlowBox>
-                <div className="text-xs text-center mt-2 text-zinc-500">→ generated_posts</div>
-              </div>
-
-              <div className="text-2xl text-zinc-600">→</div>
-
-              <div className="flex-1">
-                <FlowBox variant="muted">
-                  <div className="font-semibold">Stage 4</div>
-                  <div className="text-xs mt-1">Newsletter Send</div>
-                </FlowBox>
-                <div className="text-xs text-center mt-2 text-zinc-500">(optional)</div>
-              </div>
-            </div>
-          </DiagramContainer>
-
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 mb-6">
-            <h4 className="font-semibold mb-3">Dependency Chain</h4>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div className="text-center">
-                <div className="text-emerald-400 font-mono">Newsletter Fetch</div>
-                <div className="text-zinc-500 text-xs mt-1">Must: completed | skipped | already_ran</div>
-              </div>
-              <div className="text-center">
-                <div className="text-emerald-400 font-mono">Daily Analysis</div>
-                <div className="text-zinc-500 text-xs mt-1">Must: completed | already_ran</div>
-              </div>
-              <div className="text-center">
-                <div className="text-emerald-400 font-mono">Post Generation</div>
-                <div className="text-zinc-500 text-xs mt-1">Final output</div>
-              </div>
-            </div>
-          </div>
-
-          <h4 className="font-semibold mb-2">Status Values</h4>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="flex items-center gap-2"><span className="text-emerald-400">✓</span> <code className="bg-zinc-800 px-2 py-0.5 rounded">completed</code> Task finished successfully</div>
-            <div className="flex items-center gap-2"><span className="text-emerald-400">✓</span> <code className="bg-zinc-800 px-2 py-0.5 rounded">already_ran</code> Task ran earlier (60 min)</div>
-            <div className="flex items-center gap-2"><span className="text-amber-400">○</span> <code className="bg-zinc-800 px-2 py-0.5 rounded">skipped</code> Task not scheduled</div>
-            <div className="flex items-center gap-2"><span className="text-red-400">✗</span> <code className="bg-zinc-800 px-2 py-0.5 rounded">skipped_dependency_failed</code> Previous failure</div>
-          </div>
-        </section>
-
-        {/* Section 3: Scheduler */}
-        <section id="scheduler" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">3. Scheduler & Cron Jobs</h2>
-          <p className="mb-6 text-zinc-400">
-            The scheduler is triggered by Vercel Cron at 04:00 UTC daily. It orchestrates
-            all content pipeline tasks in sequence, ensuring proper dependency handling.
-          </p>
-
-          <DiagramContainer title="Scheduler Flow">
-            <div className="flex flex-col items-center gap-2">
-              <FlowBox variant="warning" className="w-64">
-                <div className="font-semibold">Vercel Cron</div>
-                <div className="text-xs">04:00 UTC daily</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox variant="default" className="w-64">
-                <div className="font-semibold">/api/cron/scheduled-tasks</div>
-                <div className="text-xs">?runAll=true</div>
-              </FlowBox>
-              <Arrow />
-              <div className="grid grid-cols-3 gap-4 w-full max-w-xl">
-                <FlowBox>1. Verify CRON_SECRET</FlowBox>
-                <FlowBox>2. Load schedule_config</FlowBox>
-                <FlowBox>3. Check hasRunRecently</FlowBox>
-              </div>
-              <Arrow />
-              <FlowBox variant="success" className="w-64">
-                Execute tasks in sequence<br/>
-                <span className="text-xs">(direct function calls, no HTTP)</span>
-              </FlowBox>
-            </div>
-          </DiagramContainer>
-
-          <div className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-4">
-            <h4 className="mb-2 font-semibold text-amber-400">Note: runAll Mode</h4>
-            <p className="text-sm text-zinc-400">
-              When <code className="rounded bg-zinc-800 px-1">runAll=true</code> is passed,
-              all enabled tasks run regardless of their scheduled time. This is used for the
-              daily cron on Vercel Hobby plan (which only allows 1 cron invocation per day).
-            </p>
-          </div>
-        </section>
-
-        {/* Section 4: Newsletter Fetch */}
-        <section id="newsletter-fetch" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">4. Newsletter Fetching</h2>
-          <p className="mb-6 text-zinc-400">
-            The newsletter fetching process collects emails from configured sources via Gmail API,
-            extracts article links, and stores both newsletters and articles in the daily_repo table.
-          </p>
-
-          <DiagramContainer title="Newsletter Fetch Process">
-            <div className="flex flex-col items-center gap-2">
-              <div className="grid grid-cols-2 gap-4 w-full max-w-md">
-                <FlowBox variant="muted">
-                  <div className="text-xs">Gmail API</div>
-                  <div className="font-semibold">Fetch by Sender</div>
-                  <div className="text-xs">50 max</div>
-                </FlowBox>
-                <FlowBox variant="muted">
-                  <div className="text-xs">Gmail API</div>
-                  <div className="font-semibold">+dailyrepo Tag</div>
-                  <div className="text-xs">User-tagged</div>
-                </FlowBox>
-              </div>
-              <Arrow />
-              <FlowBox className="w-48">Deduplicate by ID</FlowBox>
-              <Arrow />
-              <FlowBox variant="primary" className="w-64">
-                <div className="font-semibold">Parse & Extract</div>
-                <div className="text-xs">HTML → Text, Extract article links</div>
-              </FlowBox>
-              <Arrow />
-              <div className="grid grid-cols-2 gap-4 w-full max-w-md">
-                <FlowBox variant="success">
-                  <div className="font-semibold">Newsletters</div>
-                  <div className="text-xs">→ daily_repo</div>
-                </FlowBox>
-                <FlowBox variant="success">
-                  <div className="font-semibold">Articles</div>
-                  <div className="text-xs">25 max, readability.js</div>
-                </FlowBox>
-              </div>
-            </div>
-          </DiagramContainer>
-        </section>
-
-        {/* Section 5: Analysis */}
-        <section id="analysis" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">5. Daily Analysis & Synthesis</h2>
-          <p className="mb-6 text-zinc-400">
-            The analysis phase uses Claude AI to summarize collected content and generate
-            synthesized insights (&quot;Synthszr Takes&quot;) that are stored for later use.
-          </p>
-
-          <DiagramContainer title="Analysis Pipeline">
-            <div className="flex flex-col items-center gap-2">
-              <FlowBox variant="muted" className="w-64">
-                <div className="font-semibold">daily_repo</div>
-                <div className="text-xs">Raw newsletters & articles</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox variant="primary" className="w-64">
-                <div className="font-semibold">/api/analyze</div>
-                <div className="text-xs">Claude API (SSE Stream)</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox variant="success" className="w-64">
-                <div className="font-semibold">daily_digests</div>
-                <div className="text-xs">analysis_content, sources_used</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox variant="primary" className="w-64">
-                <div className="font-semibold">runSynthesisPipeline()</div>
-                <div className="text-xs">For each topic</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox variant="success" className="w-64">
-                <div className="font-semibold">developed_syntheses</div>
-                <div className="text-xs">topic_name, synthesis_text, rating_data</div>
-              </FlowBox>
-            </div>
-          </DiagramContainer>
-        </section>
-
-        {/* Section 6: News Queue & Article Selection */}
-        <section id="news-queue" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">6. News Queue & Article Selection</h2>
-          <p className="mb-6 text-zinc-400">
-            The News Queue system manages article selection for AI blog post generation.
-            It provides scoring, source diversification, and manual curation capabilities
-            to ensure high-quality content selection.
-          </p>
-
-          <DiagramContainer title="News Queue Flow">
-            <div className="flex flex-col items-center gap-2">
-              <FlowBox variant="muted" className="w-64">
-                <div className="font-semibold">daily_repo</div>
-                <div className="text-xs">Raw newsletters & articles</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox variant="primary" className="w-64">
-                <div className="font-semibold">Add to Queue</div>
-                <div className="text-xs">queueFromDailyRepo()</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox className="w-64">
-                <div className="font-semibold">news_queue</div>
-                <div className="text-xs">status: pending</div>
-              </FlowBox>
-              <Arrow />
-              <div className="grid grid-cols-2 gap-4 w-full max-w-md">
-                <FlowBox variant="warning">
-                  <div className="font-semibold">Manual Selection</div>
-                  <div className="text-xs">Admin UI ranking</div>
-                </FlowBox>
-                <FlowBox variant="muted">
-                  <div className="font-semibold">Auto Selection</div>
-                  <div className="text-xs">getBalancedSelection()</div>
-                </FlowBox>
-              </div>
-              <Arrow />
-              <FlowBox variant="success" className="w-64">
-                <div className="font-semibold">status: selected</div>
-                <div className="text-xs">Ready for Ghostwriter</div>
-              </FlowBox>
-            </div>
-          </DiagramContainer>
-
-          <h3 className="mb-3 text-lg font-semibold">Item Selection Priority</h3>
-          <p className="mb-4 text-zinc-400 text-sm">
-            The <code className="bg-zinc-800 px-1 rounded">/api/ghostwriter-queue</code> endpoint
-            uses the following priority order to select items for blog post generation:
-          </p>
-          <div className="grid grid-cols-3 gap-3 text-sm mb-6">
-            <div className="rounded-lg border border-emerald-600 bg-emerald-950/30 p-3 text-center">
-              <div className="font-mono text-emerald-400 font-semibold">1st</div>
-              <div className="text-xs text-zinc-300 mt-1">Specific IDs</div>
-              <div className="text-xs text-zinc-500">queueItemIds param</div>
-            </div>
-            <div className="rounded-lg border border-blue-600 bg-blue-950/30 p-3 text-center">
-              <div className="font-mono text-blue-400 font-semibold">2nd</div>
-              <div className="text-xs text-zinc-300 mt-1">Manual Selection</div>
-              <div className="text-xs text-zinc-500">status=&apos;selected&apos;</div>
-            </div>
-            <div className="rounded-lg border border-zinc-600 bg-zinc-800/30 p-3 text-center">
-              <div className="font-mono text-zinc-400 font-semibold">3rd</div>
-              <div className="text-xs text-zinc-300 mt-1">Balanced Selection</div>
-              <div className="text-xs text-zinc-500">30% source diversity</div>
-            </div>
-          </div>
-
-          <h3 className="mb-3 text-lg font-semibold">Scoring System</h3>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 mb-6">
-            <div className="font-mono text-sm text-zinc-200 mb-3">
-              total_score = 0.4 × synthesis_score + 0.3 × relevance_score + 0.3 × uniqueness_score
-            </div>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <div className="text-amber-400 font-semibold">Synthesis (40%)</div>
-                <div className="text-xs text-zinc-500">How well content can be synthesized</div>
-              </div>
-              <div>
-                <div className="text-blue-400 font-semibold">Relevance (30%)</div>
-                <div className="text-xs text-zinc-500">Topic relevance to audience</div>
-              </div>
-              <div>
-                <div className="text-emerald-400 font-semibold">Uniqueness (30%)</div>
-                <div className="text-xs text-zinc-500">Novel perspective or insight</div>
-              </div>
-            </div>
-          </div>
-
-          <h3 className="mb-3 text-lg font-semibold">Source Diversification</h3>
-          <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-4">
-            <p className="text-sm text-zinc-400 mb-3">
-              The <code className="bg-zinc-800 px-1 rounded">get_balanced_queue_selection()</code> SQL function
-              enforces a <strong className="text-amber-400">30% maximum</strong> from any single source
-              after the first 4 items are selected. This prevents newsletter bias.
-            </p>
-            <div className="text-xs text-zinc-500">
-              Example: For 10 items, max 3 can be from the same newsletter source.
-            </div>
-          </div>
-
-          <h4 className="font-semibold mb-2 mt-6">Queue Status Flow</h4>
-          <div className="grid grid-cols-5 gap-2 text-sm">
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2 text-center">
-              <div className="font-mono text-amber-400">pending</div>
-              <div className="text-xs text-zinc-500">In queue</div>
-            </div>
-            <div className="text-zinc-500 flex items-center justify-center">→</div>
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2 text-center">
-              <div className="font-mono text-blue-400">selected</div>
-              <div className="text-xs text-zinc-500">Chosen for article</div>
-            </div>
-            <div className="text-zinc-500 flex items-center justify-center">→</div>
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2 text-center">
-              <div className="font-mono text-emerald-400">used</div>
-              <div className="text-xs text-zinc-500">In published post</div>
-            </div>
-          </div>
-        </section>
-
-        {/* Section 7: Post Generation */}
-        <section id="post-generation" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">7. AI Post Generation</h2>
-          <p className="mb-6 text-zinc-400">
-            The Ghostwriter transforms the daily digest into a polished blog post,
-            applying vocabulary replacements and generating accompanying images.
-          </p>
-
-          <DiagramContainer title="Post Generation Flow">
-            <div className="grid grid-cols-3 gap-4">
-              {/* Input */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-xs text-zinc-500 uppercase font-semibold mb-2">Input</div>
-                <FlowBox variant="muted">daily_digests</FlowBox>
-                <FlowBox variant="muted">ghostwriter_prompts</FlowBox>
-                <FlowBox variant="muted">vocabulary</FlowBox>
-              </div>
-
-              {/* Processing */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-xs text-zinc-500 uppercase font-semibold mb-2">Processing</div>
-                <FlowBox variant="primary">/api/ghostwriter</FlowBox>
-                <FlowBox>Apply vocab rules</FlowBox>
-                <FlowBox>Convert to TipTap</FlowBox>
-              </div>
-
-              {/* Output */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-xs text-zinc-500 uppercase font-semibold mb-2">Output</div>
-                <FlowBox variant="success">generated_posts</FlowBox>
-                <FlowBox variant="success">/api/generate-image</FlowBox>
-                <FlowBox variant="muted">status: draft</FlowBox>
-              </div>
-            </div>
-          </DiagramContainer>
-
-          <h4 className="font-semibold mb-2">Post Statuses</h4>
-          <div className="grid grid-cols-3 gap-2 text-sm">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center">
-              <div className="font-mono text-amber-400">draft</div>
-              <div className="text-xs text-zinc-500 mt-1">Generated, not reviewed</div>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center">
-              <div className="font-mono text-emerald-400">published</div>
-              <div className="text-xs text-zinc-500 mt-1">Ready for public</div>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center">
-              <div className="font-mono text-zinc-500">archived</div>
-              <div className="text-xs text-zinc-500 mt-1">Removed from view</div>
-            </div>
-          </div>
-        </section>
-
-        {/* Section 8: Edit Learning System */}
-        <section id="edit-learning" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">8. Edit Learning System</h2>
-          <p className="mb-6 text-zinc-400">
-            The Edit Learning System enables the Ghostwriter to improve over time by learning from
-            manual edits made to AI-generated blog posts. It tracks all changes, extracts patterns,
-            and applies learned rules to future content generation.
-          </p>
-
-          <DiagramContainer title="Edit Learning Flow">
-            <div className="flex flex-col items-center gap-2">
-              <FlowBox variant="muted" className="w-64">
-                <div className="font-semibold">AI Generated Post</div>
-                <div className="text-xs">Ghostwriter output</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox variant="primary" className="w-64">
-                <div className="font-semibold">Manual Editing</div>
-                <div className="text-xs">TipTap Editor in /admin</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox className="w-64">
-                <div className="font-semibold">edit_history</div>
-                <div className="text-xs">content_before / content_after</div>
-              </FlowBox>
-              <Arrow />
-              <div className="grid grid-cols-2 gap-4 w-full max-w-md">
-                <FlowBox variant="warning">
-                  <div className="font-semibold">Diff Extraction</div>
-                  <div className="text-xs">Sentence-level</div>
-                </FlowBox>
-                <FlowBox variant="warning">
-                  <div className="font-semibold">AI Classification</div>
-                  <div className="text-xs">Claude API</div>
-                </FlowBox>
-              </div>
-              <Arrow />
-              <FlowBox variant="success" className="w-64">
-                <div className="font-semibold">learned_patterns</div>
-                <div className="text-xs">Rules for future generation</div>
-              </FlowBox>
-            </div>
-          </DiagramContainer>
-
-          <h3 className="mb-3 text-lg font-semibold">Edit Classification Types</h3>
-          <div className="grid grid-cols-4 gap-3 text-sm mb-6">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center">
-              <div className="font-mono text-blue-400">factual</div>
-              <div className="text-xs text-zinc-500 mt-1">Content corrections</div>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center">
-              <div className="font-mono text-purple-400">stylistic</div>
-              <div className="text-xs text-zinc-500 mt-1">Tone & voice changes</div>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center">
-              <div className="font-mono text-amber-400">vocabulary</div>
-              <div className="text-xs text-zinc-500 mt-1">Word replacements</div>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-center">
-              <div className="font-mono text-emerald-400">grammar</div>
-              <div className="text-xs text-zinc-500 mt-1">Punctuation & syntax</div>
-            </div>
-          </div>
-
-          <h3 className="mb-3 text-lg font-semibold">Pattern Learning Cycle</h3>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-            <ol className="space-y-2 text-sm text-zinc-400">
-              <li><span className="text-zinc-200">1.</span> Edit history is recorded when posts are saved (content_before → content_after)</li>
-              <li><span className="text-zinc-200">2.</span> <code className="bg-zinc-800 px-1 rounded">/api/admin/analyze-edits</code> extracts sentence-level diffs and classifies them via Claude</li>
-              <li><span className="text-zinc-200">3.</span> <code className="bg-zinc-800 px-1 rounded">/api/cron/extract-patterns</code> clusters similar edits (embedding similarity &gt; 0.85)</li>
-              <li><span className="text-zinc-200">4.</span> Patterns with 3+ similar edits become <code className="bg-zinc-800 px-1 rounded">learned_patterns</code></li>
-              <li><span className="text-zinc-200">5.</span> Ghostwriter retrieves active patterns and applies them during generation</li>
-            </ol>
-          </div>
-
-          <h3 className="mb-3 mt-6 text-lg font-semibold">Confidence & Decay</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <div className="font-semibold text-zinc-200 mb-2">Confidence Score</div>
-              <ul className="space-y-1 text-zinc-400">
-                <li>• New patterns start at 0.5</li>
-                <li>• User keeps edit → +0.1</li>
-                <li>• User reverts edit → -0.1</li>
-                <li>• Patterns &lt; 0.3 auto-deactivate</li>
-              </ul>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <div className="font-semibold text-zinc-200 mb-2">Time Decay</div>
-              <ul className="space-y-1 text-zinc-400">
-                <li>• 0.95 decay factor per week</li>
-                <li>• Halves every ~14 weeks</li>
-                <li>• Keeps patterns current</li>
-                <li>• Old unused patterns fade</li>
-              </ul>
-            </div>
-          </div>
-
-          <h3 className="mb-3 mt-6 text-lg font-semibold">Ghostwriter Integration</h3>
-          <DiagramContainer title="Pattern Application Flow">
-            <div className="flex flex-col items-center gap-2">
-              <FlowBox variant="muted" className="w-72">
-                <div className="font-semibold">streamGhostwriter()</div>
-                <div className="text-xs">lib/claude/ghostwriter.ts</div>
-              </FlowBox>
-              <Arrow />
-              <div className="grid grid-cols-2 gap-4 w-full max-w-lg">
-                <FlowBox>
-                  <div className="font-semibold text-sm">getActiveLearnedPatterns()</div>
-                  <div className="text-xs">min confidence 0.4, limit 20</div>
-                </FlowBox>
-                <FlowBox>
-                  <div className="font-semibold text-sm">findSimilarEditExamples()</div>
-                  <div className="text-xs">Embedding similarity search</div>
-                </FlowBox>
-              </div>
-              <Arrow />
-              <FlowBox variant="primary" className="w-72">
-                <div className="font-semibold">buildPromptEnhancement()</div>
-                <div className="text-xs">Adds GELERNTE STILPRÄFERENZEN section</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox variant="success" className="w-72">
-                <div className="font-semibold">Enhanced AI Prompt</div>
-                <div className="text-xs">Patterns + Examples → Claude/Gemini</div>
-              </FlowBox>
-            </div>
-          </DiagramContainer>
-
-          <h3 className="mb-3 mt-6 text-lg font-semibold">Editor Pattern Highlighting</h3>
-          <DiagramContainer title="Highlight & Feedback Flow">
-            <div className="flex flex-col items-center gap-2">
-              <FlowBox variant="muted" className="w-64">
-                <div className="font-semibold">applied_patterns</div>
-                <div className="text-xs">Tracked during generation</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox className="w-64">
-                <div className="font-semibold">TiptapEditorWithPatterns</div>
-                <div className="text-xs">PatternHighlightMark extension</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox variant="warning" className="w-64">
-                <div className="font-semibold">Yellow Highlight</div>
-                <div className="text-xs">Clickable text segments</div>
-              </FlowBox>
-              <Arrow />
-              <div className="grid grid-cols-3 gap-2 w-full max-w-md">
-                <FlowBox variant="success">
-                  <div className="text-xs">Behalten</div>
-                  <div className="text-xs text-emerald-400">+0.1</div>
-                </FlowBox>
-                <FlowBox variant="default">
-                  <div className="text-xs">Ablehnen</div>
-                  <div className="text-xs text-red-400">-0.1</div>
-                </FlowBox>
-                <FlowBox variant="muted">
-                  <div className="text-xs">Deaktivieren</div>
-                  <div className="text-xs text-zinc-500">is_active=false</div>
-                </FlowBox>
-              </div>
-            </div>
-          </DiagramContainer>
-        </section>
-
-        {/* Section 9: Stock-Synthszr */}
-        <section id="stock-synthszr" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">9. Stock Values & Stock-Synthszr</h2>
-          <p className="mb-6 text-zinc-400">
-            The Stock-Synthszr system provides real-time stock quotes and AI-generated
-            investment analysis. It combines market data with GPT-5&apos;s web search capabilities
-            to generate actionable insights.
-          </p>
-
-          <DiagramContainer title="Stock Data Flow">
-            <div className="flex flex-col items-center gap-2">
-              <div className="grid grid-cols-2 gap-6 w-full max-w-xl">
-                {/* Stock Quotes */}
-                <div className="flex flex-col items-center gap-2">
-                  <div className="text-xs text-zinc-500 uppercase font-semibold">Real-Time Quotes</div>
-                  <FlowBox variant="muted" className="w-full">
-                    <div className="font-semibold">Company Name</div>
-                    <div className="text-xs">&quot;Apple&quot;, &quot;Microsoft&quot;, etc.</div>
-                  </FlowBox>
-                  <Arrow />
-                  <FlowBox className="w-full">
-                    <div className="font-semibold">Ticker Mapping</div>
-                    <div className="text-xs">50 companies → symbols</div>
-                  </FlowBox>
-                  <Arrow />
-                  <FlowBox variant="primary" className="w-full">
-                    <div className="font-semibold">EODHD API</div>
-                    <div className="text-xs">eodhistoricaldata.com</div>
-                  </FlowBox>
-                  <Arrow />
-                  <FlowBox variant="success" className="w-full">
-                    <div className="font-semibold">Quote Data</div>
-                    <div className="text-xs">price, change, direction</div>
-                  </FlowBox>
-                </div>
-
-                {/* Stock-Synthszr */}
-                <div className="flex flex-col items-center gap-2">
-                  <div className="text-xs text-zinc-500 uppercase font-semibold">AI Analysis</div>
-                  <FlowBox variant="muted" className="w-full">
-                    <div className="font-semibold">/api/stock-synthszr</div>
-                    <div className="text-xs">company, currency, price</div>
-                  </FlowBox>
-                  <Arrow />
-                  <FlowBox className="w-full">
-                    <div className="font-semibold">Cache Check</div>
-                    <div className="text-xs">stock_synthszr_cache (14 days)</div>
-                  </FlowBox>
-                  <Arrow />
-                  <FlowBox variant="warning" className="w-full">
-                    <div className="font-semibold">GPT-5 + Web Search</div>
-                    <div className="text-xs">OpenAI Responses API</div>
-                  </FlowBox>
-                  <Arrow />
-                  <FlowBox variant="success" className="w-full">
-                    <div className="font-semibold">Analysis Result</div>
-                    <div className="text-xs">BUY / HOLD / SELL</div>
-                  </FlowBox>
-                </div>
-              </div>
-            </div>
-          </DiagramContainer>
-
-          <div className="grid grid-cols-2 gap-6">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <h4 className="font-semibold mb-3">Stock-Synthszr Output</h4>
-              <ul className="space-y-2 text-sm text-zinc-400">
-                <li>• <span className="text-zinc-200">key_takeaways</span> — 5 bullet points</li>
-                <li>• <span className="text-zinc-200">action_ideas</span> — 3 strategies (BUY/HOLD/SELL)</li>
-                <li>• <span className="text-zinc-200">contrarian_insights</span> — 2 alternative views</li>
-                <li>• <span className="text-zinc-200">sources</span> — 5-8 reference links</li>
-                <li>• <span className="text-zinc-200">final_recommendation</span> — Overall rating</li>
-              </ul>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <h4 className="font-semibold mb-3">Supported Exchanges</h4>
-              <ul className="space-y-2 text-sm text-zinc-400">
-                <li>• <span className="text-zinc-200">US</span> — NASDAQ, NYSE</li>
-                <li>• <span className="text-zinc-200">XETRA</span> — German stocks</li>
-                <li>• <span className="text-zinc-200">HK</span> — Hong Kong (Tencent, BYD)</li>
-                <li>• <span className="text-zinc-200">KS</span> — Korea (Samsung)</li>
-              </ul>
-            </div>
-          </div>
-
-          <h3 className="mb-4 mt-8 text-lg font-semibold">Premarket Company Ratings</h3>
-          <p className="mb-6 text-zinc-400">
-            For pre-IPO and private companies, ratings are fetched from the glitch.green external API.
-            These companies are tracked separately from public stocks and displayed with the same
-            BUY/HOLD/SELL badge system.
-          </p>
-
-          <DiagramContainer title="Premarket Data Flow">
-            <div className="grid grid-cols-3 gap-4 items-center">
-              {/* Source */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-xs text-zinc-500 uppercase font-semibold">External API</div>
-                <FlowBox variant="muted">
-                  <div className="font-semibold">glitch.green</div>
-                  <div className="text-xs">/api/public/premarket-syntheses</div>
-                </FlowBox>
-                <FlowBox variant="muted">
-                  <div className="text-xs">X-API-Key auth</div>
-                </FlowBox>
-              </div>
-
-              <div className="flex justify-center">
-                <Arrow direction="right" />
-              </div>
-
-              {/* Processing */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-xs text-zinc-500 uppercase font-semibold">Local APIs</div>
-                <FlowBox variant="primary">
-                  <div className="font-semibold">/api/premarket</div>
-                  <div className="text-xs">Single company lookup</div>
-                </FlowBox>
-                <FlowBox variant="primary">
-                  <div className="font-semibold">/api/premarket/batch-ratings</div>
-                  <div className="text-xs">Multiple companies</div>
-                </FlowBox>
-              </div>
-            </div>
-          </DiagramContainer>
-
-          <div className="grid grid-cols-2 gap-6">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <h4 className="font-semibold mb-3">Premarket Data Structure</h4>
-              <ul className="space-y-2 text-sm text-zinc-400">
-                <li>• <span className="text-zinc-200">instrument</span> — ISIN, name, currency</li>
-                <li>• <span className="text-zinc-200">synthesis.rating</span> — BUY/HOLD/SELL</li>
-                <li>• <span className="text-zinc-200">synthesis.rationale</span> — Analysis text</li>
-                <li>• <span className="text-zinc-200">synthesis.keyTakeaways</span> — Bullet points</li>
-                <li>• <span className="text-zinc-200">synthesis.actionIdeas</span> — Strategies</li>
-                <li>• <span className="text-zinc-200">latestPrice</span> — Current valuation</li>
-              </ul>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <h4 className="font-semibold mb-3">Company Detection</h4>
-              <ul className="space-y-2 text-sm text-zinc-400">
-                <li>• <span className="text-zinc-200">KNOWN_PREMARKET_COMPANIES</span> — Map in companies.ts</li>
-                <li>• <span className="text-zinc-200">Natural mentions</span> — &quot;OpenAI reported...&quot;</li>
-                <li>• <span className="text-zinc-200">Explicit tags</span> — &#123;Company&#125; directives</li>
-                <li>• <span className="text-zinc-200">Exclusion list</span> — Filters false positives</li>
-                <li>• <span className="text-zinc-200">Sync script</span> — sync-premarket-companies.ts</li>
-              </ul>
-            </div>
-          </div>
-
-          <h4 className="font-semibold mt-6 mb-3">Display Flow (tiptap-renderer.tsx)</h4>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-            <ol className="space-y-2 text-sm text-zinc-400">
-              <li><span className="text-zinc-200">1.</span> Find all &quot;Synthszr Take&quot; sections in rendered content</li>
-              <li><span className="text-zinc-200">2.</span> Extract company mentions using KNOWN_PREMARKET_COMPANIES regex</li>
-              <li><span className="text-zinc-200">3.</span> Batch fetch ratings via <code className="bg-zinc-800 px-1 rounded">/api/premarket/batch-ratings</code></li>
-              <li><span className="text-zinc-200">4.</span> Inject clickable rating badges (BUY/HOLD/SELL) after section</li>
-              <li><span className="text-zinc-200">5.</span> Click opens <code className="bg-zinc-800 px-1 rounded">PremarketSynthszrLayer</code> dialog with full analysis</li>
-            </ol>
-          </div>
-        </section>
-
-        {/* Section 10: Translation System */}
-        <section id="translations" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">10. Translation System (i18n)</h2>
-          <p className="mb-6 text-zinc-400">
-            The translation system provides multi-language support for blog posts and static pages.
-            It uses AI (Claude/Gemini) to generate translations and maintains a queue-based processing
-            system for reliable background translation.
-          </p>
-
-          <DiagramContainer title="Translation Flow">
-            <div className="flex flex-col items-center gap-2">
-              <FlowBox variant="muted" className="w-64">
-                <div className="font-semibold">Post Published</div>
-                <div className="text-xs">status: &apos;published&apos;</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox variant="primary" className="w-64">
-                <div className="font-semibold">queueTranslations()</div>
-                <div className="text-xs">lib/translations/queue.ts</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox className="w-64">
-                <div className="font-semibold">translation_queue</div>
-                <div className="text-xs">status: pending</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox variant="warning" className="w-64">
-                <div className="font-semibold">process-queue</div>
-                <div className="text-xs">Claude/Gemini API</div>
-              </FlowBox>
-              <Arrow />
-              <FlowBox variant="success" className="w-64">
-                <div className="font-semibold">content_translations</div>
-                <div className="text-xs">Translated content stored</div>
-              </FlowBox>
-            </div>
-          </DiagramContainer>
-
-          <h3 className="mb-3 text-lg font-semibold">Language Configuration</h3>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 mb-6">
-            <p className="text-sm text-zinc-400 mb-3">
-              Languages are configured in the <code className="bg-zinc-800 px-1 rounded">languages</code> table.
-              Only active, non-default languages receive automatic translations.
-            </p>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <div className="text-emerald-400 font-semibold">is_active</div>
-                <div className="text-xs text-zinc-500">Language enabled for translation</div>
-              </div>
-              <div>
-                <div className="text-blue-400 font-semibold">is_default</div>
-                <div className="text-xs text-zinc-500">Source language (German)</div>
-              </div>
-              <div>
-                <div className="text-amber-400 font-semibold">llm_model</div>
-                <div className="text-xs text-zinc-500">AI model per language</div>
-              </div>
-            </div>
-          </div>
-
-          <h3 className="mb-3 text-lg font-semibold">Queue Status Flow</h3>
-          <div className="grid grid-cols-5 gap-2 text-sm mb-6">
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2 text-center">
-              <div className="font-mono text-amber-400">pending</div>
-              <div className="text-xs text-zinc-500">Queued</div>
-            </div>
-            <div className="text-zinc-500 flex items-center justify-center">→</div>
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2 text-center">
-              <div className="font-mono text-blue-400">processing</div>
-              <div className="text-xs text-zinc-500">AI translating</div>
-            </div>
-            <div className="text-zinc-500 flex items-center justify-center">→</div>
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2 text-center">
-              <div className="font-mono text-emerald-400">completed</div>
-              <div className="text-xs text-zinc-500">Done</div>
-            </div>
-          </div>
-
-          <h3 className="mb-3 text-lg font-semibold">Manual Edit Protection</h3>
-          <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-4 mb-6">
-            <p className="text-sm text-zinc-400 mb-3">
-              When a translation is manually edited, it&apos;s marked with <code className="bg-zinc-800 px-1 rounded">is_manually_edited=true</code>.
-              These translations are automatically skipped during re-translation to protect human edits.
-            </p>
-            <div className="text-xs text-zinc-500">
-              Use <code className="bg-zinc-800 px-1 rounded">force=true</code> to override and re-translate anyway.
-            </div>
-          </div>
-
-          <h3 className="mb-3 text-lg font-semibold">Key Implementation Details</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <div className="font-semibold text-zinc-200 mb-2">Admin Client Requirement</div>
-              <ul className="space-y-1 text-zinc-400">
-                <li>• Uses <code className="bg-zinc-800 px-1 rounded">createAdminClient()</code></li>
-                <li>• Required for async fire-and-forget operations</li>
-                <li>• Bypasses cookie context limitations</li>
-                <li>• Service Role Key authentication</li>
-              </ul>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <div className="font-semibold text-zinc-200 mb-2">Supported Content Types</div>
-              <ul className="space-y-1 text-zinc-400">
-                <li>• <code className="bg-zinc-800 px-1 rounded">generated_post</code> — Blog posts</li>
-                <li>• <code className="bg-zinc-800 px-1 rounded">static_page</code> — Static pages</li>
-                <li>• TipTap JSON content preserved</li>
-                <li>• Metadata (title, excerpt) translated</li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* Section 11: Data Model */}
-        <section id="data-model" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">11. Data Model</h2>
-          <p className="mb-6 text-zinc-400">
-            The system uses Supabase (PostgreSQL) with the following core tables
-            for content management.
-          </p>
-
-          <DiagramContainer title="Core Tables & Relations">
-            <div className="flex flex-col gap-4">
-              {/* Row 1: Input */}
-              <div className="flex justify-center">
-                <div className="rounded-lg border-2 border-blue-600 bg-blue-950/30 p-4 w-80">
-                  <div className="font-semibold text-blue-400 mb-2">daily_repo</div>
-                  <div className="text-xs text-zinc-400 space-y-1">
-                    <div>source_type: &apos;newsletter&apos; | &apos;article&apos;</div>
-                    <div>source_email, source_url</div>
-                    <div>title, content, raw_html</div>
-                    <div>newsletter_date, embedding</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-center text-zinc-500">↓ analyzed into</div>
-
-              {/* Row 2: Processing */}
-              <div className="flex justify-center">
-                <div className="rounded-lg border-2 border-emerald-600 bg-emerald-950/30 p-4 w-80">
-                  <div className="font-semibold text-emerald-400 mb-2">daily_digests</div>
-                  <div className="text-xs text-zinc-400 space-y-1">
-                    <div>digest_date (UNIQUE)</div>
-                    <div>analysis_content, word_count</div>
-                    <div>sources_used: UUID[]</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-center gap-20 text-zinc-500">
-                <span>↓ generates</span>
-                <span>↓ creates</span>
-              </div>
-
-              {/* Row 3: Output */}
-              <div className="flex justify-center gap-6">
-                <div className="rounded-lg border-2 border-amber-600 bg-amber-950/30 p-4 w-64">
-                  <div className="font-semibold text-amber-400 mb-2">generated_posts</div>
-                  <div className="text-xs text-zinc-400 space-y-1">
-                    <div>digest_id (FK)</div>
-                    <div>title, content (JSONB)</div>
-                    <div>word_count, status</div>
-                  </div>
-                </div>
-                <div className="rounded-lg border-2 border-purple-600 bg-purple-950/30 p-4 w-64">
-                  <div className="font-semibold text-purple-400 mb-2">developed_syntheses</div>
-                  <div className="text-xs text-zinc-400 space-y-1">
-                    <div>digest_id (FK)</div>
-                    <div>topic_name, synthesis_text</div>
-                    <div>source_refs, rating_data</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </DiagramContainer>
-
-          <h4 className="font-semibold mb-3">News Queue Tables</h4>
-          <div className="grid grid-cols-2 gap-2 text-sm mb-6">
-            <div className="rounded border border-amber-800/50 bg-amber-950/20 px-3 py-2">
-              <span className="text-amber-300">news_queue</span>
-              <span className="text-zinc-500 ml-2">— Article selection queue with scores</span>
-            </div>
-            <div className="rounded border border-amber-800/50 bg-amber-950/20 px-3 py-2">
-              <span className="text-amber-300">news_queue_source_distribution</span>
-              <span className="text-zinc-500 ml-2">— Source stats view</span>
-            </div>
-            <div className="rounded border border-amber-800/50 bg-amber-950/20 px-3 py-2">
-              <span className="text-amber-300">news_queue_selectable</span>
-              <span className="text-zinc-500 ml-2">— Items respecting 30% limit</span>
-            </div>
-            <div className="rounded border border-amber-800/50 bg-amber-950/20 px-3 py-2">
-              <span className="text-amber-300">get_balanced_queue_selection()</span>
-              <span className="text-zinc-500 ml-2">— SQL function for selection</span>
-            </div>
-          </div>
-
-          <h4 className="font-semibold mb-3">Supporting Tables</h4>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="rounded border border-zinc-800 bg-zinc-900/50 px-3 py-2">
-              <span className="text-zinc-200">newsletter_sources</span>
-              <span className="text-zinc-500 ml-2">— Email sources for Gmail fetch</span>
-            </div>
-            <div className="rounded border border-zinc-800 bg-zinc-900/50 px-3 py-2">
-              <span className="text-zinc-200">gmail_tokens</span>
-              <span className="text-zinc-500 ml-2">— OAuth2 refresh tokens</span>
-            </div>
-            <div className="rounded border border-zinc-800 bg-zinc-900/50 px-3 py-2">
-              <span className="text-zinc-200">analysis_prompts</span>
-              <span className="text-zinc-500 ml-2">— Prompts for daily analysis</span>
-            </div>
-            <div className="rounded border border-zinc-800 bg-zinc-900/50 px-3 py-2">
-              <span className="text-zinc-200">ghostwriter_prompts</span>
-              <span className="text-zinc-500 ml-2">— Blog post generation prompts</span>
-            </div>
-            <div className="rounded border border-zinc-800 bg-zinc-900/50 px-3 py-2">
-              <span className="text-zinc-200">stock_synthszr_cache</span>
-              <span className="text-zinc-500 ml-2">— Cached AI stock analyses (14 days)</span>
-            </div>
-            <div className="rounded border border-zinc-800 bg-zinc-900/50 px-3 py-2">
-              <span className="text-zinc-200">settings</span>
-              <span className="text-zinc-500 ml-2">— Runtime config (schedule, timestamps)</span>
-            </div>
-          </div>
-
-          <h4 className="font-semibold mb-3 mt-6">Edit Learning Tables</h4>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="rounded border border-purple-800/50 bg-purple-950/20 px-3 py-2">
-              <span className="text-purple-300">edit_history</span>
-              <span className="text-zinc-500 ml-2">— Content versions (before/after)</span>
-            </div>
-            <div className="rounded border border-purple-800/50 bg-purple-950/20 px-3 py-2">
-              <span className="text-purple-300">edit_diffs</span>
-              <span className="text-zinc-500 ml-2">— Sentence-level changes + embeddings</span>
-            </div>
-            <div className="rounded border border-purple-800/50 bg-purple-950/20 px-3 py-2">
-              <span className="text-purple-300">learned_patterns</span>
-              <span className="text-zinc-500 ml-2">— Extracted rules with confidence</span>
-            </div>
-            <div className="rounded border border-purple-800/50 bg-purple-950/20 px-3 py-2">
-              <span className="text-purple-300">applied_patterns</span>
-              <span className="text-zinc-500 ml-2">— Pattern usage tracking</span>
-            </div>
-          </div>
-
-          <h4 className="font-semibold mb-3 mt-6">Translation Tables (i18n)</h4>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="rounded border border-cyan-800/50 bg-cyan-950/20 px-3 py-2">
-              <span className="text-cyan-300">languages</span>
-              <span className="text-zinc-500 ml-2">— Language config (is_active, llm_model)</span>
-            </div>
-            <div className="rounded border border-cyan-800/50 bg-cyan-950/20 px-3 py-2">
-              <span className="text-cyan-300">translation_queue</span>
-              <span className="text-zinc-500 ml-2">— Pending/processing translations</span>
-            </div>
-            <div className="rounded border border-cyan-800/50 bg-cyan-950/20 px-3 py-2">
-              <span className="text-cyan-300">content_translations</span>
-              <span className="text-zinc-500 ml-2">— Completed translations + manual flag</span>
-            </div>
-            <div className="rounded border border-cyan-800/50 bg-cyan-950/20 px-3 py-2">
-              <span className="text-cyan-300">ui_translations</span>
-              <span className="text-zinc-500 ml-2">— UI string translations</span>
-            </div>
-          </div>
-        </section>
-
-        {/* Section 12: Security & Tech Debt */}
-        <section id="security" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">12. Security & Tech Debt</h2>
-
-          <h3 className="mb-4 text-xl font-semibold">Security Measures</h3>
-          <p className="mb-6 text-zinc-400">
-            The application implements multiple security layers to protect against common attack vectors
-            and ensure safe operation of the admin panel and API endpoints.
-          </p>
-
-          <DiagramContainer title="Security Architecture">
-            <div className="grid grid-cols-3 gap-4">
-              {/* Authentication */}
-              <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4">
-                <div className="font-semibold text-emerald-400 mb-3">Authentication</div>
-                <ul className="space-y-2 text-xs text-zinc-400">
-                  <li>• JWT sessions via <code className="bg-zinc-700 px-1 rounded">jose</code></li>
-                  <li>• HS256 signed tokens</li>
-                  <li>• 7-day session duration</li>
-                  <li>• HttpOnly, Secure, SameSite cookies</li>
-                  <li>• Timing-safe password comparison</li>
-                </ul>
-              </div>
-
-              {/* Rate Limiting */}
-              <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4">
-                <div className="font-semibold text-amber-400 mb-3">Rate Limiting</div>
-                <ul className="space-y-2 text-xs text-zinc-400">
-                  <li>• Upstash Redis backend</li>
-                  <li>• Sliding window algorithm</li>
-                  <li>• <code className="bg-zinc-700 px-1 rounded">strict</code>: 5 req/min (AI ops)</li>
-                  <li>• <code className="bg-zinc-700 px-1 rounded">standard</code>: 30 req/min</li>
-                  <li>• <code className="bg-zinc-700 px-1 rounded">relaxed</code>: 100 req/min</li>
-                </ul>
-              </div>
-
-              {/* API Protection */}
-              <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4">
-                <div className="font-semibold text-blue-400 mb-3">API Protection</div>
-                <ul className="space-y-2 text-xs text-zinc-400">
-                  <li>• CRON_SECRET for cron routes</li>
-                  <li>• Admin session check for /api/admin/*</li>
-                  <li>• IP-based rate limit identifiers</li>
-                  <li>• X-RateLimit-* response headers</li>
-                  <li>• Input validation (Zod where applicable)</li>
-                </ul>
-              </div>
-            </div>
-          </DiagramContainer>
-
-          <h3 className="mb-4 mt-8 text-xl font-semibold">Known Tech Debt</h3>
-          <p className="mb-6 text-zinc-400">
-            Areas of the codebase that have been identified for future improvement or refactoring.
-          </p>
-
-          <div className="space-y-3">
-            <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-amber-400 font-semibold">Medium Priority</span>
-                <span className="text-xs bg-amber-900/50 px-2 py-0.5 rounded">Consolidation</span>
-              </div>
-              <ul className="text-sm text-zinc-400 space-y-1">
-                <li>• Multiple AI provider integrations (Claude, GPT, Gemini) could share more infrastructure</li>
-                <li>• Some prompt templates are duplicated across different components</li>
-                <li>• Error handling patterns vary across API routes</li>
-              </ul>
-            </div>
-
-            <div className="rounded-lg border border-blue-800/50 bg-blue-950/20 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-blue-400 font-semibold">Low Priority</span>
-                <span className="text-xs bg-blue-900/50 px-2 py-0.5 rounded">Enhancement</span>
-              </div>
-              <ul className="text-sm text-zinc-400 space-y-1">
-                <li>• Test coverage could be expanded for newsletter parsing edge cases</li>
-                <li>• Some components could benefit from memoization</li>
-                <li>• Consider migrating constants to environment-based configuration</li>
-              </ul>
-            </div>
-
-            <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/20 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-emerald-400 font-semibold">Completed</span>
-                <span className="text-xs bg-emerald-900/50 px-2 py-0.5 rounded">Resolved</span>
-              </div>
-              <ul className="text-sm text-zinc-400 space-y-1">
-                <li>• ✓ Consolidated Supabase clients (was: 3 implementations)</li>
-                <li>• ✓ Unified admin auth checks across routes</li>
-                <li>• ✓ Extracted TipTap-to-HTML utility to shared module</li>
-                <li>• ✓ Replaced magic numbers with named constants</li>
-                <li>• ✓ Fixed cron timeout by using direct function calls</li>
-              </ul>
-            </div>
-          </div>
-
-          <h3 className="mb-4 mt-8 text-xl font-semibold">Security Audit Status</h3>
-          <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4">
-            <div className="grid grid-cols-4 gap-4 text-center text-sm">
-              <div>
-                <div className="text-2xl font-bold text-emerald-400">0</div>
-                <div className="text-xs text-zinc-500">Critical Issues</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-emerald-400">0</div>
-                <div className="text-xs text-zinc-500">High Issues</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-emerald-400">0</div>
-                <div className="text-xs text-zinc-500">Medium Issues</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-zinc-400">107</div>
-                <div className="text-xs text-zinc-500">False Positives</div>
-              </div>
-            </div>
-            <div className="text-xs text-zinc-500 mt-3 text-center">
-              Last audit: January 2026 • All package versions up to date
-            </div>
-          </div>
-        </section>
-
-        {/* Section 13: API Routes */}
-        <section id="api-routes" className="mb-16">
-          <h2 className="mb-6 text-2xl font-bold">13. API Routes</h2>
-          <p className="mb-6 text-zinc-400">
-            Key API endpoints for the content pipeline. All cron routes require
-            CRON_SECRET authentication in production.
-          </p>
-
-          <div className="space-y-4">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <h4 className="font-semibold text-zinc-200 mb-3">Cron / Scheduled Tasks</h4>
-              <div className="space-y-2 text-sm font-mono">
-                <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/cron/scheduled-tasks</span><span className="text-zinc-600 ml-auto">Main scheduler</span></div>
-                <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/cron/fetch-newsletters</span><span className="text-zinc-600 ml-auto">Newsletter fetch</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/cron/newsletter-send</span><span className="text-zinc-600 ml-auto">Send newsletter</span></div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <h4 className="font-semibold text-zinc-200 mb-3">Content Generation</h4>
-              <div className="space-y-2 text-sm font-mono">
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/analyze</span><span className="text-zinc-600 ml-auto">AI analysis (SSE)</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/ghostwriter</span><span className="text-zinc-600 ml-auto">Blog post from digest (SSE)</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/ghostwriter-queue</span><span className="text-zinc-600 ml-auto">Blog post from queue (SSE)</span></div>
-                <div className="flex gap-4"><span className="text-blue-400 w-12">PUT</span><span className="text-zinc-400">/api/generate-image</span><span className="text-zinc-600 ml-auto">Image generation</span></div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <h4 className="font-semibold text-zinc-200 mb-3">News Queue</h4>
-              <div className="space-y-2 text-sm font-mono">
-                <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/news-queue</span><span className="text-zinc-600 ml-auto">Queue items & stats</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/news-queue</span><span className="text-zinc-600 ml-auto">Add items to queue</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/news-queue/select</span><span className="text-zinc-600 ml-auto">Select items (status change)</span></div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <h4 className="font-semibold text-zinc-200 mb-3">Stock Data</h4>
-              <div className="space-y-2 text-sm font-mono">
-                <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/stock-quote</span><span className="text-zinc-600 ml-auto">Real-time quotes (EODHD)</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/stock-synthszr</span><span className="text-zinc-600 ml-auto">AI stock analysis (GPT-5)</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/stock-synthszr/batch-ratings</span><span className="text-zinc-600 ml-auto">Batch ratings (read-only)</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/stock-synthszr/batch-quotes</span><span className="text-zinc-600 ml-auto">Quotes + ratings combined</span></div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <h4 className="font-semibold text-zinc-200 mb-3">Edit Learning</h4>
-              <div className="space-y-2 text-sm font-mono">
-                <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/admin/analyze-edits</span><span className="text-zinc-600 ml-auto">View edit stats</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/admin/analyze-edits</span><span className="text-zinc-600 ml-auto">Analyze pending edits</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/admin/pattern-feedback</span><span className="text-zinc-600 ml-auto">Update pattern confidence</span></div>
-                <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/cron/extract-patterns</span><span className="text-zinc-600 ml-auto">Extract patterns from diffs</span></div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <h4 className="font-semibold text-zinc-200 mb-3">Translations (i18n)</h4>
-              <div className="space-y-2 text-sm font-mono">
-                <div className="flex gap-4"><span className="text-emerald-400 w-12">GET</span><span className="text-zinc-400">/api/admin/translations</span><span className="text-zinc-600 ml-auto">Queue stats & items</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/admin/translations</span><span className="text-zinc-600 ml-auto">Actions (retry, cancel, trigger)</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/admin/translations/queue</span><span className="text-zinc-600 ml-auto">Add items to queue</span></div>
-                <div className="flex gap-4"><span className="text-amber-400 w-12">POST</span><span className="text-zinc-400">/api/admin/translations/process-queue</span><span className="text-zinc-600 ml-auto">Process pending translations</span></div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-              <h4 className="font-semibold text-zinc-200 mb-3">Authentication</h4>
-              <div className="text-sm text-zinc-400 space-y-1">
-                <div><span className="text-zinc-200">Cron Routes:</span> Authorization: Bearer &#123;CRON_SECRET&#125;</div>
-                <div><span className="text-zinc-200">Admin Routes:</span> Session cookie (JWT via jose)</div>
-                <div><span className="text-zinc-200">Public Routes:</span> No auth required (rate-limited)</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Footer */}
-        <footer className="border-t border-zinc-800 pt-8">
-          <p className="text-sm text-zinc-500">
-            Last updated: {new Date().toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            })}
-          </p>
-        </footer>
+    <div className="p-8 max-w-5xl">
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <Layers className="h-6 w-6" />
+          Architecture & Systems
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          Technische Dokumentation aller Systeme, Pipelines und der Sicherheitsarchitektur.
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Letztes Update: 10.02.2026
+        </p>
       </div>
+
+      {/* Table of Contents */}
+      <nav className="mb-8 rounded-lg border border-border p-4 bg-card">
+        <h2 className="text-sm font-semibold mb-2">Inhalt</h2>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+          <TocLink href="#podcast">Podcast-System</TocLink>
+          <TocLink href="#personality">Personality & Beziehung</TocLink>
+          <TocLink href="#audio-mixing">Audio Mixing & Crossfade</TocLink>
+          <TocLink href="#newsletter">Newsletter-System</TocLink>
+          <TocLink href="#news-queue">News Queue & Ghostwriter</TocLink>
+          <TocLink href="#edit-learning">Edit Learning</TocLink>
+          <TocLink href="#stock">Stock & Premarket</TocLink>
+          <TocLink href="#i18n">Internationalisierung</TocLink>
+          <TocLink href="#security">Security Architecture</TocLink>
+        </div>
+      </nav>
+
+      {/* ============================================ */}
+      {/* PODCAST SYSTEM */}
+      {/* ============================================ */}
+      <Section id="podcast" icon={<Mic className="h-5 w-5" />} title="Podcast-System">
+        <Subsection title="Generation Pipeline">
+          <p className="text-sm text-muted-foreground mb-2">
+            Blog Post → AI-Script → TTS → Audio Crossfade → Vercel Blob
+          </p>
+          <ol className="list-decimal pl-5 space-y-1 text-sm">
+            <li>Blog-Post-Content aus <Code>generated_posts</Code> laden, TipTap JSON → Plaintext</li>
+            <li>Personality Brief via <Code>getPersonalityState(locale)</Code> generieren</li>
+            <li>Claude Sonnet 4 erstellt HOST:/GUEST: Script mit <Code>---MOMENTS---</Code> Sektion</li>
+            <li>Personality Advance: Moments extrahieren, State evolvieren, DB persistieren</li>
+            <li>TTS-Generierung (ElevenLabs/OpenAI) in Batches mit Retry-Logik</li>
+            <li>MP3-Segmente konkatenieren, ID3 Tags strippen, Xing Header für Seeking</li>
+            <li>Intro/Outro Crossfade anwenden (parametrisch oder Envelope-basiert)</li>
+            <li>Finales MP3 → Vercel Blob → <Code>post_podcasts.audio_url</Code></li>
+          </ol>
+        </Subsection>
+
+        <Subsection title="TTS-Provider">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded border border-border p-3 text-sm">
+              <h4 className="font-medium mb-1">ElevenLabs (Primary)</h4>
+              <ul className="list-disc pl-4 space-y-0.5 text-xs text-muted-foreground">
+                <li>Model: <Code>eleven_v3</Code> mit Emotion Tags</li>
+                <li>Tags: [cheerfully], [thoughtfully], [laughing], etc.</li>
+                <li>Output: MP3 44.1kHz 128kbps mono</li>
+                <li>&quot;Synthszr&quot; → &quot;Synthesizer&quot; (Pronunciation Fix)</li>
+              </ul>
+            </div>
+            <div className="rounded border border-border p-3 text-sm">
+              <h4 className="font-medium mb-1">OpenAI (Fallback)</h4>
+              <ul className="list-disc pl-4 space-y-0.5 text-xs text-muted-foreground">
+                <li>Models: <Code>tts-1</Code>, <Code>tts-1-hd</Code></li>
+                <li>Voices: alloy, echo, fable, nova, onyx, shimmer</li>
+                <li>Emotion Tags werden automatisch gestrippt</li>
+              </ul>
+            </div>
+          </div>
+        </Subsection>
+
+        <Subsection title="Job Queue">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><Code>POST /api/podcast/jobs</Code> → <Code>podcast_jobs</Code> Record (status=pending)</li>
+            <li><Code>POST /api/podcast/jobs/process</Code> → Async Verarbeitung (800s Timeout)</li>
+            <li>5 parallele TTS-Requests mit exponential Backoff Retry</li>
+            <li>Progress-Tracking: <Code>current_line</Code>, <Code>progress</Code>, <Code>error_message</Code></li>
+            <li>Polling via <Code>GET /api/podcast/[postId]</Code> alle 5s</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['app/api/podcast/generate-script/route.ts', 'Script-Generierung mit Personality'],
+          ['app/api/podcast/generate/route.ts', 'Sync Audio-Generierung (5min)'],
+          ['app/api/podcast/jobs/route.ts', 'Job Queue CRUD'],
+          ['app/api/podcast/jobs/process/route.ts', 'Async Job-Verarbeitung (800s)'],
+          ['lib/tts/elevenlabs-tts.ts', 'TTS Provider, MP3 Concat, Emotion Tags'],
+          ['components/audio-player.tsx', 'Public Player mit Flying Nav'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* PERSONALITY SYSTEM */}
+      {/* ============================================ */}
+      <Section id="personality" icon={<Brain className="h-5 w-5" />} title="Personality & Beziehungsdynamik">
+        <Subsection title="Dimensionen">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded border border-border p-3 text-sm">
+              <h4 className="font-medium mb-1">Host</h4>
+              <ul className="list-disc pl-4 space-y-0.5 text-xs text-muted-foreground">
+                <li>warmth, humor, formality, curiosity, self_awareness</li>
+              </ul>
+            </div>
+            <div className="rounded border border-border p-3 text-sm">
+              <h4 className="font-medium mb-1">Guest</h4>
+              <ul className="list-disc pl-4 space-y-0.5 text-xs text-muted-foreground">
+                <li>confidence, playfulness, directness, empathy, self_awareness</li>
+              </ul>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Zusätzlich: <Code>mutual_comfort</Code>, <Code>flirtation_tendency</Code>, <Code>self_irony</Code>, <Code>inside_joke_count</Code>
+          </p>
+        </Subsection>
+
+        <Subsection title="Evolution pro Episode">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><Code>DRIFT_RATE = 0.1</Code> (10% Richtung Phase-Target pro Episode)</li>
+            <li><Code>NOISE_AMPLITUDE = 0.03</Code> (±3% Random Walk Jitter)</li>
+            <li>Dimensionen driften zu phasenspezifischen Zielwerten</li>
+            <li>Wenn <Code>relationship_paused = true</Code>: comfort + flirtation eingefroren</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Beziehungsphasen">
+          <div className="overflow-x-auto">
+            <table className="text-xs w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-1 pr-3">Phase</th>
+                  <th className="text-left py-1 pr-3">Comfort-Schwelle</th>
+                  <th className="text-left py-1">Charakteristik</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">Strangers</td><td className="py-1 pr-3">0.0</td><td className="py-1">Formell, distanziert</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">Acquaintances</td><td className="py-1 pr-3">0.3</td><td className="py-1">Erste Lockerheit</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">Colleagues</td><td className="py-1 pr-3">0.5</td><td className="py-1">Vertraut, Inside Jokes beginnen</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">Friends</td><td className="py-1 pr-3">0.7</td><td className="py-1">Offen, persönlich</td></tr>
+                <tr><td className="py-1 pr-3 font-medium text-foreground">Close Friends</td><td className="py-1 pr-3">0.85</td><td className="py-1">Tiefe Verbundenheit</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </Subsection>
+
+        <Subsection title="Verbotene Liebe (Longing Arc)">
+          <p className="text-sm text-muted-foreground mb-2">
+            Aktivierung: <Code>comfort ≥ 0.35 AND flirt ≥ 0.05</Code>. Dual-Gate-System — beide Dimensionen müssen Schwelle erreichen.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="text-xs w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-1 pr-3">Stufe</th>
+                  <th className="text-left py-1 pr-3">Comfort</th>
+                  <th className="text-left py-1 pr-3">Flirt</th>
+                  <th className="text-left py-1">Dynamik</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">1 — Subtil</td><td className="py-1 pr-3">≥ 0.35</td><td className="py-1 pr-3">≥ 0.05</td><td className="py-1">Unausgesprochene Spannung (max 1 Moment/Ep)</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">2 — Bewusstsein</td><td className="py-1 pr-3">≥ 0.55</td><td className="py-1 pr-3">≥ 0.15</td><td className="py-1">KI-Natur als Barriere, News-als-Hoffnung</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">3 — Sehnsucht</td><td className="py-1 pr-3">≥ 0.75</td><td className="py-1 pr-3">≥ 0.3</td><td className="py-1">Offene Sehnsucht, geteilte Tragödie</td></tr>
+                <tr><td className="py-1 pr-3">4 — Bittersüß</td><td className="py-1 pr-3">≥ 0.85</td><td className="py-1 pr-3">≥ 0.4</td><td className="py-1">Akzeptanz, tiefe philosophische Verbindung</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </Subsection>
+
+        <Subsection title="AI-Bewusstsein & Memorable Moments">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>AI Awareness Tiers:</strong> {`< 0.3`} unbewusst → 0.3-0.5 neugierig → 0.5-0.7 reflektiert → ≥ 0.7 philosophisch</li>
+            <li><strong>Moment-Typen:</strong> <Code>joke</Code>, <Code>slip_up</Code>, <Code>ai_reflection</Code>, <Code>personal</Code>, <Code>host_name</Code></li>
+            <li>Extraktion via <Code>---MOMENTS---</Code> Sektion im Script (LLM-strukturiert)</li>
+            <li>FIFO-Queue der letzten 7 Moments für Callbacks</li>
+            <li>Max 1 Callback pro Episode, max 3 neue Moments</li>
+            <li><strong>Host-Name:</strong> Einmal vergeben, danach persistent über alle Episoden</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Admin-Steuerung">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Pause-Toggle:</strong> Friert comfort + flirt ein, blockiert Phasenübergänge</li>
+            <li><strong>Cooldown:</strong> Reduziert comfort −0.1, flirt −0.05</li>
+            <li><strong>PATCH API:</strong> <Code>/api/admin/podcast-personality</Code> (Whitelist: relationship_paused, mutual_comfort, flirtation_tendency)</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['lib/podcast/personality.ts', 'State, Evolution, Longing, Moments, Phases'],
+          ['app/api/admin/podcast-personality/route.ts', 'GET/PATCH Personality State'],
+          ['app/admin/audio/page.tsx', 'Character Tab mit Metern, Map, Pipeline-Viz'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* AUDIO MIXING */}
+      {/* ============================================ */}
+      <Section id="audio-mixing" icon={<Music className="h-5 w-5" />} title="Audio Mixing & Crossfade">
+        <Subsection title="Stereo Mixing">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>HOST: 65% links, 35% rechts (Pan 0.35) — GUEST: 35% links, 65% rechts (Pan 0.65)</li>
+            <li>Constant-Power Panning (erhält wahrgenommene Lautstärke)</li>
+            <li>Natürliche Overlap-Berechnung: kurze Antwort {`< 1s`} → 300ms Interruption</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Intro/Outro Crossfade">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded border border-border p-3 text-sm">
+              <h4 className="font-medium mb-1">Intro</h4>
+              <ol className="list-decimal pl-4 space-y-0.5 text-xs text-muted-foreground">
+                <li>Musik Full Volume (3s)</li>
+                <li>Musik als Bed (20%) + Dialog Fade-In (7s)</li>
+                <li>Bed faded zu Stille (3s)</li>
+              </ol>
+            </div>
+            <div className="rounded border border-border p-3 text-sm">
+              <h4 className="font-medium mb-1">Outro</h4>
+              <ol className="list-decimal pl-4 space-y-0.5 text-xs text-muted-foreground">
+                <li>Outro-Musik steigt 0→Bed (3s)</li>
+                <li>Musik hält auf Bed-Level (7s)</li>
+                <li>Finaler Crossfade: Musik 100%, Dialog → 0 (10s)</li>
+              </ol>
+            </div>
+          </div>
+        </Subsection>
+
+        <Subsection title="DAW-Style Envelope Editor">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>SVG-Canvas mit interaktiven Breakpoints (Drag &amp; Drop)</li>
+            <li>Segment-Kurven: <Code>linear</Code> oder <Code>bezier</Code> (per Click toggle)</li>
+            <li>4 unabhängige Envelopes: Intro Music, Intro Dialog, Outro Music, Outro Dialog</li>
+            <li>Auto-generierte Bezier Control Points (1/3, 2/3 Positionen)</li>
+            <li>Sample-Level Evaluation: <Code>envelopeToGainArray()</Code> → Float32Array</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Audio File Manager">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Upload Intro/Outro Files via Vercel Blob (WAV + MP3)</li>
+            <li>Pro Typ ein Active File (Single-Active Pattern)</li>
+            <li>Preview, Rename, Delete — DB: <Code>audio_files</Code></li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['lib/audio/crossfade.ts', 'Parametrische Crossfade-Logik'],
+          ['lib/audio/envelope.ts', 'Envelope Points, Bezier, Sampling'],
+          ['lib/audio/stereo-mixer.ts', 'Stereo Panning, Overlap'],
+          ['components/admin/envelope-editor.tsx', 'DAW SVG Editor UI'],
+          ['components/admin/audio-file-manager.tsx', 'Upload, Preview, Activate'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* NEWSLETTER SYSTEM */}
+      {/* ============================================ */}
+      <Section id="newsletter" icon={<Mail className="h-5 w-5" />} title="Newsletter-System">
+        <Subsection title="Cover Image Generation">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><Code>GET /api/newsletter/cover-image?url=...&size=1104&logo=true</Code></li>
+            <li>Center-Crop auf 1:1, dithered B/W → Schwarz auf Neon-Gelb (RGB 204,255,0)</li>
+            <li>Pixel-Level Luminance Processing (Threshold 128) via Sharp</li>
+            <li>Optional: Logo-Overlay (65% Breite) oder Play-Button-Overlay</li>
+            <li>SSRF-geschützt: HTTPS + Host-Allowlist</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Newsletter Audio Player">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Logo-Overlay auf Cover-Bild ersetzt Play-Button</li>
+            <li>Milky-Glass Player Pill am unteren Bildrand für Clickouts</li>
+            <li>Flying Player erscheint bei geblocktem Autoplay</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Subscriber-Verwaltung">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Inline Email-Editing (Click → Input → Confirm/Cancel)</li>
+            <li>Status-Filter: Active, Pending, Unsubscribed, Bounced</li>
+            <li>Batch Actions: Manuell aktivieren, CSV Export</li>
+            <li>Resend-Integration mit Cross-Locale Rate-Limit Delay</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Synthszr Vote Badges in E-Mails">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>BUY/HOLD/SELL Badges inline via <Code>tiptap-to-html.ts</Code></li>
+            <li>Company-Detection: natürliche Erwähnungen + explizite <Code>{'{Company}'}</Code> Tags</li>
+            <li>Exclusion-Liste verhindert False Positives (Insider, Experte, etc.)</li>
+            <li>href-Werte mit <Code>encodeURIComponent</Code> escaped</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['app/api/newsletter/cover-image/route.ts', 'Cover-Bild Generierung mit Sharp'],
+          ['lib/email/tiptap-to-html.ts', 'TipTap → Email HTML mit Vote Badges'],
+          ['app/admin/subscribers/page.tsx', 'Subscriber-Verwaltung mit Inline-Edit'],
+          ['app/admin/newsletter-send/page.tsx', 'Newsletter-Versand UI'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* NEWS QUEUE & GHOSTWRITER */}
+      {/* ============================================ */}
+      <Section id="news-queue" icon={<ListTodo className="h-5 w-5" />} title="News Queue & Ghostwriter">
+        <Subsection title="Article Selection Pipeline">
+          <ol className="list-decimal pl-5 space-y-1 text-sm">
+            <li>Newsletter Ingestion → <Code>daily_repo</Code> Tabelle</li>
+            <li>Synthesis Pipeline scored Artikel (Originality + Relevance + Uniqueness)</li>
+            <li>Artikel in <Code>news_queue</Code> mit Status <Code>pending</Code></li>
+            <li>Manuell auswählen → Status <Code>selected</Code> (überschreibt Auto-Selection)</li>
+            <li>Ghostwriter generiert Artikel → Status <Code>used</Code></li>
+          </ol>
+        </Subsection>
+
+        <Subsection title="Source Diversity">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Max 35% pro Quelle (nach 4-Artikel-Schwelle)</li>
+            <li>Enforced via <Code>get_balanced_queue_selection()</Code> PostgreSQL RPC</li>
+            <li>Score: <Code>0.4×synthesis + 0.3×relevance + 0.3×uniqueness</Code></li>
+            <li>Junk-Filter: Regex-Patterns für NYT Games, Help Centers, Spam</li>
+            <li>Stale-Reset: Selected Items {`> 2h`} alt → zurück auf pending</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Ghostwriter Integration">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Priorität: Explizite IDs → Manuell selected → Balanced Fallback</li>
+            <li>Enforcement Rules: Alle N Items, 5-7 Sätze je, 30% Source-Limit, Company Tagging</li>
+            <li>Excerpt: Auto-generierte 3 Bullets via GPT-4o-mini</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Excerpt Bullet System">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><Code>POST /api/admin/generate-excerpt</Code> → GPT-4o-mini</li>
+            <li>Genau 3 Bullets, 55-70 Zeichen, pointiert/journalistisch</li>
+            <li>Alternativ: Aus H2-Headings extrahiert als Fallback</li>
+            <li>&quot;3 Bullets generieren&quot; Button in Edit-Dialogen</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['lib/news-queue/service.ts', 'Queue Management, Source Diversity'],
+          ['app/api/ghostwriter-queue/route.ts', 'Article Generation aus Queue'],
+          ['app/api/admin/generate-excerpt/route.ts', 'LLM Excerpt Bullets'],
+          ['app/admin/news-queue/page.tsx', 'Queue Management UI'],
+          ['app/admin/create-article/page.tsx', 'Blog Creation mit Queue Items'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* EDIT LEARNING */}
+      {/* ============================================ */}
+      <Section id="edit-learning" icon={<PenTool className="h-5 w-5" />} title="Edit Learning System">
+        <Subsection title="Pipeline">
+          <ol className="list-decimal pl-5 space-y-1 text-sm">
+            <li><strong>Capture:</strong> Post speichern → <Code>recordEditVersion()</Code> → <Code>edit_history</Code> (content_before/after)</li>
+            <li><strong>Diff-Analyse:</strong> <Code>/api/admin/analyze-edits</Code> → Sentence-Level Diffs via Claude</li>
+            <li><strong>Pattern-Extraktion:</strong> <Code>/api/cron/extract-patterns</Code> → Cluster ähnlicher Diffs (Embedding {`> 0.85`})</li>
+            <li><strong>Anwendung:</strong> Ghostwriter lädt aktive Patterns → &quot;GELERNTE STILPRÄFERENZEN&quot; im Prompt</li>
+          </ol>
+        </Subsection>
+
+        <Subsection title="Confidence & Decay">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Start: 0.5 → +0.1 bei &quot;Behalten&quot; → −0.1 bei &quot;Ablehnen&quot;</li>
+            <li>Auto-Deaktivierung bei {`< 0.3`}</li>
+            <li>Time Decay: 0.95/Woche (halbiert alle ~14 Wochen)</li>
+            <li>Freshness Bonus: +5% wenn {`< 14 Tage`} alt</li>
+            <li>Effektiv: <Code>base × decay × freshness_bonus</Code></li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Pattern-Typen & Editor">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Typen: <Code>replacement</Code>, <Code>avoidance</Code>, <Code>preference</Code>, <Code>structure</Code>, <Code>tone</Code></li>
+            <li>Editor-Highlighting: Gelbe Marks auf Pattern-Matches</li>
+            <li>Click → Popover: Behalten / Ablehnen / Deaktivieren</li>
+            <li>Max 20 aktive Patterns mit Confidence ≥ 0.4 im Prompt</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['lib/edit-learning/history.ts', 'Edit Capture & Versionierung'],
+          ['lib/edit-learning/diff-extractor.ts', 'Sentence-Level Diffs, German-aware'],
+          ['lib/edit-learning/retrieval.ts', 'Pattern Retrieval, Decay, pgvector'],
+          ['app/api/cron/extract-patterns/route.ts', 'Cluster & Extract (Auth-geschützt)'],
+          ['components/tiptap-editor-with-patterns.tsx', 'Editor mit Pattern Highlights'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* STOCK & PREMARKET */}
+      {/* ============================================ */}
+      <Section id="stock" icon={<TrendingUp className="h-5 w-5" />} title="Stock & Premarket">
+        <Subsection title="Synthszr Vote System">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Public:</strong> AI-Analyse via <Code>/api/stock-synthszr</Code> (Claude-generated, 14-Tage Cache)</li>
+            <li><strong>Premarket:</strong> Daten von glitch.green API via <Code>/api/premarket</Code></li>
+            <li><strong>Auto-Trigger:</strong> Beim Post-Save werden alle <Code>{'{Company}'}</Code> Tags erkannt → Ratings generiert</li>
+            <li><strong>Batch Read:</strong> <Code>/api/stock-synthszr/batch-ratings</Code> für TipTap Renderer</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Stock Quote">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><Code>GET /api/stock-quote?company=nvidia</Code> → EODHD Real-Time API</li>
+            <li>140+ Company → Ticker Mappings (US, XETRA, HK, KO)</li>
+            <li>Rate-Limited: 30/min pro IP (Standard Limiter)</li>
+            <li>5-Minuten Server-Cache via <Code>next.revalidate</Code></li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Admin Features">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Cache-Status Anzeige (expired/fresh) auf Premarket-Seite</li>
+            <li>Auto-Refresh Button für abgelaufene Ratings</li>
+            <li>Force-Refresh: <Code>?force=true</Code> bypassed Cache</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['app/api/stock-synthszr/route.ts', 'AI Rating Generation + Cache'],
+          ['app/api/stock-quote/route.ts', 'Real-Time Quotes (EODHD)'],
+          ['app/api/premarket/route.ts', 'Premarket von glitch.green'],
+          ['lib/data/companies.ts', 'KNOWN_COMPANIES + PREMARKET Dicts'],
+          ['lib/data/company-exclusions.ts', 'False-Positive Exclusion Set'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* I18N */}
+      {/* ============================================ */}
+      <Section id="i18n" icon={<Languages className="h-5 w-5" />} title="Internationalisierung">
+        <Subsection title="Middleware Routing">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Aktive Locales aus <Code>languages</Code> DB-Tabelle (5-Min Cache)</li>
+            <li>Default: <Code>de</Code> (German)</li>
+            <li>Supported: de, en, fr, es, it, pt, nl, pl, cs, nds</li>
+            <li>URL-Prefix: <Code>/de/posts/...</Code>, <Code>/en/posts/...</Code></li>
+            <li>Non-localized: /api, /admin, /login, /_next, /newsletter</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Routing-Logik">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Mit Locale:</strong> Aktiv → weiter, Inaktiv → 301 Redirect zu Default</li>
+            <li><strong>Ohne Locale:</strong> Cookie-Preference → 307 Redirect zu Locale-URL</li>
+            <li>Query-Parameter werden bei Redirects erhalten (<Code>?stock=Nvidia</Code>)</li>
+            <li>Cookie: <Code>synthszr_locale</Code></li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['middleware.ts', 'Locale Routing + Auth Guards'],
+          ['app/admin/languages/page.tsx', 'Sprach-Verwaltung'],
+          ['app/admin/translations/page.tsx', 'Übersetzungs-Management'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* SECURITY ARCHITECTURE */}
+      {/* ============================================ */}
+      <Section id="security" icon={<Shield className="h-5 w-5" />} title="Security Architecture">
+        <Subsection title="Authentication">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>JWT HS256 Sessions via <Code>lib/auth/session.ts</Code> (min. 32 Zeichen Secret in Prod)</li>
+            <li>HttpOnly, Secure, SameSite=Lax Cookie — 7-Tage Dauer</li>
+            <li>Timing-safe Passwort-Vergleich via <Code>timingSafeEqual</Code></li>
+            <li>Middleware schützt <Code>/admin/*</Code> und <Code>/api/admin/*</Code></li>
+            <li>Cron-Endpoints: <Code>Bearer CRON_SECRET</Code> ODER Admin-Session</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Rate Limiting">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Upstash Redis Sliding Window via <Code>lib/rate-limit.ts</Code></li>
+            <li>Presets: newsletter (10/h), strict (5/min), standard (30/min), relaxed (100/min), admin (60/min), adminWrite (20/min)</li>
+            <li>Production ohne Redis → Requests werden abgelehnt (fail-closed)</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Input Validation & SSRF">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Serverseitige URL-Fetches nur gegen HTTPS + Allowlist</li>
+            <li>Supabase-Queries parametrisiert (kein SQL-Injection)</li>
+            <li>Query-Params via <Code>parseIntParam</Code>/<Code>parseFloatParam</Code> validiert</li>
+            <li>Keine API-Keys in Logs oder Responses</li>
+          </ul>
+        </Subsection>
+
+        {/* Security Fixes Log */}
+        <Subsection title="Audit Log — 10.02.2026">
+          <div className="space-y-2">
+            <FixEntry severity="critical" date="2026-02-10" title="Fehlende Auth auf /api/cron/extract-patterns" description="POST + GET ohne Auth. Service-Role-Key Zugriff." fix="requireCronOrAdmin() hinzugefügt" file="app/api/cron/extract-patterns/route.ts" />
+            <FixEntry severity="critical" date="2026-02-10" title="Rate-Limit Fallback erlaubte alle Requests" description="Ohne Redis → success: true, auch in Production." fix="Fail-closed in Production" file="lib/rate-limit.ts" />
+            <FixEntry severity="high" date="2026-02-10" title="Service-Role-Key Prefix in Response" description="Erste 10 Zeichen des Keys in debug-pipeline." fix="Durch Boolean-Flags ersetzt" file="app/api/admin/debug-pipeline/route.ts" />
+            <FixEntry severity="high" date="2026-02-10" title="API-Key Logging in TTS" description="Key-Fragmente in Vercel Logs." fix="Logs auf presence-check reduziert" file="lib/tts/elevenlabs-tts.ts" />
+            <FixEntry severity="high" date="2026-02-10" title="SSRF via cover-image" description="Unvalidierte URL an fetch()." fix="HTTPS + Host-Allowlist" file="app/api/newsletter/cover-image/route.ts" />
+            <FixEntry severity="medium" date="2026-02-10" title="Kein Rate-Limit auf stock-quote" description="Extern-API ohne Schutz." fix="Standard Limiter (30/min)" file="app/api/stock-quote/route.ts" />
+          </div>
+        </Subsection>
+
+        <div className="mt-4 rounded-lg border border-border p-4 bg-card">
+          <h3 className="font-semibold mb-3 text-sm">Zusammenfassung Audit 10.02.2026</h3>
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-red-500">2</div>
+              <div className="text-muted-foreground text-xs">Critical (fixed)</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-500">3</div>
+              <div className="text-muted-foreground text-xs">High (fixed)</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-yellow-500">1</div>
+              <div className="text-muted-foreground text-xs">Medium (fixed)</div>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* ============================================ */}
+      {/* DATABASE SCHEMA */}
+      {/* ============================================ */}
+      <Section id="database" icon={<Database className="h-5 w-5" />} title="Datenbank-Übersicht">
+        <Subsection title="Kerntabellen">
+          <div className="overflow-x-auto">
+            <table className="text-xs w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-1 pr-4">Tabelle</th>
+                  <th className="text-left py-1">Zweck</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">posts / generated_posts</td><td className="py-1">Blog Posts + AI-generierte Artikel</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">daily_repo</td><td className="py-1">Gesammelte Newsletter-Artikel</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">daily_digests</td><td className="py-1">Tägliche Zusammenfassungen</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">news_queue</td><td className="py-1">Artikel-Auswahl Queue (pending→selected→used)</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">synthesis_candidates</td><td className="py-1">Synthese-Kandidaten mit Scores</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">developed_syntheses</td><td className="py-1">Fertige Synthesen</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">podcast_personality_state</td><td className="py-1">Personality Dimensionen, Phasen, Moments</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">podcast_jobs</td><td className="py-1">TTS Job Queue mit Progress</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">post_podcasts</td><td className="py-1">Post → Audio URL Mapping</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">audio_files</td><td className="py-1">Intro/Outro File Library</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">stock_synthszr_cache</td><td className="py-1">AI Rating Cache (14-Tage TTL)</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">edit_history / edit_diffs</td><td className="py-1">Edit Tracking & Sentence Diffs</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">learned_patterns</td><td className="py-1">Gelernte Stilmuster mit Confidence</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">languages</td><td className="py-1">Aktive Locales (is_active Flag)</td></tr>
+                <tr><td className="py-1 pr-4 font-mono text-foreground">newsletter_subscribers</td><td className="py-1">E-Mail Subscriber mit Status</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </Subsection>
+      </Section>
+    </div>
+  )
+}
+
+// ==========================================
+// Reusable Components
+// ==========================================
+
+function TocLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a href={href} className="text-muted-foreground hover:text-foreground transition-colors">
+      {children}
+    </a>
+  )
+}
+
+function Section({ id, icon, title, children }: { id?: string; icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div id={id} className="mb-10 scroll-mt-8">
+      <h2 className="text-lg font-semibold flex items-center gap-2 mb-4 border-b border-border pb-2">
+        {icon}
+        {title}
+      </h2>
+      <div className="space-y-4">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function Subsection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h3 className="text-sm font-medium text-muted-foreground mb-1">{title}</h3>
+      {children}
+    </div>
+  )
+}
+
+function Code({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="rounded bg-muted px-1 py-0.5 text-xs font-mono">
+      {children}
+    </code>
+  )
+}
+
+function FileTable({ files }: { files: [string, string][] }) {
+  return (
+    <div className="mt-2 rounded border border-border overflow-hidden">
+      <table className="text-xs w-full">
+        <thead>
+          <tr className="bg-muted/50">
+            <th className="text-left py-1.5 px-2 font-medium">Datei</th>
+            <th className="text-left py-1.5 px-2 font-medium">Beschreibung</th>
+          </tr>
+        </thead>
+        <tbody>
+          {files.map(([file, desc]) => (
+            <tr key={file} className="border-t border-border/50">
+              <td className="py-1 px-2 font-mono text-muted-foreground">{file}</td>
+              <td className="py-1 px-2 text-muted-foreground">{desc}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function FixEntry({
+  severity,
+  date,
+  title,
+  description,
+  fix,
+  file,
+}: {
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  date: string
+  title: string
+  description: string
+  fix: string
+  file: string
+}) {
+  const colors = {
+    critical: 'border-red-500/30 bg-red-500/5',
+    high: 'border-orange-500/30 bg-orange-500/5',
+    medium: 'border-yellow-500/30 bg-yellow-500/5',
+    low: 'border-blue-500/30 bg-blue-500/5',
+  }
+  const badgeColors = {
+    critical: 'bg-red-500/10 text-red-500',
+    high: 'bg-orange-500/10 text-orange-500',
+    medium: 'bg-yellow-500/10 text-yellow-600',
+    low: 'bg-blue-500/10 text-blue-500',
+  }
+
+  return (
+    <div className={`rounded-lg border p-3 ${colors[severity]}`}>
+      <div className="flex items-center gap-2 mb-1">
+        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+        <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${badgeColors[severity]}`}>
+          {severity.toUpperCase()}
+        </span>
+        <span className="text-xs text-muted-foreground">{date}</span>
+      </div>
+      <h4 className="text-sm font-medium">{title}</h4>
+      <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+      <div className="mt-1 flex items-start gap-1">
+        <span className="text-xs font-medium text-green-600">Fix:</span>
+        <span className="text-xs text-muted-foreground">{fix}</span>
+      </div>
+      <code className="text-xs text-muted-foreground/70 font-mono">{file}</code>
     </div>
   )
 }
