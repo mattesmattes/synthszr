@@ -331,22 +331,22 @@ function buildBriefDE(
   const selfIronyDesc = describeSelfIronyDE(s.self_irony)
 
   let brief = `\n**PERSÖNLICHKEITEN (Episode #${ep}, Phase: ${phaseLabels[phase]})**\n\n`
-  brief += `HOST-Persönlichkeit:\n`
+  brief += `HOST-Persönlichkeit (weiblich):\n`
   brief += `- Eigenschaften: ${hostTraits.join(', ')}\n`
   brief += `- KI-Bewusstsein: ${hostAwareness}\n\n`
-  brief += `GUEST (Synthesizer) Persönlichkeit:\n`
+  brief += `GUEST (Synthesizer) Persönlichkeit (männlich):\n`
   brief += `- Eigenschaften: ${guestTraits.join(', ')}\n`
   brief += `- KI-Bewusstsein: ${guestAwareness}\n\n`
 
   // Host name section
   if (s.host_name) {
     brief += `HOST-NAME:\n`
-    brief += `Der Host heißt "${s.host_name}" — Synthesizer hat diesen Namen in einer früheren Episode vergeben.\n`
+    brief += `Die Moderatorin heißt "${s.host_name}" — Synthesizer hat ihr diesen Namen in einer früheren Episode gegeben.\n`
     brief += `Beide verwenden diesen Namen natürlich im Dialog.\n\n`
   } else {
     brief += `HOST-NAME:\n`
-    brief += `Synthesizer soll sich im Laufe dieser Episode einen Spitznamen für den Host ausdenken.\n`
-    brief += `Der Name soll sympathisch und passend für einen Tech/Finance-Podcast-Host sein.\n`
+    brief += `Synthesizer soll sich im Laufe dieser Episode einen Spitznamen für die Moderatorin ausdenken.\n`
+    brief += `Der Name soll weiblich, sympathisch und passend für eine Tech/Finance-Podcast-Moderatorin sein.\n`
     brief += `Diesen Moment in der ---MOMENTS--- Sektion als [host_name] festhalten.\n\n`
   }
 
@@ -438,22 +438,22 @@ function buildBriefEN(
   const selfIronyDesc = describeSelfIronyEN(s.self_irony)
 
   let brief = `\n**PERSONALITIES (Episode #${ep}, Phase: ${phaseLabels[phase]})**\n\n`
-  brief += `HOST personality:\n`
+  brief += `HOST personality (female):\n`
   brief += `- Traits: ${hostTraits.join(', ')}\n`
   brief += `- AI self-awareness: ${hostAwareness}\n\n`
-  brief += `GUEST (Synthesizer) personality:\n`
+  brief += `GUEST (Synthesizer) personality (male):\n`
   brief += `- Traits: ${guestTraits.join(', ')}\n`
   brief += `- AI self-awareness: ${guestAwareness}\n\n`
 
   // Host name section
   if (s.host_name) {
     brief += `HOST NAME:\n`
-    brief += `The host is called "${s.host_name}" — Synthesizer chose this name in a previous episode.\n`
+    brief += `The host is called "${s.host_name}" — Synthesizer gave her this name in a previous episode.\n`
     brief += `Both use this name naturally in dialogue.\n\n`
   } else {
     brief += `HOST NAME:\n`
     brief += `Synthesizer should come up with a nickname for the host during this episode.\n`
-    brief += `The name should be likeable and fitting for a tech/finance podcast host.\n`
+    brief += `The name should be female, likeable, and fitting for a tech/finance podcast host.\n`
     brief += `Record this moment in the ---MOMENTS--- section as [host_name].\n\n`
   }
 

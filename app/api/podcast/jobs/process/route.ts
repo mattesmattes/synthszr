@@ -218,10 +218,17 @@ export async function POST(request: NextRequest) {
     const segments: AudioSegment[] = []
     const segmentMetadata: SegmentMetadata[] = []
 
+    const timestamp = Date.now()
+    const safeTitle = (job.title || 'podcast')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .slice(0, 50)
+
     console.log(`[Podcast Jobs] Generating ${lines.length} segments with ${provider} (parallel batches of ${TTS_BATCH_SIZE})`)
 
-    // Generate segments in parallel batches for faster processing
-    const segmentResults: Array<{ buffer: Buffer; index: number; speaker: 'HOST' | 'GUEST'; text: string }> = []
+    // Generate TTS + upload each segment immediately (don't accumulate in memory)
+    const segmentUrls: string[] = new Array(lines.length).fill('')
+    const segmentBuffers: Array<{ buffer: Buffer; speaker: 'HOST' | 'GUEST'; text: string }> = []
 
     for (let batchStart = 0; batchStart < lines.length; batchStart += TTS_BATCH_SIZE) {
       const batchEnd = Math.min(batchStart + TTS_BATCH_SIZE, lines.length)
@@ -229,7 +236,7 @@ export async function POST(request: NextRequest) {
 
       const batchStartTime = Date.now()
 
-      // Process batch in parallel
+      // Process batch in parallel: TTS + upload per segment
       const batchPromises = batch.map(async (line, batchIndex) => {
         const globalIndex = batchStart + batchIndex
         const voiceId = line.speaker === 'HOST' ? job.host_voice_id : job.guest_voice_id
@@ -241,27 +248,45 @@ export async function POST(request: NextRequest) {
           buffer = await generateSegmentElevenLabs(line.text, voiceId, job.model || 'eleven_v3')
         }
 
+        // Upload segment immediately after generation
+        const fileName = `podcasts/${safeTitle}-${timestamp}-seg${globalIndex.toString().padStart(3, '0')}.mp3`
+        const blob = await put(fileName, buffer, {
+          access: 'public',
+          contentType: 'audio/mpeg',
+        })
+
         return {
           buffer,
           index: globalIndex,
           speaker: line.speaker as 'HOST' | 'GUEST',
-          text: line.text
+          text: line.text,
+          url: blob.url,
         }
       })
 
       const batchResults = await Promise.all(batchPromises)
-      segmentResults.push(...batchResults)
+
+      // Store results in order
+      for (const result of batchResults) {
+        segmentUrls[result.index] = result.url
+        segmentBuffers[result.index] = {
+          buffer: result.buffer,
+          speaker: result.speaker,
+          text: result.text,
+        }
+      }
 
       const batchElapsed = Date.now() - batchStartTime
       console.log(`[Podcast Jobs] Batch ${Math.floor(batchStart / TTS_BATCH_SIZE) + 1}: lines ${batchStart + 1}-${batchEnd}/${lines.length} in ${batchElapsed}ms`)
 
-      // Update progress
+      // Update progress + persist segment URLs so far (crash recovery)
       const progress = Math.round((batchEnd / lines.length) * 100)
       await supabase
         .from('podcast_jobs')
         .update({
           progress,
           current_line: batchEnd,
+          segment_urls: segmentUrls.filter(Boolean),
         })
         .eq('id', job.id)
 
@@ -271,43 +296,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Sort results by index and build final arrays
-    segmentResults.sort((a, b) => a.index - b.index)
-
+    // Build segments + metadata arrays for concatenation
     let cumulativeTime = 0
-    for (const result of segmentResults) {
+    for (let i = 0; i < segmentBuffers.length; i++) {
+      const seg = segmentBuffers[i]
+      if (!seg) continue
+
       segments.push({
-        buffer: result.buffer,
-        speaker: result.speaker as 'HOST' | 'GUEST',
-        text: result.text
+        buffer: seg.buffer,
+        speaker: seg.speaker,
+        text: seg.text,
       })
 
-      const segmentDuration = result.buffer.length / (128 * 1024 / 8)
+      const segmentDuration = seg.buffer.length / (128 * 1024 / 8)
       segmentMetadata.push({
-        index: result.index,
-        speaker: result.speaker,
-        text: result.text,
+        index: i,
+        speaker: seg.speaker,
+        text: seg.text,
         startTime: cumulativeTime,
         durationEstimate: segmentDuration,
       })
       cumulativeTime += segmentDuration
-    }
-
-    // Upload individual segments to Vercel Blob
-    const timestamp = Date.now()
-    const safeTitle = (job.title || 'podcast')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .slice(0, 50)
-
-    const segmentUrls: string[] = []
-    for (let i = 0; i < segments.length; i++) {
-      const fileName = `podcasts/${safeTitle}-${timestamp}-seg${i.toString().padStart(3, '0')}.mp3`
-      const blob = await put(fileName, segments[i].buffer, {
-        access: 'public',
-        contentType: 'audio/mpeg',
-      })
-      segmentUrls.push(blob.url)
     }
 
     // Read mixing settings from DB and apply to crossfade

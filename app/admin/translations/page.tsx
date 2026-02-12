@@ -103,13 +103,6 @@ export default function TranslationsPage() {
     fetchData()
   }, [fetchData])
 
-  // Auto-refresh when processing
-  useEffect(() => {
-    if (processing) {
-      const interval = setInterval(fetchData, 2000)
-      return () => clearInterval(interval)
-    }
-  }, [processing, fetchData])
 
   async function processQueueContinuously() {
     if (processing) return
@@ -125,16 +118,9 @@ export default function TranslationsPage() {
     let successCount = 0
     let failCount = 0
 
+    let consecutiveErrors = 0
+
     while (!abortRef.current) {
-      // Fetch current queue status
-      const statsRes = await fetch('/api/admin/translations/process-queue')
-      const stats = await statsRes.json()
-
-      if (stats.stats?.pending === 0) {
-        startTransition(() => setProcessLog(prev => [...prev, '✅ Alle Items verarbeitet!']))
-        break
-      }
-
       startTransition(() => setProcessLog(prev => [...prev, `🔄 Verarbeite nächstes Item...`]))
 
       try {
@@ -144,6 +130,12 @@ export default function TranslationsPage() {
         })
         const result: ProcessResult = await res.json()
 
+        if (result.processed === 0) {
+          startTransition(() => setProcessLog(prev => [...prev, '✅ Alle Items verarbeitet!']))
+          break
+        }
+
+        consecutiveErrors = 0
         processed += result.processed
         successCount += result.success
         failCount += result.failed
@@ -164,17 +156,23 @@ export default function TranslationsPage() {
         // Refresh data
         await fetchData()
 
-        // Delay between batches to avoid rate limiting
-        if (!abortRef.current && stats.stats?.pending > 0) {
-          startTransition(() => setProcessLog(prev => [...prev, `⏳ Warte 2 Sekunden (Rate Limit)...`]))
-          await new Promise(resolve => setTimeout(resolve, 2000))
+        // Short delay between items to avoid rate limiting
+        if (!abortRef.current) {
+          await new Promise(resolve => setTimeout(resolve, 1000))
         }
       } catch (error) {
+        consecutiveErrors++
         const errorMsg = error instanceof Error ? error.message : String(error)
         startTransition(() => {
           setProcessLog(prev => [...prev, `❌ Fehler: ${errorMsg}`])
-          setProcessLog(prev => [...prev, `⏳ Warte 5 Sekunden nach Fehler...`])
         })
+
+        if (consecutiveErrors >= 3) {
+          startTransition(() => setProcessLog(prev => [...prev, '🛑 Zu viele Fehler, stoppe Verarbeitung']))
+          break
+        }
+
+        startTransition(() => setProcessLog(prev => [...prev, `⏳ Warte 5 Sekunden nach Fehler...`]))
         await new Promise(resolve => setTimeout(resolve, 5000))
       }
     }

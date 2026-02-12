@@ -5,10 +5,11 @@ import { translateContent, type TranslationModel } from '@/lib/i18n/translation-
 import type { LanguageCode, TranslationQueueItem } from '@/lib/types'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
 
-export const maxDuration = 300 // 5 minutes for batch translations
+export const maxDuration = 120 // 2 minutes per single translation
 
-const BATCH_SIZE = 3 // Reduced to avoid timeout even with maxDuration
+const BATCH_SIZE = 1 // Process one at a time; client loop handles iteration
 const MAX_ATTEMPTS = 3
+const STUCK_TIMEOUT_MS = 5 * 60 * 1000 // 5 min — reset stuck 'processing' items
 
 /**
  * POST /api/admin/translations/process-queue
@@ -28,6 +29,19 @@ export async function POST(request: NextRequest) {
   try {
     // Always use admin client to bypass RLS (auth already verified above)
     const supabase = createAdminClient()
+
+    // Recover stuck 'processing' items (timed out from previous requests)
+    const stuckCutoff = new Date(Date.now() - STUCK_TIMEOUT_MS).toISOString()
+    const { data: stuckItems } = await supabase
+      .from('translation_queue')
+      .update({ status: 'pending', started_at: null })
+      .eq('status', 'processing')
+      .lt('started_at', stuckCutoff)
+      .select('id')
+
+    if (stuckItems && stuckItems.length > 0) {
+      console.log(`[Queue] Recovered ${stuckItems.length} stuck items`)
+    }
 
     // Get pending queue items (ordered by priority and age)
     const { data: queueItems, error: fetchError } = await supabase

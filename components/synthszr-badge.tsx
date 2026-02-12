@@ -5,8 +5,13 @@ import { StockSynthszrLayer } from './stock-synthszr-layer'
 import { StockQuotePopover } from './stock-quote-popover'
 import { PremarketSynthszrLayer } from './premarket-synthszr-layer'
 import { cn } from '@/lib/utils'
-
-type Rating = 'BUY' | 'HOLD' | 'SELL'
+import {
+  RATING_BADGE_STYLES,
+  RATING_LABELS,
+  DIRECTION_STYLES,
+  DIRECTION_ARROWS,
+} from '@/lib/synthszr/rating-styles'
+import type { StockRating } from '@/lib/stock-synthszr/types'
 
 interface SynthszrBadgeProps {
   /** Company API slug (e.g., 'apple', 'anysphere') */
@@ -14,7 +19,7 @@ interface SynthszrBadgeProps {
   /** Display name for the company */
   displayName: string
   /** The rating to display */
-  rating: Rating
+  rating: StockRating
   /** Company type */
   type: 'public' | 'premarket'
   /** Stock ticker symbol (for public companies) */
@@ -31,30 +36,6 @@ interface SynthszrBadgeProps {
   size?: 'sm' | 'md'
   /** Additional CSS classes */
   className?: string
-}
-
-const ratingStyles = {
-  BUY: 'bg-neon-green text-black',      // Neon Green (P3 enhanced)
-  HOLD: 'bg-neon-yellow text-black',    // Neon Yellow (P3 enhanced)
-  SELL: 'bg-neon-orange text-black',    // Neon Orange (P3 enhanced)
-}
-
-const ratingLabels = {
-  BUY: 'Buy',
-  HOLD: 'Hold',
-  SELL: 'Sell',
-}
-
-const directionStyles = {
-  up: 'bg-neon-green text-black',
-  down: 'bg-neon-orange text-black',
-  neutral: 'bg-gray-300 text-black',
-}
-
-const directionArrows = {
-  up: '↑',
-  down: '↓',
-  neutral: '→',
 }
 
 /**
@@ -110,9 +91,9 @@ export function SynthszrBadge({
             {hasQuoteData && direction && (
               <span className={cn(
                 'ml-1 px-1 py-0.5 rounded text-[11px] font-bold',
-                directionStyles[direction]
+                DIRECTION_STYLES[direction]
               )}>
-                {directionArrows[direction]}{Math.abs(changePercent).toFixed(1)}%
+                {DIRECTION_ARROWS[direction]}{Math.abs(changePercent).toFixed(1)}%
               </span>
             )}
           </span>
@@ -123,10 +104,10 @@ export function SynthszrBadge({
           className={cn(
             'font-bold rounded not-italic cursor-pointer hover:opacity-80 transition-opacity',
             sizeClasses,
-            ratingStyles[rating]
+            RATING_BADGE_STYLES[rating]
           )}
         >
-          {ratingLabels[rating]}
+          {RATING_LABELS[rating]}
         </button>
       </span>
 

@@ -43,8 +43,8 @@ const DEFAULT_SCRIPT_PROMPT_DE = `Du bist ein erfahrener Podcast-Skriptautor. Er
 - Danach soll der HOST das Thema der heutigen Folge kurz anreißen
 
 **Rollen:**
-- HOST: Moderiert das Gespräch, stellt Fragen, fasst zusammen
-- GUEST: Synthesizer - der AI-Analyst mit pointierten Meinungen
+- HOST (weiblich): Moderatorin — moderiert das Gespräch, stellt Fragen, fasst zusammen
+- GUEST (männlich): Synthesizer — der AI-Analyst mit pointierten Meinungen
 
 **Output-Format (WICHTIG - exakt dieses Format verwenden):**
 HOST: [emotion] Dialog text here...
@@ -109,8 +109,8 @@ The source content below may be in German or another language. You MUST translat
 - After that, the HOST should briefly tease the topic of today's episode
 
 **Roles:**
-- HOST: Moderates the conversation, asks questions, summarizes
-- GUEST: Synthesizer - the AI analyst with pointed opinions
+- HOST (female): The host — moderates the conversation, asks questions, summarizes
+- GUEST (male): Synthesizer — the AI analyst with pointed opinions
 
 **Output Format (IMPORTANT - use exactly this format):**
 HOST: [emotion] Dialog text here...

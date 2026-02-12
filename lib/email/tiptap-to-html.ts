@@ -637,97 +637,185 @@ function isAbbreviationDot(text: string, dotIndex: number): boolean {
 }
 
 /**
- * Render content with the last sentence highlighted in neon yellow
- * Used for SYNTHSZR TAKE paragraphs in newsletter emails
+ * Render content with the last sentence highlighted in neon yellow.
+ * Used for SYNTHSZR TAKE paragraphs in newsletter emails.
+ *
+ * Works at TipTap node level (like the DOM-based web version) to correctly
+ * handle highlighting across HTML tags (bold, italic, links).
  */
 function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string {
   if (!content) return ''
 
-  // First, render all content normally
-  const fullHtml = renderContent(content)
+  // Build a map of character positions per text node (accounts for mark-transition spaces)
+  interface TextSegment {
+    nodeIndex: number
+    text: string
+    charStart: number  // position in the full plain text
+    charEnd: number
+    isImplicitSpace: boolean // space inserted for mark transitions
+  }
 
-  // Get the plain text to find sentence boundaries (with space handling for mark transitions)
-  const plainTextParts: string[] = []
+  const segments: TextSegment[] = []
+  let charPos = 0
+
   for (let i = 0; i < content.length; i++) {
     const node = content[i]
-    if (node.type === 'text') {
-      // Check for mark transition that needs a space
-      if (i > 0 && content[i - 1].type === 'text') {
-        const prevNode = content[i - 1]
-        const prevMarks = JSON.stringify(prevNode.marks || [])
-        const currMarks = JSON.stringify(node.marks || [])
+    if (node.type !== 'text') continue
 
-        if (prevMarks !== currMarks) {
-          const prevText = prevNode.text || ''
-          const currText = node.text || ''
-          const lastChar = prevText.slice(-1)
-          const firstChar = currText.slice(0, 1)
+    // Check for mark transition that needs an implicit space
+    if (i > 0 && content[i - 1].type === 'text') {
+      const prevNode = content[i - 1]
+      const prevMarks = JSON.stringify(prevNode.marks || [])
+      const currMarks = JSON.stringify(node.marks || [])
 
-          const needsNoSpace = /[\s.,;:!?\-–—()\[\]{}'"„"«»]/.test(lastChar) ||
-                              /[\s.,;:!?\-–—()\[\]{}'"„"«»]/.test(firstChar)
+      if (prevMarks !== currMarks) {
+        const prevText = prevNode.text || ''
+        const currText = node.text || ''
+        const lastChar = prevText.slice(-1)
+        const firstChar = currText.slice(0, 1)
 
-          if (!needsNoSpace && lastChar && firstChar) {
-            plainTextParts.push(' ')
-          }
+        const needsNoSpace = /[\s.,;:!?\-–—()\[\]{}'"„"«»]/.test(lastChar) ||
+                            /[\s.,;:!?\-–—()\[\]{}'"„"«»]/.test(firstChar)
+
+        if (!needsNoSpace && lastChar && firstChar) {
+          segments.push({ nodeIndex: -1, text: ' ', charStart: charPos, charEnd: charPos + 1, isImplicitSpace: true })
+          charPos += 1
         }
       }
-      plainTextParts.push(node.text || '')
     }
+
+    const text = node.text || ''
+    segments.push({ nodeIndex: i, text, charStart: charPos, charEnd: charPos + text.length, isImplicitSpace: false })
+    charPos += text.length
   }
-  const plainText = plainTextParts.join('')
+
+  const plainText = segments.map(s => s.text).join('')
 
   // Find the last REAL sentence boundary: ".!?" followed by space and capital letter
-  // But exclude abbreviations like "vs.", "z.B.", etc.
   let lastSentenceStart = 0
 
-  // Match potential sentence endings: . ! ? followed by space(s) and capital letter
   const potentialEndRegex = /[.!?]\s+(?=[A-ZÄÖÜ])/g
   let match
   while ((match = potentialEndRegex.exec(plainText)) !== null) {
     const punctuation = plainText[match.index]
-
-    // For periods, check if it's an abbreviation
     if (punctuation === '.' && isAbbreviationDot(plainText, match.index)) {
-      continue // Skip abbreviations
+      continue
     }
-
-    // This is a real sentence boundary
     lastSentenceStart = match.index + match[0].length
   }
 
-  // If no sentence boundary found, try to highlight everything after "Synthszr Take/Contra:"
+  // Fallback: if no sentence boundary, try highlighting after "Synthszr Take/Contra:"
   if (lastSentenceStart === 0) {
     const synthszrMatch = plainText.match(/synthszr (?:take|contra):?\s*/i)
     if (synthszrMatch) {
-      // Highlight everything after "Synthszr Take/Contra:"
-      const afterLabel = plainText.slice(synthszrMatch.index! + synthszrMatch[0].length)
-      if (afterLabel.trim()) {
-        const escapedAfterLabel = afterLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const highlightRegex = new RegExp(`(${escapedAfterLabel})$`)
-        return fullHtml.replace(
-          highlightRegex,
-          '<span style="background-color: #FFFF00; padding: 2px 4px;">$1</span>'
-        )
+      lastSentenceStart = synthszrMatch.index! + synthszrMatch[0].length
+      if (!plainText.slice(lastSentenceStart).trim()) {
+        return renderContent(content) // nothing after the label
       }
+    } else {
+      return renderContent(content) // no sentence boundary at all
     }
-    return fullHtml
   }
 
-  // Find the last sentence text
-  const lastSentence = plainText.slice(lastSentenceStart)
+  // Now render each text node, wrapping parts that fall within the last sentence
+  const renderedParts: string[] = []
 
-  // Escape special regex characters in the last sentence
-  const escapedLastSentence = lastSentence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  for (let i = 0; i < content.length; i++) {
+    const node = content[i]
+    if (node.type !== 'text') continue
 
-  // Wrap the last sentence in a highlighted span
-  // Match the last occurrence to handle any repetitions
-  const highlightRegex = new RegExp(`(${escapedLastSentence})(?!.*${escapedLastSentence})`)
-  const highlightedHtml = fullHtml.replace(
-    highlightRegex,
-    '<span style="background-color: #FFFF00; padding: 2px 4px;">$1</span>'
-  )
+    const seg = segments.find(s => s.nodeIndex === i)
+    if (!seg) continue
 
-  return highlightedHtml
+    // Add implicit space from mark transition (before this node)
+    const implicitSpace = segments.find(s => s.isImplicitSpace && s.charEnd === seg.charStart)
+    if (implicitSpace) {
+      // Check if the space falls within the highlight region
+      if (implicitSpace.charStart >= lastSentenceStart) {
+        renderedParts.push('<span style="background-color: #FFFF00; padding: 2px 0;"> </span>')
+      } else {
+        renderedParts.push(' ')
+      }
+    }
+
+    let text = node.text || ''
+    text = stripExplicitCompanyTags(text)
+
+    // Determine which part of this node falls within the last sentence
+    const nodeInHighlight = seg.charEnd > lastSentenceStart && seg.charStart < charPos
+    const highlightStartInNode = Math.max(0, lastSentenceStart - seg.charStart)
+
+    // Style "Synthszr Take/Contra:" label
+    const synthszrPattern = /(Synthszr (?:Take|Contra):?)/gi
+    const hasBoldMark = node.marks?.some(m => m.type === 'bold')
+
+    if (!hasBoldMark && synthszrPattern.test(text)) {
+      text = text.replace(synthszrPattern, '<strong style="background-color: #FFFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">$1</strong>')
+    }
+
+    if (nodeInHighlight && highlightStartInNode === 0) {
+      // Entire node is in the highlight
+      const rendered = applyMarks(text, node.marks, true)
+      renderedParts.push(rendered)
+    } else if (nodeInHighlight && highlightStartInNode > 0) {
+      // Node is split: beginning is normal, rest is highlighted
+      const rawText = node.text || ''
+      const beforeText = stripExplicitCompanyTags(rawText.slice(0, highlightStartInNode))
+      const afterText = stripExplicitCompanyTags(rawText.slice(highlightStartInNode))
+
+      // Re-apply Synthszr label styling on the before part
+      let styledBefore = beforeText
+      if (!hasBoldMark && /synthszr (?:take|contra):?/i.test(styledBefore)) {
+        styledBefore = styledBefore.replace(/(Synthszr (?:Take|Contra):?)/gi,
+          '<strong style="background-color: #FFFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">$1</strong>')
+      }
+
+      renderedParts.push(applyMarks(styledBefore, node.marks, false))
+      renderedParts.push(applyMarks(afterText, node.marks, true))
+    } else {
+      // Node is entirely before the highlight
+      const rendered = applyMarks(text, node.marks, false)
+      renderedParts.push(rendered)
+    }
+  }
+
+  return renderedParts.join('')
+}
+
+/**
+ * Apply TipTap marks to text, optionally wrapping in highlight span
+ */
+function applyMarks(text: string, marks?: Array<{ type: string; attrs?: Record<string, string> }>, highlight?: boolean): string {
+  let result = text
+
+  if (marks) {
+    for (const mark of marks) {
+      switch (mark.type) {
+        case 'bold':
+          if (/synthszr (take|contra):?/i.test(result)) {
+            result = `<strong style="background-color: #FFFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">${result}</strong>`
+          } else {
+            result = `<strong>${result}</strong>`
+          }
+          break
+        case 'italic':
+          result = `<em>${result}</em>`
+          break
+        case 'link': {
+          const rawHref = mark.attrs?.href || '#'
+          const cleanHref = sanitizeUrl(rawHref) || rawHref
+          result = `<a href="${cleanHref}">${result}</a>`
+          break
+        }
+      }
+    }
+  }
+
+  if (highlight) {
+    result = `<span style="background-color: #FFFF00; padding: 2px 4px;">${result}</span>`
+  }
+
+  return result
 }
 
 /**

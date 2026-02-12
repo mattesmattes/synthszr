@@ -1,0 +1,35 @@
+"use client"
+
+import { useState } from "react"
+import { PremarketSynthszrLayer } from "../premarket-synthszr-layer"
+import { RATING_BADGE_STYLES, RATING_LABELS } from "@/lib/synthszr/rating-styles"
+import type { PremarketRatingLinkProps } from "./types"
+
+export function PremarketRatingLink({ company, displayName, rating, isFirst, isin }: PremarketRatingLinkProps) {
+  const [showPremarket, setShowPremarket] = useState(false)
+
+  return (
+    <>
+      <button
+        onClick={() => setShowPremarket(true)}
+        className="inline-flex items-baseline gap-1 hover:underline cursor-pointer text-foreground text-[13px]"
+      >
+        {isFirst ? (
+          <span><span className="font-bold uppercase text-[0.8125em]">Synthszr Vote:</span> {displayName}</span>
+        ) : (
+          <span>, {displayName}</span>
+        )}
+        <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold not-italic ${RATING_BADGE_STYLES[rating]}`}>
+          {RATING_LABELS[rating]}
+        </span>
+      </button>
+      {showPremarket && (
+        <PremarketSynthszrLayer
+          company={company}
+          isin={isin}
+          onClose={() => setShowPremarket(false)}
+        />
+      )}
+    </>
+  )
+}
