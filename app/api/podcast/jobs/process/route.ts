@@ -280,7 +280,8 @@ export async function POST(request: NextRequest) {
       console.log(`[Podcast Jobs] Batch ${Math.floor(batchStart / TTS_BATCH_SIZE) + 1}: lines ${batchStart + 1}-${batchEnd}/${lines.length} in ${batchElapsed}ms`)
 
       // Update progress + persist segment URLs so far (crash recovery)
-      const progress = Math.round((batchEnd / lines.length) * 100)
+      // TTS phase uses 0-90%, concatenation phase uses 90-100%
+      const progress = Math.round((batchEnd / lines.length) * 90)
       await supabase
         .from('podcast_jobs')
         .update({
@@ -343,6 +344,15 @@ export async function POST(request: NextRequest) {
     }
     if (activeOutro?.url) {
       crossfadeOptions.outroUrl = activeOutro.url
+    }
+
+    // Report concatenation progress (90-100% range)
+    crossfadeOptions.onProgress = async (concatPercent: number) => {
+      const overallProgress = 90 + Math.round(concatPercent * 10 / 100)
+      await supabase
+        .from('podcast_jobs')
+        .update({ progress: Math.min(overallProgress, 99) })
+        .eq('id', job.id)
     }
 
     const combinedBuffer = await concatenateWithCrossfade(segments, crossfadeOptions)

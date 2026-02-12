@@ -96,6 +96,9 @@ export interface CrossfadeOptions {
   overlapQuestionMs?: number
   /** Normal speaker change (default 50) */
   overlapSpeakerChangeMs?: number
+
+  /** Progress callback for large-scale concatenation (percent 0-100) */
+  onProgress?: (percent: number) => Promise<void>
 }
 
 interface AnalyzedSegment {
@@ -127,6 +130,9 @@ const DEFAULT_OVERLAP_AFTER_QUESTION = 80
 const DEFAULT_OVERLAP_SPEAKER_CHANGE = 50
 const OVERLAP_SAME_SPEAKER = 0      // Same speaker continues - no overlap
 const MIN_SEGMENT_FOR_OVERLAP = 300  // Don't overlap if segment < 300ms
+
+// Large podcast threshold: above this, use fast MP3 concatenation to avoid OOM
+const LARGE_PODCAST_THRESHOLD = 40
 
 // Short reaction patterns (German & English)
 const SHORT_REACTIONS = new Set([
@@ -1014,6 +1020,161 @@ function applyOutroWithCrossfade(
 }
 
 /**
+ * Fast-path concatenation for large podcasts (40+ segments).
+ * Only decodes segments needed for intro/outro mixing.
+ * Middle segments are concatenated as raw MP3 buffers — no decode, no encode.
+ * This keeps peak memory under ~50 MB instead of 600+ MB.
+ */
+async function concatenateLargeScale(
+  segments: AudioSegment[],
+  options: CrossfadeOptions
+): Promise<Buffer> {
+  const {
+    includeIntro = false,
+    includeOutro = false,
+    introFullSec = 3,
+    introBedSec = 7,
+    introBedVolume = 0.20,
+    introFadeoutSec = 3,
+    introDialogFadeInSec = 1,
+    introFadeoutCurve = 'exponential',
+    introDialogCurve = 'exponential',
+    outroCrossfadeSec = 10,
+    outroRiseSec = 3,
+    outroBedVolume = 0.20,
+    outroFinalStartSec = 7,
+    outroRiseCurve = 'exponential',
+    outroFinalCurve = 'exponential',
+    stereoHost = DEFAULT_STEREO_HOST,
+    stereoGuest = DEFAULT_STEREO_GUEST,
+    introUrl,
+    outroUrl,
+  } = options
+
+  const stereoPositions = { HOST: stereoHost, GUEST: stereoGuest }
+
+  console.log(`[Crossfade] Large-scale mode: ${segments.length} segments (threshold: ${LARGE_PODCAST_THRESHOLD})`)
+
+  const mp3Parts: Buffer[] = []
+  let introSegments = 0
+  let outroSegments = 0
+
+  // 1. Handle intro: decode first segment + intro music → mix → encode to MP3
+  if (includeIntro) {
+    console.log(`[Crossfade] Loading and mixing intro with first segment...`)
+    const intro = await loadIntro(introUrl)
+    const firstPcm = await decodeMP3(segments[0].buffer)
+    const firstStereo = applyStereoPosition(firstPcm, segments[0].speaker, stereoPositions)
+
+    let introResult: Float32Array[]
+    if (options.introMusicEnvelope && options.introDialogEnvelope) {
+      introResult = applyIntroWithEnvelope(intro, firstStereo,
+        options.introMusicEnvelope, options.introDialogEnvelope)
+    } else {
+      introResult = applyIntroWithCrossfade(intro, firstStereo, {
+        fullSec: introFullSec,
+        bedSec: introBedSec,
+        bedVolume: introBedVolume,
+        fadeoutSec: introFadeoutSec,
+        dialogFadeInSec: introDialogFadeInSec,
+        fadeoutCurve: introFadeoutCurve as 'linear' | 'exponential',
+        dialogCurve: introDialogCurve as 'linear' | 'exponential',
+      })
+    }
+
+    mp3Parts.push(encodeMP3(introResult[0], introResult[1]))
+    introSegments = 1
+    console.log(`[Crossfade] Intro mixed with first segment ✓`)
+  }
+
+  // 2. Determine how many trailing segments are needed for outro mixing
+  if (includeOutro && segments.length > introSegments) {
+    // Need enough audio for the outro crossfade (default 10s)
+    // Estimate ~15s avg per segment → typically 1 segment suffices
+    outroSegments = Math.min(2, segments.length - introSegments)
+  }
+
+  // 3. Middle segments: decode → stereo pan → re-encode one at a time
+  //    This keeps peak memory at ~13 MB (one segment) instead of 600+ MB (all segments).
+  //    Raw MP3 concat doesn't work because each segment has its own MP3/ID3 headers.
+  const middleStart = introSegments
+  const middleEnd = segments.length - outroSegments
+
+  if (middleEnd > middleStart) {
+    const middleCount = middleEnd - middleStart
+    // Total steps: middleCount + intro(1) + outro(1) for progress calculation
+    const totalSteps = middleCount + (introSegments > 0 ? 1 : 0) + (outroSegments > 0 ? 1 : 0)
+    const introSteps = introSegments > 0 ? 1 : 0
+    console.log(`[Crossfade] Re-encoding segments ${middleStart + 1}–${middleEnd} individually (${middleCount} segments, stereo pan)`)
+    for (let i = middleStart; i < middleEnd; i++) {
+      const pcm = await decodeMP3(segments[i].buffer)
+      const stereo = applyStereoPosition(pcm, segments[i].speaker, stereoPositions)
+      mp3Parts.push(encodeMP3(stereo[0], stereo[1]))
+      const done = i - middleStart + 1
+      if (done % 20 === 0 || i === middleEnd - 1) {
+        console.log(`[Crossfade] Progress: ${done}/${middleCount} segments re-encoded`)
+      }
+      // Report progress: intro=done, middle segments progressing, outro=pending
+      if (options.onProgress) {
+        const percent = Math.round(((introSteps + done) / totalSteps) * 100)
+        await options.onProgress(percent)
+      }
+    }
+  }
+
+  // 4. Handle outro: decode last N segments + outro music → mix → encode to MP3
+  if (outroSegments > 0) {
+    console.log(`[Crossfade] Loading and mixing outro with last ${outroSegments} segments...`)
+    const outro = await loadOutro(outroUrl)
+
+    // Decode and concatenate the last N segments into one PCM buffer
+    const lastSegmentPcms: Float32Array[][] = []
+    for (let i = segments.length - outroSegments; i < segments.length; i++) {
+      const pcm = await decodeMP3(segments[i].buffer)
+      const stereo = applyStereoPosition(pcm, segments[i].speaker, stereoPositions)
+      lastSegmentPcms.push(stereo)
+    }
+
+    const totalLength = lastSegmentPcms.reduce((sum, pcm) => sum + pcm[0].length, 0)
+    const combinedLast: Float32Array[] = [
+      new Float32Array(totalLength),
+      new Float32Array(totalLength),
+    ]
+    let writeOffset = 0
+    for (const pcm of lastSegmentPcms) {
+      combinedLast[0].set(pcm[0], writeOffset)
+      combinedLast[1].set(pcm[1], writeOffset)
+      writeOffset += pcm[0].length
+    }
+
+    // Apply outro crossfade
+    let outroResult: Float32Array[]
+    if (options.outroMusicEnvelope && options.outroDialogEnvelope) {
+      outroResult = applyOutroWithEnvelope(combinedLast, outro,
+        options.outroMusicEnvelope, options.outroDialogEnvelope)
+    } else {
+      outroResult = applyOutroWithCrossfade(combinedLast, outro, {
+        crossfadeSec: outroCrossfadeSec,
+        riseSec: outroRiseSec,
+        bedVolume: outroBedVolume,
+        finalStartSec: outroFinalStartSec,
+        riseCurve: outroRiseCurve as 'linear' | 'exponential',
+        finalCurve: outroFinalCurve as 'linear' | 'exponential',
+      })
+    }
+
+    mp3Parts.push(encodeMP3(outroResult[0], outroResult[1]))
+    console.log(`[Crossfade] Outro mixed ✓`)
+  }
+
+  // 5. Combine all MP3 parts
+  const result = Buffer.concat(mp3Parts)
+  console.log(`[Crossfade] Large-scale concatenation complete: ${(result.length / 1024).toFixed(0)} KB`)
+
+  return result
+}
+
+/**
  * Concatenate audio segments with smart crossfade
  */
 export async function concatenateWithCrossfade(
@@ -1065,6 +1226,11 @@ export async function concatenateWithCrossfade(
 
   if (segments.length === 1 && !includeIntro && !includeOutro) {
     return segments[0].buffer
+  }
+
+  // Fast path for large podcasts: avoid decoding all segments to PCM
+  if (segments.length > LARGE_PODCAST_THRESHOLD) {
+    return concatenateLargeScale(segments, options)
   }
 
   console.log(`[Crossfade] Processing ${segments.length} segments with smart algorithm...`)

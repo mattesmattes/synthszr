@@ -1035,7 +1035,12 @@ export default function AudioPage() {
                 {podcastGenerating && podcastTotalLines > 0 && (
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Zeile {podcastCurrentLine} / {podcastTotalLines}</span>
+                      <span className="text-muted-foreground">
+                        {podcastProgress >= 90 && podcastCurrentLine >= podcastTotalLines
+                          ? 'Audio zusammenführen...'
+                          : `Zeile ${podcastCurrentLine} / ${podcastTotalLines}`
+                        }
+                      </span>
                       <span className="font-medium">{podcastProgress}%</span>
                     </div>
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
