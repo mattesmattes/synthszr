@@ -360,21 +360,23 @@ export async function POST(request: NextRequest) {
     // AFTER the podcast audio is successfully generated — not here at script generation time.
     // This prevents test scripts from advancing the personality state.
 
-    // Strip ---MOMENTS--- section before returning to client (not needed for TTS)
-    const cleanScript = stripMomentsSection(scriptContent)
+    // Keep ---MOMENTS--- section in the script so advanceState() can extract
+    // memorable moments when the job is processed. The TTS pipeline's parseScriptText()
+    // only picks up HOST:/GUEST: lines, so the MOMENTS section is safely ignored.
 
-    // Count lines and estimate duration
-    const lines = cleanScript.split('\n').filter(line =>
+    // Count lines and estimate duration (exclude MOMENTS section for accuracy)
+    const scriptForStats = stripMomentsSection(scriptContent)
+    const lines = scriptForStats.split('\n').filter(line =>
       line.trim().match(/^(HOST|GUEST):/i)
     )
-    const totalWords = cleanScript.split(/\s+/).length
+    const totalWords = scriptForStats.split(/\s+/).length
     const estimatedDuration = Math.round(totalWords / 150)
 
     console.log(`[Podcast Script] Generated ${lines.length} lines, ~${estimatedDuration}min`)
 
     return NextResponse.json({
       success: true,
-      script: cleanScript,
+      script: scriptContent,
       lineCount: lines.length,
       wordCount: totalWords,
       estimatedDuration,
