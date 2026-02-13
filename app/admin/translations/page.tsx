@@ -141,9 +141,15 @@ export default function TranslationsPage() {
           throw new Error(errorMsg)
         }
 
-        const result: ProcessResult = await res.json()
+        const result = await res.json() as ProcessResult & { stillProcessing?: number }
 
         if (result.processed === 0) {
+          if (result.stillProcessing && result.stillProcessing > 0) {
+            // Items are stuck in 'processing' — wait for stuck recovery to reset them
+            startTransition(() => setProcessLog(prev => [...prev, `⏳ ${result.stillProcessing} Items noch in Verarbeitung, warte auf Recovery...`]))
+            await new Promise(resolve => setTimeout(resolve, 10000))
+            continue
+          }
           startTransition(() => setProcessLog(prev => [...prev, '✅ Alle Items verarbeitet!']))
           break
         }
@@ -180,8 +186,8 @@ export default function TranslationsPage() {
           setProcessLog(prev => [...prev, `❌ Fehler: ${errorMsg}`])
         })
 
-        if (consecutiveErrors >= 3) {
-          startTransition(() => setProcessLog(prev => [...prev, '🛑 Zu viele Fehler, stoppe Verarbeitung']))
+        if (consecutiveErrors >= 5) {
+          startTransition(() => setProcessLog(prev => [...prev, '🛑 Zu viele Fehler (5x), stoppe Verarbeitung']))
           break
         }
 

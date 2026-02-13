@@ -9,7 +9,7 @@ export const maxDuration = 120 // 2 minutes per single translation
 
 const BATCH_SIZE = 1 // Process one at a time; client loop handles iteration
 const MAX_ATTEMPTS = 3
-const STUCK_TIMEOUT_MS = 5 * 60 * 1000 // 5 min — reset stuck 'processing' items
+const STUCK_TIMEOUT_MS = 2 * 60 * 1000 // 2 min — reset stuck 'processing' items (matches maxDuration)
 
 /**
  * POST /api/admin/translations/process-queue
@@ -59,11 +59,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (!queueItems || queueItems.length === 0) {
+      // Check if there are items stuck in 'processing' (might be recovered soon)
+      const { count: processingCount } = await supabase
+        .from('translation_queue')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'processing')
+
       return NextResponse.json({
         message: 'No pending items in queue',
         processed: 0,
         success: 0,
         failed: 0,
+        stillProcessing: processingCount || 0,
       })
     }
 
