@@ -534,7 +534,11 @@ const MOMENT_TYPE_STYLES: Record<string, { label: string; color: string }> = {
   ai_reflection: { label: 'KI', color: 'bg-blue-500/20 text-blue-700' },
   personal: { label: 'Persönlich', color: 'bg-pink-500/20 text-pink-700' },
   callback: { label: 'Callback', color: 'bg-green-500/20 text-green-700' },
+  insight: { label: 'Einsicht', color: 'bg-emerald-500/20 text-emerald-700' },
+  milestone: { label: 'Meilenstein', color: 'bg-purple-500/20 text-purple-700' },
 }
+
+const DEFAULT_MOMENT_STYLE = { label: 'Moment', color: 'bg-gray-500/20 text-gray-700' }
 
 // ---------------------------------------------------------------------------
 // Main Page Component
@@ -1852,7 +1856,7 @@ function AudioPage() {
                       <Label className="text-sm font-semibold">Bemerkenswerte Momente</Label>
                       <div className="space-y-2">
                         {personality.memorable_moments.map((m, i) => {
-                          const typeStyle = MOMENT_TYPE_STYLES[m.type ?? 'ai_reflection']
+                          const typeStyle = MOMENT_TYPE_STYLES[m.type ?? 'ai_reflection'] || DEFAULT_MOMENT_STYLE
                           return (
                             <div key={i} className="flex items-start gap-2 text-sm">
                               <Badge variant="outline" className="text-xs shrink-0 mt-0.5">#{m.episode}</Badge>
