@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { Suspense, useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users, SlidersHorizontal, RotateCcw, Database, MessageSquare, BrainCircuit, ArrowRight, TrendingUp, BookOpen } from 'lucide-react'
 import { StereoPodcastPlayer } from '@/components/stereo-podcast-player'
@@ -540,7 +540,15 @@ const MOMENT_TYPE_STYLES: Record<string, { label: string; color: string }> = {
 // Main Page Component
 // ---------------------------------------------------------------------------
 
-export default function AudioPage() {
+export default function AudioPageWrapper() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+      <AudioPage />
+    </Suspense>
+  )
+}
+
+function AudioPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [ttsSettings, setTtsSettings] = useState<TTSSettings | null>(null)
