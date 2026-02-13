@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users, SlidersHorizontal, RotateCcw, Database, MessageSquare, BrainCircuit, ArrowRight, TrendingUp, BookOpen } from 'lucide-react'
 import { StereoPodcastPlayer } from '@/components/stereo-podcast-player'
 import type { SegmentMetadata } from '@/lib/audio/stereo-mixer'
@@ -540,11 +541,27 @@ const MOMENT_TYPE_STYLES: Record<string, { label: string; color: string }> = {
 // ---------------------------------------------------------------------------
 
 export default function AudioPage() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const [ttsSettings, setTtsSettings] = useState<TTSSettings | null>(null)
   const [ttsLoading, setTtsLoading] = useState(true)
   const [ttsSaving, setTtsSaving] = useState(false)
   const [ttsSuccess, setTtsSuccess] = useState(false)
-  const [activeTab, setActiveTab] = useState('episode')
+
+  // Sync active tab with URL ?tab= param
+  const validTabs = useMemo(() => new Set(['episode', 'recording', 'character']), [])
+  const tabFromUrl = searchParams.get('tab')
+  const activeTab = validTabs.has(tabFromUrl ?? '') ? tabFromUrl! : 'episode'
+  const setActiveTab = useCallback((tab: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'episode') {
+      params.delete('tab')
+    } else {
+      params.set('tab', tab)
+    }
+    const qs = params.toString()
+    router.replace(`/admin/audio${qs ? `?${qs}` : ''}`, { scroll: false })
+  }, [searchParams, router])
 
   // Podcast-specific state
   const [podcastDuration, setPodcastDuration] = useState(30)
