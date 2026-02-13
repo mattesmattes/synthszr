@@ -194,11 +194,13 @@ export async function GET(request: NextRequest) {
       previewTextByLocale.set(locale, excerptToUse || '')
     }
 
-    // Use Resend Batch API to send emails efficiently (up to 100 per batch)
+    // Use Resend Batch API with small batches and retry on 429
     let successCount = 0
     let failCount = 0
     let batchCount = 0
-    const BATCH_SIZE = 100
+    const BATCH_SIZE = 10 // Small batches to stay within Resend rate limits (2 req/s)
+    const BATCH_DELAY_MS = 1500 // 1.5s between batches
+    const MAX_RETRIES = 3
 
     for (const [locale, localeSubscribers] of subscribersByLocale) {
       const emailContent = contentByLocale.get(locale)!
@@ -246,28 +248,47 @@ export async function GET(request: NextRequest) {
           }
         })
 
-        try {
-          // Rate limit: wait 1s between batches to stay well under Resend limits
-          if (batchCount > 0) {
-            await new Promise(resolve => setTimeout(resolve, 1000))
-          }
-          batchCount++
+        // Retry loop with exponential backoff for 429 errors
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            // Wait between batches (longer on retries)
+            if (batchCount > 0 || attempt > 0) {
+              const delay = attempt > 0 ? BATCH_DELAY_MS * Math.pow(2, attempt) : BATCH_DELAY_MS
+              await new Promise(resolve => setTimeout(resolve, delay))
+            }
 
-          // Send batch (Resend batch API — single request for up to 100 emails)
-          const result = await getResend().batch.send(batchEmails)
+            const result = await getResend().batch.send(batchEmails)
 
-          if (result.data) {
-            successCount += result.data.length
-            console.log(`[Newsletter Cron] Batch ${batchCount}: Sent ${result.data.length} emails for locale ${locale}`)
-          }
-          if (result.error) {
-            console.error(`[Newsletter Cron] Batch error:`, result.error)
+            if (result.data) {
+              successCount += result.data.length
+              console.log(`[Newsletter Cron] Batch ${batchCount + 1}: Sent ${result.data.length} emails for locale ${locale}`)
+            }
+            if (result.error) {
+              // Check if it's a rate limit error
+              const errMsg = typeof result.error === 'object' && 'message' in result.error
+                ? (result.error as { message: string }).message : String(result.error)
+              if (errMsg.includes('429') || errMsg.toLowerCase().includes('rate')) {
+                if (attempt < MAX_RETRIES) {
+                  console.warn(`[Newsletter Cron] Rate limited on batch ${batchCount + 1}, retry ${attempt + 1}/${MAX_RETRIES}`)
+                  continue // retry
+                }
+              }
+              console.error(`[Newsletter Cron] Batch error:`, result.error)
+              failCount += batch.length
+            }
+            break // success or non-retryable error
+          } catch (error) {
+            const errMsg = error instanceof Error ? error.message : String(error)
+            if ((errMsg.includes('429') || errMsg.toLowerCase().includes('rate')) && attempt < MAX_RETRIES) {
+              console.warn(`[Newsletter Cron] Rate limited on batch ${batchCount + 1}, retry ${attempt + 1}/${MAX_RETRIES}`)
+              continue // retry
+            }
+            console.error(`[Newsletter Cron] Batch send failed:`, error)
             failCount += batch.length
+            break
           }
-        } catch (error) {
-          console.error(`[Newsletter Cron] Batch send failed:`, error)
-          failCount += batch.length
         }
+        batchCount++
       }
     }
 
