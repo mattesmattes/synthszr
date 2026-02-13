@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download, Search, UserCheck, Pencil, Check, X } from 'lucide-react'
+import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download, Search, UserCheck, Pencil, Check, X, TrendingUp, TrendingDown } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,13 @@ interface Subscriber {
   unsubscribed_at: string | null
 }
 
+interface GrowthPeriod {
+  new: number
+  churned: number
+  net: number
+  percent: number
+}
+
 interface SubscribersResponse {
   subscribers: Subscriber[]
   total: number
@@ -28,6 +35,11 @@ interface SubscribersResponse {
     active: number
     unsubscribed: number
     bounced: number
+  }
+  growth?: {
+    day: GrowthPeriod
+    week: GrowthPeriod
+    month: GrowthPeriod
   }
 }
 
@@ -196,6 +208,37 @@ export default function SubscribersPage() {
           Export CSV
         </Button>
       </div>
+
+      {/* Growth Stats */}
+      {data?.growth && (
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          {([
+            { key: 'day' as const, label: 'Heute' },
+            { key: 'week' as const, label: 'Woche' },
+            { key: 'month' as const, label: 'Monat' },
+          ]).map(({ key, label }) => {
+            const g = data.growth![key]
+            const isPositive = g.net >= 0
+            return (
+              <Card key={key}>
+                <CardContent className="p-3">
+                  <div className="text-[10px] text-muted-foreground font-medium mb-1">{label}</div>
+                  <div className={`text-xl font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                    {isPositive ? '+' : ''}{g.net}
+                  </div>
+                  <div className={`flex items-center gap-0.5 text-xs ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                    {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                    {Math.abs(g.percent)}%
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-1">
+                    {g.new} neu · {g.churned} weg
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
 
       {/* Stats */}
       {data?.counts && (

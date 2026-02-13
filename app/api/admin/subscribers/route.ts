@@ -54,12 +54,43 @@ export async function GET(request: NextRequest) {
       bounced: statusCounts?.filter(s => s.status === 'bounced').length || 0,
     }
 
+    // Growth stats for day/week/month
+    const now = new Date()
+    const cutoffs = {
+      day: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+      week: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+      month: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    }
+
+    const [dayNew, weekNew, monthNew, dayChurned, weekChurned, monthChurned] = await Promise.all([
+      supabase.from('subscribers').select('id', { count: 'exact', head: true }).gte('created_at', cutoffs.day),
+      supabase.from('subscribers').select('id', { count: 'exact', head: true }).gte('created_at', cutoffs.week),
+      supabase.from('subscribers').select('id', { count: 'exact', head: true }).gte('created_at', cutoffs.month),
+      supabase.from('subscribers').select('id', { count: 'exact', head: true }).eq('status', 'unsubscribed').gte('unsubscribed_at', cutoffs.day),
+      supabase.from('subscribers').select('id', { count: 'exact', head: true }).eq('status', 'unsubscribed').gte('unsubscribed_at', cutoffs.week),
+      supabase.from('subscribers').select('id', { count: 'exact', head: true }).eq('status', 'unsubscribed').gte('unsubscribed_at', cutoffs.month),
+    ])
+
+    function calcGrowth(newCount: number, churnedCount: number, activeTotal: number) {
+      const net = newCount - churnedCount
+      const base = activeTotal - net
+      const percent = base > 0 ? Math.round((net / base) * 1000) / 10 : 0
+      return { new: newCount, churned: churnedCount, net, percent }
+    }
+
+    const growth = {
+      day: calcGrowth(dayNew.count || 0, dayChurned.count || 0, counts.active),
+      week: calcGrowth(weekNew.count || 0, weekChurned.count || 0, counts.active),
+      month: calcGrowth(monthNew.count || 0, monthChurned.count || 0, counts.active),
+    }
+
     return NextResponse.json({
       subscribers: data,
       total: count,
       page,
       limit,
       counts,
+      growth,
     })
   } catch (error) {
     console.error('Subscribers GET error:', error)
