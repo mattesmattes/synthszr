@@ -128,6 +128,19 @@ export default function TranslationsPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         })
+
+        if (!res.ok) {
+          const text = await res.text()
+          let errorMsg: string
+          try {
+            const json = JSON.parse(text)
+            errorMsg = json.error || `HTTP ${res.status}`
+          } catch {
+            errorMsg = `HTTP ${res.status}: ${text.slice(0, 200)}`
+          }
+          throw new Error(errorMsg)
+        }
+
         const result: ProcessResult = await res.json()
 
         if (result.processed === 0) {
