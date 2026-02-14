@@ -68,6 +68,7 @@ interface QueueItem {
   source_identifier: string
   source_display_name: string | null
   source_url: string | null
+  daily_repo_id: string | null
   synthesis_score: number
   relevance_score: number
   uniqueness_score: number
@@ -120,6 +121,7 @@ export default function NewsQueuePage() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [statusFilter, setStatusFilter] = useState<string>('pending')
   const [viewingItem, setViewingItem] = useState<QueueItem | null>(null)
+  const [loadingContent, setLoadingContent] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showBalancedDialog, setShowBalancedDialog] = useState(false)
@@ -177,6 +179,22 @@ export default function NewsQueuePage() {
   useEffect(() => {
     setCurrentPage(0)
   }, [statusFilter])
+
+  // Fetch content from daily_repo when preview dialog opens and content is missing
+  useEffect(() => {
+    if (!viewingItem || viewingItem.content || !viewingItem.daily_repo_id) return
+
+    setLoadingContent(true)
+    fetch(`/api/admin/news-queue?action=get-content&id=${viewingItem.id}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.content) {
+          setViewingItem(prev => prev ? { ...prev, content: data.content } : null)
+        }
+      })
+      .catch(err => console.error('Failed to fetch content:', err))
+      .finally(() => setLoadingContent(false))
+  }, [viewingItem?.id])
 
   async function fetchEmbeddingStatus() {
     setEmbeddingLoading(true)
@@ -1020,6 +1038,10 @@ export default function NewsQueuePage() {
                 <div>
                   <div className="text-muted-foreground mb-1">Excerpt</div>
                   <p className="text-sm">{viewingItem.excerpt}</p>
+                </div>
+              ) : loadingContent ? (
+                <div className="p-3 bg-muted/30 rounded text-center text-muted-foreground">
+                  <p className="text-sm">Content wird geladen...</p>
                 </div>
               ) : (
                 <div className="p-3 bg-muted/30 rounded text-center text-muted-foreground">

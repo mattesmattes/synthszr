@@ -123,6 +123,45 @@ export async function GET(request: NextRequest) {
         })
       }
 
+      case 'get-content': {
+        // Fetch content from daily_repo for a queue item that has no content
+        const itemId = searchParams.get('id')
+        if (!itemId) {
+          return NextResponse.json({ error: 'Missing id parameter' }, { status: 400 })
+        }
+
+        const supabaseContent = await createClient()
+
+        // Get the queue item's daily_repo_id
+        const { data: queueItem } = await supabaseContent
+          .from('news_queue')
+          .select('daily_repo_id, content')
+          .eq('id', itemId)
+          .single()
+
+        if (!queueItem) {
+          return NextResponse.json({ error: 'Item not found' }, { status: 404 })
+        }
+
+        // If the queue item already has content, return it
+        if (queueItem.content) {
+          return NextResponse.json({ content: queueItem.content })
+        }
+
+        // Try to fetch content from daily_repo
+        if (!queueItem.daily_repo_id) {
+          return NextResponse.json({ content: null })
+        }
+
+        const { data: repoItem } = await supabaseContent
+          .from('daily_repo')
+          .select('content')
+          .eq('id', queueItem.daily_repo_id)
+          .single()
+
+        return NextResponse.json({ content: repoItem?.content || null })
+      }
+
       case 'list':
       default: {
         const supabase = await createClient()
