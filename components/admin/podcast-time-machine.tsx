@@ -13,16 +13,26 @@ import { createClient } from '@/lib/supabase/client'
 // Types
 // ---------------------------------------------------------------------------
 
+interface PostPodcastRow {
+  id: string
+  post_id: string
+  locale: string
+  audio_url: string | null
+  duration_seconds: number | null
+  script_content: string | null
+  created_at: string
+}
+
 interface PodcastEpisode {
   id: string
   title: string | null
   script: string | null
   audio_url: string | null
-  source_locale: string | null
+  locale: string
   duration_seconds: number | null
   created_at: string
-  post_id: string | null
-  generated_posts: { title: string; slug: string } | null
+  post_id: string
+  slug: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -77,10 +87,12 @@ export function PodcastTimeMachine() {
   const fetchEpisodes = useCallback(async () => {
     setLoading(true)
     try {
+      // Step 1: Fetch completed podcasts from post_podcasts
       let query = supabase
-        .from('podcast_jobs')
-        .select('id, title, script, audio_url, source_locale, duration_seconds, created_at, post_id, generated_posts(title, slug)')
+        .from('post_podcasts')
+        .select('id, post_id, locale, audio_url, duration_seconds, script_content, created_at')
         .eq('status', 'completed')
+        .not('audio_url', 'is', null)
         .order('created_at', { ascending: false })
         .limit(50)
 
@@ -91,21 +103,62 @@ export function PodcastTimeMachine() {
         query = query.lte('created_at', `${dateTo}T23:59:59`)
       }
       if (localeFilter !== 'all') {
-        query = query.eq('source_locale', localeFilter)
+        query = query.eq('locale', localeFilter)
       }
       if (search.trim()) {
         const term = `%${search.trim()}%`
-        query = query.or(`title.ilike.${term},script.ilike.${term}`)
+        query = query.ilike('script_content', term)
       }
 
-      const { data, error } = await query
+      const { data: rows, error } = await query
 
       if (error) {
         console.error('Time Machine fetch error:', error)
         setEpisodes([])
-      } else {
-        setEpisodes((data as unknown as PodcastEpisode[]) ?? [])
+        return
       }
+
+      const podcastRows = (rows ?? []) as PostPodcastRow[]
+      if (podcastRows.length === 0) {
+        setEpisodes([])
+        return
+      }
+
+      // Step 2: Fetch post titles for all unique post_ids
+      const postIds = [...new Set(podcastRows.map(r => r.post_id))]
+      const { data: posts } = await supabase
+        .from('generated_posts')
+        .select('id, title, slug')
+        .in('id', postIds)
+
+      const postMap = new Map<string, { title: string; slug: string }>()
+      for (const p of posts ?? []) {
+        postMap.set(p.id, { title: p.title, slug: p.slug })
+      }
+
+      // Step 3: Merge into PodcastEpisode
+      let merged: PodcastEpisode[] = podcastRows.map(r => ({
+        id: r.id,
+        title: postMap.get(r.post_id)?.title ?? null,
+        script: r.script_content,
+        audio_url: r.audio_url,
+        locale: r.locale,
+        duration_seconds: r.duration_seconds,
+        created_at: r.created_at,
+        post_id: r.post_id,
+        slug: postMap.get(r.post_id)?.slug ?? null,
+      }))
+
+      // Client-side title search (DB only searched script_content)
+      if (search.trim()) {
+        const lower = search.trim().toLowerCase()
+        merged = merged.filter(ep =>
+          ep.title?.toLowerCase().includes(lower) ||
+          ep.script?.toLowerCase().includes(lower)
+        )
+      }
+
+      setEpisodes(merged)
     } finally {
       setLoading(false)
     }
@@ -207,17 +260,12 @@ export function PodcastTimeMachine() {
 
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">
-                        {ep.title || ep.generated_posts?.title || 'Ohne Titel'}
+                        {ep.title || 'Ohne Titel'}
                       </p>
-                      {ep.generated_posts && (
-                        <p className="text-xs text-muted-foreground truncate">
-                          {ep.generated_posts.title}
-                        </p>
-                      )}
                     </div>
 
                     <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0">
-                      {LOCALE_LABELS[ep.source_locale ?? ''] ?? ep.source_locale ?? '?'}
+                      {LOCALE_LABELS[ep.locale] ?? ep.locale ?? '?'}
                     </Badge>
 
                     <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
