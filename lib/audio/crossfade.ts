@@ -1132,6 +1132,7 @@ async function concatenateLargeScale(
   const mp3Parts: Buffer[] = []
   let introSegments = 0
   let outroSegments = 0
+  let totalOverlapMs = 0
 
   // 1. Handle intro: decode first segment + intro music → mix → encode to MP3
   if (includeIntro) {
@@ -1207,7 +1208,9 @@ async function concatenateLargeScale(
         )
 
         if (overlapSamples > 0) {
-          console.log(`[Crossfade] Large-scale overlapping: "${segments[i].text.substring(0, 40)}..." → ${(overlapSamples / SAMPLE_RATE * 1000).toFixed(0)}ms (slider=${overlapOverlappingMs}ms)`)
+          const overlapMs = (overlapSamples / SAMPLE_RATE) * 1000
+          totalOverlapMs += overlapMs
+          console.log(`[Crossfade] Large-scale overlapping: "${segments[i].text.substring(0, 40)}..." → ${overlapMs.toFixed(0)}ms (slider=${overlapOverlappingMs}ms, total=${totalOverlapMs.toFixed(0)}ms)`)
 
           // Extract tail of previous and start of current
           const prevTail: Float32Array[] = [
@@ -1278,8 +1281,11 @@ async function concatenateLargeScale(
   }
 
   // 4. Handle outro: decode last N segments + outro music → mix → encode to MP3
+  //    Shift outro crossfade start earlier by accumulated overlap time so the
+  //    outro doesn't start too late when middle segments had overlapping speech.
   if (outroSegments > 0) {
-    console.log(`[Crossfade] Loading and mixing outro with last ${outroSegments} segments...`)
+    const overlapShiftSec = totalOverlapMs / 1000
+    console.log(`[Crossfade] Loading and mixing outro with last ${outroSegments} segments (overlap shift: ${overlapShiftSec.toFixed(1)}s)...`)
     const outro = await loadOutro(outroUrl)
 
     // Decode and concatenate the last N segments into one PCM buffer
@@ -1302,14 +1308,16 @@ async function concatenateLargeScale(
       writeOffset += pcm[0].length
     }
 
-    // Apply outro crossfade
+    // Apply outro crossfade — increase crossfade duration by accumulated overlap
+    // so the outro music starts earlier to compensate for shorter middle section
+    const adjustedOutroCrossfadeSec = outroCrossfadeSec + overlapShiftSec
     let outroResult: Float32Array[]
     if (options.outroMusicEnvelope && options.outroDialogEnvelope) {
       outroResult = applyOutroWithEnvelope(combinedLast, outro,
         options.outroMusicEnvelope, options.outroDialogEnvelope)
     } else {
       outroResult = applyOutroWithCrossfade(combinedLast, outro, {
-        crossfadeSec: outroCrossfadeSec,
+        crossfadeSec: adjustedOutroCrossfadeSec,
         riseSec: outroRiseSec,
         bedVolume: outroBedVolume,
         finalStartSec: outroFinalStartSec,
