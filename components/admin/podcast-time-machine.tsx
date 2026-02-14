@@ -3,10 +3,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { History, Search, Download, ChevronDown, ChevronUp, Clock, FileText, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -16,7 +14,6 @@ interface PodcastEpisode {
   title: string | null
   script: string | null
   audio_url: string | null
-  locale: string
   duration_seconds: number | null
   created_at: string
   post_id: string
@@ -44,13 +41,6 @@ function formatTime(iso: string): string {
   return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
 }
 
-const LOCALE_LABELS: Record<string, string> = {
-  de: 'DE',
-  en: 'EN',
-  cs: 'CS',
-  nds: 'NDS',
-}
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -63,7 +53,6 @@ export function PodcastTimeMachine() {
   const [dateFrom, setDateFrom] = useState(thirtyDaysAgo)
   const [dateTo, setDateTo] = useState(today)
   const [search, setSearch] = useState('')
-  const [localeFilter, setLocaleFilter] = useState('all')
 
   // Data state
   const [episodes, setEpisodes] = useState<PodcastEpisode[]>([])
@@ -76,7 +65,6 @@ export function PodcastTimeMachine() {
       const params = new URLSearchParams()
       if (dateFrom) params.set('dateFrom', dateFrom)
       if (dateTo) params.set('dateTo', dateTo)
-      if (localeFilter !== 'all') params.set('locale', localeFilter)
       if (search.trim()) params.set('search', search.trim())
 
       const res = await fetch(`/api/admin/podcast-history?${params}`)
@@ -103,7 +91,7 @@ export function PodcastTimeMachine() {
     } finally {
       setLoading(false)
     }
-  }, [dateFrom, dateTo, search, localeFilter])
+  }, [dateFrom, dateTo, search])
 
   // Initial load + refetch on filter change
   useEffect(() => {
@@ -152,21 +140,6 @@ export function PodcastTimeMachine() {
                 />
               </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Locale</label>
-              <Select value={localeFilter} onValueChange={setLocaleFilter}>
-                <SelectTrigger className="w-[100px] h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle</SelectItem>
-                  <SelectItem value="de">DE</SelectItem>
-                  <SelectItem value="en">EN</SelectItem>
-                  <SelectItem value="cs">CS</SelectItem>
-                  <SelectItem value="nds">NDS</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -204,10 +177,6 @@ export function PodcastTimeMachine() {
                         {ep.title || 'Ohne Titel'}
                       </p>
                     </div>
-
-                    <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0">
-                      {LOCALE_LABELS[ep.locale] ?? ep.locale ?? '?'}
-                    </Badge>
 
                     <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
                       <Clock className="h-3 w-3" />

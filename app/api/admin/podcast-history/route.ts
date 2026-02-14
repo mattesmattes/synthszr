@@ -11,16 +11,16 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const dateFrom = searchParams.get('dateFrom')
   const dateTo = searchParams.get('dateTo')
-  const locale = searchParams.get('locale')
   const search = searchParams.get('search')
 
   const supabase = createAdminClient()
 
-  // Fetch completed podcasts
+  // Fetch completed podcasts — one row per post (deduplicate by picking 'de' locale)
   let query = supabase
     .from('post_podcasts')
     .select('id, post_id, locale, audio_url, duration_seconds, script_content, created_at')
     .eq('status', 'completed')
+    .eq('locale', 'de')
     .not('audio_url', 'is', null)
     .order('created_at', { ascending: false })
     .limit(50)
@@ -30,9 +30,6 @@ export async function GET(request: NextRequest) {
   }
   if (dateTo) {
     query = query.lte('created_at', `${dateTo}T23:59:59`)
-  }
-  if (locale && locale !== 'all') {
-    query = query.eq('locale', locale)
   }
   if (search?.trim()) {
     query = query.ilike('script_content', `%${search.trim()}%`)
