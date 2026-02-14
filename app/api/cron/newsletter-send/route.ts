@@ -194,12 +194,12 @@ export async function GET(request: NextRequest) {
       previewTextByLocale.set(locale, excerptToUse || '')
     }
 
-    // Use Resend Batch API with small batches and retry on 429
+    // Send emails via Resend with strict rate limiting (2 req/s API limit)
     let successCount = 0
     let failCount = 0
     let batchCount = 0
-    const BATCH_SIZE = 10 // Small batches to stay within Resend rate limits (2 req/s)
-    const BATCH_DELAY_MS = 1500 // 1.5s between batches
+    const BATCH_SIZE = 2 // Very small batches to stay well within rate limits
+    const BATCH_DELAY_MS = 1200 // 1.2s between every batch (always, including the first)
     const MAX_RETRIES = 3
 
     for (const [locale, localeSubscribers] of subscribersByLocale) {
@@ -251,11 +251,9 @@ export async function GET(request: NextRequest) {
         // Retry loop with exponential backoff for 429 errors
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
           try {
-            // Wait between batches (longer on retries)
-            if (batchCount > 0 || attempt > 0) {
-              const delay = attempt > 0 ? BATCH_DELAY_MS * Math.pow(2, attempt) : BATCH_DELAY_MS
-              await new Promise(resolve => setTimeout(resolve, delay))
-            }
+            // Always wait before sending — strict rate limiting
+            const delay = attempt > 0 ? BATCH_DELAY_MS * Math.pow(2, attempt) : BATCH_DELAY_MS
+            await new Promise(resolve => setTimeout(resolve, delay))
 
             const result = await getResend().batch.send(batchEmails)
 
