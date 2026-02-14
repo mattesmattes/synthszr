@@ -554,10 +554,14 @@ function calculateOverlap(
   const nextDurationMs = (next.pcm[0].length / SAMPLE_RATE) * 1000
 
   // Priority 0: Explicit (overlapping) annotation — TRUE simultaneous speech
-  // This bypasses MIN_SEGMENT and same-speaker checks — overlapping ALWAYS overlaps
+  // The ENTIRE overlapping segment plays on top of the previous segment's tail.
+  // This creates genuine "talking over each other" where the gap is effectively negative.
   if (next.isOverlapping) {
-    console.log(`[Crossfade] Overlapping annotation detected: "${next.text.substring(0, 40)}..."`)
-    return Math.min(overlappingMs, currentDurationMs * 0.4, nextDurationMs * 0.8)
+    // Overlap = full duration of the overlapping segment (it plays entirely on top of previous)
+    // Capped at 40% of previous segment so we don't eat into its early speech
+    const overlapMs = Math.min(nextDurationMs * 0.95, currentDurationMs * 0.4)
+    console.log(`[Crossfade] Overlapping: "${next.text.substring(0, 40)}..." → ${overlapMs.toFixed(0)}ms (full segment overlay, next=${nextDurationMs.toFixed(0)}ms)`)
+    return overlapMs
   }
 
   // Don't overlap very short segments (except explicit overlapping above)
