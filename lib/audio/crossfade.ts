@@ -554,13 +554,10 @@ function calculateOverlap(
   const nextDurationMs = (next.pcm[0].length / SAMPLE_RATE) * 1000
 
   // Priority 0: Explicit (overlapping) annotation — TRUE simultaneous speech
-  // The ENTIRE overlapping segment plays on top of the previous segment's tail.
-  // This creates genuine "talking over each other" where the gap is effectively negative.
+  // Uses the configured overlappingMs from the Audio Mixer slider.
   if (next.isOverlapping) {
-    // Overlap = full duration of the overlapping segment (it plays entirely on top of previous)
-    // Capped at 40% of previous segment so we don't eat into its early speech
-    const overlapMs = Math.min(nextDurationMs * 0.95, currentDurationMs * 0.4)
-    console.log(`[Crossfade] Overlapping: "${next.text.substring(0, 40)}..." → ${overlapMs.toFixed(0)}ms (full segment overlay, next=${nextDurationMs.toFixed(0)}ms)`)
+    const overlapMs = Math.min(overlappingMs, currentDurationMs * 0.4, nextDurationMs * 0.95)
+    console.log(`[Crossfade] Overlapping: "${next.text.substring(0, 40)}..." → ${overlapMs.toFixed(0)}ms (slider=${overlappingMs}ms)`)
     return overlapMs
   }
 
@@ -1122,13 +1119,15 @@ async function concatenateLargeScale(
     outroFinalCurve = 'exponential',
     stereoHost = DEFAULT_STEREO_HOST,
     stereoGuest = DEFAULT_STEREO_GUEST,
+    overlapOverlappingMs = 500,
     introUrl,
     outroUrl,
   } = options
 
   const stereoPositions = { HOST: stereoHost, GUEST: stereoGuest }
+  const overlapSamplesFromSlider = Math.floor((overlapOverlappingMs / 1000) * SAMPLE_RATE)
 
-  console.log(`[Crossfade] Large-scale mode: ${segments.length} segments (threshold: ${LARGE_PODCAST_THRESHOLD})`)
+  console.log(`[Crossfade] Large-scale mode: ${segments.length} segments (threshold: ${LARGE_PODCAST_THRESHOLD}, overlapping: ${overlapOverlappingMs}ms)`)
 
   const mp3Parts: Buffer[] = []
   let introSegments = 0
@@ -1200,14 +1199,15 @@ async function concatenateLargeScale(
       const stereo = applyStereoPosition(pcm, segments[i].speaker, stereoPositions)
 
       if (segments[i].overlapping && prevStereo) {
-        // Additive overlap: mix this segment on top of the tail of the previous segment
+        // Additive overlap: use slider value, capped by segment lengths
         const overlapSamples = Math.min(
+          overlapSamplesFromSlider,
           stereo[0].length,
           Math.floor(prevStereo[0].length * 0.4)
         )
 
         if (overlapSamples > 0) {
-          console.log(`[Crossfade] Large-scale overlapping: "${segments[i].text.substring(0, 40)}..." → ${(overlapSamples / SAMPLE_RATE * 1000).toFixed(0)}ms`)
+          console.log(`[Crossfade] Large-scale overlapping: "${segments[i].text.substring(0, 40)}..." → ${(overlapSamples / SAMPLE_RATE * 1000).toFixed(0)}ms (slider=${overlapOverlappingMs}ms)`)
 
           // Extract tail of previous and start of current
           const prevTail: Float32Array[] = [
