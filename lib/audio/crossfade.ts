@@ -1164,29 +1164,28 @@ async function concatenateLargeScale(
 
   // 2. Determine how many trailing segments are needed for outro mixing
   if (includeOutro && segments.length > introSegments) {
-    // Need enough audio for the outro crossfade (default 10s)
-    // Estimate ~15s avg per segment → typically 1 segment suffices
     outroSegments = Math.min(2, segments.length - introSegments)
   }
 
-  // 3. Middle segments: decode → stereo pan → re-encode one at a time
-  //    This keeps peak memory at ~13 MB (one segment) instead of 600+ MB (all segments).
-  //    Raw MP3 concat doesn't work because each segment has its own MP3/ID3 headers.
-  //    For overlapping segments: keep previous PCM in memory to mix additively.
+  // 3. Process ALL segments (middle + outro) through a single loop with overlapping.
+  //    Segments are decoded one at a time for memory efficiency.
+  //    The last `outroSegments` PCM buffers are kept for outro mixing instead of
+  //    being encoded to MP3 immediately. This ensures overlapping speech is correctly
+  //    applied across the middle→outro boundary and the outro timing is accurate.
   const middleStart = introSegments
-  const middleEnd = segments.length - outroSegments
+  const totalSegments = segments.length - middleStart
+  const totalSteps = totalSegments + (introSegments > 0 ? 1 : 0) + (outroSegments > 0 ? 1 : 0)
+  const introSteps = introSegments > 0 ? 1 : 0
 
-  if (middleEnd > middleStart) {
-    const middleCount = middleEnd - middleStart
-    // Total steps: middleCount + intro(1) + outro(1) for progress calculation
-    const totalSteps = middleCount + (introSegments > 0 ? 1 : 0) + (outroSegments > 0 ? 1 : 0)
-    const introSteps = introSegments > 0 ? 1 : 0
-    console.log(`[Crossfade] Re-encoding segments ${middleStart + 1}–${middleEnd} individually (${middleCount} segments, stereo pan)`)
+  if (totalSegments > 0) {
+    console.log(`[Crossfade] Processing segments ${middleStart + 1}–${segments.length} (${totalSegments} segments, keeping last ${outroSegments} for outro)`)
 
     // Track previous segment PCM for overlapping mixing
     let prevStereo: Float32Array[] | null = null
+    // Ring buffer: completed PCMs waiting to be encoded or kept for outro
+    const pendingPcms: Float32Array[][] = []
 
-    for (let i = middleStart; i < middleEnd; i++) {
+    for (let i = middleStart; i < segments.length; i++) {
       let pcm = await decodeMP3(segments[i].buffer)
 
       // Trim leading silence for overlapping segments
@@ -1236,37 +1235,41 @@ async function concatenateLargeScale(
             prevRebuilt[ch].set(mixed[ch], prevTrimLen)
           }
 
-          // Encode and push the rebuilt previous segment
-          mp3Parts.push(encodeMP3(prevRebuilt[0], prevRebuilt[1]))
+          // Previous is complete → add to pending
+          pendingPcms.push(prevRebuilt)
 
           // Current segment continues after the overlap region
           if (stereo[0].length > overlapSamples) {
-            const remainder: Float32Array[] = [
+            prevStereo = [
               stereo[0].slice(overlapSamples),
               stereo[1].slice(overlapSamples),
             ]
-            prevStereo = remainder
           } else {
             prevStereo = null
           }
         } else {
-          // Overlap too small, just encode previous normally
-          mp3Parts.push(encodeMP3(prevStereo[0], prevStereo[1]))
+          // Overlap too small, just complete previous normally
+          pendingPcms.push(prevStereo)
           prevStereo = stereo
         }
       } else {
-        // Normal segment: encode previous if pending, keep current for potential next overlap
+        // Normal segment: complete previous if pending
         if (prevStereo) {
-          mp3Parts.push(encodeMP3(prevStereo[0], prevStereo[1]))
+          pendingPcms.push(prevStereo)
         }
         prevStereo = stereo
       }
 
-      const done = i - middleStart + 1
-      if (done % 20 === 0 || i === middleEnd - 1) {
-        console.log(`[Crossfade] Progress: ${done}/${middleCount} segments re-encoded`)
+      // Encode completed PCMs to MP3 — but keep last outroSegments for outro mixing
+      while (pendingPcms.length > outroSegments) {
+        const toEncode = pendingPcms.shift()!
+        mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
       }
-      // Report progress: intro=done, middle segments progressing, outro=pending
+
+      const done = i - middleStart + 1
+      if (done % 20 === 0 || i === segments.length - 1) {
+        console.log(`[Crossfade] Progress: ${done}/${totalSegments} segments processed`)
+      }
       if (options.onProgress) {
         const percent = Math.round(((introSteps + done) / totalSteps) * 100)
         await options.onProgress(percent)
@@ -1275,59 +1278,59 @@ async function concatenateLargeScale(
 
     // Flush last pending segment
     if (prevStereo) {
-      mp3Parts.push(encodeMP3(prevStereo[0], prevStereo[1]))
+      pendingPcms.push(prevStereo)
       prevStereo = null
     }
-  }
 
-  // 4. Handle outro: decode last N segments + outro music → mix → encode to MP3
-  //    Shift outro crossfade start earlier by accumulated overlap time so the
-  //    outro doesn't start too late when middle segments had overlapping speech.
-  if (outroSegments > 0) {
-    const overlapShiftSec = totalOverlapMs / 1000
-    console.log(`[Crossfade] Loading and mixing outro with last ${outroSegments} segments (overlap shift: ${overlapShiftSec.toFixed(1)}s)...`)
-    const outro = await loadOutro(outroUrl)
-
-    // Decode and concatenate the last N segments into one PCM buffer
-    const lastSegmentPcms: Float32Array[][] = []
-    for (let i = segments.length - outroSegments; i < segments.length; i++) {
-      const pcm = await decodeMP3(segments[i].buffer)
-      const stereo = applyStereoPosition(pcm, segments[i].speaker, stereoPositions)
-      lastSegmentPcms.push(stereo)
+    // Encode all remaining PCMs except the last outroSegments
+    while (pendingPcms.length > outroSegments) {
+      const toEncode = pendingPcms.shift()!
+      mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
     }
 
-    const totalLength = lastSegmentPcms.reduce((sum, pcm) => sum + pcm[0].length, 0)
-    const combinedLast: Float32Array[] = [
-      new Float32Array(totalLength),
-      new Float32Array(totalLength),
-    ]
-    let writeOffset = 0
-    for (const pcm of lastSegmentPcms) {
-      combinedLast[0].set(pcm[0], writeOffset)
-      combinedLast[1].set(pcm[1], writeOffset)
-      writeOffset += pcm[0].length
-    }
+    // 4. Handle outro: use the last pendingPcms (already overlap-processed) + outro music
+    if (outroSegments > 0 && pendingPcms.length > 0) {
+      console.log(`[Crossfade] Loading and mixing outro with last ${pendingPcms.length} overlap-processed segments...`)
+      const outro = await loadOutro(outroUrl)
 
-    // Apply outro crossfade — increase crossfade duration by accumulated overlap
-    // so the outro music starts earlier to compensate for shorter middle section
-    const adjustedOutroCrossfadeSec = outroCrossfadeSec + overlapShiftSec
-    let outroResult: Float32Array[]
-    if (options.outroMusicEnvelope && options.outroDialogEnvelope) {
-      outroResult = applyOutroWithEnvelope(combinedLast, outro,
-        options.outroMusicEnvelope, options.outroDialogEnvelope)
-    } else {
-      outroResult = applyOutroWithCrossfade(combinedLast, outro, {
-        crossfadeSec: adjustedOutroCrossfadeSec,
-        riseSec: outroRiseSec,
-        bedVolume: outroBedVolume,
-        finalStartSec: outroFinalStartSec,
-        riseCurve: outroRiseCurve as 'linear' | 'exponential',
-        finalCurve: outroFinalCurve as 'linear' | 'exponential',
-      })
-    }
+      // Concatenate the last PCM buffers into one
+      const totalLength = pendingPcms.reduce((sum, pcm) => sum + pcm[0].length, 0)
+      const combinedLast: Float32Array[] = [
+        new Float32Array(totalLength),
+        new Float32Array(totalLength),
+      ]
+      let writeOffset = 0
+      for (const pcm of pendingPcms) {
+        combinedLast[0].set(pcm[0], writeOffset)
+        combinedLast[1].set(pcm[1], writeOffset)
+        writeOffset += pcm[0].length
+      }
 
-    mp3Parts.push(encodeMP3(outroResult[0], outroResult[1]))
-    console.log(`[Crossfade] Outro mixed ✓`)
+      // Apply outro crossfade — timing is now correct because the PCMs already
+      // include all overlapping processing from the main loop
+      let outroResult: Float32Array[]
+      if (options.outroMusicEnvelope && options.outroDialogEnvelope) {
+        outroResult = applyOutroWithEnvelope(combinedLast, outro,
+          options.outroMusicEnvelope, options.outroDialogEnvelope)
+      } else {
+        outroResult = applyOutroWithCrossfade(combinedLast, outro, {
+          crossfadeSec: outroCrossfadeSec,
+          riseSec: outroRiseSec,
+          bedVolume: outroBedVolume,
+          finalStartSec: outroFinalStartSec,
+          riseCurve: outroRiseCurve as 'linear' | 'exponential',
+          finalCurve: outroFinalCurve as 'linear' | 'exponential',
+        })
+      }
+
+      mp3Parts.push(encodeMP3(outroResult[0], outroResult[1]))
+      console.log(`[Crossfade] Outro mixed ✓ (total overlap: ${totalOverlapMs.toFixed(0)}ms)`)
+    } else if (outroSegments > 0) {
+      // No pending PCMs (shouldn't happen), encode any remaining
+      for (const pcm of pendingPcms) {
+        mp3Parts.push(encodeMP3(pcm[0], pcm[1]))
+      }
+    }
   }
 
   // 5. Combine all MP3 parts
