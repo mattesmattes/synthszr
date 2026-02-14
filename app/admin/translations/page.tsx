@@ -126,10 +126,31 @@ export default function TranslationsPage() {
       startTransition(() => setProcessLog(prev => [...prev, `🔄 Verarbeite nächstes Item...`]))
 
       try {
-        const res = await fetch('/api/admin/translations/process-queue', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        })
+        // Client-side timeout: abort after 2 min to avoid UI hanging
+        // Server continues in background — translation still gets saved
+        const controller = new AbortController()
+        const clientTimeout = setTimeout(() => controller.abort(), 120_000)
+
+        let res: Response
+        try {
+          res = await fetch('/api/admin/translations/process-queue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+          })
+        } catch (fetchError) {
+          clearTimeout(clientTimeout)
+          if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
+            startTransition(() => setProcessLog(prev => [...prev, `⏳ Übersetzung läuft im Hintergrund weiter (>2min)...`]))
+            // Wait before next attempt to let server finish
+            await new Promise(resolve => setTimeout(resolve, 15_000))
+            // Refresh data to check if it completed in background
+            await fetchData()
+            continue
+          }
+          throw fetchError
+        }
+        clearTimeout(clientTimeout)
 
         if (!res.ok) {
           const text = await res.text()
