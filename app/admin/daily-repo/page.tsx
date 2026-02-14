@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Eye, Trash2, Plus, RefreshCw, StickyNote, Download, Globe, PenLine } from 'lucide-react'
+import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Eye, Trash2, Plus, RefreshCw, StickyNote, Download, PenLine } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -46,9 +46,6 @@ export default function DailyRepoPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [showFetchDialog, setShowFetchDialog] = useState(false)
   const [fetchDate, setFetchDate] = useState<string>(new Date().toISOString().split('T')[0])
-  const [urlInput, setUrlInput] = useState('')
-  const [crawling, setCrawling] = useState(false)
-  const [crawlError, setCrawlError] = useState<string | null>(null)
   const [showManualDialog, setShowManualDialog] = useState(false)
   const [manualSource, setManualSource] = useState('')
   const [manualUrl, setManualUrl] = useState('')
@@ -143,30 +140,6 @@ export default function DailyRepoPage() {
     }
   }
 
-  async function crawlUrl() {
-    if (!urlInput.trim()) return
-    setCrawling(true)
-    setCrawlError(null)
-    try {
-      const res = await fetch('/api/admin/crawl-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: urlInput.trim(), newsletter_date: selectedDate }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setCrawlError(data.error || 'Fehler beim Crawlen')
-        return
-      }
-      setUrlInput('')
-      fetchItemsForDate(selectedDate)
-      fetchRepoSummaries()
-    } catch {
-      setCrawlError('Netzwerkfehler')
-    } finally {
-      setCrawling(false)
-    }
-  }
 
   async function saveManualArticle() {
     if (!manualContent.trim()) return
@@ -313,29 +286,30 @@ export default function DailyRepoPage() {
   return (
     <div className="p-4 md:p-6 max-w-full">
       {/* Header */}
-      <div className="flex items-start justify-between mb-5">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">Daily Repo</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Newsletter &amp; Artikel</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => setShowFetchDialog(true)} className="gap-1.5 text-xs h-8">
-            <RefreshCw className="h-3.5 w-3.5" />
-            Abrufen
-          </Button>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="rounded-md border px-2.5 py-1 text-xs h-8 bg-background"
-            style={{ fontWeight: hasRepoForDate(selectedDate) ? 600 : 400 }}
-          />
-        </div>
+      <div className="mb-5">
+        <h1 className="text-lg font-semibold tracking-tight">Daily Repo</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">Newsletter &amp; Artikel</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
         {/* Left: Date Navigation */}
         <div>
+          {/* Abrufen + Date Picker */}
+          <div className="flex items-center gap-2 mb-3">
+            <Button size="sm" onClick={() => setShowFetchDialog(true)} className="gap-1.5 text-xs h-8 flex-1">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Abrufen
+            </Button>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="rounded-md border px-2.5 py-1 text-xs h-8 bg-background"
+              style={{ fontWeight: hasRepoForDate(selectedDate) ? 600 : 400 }}
+            />
+          </div>
+
+          {/* Date List */}
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -346,7 +320,7 @@ export default function DailyRepoPage() {
             </div>
           ) : (
             <div className="rounded-lg border overflow-hidden">
-              <div className="max-h-[calc(100vh-180px)] overflow-y-auto">
+              <div className="max-h-[calc(100vh-240px)] overflow-y-auto">
                 {repoSummaries.map((repo) => {
                   const isSelected = selectedDate === repo.date
                   return (
@@ -443,7 +417,6 @@ export default function DailyRepoPage() {
               )}
               <Button
                 size="sm"
-                variant="outline"
                 onClick={() => setShowManualDialog(true)}
                 className="h-7 px-2.5 text-xs gap-1.5"
               >
@@ -451,35 +424,6 @@ export default function DailyRepoPage() {
                 Manuell
               </Button>
             </div>
-          </div>
-
-          {/* URL Crawl Bar */}
-          <div className="mb-3">
-            <div className="flex items-center gap-1.5">
-              <div className="relative flex-1">
-                <Globe className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <input
-                  type="url"
-                  placeholder="URL crawlen und hinzufügen…"
-                  value={urlInput}
-                  onChange={(e) => { setUrlInput(e.target.value); setCrawlError(null) }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') crawlUrl() }}
-                  disabled={crawling}
-                  className="rounded-md border pl-8 pr-3 py-1.5 text-xs h-8 w-full bg-background placeholder:text-muted-foreground/60"
-                />
-              </div>
-              <Button
-                size="sm"
-                onClick={crawlUrl}
-                disabled={crawling || !urlInput.trim()}
-                className="text-xs h-8 px-3 shrink-0"
-              >
-                {crawling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Crawlen'}
-              </Button>
-            </div>
-            {crawlError && (
-              <p className="text-xs text-destructive mt-1.5 pl-1">{crawlError}</p>
-            )}
           </div>
 
           {/* Article List */}
