@@ -1131,7 +1131,6 @@ async function concatenateLargeScale(
 
   const mp3Parts: Buffer[] = []
   let introSegments = 0
-  let outroSegments = 0
   let totalOverlapMs = 0
 
   // 1. Handle intro: decode first segment + intro music → mix → encode to MP3
@@ -1162,28 +1161,27 @@ async function concatenateLargeScale(
     console.log(`[Crossfade] Intro mixed with first segment ✓`)
   }
 
-  // 2. Determine how many trailing segments are needed for outro mixing
-  if (includeOutro && segments.length > introSegments) {
-    outroSegments = Math.min(2, segments.length - introSegments)
-  }
+  // 2. Outro requires enough PCM data for the crossfade duration.
+  //    Instead of a fixed segment count, we dynamically keep enough PCMs.
+  const outroMinDurationSec = includeOutro ? outroCrossfadeSec + 3 : 0
 
-  // 3. Process ALL segments (middle + outro) through a single loop with overlapping.
-  //    Segments are decoded one at a time for memory efficiency.
-  //    The last `outroSegments` PCM buffers are kept for outro mixing instead of
-  //    being encoded to MP3 immediately. This ensures overlapping speech is correctly
-  //    applied across the middle→outro boundary and the outro timing is accurate.
+  // 3. Process ALL segments through a single loop with overlapping.
+  //    A sliding window of PCM buffers is kept for outro mixing, sized dynamically
+  //    to cover outroCrossfadeSec. This ensures overlapping speech is correctly
+  //    applied across the middle→outro boundary and the outro has enough audio.
   const middleStart = introSegments
   const totalSegments = segments.length - middleStart
-  const totalSteps = totalSegments + (introSegments > 0 ? 1 : 0) + (outroSegments > 0 ? 1 : 0)
+  const totalSteps = totalSegments + (introSegments > 0 ? 1 : 0) + (includeOutro ? 1 : 0)
   const introSteps = introSegments > 0 ? 1 : 0
 
   if (totalSegments > 0) {
-    console.log(`[Crossfade] Processing segments ${middleStart + 1}–${segments.length} (${totalSegments} segments, keeping last ${outroSegments} for outro)`)
+    console.log(`[Crossfade] Processing segments ${middleStart + 1}–${segments.length} (${totalSegments} segments, outro needs ${outroMinDurationSec.toFixed(0)}s)`)
 
     // Track previous segment PCM for overlapping mixing
     let prevStereo: Float32Array[] | null = null
-    // Ring buffer: completed PCMs waiting to be encoded or kept for outro
+    // Sliding window: completed PCMs waiting to be encoded or kept for outro
     const pendingPcms: Float32Array[][] = []
+    let pendingDurationSec = 0
 
     for (let i = middleStart; i < segments.length; i++) {
       let pcm = await decodeMP3(segments[i].buffer)
@@ -1237,6 +1235,7 @@ async function concatenateLargeScale(
 
           // Previous is complete → add to pending
           pendingPcms.push(prevRebuilt)
+          pendingDurationSec += prevRebuilt[0].length / SAMPLE_RATE
 
           // Current segment continues after the overlap region
           if (stereo[0].length > overlapSamples) {
@@ -1250,19 +1249,22 @@ async function concatenateLargeScale(
         } else {
           // Overlap too small, just complete previous normally
           pendingPcms.push(prevStereo)
+          pendingDurationSec += prevStereo[0].length / SAMPLE_RATE
           prevStereo = stereo
         }
       } else {
         // Normal segment: complete previous if pending
         if (prevStereo) {
           pendingPcms.push(prevStereo)
+          pendingDurationSec += prevStereo[0].length / SAMPLE_RATE
         }
         prevStereo = stereo
       }
 
-      // Encode completed PCMs to MP3 — but keep last outroSegments for outro mixing
-      while (pendingPcms.length > outroSegments) {
+      // Encode oldest PCMs to MP3 — keep enough duration for outro crossfade
+      while (pendingPcms.length > 1 && pendingDurationSec > outroMinDurationSec) {
         const toEncode = pendingPcms.shift()!
+        pendingDurationSec -= toEncode[0].length / SAMPLE_RATE
         mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
       }
 
@@ -1279,18 +1281,28 @@ async function concatenateLargeScale(
     // Flush last pending segment
     if (prevStereo) {
       pendingPcms.push(prevStereo)
+      pendingDurationSec += prevStereo[0].length / SAMPLE_RATE
       prevStereo = null
     }
 
-    // Encode all remaining PCMs except the last outroSegments
-    while (pendingPcms.length > outroSegments) {
-      const toEncode = pendingPcms.shift()!
-      mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
+    // Encode remaining PCMs — keep enough for outro crossfade
+    if (includeOutro) {
+      while (pendingPcms.length > 1 && pendingDurationSec > outroMinDurationSec) {
+        const toEncode = pendingPcms.shift()!
+        pendingDurationSec -= toEncode[0].length / SAMPLE_RATE
+        mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
+      }
+    } else {
+      // No outro — encode everything
+      while (pendingPcms.length > 0) {
+        const toEncode = pendingPcms.shift()!
+        mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
+      }
     }
 
     // 4. Handle outro: use the last pendingPcms (already overlap-processed) + outro music
-    if (outroSegments > 0 && pendingPcms.length > 0) {
-      console.log(`[Crossfade] Loading and mixing outro with last ${pendingPcms.length} overlap-processed segments...`)
+    if (includeOutro && pendingPcms.length > 0) {
+      console.log(`[Crossfade] Loading and mixing outro with ${pendingPcms.length} segments (${pendingDurationSec.toFixed(1)}s, crossfade: ${outroCrossfadeSec}s)...`)
       const outro = await loadOutro(outroUrl)
 
       // Concatenate the last PCM buffers into one
@@ -1325,8 +1337,8 @@ async function concatenateLargeScale(
 
       mp3Parts.push(encodeMP3(outroResult[0], outroResult[1]))
       console.log(`[Crossfade] Outro mixed ✓ (total overlap: ${totalOverlapMs.toFixed(0)}ms)`)
-    } else if (outroSegments > 0) {
-      // No pending PCMs (shouldn't happen), encode any remaining
+    } else {
+      // No outro or no pending PCMs — encode any remaining
       for (const pcm of pendingPcms) {
         mp3Parts.push(encodeMP3(pcm[0], pcm[1]))
       }
