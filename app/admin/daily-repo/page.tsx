@@ -47,6 +47,8 @@ export default function DailyRepoPage() {
   const [showFetchDialog, setShowFetchDialog] = useState(false)
   const [fetchDate, setFetchDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [showManualDialog, setShowManualDialog] = useState(false)
+  const [manualFetchUrl, setManualFetchUrl] = useState('')
+  const [manualFetching, setManualFetching] = useState(false)
   const [manualSource, setManualSource] = useState('')
   const [manualUrl, setManualUrl] = useState('')
   const [manualContent, setManualContent] = useState('')
@@ -141,6 +143,31 @@ export default function DailyRepoPage() {
   }
 
 
+  async function fetchMarkdownFromUrl() {
+    const url = manualFetchUrl.trim()
+    if (!url) return
+    setManualFetching(true)
+    try {
+      const res = await fetch(`https://markdown.new/${url}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const md = await res.text()
+      if (md) {
+        setManualContent(md)
+        setManualUrl(url)
+        // Extract domain as source name
+        try {
+          const domain = new URL(url).hostname.replace('www.', '')
+          if (!manualSource) setManualSource(domain)
+        } catch { /* ignore */ }
+      }
+    } catch (err) {
+      console.error('Failed to fetch markdown:', err)
+      alert('Markdown konnte nicht geladen werden: ' + (err instanceof Error ? err.message : 'Unbekannter Fehler'))
+    } finally {
+      setManualFetching(false)
+    }
+  }
+
   async function saveManualArticle() {
     if (!manualContent.trim()) return
     setManualSaving(true)
@@ -168,6 +195,7 @@ export default function DailyRepoPage() {
       if (insertError) throw insertError
 
       // Reset form and close
+      setManualFetchUrl('')
       setManualSource('')
       setManualUrl('')
       setManualContent('')
@@ -584,6 +612,29 @@ export default function DailyRepoPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">URL → Markdown importieren</label>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  placeholder="https://… — Artikel-URL eingeben und als Markdown laden"
+                  value={manualFetchUrl}
+                  onChange={(e) => setManualFetchUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && fetchMarkdownFromUrl()}
+                  className="rounded border px-2.5 py-1.5 text-sm flex-1"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchMarkdownFromUrl}
+                  disabled={manualFetching || !manualFetchUrl.trim()}
+                  className="text-xs h-8 gap-1.5 shrink-0"
+                >
+                  {manualFetching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                  Laden
+                </Button>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Source</label>
