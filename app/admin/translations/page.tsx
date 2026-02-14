@@ -82,6 +82,7 @@ export default function TranslationsPage() {
   const [currentItem, setCurrentItem] = useState<string | null>(null)
   const [progress, setProgress] = useState({ current: 0, total: 0 })
   const abortRef = useRef(false)
+  const processingRef = useRef(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -105,7 +106,8 @@ export default function TranslationsPage() {
 
 
   async function processQueueContinuously() {
-    if (processing) return
+    if (processingRef.current) return
+    processingRef.current = true
 
     setProcessing(true)
     startTransition(() => {
@@ -182,17 +184,22 @@ export default function TranslationsPage() {
       } catch (error) {
         consecutiveErrors++
         const errorMsg = error instanceof Error ? error.message : String(error)
+        const is504 = errorMsg.includes('504') || errorMsg.includes('TIMEOUT')
         startTransition(() => {
           setProcessLog(prev => [...prev, `❌ Fehler: ${errorMsg}`])
         })
 
-        if (consecutiveErrors >= 5) {
-          startTransition(() => setProcessLog(prev => [...prev, '🛑 Zu viele Fehler (5x), stoppe Verarbeitung']))
+        // Allow more retries for 504 timeouts since they're transient
+        const maxErrors = is504 ? 8 : 5
+        if (consecutiveErrors >= maxErrors) {
+          startTransition(() => setProcessLog(prev => [...prev, `🛑 Zu viele Fehler (${maxErrors}x), stoppe Verarbeitung`]))
           break
         }
 
-        startTransition(() => setProcessLog(prev => [...prev, `⏳ Warte 5 Sekunden nach Fehler...`]))
-        await new Promise(resolve => setTimeout(resolve, 5000))
+        // Exponential backoff: 5s, 10s, 15s, 20s...
+        const waitSec = Math.min(5 * consecutiveErrors, 30)
+        startTransition(() => setProcessLog(prev => [...prev, `⏳ Warte ${waitSec} Sekunden nach Fehler...`]))
+        await new Promise(resolve => setTimeout(resolve, waitSec * 1000))
       }
     }
 
@@ -201,6 +208,7 @@ export default function TranslationsPage() {
     }
 
     startTransition(() => setProcessLog(prev => [...prev, `📊 Ergebnis: ${successCount} erfolgreich, ${failCount} fehlgeschlagen`]))
+    processingRef.current = false
     setProcessing(false)
     setCurrentItem(null)
     fetchData()
@@ -231,7 +239,7 @@ export default function TranslationsPage() {
       await fetchData()
 
       // Auto-start processing if not already running
-      if (!processing) {
+      if (!processingRef.current) {
         setProcessLog(prev => [...prev, `🚀 Starte Verarbeitung...`])
         processQueueContinuously()
       }

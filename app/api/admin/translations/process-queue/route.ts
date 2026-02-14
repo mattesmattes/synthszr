@@ -5,11 +5,11 @@ import { translateContent, type TranslationModel } from '@/lib/i18n/translation-
 import type { LanguageCode, TranslationQueueItem } from '@/lib/types'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
 
-export const maxDuration = 120 // 2 minutes per single translation
+export const maxDuration = 300 // 5 minutes per single translation (Pro plan allows up to 300s)
 
 const BATCH_SIZE = 1 // Process one at a time; client loop handles iteration
 const MAX_ATTEMPTS = 3
-const STUCK_TIMEOUT_MS = 2 * 60 * 1000 // 2 min — reset stuck 'processing' items (matches maxDuration)
+const STUCK_TIMEOUT_MS = 5 * 60 * 1000 // 5 min — reset stuck 'processing' items (matches maxDuration)
 
 /**
  * POST /api/admin/translations/process-queue

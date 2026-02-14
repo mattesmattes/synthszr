@@ -161,6 +161,19 @@ Return ONLY a valid JSON object with this exact structure:
 
 Do NOT include any markdown formatting or code blocks. Return ONLY the raw JSON.`
 
+  // Use compact JSON to significantly reduce token count
+  const contentJson = JSON.stringify(source.content)
+
+  // Check if content is large enough to need chunked translation
+  const CHUNK_THRESHOLD = 30000 // chars of JSON — above this, chunk the content
+  const needsChunking = contentJson.length > CHUNK_THRESHOLD
+    && source.content.content
+    && Array.isArray(source.content.content)
+
+  if (needsChunking) {
+    return await translateContentChunked(source, targetLanguage, model, systemPrompt)
+  }
+
   const userPrompt = `Translate this content to ${targetLangName}:
 
 TITLE: ${source.title}
@@ -168,7 +181,7 @@ TITLE: ${source.title}
 EXCERPT: ${source.excerpt || ''}
 
 CONTENT (TipTap JSON):
-${JSON.stringify(source.content, null, 2)}`
+${contentJson}`
 
   try {
     let responseText: string
@@ -216,6 +229,99 @@ ${JSON.stringify(source.content, null, 2)}`
 }
 
 /**
+ * Chunked translation for large TipTap content.
+ * Splits the top-level content array into chunks and translates each separately.
+ */
+async function translateContentChunked(
+  source: TranslationInput,
+  targetLanguage: LanguageCode,
+  model: TranslationModel,
+  systemPrompt: string,
+): Promise<TranslationResult> {
+  const targetLangName = LANGUAGE_NAMES[targetLanguage]
+  const blocks = (source.content as { type: string; content: unknown[] }).content
+  const CHUNK_SIZE = 15 // blocks per chunk
+
+  console.log(`[Translation] Chunked mode: ${blocks.length} blocks in ${Math.ceil(blocks.length / CHUNK_SIZE)} chunks`)
+
+  // First: translate title + excerpt
+  const metaPrompt = `Translate to ${targetLangName}:
+
+TITLE: ${source.title}
+
+EXCERPT: ${source.excerpt || ''}
+
+Return ONLY a valid JSON object:
+{"title": "translated title", "slug": "translated-url-slug", "excerpt": "translated excerpt"}`
+
+  let metaText: string
+  if (model.startsWith('claude')) {
+    metaText = await translateWithClaude(systemPrompt, metaPrompt, model)
+  } else {
+    metaText = await translateWithGemini(systemPrompt, metaPrompt, model)
+  }
+  const meta = parseJsonResponse(metaText)
+
+  // Then: translate content in chunks
+  const translatedBlocks: unknown[] = []
+
+  for (let i = 0; i < blocks.length; i += CHUNK_SIZE) {
+    const chunk = blocks.slice(i, i + CHUNK_SIZE)
+    const chunkNum = Math.floor(i / CHUNK_SIZE) + 1
+    const totalChunks = Math.ceil(blocks.length / CHUNK_SIZE)
+
+    console.log(`[Translation] Translating chunk ${chunkNum}/${totalChunks} (${chunk.length} blocks)`)
+
+    const chunkPrompt = `Translate this TipTap JSON content array to ${targetLangName}.
+This is chunk ${chunkNum} of ${totalChunks} from a larger article titled "${source.title}".
+
+Return ONLY the translated JSON array (not wrapped in an object).
+
+CONTENT:
+${JSON.stringify(chunk)}`
+
+    let chunkText: string
+    if (model.startsWith('claude')) {
+      chunkText = await translateWithClaude(systemPrompt, chunkPrompt, model)
+    } else {
+      chunkText = await translateWithGemini(systemPrompt, chunkPrompt, model)
+    }
+
+    // Parse the chunk response (should be a JSON array)
+    const parsedChunk = parseChunkResponse(chunkText)
+
+    if (Array.isArray(parsedChunk)) {
+      translatedBlocks.push(...parsedChunk)
+    } else if (typeof parsedChunk === 'object' && parsedChunk !== null && 'content' in parsedChunk && Array.isArray((parsedChunk as Record<string, unknown>).content)) {
+      // LLM might wrap it in a doc object
+      translatedBlocks.push(...((parsedChunk as Record<string, unknown>).content as unknown[]))
+    } else {
+      // Fallback: use original chunk
+      console.warn(`[Translation] Chunk ${chunkNum} returned unexpected format, using original`)
+      translatedBlocks.push(...chunk)
+    }
+  }
+
+  const translatedContent = {
+    type: 'doc',
+    content: translatedBlocks,
+  } as Record<string, unknown>
+
+  const title = (meta.title as string) || source.title
+  const normalizedTitle = fixQuotes(title, targetLanguage)
+  const normalizedExcerpt = meta.excerpt ? fixQuotes(meta.excerpt as string, targetLanguage) : undefined
+  const normalizedContent = normalizeQuotesInTipTap(translatedContent, targetLanguage)
+
+  return {
+    success: true,
+    title: normalizedTitle,
+    slug: (meta.slug as string) || generateSlug(title),
+    excerpt: normalizedExcerpt,
+    content: normalizedContent,
+  }
+}
+
+/**
  * Translate using Claude
  */
 async function translateWithClaude(
@@ -231,7 +337,7 @@ async function translateWithClaude(
 
   const response = await anthropic.messages.create({
     model: modelId,
-    max_tokens: 8192,
+    max_tokens: 16384,
     system: systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
   })
@@ -263,6 +369,24 @@ async function translateWithGemini(
   const response = result.response
 
   return response.text()
+}
+
+/**
+ * Parse a chunk response that can be a JSON array or object
+ */
+function parseChunkResponse(text: string): unknown {
+  let cleaned = text.trim()
+  if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7)
+  else if (cleaned.startsWith('```')) cleaned = cleaned.slice(3)
+  if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3)
+  cleaned = cleaned.trim()
+
+  try {
+    return JSON.parse(cleaned)
+  } catch (error) {
+    console.error('[Translation] Chunk JSON parse error:', error)
+    throw new Error('Failed to parse chunk response as JSON')
+  }
 }
 
 /**

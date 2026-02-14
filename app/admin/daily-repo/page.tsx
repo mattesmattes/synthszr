@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash, Eye, Clock, Trash2, Plus, RefreshCw, StickyNote, Download } from 'lucide-react'
+import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash, Eye, Clock, Trash2, Plus, RefreshCw, StickyNote, Download, Globe } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -48,6 +48,9 @@ export default function DailyRepoPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [showFetchDialog, setShowFetchDialog] = useState(false)
   const [fetchDate, setFetchDate] = useState<string>(new Date().toISOString().split('T')[0])
+  const [urlInput, setUrlInput] = useState('')
+  const [crawling, setCrawling] = useState(false)
+  const [crawlError, setCrawlError] = useState<string | null>(null)
 
   const supabase = createClient()
 
@@ -134,6 +137,31 @@ export default function DailyRepoPage() {
       alert('Fehler beim Löschen')
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  async function crawlUrl() {
+    if (!urlInput.trim()) return
+    setCrawling(true)
+    setCrawlError(null)
+    try {
+      const res = await fetch('/api/admin/crawl-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: urlInput.trim(), newsletter_date: selectedDate }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setCrawlError(data.error || 'Fehler beim Crawlen')
+        return
+      }
+      setUrlInput('')
+      fetchItemsForDate(selectedDate)
+      fetchRepoSummaries()
+    } catch {
+      setCrawlError('Netzwerkfehler')
+    } finally {
+      setCrawling(false)
     }
   }
 
@@ -245,6 +273,29 @@ export default function DailyRepoPage() {
           <Plus className="h-3 w-3" />
           Neues Repo
         </Button>
+        <div className="flex items-center gap-1 flex-1 min-w-[200px] max-w-md">
+          <div className="relative flex-1">
+            <Globe className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+            <input
+              type="url"
+              placeholder="URL hinzufügen…"
+              value={urlInput}
+              onChange={(e) => { setUrlInput(e.target.value); setCrawlError(null) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') crawlUrl() }}
+              disabled={crawling}
+              className="rounded border pl-7 pr-2 py-0.5 text-xs h-7 w-full"
+            />
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={crawlUrl}
+            disabled={crawling || !urlInput.trim()}
+            className="text-xs h-7 px-2 shrink-0"
+          >
+            {crawling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+          </Button>
+        </div>
         <div className="flex items-center gap-1.5 ml-auto">
           <Calendar className="h-3 w-3 text-muted-foreground" />
           <input
@@ -258,6 +309,11 @@ export default function DailyRepoPage() {
           />
         </div>
       </div>
+      {crawlError && (
+        <div className="mb-3 text-xs text-destructive bg-destructive/10 rounded px-3 py-1.5">
+          {crawlError}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left: Repo List by Date */}
