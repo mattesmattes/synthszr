@@ -345,10 +345,6 @@ export default function DailyRepoPage() {
             {crawling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
           </Button>
         </div>
-        <Button size="sm" variant="outline" onClick={() => setShowManualDialog(true)} className="gap-1.5 text-xs h-7">
-          <PenLine className="h-3 w-3" />
-          Manuell
-        </Button>
         <div className="flex items-center gap-1.5 ml-auto">
           <Calendar className="h-3 w-3 text-muted-foreground" />
           <input
@@ -453,29 +449,40 @@ export default function DailyRepoPage() {
                 year: 'numeric',
               })}
             </div>
-            {items.length > 0 && (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Database className="h-3 w-3" />
-                    {items.length}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Hash className="h-3 w-3" />
-                    {(items.reduce((s, i) => s + (i.content?.length || 0), 0) / 1000).toFixed(0)}k
-                  </span>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={downloadRepoAsMarkdown}
-                  className="h-6 px-2 text-[10px] gap-1"
-                >
-                  <Download className="h-3 w-3" />
-                  .md
-                </Button>
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {items.length > 0 && (
+                <>
+                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Database className="h-3 w-3" />
+                      {items.length}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Hash className="h-3 w-3" />
+                      {(items.reduce((s, i) => s + (i.content?.length || 0), 0) / 1000).toFixed(0)}k
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={downloadRepoAsMarkdown}
+                    className="h-6 px-2 text-[10px] gap-1"
+                  >
+                    <Download className="h-3 w-3" />
+                    .md
+                  </Button>
+                </>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowManualDialog(true)}
+                className="h-6 px-2 text-[10px] gap-1"
+              >
+                <PenLine className="h-3 w-3" />
+                Manuell
+              </Button>
+            </div>
           </div>
 
           {loadingItems ? (
