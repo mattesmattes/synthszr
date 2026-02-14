@@ -1474,6 +1474,7 @@ export function mixingSettingsToCrossfadeOptions(
     overlap_interrupt_ms?: number
     overlap_question_ms?: number
     overlap_speaker_ms?: number
+    overlap_overlapping_ms?: number
     intro_url?: string
     outro_url?: string
     intro_music_envelope?: AudioEnvelope
@@ -1511,6 +1512,7 @@ export function mixingSettingsToCrossfadeOptions(
     overlapInterruptMs: mixing.overlap_interrupt_ms ?? 180,
     overlapQuestionMs: mixing.overlap_question_ms ?? 80,
     overlapSpeakerChangeMs: mixing.overlap_speaker_ms ?? 50,
+    overlapOverlappingMs: mixing.overlap_overlapping_ms ?? 500,
     introUrl: mixing.intro_url,
     outroUrl: mixing.outro_url,
     introMusicEnvelope: mixing.intro_music_envelope,

@@ -77,6 +77,7 @@ interface MixingSettings {
   overlap_interrupt_ms: number
   overlap_question_ms: number
   overlap_speaker_ms: number
+  overlap_overlapping_ms: number
   // Envelope-based mixing (takes precedence when present)
   intro_music_envelope?: AudioEnvelope
   intro_dialog_envelope?: AudioEnvelope
@@ -106,6 +107,7 @@ const DEFAULT_MIXING: MixingSettings = {
   overlap_interrupt_ms: 180,
   overlap_question_ms: 80,
   overlap_speaker_ms: 50,
+  overlap_overlapping_ms: 500,
 }
 
 interface PersonalityState {
@@ -1312,6 +1314,9 @@ function AudioPage() {
                   <MixerSlider label="Sprecherwechsel" value={mixing.overlap_speaker_ms} min={0} max={500} step={10} unit="ms"
                     description="Normaler Wechsel"
                     onChange={(v) => updateMixing('overlap_speaker_ms', v)} />
+                  <MixerSlider label="Überlappung" value={mixing.overlap_overlapping_ms ?? 500} min={100} max={1000} step={25} unit="ms"
+                    description="(overlapping) — beide gleichzeitig"
+                    onChange={(v) => updateMixing('overlap_overlapping_ms', v)} />
                 </div>
               </div>
 

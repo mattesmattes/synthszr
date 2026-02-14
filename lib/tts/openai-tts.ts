@@ -66,6 +66,7 @@ export interface MixingSettings {
   overlap_interrupt_ms: number
   overlap_question_ms: number
   overlap_speaker_ms: number
+  overlap_overlapping_ms: number
   // Envelope-based mixing (takes precedence over parametric when present)
   intro_music_envelope?: import('@/lib/audio/envelope').AudioEnvelope
   intro_dialog_envelope?: import('@/lib/audio/envelope').AudioEnvelope
