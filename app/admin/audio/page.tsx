@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users, SlidersHorizontal, RotateCcw, Database, MessageSquare, BrainCircuit, ArrowRight, TrendingUp, BookOpen } from 'lucide-react'
+import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users, SlidersHorizontal, RotateCcw, Database, MessageSquare, BrainCircuit, ArrowRight, TrendingUp, BookOpen, History } from 'lucide-react'
 import { StereoPodcastPlayer } from '@/components/stereo-podcast-player'
 import type { SegmentMetadata } from '@/lib/audio/stereo-mixer'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +16,7 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { AudioFileManager, type AudioFile } from '@/components/admin/audio-file-manager'
+import { PodcastTimeMachine } from '@/components/admin/podcast-time-machine'
 import { EnvelopeEditor } from '@/components/admin/envelope-editor'
 import type { AudioEnvelope } from '@/lib/audio/envelope'
 import { legacyIntroToEnvelopes, legacyOutroToEnvelopes } from '@/lib/audio/envelope'
@@ -562,7 +563,7 @@ function AudioPage() {
   const [ttsSuccess, setTtsSuccess] = useState(false)
 
   // Sync active tab with URL ?tab= param
-  const validTabs = useMemo(() => new Set(['episode', 'recording', 'character']), [])
+  const validTabs = useMemo(() => new Set(['episode', 'recording', 'character', 'timemachine']), [])
   const tabFromUrl = searchParams.get('tab')
   const activeTab = validTabs.has(tabFromUrl ?? '') ? tabFromUrl! : 'episode'
   const setActiveTab = useCallback((tab: string) => {
@@ -952,7 +953,7 @@ function AudioPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-lg grid-cols-3">
+        <TabsList className="grid w-full max-w-2xl grid-cols-4">
           <TabsTrigger value="episode" className="flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
             Episode
@@ -964,6 +965,10 @@ function AudioPage() {
           <TabsTrigger value="character" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Character
+          </TabsTrigger>
+          <TabsTrigger value="timemachine" className="flex items-center gap-2">
+            <History className="h-4 w-4" />
+            Time Machine
           </TabsTrigger>
         </TabsList>
 
@@ -1931,6 +1936,13 @@ function AudioPage() {
               <PersonalityPipeline personality={personality} />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ================================================================ */}
+        {/* TIME MACHINE TAB                                                 */}
+        {/* ================================================================ */}
+        <TabsContent value="timemachine" className="space-y-6">
+          <PodcastTimeMachine />
         </TabsContent>
       </Tabs>
     </div>
