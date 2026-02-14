@@ -64,23 +64,44 @@ Zeilen mit \`(overlapping)\` werden zeitlich ÜBER die vorherige Zeile gelegt �
 - [paper rustle] — Studio-Atmosphäre
 - [sip] — Studio-Atmosphäre
 
-**REALISM RULES (strikt befolgen):**
-1. **Turn-Taking:** Ungleiche Redezeit — HOST mal kurz mal lang, GUEST ebenso. Keine symmetrischen Blöcke.
-2. **Überlappungen:** Nutze \`(overlapping)\` für Zustimmung, Erstaunen, Widerspruch WÄHREND der andere noch spricht. Beispiel:
+**REALISM RULES — PFLICHT (Skript wird ABGELEHNT wenn diese fehlen):**
+
+⚠️ ANTI-PATTERN-WARNUNG: Erzeuge KEIN höfliches Interview wo HOST fragt und GUEST antwortet.
+Erzeuge stattdessen ein ECHTES Gespräch mit Reibung, Chaos und menschlichen Momenten.
+
+1. **Turn-Taking:** Ungleiche Redezeit. Manche Turns sind 1 Satz, andere 5 Sätze. KEINE Ping-Pong-Symmetrie.
+2. **Überlappungen (PFLICHT — mind. 8× im Skript, beide Sprecher):**
+   Nutze \`(overlapping)\` wenn jemand reinredet WÄHREND der andere noch spricht. BEIDE Sprecher müssen overlappen — nicht nur HOST.
+   Typische Situationen: Zustimmung ("Genau!"), Erstaunen ("Warte, was?!"), Widerspruch ("Nee, das stimmt so nicht—"), Ergänzung ("Und nicht nur das—")
+   Beispiel:
    GUEST: [thoughtfully] Das Interessante an diesem Deal ist ja, dass hier—
    HOST (overlapping): [excitedly] Genau!
    GUEST: —dass hier erstmals ein europäischer Player den Zuschlag bekommen hat.
-3. **Mind. 3 Missverständnisse + Reparaturen:** "Moment — was ich meinte war...", "Du meinst X, oder?", "Nein nein, ich sprach von..."
-4. **Mind. 2 echte Meinungsverschiedenheiten:** Höflich aber spürbar. HOST und GUEST müssen nicht einer Meinung sein.
+   HOST: [curiously] Aber was bedeutet das konkret für—
+   GUEST (overlapping): [interrupting] Moment, lass mich noch den Punkt zu Ende bringen.
+3. **PFLICHT — Exakt 3 Missverständnisse + Reparaturen:** Einer versteht den anderen FALSCH und wird KORRIGIERT.
+   Beispiel: "Du meinst die Übernahme?" — "Nein, nein, ich sprach vom Joint Venture, das ist was ganz anderes."
+   Weiteres Beispiel: "Moment — das hab ich jetzt anders verstanden. Du sagst also, dass..."
+4. **PFLICHT — Exakt 2 echte Meinungsverschiedenheiten:** HOST und GUEST sind UNTERSCHIEDLICHER Meinung und halten daran fest (mind. 3 Turns lang). Kein sofortiges "Da hast du recht".
+   Beispiel: HOST findet etwas übertrieben, GUEST verteidigt es mit Argumenten, HOST bleibt skeptisch.
 5. **Natürliche Pausen:** [beat], [short pause], [longer pause] — sparsam, variiert. Nicht nach jedem Satz.
 6. **Backchanneling variiert:** "mm-hmm", "ja", "richtig", "okay—" — nicht nach jedem Satz, nicht im Muster. Mal 3 Sätze ohne Reaktion, mal 2 schnelle nacheinander.
-7. **Falschstarts:** "Ich— ich meine, was ich sagen will ist—", "Also das ist— warte, lass mich anders anfangen."
-8. **70-80% Substanz, 20-30% menschliche Reibung:** Anekdote, kurzer Abstecher, Humor, persönliche Meinung.
+7. **Falschstarts (mind. 4×):** "Ich— ich meine, was ich sagen will ist—", "Also das ist— warte, lass mich anders anfangen.", "Das klingt jetzt vielleicht— also okay, anders gesagt:"
+8. **70-80% Substanz, 20-30% menschliche Reibung:** Persönliche Anekdote, kurzer Abstecher, Humor.
 9. **Keine Recap-Inflation.** Nur wenn natürlich: "Lass mich kurz checken ob ich das richtig verstanden hab..."
-10. **Konversationeller Stil.** Keine "LinkedIn-Satzketten". Synonyme statt Keyword-Wiederholung. Kurze Sätze.
-11. **Studio-Momente:** 2-3× [paper rustle], [sip], "Moment, ich hab mir das markiert...", "Warte, ich schau mal schnell..."
+10. **Konversationeller Stil.** KEINE "LinkedIn-Satzketten". Kurze Sätze. Umgangssprache erlaubt. "Echt jetzt?", "Krass.", "Keine Ahnung ehrlich gesagt."
+11. **Studio-Momente (mind. 3×):** [paper rustle], [sip], "Moment, ich hab mir das markiert...", "Warte, ich schau mal schnell..."
 12. **Running Gag / Callback:** Bezieh dich auf frühere Episoden (das Personality-System liefert Kontext).
 13. **Fakten-Hygiene:** Keine erfundenen Details. Bei Unsicherheit: "Da müsste ich nochmal nachschauen."
+
+**SELF-CHECK vor Abgabe — das Skript MUSS enthalten:**
+□ Mind. 8× \`(overlapping)\` (HOST und GUEST)
+□ Exakt 3 Missverständnisse mit Korrektur
+□ Exakt 2 Meinungsverschiedenheiten (mind. 3 Turns lang)
+□ Mind. 4 Falschstarts
+□ Mind. 3 Studio-Momente ([paper rustle], [sip])
+□ Ungleiche Turn-Längen (kein Ping-Pong)
+Wenn eines fehlt: ÜBERARBEITE das Skript bevor du es ausgibst.
 
 **4-BLOCK-STRUKTUR:**
 1. **Cold Open (20-40 Sek.):** Hook + leicht unbeholfener menschlicher Moment (kein Marketing-Slogan)
@@ -148,23 +169,44 @@ Lines with \`(overlapping)\` are layered ON TOP of the previous line — both vo
 - [paper rustle] — studio atmosphere
 - [sip] — studio atmosphere
 
-**REALISM RULES (follow strictly):**
-1. **Turn-Taking:** Unequal speaking time — HOST sometimes brief sometimes extended, GUEST likewise. No symmetric blocks.
-2. **Overlapping:** Use \`(overlapping)\` for agreement, surprise, disagreement WHILE the other is still speaking. Example:
+**REALISM RULES — MANDATORY (script will be REJECTED if these are missing):**
+
+⚠️ ANTI-PATTERN WARNING: Do NOT produce a polite interview where HOST asks and GUEST answers.
+Produce a REAL conversation with friction, messiness, and human moments.
+
+1. **Turn-Taking:** Unequal speaking time. Some turns are 1 sentence, others are 5 sentences. NO ping-pong symmetry.
+2. **Overlapping (MANDATORY — at least 8× in the script, BOTH speakers):**
+   Use \`(overlapping)\` when someone talks OVER the other person. BOTH speakers must overlap — not just HOST.
+   Typical situations: agreement ("Exactly!"), surprise ("Wait, what?!"), disagreement ("No, that's not—"), addition ("And not just that—")
+   Example:
    GUEST: [thoughtfully] The interesting thing about this deal is that—
    HOST (overlapping): [excitedly] Exactly!
    GUEST: —that for the first time a European player got the contract.
-3. **At least 3 misunderstandings + repairs:** "Wait — what I meant was...", "You mean X, right?", "No no, I was talking about..."
-4. **At least 2 genuine disagreements:** Polite but noticeable. HOST and GUEST don't need to agree on everything.
+   HOST: [curiously] But what does that mean concretely for—
+   GUEST (overlapping): [interrupting] Hold on, let me finish my point.
+3. **MANDATORY — Exactly 3 misunderstandings + repairs:** One person misunderstands the other and gets CORRECTED.
+   Example: "You mean the acquisition?" — "No no, I was talking about the joint venture, that's totally different."
+   Another: "Wait — I understood that differently. So you're saying that..."
+4. **MANDATORY — Exactly 2 genuine disagreements:** HOST and GUEST hold DIFFERENT opinions and stick to them (at least 3 turns each). No instant "You're right about that."
+   Example: HOST finds something overblown, GUEST defends it with arguments, HOST remains skeptical.
 5. **Natural pauses:** [beat], [short pause], [longer pause] — sparingly, varied. Not after every sentence.
 6. **Varied backchanneling:** "mm-hmm", "yeah", "right", "okay—" — not after every sentence, not in a pattern. Sometimes 3 sentences without reaction, sometimes 2 quick in a row.
-7. **False starts:** "I— I mean, what I'm trying to say is—", "So this is— wait, let me start over."
-8. **70-80% substance, 20-30% human friction:** Anecdotes, brief tangents, humor, personal opinion.
+7. **False starts (at least 4×):** "I— I mean, what I'm trying to say is—", "So this is— wait, let me start over.", "It sounds maybe— okay, put differently:"
+8. **70-80% substance, 20-30% human friction:** Personal anecdotes, brief tangents, humor.
 9. **No recap inflation.** Only when natural: "Let me just check if I understood that right..."
-10. **Conversational style.** No "LinkedIn sentence chains". Synonyms instead of keyword repetition. Short sentences.
-11. **Studio moments:** 2-3× [paper rustle], [sip], "Hold on, I marked that down...", "Wait, let me check real quick..."
+10. **Conversational style.** NO "LinkedIn sentence chains". Short sentences. Colloquial language OK. "Seriously?", "Wild.", "Honestly no idea."
+11. **Studio moments (at least 3×):** [paper rustle], [sip], "Hold on, I marked that down...", "Wait, let me check real quick..."
 12. **Running gag / callback:** Reference earlier episodes (the personality system provides context).
 13. **Fact hygiene:** No invented details. When uncertain: "I'd need to double-check that."
+
+**SELF-CHECK before output — the script MUST contain:**
+□ At least 8× \`(overlapping)\` (HOST and GUEST)
+□ Exactly 3 misunderstandings with correction
+□ Exactly 2 disagreements (at least 3 turns each)
+□ At least 4 false starts
+□ At least 3 studio moments ([paper rustle], [sip])
+□ Unequal turn lengths (no ping-pong)
+If any are missing: REVISE the script before outputting.
 
 **4-BLOCK STRUCTURE:**
 1. **Cold Open (20-40 sec):** Hook + slightly awkward human moment (no marketing slogan)

@@ -467,6 +467,33 @@ function detectTrailingSilence(pcm: Float32Array[], thresholdDb: number = -40): 
   return (silentSamples / SAMPLE_RATE) * 1000
 }
 
+function detectLeadingSilence(pcm: Float32Array[], thresholdDb: number = -40): number {
+  const threshold = Math.pow(10, thresholdDb / 20)
+  const channel = pcm[0]
+
+  let silentSamples = 0
+
+  for (let i = 0; i < channel.length; i++) {
+    if (Math.abs(channel[i]) > threshold) {
+      break
+    }
+    silentSamples++
+  }
+
+  return (silentSamples / SAMPLE_RATE) * 1000
+}
+
+function trimLeadingSilence(pcm: Float32Array[], silenceMs: number, keepMs: number = 10): Float32Array[] {
+  const trimMs = Math.max(0, silenceMs - keepMs)
+  const samplesToTrim = Math.floor((trimMs / 1000) * SAMPLE_RATE)
+
+  if (samplesToTrim <= 0 || samplesToTrim >= pcm[0].length) {
+    return pcm
+  }
+
+  return pcm.map(ch => ch.slice(samplesToTrim))
+}
+
 /**
  * Analyze a segment's text to determine dialogue patterns
  */
@@ -526,7 +553,14 @@ function calculateOverlap(
   const currentDurationMs = (current.pcm[0].length / SAMPLE_RATE) * 1000
   const nextDurationMs = (next.pcm[0].length / SAMPLE_RATE) * 1000
 
-  // Don't overlap very short segments
+  // Priority 0: Explicit (overlapping) annotation — TRUE simultaneous speech
+  // This bypasses MIN_SEGMENT and same-speaker checks — overlapping ALWAYS overlaps
+  if (next.isOverlapping) {
+    console.log(`[Crossfade] Overlapping annotation detected: "${next.text.substring(0, 40)}..."`)
+    return Math.min(overlappingMs, currentDurationMs * 0.4, nextDurationMs * 0.8)
+  }
+
+  // Don't overlap very short segments (except explicit overlapping above)
   if (currentDurationMs < MIN_SEGMENT_FOR_OVERLAP || nextDurationMs < MIN_SEGMENT_FOR_OVERLAP) {
     return 0
   }
@@ -534,12 +568,6 @@ function calculateOverlap(
   // Same speaker continues - add small gap instead of overlap
   if (current.speaker === next.speaker) {
     return OVERLAP_SAME_SPEAKER
-  }
-
-  // Priority 0: Explicit (overlapping) annotation — TRUE simultaneous speech
-  if (next.isOverlapping) {
-    console.log(`[Crossfade] Overlapping annotation detected: "${next.text.substring(0, 40)}..."`)
-    return Math.min(overlappingMs, currentDurationMs * 0.4, nextDurationMs * 0.8)
   }
 
   // Priority 1: Short reactions get heavy overlap
@@ -1289,7 +1317,16 @@ export async function concatenateWithCrossfade(
     const seg = segments[i]
     const rawPcm = await decodeMP3(seg.buffer)
     // Apply stereo panning: HOST slightly left, GUEST slightly right
-    const pcm = applyStereoPosition(rawPcm, seg.speaker, stereoPositions)
+    let pcm = applyStereoPosition(rawPcm, seg.speaker, stereoPositions)
+
+    // For (overlapping) segments, trim leading silence so the overlap
+    // region contains actual speech, not TTS-generated padding
+    const leadingSilenceMs = detectLeadingSilence(pcm)
+    if (seg.overlapping && leadingSilenceMs > 20) {
+      pcm = trimLeadingSilence(pcm, leadingSilenceMs)
+      console.log(`[Crossfade] Trimmed ${leadingSilenceMs.toFixed(0)}ms leading silence from overlapping segment`)
+    }
+
     const textAnalysis = analyzeText(seg.text)
     const silenceAtEndMs = detectTrailingSilence(pcm)
 
@@ -1303,7 +1340,7 @@ export async function concatenateWithCrossfade(
     })
 
     const durationMs = (pcm[0].length / SAMPLE_RATE) * 1000
-    console.log(`[Crossfade] Segment ${i + 1}: ${seg.speaker}${seg.overlapping ? ' (overlapping)' : ''} | ${textAnalysis.wordCount} words | ${durationMs.toFixed(0)}ms | silence: ${silenceAtEndMs.toFixed(0)}ms`)
+    console.log(`[Crossfade] Segment ${i + 1}: ${seg.speaker}${seg.overlapping ? ' (overlapping)' : ''} | ${textAnalysis.wordCount} words | ${durationMs.toFixed(0)}ms | lead-silence: ${leadingSilenceMs.toFixed(0)}ms | trail-silence: ${silenceAtEndMs.toFixed(0)}ms`)
   }
 
   // Build final audio with smart overlaps
