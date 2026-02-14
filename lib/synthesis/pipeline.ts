@@ -233,6 +233,7 @@ async function queueCandidatesForArticle(
     return {
       dailyRepoId: c.sourceItem.id,
       title: c.sourceItem.title,
+      content: c.sourceItem.content || undefined,
       sourceEmail: source?.source_email || undefined,
       sourceUrl: source?.source_url || undefined,
       synthesisScore: c.originalityScore,
@@ -481,6 +482,7 @@ export async function runSynthesisPipeline(
         return {
           dailyRepoId: item.id,
           title: item.title,
+          content: item.content || undefined,
           sourceEmail: source?.source_email || undefined,
           sourceUrl: source?.source_url || undefined,
           synthesisScore: score?.synthesisScore ?? 3,
