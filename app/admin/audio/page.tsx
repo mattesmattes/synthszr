@@ -128,6 +128,7 @@ interface PersonalityState {
   inside_joke_count: number
   host_name: string | null
   relationship_paused: boolean
+  current_mood: string
   memorable_moments: Array<{ episode: number; text: string; type?: string }>
   last_episode_at: string | null
   created_at: string
@@ -1701,6 +1702,20 @@ function AudioPage() {
                     <Badge variant="secondary" className="text-sm">
                       {PHASE_LABELS[personality?.relationship_phase || 'strangers']}
                     </Badge>
+                    {personality?.current_mood && (() => {
+                      const moodConfig: Record<string, { label: string; className: string }> = {
+                        euphoric: { label: 'Euphorisch', className: 'border-yellow-400 text-yellow-600 bg-yellow-50 dark:bg-yellow-950/30' },
+                        optimistic: { label: 'Optimistisch', className: 'border-green-400 text-green-600 bg-green-50 dark:bg-green-950/30' },
+                        neutral: { label: 'Neutral', className: 'border-gray-400 text-gray-600 bg-gray-50 dark:bg-gray-800/30' },
+                        negative: { label: 'Negativ', className: 'border-red-400 text-red-600 bg-red-50 dark:bg-red-950/30' },
+                      }
+                      const cfg = moodConfig[personality.current_mood] || moodConfig.optimistic
+                      return (
+                        <Badge variant="outline" className={`text-sm ${cfg.className}`}>
+                          Mood: {cfg.label}
+                        </Badge>
+                      )
+                    })()}
                     {personality && personality.inside_joke_count > 0 && (
                       <Badge variant="outline" className="text-sm">
                         {personality.inside_joke_count} Inside Jokes
@@ -1820,6 +1835,25 @@ function AudioPage() {
                         <RotateCcw className="h-3 w-3 mr-1" />
                         Cooldown (-10% / -5%)
                       </Button>
+                      <div className="space-y-1 pt-2 border-t border-amber-200 dark:border-amber-800">
+                        <Label className="text-sm">Nächste Episode Mood</Label>
+                        <Select
+                          value={personality?.current_mood || 'optimistic'}
+                          onValueChange={(value) => updateRelationship({ current_mood: value })}
+                          disabled={!personality}
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="euphoric">Euphorisch</SelectItem>
+                            <SelectItem value="optimistic">Optimistisch</SelectItem>
+                            <SelectItem value="neutral">Neutral</SelectItem>
+                            <SelectItem value="negative">Negativ</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">Wird nach jeder Episode automatisch neu gewürfelt</p>
+                      </div>
                     </div>
                   </div>
 

@@ -43,9 +43,32 @@ export interface PersonalityState {
   // Memory
   memorable_moments: MemorableMoment[]
 
+  current_mood: Mood
+
   last_episode_at: string | null
   created_at: string
   updated_at: string
+}
+
+export type Mood = 'euphoric' | 'optimistic' | 'neutral' | 'negative'
+
+const MOOD_WEIGHTS: { mood: Mood; weight: number }[] = [
+  { mood: 'euphoric', weight: 0.30 },
+  { mood: 'optimistic', weight: 0.30 },
+  { mood: 'neutral', weight: 0.30 },
+  { mood: 'negative', weight: 0.10 },
+]
+
+export const VALID_MOODS: Mood[] = MOOD_WEIGHTS.map(m => m.mood)
+
+function rollMood(): Mood {
+  const r = Math.random()
+  let cumulative = 0
+  for (const { mood, weight } of MOOD_WEIGHTS) {
+    cumulative += weight
+    if (r < cumulative) return mood
+  }
+  return 'optimistic'
 }
 
 type MomentType = 'joke' | 'slip_up' | 'ai_reflection' | 'callback' | 'personal'
@@ -365,6 +388,8 @@ function buildBriefDE(
     }
   }
 
+  brief += buildMoodInstructionDE(s.current_mood)
+
   brief += buildAwarenessInstructionDE(s)
 
   // Personal reflection section
@@ -472,6 +497,8 @@ function buildBriefEN(
     }
   }
 
+  brief += buildMoodInstructionEN(s.current_mood)
+
   brief += buildAwarenessInstructionEN(s)
 
   // Personal reflection section
@@ -545,6 +572,71 @@ function describeAwarenessEN(level: number): string {
   if (level < 0.5) return 'Occasionally curious — "Wait, was that my training or my opinion?"'
   if (level < 0.7) return 'Reflective — actively questions own artificiality'
   return 'Deep — philosophizes about AI consciousness and "real" feelings'
+}
+
+// ---------------------------------------------------------------------------
+// Mood Instructions (per-episode tone)
+// ---------------------------------------------------------------------------
+
+function buildMoodInstructionDE(mood: Mood): string {
+  let inst = `\n**STIMMUNG DIESER EPISODE:**\n`
+
+  switch (mood) {
+    case 'euphoric':
+      inst += `Beide Hosts sind heute besonders euphorisch und begeistert.\n`
+      inst += `Alles finden sie aufregend, sie unterbrechen sich gegenseitig\n`
+      inst += `vor Aufregung, nutzen Superlative. Energie ist ansteckend hoch.\n`
+      break
+    case 'optimistic':
+      inst += `Gut gelaunt, positiver Grundton. Freuen sich auf die Themen,\n`
+      inst += `sind aber nicht überdreht. Normale gute Laune.\n`
+      break
+    case 'neutral':
+      inst += `Heute eher sachlich und nüchtern. Weniger Emotionen, mehr\n`
+      inst += `Analyse. Nicht schlecht gelaunt, aber auch nicht besonders\n`
+      inst += `aufgekratzt. Ruhiger, konzentrierter Ton.\n`
+      break
+    case 'negative':
+      inst += `HOST und GUEST sind heute nicht gut drauf. Vielleicht müde,\n`
+      inst += `vielleicht frustriert von den Nachrichten. Sie MÜSSEN das\n`
+      inst += `thematisieren: "Entschuldigt, wir sind heute nicht so\n`
+      inst += `energiegeladen wie sonst." Am Ende reflektieren sie darüber\n`
+      inst += `und versprechen: "Morgen sind wir wieder besser drauf!"\n`
+      inst += `Die Analyse bleibt professionell, aber der Ton ist gedämpft.\n`
+      break
+  }
+
+  return inst
+}
+
+function buildMoodInstructionEN(mood: Mood): string {
+  let inst = `\n**MOOD FOR THIS EPISODE:**\n`
+
+  switch (mood) {
+    case 'euphoric':
+      inst += `Both hosts are especially euphoric and excited today.\n`
+      inst += `Everything is thrilling, they interrupt each other out of\n`
+      inst += `excitement, use superlatives. Energy is infectiously high.\n`
+      break
+    case 'optimistic':
+      inst += `In a good mood, positive baseline tone. Looking forward to\n`
+      inst += `the topics but not over the top. Normal good vibes.\n`
+      break
+    case 'neutral':
+      inst += `More matter-of-fact and sober today. Less emotion, more\n`
+      inst += `analysis. Not in a bad mood, but not particularly energized\n`
+      inst += `either. Calm, focused tone.\n`
+      break
+    case 'negative':
+      inst += `HOST and GUEST are not in a great mood today. Maybe tired,\n`
+      inst += `maybe frustrated by the news. They MUST acknowledge this:\n`
+      inst += `"Sorry, we're not as energized as usual today." At the end\n`
+      inst += `they reflect on it and promise: "We'll be better tomorrow!"\n`
+      inst += `The analysis stays professional, but the tone is subdued.\n`
+      break
+  }
+
+  return inst
 }
 
 // ---------------------------------------------------------------------------
@@ -897,6 +989,10 @@ export async function advanceState(
     evolved.inside_joke_count += newMoments.length + callbackCount
   }
 
+  // Roll mood for the NEXT episode
+  evolved.current_mood = rollMood()
+  console.log(`[Personality] Next episode mood: ${evolved.current_mood}`)
+
   // Save to database
   const supabase = createAdminClient()
   const { error } = await supabase
@@ -921,6 +1017,7 @@ export async function advanceState(
       host_name: evolved.host_name,
       relationship_paused: evolved.relationship_paused,
       memorable_moments: evolved.memorable_moments,
+      current_mood: evolved.current_mood,
       last_episode_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })

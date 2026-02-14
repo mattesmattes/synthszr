@@ -36,7 +36,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ personality: data || null })
 }
 
-const ALLOWED_FIELDS = ['relationship_paused', 'mutual_comfort', 'flirtation_tendency'] as const
+const VALID_MOODS = ['euphoric', 'optimistic', 'neutral', 'negative'] as const
+const ALLOWED_FIELDS = ['relationship_paused', 'mutual_comfort', 'flirtation_tendency', 'current_mood'] as const
 
 export async function PATCH(request: NextRequest) {
   const body = await request.json()
@@ -54,6 +55,11 @@ export async function PATCH(request: NextRequest) {
       if (field === 'relationship_paused') {
         if (typeof val !== 'boolean') {
           return NextResponse.json({ error: `${field} must be boolean` }, { status: 400 })
+        }
+        sanitized[field] = val
+      } else if (field === 'current_mood') {
+        if (typeof val !== 'string' || !VALID_MOODS.includes(val as typeof VALID_MOODS[number])) {
+          return NextResponse.json({ error: `${field} must be one of: ${VALID_MOODS.join(', ')}` }, { status: 400 })
         }
         sanitized[field] = val
       } else {
