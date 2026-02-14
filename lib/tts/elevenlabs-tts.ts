@@ -625,6 +625,12 @@ export async function generatePodcastDialogue(
         let buffer: Buffer
         const ttsText = stripDirectiveTags(line.text)
 
+        // Skip TTS for lines that become empty after stripping directives
+        if (!ttsText) {
+          console.log(`[Podcast] Skipping empty line ${i + 1}/${validLines.length} after directive strip`)
+          continue
+        }
+
         if (provider === 'openai') {
           // OpenAI: emotion tags are stripped automatically
           buffer = await generateDialogueSegmentOpenAI(

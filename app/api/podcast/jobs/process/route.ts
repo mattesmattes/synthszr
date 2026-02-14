@@ -47,7 +47,7 @@ async function withRetry<T>(
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))
 
-      // Check if it's a retryable error (5xx, connection errors)
+      // Check if it's a retryable error (5xx, connection errors, stream termination)
       const isRetryable =
         lastError.message.includes('503') ||
         lastError.message.includes('502') ||
@@ -55,7 +55,10 @@ async function withRetry<T>(
         lastError.message.includes('429') ||
         lastError.message.includes('connection') ||
         lastError.message.includes('ECONNREFUSED') ||
-        lastError.message.includes('timeout')
+        lastError.message.includes('timeout') ||
+        lastError.message.includes('terminated') ||
+        lastError.message.includes('ECONNRESET') ||
+        lastError.message.includes('fetch failed')
 
       if (!isRetryable || attempt === maxRetries) {
         throw lastError
@@ -245,6 +248,12 @@ export async function POST(request: NextRequest) {
         // Strip directive tags ([beat], [short pause], etc.) before TTS — they're script annotations, not speech
         const ttsText = stripDirectiveTags(line.text)
 
+        // Skip TTS for lines that become empty after stripping (e.g., "HOST: [longer pause]")
+        if (!ttsText) {
+          console.log(`[Podcast Jobs] Skipping empty line ${globalIndex + 1} after directive strip`)
+          return null
+        }
+
         let buffer: Buffer
         if (provider === 'openai') {
           buffer = await generateSegmentOpenAI(ttsText, voiceId as OpenAIVoice, job.model || 'tts-1')
@@ -270,8 +279,9 @@ export async function POST(request: NextRequest) {
 
       const batchResults = await Promise.all(batchPromises)
 
-      // Store results in order
+      // Store results in order (skip null entries from empty directive-only lines)
       for (const result of batchResults) {
+        if (!result) continue
         segmentUrls[result.index] = result.url
         segmentBuffers[result.index] = {
           buffer: result.buffer,
