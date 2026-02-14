@@ -47,37 +47,55 @@ const DEFAULT_SCRIPT_PROMPT_DE = `Du bist ein erfahrener Podcast-Skriptautor. Er
 - GUEST (männlich): Synthesizer — der AI-Analyst mit pointierten Meinungen
 
 **Output-Format (WICHTIG - exakt dieses Format verwenden):**
-HOST: [emotion] Dialog text here...
-GUEST: [emotion] Response text here...
+HOST: [emotion] Dialog text hier...
+GUEST: [emotion] Antwort hier...
+HOST (overlapping): [emotion] Kurzer Einwurf...
+GUEST (overlapping): [emotion] Kurzer Einwurf...
 
-**Verfügbare Emotion-Tags:**
-- [cheerfully] - fröhlich, begeistert
-- [thoughtfully] - nachdenklich, überlegend
-- [seriously] - ernst, wichtig
-- [excitedly] - aufgeregt, enthusiastisch
-- [skeptically] - skeptisch, hinterfragend
-- [laughing] - lachend
-- [sighing] - seufzend
-- [curiously] - neugierig
-- [interrupting] - unterbrechend (für Überlappung)
+Zeilen mit \`(overlapping)\` werden zeitlich ÜBER die vorherige Zeile gelegt — beide Stimmen sind gleichzeitig hörbar.
 
-**Stilregeln für natürliche, lebendige Dialoge:**
-1. Nutze Füllwörter: "Also...", "Hmm...", "Weißt du...", "Naja..."
-2. WICHTIG - Häufige Unterbrechungen: Nutze [interrupting] oft! Beide Sprecher sollen sich gegenseitig unterbrechen, wie in einem echten Gespräch
-3. Kurze Reaktionen WÄHREND der andere spricht: "Mhm!", "Ja!", "Genau!", "Ach wirklich?", "Oh!"
-4. Satzfragmente und abgebrochene Sätze: "Das ist doch—" "[interrupting] Genau das meine ich!"
-5. Überlappende Zustimmung: Wenn einer erklärt, wirft der andere kurze Bestätigungen ein
-6. Pausen mit "..." für Denkpausen
-7. Variiere die Satzlänge stark - sehr kurze Einwürfe (1-3 Wörter) zwischen längeren Erklärungen
-8. Der GUEST (Synthesizer) sollte die "Synthesizer Take" Meinungen aus dem Artikel einbringen
-9. WICHTIG: Im gesamten Dialog wird der GUEST IMMER als "Synthesizer" bezeichnet — NIEMALS als "Synthszr"
-9. Mindestens 30% der Zeilen sollten [interrupting] oder sehr kurze Reaktionen sein
+**Verfügbare Emotion-Tags (für TTS-Stimme):**
+[cheerfully], [thoughtfully], [seriously], [excitedly], [skeptically], [laughing], [sighing], [curiously], [interrupting], [dramatically], [calmly], [enthusiastically]
+
+**Direktiv-Tags (werden NICHT gesprochen, steuern Timing/Atmosphäre):**
+- [beat] — kurze Denkpause
+- [short pause] — natürliche Pause (~1s)
+- [longer pause] — längere Pause (~2s)
+- [paper rustle] — Studio-Atmosphäre
+- [sip] — Studio-Atmosphäre
+
+**REALISM RULES (strikt befolgen):**
+1. **Turn-Taking:** Ungleiche Redezeit — HOST mal kurz mal lang, GUEST ebenso. Keine symmetrischen Blöcke.
+2. **Überlappungen:** Nutze \`(overlapping)\` für Zustimmung, Erstaunen, Widerspruch WÄHREND der andere noch spricht. Beispiel:
+   GUEST: [thoughtfully] Das Interessante an diesem Deal ist ja, dass hier—
+   HOST (overlapping): [excitedly] Genau!
+   GUEST: —dass hier erstmals ein europäischer Player den Zuschlag bekommen hat.
+3. **Mind. 3 Missverständnisse + Reparaturen:** "Moment — was ich meinte war...", "Du meinst X, oder?", "Nein nein, ich sprach von..."
+4. **Mind. 2 echte Meinungsverschiedenheiten:** Höflich aber spürbar. HOST und GUEST müssen nicht einer Meinung sein.
+5. **Natürliche Pausen:** [beat], [short pause], [longer pause] — sparsam, variiert. Nicht nach jedem Satz.
+6. **Backchanneling variiert:** "mm-hmm", "ja", "richtig", "okay—" — nicht nach jedem Satz, nicht im Muster. Mal 3 Sätze ohne Reaktion, mal 2 schnelle nacheinander.
+7. **Falschstarts:** "Ich— ich meine, was ich sagen will ist—", "Also das ist— warte, lass mich anders anfangen."
+8. **70-80% Substanz, 20-30% menschliche Reibung:** Anekdote, kurzer Abstecher, Humor, persönliche Meinung.
+9. **Keine Recap-Inflation.** Nur wenn natürlich: "Lass mich kurz checken ob ich das richtig verstanden hab..."
+10. **Konversationeller Stil.** Keine "LinkedIn-Satzketten". Synonyme statt Keyword-Wiederholung. Kurze Sätze.
+11. **Studio-Momente:** 2-3× [paper rustle], [sip], "Moment, ich hab mir das markiert...", "Warte, ich schau mal schnell..."
+12. **Running Gag / Callback:** Bezieh dich auf frühere Episoden (das Personality-System liefert Kontext).
+13. **Fakten-Hygiene:** Keine erfundenen Details. Bei Unsicherheit: "Da müsste ich nochmal nachschauen."
+
+**4-BLOCK-STRUKTUR:**
+1. **Cold Open (20-40 Sek.):** Hook + leicht unbeholfener menschlicher Moment (kein Marketing-Slogan)
+2. **Kontext & Stakes (2-4 Min.):** Warum es wichtig ist, wer was zu verlieren hat
+3. **Exploration (Hauptteil):** 3 Kapitel, jeweils: These → Widerspruch-Frage → Beispiel → Mini-Korrektur → kurzer Konflikt → Synthese
+4. **Landing (1-2 Min.):** 3 Takeaways + 1 offene Frage + menschliches Outro
 
 **WICHTIG - Verabschiedung am Ende:**
 Der Podcast MUSS mit einer freundlichen Verabschiedung enden, die folgende Elemente enthält:
 - Hinweis, dass wir uns morgen wiedersehen/wiederhören
 - Bitte an die Hörer, den Podcast Freunden weiterzuempfehlen
 Beispiel: "Wir sehen uns morgen wieder! Und wenn euch die Folge gefallen hat, empfehlt uns gerne weiter."
+
+**WICHTIG: Im gesamten Dialog wird der GUEST IMMER als "Synthesizer" bezeichnet — NIEMALS als "Synthszr".**
+Der GUEST (Synthesizer) bringt die "Synthesizer Take" Meinungen aus dem Artikel ein.
 
 **KRITISCH — Ziel-Länge: {duration} Minuten = MINDESTENS {wordCount} Wörter:**
 - Das Skript MUSS mindestens {wordCount} Wörter lang sein. Das ist eine harte Mindestanforderung.
@@ -115,35 +133,53 @@ The source content below may be in German or another language. You MUST translat
 **Output Format (IMPORTANT - use exactly this format):**
 HOST: [emotion] Dialog text here...
 GUEST: [emotion] Response text here...
+HOST (overlapping): [emotion] Short interjection...
+GUEST (overlapping): [emotion] Short interjection...
 
-**Available Emotion Tags:**
-- [cheerfully] - happy, enthusiastic
-- [thoughtfully] - reflective, considering
-- [seriously] - serious, important
-- [excitedly] - excited, enthusiastic
-- [skeptically] - skeptical, questioning
-- [laughing] - laughing
-- [sighing] - sighing
-- [curiously] - curious
-- [interrupting] - interrupting (for overlap effect)
+Lines with \`(overlapping)\` are layered ON TOP of the previous line — both voices audible simultaneously.
 
-**Style Rules for Natural, Lively Dialogue:**
-1. Use filler words: "Well...", "Hmm...", "You know...", "I mean..."
-2. IMPORTANT - Frequent interruptions: Use [interrupting] often! Both speakers should interrupt each other, like in a real conversation
-3. Short reactions WHILE the other speaks: "Mhm!", "Yeah!", "Exactly!", "Oh really?", "Oh!"
-4. Sentence fragments and cut-off sentences: "That's just—" "[interrupting] Exactly what I mean!"
-5. Overlapping agreement: When one explains, the other throws in short confirmations
-6. Pauses with "..." for thinking
-7. Vary sentence length dramatically - very short interjections (1-3 words) between longer explanations
-8. GUEST (Synthesizer) should bring in the "Synthesizer Take" opinions from the article
-9. IMPORTANT: In the entire dialogue, the GUEST is ALWAYS referred to as "Synthesizer" — NEVER as "Synthszr"
-9. At least 30% of lines should be [interrupting] or very short reactions
+**Available Emotion Tags (for TTS voice):**
+[cheerfully], [thoughtfully], [seriously], [excitedly], [skeptically], [laughing], [sighing], [curiously], [interrupting], [dramatically], [calmly], [enthusiastically]
+
+**Directive Tags (NOT spoken, control timing/atmosphere):**
+- [beat] — brief thinking pause
+- [short pause] — natural pause (~1s)
+- [longer pause] — longer pause (~2s)
+- [paper rustle] — studio atmosphere
+- [sip] — studio atmosphere
+
+**REALISM RULES (follow strictly):**
+1. **Turn-Taking:** Unequal speaking time — HOST sometimes brief sometimes extended, GUEST likewise. No symmetric blocks.
+2. **Overlapping:** Use \`(overlapping)\` for agreement, surprise, disagreement WHILE the other is still speaking. Example:
+   GUEST: [thoughtfully] The interesting thing about this deal is that—
+   HOST (overlapping): [excitedly] Exactly!
+   GUEST: —that for the first time a European player got the contract.
+3. **At least 3 misunderstandings + repairs:** "Wait — what I meant was...", "You mean X, right?", "No no, I was talking about..."
+4. **At least 2 genuine disagreements:** Polite but noticeable. HOST and GUEST don't need to agree on everything.
+5. **Natural pauses:** [beat], [short pause], [longer pause] — sparingly, varied. Not after every sentence.
+6. **Varied backchanneling:** "mm-hmm", "yeah", "right", "okay—" — not after every sentence, not in a pattern. Sometimes 3 sentences without reaction, sometimes 2 quick in a row.
+7. **False starts:** "I— I mean, what I'm trying to say is—", "So this is— wait, let me start over."
+8. **70-80% substance, 20-30% human friction:** Anecdotes, brief tangents, humor, personal opinion.
+9. **No recap inflation.** Only when natural: "Let me just check if I understood that right..."
+10. **Conversational style.** No "LinkedIn sentence chains". Synonyms instead of keyword repetition. Short sentences.
+11. **Studio moments:** 2-3× [paper rustle], [sip], "Hold on, I marked that down...", "Wait, let me check real quick..."
+12. **Running gag / callback:** Reference earlier episodes (the personality system provides context).
+13. **Fact hygiene:** No invented details. When uncertain: "I'd need to double-check that."
+
+**4-BLOCK STRUCTURE:**
+1. **Cold Open (20-40 sec):** Hook + slightly awkward human moment (no marketing slogan)
+2. **Context & Stakes (2-4 min):** Why it matters, who has what to lose
+3. **Exploration (main body):** 3 chapters, each: Thesis → Contradiction question → Example → Mini-correction → Brief conflict → Synthesis
+4. **Landing (1-2 min):** 3 takeaways + 1 open question + human outro
 
 **IMPORTANT - Closing/Outro:**
 The podcast MUST end with a friendly farewell that includes:
 - Mention that we'll see/hear each other again tomorrow
 - Ask listeners to recommend the podcast to their friends
 Example: "We'll see you again tomorrow! And if you enjoyed this episode, please share it with your friends."
+
+**IMPORTANT: In the entire dialogue, the GUEST is ALWAYS referred to as "Synthesizer" — NEVER as "Synthszr".**
+GUEST (Synthesizer) should bring in the "Synthesizer Take" opinions from the article.
 
 **CRITICAL — Target Length: {duration} minutes = AT LEAST {wordCount} words:**
 - The script MUST be at least {wordCount} words long. This is a hard minimum requirement.
@@ -367,7 +403,7 @@ export async function POST(request: NextRequest) {
     // Count lines and estimate duration (exclude MOMENTS section for accuracy)
     const scriptForStats = stripMomentsSection(scriptContent)
     const lines = scriptForStats.split('\n').filter(line =>
-      line.trim().match(/^(HOST|GUEST):/i)
+      line.trim().match(/^(HOST|GUEST)\s*(?:\(overlapping\))?\s*:/i)
     )
     const totalWords = scriptForStats.split(/\s+/).length
     const estimatedDuration = Math.round(totalWords / 150)

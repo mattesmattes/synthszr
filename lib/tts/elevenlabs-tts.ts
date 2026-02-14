@@ -129,6 +129,7 @@ export function getRecommendedVoices(
 export interface PodcastLine {
   speaker: 'HOST' | 'GUEST'
   text: string // Can include emotion tags like [cheerfully], [thoughtfully]
+  overlapping?: boolean // True when marked with (overlapping) — both speakers audible simultaneously
 }
 
 /**
@@ -224,6 +225,15 @@ function prepareTTSText(text: string): string {
  */
 export function stripEmotionTags(text: string): string {
   return text.replace(/\[(?:cheerfully|thoughtfully|seriously|excitedly|skeptically|laughing|sighing|whispering|interrupting|curiously|dramatically|calmly|enthusiastically)\]\s*/gi, '').trim()
+}
+
+/**
+ * Strip directive tags from script text before sending to TTS.
+ * These are script-level annotations for pauses and atmosphere,
+ * not meant to be spoken aloud.
+ */
+export function stripDirectiveTags(text: string): string {
+  return text.replace(/\[(?:beat|short pause|longer pause|paper rustle|sip)\]\s*/gi, '').trim()
 }
 
 /**
@@ -756,14 +766,15 @@ export function parseScriptText(rawScript: string): PodcastLine[] {
   for (const rawLine of rawLines) {
     const trimmed = rawLine.trim()
 
-    // Match "HOST: text" or "GUEST: text" patterns
-    const hostMatch = trimmed.match(/^HOST:\s*(.+)$/i)
-    const guestMatch = trimmed.match(/^GUEST:\s*(.+)$/i)
+    // Match "HOST: text", "HOST (overlapping): text", "GUEST: text", "GUEST (overlapping): text"
+    const hostMatch = trimmed.match(/^HOST\s*(?:\(overlapping\))?\s*:\s*(.+)$/i)
+    const guestMatch = trimmed.match(/^GUEST\s*(?:\(overlapping\))?\s*:\s*(.+)$/i)
+    const isOverlapping = /\(overlapping\)/i.test(trimmed)
 
     if (hostMatch) {
-      lines.push({ speaker: 'HOST', text: hostMatch[1].trim() })
+      lines.push({ speaker: 'HOST', text: hostMatch[1].trim(), ...(isOverlapping && { overlapping: true }) })
     } else if (guestMatch) {
-      lines.push({ speaker: 'GUEST', text: guestMatch[1].trim() })
+      lines.push({ speaker: 'GUEST', text: guestMatch[1].trim(), ...(isOverlapping && { overlapping: true }) })
     }
     // Skip lines that don't match either pattern
   }

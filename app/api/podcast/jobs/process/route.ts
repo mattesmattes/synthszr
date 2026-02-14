@@ -13,6 +13,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { put } from '@vercel/blob'
 import {
   parseScriptText,
+  stripDirectiveTags,
   type OpenAIVoice,
   type SegmentMetadata,
 } from '@/lib/tts/elevenlabs-tts'
@@ -241,11 +242,14 @@ export async function POST(request: NextRequest) {
         const globalIndex = batchStart + batchIndex
         const voiceId = line.speaker === 'HOST' ? job.host_voice_id : job.guest_voice_id
 
+        // Strip directive tags ([beat], [short pause], etc.) before TTS — they're script annotations, not speech
+        const ttsText = stripDirectiveTags(line.text)
+
         let buffer: Buffer
         if (provider === 'openai') {
-          buffer = await generateSegmentOpenAI(line.text, voiceId as OpenAIVoice, job.model || 'tts-1')
+          buffer = await generateSegmentOpenAI(ttsText, voiceId as OpenAIVoice, job.model || 'tts-1')
         } else {
-          buffer = await generateSegmentElevenLabs(line.text, voiceId, job.model || 'eleven_v3')
+          buffer = await generateSegmentElevenLabs(ttsText, voiceId, job.model || 'eleven_v3')
         }
 
         // Upload segment immediately after generation
@@ -307,6 +311,7 @@ export async function POST(request: NextRequest) {
         buffer: seg.buffer,
         speaker: seg.speaker,
         text: seg.text,
+        overlapping: lines[i]?.overlapping,
       })
 
       const segmentDuration = seg.buffer.length / (128 * 1024 / 8)

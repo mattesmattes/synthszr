@@ -28,6 +28,7 @@ export interface AudioSegment {
   buffer: Buffer
   speaker: 'HOST' | 'GUEST'
   text: string
+  overlapping?: boolean // True for (overlapping) lines — additive mix instead of crossfade
 }
 
 export interface CrossfadeOptions {
@@ -96,6 +97,8 @@ export interface CrossfadeOptions {
   overlapQuestionMs?: number
   /** Normal speaker change (default 50) */
   overlapSpeakerChangeMs?: number
+  /** Explicit (overlapping) annotation — true simultaneous speech (default 500) */
+  overlapOverlappingMs?: number
 
   /** Progress callback for large-scale concatenation (percent 0-100) */
   onProgress?: (percent: number) => Promise<void>
@@ -108,6 +111,7 @@ interface AnalyzedSegment {
   wordCount: number
   isShortReaction: boolean
   isInterrupting: boolean
+  isOverlapping: boolean
   isQuestion: boolean
   endsWithTrailOff: boolean
   silenceAtEndMs: number
@@ -505,6 +509,7 @@ interface OverlapSettings {
   interruptMs: number
   questionMs: number
   speakerChangeMs: number
+  overlappingMs: number
 }
 
 function calculateOverlap(
@@ -516,6 +521,7 @@ function calculateOverlap(
   const interruptMs = overlapOpts?.interruptMs ?? DEFAULT_OVERLAP_INTERRUPTING
   const questionMs = overlapOpts?.questionMs ?? DEFAULT_OVERLAP_AFTER_QUESTION
   const speakerChangeMs = overlapOpts?.speakerChangeMs ?? DEFAULT_OVERLAP_SPEAKER_CHANGE
+  const overlappingMs = overlapOpts?.overlappingMs ?? 500
 
   const currentDurationMs = (current.pcm[0].length / SAMPLE_RATE) * 1000
   const nextDurationMs = (next.pcm[0].length / SAMPLE_RATE) * 1000
@@ -528,6 +534,12 @@ function calculateOverlap(
   // Same speaker continues - add small gap instead of overlap
   if (current.speaker === next.speaker) {
     return OVERLAP_SAME_SPEAKER
+  }
+
+  // Priority 0: Explicit (overlapping) annotation — TRUE simultaneous speech
+  if (next.isOverlapping) {
+    console.log(`[Crossfade] Overlapping annotation detected: "${next.text.substring(0, 40)}..."`)
+    return Math.min(overlappingMs, currentDurationMs * 0.4, nextDurationMs * 0.8)
   }
 
   // Priority 1: Short reactions get heavy overlap
@@ -599,6 +611,37 @@ function applyCrossfade(
 
     for (let ch = 0; ch < 2; ch++) {
       result[ch][i] = (endOfFirst[ch][i] * normFadeOut) + (startOfSecond[ch][i] * normFadeIn)
+    }
+  }
+
+  return result
+}
+
+/**
+ * Apply additive overlap — both speakers at full volume simultaneously.
+ * Unlike crossfade (one fades out, other fades in), both voices remain audible.
+ * Uses soft-limiter (tanh) to prevent clipping when signals stack.
+ * Short fade-in/out (15%) smooths the edges of the overlap region.
+ */
+function applyAdditiveOverlap(
+  endOfFirst: Float32Array[],
+  startOfSecond: Float32Array[],
+  overlapLength: number
+): Float32Array[] {
+  const result: Float32Array[] = [
+    new Float32Array(overlapLength),
+    new Float32Array(overlapLength)
+  ]
+
+  for (let i = 0; i < overlapLength; i++) {
+    // Gentle fade-in/out at edges (15% of overlap) for natural blending
+    const fadeIn = Math.min(1, i / (overlapLength * 0.15))
+    const fadeOut = Math.min(1, (overlapLength - i) / (overlapLength * 0.15))
+
+    for (let ch = 0; ch < 2; ch++) {
+      const mixed = (endOfFirst[ch][i] * fadeOut) + (startOfSecond[ch][i] * fadeIn)
+      // Soft-limiter: linear below 0.8, tanh saturation above
+      result[ch][i] = Math.abs(mixed) < 0.8 ? mixed : Math.tanh(mixed * 1.2) / Math.tanh(1.2)
     }
   }
 
@@ -1207,6 +1250,7 @@ export async function concatenateWithCrossfade(
     overlapInterruptMs = DEFAULT_OVERLAP_INTERRUPTING,
     overlapQuestionMs = DEFAULT_OVERLAP_AFTER_QUESTION,
     overlapSpeakerChangeMs = DEFAULT_OVERLAP_SPEAKER_CHANGE,
+    overlapOverlappingMs = 500,
     // Custom audio URLs
     introUrl,
     outroUrl,
@@ -1218,6 +1262,7 @@ export async function concatenateWithCrossfade(
     interruptMs: overlapInterruptMs,
     questionMs: overlapQuestionMs,
     speakerChangeMs: overlapSpeakerChangeMs,
+    overlappingMs: overlapOverlappingMs,
   }
 
   if (segments.length === 0) {
@@ -1253,11 +1298,12 @@ export async function concatenateWithCrossfade(
       speaker: seg.speaker,
       text: seg.text,
       ...textAnalysis,
+      isOverlapping: !!seg.overlapping,
       silenceAtEndMs,
     })
 
     const durationMs = (pcm[0].length / SAMPLE_RATE) * 1000
-    console.log(`[Crossfade] Segment ${i + 1}: ${seg.speaker} | ${textAnalysis.wordCount} words | ${durationMs.toFixed(0)}ms | silence: ${silenceAtEndMs.toFixed(0)}ms`)
+    console.log(`[Crossfade] Segment ${i + 1}: ${seg.speaker}${seg.overlapping ? ' (overlapping)' : ''} | ${textAnalysis.wordCount} words | ${durationMs.toFixed(0)}ms | silence: ${silenceAtEndMs.toFixed(0)}ms`)
   }
 
   // Build final audio with smart overlaps
@@ -1307,7 +1353,7 @@ export async function concatenateWithCrossfade(
       const overlapSamples = Math.floor((overlapMs / 1000) * SAMPLE_RATE)
 
       if (overlapSamples > 0 && resultChannels[0].length >= overlapSamples && segment.pcm[0].length >= overlapSamples) {
-        // Apply crossfade
+        // Apply crossfade or additive overlap
         totalOverlapMs += overlapMs
 
         const endOfResult: Float32Array[] = [
@@ -1320,7 +1366,11 @@ export async function concatenateWithCrossfade(
           segment.pcm[1].slice(0, overlapSamples)
         ]
 
-        const crossfaded = applyCrossfade(endOfResult, startOfNew, overlapSamples)
+        // Use additive overlap for (overlapping) segments — both voices fully audible
+        // Use standard crossfade for all other overlap types
+        const crossfaded = segment.isOverlapping
+          ? applyAdditiveOverlap(endOfResult, startOfNew, overlapSamples)
+          : applyCrossfade(endOfResult, startOfNew, overlapSamples)
 
         // Build new result
         const newLength = resultChannels[0].length - overlapSamples + segment.pcm[0].length
