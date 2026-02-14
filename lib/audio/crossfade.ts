@@ -1172,6 +1172,7 @@ async function concatenateLargeScale(
   // 3. Middle segments: decode → stereo pan → re-encode one at a time
   //    This keeps peak memory at ~13 MB (one segment) instead of 600+ MB (all segments).
   //    Raw MP3 concat doesn't work because each segment has its own MP3/ID3 headers.
+  //    For overlapping segments: keep previous PCM in memory to mix additively.
   const middleStart = introSegments
   const middleEnd = segments.length - outroSegments
 
@@ -1181,10 +1182,83 @@ async function concatenateLargeScale(
     const totalSteps = middleCount + (introSegments > 0 ? 1 : 0) + (outroSegments > 0 ? 1 : 0)
     const introSteps = introSegments > 0 ? 1 : 0
     console.log(`[Crossfade] Re-encoding segments ${middleStart + 1}–${middleEnd} individually (${middleCount} segments, stereo pan)`)
+
+    // Track previous segment PCM for overlapping mixing
+    let prevStereo: Float32Array[] | null = null
+
     for (let i = middleStart; i < middleEnd; i++) {
-      const pcm = await decodeMP3(segments[i].buffer)
+      let pcm = await decodeMP3(segments[i].buffer)
+
+      // Trim leading silence for overlapping segments
+      if (segments[i].overlapping) {
+        const leadSilence = detectLeadingSilence(pcm)
+        if (leadSilence > 20) {
+          pcm = trimLeadingSilence(pcm, leadSilence)
+        }
+      }
+
       const stereo = applyStereoPosition(pcm, segments[i].speaker, stereoPositions)
-      mp3Parts.push(encodeMP3(stereo[0], stereo[1]))
+
+      if (segments[i].overlapping && prevStereo) {
+        // Additive overlap: mix this segment on top of the tail of the previous segment
+        const overlapSamples = Math.min(
+          stereo[0].length,
+          Math.floor(prevStereo[0].length * 0.4)
+        )
+
+        if (overlapSamples > 0) {
+          console.log(`[Crossfade] Large-scale overlapping: "${segments[i].text.substring(0, 40)}..." → ${(overlapSamples / SAMPLE_RATE * 1000).toFixed(0)}ms`)
+
+          // Extract tail of previous and start of current
+          const prevTail: Float32Array[] = [
+            prevStereo[0].slice(prevStereo[0].length - overlapSamples),
+            prevStereo[1].slice(prevStereo[1].length - overlapSamples),
+          ]
+          const currStart: Float32Array[] = [
+            stereo[0].slice(0, overlapSamples),
+            stereo[1].slice(0, overlapSamples),
+          ]
+
+          // Mix additively
+          const mixed = applyAdditiveOverlap(prevTail, currStart, overlapSamples)
+
+          // Rebuild previous: trim tail, append mixed region
+          const prevTrimLen = prevStereo[0].length - overlapSamples
+          const prevRebuilt: Float32Array[] = [
+            new Float32Array(prevTrimLen + overlapSamples),
+            new Float32Array(prevTrimLen + overlapSamples),
+          ]
+          for (let ch = 0; ch < 2; ch++) {
+            prevRebuilt[ch].set(prevStereo[ch].subarray(0, prevTrimLen), 0)
+            prevRebuilt[ch].set(mixed[ch], prevTrimLen)
+          }
+
+          // Encode and push the rebuilt previous segment
+          mp3Parts.push(encodeMP3(prevRebuilt[0], prevRebuilt[1]))
+
+          // Current segment continues after the overlap region
+          if (stereo[0].length > overlapSamples) {
+            const remainder: Float32Array[] = [
+              stereo[0].slice(overlapSamples),
+              stereo[1].slice(overlapSamples),
+            ]
+            prevStereo = remainder
+          } else {
+            prevStereo = null
+          }
+        } else {
+          // Overlap too small, just encode previous normally
+          mp3Parts.push(encodeMP3(prevStereo[0], prevStereo[1]))
+          prevStereo = stereo
+        }
+      } else {
+        // Normal segment: encode previous if pending, keep current for potential next overlap
+        if (prevStereo) {
+          mp3Parts.push(encodeMP3(prevStereo[0], prevStereo[1]))
+        }
+        prevStereo = stereo
+      }
+
       const done = i - middleStart + 1
       if (done % 20 === 0 || i === middleEnd - 1) {
         console.log(`[Crossfade] Progress: ${done}/${middleCount} segments re-encoded`)
@@ -1194,6 +1268,12 @@ async function concatenateLargeScale(
         const percent = Math.round(((introSteps + done) / totalSteps) * 100)
         await options.onProgress(percent)
       }
+    }
+
+    // Flush last pending segment
+    if (prevStereo) {
+      mp3Parts.push(encodeMP3(prevStereo[0], prevStereo[1]))
+      prevStereo = null
     }
   }
 

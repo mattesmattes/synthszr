@@ -155,6 +155,7 @@ export interface SegmentMetadata {
   text: string
   startTime: number // Calculated start time in seconds
   durationEstimate: number // Estimated duration in seconds
+  overlapping?: boolean // True for (overlapping) lines
 }
 
 /**
@@ -622,18 +623,19 @@ export async function generatePodcastDialogue(
       try {
         const startTime = Date.now()
         let buffer: Buffer
+        const ttsText = stripDirectiveTags(line.text)
 
         if (provider === 'openai') {
           // OpenAI: emotion tags are stripped automatically
           buffer = await generateDialogueSegmentOpenAI(
-            line.text,
+            ttsText,
             voiceId as OpenAIVoice,
             script.openaiModel || 'tts-1'
           )
         } else {
           // ElevenLabs: emotion tags are preserved
           buffer = await generateDialogueSegment(
-            line.text,
+            ttsText,
             voiceId,
             script.model || 'eleven_v3'
           )
@@ -708,6 +710,7 @@ export async function generatePodcastDialogue(
         text: line.text,
         startTime: currentTime,
         durationEstimate: segmentDuration,
+        overlapping: line.overlapping,
       })
 
       finalBuffers.push(segment)
