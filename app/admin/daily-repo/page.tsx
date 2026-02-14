@@ -1,9 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash, Eye, Clock, Trash2, Plus, RefreshCw, StickyNote, Download, Globe, PenLine } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Eye, Trash2, Plus, RefreshCw, StickyNote, Download, Globe, PenLine } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -309,175 +307,145 @@ export default function DailyRepoPage() {
     URL.revokeObjectURL(url)
   }
 
+  // Current selected summary (for stats in header)
+  const selectedSummary = repoSummaries.find(r => r.date === selectedDate)
+
   return (
     <div className="p-4 md:p-6 max-w-full">
-      <div className="mb-4">
-        <h1 className="text-xl font-bold tracking-tight">Daily Repo</h1>
-        <p className="text-xs text-muted-foreground">Gesammelte Inhalte aus Newslettern und Artikeln</p>
-      </div>
-
-      {/* Actions Bar */}
-      <div className="mb-4 flex items-center gap-2 flex-wrap">
-        <Button size="sm" variant="outline" onClick={() => setShowFetchDialog(true)} className="gap-1.5 text-xs h-7">
-          <Plus className="h-3 w-3" />
-          Neues Repo
-        </Button>
-        <div className="flex items-center gap-1 flex-1 min-w-[200px] max-w-md">
-          <div className="relative flex-1">
-            <Globe className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-            <input
-              type="url"
-              placeholder="URL hinzufügen…"
-              value={urlInput}
-              onChange={(e) => { setUrlInput(e.target.value); setCrawlError(null) }}
-              onKeyDown={(e) => { if (e.key === 'Enter') crawlUrl() }}
-              disabled={crawling}
-              className="rounded border pl-7 pr-2 py-0.5 text-xs h-7 w-full"
-            />
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={crawlUrl}
-            disabled={crawling || !urlInput.trim()}
-            className="text-xs h-7 px-2 shrink-0"
-          >
-            {crawling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-          </Button>
+      {/* Header */}
+      <div className="flex items-start justify-between mb-5">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">Daily Repo</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Newsletter &amp; Artikel</p>
         </div>
-        <div className="flex items-center gap-1.5 ml-auto">
-          <Calendar className="h-3 w-3 text-muted-foreground" />
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setShowFetchDialog(true)} className="gap-1.5 text-xs h-8">
+            <RefreshCw className="h-3.5 w-3.5" />
+            Abrufen
+          </Button>
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="rounded border px-2 py-0.5 text-xs h-7"
-            style={{
-              fontWeight: hasRepoForDate(selectedDate) ? 600 : 400,
-            }}
+            className="rounded-md border px-2.5 py-1 text-xs h-8 bg-background"
+            style={{ fontWeight: hasRepoForDate(selectedDate) ? 600 : 400 }}
           />
         </div>
       </div>
-      {crawlError && (
-        <div className="mb-3 text-xs text-destructive bg-destructive/10 rounded px-3 py-1.5">
-          {crawlError}
-        </div>
-      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left: Repo List by Date */}
-        <div className="lg:col-span-1">
-          <div className="text-xs font-medium text-muted-foreground mb-2">Vorhandene Repos</div>
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
+        {/* Left: Date Navigation */}
+        <div>
           {loading ? (
-            <div className="flex items-center justify-center py-6">
+            <div className="flex items-center justify-center py-12">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : repoSummaries.length === 0 ? (
-            <Card>
-              <CardContent className="py-4 text-center text-xs text-muted-foreground">
-                Noch keine Repos vorhanden
-              </CardContent>
-            </Card>
+            <div className="rounded-lg border border-dashed py-8 text-center text-xs text-muted-foreground">
+              Noch keine Repos
+            </div>
           ) : (
-            <Card>
-              <CardContent className="p-0">
-                <div className="divide-y max-h-[60vh] overflow-y-auto">
-                  {repoSummaries.map((repo) => (
-                    <div
+            <div className="rounded-lg border overflow-hidden">
+              <div className="max-h-[calc(100vh-180px)] overflow-y-auto">
+                {repoSummaries.map((repo) => {
+                  const isSelected = selectedDate === repo.date
+                  return (
+                    <button
                       key={repo.date}
-                      className={`flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors ${
-                        selectedDate === repo.date ? 'bg-primary/10' : ''
+                      onClick={() => setSelectedDate(repo.date)}
+                      className={`group w-full text-left px-3 py-2.5 border-b last:border-b-0 transition-colors relative ${
+                        isSelected
+                          ? 'bg-primary/5'
+                          : 'hover:bg-muted/40'
                       }`}
                     >
-                      <button
-                        onClick={() => setSelectedDate(repo.date)}
-                        className="flex-1 min-w-0 text-left"
-                      >
-                        <div className="text-xs font-medium">
+                      {isSelected && (
+                        <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-primary" />
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[13px] ${isSelected ? 'font-semibold' : 'font-medium'}`}>
                           {new Date(repo.date).toLocaleDateString('de-DE', {
                             weekday: 'short',
                             day: 'numeric',
                             month: 'short',
                           })}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground tabular-nums">
+                            {(repo.totalChars / 1000).toFixed(0)}k
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              deleteRepo(repo.date)
+                            }}
+                            disabled={deletingId === repo.date}
+                            className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                          >
+                            {deletingId === repo.date ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3 w-3" />
+                            )}
+                          </Button>
                         </div>
-                      </button>
-                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                        <span className="flex items-center gap-0.5">
-                          <Mail className="h-2.5 w-2.5 text-blue-500" />
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Mail className="h-2.5 w-2.5" />
                           {repo.newsletters}
                         </span>
-                        <span className="flex items-center gap-0.5">
-                          <FileText className="h-2.5 w-2.5 text-green-500" />
+                        <span className="flex items-center gap-1">
+                          <FileText className="h-2.5 w-2.5" />
                           {repo.articles}
                         </span>
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
-                          {(repo.totalChars / 1000).toFixed(0)}k
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            deleteRepo(repo.date)
-                          }}
-                          disabled={deletingId === repo.date}
-                          className="h-5 w-5 text-destructive hover:text-destructive ml-1"
-                        >
-                          {deletingId === repo.date ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3 w-3" />
-                          )}
-                        </Button>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           )}
         </div>
 
-        {/* Right: Items for Selected Date */}
-        <div className="lg:col-span-2">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-medium text-muted-foreground">
-              {selectedDate && new Date(selectedDate).toLocaleDateString('de-DE', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
+        {/* Right: Content Area */}
+        <div className="min-w-0">
+          {/* Content Header */}
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-sm font-semibold">
+                {selectedDate && new Date(selectedDate).toLocaleDateString('de-DE', {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric',
+                })}
+              </h2>
+              {selectedSummary && (
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {selectedSummary.newsletters} Newsletter, {selectedSummary.articles} Artikel — {(selectedSummary.totalChars / 1000).toFixed(0)}k Zeichen
+                </p>
+              )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
               {items.length > 0 && (
-                <>
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Database className="h-3 w-3" />
-                      {items.length}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Hash className="h-3 w-3" />
-                      {(items.reduce((s, i) => s + (i.content?.length || 0), 0) / 1000).toFixed(0)}k
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={downloadRepoAsMarkdown}
-                    className="h-6 px-2 text-[10px] gap-1"
-                  >
-                    <Download className="h-3 w-3" />
-                    .md
-                  </Button>
-                </>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={downloadRepoAsMarkdown}
+                  className="h-7 px-2 text-xs gap-1 text-muted-foreground"
+                >
+                  <Download className="h-3 w-3" />
+                  .md
+                </Button>
               )}
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => setShowManualDialog(true)}
-                className="h-6 px-2 text-[10px] gap-1"
+                className="h-7 px-2.5 text-xs gap-1.5"
               >
                 <PenLine className="h-3 w-3" />
                 Manuell
@@ -485,94 +453,141 @@ export default function DailyRepoPage() {
             </div>
           </div>
 
+          {/* URL Crawl Bar */}
+          <div className="mb-3">
+            <div className="flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <Globe className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  type="url"
+                  placeholder="URL crawlen und hinzufügen…"
+                  value={urlInput}
+                  onChange={(e) => { setUrlInput(e.target.value); setCrawlError(null) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') crawlUrl() }}
+                  disabled={crawling}
+                  className="rounded-md border pl-8 pr-3 py-1.5 text-xs h-8 w-full bg-background placeholder:text-muted-foreground/60"
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={crawlUrl}
+                disabled={crawling || !urlInput.trim()}
+                className="text-xs h-8 px-3 shrink-0"
+              >
+                {crawling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Crawlen'}
+              </Button>
+            </div>
+            {crawlError && (
+              <p className="text-xs text-destructive mt-1.5 pl-1">{crawlError}</p>
+            )}
+          </div>
+
+          {/* Article List */}
           {loadingItems ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : items.length === 0 ? (
-            <Card>
-              <CardContent className="py-6 text-center">
-                <Database className="h-6 w-6 mx-auto mb-2 text-muted-foreground/50" />
-                <p className="text-xs text-muted-foreground">Kein Repo für dieses Datum</p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-3 text-xs h-7"
-                  onClick={() => {
-                    setFetchDate(selectedDate)
-                    setShowFetchDialog(true)
-                  }}
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Repo erstellen
-                </Button>
-              </CardContent>
-            </Card>
+            <div className="rounded-lg border border-dashed py-12 text-center">
+              <Database className="h-7 w-7 mx-auto mb-2.5 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">Kein Repo für dieses Datum</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-4 text-xs h-8"
+                onClick={() => {
+                  setFetchDate(selectedDate)
+                  setShowFetchDialog(true)
+                }}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                Repo erstellen
+              </Button>
+            </div>
           ) : (
-            <Card>
-              <CardContent className="p-0">
-                <div className="divide-y max-h-[60vh] overflow-y-auto">
-                  {items.map((item) => {
-                    const faviconUrl = getFaviconUrl(item.source_url)
-                    return (
-                    <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 transition-colors text-xs">
-                      <div className="shrink-0 flex items-center gap-1">
-                        {/* Always show source type icon for clarity */}
-                        <span className={item.source_type === 'newsletter' ? 'text-blue-500' : item.source_type === 'article' ? 'text-green-500' : 'text-orange-500'}>
-                          {sourceTypeIcon(item.source_type)}
-                        </span>
-                        {faviconUrl && (
+            <div className="rounded-lg border overflow-hidden">
+              <div className="max-h-[calc(100vh-280px)] overflow-y-auto divide-y">
+                {items.map((item) => {
+                  const faviconUrl = getFaviconUrl(item.source_url)
+                  return (
+                    <div
+                      key={item.id}
+                      className="group flex items-center gap-3 px-3 py-2.5 hover:bg-muted/30 transition-colors"
+                    >
+                      {/* Source icon */}
+                      <div className="shrink-0 flex items-center justify-center w-7 h-7 rounded-md bg-muted/50">
+                        {faviconUrl ? (
                           <img
                             src={faviconUrl}
                             alt=""
-                            width={14}
-                            height={14}
+                            width={16}
+                            height={16}
                             className="rounded-sm"
                             onError={(e) => {
+                              // Fall back to type icon
                               e.currentTarget.style.display = 'none'
+                              const parent = e.currentTarget.parentElement
+                              if (parent) parent.classList.add('favicon-fallback')
                             }}
                           />
+                        ) : (
+                          <span className={
+                            item.source_type === 'newsletter' ? 'text-blue-500' :
+                            item.source_type === 'article' ? 'text-green-600' : 'text-orange-500'
+                          }>
+                            {sourceTypeIcon(item.source_type)}
+                          </span>
                         )}
                       </div>
+
+                      {/* Title + meta */}
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate text-xs">{item.title}</div>
-                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                          <Clock className="h-2.5 w-2.5" />
-                          {new Date(item.collected_at).toLocaleTimeString('de-DE', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                        <div className="text-[13px] font-medium truncate leading-snug">{item.title}</div>
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
+                          <span className="tabular-nums">
+                            {new Date(item.collected_at).toLocaleTimeString('de-DE', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
                           {item.source_email && (
-                            <span className="ml-1 truncate max-w-[120px]">{item.source_email}</span>
+                            <>
+                              <span className="text-muted-foreground/40">|</span>
+                              <span className="truncate max-w-[160px]">{item.source_email}</span>
+                            </>
                           )}
                         </div>
                       </div>
-                      <Badge variant="outline" className="shrink-0 text-[9px] px-1 py-0 h-4">
+
+                      {/* Size badge */}
+                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground bg-muted/60 rounded px-1.5 py-0.5">
                         {((item.content?.length || 0) / 1000).toFixed(1)}k
-                      </Badge>
-                      <div className="flex items-center gap-0.5 shrink-0">
+                      </span>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => setViewingItem(item)}
-                          className="h-6 w-6"
+                          className="h-7 w-7"
+                          title="Inhalt anzeigen"
                         >
-                          <Eye className="h-3 w-3" />
+                          <Eye className="h-3.5 w-3.5" />
                         </Button>
                         {item.source_url && (
-                          <Button variant="ghost" size="icon" asChild className="h-6 w-6">
+                          <Button variant="ghost" size="icon" asChild className="h-7 w-7" title="Original-Quelle">
                             <a href={item.source_url} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="h-3 w-3" />
+                              <ExternalLink className="h-3.5 w-3.5" />
                             </a>
                           </Button>
                         )}
                       </div>
                     </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+                  )
+                })}
+              </div>
+            </div>
           )}
         </div>
       </div>
