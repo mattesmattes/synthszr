@@ -1261,11 +1261,17 @@ async function concatenateLargeScale(
         prevStereo = stereo
       }
 
-      // Encode oldest PCMs to MP3 — keep enough duration for outro crossfade
-      while (pendingPcms.length > 1 && pendingDurationSec > outroMinDurationSec) {
-        const toEncode = pendingPcms.shift()!
-        pendingDurationSec -= toEncode[0].length / SAMPLE_RATE
-        mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
+      // Encode oldest PCMs to MP3 — keep enough duration for outro crossfade.
+      // Check remaining duration AFTER hypothetical flush to avoid dropping below threshold.
+      while (pendingPcms.length > 1) {
+        const oldestDuration = pendingPcms[0][0].length / SAMPLE_RATE
+        if (pendingDurationSec - oldestDuration >= outroMinDurationSec) {
+          const toEncode = pendingPcms.shift()!
+          pendingDurationSec -= oldestDuration
+          mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
+        } else {
+          break
+        }
       }
 
       const done = i - middleStart + 1
@@ -1287,10 +1293,15 @@ async function concatenateLargeScale(
 
     // Encode remaining PCMs — keep enough for outro crossfade
     if (includeOutro) {
-      while (pendingPcms.length > 1 && pendingDurationSec > outroMinDurationSec) {
-        const toEncode = pendingPcms.shift()!
-        pendingDurationSec -= toEncode[0].length / SAMPLE_RATE
-        mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
+      while (pendingPcms.length > 1) {
+        const oldestDuration = pendingPcms[0][0].length / SAMPLE_RATE
+        if (pendingDurationSec - oldestDuration >= outroMinDurationSec) {
+          const toEncode = pendingPcms.shift()!
+          pendingDurationSec -= oldestDuration
+          mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
+        } else {
+          break
+        }
       }
     } else {
       // No outro — encode everything
