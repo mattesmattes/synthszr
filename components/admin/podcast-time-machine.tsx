@@ -7,21 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { createClient } from '@/lib/supabase/client'
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface PostPodcastRow {
-  id: string
-  post_id: string
-  locale: string
-  audio_url: string | null
-  duration_seconds: number | null
-  script_content: string | null
-  created_at: string
-}
 
 interface PodcastEpisode {
   id: string
@@ -68,8 +56,6 @@ const LOCALE_LABELS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 export function PodcastTimeMachine() {
-  const supabase = createClient()
-
   // Filter state
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
   const today = new Date().toISOString().split('T')[0]
@@ -87,82 +73,37 @@ export function PodcastTimeMachine() {
   const fetchEpisodes = useCallback(async () => {
     setLoading(true)
     try {
-      // Step 1: Fetch completed podcasts from post_podcasts
-      let query = supabase
-        .from('post_podcasts')
-        .select('id, post_id, locale, audio_url, duration_seconds, script_content, created_at')
-        .eq('status', 'completed')
-        .not('audio_url', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(50)
+      const params = new URLSearchParams()
+      if (dateFrom) params.set('dateFrom', dateFrom)
+      if (dateTo) params.set('dateTo', dateTo)
+      if (localeFilter !== 'all') params.set('locale', localeFilter)
+      if (search.trim()) params.set('search', search.trim())
 
-      if (dateFrom) {
-        query = query.gte('created_at', `${dateFrom}T00:00:00`)
-      }
-      if (dateTo) {
-        query = query.lte('created_at', `${dateTo}T23:59:59`)
-      }
-      if (localeFilter !== 'all') {
-        query = query.eq('locale', localeFilter)
-      }
-      if (search.trim()) {
-        const term = `%${search.trim()}%`
-        query = query.ilike('script_content', term)
-      }
+      const res = await fetch(`/api/admin/podcast-history?${params}`)
+      const json = await res.json()
 
-      const { data: rows, error } = await query
-
-      if (error) {
-        console.error('Time Machine fetch error:', error)
+      if (!res.ok) {
+        console.error('Time Machine fetch error:', json.error)
         setEpisodes([])
         return
       }
 
-      const podcastRows = (rows ?? []) as PostPodcastRow[]
-      if (podcastRows.length === 0) {
-        setEpisodes([])
-        return
-      }
+      let episodes: PodcastEpisode[] = json.episodes ?? []
 
-      // Step 2: Fetch post titles for all unique post_ids
-      const postIds = [...new Set(podcastRows.map(r => r.post_id))]
-      const { data: posts } = await supabase
-        .from('generated_posts')
-        .select('id, title, slug')
-        .in('id', postIds)
-
-      const postMap = new Map<string, { title: string; slug: string }>()
-      for (const p of posts ?? []) {
-        postMap.set(p.id, { title: p.title, slug: p.slug })
-      }
-
-      // Step 3: Merge into PodcastEpisode
-      let merged: PodcastEpisode[] = podcastRows.map(r => ({
-        id: r.id,
-        title: postMap.get(r.post_id)?.title ?? null,
-        script: r.script_content,
-        audio_url: r.audio_url,
-        locale: r.locale,
-        duration_seconds: r.duration_seconds,
-        created_at: r.created_at,
-        post_id: r.post_id,
-        slug: postMap.get(r.post_id)?.slug ?? null,
-      }))
-
-      // Client-side title search (DB only searched script_content)
+      // Client-side title search (API only searched script_content)
       if (search.trim()) {
         const lower = search.trim().toLowerCase()
-        merged = merged.filter(ep =>
+        episodes = episodes.filter(ep =>
           ep.title?.toLowerCase().includes(lower) ||
           ep.script?.toLowerCase().includes(lower)
         )
       }
 
-      setEpisodes(merged)
+      setEpisodes(episodes)
     } finally {
       setLoading(false)
     }
-  }, [supabase, dateFrom, dateTo, search, localeFilter])
+  }, [dateFrom, dateTo, search, localeFilter])
 
   // Initial load + refetch on filter change
   useEffect(() => {
