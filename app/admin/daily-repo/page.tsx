@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash, Eye, Clock, Trash2, Plus, RefreshCw, StickyNote, Download, Globe } from 'lucide-react'
+import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Hash, Eye, Clock, Trash2, Plus, RefreshCw, StickyNote, Download, Globe, PenLine } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -51,6 +51,11 @@ export default function DailyRepoPage() {
   const [urlInput, setUrlInput] = useState('')
   const [crawling, setCrawling] = useState(false)
   const [crawlError, setCrawlError] = useState<string | null>(null)
+  const [showManualDialog, setShowManualDialog] = useState(false)
+  const [manualSource, setManualSource] = useState('')
+  const [manualUrl, setManualUrl] = useState('')
+  const [manualContent, setManualContent] = useState('')
+  const [manualSaving, setManualSaving] = useState(false)
 
   const supabase = createClient()
 
@@ -162,6 +167,50 @@ export default function DailyRepoPage() {
       setCrawlError('Netzwerkfehler')
     } finally {
       setCrawling(false)
+    }
+  }
+
+  async function saveManualArticle() {
+    if (!manualContent.trim()) return
+    setManualSaving(true)
+    try {
+      // Use the most recent repo date, or today if none exists
+      const targetDate = repoSummaries.length > 0 ? repoSummaries[0].date : new Date().toISOString().split('T')[0]
+
+      const title = manualSource.trim()
+        ? `${manualSource.trim()} — Manueller Artikel`
+        : 'Manueller Artikel'
+
+      const { error: insertError } = await supabase
+        .from('daily_repo')
+        .insert({
+          source_type: 'article',
+          source_url: manualUrl.trim() || null,
+          title,
+          content: manualContent.trim(),
+          newsletter_date: targetDate,
+          source_email: null,
+          newsletter_source_id: null,
+          source_language: 'de',
+        })
+
+      if (insertError) throw insertError
+
+      // Reset form and close
+      setManualSource('')
+      setManualUrl('')
+      setManualContent('')
+      setShowManualDialog(false)
+
+      // Refresh data and navigate to the target date
+      setSelectedDate(targetDate)
+      fetchRepoSummaries()
+      fetchItemsForDate(targetDate)
+    } catch (error) {
+      console.error('Manual article save error:', error)
+      alert('Fehler beim Speichern')
+    } finally {
+      setManualSaving(false)
     }
   }
 
@@ -296,6 +345,10 @@ export default function DailyRepoPage() {
             {crawling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
           </Button>
         </div>
+        <Button size="sm" variant="outline" onClick={() => setShowManualDialog(true)} className="gap-1.5 text-xs h-7">
+          <PenLine className="h-3 w-3" />
+          Manuell
+        </Button>
         <div className="flex items-center gap-1.5 ml-auto">
           <Calendar className="h-3 w-3 text-muted-foreground" />
           <input
@@ -548,6 +601,74 @@ export default function DailyRepoPage() {
                 setShowFetchDialog(false)
               }}
             />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Article Dialog */}
+      <Dialog open={showManualDialog} onOpenChange={setShowManualDialog}>
+        <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <PenLine className="h-4 w-4" />
+              Artikel manuell hinzufügen
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Wird dem aktuellsten Repo hinzugefügt{repoSummaries.length > 0 && ` (${new Date(repoSummaries[0].date).toLocaleDateString('de-DE')})`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Source</label>
+                <input
+                  type="text"
+                  placeholder="z.B. Reuters, Bloomberg, Handelsblatt…"
+                  value={manualSource}
+                  onChange={(e) => setManualSource(e.target.value)}
+                  className="rounded border px-2.5 py-1.5 text-sm w-full"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Source URL</label>
+                <input
+                  type="url"
+                  placeholder="https://…"
+                  value={manualUrl}
+                  onChange={(e) => setManualUrl(e.target.value)}
+                  className="rounded border px-2.5 py-1.5 text-sm w-full"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Content</label>
+              <textarea
+                placeholder="Artikeltext hier einfügen…"
+                value={manualContent}
+                onChange={(e) => setManualContent(e.target.value)}
+                rows={16}
+                className="rounded border px-2.5 py-1.5 text-sm w-full resize-y min-h-[200px]"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between pt-2 border-t shrink-0">
+            <span className="text-[10px] text-muted-foreground">
+              {manualContent.length > 0 && `${(manualContent.length / 1000).toFixed(1)}k Zeichen`}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowManualDialog(false)} className="text-xs h-8">
+                Abbrechen
+              </Button>
+              <Button
+                size="sm"
+                onClick={saveManualArticle}
+                disabled={manualSaving || !manualContent.trim()}
+                className="text-xs h-8 gap-1.5"
+              >
+                {manualSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                Hinzufügen
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
