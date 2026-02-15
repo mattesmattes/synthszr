@@ -225,12 +225,13 @@ export async function POST(request: NextRequest) {
       previewTextByLocale.set(locale, excerptToUse || '')
     }
 
-    // Send emails via Resend with strict rate limiting (2 req/s API limit)
+    // Send emails via Resend batch API (supports up to 100 emails per call)
+    // Using large batches = fewer API calls = no rate limit issues + no timeouts
     let successCount = 0
     let failCount = 0
     let batchCount = 0
-    const BATCH_SIZE = 2 // Very small batches to stay well within rate limits
-    const BATCH_DELAY_MS = 1200 // 1.2s between every batch (always, including the first)
+    const BATCH_SIZE = 50 // Resend batch API supports up to 100 per call
+    const BATCH_DELAY_MS = 1500 // 1.5s between batches (only matters if >50 subscribers per locale)
     const MAX_RETRIES = 3
 
     for (const [locale, localeSubscribers] of subscribersByLocale) {
