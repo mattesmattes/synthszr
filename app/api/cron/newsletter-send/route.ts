@@ -7,6 +7,9 @@ import { generateEmailContentWithVotes, ArticleThumbnail } from '@/lib/email/tip
 import type { LanguageCode } from '@/lib/types'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
 
+// Allow up to 2 minutes for large subscriber lists
+export const maxDuration = 120
+
 export async function GET(request: NextRequest) {
   // Verify cron authentication (secure - no dev bypass by default)
   const authResult = verifyCronAuth(request)
@@ -249,10 +252,10 @@ export async function GET(request: NextRequest) {
           }
         })
 
-        // Retry loop with exponential backoff for 429 errors
+        // Retry loop with exponential backoff for all transient errors
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
           try {
-            // Always wait before sending — strict rate limiting
+            // Wait before sending (longer on retries)
             const delay = attempt > 0 ? BATCH_DELAY_MS * Math.pow(2, attempt) : BATCH_DELAY_MS
             await new Promise(resolve => setTimeout(resolve, delay))
 
@@ -260,29 +263,23 @@ export async function GET(request: NextRequest) {
 
             if (result.data) {
               successCount += result.data.length
-              console.log(`[Newsletter Cron] Batch ${batchCount + 1}: Sent ${result.data.length} emails for locale ${locale}`)
+              console.log(`[Newsletter Cron] Batch ${batchCount + 1}: Sent ${result.data.length}/${batch.length} emails for locale ${locale}`)
             }
             if (result.error) {
-              // Check if it's a rate limit error
-              const errMsg = typeof result.error === 'object' && 'message' in result.error
-                ? (result.error as { message: string }).message : String(result.error)
-              if (errMsg.includes('429') || errMsg.toLowerCase().includes('rate')) {
-                if (attempt < MAX_RETRIES) {
-                  console.warn(`[Newsletter Cron] Rate limited on batch ${batchCount + 1}, retry ${attempt + 1}/${MAX_RETRIES}`)
-                  continue // retry
-                }
+              if (attempt < MAX_RETRIES) {
+                console.warn(`[Newsletter Cron] Batch ${batchCount + 1} error (retry ${attempt + 1}/${MAX_RETRIES}):`, result.error)
+                continue
               }
-              console.error(`[Newsletter Cron] Batch error:`, result.error)
+              console.error(`[Newsletter Cron] Batch ${batchCount + 1} failed after ${MAX_RETRIES} retries:`, result.error)
               failCount += batch.length
             }
-            break // success or non-retryable error
+            break // success
           } catch (error) {
-            const errMsg = error instanceof Error ? error.message : String(error)
-            if ((errMsg.includes('429') || errMsg.toLowerCase().includes('rate')) && attempt < MAX_RETRIES) {
-              console.warn(`[Newsletter Cron] Rate limited on batch ${batchCount + 1}, retry ${attempt + 1}/${MAX_RETRIES}`)
-              continue // retry
+            if (attempt < MAX_RETRIES) {
+              console.warn(`[Newsletter Cron] Batch ${batchCount + 1} exception (retry ${attempt + 1}/${MAX_RETRIES}):`, error instanceof Error ? error.message : error)
+              continue
             }
-            console.error(`[Newsletter Cron] Batch send failed:`, error)
+            console.error(`[Newsletter Cron] Batch ${batchCount + 1} failed after ${MAX_RETRIES} retries:`, error)
             failCount += batch.length
             break
           }
