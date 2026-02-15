@@ -61,16 +61,16 @@ export function AudioPlayer({ postId }: AudioPlayerProps) {
     setShowFlyingNav(!coverVisible)
   }, [coverVisible])
 
-  // Milky → transparent transition for flying nav (newsletter clickout)
+  // Milky → transparent transition for flying nav
   useEffect(() => {
-    if (shouldAutoplay && showFlyingNav && !hasTransitionedRef.current) {
+    if (showFlyingNav && !hasTransitionedRef.current) {
       hasTransitionedRef.current = true
       setFlyingNavMilky(true)
       // Brief pause, then start CSS transition to transparent
       const timer = setTimeout(() => setFlyingNavMilky(false), 600)
       return () => clearTimeout(timer)
     }
-  }, [shouldAutoplay, showFlyingNav])
+  }, [showFlyingNav])
 
   // Fetch podcast audio status on mount (always EN)
   useEffect(() => {
@@ -419,7 +419,7 @@ export function AudioPlayer({ postId }: AudioPlayerProps) {
           'dark:shadow-[0_2px_16px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.3)]',
           'ai-glow-active',
         )}>
-          {glassLayers(shouldAutoplay ? 1 : 0)}
+          {glassLayers(1)}
           {playerContent({ showClose: false })}
         </div>
       </div>
