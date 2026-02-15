@@ -262,8 +262,9 @@ export async function GET(request: NextRequest) {
             const result = await getResend().batch.send(batchEmails)
 
             if (result.data) {
-              successCount += result.data.length
-              console.log(`[Newsletter Cron] Batch ${batchCount + 1}: Sent ${result.data.length}/${batch.length} emails for locale ${locale}`)
+              const sentCount = result.data.data?.length ?? batch.length
+              successCount += sentCount
+              console.log(`[Newsletter Cron] Batch ${batchCount + 1}: Sent ${sentCount}/${batch.length} emails for locale ${locale}`)
             }
             if (result.error) {
               if (attempt < MAX_RETRIES) {
