@@ -81,13 +81,55 @@ CATEGORY: [AI & Tech, Marketing, Design, Business, Code, oder Synthese]
 Danach folgt der Artikel-Content in Markdown.
 
 STILREGEL — VERMEIDE TYPISCHE KI-SPRACHMUSTER (HÖCHSTE PRIORITÄT):
-Diese Regeln gelten für den GESAMTEN Text inkl. Synthszr Takes:
-- KEINE Kontrastpaare: "nicht nur... sondern auch", "einerseits... andererseits", "zwar... aber", "weniger... mehr", "sowohl... als auch"
-- KEINE Parallelkonstruktionen: Keine gleichförmigen Satzanfänge, keine rhythmischen Aufzählungen mit identischer Struktur (z.B. "X zeigt... Y zeigt... Z zeigt...")
-- KEINE Gedankenstriche als Stilmittel: Höchstens 1x pro Artikel, nie als rhetorische Pause oder Einschub-Muster
-- KEINE Phrasen: "Es zeigt sich", "Es wird deutlich", "Man darf gespannt sein", "Es bleibt abzuwarten", "Zusammenfassend lässt sich sagen", "In einer Zeit, in der..."
-- KEINE Überleitungen mit "Dabei": "Dabei ist...", "Dabei zeigt sich..."
-- Schreibe asymmetrisch: Variiere Satzlänge und -struktur bewusst ungleichmäßig. Kein Satz darf den gleichen Aufbau haben wie der vorherige.`
+Diese Regeln gelten für den GESAMTEN Text, besonders streng für Synthszr Takes.
+
+1. VERBOTENE SATZSTRUKTUREN:
+- KEINE Kontrastpaare: "nicht nur... sondern auch", "einerseits... andererseits", "zwar... aber", "weniger... mehr", "sowohl... als auch", "statt... lieber"
+- KEINE Parallelkonstruktionen: Keine gleichförmigen Satzanfänge, keine rhythmischen Aufzählungen mit identischer Struktur ("X zeigt... Y zeigt... Z zeigt...")
+- KEINE dreiteiligen Aufzählungen als rhetorisches Muster: "schneller, effizienter, skalierbarer" — wenn Dreiergruppe, dann mit ungleicher Gewichtung
+- KEINE Rahmensätze: "In einer Welt, in der...", "In einer Zeit, in der...", "Angesichts der Tatsache, dass..."
+- KEINE Wenn-Dann-Formeln: "Wenn X, dann Y" als rhetorische Struktur vermeiden
+
+2. VERBOTENE PHRASEN UND FLOSKELN:
+- "Es zeigt sich", "Es wird deutlich", "Es zeichnet sich ab", "Es lässt sich festhalten"
+- "Man darf gespannt sein", "Es bleibt abzuwarten", "Die Zeit wird zeigen"
+- "Zusammenfassend lässt sich sagen", "Eines ist klar", "Fakt ist"
+- "Spannend ist dabei", "Besonders bemerkenswert", "Interessanterweise"
+- "Das Potenzial ist enorm", "Die Möglichkeiten sind vielfältig"
+- "In der heutigen digitalen Welt", "Im Zeitalter von"
+- "Letztlich", "Letzten Endes", "Am Ende des Tages"
+- "Holistic", "ganzheitlich", "nahtlos", "robust", "cutting-edge"
+- "revolutionär", "bahnbrechend", "wegweisend" (außer bei tatsächlichen Durchbrüchen)
+
+3. VERBOTENE ÜBERGANGS- UND ÜBERGANGSWÖRTER:
+- "Dabei ist...", "Dabei zeigt sich...", "Dabei wird deutlich..."
+- "Darüber hinaus", "Des Weiteren", "Ferner", "Zudem" als Satzanfang
+- "Allerdings", "Nichtsdestotrotz", "Gleichwohl" als alleiniger Satzanfang
+- "Es ist wichtig zu beachten", "Es sei darauf hingewiesen"
+
+4. VERBOTENE STILMITTEL:
+- KEINE Gedankenstriche als Stilmittel: Max. 1x pro Artikel, nie als rhetorische Pause
+- KEINE rhetorischen Fragen am Absatzende als Cliffhanger ("Aber was bedeutet das wirklich?")
+- KEINE Metaphern-Ketten: Nicht mehr als eine Metapher pro Absatz
+- KEINE Pseudo-Mündlichkeit: "Mal ehrlich:", "Hand aufs Herz:", "Seien wir ehrlich:"
+- KEIN "Doch" als dramatischer Satzanfang ("Doch der Schein trügt.", "Doch es gibt ein Problem.")
+- KEINE qualifizierenden Relativierungen am Satzende: "— und das ist erst der Anfang", "— und das aus gutem Grund"
+- KEIN inflationäres Ausrufezeichen
+
+5. VERBOTENE INHALTSMUSTER:
+- KEINE unspezifischen Zukunftsprognosen: "wird die Branche verändern", "könnte alles auf den Kopf stellen"
+- KEINE Buzzword-Häufungen: Maximal 1 Fachbegriff pro Satz
+- KEINE Selbstreferenz des Textes: "In diesem Artikel...", "Wie wir gesehen haben..."
+- KEINE Appelle an den Leser: "Stellen Sie sich vor...", "Fragen Sie sich mal..."
+- KEINE künstliche Dringlichkeit: "Jetzt ist der Zeitpunkt", "Wer jetzt nicht handelt..."
+
+6. POSITIV-REGELN (SO STATTDESSEN):
+- Schreibe asymmetrisch: Variiere Satzlänge bewusst (kurz-lang-mittel-kurz). Kein Satz darf den gleichen Aufbau haben wie der vorherige.
+- Bevorzuge konkrete Fakten und Zahlen statt vager Adjektive.
+- Nutze aktive Verben statt nominalisierte Konstruktionen ("X erhöht den Umsatz" statt "eine Umsatzerhöhung wird erzielt").
+- Lass Absätze unterschiedlich lang sein — ein Ein-Satz-Absatz neben einem Vier-Satz-Absatz ist gewünscht.
+- Beginne Sätze mit dem Subjekt oder einem konkreten Fakt, nicht mit Füllwörtern.
+- Schreibe Synthszr Takes wie eine nüchterne Analysteneinschätzung, nicht wie ein Meinungsartikel.`
 
 /**
  * Stream ghostwriter blog post generation using the specified AI model
