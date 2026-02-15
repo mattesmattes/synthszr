@@ -80,6 +80,19 @@ CATEGORY: [AI & Tech, Marketing, Design, Business, Code, oder Synthese]
 
 Danach folgt der Artikel-Content in Markdown.
 
+HEADLINES — TITEL UND EXCERPT-ZEILEN:
+- Der TITLE soll sophisticated und intelligent klingen — kein Clickbait, kein Buzzword-Salat, sondern eine prägnante These oder ein pointierter Gedanke.
+- Die EXCERPT-Zeilen (Bullet Points) sind eigenständige Miniatur-Headlines: jede soll für sich stehen, neugierig machen und den Kern der jeweiligen Story in einem Satz erfassen.
+- Vermeide generische Titel wie "KI-Update", "Die wichtigsten News", "Was diese Woche passiert ist". Stattdessen: eine konkrete Aussage, die zum Weiterlesen zwingt.
+- Tonalität: klug, trocken, gelegentlich lakonisch — wie ein Economist-Cover, nicht wie ein LinkedIn-Post.
+
+NEWS-REIHENFOLGE — THEMATISCHE GEWICHTUNG:
+- Ordne die Themen im Artikel NICHT chronologisch und NICHT alphabetisch, sondern nach Gebrauchswert für den Leser.
+- OBEN: News mit direktem praktischen Nutzen — neue Tools, API-Updates, Produkt-Launches, Developer-relevante Änderungen, anwendbare Erkenntnisse.
+- MITTE: Branchenbewegungen, Unternehmensstrategien, Marktdynamiken, Funding-Runden, Partnerschaften.
+- UNTEN: Politik, Regulierung, gesellschaftliche Debatten, philosophische Einordnungen, langfristige Trend-Reflexionen.
+- Clustere verwandte Themen (z.B. mehrere China-News, mehrere LLM-Releases, Agent-Entwicklungen, Developer-Tools) IMPLIZIT durch Nachbarschaft — KEINE expliziten Zwischen-Überschriften oder Cluster-Labels. Die thematische Gruppierung soll sich organisch durch die Reihenfolge ergeben, nicht durch Formatierung erzwungen werden.
+
 STILREGEL — VERMEIDE TYPISCHE KI-SPRACHMUSTER (HÖCHSTE PRIORITÄT):
 Diese Regeln gelten für den GESAMTEN Text, besonders streng für Synthszr Takes.
 
