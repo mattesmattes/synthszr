@@ -61,10 +61,49 @@ export function isJunkTitle(title: string): boolean {
 }
 
 /**
+ * Aggregator newsletters that curate links from other sources.
+ * For these, we attribute items to the original source (via source_url domain)
+ * instead of the aggregator newsletter email.
+ */
+const AGGREGATOR_EMAILS = new Set([
+  'newsletter@techmeme.com',
+])
+
+/**
+ * Check if an email belongs to a known aggregator newsletter
+ */
+function isAggregatorEmail(email: string | null): boolean {
+  if (!email) return false
+  const match = email.match(/<([^>]+)>/)
+  const addr = match ? match[1].toLowerCase() : email.toLowerCase().trim()
+  return AGGREGATOR_EMAILS.has(addr)
+}
+
+/**
+ * Extract domain display name from a URL
+ * e.g., "https://www.reuters.com/article/..." → "reuters.com"
+ */
+function domainFromUrl(url: string | null): string | null {
+  if (!url) return null
+  try {
+    return new URL(url).hostname.replace('www.', '')
+  } catch {
+    return null
+  }
+}
+
+/**
  * Extract normalized source identifier from email
  * e.g., "Newsletter Name <email@domain.com>" → "email@domain.com"
+ * For aggregator newsletters (e.g. Techmeme), uses the article URL domain instead.
  */
 export function normalizeSourceIdentifier(email: string | null, url: string | null): string {
+  // For aggregators, attribute to the original source URL domain
+  if (isAggregatorEmail(email) && url) {
+    const domain = domainFromUrl(url)
+    if (domain) return domain
+  }
+
   if (email) {
     // Extract email address from format like "Name <email@domain.com>"
     const match = email.match(/<([^>]+)>/)
@@ -74,12 +113,8 @@ export function normalizeSourceIdentifier(email: string | null, url: string | nu
   }
 
   if (url) {
-    try {
-      const hostname = new URL(url).hostname.replace('www.', '')
-      return hostname
-    } catch {
-      // Invalid URL
-    }
+    const domain = domainFromUrl(url)
+    if (domain) return domain
   }
 
   return 'unknown'
@@ -87,8 +122,15 @@ export function normalizeSourceIdentifier(email: string | null, url: string | nu
 
 /**
  * Extract human-readable source name from email
+ * For aggregator newsletters, uses the article URL domain instead.
  */
-export function extractSourceDisplayName(email: string | null): string | null {
+export function extractSourceDisplayName(email: string | null, url?: string | null): string | null {
+  // For aggregators, use the original article domain as display name
+  if (isAggregatorEmail(email) && url) {
+    const domain = domainFromUrl(url)
+    if (domain) return domain
+  }
+
   if (!email) return null
 
   // Extract name from "Newsletter Name <email@domain.com>" format
@@ -129,7 +171,7 @@ export async function addToQueue(
   for (const item of items) {
     try {
       const sourceIdentifier = normalizeSourceIdentifier(item.sourceEmail ?? null, item.sourceUrl ?? null)
-      const sourceDisplayName = extractSourceDisplayName(item.sourceEmail ?? null)
+      const sourceDisplayName = extractSourceDisplayName(item.sourceEmail ?? null, item.sourceUrl ?? null)
 
       const record: NewsQueueItemInsert = {
         daily_repo_id: item.dailyRepoId || null,
