@@ -9,7 +9,7 @@ export const maxDuration = 300 // 5 minutes per single translation (Pro plan all
 
 const BATCH_SIZE = 1 // Process one at a time; client loop handles iteration
 const MAX_ATTEMPTS = 3
-const STUCK_TIMEOUT_MS = 5 * 60 * 1000 // 5 min — reset stuck 'processing' items (matches maxDuration)
+const STUCK_TIMEOUT_MS = 6 * 60 * 1000 // 6 min — reset stuck 'processing' items (slightly > maxDuration=300s)
 
 /**
  * POST /api/admin/translations/process-queue

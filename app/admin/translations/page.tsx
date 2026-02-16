@@ -126,10 +126,17 @@ export default function TranslationsPage() {
       startTransition(() => setProcessLog(prev => [...prev, `🔄 Verarbeite nächstes Item...`]))
 
       try {
-        // Client-side timeout: abort after 2 min to avoid UI hanging
-        // Server continues in background — translation still gets saved
+        // Client-side timeout: 5.5 min — slightly longer than server maxDuration (300s)
+        // so Vercel kills the function before we abort
         const controller = new AbortController()
-        const clientTimeout = setTimeout(() => controller.abort(), 120_000)
+        const clientTimeout = setTimeout(() => controller.abort(), 330_000)
+
+        // Show periodic progress while waiting (every 30s)
+        let elapsed = 0
+        const progressInterval = setInterval(() => {
+          elapsed += 30
+          startTransition(() => setProcessLog(prev => [...prev, `⏳ Übersetzung läuft... (${elapsed}s)`]))
+        }, 30_000)
 
         let res: Response
         try {
@@ -140,17 +147,17 @@ export default function TranslationsPage() {
           })
         } catch (fetchError) {
           clearTimeout(clientTimeout)
+          clearInterval(progressInterval)
           if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
-            startTransition(() => setProcessLog(prev => [...prev, `⏳ Übersetzung läuft im Hintergrund weiter (>2min)...`]))
-            // Wait before next attempt to let server finish
-            await new Promise(resolve => setTimeout(resolve, 15_000))
-            // Refresh data to check if it completed in background
+            startTransition(() => setProcessLog(prev => [...prev, `⏳ Server-Timeout (>5min) — prüfe Status...`]))
+            await new Promise(resolve => setTimeout(resolve, 5_000))
             await fetchData()
             continue
           }
           throw fetchError
         }
         clearTimeout(clientTimeout)
+        clearInterval(progressInterval)
 
         if (!res.ok) {
           const text = await res.text()
@@ -168,9 +175,10 @@ export default function TranslationsPage() {
 
         if (result.processed === 0) {
           if (result.stillProcessing && result.stillProcessing > 0) {
-            // Items are stuck in 'processing' — wait for stuck recovery to reset them
-            startTransition(() => setProcessLog(prev => [...prev, `⏳ ${result.stillProcessing} Items noch in Verarbeitung, warte auf Recovery...`]))
-            await new Promise(resolve => setTimeout(resolve, 10000))
+            // Items still processing from a previous request — poll until they finish
+            startTransition(() => setProcessLog(prev => [...prev, `⏳ ${result.stillProcessing} Item(s) werden noch verarbeitet...`]))
+            await new Promise(resolve => setTimeout(resolve, 15_000))
+            await fetchData()
             continue
           }
           startTransition(() => setProcessLog(prev => [...prev, '✅ Alle Items verarbeitet!']))
@@ -210,8 +218,17 @@ export default function TranslationsPage() {
           setProcessLog(prev => [...prev, `❌ Fehler: ${errorMsg}`])
         })
 
-        // Allow more retries for 504 timeouts since they're transient
-        const maxErrors = is504 ? 8 : 5
+        // For 504/timeout: the server likely finished in background, just continue
+        if (is504) {
+          startTransition(() => setProcessLog(prev => [...prev, `⏳ Server-Timeout — prüfe ob Übersetzung trotzdem fertig wurde...`]))
+          await new Promise(resolve => setTimeout(resolve, 10_000))
+          await fetchData()
+          // Don't count 504 as consecutive error — server likely completed
+          consecutiveErrors = Math.max(0, consecutiveErrors - 1)
+          continue
+        }
+
+        const maxErrors = 5
         if (consecutiveErrors >= maxErrors) {
           startTransition(() => setProcessLog(prev => [...prev, `🛑 Zu viele Fehler (${maxErrors}x), stoppe Verarbeitung`]))
           break
@@ -219,7 +236,7 @@ export default function TranslationsPage() {
 
         // Exponential backoff: 5s, 10s, 15s, 20s...
         const waitSec = Math.min(5 * consecutiveErrors, 30)
-        startTransition(() => setProcessLog(prev => [...prev, `⏳ Warte ${waitSec} Sekunden nach Fehler...`]))
+        startTransition(() => setProcessLog(prev => [...prev, `⏳ Warte ${waitSec}s...`]))
         await new Promise(resolve => setTimeout(resolve, waitSec * 1000))
       }
     }
