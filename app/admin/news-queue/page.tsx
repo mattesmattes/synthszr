@@ -108,7 +108,7 @@ interface SynthesisCandidateItem {
 const PAGE_SIZE = 100
 
 // Truncate title to prevent UI breakage from long titles
-const truncateTitle = (title: string, maxLength: number = 50) =>
+const truncateTitle = (title: string, maxLength: number = 130) =>
   title.length > maxLength ? title.slice(0, maxLength) + '...' : title
 
 export default function NewsQueuePage() {
