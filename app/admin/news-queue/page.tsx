@@ -69,6 +69,7 @@ interface QueueItem {
   source_display_name: string | null
   source_url: string | null
   daily_repo_id: string | null
+  daily_repo: { source_type: string } | null
   synthesis_score: number
   relevance_score: number
   uniqueness_score: number
@@ -923,6 +924,15 @@ export default function NewsQueuePage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
+                              {item.daily_repo?.source_type && (
+                                <Badge className={`text-[8px] px-1 h-3.5 font-medium border-0 ${
+                                  item.daily_repo.source_type === 'webcrawl'
+                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                }`}>
+                                  {item.daily_repo.source_type === 'webcrawl' ? 'Web' : 'NL'}
+                                </Badge>
+                              )}
                               <Badge
                                 variant="outline"
                                 className="text-[9px] px-1.5 py-0 h-4 font-mono font-bold border-0"

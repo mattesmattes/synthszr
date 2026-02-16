@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Eye, Trash2, Plus, RefreshCw, StickyNote, Download, PenLine } from 'lucide-react'
+import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Eye, Trash2, Plus, RefreshCw, StickyNote, Download, PenLine, Globe } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -33,6 +33,7 @@ interface RepoSummary {
   count: number
   newsletters: number
   articles: number
+  webcrawl: number
   totalChars: number
 }
 
@@ -53,6 +54,11 @@ export default function DailyRepoPage() {
   const [manualUrl, setManualUrl] = useState('')
   const [manualContent, setManualContent] = useState('')
   const [manualSaving, setManualSaving] = useState(false)
+  const [showWebCrawlDialog, setShowWebCrawlDialog] = useState(false)
+  const [webCrawlRunning, setWebCrawlRunning] = useState(false)
+  const [webCrawlItems, setWebCrawlItems] = useState<Array<{ title: string; status: string; error?: string }>>([])
+  const [webCrawlSummary, setWebCrawlSummary] = useState<{ emails: number; articles: number; errors: number; totalCharacters: number } | null>(null)
+  const [webCrawlPhase, setWebCrawlPhase] = useState<string>('idle')
 
   const supabase = createClient()
 
@@ -91,12 +97,14 @@ export default function DailyRepoPage() {
           count: 0,
           newsletters: 0,
           articles: 0,
+          webcrawl: 0,
           totalChars: 0,
         }
 
         existing.count++
         if (item.source_type === 'newsletter') existing.newsletters++
         if (item.source_type === 'article') existing.articles++
+        if (item.source_type === 'webcrawl') existing.webcrawl++
         existing.totalChars += item.content?.length || 0
 
         summaryMap.set(date, existing)
@@ -217,8 +225,91 @@ export default function DailyRepoPage() {
     switch (type) {
       case 'newsletter': return <Mail className="h-3 w-3" />
       case 'article': return <FileText className="h-3 w-3" />
+      case 'webcrawl': return <Globe className="h-3 w-3" />
       case 'email_note': return <StickyNote className="h-3 w-3 text-orange-500" />
       default: return <Link2 className="h-3 w-3" />
+    }
+  }
+
+  const sourceBadge = (type: string) => {
+    if (type === 'webcrawl') {
+      return <span className="inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">Web</span>
+    }
+    if (type === 'newsletter' || type === 'article') {
+      return <span className="inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">NL</span>
+    }
+    if (type === 'email_note') {
+      return <span className="inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">Notiz</span>
+    }
+    return null
+  }
+
+  async function startWebCrawl() {
+    setWebCrawlRunning(true)
+    setWebCrawlPhase('fetching')
+    setWebCrawlItems([])
+    setWebCrawlSummary(null)
+
+    try {
+      const response = await fetch('/api/admin/webcrawl-fetch', {
+        method: 'POST',
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        throw new Error(`Fetch failed (${response.status})`)
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No reader')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6))
+
+              if (event.phase) setWebCrawlPhase(event.phase)
+
+              if (event.item) {
+                setWebCrawlItems(prev => {
+                  const existing = prev.findIndex(i => i.title === event.item.title)
+                  if (existing >= 0) {
+                    const updated = [...prev]
+                    updated[existing] = event.item
+                    return updated
+                  }
+                  return [...prev, event.item]
+                })
+              }
+
+              if (event.type === 'complete' && event.summary) {
+                setWebCrawlSummary(event.summary)
+                // Refresh data
+                fetchRepoSummaries()
+                fetchItemsForDate(selectedDate)
+              }
+            } catch (e) {
+              console.error('Error parsing SSE:', e)
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('WebCrawl error:', error)
+      setWebCrawlPhase('error')
+    } finally {
+      setWebCrawlRunning(false)
     }
   }
 
@@ -325,8 +416,12 @@ export default function DailyRepoPage() {
           {/* Abrufen + Date Picker */}
           <div className="flex items-center gap-2 mb-3">
             <Button size="sm" onClick={() => setShowFetchDialog(true)} className="gap-1.5 text-xs h-8 flex-1">
-              <RefreshCw className="h-3.5 w-3.5" />
-              Abrufen
+              <Mail className="h-3.5 w-3.5" />
+              Newsletter
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowWebCrawlDialog(true)} className="gap-1.5 text-xs h-8">
+              <Globe className="h-3.5 w-3.5" />
+              WebCrawl
             </Button>
             <input
               type="date"
@@ -403,6 +498,12 @@ export default function DailyRepoPage() {
                           <FileText className="h-2.5 w-2.5" />
                           {repo.articles}
                         </span>
+                        {repo.webcrawl > 0 && (
+                          <span className="flex items-center gap-1 text-purple-500">
+                            <Globe className="h-2.5 w-2.5" />
+                            {repo.webcrawl}
+                          </span>
+                        )}
                       </div>
                     </button>
                   )
@@ -427,7 +528,7 @@ export default function DailyRepoPage() {
               </h2>
               {selectedSummary && (
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {selectedSummary.newsletters} Newsletter, {selectedSummary.articles} Artikel — {(selectedSummary.totalChars / 1000).toFixed(0)}k Zeichen
+                  {selectedSummary.newsletters} Newsletter, {selectedSummary.articles} Artikel{selectedSummary.webcrawl > 0 ? `, ${selectedSummary.webcrawl} WebCrawl` : ''} — {(selectedSummary.totalChars / 1000).toFixed(0)}k Zeichen
                 </p>
               )}
             </div>
@@ -505,7 +606,8 @@ export default function DailyRepoPage() {
                         ) : (
                           <span className={
                             item.source_type === 'newsletter' ? 'text-blue-500' :
-                            item.source_type === 'article' ? 'text-green-600' : 'text-orange-500'
+                            item.source_type === 'article' ? 'text-green-600' :
+                            item.source_type === 'webcrawl' ? 'text-purple-500' : 'text-orange-500'
                           }>
                             {sourceTypeIcon(item.source_type)}
                           </span>
@@ -514,7 +616,10 @@ export default function DailyRepoPage() {
 
                       {/* Title + meta */}
                       <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-medium truncate leading-snug">{item.title}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[13px] font-medium truncate leading-snug">{item.title}</span>
+                          {sourceBadge(item.source_type)}
+                        </div>
                         <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
                           <span className="tabular-nums">
                             {new Date(item.collected_at).toLocaleTimeString('de-DE', {
@@ -686,6 +791,87 @@ export default function DailyRepoPage() {
                 Hinzufügen
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* WebCrawl Dialog */}
+      <Dialog open={showWebCrawlDialog} onOpenChange={setShowWebCrawlDialog}>
+        <DialogContent className="max-w-lg max-h-[70vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Globe className="h-4 w-4" />
+              WebCrawl
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Holt die neueste +synthszr-webcrawler E-Mail und crawlt die enthaltenen Links
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-3">
+            {webCrawlPhase === 'idle' && !webCrawlSummary && (
+              <div className="text-center py-6 text-muted-foreground">
+                <Globe className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">WebCrawl starten um Artikel aus der Webcrawler-Mail zu importieren</p>
+              </div>
+            )}
+
+            {webCrawlItems.length > 0 && (
+              <div className="space-y-1 border rounded-lg p-2 max-h-48 overflow-y-auto">
+                {webCrawlItems.slice(-10).map((item, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs py-1">
+                    <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${
+                      item.status === 'success' ? 'bg-green-500' :
+                      item.status === 'error' ? 'bg-red-500' :
+                      item.status === 'skipped' ? 'bg-yellow-500' :
+                      item.status === 'processing' ? 'bg-blue-500 animate-pulse' : 'bg-gray-300'
+                    }`} />
+                    <span className="truncate">{item.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {webCrawlSummary && (
+              <div className="grid grid-cols-4 gap-2 p-3 bg-muted/50 rounded-lg text-center">
+                <div>
+                  <div className="text-lg font-bold text-blue-600">{webCrawlSummary.emails}</div>
+                  <div className="text-[10px] text-muted-foreground">E-Mails</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-green-600">{webCrawlSummary.articles}</div>
+                  <div className="text-[10px] text-muted-foreground">Artikel</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-purple-600">{(webCrawlSummary.totalCharacters / 1000).toFixed(0)}k</div>
+                  <div className="text-[10px] text-muted-foreground">Zeichen</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-red-600">{webCrawlSummary.errors}</div>
+                  <div className="text-[10px] text-muted-foreground">Fehler</div>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end pt-2 border-t shrink-0">
+            {webCrawlSummary ? (
+              <Button size="sm" variant="outline" onClick={() => setShowWebCrawlDialog(false)} className="text-xs h-8">
+                Schließen
+              </Button>
+            ) : (
+              <Button size="sm" onClick={startWebCrawl} disabled={webCrawlRunning} className="text-xs h-8 gap-1.5">
+                {webCrawlRunning ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Läuft...
+                  </>
+                ) : (
+                  <>
+                    <Globe className="h-3 w-3" />
+                    WebCrawl starten
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

@@ -187,7 +187,7 @@ export async function GET(request: NextRequest) {
 
         let query = supabase
           .from('news_queue')
-          .select('*', { count: 'exact' })
+          .select('*, daily_repo:daily_repo_id(source_type)', { count: 'exact' })
           .eq('status', status)
 
         // Sorting: newest first, then by score (for pending)
