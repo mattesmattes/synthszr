@@ -177,3 +177,80 @@ export function formatIssuesForDisplay(issues: UrlIssue[]): string {
 
   return `Tracking-URLs gefunden:\n\n${lines.join('\n\n')}`
 }
+
+/**
+ * Sanitize TipTap content by removing or cleaning tracking URLs
+ * - Redirect domains: remove the link mark entirely (keep the text)
+ * - Tracking params: strip the params from the URL
+ * - Tracking paths: remove the link mark entirely (keep the text)
+ * Returns the cleaned content and a list of what was changed
+ */
+export function sanitizeTiptapUrls(content: JSONContent | string): {
+  content: JSONContent
+  changes: string[]
+} {
+  const parsed: JSONContent = typeof content === 'string'
+    ? JSON.parse(content)
+    : JSON.parse(JSON.stringify(content)) // deep clone
+
+  const changes: string[] = []
+
+  function sanitizeNode(node: JSONContent): void {
+    // Clean link marks on text nodes
+    if (node.marks) {
+      node.marks = node.marks.filter(mark => {
+        if (mark.type !== 'link' || !mark.attrs?.href) return true
+
+        const url = mark.attrs.href as string
+        const issue = checkUrl(url)
+        if (!issue) return true // clean URL, keep it
+
+        if (issue.type === 'redirect_domain' || issue.type === 'tracking_path') {
+          // Remove the entire link (keep the text)
+          changes.push(`Entfernt: ${url.slice(0, 80)}`)
+          return false // filter out this mark
+        }
+
+        if (issue.type === 'tracking_param') {
+          // Strip tracking params but keep the link
+          try {
+            const parsed = new URL(url)
+            for (const param of TRACKING_PARAMS) {
+              if (parsed.searchParams.has(param)) {
+                parsed.searchParams.delete(param)
+              }
+            }
+            // Also strip utm_ and other prefixed params
+            const toDelete: string[] = []
+            parsed.searchParams.forEach((_, key) => {
+              const k = key.toLowerCase()
+              if (k.startsWith('utm_') || k.startsWith('mc_') || k.startsWith('fb_') || k.startsWith('__')) {
+                toDelete.push(key)
+              }
+            })
+            for (const key of toDelete) parsed.searchParams.delete(key)
+
+            mark.attrs.href = parsed.toString()
+            changes.push(`Bereinigt: ${url.slice(0, 60)} → ${mark.attrs.href.slice(0, 60)}`)
+          } catch {
+            // Can't parse, remove the link
+            changes.push(`Entfernt (parse error): ${url.slice(0, 80)}`)
+            return false
+          }
+        }
+
+        return true
+      })
+    }
+
+    // Recurse into children
+    if (node.content) {
+      for (const child of node.content) {
+        sanitizeNode(child)
+      }
+    }
+  }
+
+  sanitizeNode(parsed)
+  return { content: parsed, changes }
+}

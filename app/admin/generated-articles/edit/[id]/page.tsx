@@ -27,7 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/client'
 import { use } from 'react'
 import { ensureInitialEditHistory, recordEditVersion } from '@/lib/edit-learning/history'
-import { verifyContentUrls, formatIssuesForDisplay } from '@/lib/utils/url-verifier'
+import { sanitizeTiptapUrls } from '@/lib/utils/url-verifier'
 import type { LearnedPattern } from '@/lib/edit-learning/retrieval'
 
 interface QueueItem {
@@ -496,13 +496,13 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    // Verify URLs before saving
-    const verification = verifyContentUrls(content)
-    if (!verification.isClean) {
-      const message = formatIssuesForDisplay(verification.issues)
-      alert(`⚠️ Speichern abgebrochen!\n\n${message}\n\nBitte bereinige die URLs vor dem Speichern.`)
-      return
+    // Auto-sanitize tracking URLs before saving
+    const { content: sanitizedContent, changes } = sanitizeTiptapUrls(content)
+    if (changes.length > 0) {
+      console.log(`[Edit Article] Auto-sanitized ${changes.length} tracking URLs:`, changes)
+      setContent(sanitizedContent)
     }
+    const contentToSave = changes.length > 0 ? sanitizedContent : content
 
     setSaving(true)
 
@@ -514,7 +514,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     // Record edit version for learning (before saving)
     // This captures the before/after diff for pattern extraction
     try {
-      const result = await recordEditVersion(id, content, supabase)
+      const result = await recordEditVersion(id, contentToSave, supabase)
       if (result?.hasChanges) {
         console.log('[EditLearning] Recorded edit version:', result.version)
       }
@@ -528,7 +528,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       slug,
       excerpt: excerpt || null,
       category,
-      content: JSON.stringify(content),
+      content: JSON.stringify(contentToSave),
       status: published ? 'published' : 'draft',
       updated_at: new Date().toISOString(),
       // Always update with current queue item IDs
