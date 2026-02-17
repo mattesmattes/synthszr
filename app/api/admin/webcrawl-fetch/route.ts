@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
           return
         }
 
-        // BULLETPROOF DEDUP: Check existing gmail_message_ids
+        // Check which emails are already imported (for email save dedup only — NOT for article extraction)
         const incomingGmailIds = emails.map(e => e.id)
         const { data: existingEntries } = await supabase
           .from('daily_repo')
@@ -122,19 +122,10 @@ export async function POST(request: NextRequest) {
           .in('gmail_message_id', incomingGmailIds)
 
         const existingGmailIds = new Set((existingEntries || []).map(e => e.gmail_message_id).filter(Boolean))
-        console.log(`[WebCrawl] ${existingGmailIds.size} already imported, ${emails.length - existingGmailIds.size} new`)
+        const newCount = emails.length - existingGmailIds.size
+        console.log(`[WebCrawl] ${existingGmailIds.size} already imported, ${newCount} new`)
 
-        // Filter to only new emails
-        const newEmails = emails.filter(e => !existingGmailIds.has(e.id))
-
-        if (newEmails.length === 0) {
-          send({ type: 'email', phase: 'processing', item: { title: 'Alle E-Mails bereits importiert', status: 'skipped' } })
-          send({ type: 'complete', phase: 'done', summary: { emails: 0, articles: 0, errors: 0, totalCharacters: 0 } })
-          controller.close()
-          return
-        }
-
-        send({ type: 'email', phase: 'processing', current: 0, total: newEmails.length, item: { title: `${newEmails.length} neue WebCrawl E-Mails gefunden`, status: 'success' } })
+        send({ type: 'email', phase: 'processing', current: 0, total: emails.length, item: { title: `${emails.length} WebCrawl E-Mails (${newCount} neu)`, status: 'success' } })
 
         const todayDate = new Date().toISOString().split('T')[0]
         let processedEmails = 0
@@ -143,15 +134,18 @@ export async function POST(request: NextRequest) {
         let totalCharacters = 0
         const articleUrls: Array<{ url: string; title: string; emailSubject: string }> = []
 
-        // Process each webcrawler email
-        for (let i = 0; i < newEmails.length; i++) {
-          const email = newEmails[i]
+        // Process ALL emails: always extract article links,
+        // but only save the email itself to daily_repo if not already imported.
+        // This ensures re-runs still crawl articles even if the email was saved on a previous run.
+        for (let i = 0; i < emails.length; i++) {
+          const email = emails[i]
+          const isAlreadyImported = existingGmailIds.has(email.id)
 
           send({
             type: 'email',
             phase: 'processing',
             current: i + 1,
-            total: newEmails.length,
+            total: emails.length,
             item: { title: email.subject, from: email.from, status: 'processing' }
           })
 
@@ -170,7 +164,6 @@ export async function POST(request: NextRequest) {
             console.log(`[WebCrawl] "${email.subject}" - ${parsed.links.length} total HTML links, ${links.length} article links after filtering`)
 
             // FALLBACK: If HTML parsing found no article links, extract URLs from plain text
-            // Webcrawler emails often list URLs as plain text without <a> tags
             if (links.length === 0) {
               const plainText = parsed.plainText || email.textBody || ''
               const plainTextLinks = extractUrlsFromPlainText(plainText)
@@ -182,6 +175,7 @@ export async function POST(request: NextRequest) {
               }
             }
 
+            // Always collect article links (even from already-imported emails)
             for (const link of links) {
               articleUrls.push({
                 url: link.url,
@@ -190,30 +184,35 @@ export async function POST(request: NextRequest) {
               })
             }
 
-            // Save the webcrawl email itself to daily_repo
-            await supabase
-              .from('daily_repo')
-              .insert({
-                source_type: 'webcrawl',
-                source_email: email.from,
-                source_url: null,
-                title: email.subject,
-                content: parsed.plainText,
-                raw_html: htmlContent,
-                newsletter_date: todayDate,
-                email_received_at: email.date.toISOString(),
-                gmail_message_id: email.id,
-              })
-
-            processedEmails++
-            totalCharacters += parsed.plainText?.length || 0
+            // Only save the email itself if not already in daily_repo
+            if (!isAlreadyImported) {
+              await supabase
+                .from('daily_repo')
+                .insert({
+                  source_type: 'webcrawl',
+                  source_email: email.from,
+                  source_url: null,
+                  title: email.subject,
+                  content: parsed.plainText,
+                  raw_html: htmlContent,
+                  newsletter_date: todayDate,
+                  email_received_at: email.date.toISOString(),
+                  gmail_message_id: email.id,
+                })
+              processedEmails++
+              totalCharacters += parsed.plainText?.length || 0
+            }
 
             send({
               type: 'email',
               phase: 'processing',
               current: i + 1,
-              total: newEmails.length,
-              item: { title: `${email.subject} (${links.length} Links)`, from: email.from, status: 'success' }
+              total: emails.length,
+              item: {
+                title: `${email.subject} (${links.length} Links${isAlreadyImported ? ', Mail bereits gespeichert' : ''})`,
+                from: email.from,
+                status: 'success'
+              }
             })
           } catch (err) {
             errors++
@@ -221,7 +220,7 @@ export async function POST(request: NextRequest) {
               type: 'email',
               phase: 'processing',
               current: i + 1,
-              total: newEmails.length,
+              total: emails.length,
               item: {
                 title: email.subject,
                 from: email.from,
