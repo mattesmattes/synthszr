@@ -1,51 +1,170 @@
 import { NextRequest } from 'next/server'
 import { GmailClient } from '@/lib/gmail/client'
-import { parseNewsletterHtml, type ExtractedLink } from '@/lib/email/parser'
-import { extractArticleContent, isLikelyArticleUrl, isNonArticleLinkText } from '@/lib/scraper/article-extractor'
+import * as cheerio from 'cheerio'
 import { createClient } from '@/lib/supabase/server'
 import { isAdminRequest } from '@/lib/auth/session'
 import { backfillMissingEmbeddings } from '@/lib/embeddings/backfill'
 
-/**
- * Extract URLs from plain text content (fallback when HTML has no <a> tags).
- * Webcrawler emails often list URLs as plain text without HTML wrapping.
- */
-function extractUrlsFromPlainText(text: string): ExtractedLink[] {
-  const urlRegex = /https?:\/\/[^\s<>"')\]]+/gi
-  const matches = text.match(urlRegex) || []
-  const seen = new Set<string>()
-  const links: ExtractedLink[] = []
-
-  for (const rawUrl of matches) {
-    // Clean trailing punctuation that's likely not part of the URL
-    const url = rawUrl.replace(/[.,;:!?)>\]]+$/, '')
-    if (seen.has(url)) continue
-    seen.add(url)
-    links.push({ url, text: url, type: 'article' })
-  }
-
-  return links
-}
-
-// BULLETPROOF APPROACH: Always fetch last 48h, deduplicate by Gmail message ID
+// Always fetch last 48h, deduplicate at article level by source_url/title
 const FETCH_WINDOW_HOURS = 48
 
-// Node.js runtime for jsdom compatibility
+// Node.js runtime for cheerio compatibility
 export const runtime = 'nodejs'
 
-// Article processing constants
-const MAX_ARTICLES_PER_RUN = 100
-const BATCH_SIZE = 5
+interface ParsedArticle {
+  title: string
+  content: string
+  sourceUrl: string | null
+  sourceIdentifier: string | null
+  priority: string | null
+}
+
+/**
+ * Convert HTML to text preserving paragraph structure.
+ * Unlike cheerio's .text() which collapses ALL whitespace,
+ * this inserts newlines for block-level elements.
+ */
+function htmlToStructuredText(html: string): string {
+  const $ = cheerio.load(html)
+  $('script, style, head').remove()
+
+  // Replace <br> with newlines
+  $('br').replaceWith('\n')
+
+  // Add newlines around block elements
+  $('p, div, h1, h2, h3, h4, h5, h6, li, tr, blockquote, hr').each((_, el) => {
+    $(el).prepend('\n').append('\n')
+  })
+
+  const text = ($('body').text() || $.root().text())
+    .replace(/[ \t]+/g, ' ')       // collapse horizontal whitespace only
+    .replace(/\n[ \t]+/g, '\n')    // trim leading whitespace on lines
+    .replace(/[ \t]+\n/g, '\n')    // trim trailing whitespace on lines
+    .replace(/\n{3,}/g, '\n\n')    // max 2 consecutive newlines
+    .trim()
+
+  return text
+}
+
+/**
+ * Extract all "Artikel lesen" link URLs from the HTML in order.
+ * These are the source URLs for each article.
+ */
+function extractReadMoreLinks(html: string): string[] {
+  const $ = cheerio.load(html)
+  const urls: string[] = []
+
+  $('a').each((_, el) => {
+    const text = $(el).text().trim()
+    if (/artikel\s*lesen/i.test(text)) {
+      const href = $(el).attr('href')
+      if (href) urls.push(href)
+    }
+  })
+
+  return urls
+}
+
+/**
+ * Parse a webcrawler email into individual article blocks.
+ * Each article ends with an "Artikel lesen →" link.
+ * Articles typically have: priority label, title, excerpt, metadata (📅📰🏷️), body text.
+ */
+function parseWebcrawlerArticles(
+  htmlContent: string,
+  textBody: string
+): ParsedArticle[] {
+  // Extract source URLs from "Artikel lesen" links (preserving order)
+  const sourceUrls = extractReadMoreLinks(htmlContent)
+
+  // Get structured text with preserved line breaks
+  const text = htmlToStructuredText(htmlContent) || textBody || ''
+
+  if (!text) return []
+
+  // Split text by "Artikel lesen" markers
+  const sections = text.split(/Artikel\s*lesen\s*→?\s*/i)
+
+  // Need at least 2 sections (1 article + footer)
+  if (sections.length < 2) {
+    console.log('[WebCrawl] No "Artikel lesen" markers found in email')
+    return []
+  }
+
+  // Last section is footer/trailing text — drop it
+  const articleSections = sections.slice(0, -1)
+
+  console.log(`[WebCrawl] Found ${articleSections.length} article sections, ${sourceUrls.length} source URLs`)
+
+  const articles: ParsedArticle[] = []
+
+  for (let i = 0; i < articleSections.length; i++) {
+    let section = articleSections[i]
+
+    // For the first section, skip intro text before the first priority label
+    if (i === 0) {
+      const priorityIdx = section.search(/^.*\b(?:HIGH|MEDIUM|LOW)\b/im)
+      if (priorityIdx > 0) {
+        section = section.substring(priorityIdx)
+      }
+    }
+
+    const lines = section.split('\n').map(l => l.trim()).filter(Boolean)
+    if (lines.length < 2) continue
+
+    let lineIdx = 0
+    let priority: string | null = null
+
+    // Check for priority label (HIGH/MEDIUM/LOW, possibly with emoji prefix)
+    if (lines[lineIdx]?.match(/\b(HIGH|MEDIUM|LOW)\b/i)) {
+      const m = lines[lineIdx].match(/\b(HIGH|MEDIUM|LOW)\b/i)
+      priority = m ? m[1].toUpperCase() : null
+      lineIdx++
+    }
+
+    // Title
+    const title = lines[lineIdx] || 'Untitled'
+    lineIdx++
+
+    // Excerpt (line before metadata — skip if it looks like metadata)
+    let excerpt = ''
+    if (lineIdx < lines.length && !lines[lineIdx]?.includes('📅')) {
+      excerpt = lines[lineIdx]
+      lineIdx++
+    }
+
+    // Metadata line: 📅 date | 📰 source | 🏷️ category
+    let sourceIdentifier: string | null = null
+    if (lineIdx < lines.length && lines[lineIdx]?.includes('📅')) {
+      const metaLine = lines[lineIdx]
+      const sourceMatch = metaLine.match(/📰\s*([^|📅🏷️]+)/)
+      sourceIdentifier = sourceMatch ? sourceMatch[1].trim() : null
+      lineIdx++
+    }
+
+    // Content: everything remaining
+    const bodyContent = lines.slice(lineIdx).join('\n').trim()
+    const fullContent = excerpt ? `${excerpt}\n\n${bodyContent}` : bodyContent
+
+    if (fullContent.length < 50) continue // Skip empty/tiny articles
+
+    articles.push({
+      title,
+      content: fullContent,
+      sourceUrl: sourceUrls[i] || null,
+      sourceIdentifier,
+      priority,
+    })
+  }
+
+  return articles
+}
 
 interface ProgressEvent {
   type: 'start' | 'email' | 'article' | 'embedding_backfill' | 'complete' | 'error'
   phase: 'fetching' | 'processing' | 'extracting' | 'embedding_backfill' | 'done'
   current?: number
   total?: number
-  batch?: {
-    current: number
-    total: number
-  }
   item?: {
     title: string
     from?: string
@@ -114,32 +233,17 @@ export async function POST(request: NextRequest) {
           return
         }
 
-        // Check which emails are already imported (for email save dedup only — NOT for article extraction)
-        const incomingGmailIds = emails.map(e => e.id)
-        const { data: existingEntries } = await supabase
-          .from('daily_repo')
-          .select('gmail_message_id')
-          .in('gmail_message_id', incomingGmailIds)
+        send({ type: 'email', phase: 'processing', current: 0, total: emails.length, item: { title: `${emails.length} WebCrawl E-Mails gefunden`, status: 'success' } })
 
-        const existingGmailIds = new Set((existingEntries || []).map(e => e.gmail_message_id).filter(Boolean))
-        const newCount = emails.length - existingGmailIds.size
-        console.log(`[WebCrawl] ${existingGmailIds.size} already imported, ${newCount} new`)
-
-        send({ type: 'email', phase: 'processing', current: 0, total: emails.length, item: { title: `${emails.length} WebCrawl E-Mails (${newCount} neu)`, status: 'success' } })
-
-        const todayDate = new Date().toISOString().split('T')[0]
         let processedEmails = 0
         let processedArticles = 0
         let errors = 0
         let totalCharacters = 0
-        const articleUrls: Array<{ url: string; title: string; emailSubject: string }> = []
 
-        // Process ALL emails: always extract article links,
-        // but only save the email itself to daily_repo if not already imported.
-        // This ensures re-runs still crawl articles even if the email was saved on a previous run.
+        // Process each webcrawler email: parse articles directly from content
         for (let i = 0; i < emails.length; i++) {
           const email = emails[i]
-          const isAlreadyImported = existingGmailIds.has(email.id)
+          const emailDate = email.date.toISOString().split('T')[0]
 
           send({
             type: 'email',
@@ -151,57 +255,106 @@ export async function POST(request: NextRequest) {
 
           try {
             const htmlContent = email.htmlBody || email.textBody || ''
-            const parsed = parseNewsletterHtml(htmlContent, email.subject, email.from, email.date)
 
-            // Extract article links from HTML <a> tags
-            let links = parsed.links.filter(link => {
-              if (link.type !== 'article') return false
-              if (!isLikelyArticleUrl(link.url)) return false
-              if (isNonArticleLinkText(link.text)) return false
-              return true
-            })
+            // Parse webcrawler email into individual articles
+            const articles = parseWebcrawlerArticles(htmlContent, email.textBody || '')
 
-            console.log(`[WebCrawl] "${email.subject}" - ${parsed.links.length} total HTML links, ${links.length} article links after filtering`)
+            console.log(`[WebCrawl] "${email.subject}" → ${articles.length} Artikel extrahiert`)
 
-            // FALLBACK: If HTML parsing found no article links, extract URLs from plain text
-            if (links.length === 0) {
-              const plainText = parsed.plainText || email.textBody || ''
-              const plainTextLinks = extractUrlsFromPlainText(plainText)
-                .filter(link => isLikelyArticleUrl(link.url))
+            let emailArticlesSaved = 0
 
-              if (plainTextLinks.length > 0) {
-                console.log(`[WebCrawl] FALLBACK: Found ${plainTextLinks.length} URLs in plain text`)
-                links = plainTextLinks
+            // Save each article to daily_repo
+            for (let j = 0; j < articles.length; j++) {
+              const article = articles[j]
+
+              send({
+                type: 'article',
+                phase: 'extracting',
+                current: j + 1,
+                total: articles.length,
+                item: { title: article.title, url: article.sourceUrl || undefined, status: 'processing' }
+              })
+
+              try {
+                // Dedup by source URL if available
+                if (article.sourceUrl) {
+                  const { data: existing } = await supabase
+                    .from('daily_repo')
+                    .select('id')
+                    .eq('source_url', article.sourceUrl)
+                    .single()
+
+                  if (existing) {
+                    send({
+                      type: 'article',
+                      phase: 'extracting',
+                      current: j + 1,
+                      total: articles.length,
+                      item: { title: article.title, url: article.sourceUrl || undefined, status: 'skipped' }
+                    })
+                    continue
+                  }
+                }
+
+                // Fallback dedup by title + source_type
+                const { data: existingByTitle } = await supabase
+                  .from('daily_repo')
+                  .select('id')
+                  .eq('title', article.title)
+                  .eq('source_type', 'webcrawl')
+                  .single()
+
+                if (existingByTitle) {
+                  send({
+                    type: 'article',
+                    phase: 'extracting',
+                    current: j + 1,
+                    total: articles.length,
+                    item: { title: article.title, status: 'skipped' }
+                  })
+                  continue
+                }
+
+                await supabase
+                  .from('daily_repo')
+                  .insert({
+                    source_type: 'webcrawl',
+                    source_url: article.sourceUrl,
+                    source_email: article.sourceIdentifier || email.from,
+                    title: article.title,
+                    content: article.content,
+                    newsletter_date: emailDate,
+                    email_received_at: email.date.toISOString(),
+                  })
+
+                processedArticles++
+                emailArticlesSaved++
+                totalCharacters += article.content.length
+
+                send({
+                  type: 'article',
+                  phase: 'extracting',
+                  current: j + 1,
+                  total: articles.length,
+                  item: { title: article.title, url: article.sourceUrl || undefined, status: 'success' }
+                })
+              } catch (err) {
+                errors++
+                send({
+                  type: 'article',
+                  phase: 'extracting',
+                  current: j + 1,
+                  total: articles.length,
+                  item: {
+                    title: article.title,
+                    status: 'error',
+                    error: err instanceof Error ? err.message : 'Fehler beim Speichern'
+                  }
+                })
               }
             }
 
-            // Always collect article links (even from already-imported emails)
-            for (const link of links) {
-              articleUrls.push({
-                url: link.url,
-                title: link.text || 'Unbekannter Artikel',
-                emailSubject: email.subject
-              })
-            }
-
-            // Only save the email itself if not already in daily_repo
-            if (!isAlreadyImported) {
-              await supabase
-                .from('daily_repo')
-                .insert({
-                  source_type: 'webcrawl',
-                  source_email: email.from,
-                  source_url: null,
-                  title: email.subject,
-                  content: parsed.plainText,
-                  raw_html: htmlContent,
-                  newsletter_date: todayDate,
-                  email_received_at: email.date.toISOString(),
-                  gmail_message_id: email.id,
-                })
-              processedEmails++
-              totalCharacters += parsed.plainText?.length || 0
-            }
+            processedEmails++
 
             send({
               type: 'email',
@@ -209,7 +362,7 @@ export async function POST(request: NextRequest) {
               current: i + 1,
               total: emails.length,
               item: {
-                title: `${email.subject} (${links.length} Links${isAlreadyImported ? ', Mail bereits gespeichert' : ''})`,
+                title: `${email.subject} (${articles.length} Artikel, ${emailArticlesSaved} neu)`,
                 from: email.from,
                 status: 'success'
               }
@@ -232,120 +385,7 @@ export async function POST(request: NextRequest) {
         }
 
         // ========================================
-        // PHASE 2: Crawl articles from webcrawler links
-        // ========================================
-        const articlesToProcess = articleUrls.slice(0, MAX_ARTICLES_PER_RUN)
-
-        if (articlesToProcess.length > 0) {
-          const totalBatches = Math.ceil(articlesToProcess.length / BATCH_SIZE)
-          send({
-            type: 'article',
-            phase: 'extracting',
-            current: 0,
-            total: articlesToProcess.length,
-            item: { title: `Artikel werden extrahiert (${totalBatches} Batches)...`, status: 'processing' }
-          })
-
-          for (let batchStart = 0; batchStart < articlesToProcess.length; batchStart += BATCH_SIZE) {
-            const batch = articlesToProcess.slice(batchStart, batchStart + BATCH_SIZE)
-            const batchNum = Math.floor(batchStart / BATCH_SIZE) + 1
-
-            const batchResults = await Promise.all(batch.map(async (article, batchIndex) => {
-              const globalIndex = batchStart + batchIndex
-              try {
-                // Check if article URL already exists
-                const { data: existingArticle } = await supabase
-                  .from('daily_repo')
-                  .select('id')
-                  .eq('source_url', article.url)
-                  .single()
-
-                if (existingArticle) {
-                  return { globalIndex, article, status: 'skipped' as const, title: article.title, url: article.url }
-                }
-
-                const extracted = await extractArticleContent(article.url)
-
-                if (extracted && extracted.content) {
-                  const resolvedUrl = extracted.finalUrl || article.url
-
-                  // Check resolved URL
-                  if (!isLikelyArticleUrl(resolvedUrl)) {
-                    return {
-                      globalIndex, article, status: 'skipped' as const,
-                      title: extracted.title || article.title, url: resolvedUrl,
-                      error: 'Resolved URL is not an article'
-                    }
-                  }
-
-                  // Check if resolved URL exists
-                  if (extracted.finalUrl) {
-                    const { data: existingResolved } = await supabase
-                      .from('daily_repo')
-                      .select('id')
-                      .eq('source_url', resolvedUrl)
-                      .single()
-
-                    if (existingResolved) {
-                      return { globalIndex, article, status: 'skipped' as const, title: extracted.title || article.title, url: resolvedUrl }
-                    }
-                  }
-
-                  await supabase
-                    .from('daily_repo')
-                    .insert({
-                      source_type: 'webcrawl',
-                      source_url: resolvedUrl,
-                      source_email: null,
-                      title: extracted.title || article.title,
-                      content: extracted.content,
-                      newsletter_date: todayDate,
-                      email_received_at: new Date().toISOString(),
-                    })
-
-                  return {
-                    globalIndex, article, status: 'success' as const,
-                    title: extracted.title || article.title, url: resolvedUrl,
-                    contentLength: extracted.content.length
-                  }
-                } else {
-                  return { globalIndex, article, status: 'error' as const, title: article.title, url: article.url, error: 'Kein Inhalt extrahiert' }
-                }
-              } catch (err) {
-                return {
-                  globalIndex, article, status: 'error' as const,
-                  title: article.title, url: article.url,
-                  error: err instanceof Error ? err.message : 'Extraction failed'
-                }
-              }
-            }))
-
-            for (const result of batchResults) {
-              if (result.status === 'success') {
-                processedArticles++
-                totalCharacters += result.contentLength || 0
-              } else if (result.status === 'error') {
-                errors++
-              }
-              send({
-                type: 'article',
-                phase: 'extracting',
-                current: result.globalIndex + 1,
-                total: articlesToProcess.length,
-                batch: { current: batchNum, total: totalBatches },
-                item: {
-                  title: result.title,
-                  url: result.url,
-                  status: result.status,
-                  error: result.error
-                }
-              })
-            }
-          }
-        }
-
-        // ========================================
-        // PHASE 3: Generate missing embeddings
+        // PHASE 2: Generate missing embeddings
         // ========================================
         send({
           type: 'embedding_backfill',
