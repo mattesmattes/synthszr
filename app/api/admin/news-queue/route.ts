@@ -313,8 +313,8 @@ export async function POST(request: NextRequest) {
         // originality_score (0-10) -> synthesis_score (0-10)
         // relevance_score (0-10) -> relevance_score (0-10)
         // uniqueness_score calculated separately (default 5)
-        // Webcrawl articles: cap all scores at 7 (max total_score = 7.0)
-        const WEBCRAWL_SCORE_CAP = 7
+        // Webcrawl articles: cap all scores at 5 (max total_score = 5.0)
+        const WEBCRAWL_SCORE_CAP = 5
         const items = candidates.map(c => {
           const repoData = repoDataMap.get(c.source_item_id)
           const isWebcrawl = repoData?.sourceType === 'webcrawl'
