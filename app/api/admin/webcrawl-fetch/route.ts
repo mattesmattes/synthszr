@@ -122,13 +122,18 @@ function parseWebcrawlerArticles(
       lineIdx++
     }
 
+    // Skip URL lines that may appear before the title (source links in the HTML)
+    while (lineIdx < lines.length && /^https?:\/\//i.test(lines[lineIdx])) {
+      lineIdx++
+    }
+
     // Title
     const title = lines[lineIdx] || 'Untitled'
     lineIdx++
 
-    // Excerpt (line before metadata — skip if it looks like metadata)
+    // Excerpt (line before metadata — skip if it looks like metadata or a URL)
     let excerpt = ''
-    if (lineIdx < lines.length && !lines[lineIdx]?.includes('📅')) {
+    if (lineIdx < lines.length && !lines[lineIdx]?.includes('📅') && !/^https?:\/\//i.test(lines[lineIdx])) {
       excerpt = lines[lineIdx]
       lineIdx++
     }
@@ -142,8 +147,9 @@ function parseWebcrawlerArticles(
       lineIdx++
     }
 
-    // Content: everything remaining
-    const bodyContent = lines.slice(lineIdx).join('\n').trim()
+    // Content: everything remaining (filter out standalone URL lines)
+    const bodyLines = lines.slice(lineIdx).filter(l => !/^https?:\/\//i.test(l))
+    const bodyContent = bodyLines.join('\n').trim()
     const fullContent = excerpt ? `${excerpt}\n\n${bodyContent}` : bodyContent
 
     if (fullContent.length < 50) continue // Skip empty/tiny articles
