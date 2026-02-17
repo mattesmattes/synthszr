@@ -1,10 +1,31 @@
 import { NextRequest } from 'next/server'
 import { GmailClient } from '@/lib/gmail/client'
-import { parseNewsletterHtml } from '@/lib/email/parser'
+import { parseNewsletterHtml, type ExtractedLink } from '@/lib/email/parser'
 import { extractArticleContent, isLikelyArticleUrl, isNonArticleLinkText } from '@/lib/scraper/article-extractor'
 import { createClient } from '@/lib/supabase/server'
 import { isAdminRequest } from '@/lib/auth/session'
 import { backfillMissingEmbeddings } from '@/lib/embeddings/backfill'
+
+/**
+ * Extract URLs from plain text content (fallback when HTML has no <a> tags).
+ * Webcrawler emails often list URLs as plain text without HTML wrapping.
+ */
+function extractUrlsFromPlainText(text: string): ExtractedLink[] {
+  const urlRegex = /https?:\/\/[^\s<>"')\]]+/gi
+  const matches = text.match(urlRegex) || []
+  const seen = new Set<string>()
+  const links: ExtractedLink[] = []
+
+  for (const rawUrl of matches) {
+    // Clean trailing punctuation that's likely not part of the URL
+    const url = rawUrl.replace(/[.,;:!?)>\]]+$/, '')
+    if (seen.has(url)) continue
+    seen.add(url)
+    links.push({ url, text: url, type: 'article' })
+  }
+
+  return links
+}
 
 // BULLETPROOF APPROACH: Always fetch last 48h, deduplicate by Gmail message ID
 const FETCH_WINDOW_HOURS = 48
@@ -138,15 +159,28 @@ export async function POST(request: NextRequest) {
             const htmlContent = email.htmlBody || email.textBody || ''
             const parsed = parseNewsletterHtml(htmlContent, email.subject, email.from, email.date)
 
-            // Extract article links
-            const links = parsed.links.filter(link => {
+            // Extract article links from HTML <a> tags
+            let links = parsed.links.filter(link => {
               if (link.type !== 'article') return false
               if (!isLikelyArticleUrl(link.url)) return false
               if (isNonArticleLinkText(link.text)) return false
               return true
             })
 
-            console.log(`[WebCrawl] "${email.subject}" - ${links.length} article links after filtering`)
+            console.log(`[WebCrawl] "${email.subject}" - ${parsed.links.length} total HTML links, ${links.length} article links after filtering`)
+
+            // FALLBACK: If HTML parsing found no article links, extract URLs from plain text
+            // Webcrawler emails often list URLs as plain text without <a> tags
+            if (links.length === 0) {
+              const plainText = parsed.plainText || email.textBody || ''
+              const plainTextLinks = extractUrlsFromPlainText(plainText)
+                .filter(link => isLikelyArticleUrl(link.url))
+
+              if (plainTextLinks.length > 0) {
+                console.log(`[WebCrawl] FALLBACK: Found ${plainTextLinks.length} URLs in plain text`)
+                links = plainTextLinks
+              }
+            }
 
             for (const link of links) {
               articleUrls.push({
