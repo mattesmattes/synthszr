@@ -295,31 +295,38 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'candidates array required' }, { status: 400 })
         }
 
-        // Fetch content and email_received_at from daily_repo for all candidates
+        // Fetch content, email_received_at, and source_type from daily_repo
         const supabase = await createClient()
         const sourceItemIds = candidates.map(c => c.source_item_id).filter(Boolean)
         const { data: repoItems } = await supabase
           .from('daily_repo')
-          .select('id, content, email_received_at')
+          .select('id, content, email_received_at, source_type')
           .in('id', sourceItemIds)
 
-        const repoDataMap = new Map(repoItems?.map(r => [r.id, { content: r.content, emailReceivedAt: r.email_received_at }]) || [])
+        const repoDataMap = new Map(repoItems?.map(r => [r.id, {
+          content: r.content,
+          emailReceivedAt: r.email_received_at,
+          sourceType: r.source_type
+        }]) || [])
 
         // Map synthesis scores to queue scores
         // originality_score (0-10) -> synthesis_score (0-10)
         // relevance_score (0-10) -> relevance_score (0-10)
         // uniqueness_score calculated separately (default 5)
+        // Webcrawl articles: cap all scores at 7 (max total_score = 7.0)
+        const WEBCRAWL_SCORE_CAP = 7
         const items = candidates.map(c => {
           const repoData = repoDataMap.get(c.source_item_id)
+          const isWebcrawl = repoData?.sourceType === 'webcrawl'
           return {
             dailyRepoId: c.source_item_id,
             title: c.title,
             content: repoData?.content || undefined,
             sourceEmail: c.source_identifier,
             sourceUrl: c.source_url,
-            synthesisScore: c.originality_score,
-            relevanceScore: c.relevance_score,
-            uniquenessScore: 5, // Default, can be calculated later
+            synthesisScore: isWebcrawl ? Math.min(c.originality_score, WEBCRAWL_SCORE_CAP) : c.originality_score,
+            relevanceScore: isWebcrawl ? Math.min(c.relevance_score, WEBCRAWL_SCORE_CAP) : c.relevance_score,
+            uniquenessScore: isWebcrawl ? Math.min(5, WEBCRAWL_SCORE_CAP) : 5,
             emailReceivedAt: repoData?.emailReceivedAt || null
           }
         })
