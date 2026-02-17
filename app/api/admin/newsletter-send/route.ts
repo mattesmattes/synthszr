@@ -227,6 +227,21 @@ export async function POST(request: NextRequest) {
       previewTextByLocale.set(locale, excerptToUse || '')
     }
 
+    // Create send record BEFORE sending (needed for recipient tracking)
+    const { data: sendRecord } = await supabase
+      .from('newsletter_sends')
+      .insert({
+        post_id: postId,
+        subject,
+        preview_text: previewText,
+        recipient_count: 0,
+        status: 'sending',
+      })
+      .select('id')
+      .single()
+
+    const sendId = sendRecord?.id
+
     // Send emails via Resend batch API (supports up to 100 emails per call)
     // Using large batches = fewer API calls = no rate limit issues + no timeouts
     let successCount = 0
@@ -298,6 +313,17 @@ export async function POST(request: NextRequest) {
               const sentCount = result.data.data?.length ?? batch.length
               successCount += sentCount
               console.log(`[Newsletter] Batch ${batchCount + 1}: Sent ${sentCount}/${batch.length} emails for locale ${locale}`)
+
+              // Store Resend email IDs for webhook tracking
+              if (sendId && result.data.data) {
+                const recipients = result.data.data.map((item: { id: string }, idx: number) => ({
+                  newsletter_send_id: sendId,
+                  subscriber_id: batch[idx].id,
+                  resend_email_id: item.id,
+                  email: batch[idx].email,
+                }))
+                await supabase.from('newsletter_send_recipients').insert(recipients)
+              }
             }
             if (result.error) {
               if (attempt < MAX_RETRIES) {
@@ -322,14 +348,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Log the send
-    await supabase.from('newsletter_sends').insert({
-      post_id: postId,
-      subject,
-      preview_text: previewText,
-      recipient_count: successCount,
-      status: failCount === 0 ? 'sent' : (successCount === 0 ? 'failed' : 'sent'),
-    })
+    // Update the send record with final counts
+    if (sendId) {
+      await supabase
+        .from('newsletter_sends')
+        .update({
+          recipient_count: successCount,
+          status: failCount === 0 ? 'sent' : (successCount === 0 ? 'failed' : 'sent'),
+        })
+        .eq('id', sendId)
+    }
 
     return NextResponse.json({
       success: true,

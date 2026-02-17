@@ -201,8 +201,21 @@ export function AudioPlayer({ postId }: AudioPlayerProps) {
     }
   }, [audioUrl, status, isPlaying])
 
+  // Track podcast play (fire-and-forget, once per page session)
+  const hasTrackedRef = useRef(false)
+
   // Audio event handlers
-  const handlePlay = useCallback(() => setIsPlaying(true), [])
+  const handlePlay = useCallback(() => {
+    setIsPlaying(true)
+    if (!hasTrackedRef.current) {
+      hasTrackedRef.current = true
+      fetch('/api/track/podcast-play', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, locale: 'en' }),
+      }).catch(() => {})
+    }
+  }, [postId])
   const handlePause = useCallback(() => setIsPlaying(false), [])
   const handleEnded = useCallback(() => {
     setIsPlaying(false)
