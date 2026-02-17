@@ -24,12 +24,30 @@ export interface SegmentMetadata {
   text: string
   startTime: number
   durationEstimate: number
+  overlapping?: boolean
+}
+
+export interface OverlapSettings {
+  reaction_ms: number      // Short reactions ("Ja!", "Genau!")
+  interrupt_ms: number     // [interrupting] tag
+  question_ms: number      // Quick response after "?"
+  speaker_ms: number       // Normal speaker change gap
+  overlapping_ms: number   // (overlapping) — both simultaneous
+}
+
+const DEFAULT_OVERLAP: OverlapSettings = {
+  reaction_ms: 250,
+  interrupt_ms: 180,
+  question_ms: 80,
+  speaker_ms: 50,
+  overlapping_ms: 500,
 }
 
 export interface MixerOptions {
   segmentUrls: string[]
   segmentMetadata: SegmentMetadata[]
   sampleRate?: number
+  overlapSettings?: OverlapSettings
 }
 
 export interface MixResult {
@@ -90,50 +108,68 @@ export async function mixToStereo(options: MixerOptions): Promise<MixResult> {
     console.log(`[StereoMixer] Segment ${i} decoded: ${buffer.duration.toFixed(2)}s, ${buffer.numberOfChannels}ch`)
   }
 
-  // Post-process timing for natural overlaps (helps OpenAI which has no emotion tags)
-  // Heuristic: short responses (< 2s) when speaker changes are likely reactions/interruptions
-  const REACTION_THRESHOLD = 2.0  // seconds
-  const REACTION_OVERLAP = 0.15   // 150ms overlap for reactions
-  const INTERRUPTION_OVERLAP = 0.3 // 300ms overlap for very short responses
+  // Overlap settings (from UI or defaults)
+  const overlap = { ...DEFAULT_OVERLAP, ...options.overlapSettings }
 
   const adjustedStartTimes: number[] = []
   let currentTime = 0
+  // Track the latest end time across ALL segments (not just the previous one).
+  // This prevents gaps after overlapping segments: when a short overlap (B)
+  // plays over a longer segment (A), the next segment (C) should anchor to
+  // max(A_end, B_end) instead of only B_end.
+  let latestEndTime = 0
 
   for (let i = 0; i < decodedSegments.length; i++) {
     const segment = decodedSegments[i]
     const meta = segmentMetadata[i]
     const prevMeta = i > 0 ? segmentMetadata[i - 1] : null
-    const prevDuration = i > 0 ? decodedSegments[i - 1].duration : 0
 
     // Check for speaker change
     const speakerChanged = prevMeta && prevMeta.speaker !== meta.speaker
 
-    if (speakerChanged) {
-      // Calculate overlap based on response length
+    if (i === 0) {
+      currentTime = 0
+    } else if (speakerChanged) {
       const responseDuration = segment.duration
-      let overlap = 0
+      let overlapMs = 0
 
-      if (responseDuration < 1.0) {
-        // Very short response (< 1s) - likely an interruption
-        overlap = INTERRUPTION_OVERLAP
-      } else if (responseDuration < REACTION_THRESHOLD) {
-        // Short response (< 2s) - likely a reaction
-        overlap = REACTION_OVERLAP
+      if (meta.overlapping) {
+        // Explicitly marked (overlapping) — always overlap
+        overlapMs = overlap.overlapping_ms
+      } else if (meta.text.toLowerCase().includes('[interrupting]')) {
+        overlapMs = overlap.interrupt_ms
+      } else if (responseDuration < 1.0) {
+        // Very short response — likely a reaction ("Ja!", "Genau!")
+        overlapMs = overlap.reaction_ms
+      } else if (responseDuration < 2.0) {
+        // Short response — moderate overlap
+        overlapMs = overlap.question_ms
+      } else {
+        // Normal speaker change — small gap (positive = gap, not overlap)
+        overlapMs = -overlap.speaker_ms
       }
 
-      // Previous segment end time minus overlap
-      const prevEndTime = adjustedStartTimes[i - 1] + prevDuration
-      currentTime = Math.max(0, prevEndTime - overlap)
+      // Anchor to the latest end time across all previous segments.
+      // This ensures we don't get stuck behind a short overlapping segment
+      // when a longer main segment is still "further ahead" on the timeline.
+      const overlapSec = overlapMs / 1000
+      currentTime = Math.max(0, latestEndTime - overlapSec)
 
-      if (overlap > 0) {
-        console.log(`[StereoMixer] Segment ${i}: applying ${(overlap * 1000).toFixed(0)}ms overlap (${responseDuration.toFixed(1)}s response)`)
+      if (overlapMs > 0) {
+        console.log(`[StereoMixer] Segment ${i}: applying ${overlapMs}ms overlap (${responseDuration.toFixed(1)}s response${meta.overlapping ? ', explicit' : ''})`)
       }
-    } else if (i > 0) {
-      // Same speaker continues - no gap
-      currentTime = adjustedStartTimes[i - 1] + prevDuration
+    } else {
+      // Same speaker continues — no gap
+      currentTime = latestEndTime
     }
 
     adjustedStartTimes.push(currentTime)
+
+    // Update the global latest end time
+    const segmentEnd = currentTime + segment.duration
+    if (segmentEnd > latestEndTime) {
+      latestEndTime = segmentEnd
+    }
   }
 
   // Calculate total duration based on adjusted timing

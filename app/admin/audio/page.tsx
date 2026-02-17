@@ -1108,7 +1108,18 @@ function AudioPage() {
                         <span className="font-medium text-green-600">Stereo Player</span>
                         <span className="text-muted-foreground">(HOST 65% links, GUEST 65% rechts)</span>
                       </div>
-                      <StereoPodcastPlayer segmentUrls={segmentUrls} segmentMetadata={segmentMetadata} title="test-podcast" />
+                      <StereoPodcastPlayer
+                        segmentUrls={segmentUrls}
+                        segmentMetadata={segmentMetadata}
+                        title="test-podcast"
+                        overlapSettings={{
+                          reaction_ms: mixing.overlap_reaction_ms,
+                          interrupt_ms: mixing.overlap_interrupt_ms,
+                          question_ms: mixing.overlap_question_ms,
+                          speaker_ms: mixing.overlap_speaker_ms,
+                          overlapping_ms: mixing.overlap_overlapping_ms,
+                        }}
+                      />
                     </div>
                   ) : (
                     <div className="space-y-3 p-4 bg-muted/50 rounded-lg">

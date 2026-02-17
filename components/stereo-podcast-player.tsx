@@ -9,18 +9,21 @@ import {
   audioBufferToWav,
   downloadWav,
   type SegmentMetadata,
+  type OverlapSettings,
 } from '@/lib/audio/stereo-mixer'
 
 interface StereoPodcastPlayerProps {
   segmentUrls: string[]
   segmentMetadata: SegmentMetadata[]
   title?: string
+  overlapSettings?: OverlapSettings
 }
 
 export function StereoPodcastPlayer({
   segmentUrls,
   segmentMetadata,
   title = 'podcast',
+  overlapSettings,
 }: StereoPodcastPlayerProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -44,6 +47,7 @@ export function StereoPodcastPlayer({
       const result = await mixToStereo({
         segmentUrls,
         segmentMetadata,
+        overlapSettings,
       })
 
       audioBufferRef.current = result.audioBuffer
@@ -57,7 +61,7 @@ export function StereoPodcastPlayer({
     } finally {
       setIsLoading(false)
     }
-  }, [segmentUrls, segmentMetadata])
+  }, [segmentUrls, segmentMetadata, overlapSettings])
 
   const updateProgress = useCallback(() => {
     if (!audioContextRef.current || !isPlaying) return
