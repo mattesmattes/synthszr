@@ -48,6 +48,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="de">
+      <head>
+        <link rel="preconnect" href="https://zadrjbyszvsusukajsbp.supabase.co" />
+        <link rel="dns-prefetch" href="https://zadrjbyszvsusukajsbp.supabase.co" />
+      </head>
       <body className={`${ibmPlexSerif.variable} ${spaceMono.variable} font-serif antialiased`}>
         {children}
         <Analytics />

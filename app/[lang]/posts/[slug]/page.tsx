@@ -152,7 +152,7 @@ export default async function PostPage({ params }: PageProps) {
     // First try by original slug
     let { data: aiPost } = await supabase
       .from("generated_posts")
-      .select("id, title, slug, excerpt, content, category, created_at, cover_image_id, pending_queue_item_ids")
+      .select("id, title, slug, excerpt, content, category, created_at, updated_at, cover_image_id, pending_queue_item_ids")
       .eq("slug", slug)
       .eq("status", "published")
       .single()
@@ -170,7 +170,7 @@ export default async function PostPage({ params }: PageProps) {
       if (translationBySlug?.generated_post_id) {
         const { data: postByTranslatedSlug } = await supabase
           .from("generated_posts")
-          .select("id, title, slug, excerpt, content, category, created_at, cover_image_id, pending_queue_item_ids")
+          .select("id, title, slug, excerpt, content, category, created_at, updated_at, cover_image_id, pending_queue_item_ids")
           .eq("id", translationBySlug.generated_post_id)
           .eq("status", "published")
           .single()
@@ -275,10 +275,21 @@ export default async function PostPage({ params }: PageProps) {
     '@type': 'Article',
     headline: post.title,
     datePublished: post.created_at,
+    ...(post.updated_at && { dateModified: post.updated_at }),
     author: { '@type': 'Organization', name: 'Synthszr' },
     publisher: { '@type': 'Organization', name: 'Synthszr' },
     ...(post.excerpt && { description: post.excerpt }),
     ...(post.cover_image_url && { image: post.cover_image_url }),
+  }
+
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: `https://synthszr.com/${locale}` },
+      { '@type': 'ListItem', position: 2, name: 'Archive', item: `https://synthszr.com/${locale}/archive` },
+      { '@type': 'ListItem', position: 3, name: post.title },
+    ],
   }
 
   return (
@@ -291,6 +302,10 @@ export default async function PostPage({ params }: PageProps) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
       />
 
         <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
