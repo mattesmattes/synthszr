@@ -190,12 +190,12 @@ export async function GET(request: NextRequest) {
           .select('*, daily_repo:daily_repo_id(source_type)', { count: 'exact' })
           .eq('status', status)
 
-        // Sorting: newest first, then by score (for pending)
+        // Sorting: by score first, then newest (for pending)
         // For other statuses: just by score
         if (status === 'pending') {
           query = query
-            .order('queued_at', { ascending: false })
             .order('total_score', { ascending: false })
+            .order('queued_at', { ascending: false })
         } else {
           query = query.order('total_score', { ascending: false })
         }
