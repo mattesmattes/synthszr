@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Eye, Trash2, Plus, RefreshCw, StickyNote, Download, PenLine, Globe } from 'lucide-react'
+import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Eye, Trash2, Plus, RefreshCw, StickyNote, Download, PenLine, Globe, ListTodo } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -45,6 +45,7 @@ export default function DailyRepoPage() {
   const [loadingItems, setLoadingItems] = useState(false)
   const [viewingItem, setViewingItem] = useState<DailyRepoItem | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [queuingId, setQueuingId] = useState<string | null>(null)
   const [showFetchDialog, setShowFetchDialog] = useState(false)
   const [fetchDate, setFetchDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [showManualDialog, setShowManualDialog] = useState(false)
@@ -643,6 +644,40 @@ export default function DailyRepoPage() {
 
                       {/* Actions */}
                       <div className="flex items-center gap-0.5 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={async () => {
+                            setQueuingId(item.id)
+                            try {
+                              const res = await fetch('/api/admin/news-queue', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'add-from-repo', itemIds: [item.id] }),
+                              })
+                              const data = await res.json()
+                              if (data.added > 0) {
+                                alert('Zur News Queue hinzugefügt')
+                              } else if (data.skipped > 0) {
+                                alert('Bereits in der Queue')
+                              } else if (data.errors?.length) {
+                                alert(`Fehler: ${data.errors[0]}`)
+                              }
+                            } catch {
+                              alert('Netzwerkfehler')
+                            }
+                            setQueuingId(null)
+                          }}
+                          disabled={queuingId === item.id}
+                          className="h-7 w-7"
+                          title="Zur News Queue hinzufügen"
+                        >
+                          {queuingId === item.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <ListTodo className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
