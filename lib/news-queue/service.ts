@@ -201,7 +201,6 @@ export async function addToQueue(
               synthesis_score: record.synthesis_score,
               relevance_score: record.relevance_score,
               uniqueness_score: record.uniqueness_score,
-              total_score: (record.synthesis_score * 0.4) + (record.relevance_score * 0.3) + (record.uniqueness_score * 0.3)
             })
             .eq('daily_repo_id', item.dailyRepoId)
             .eq('status', 'pending')  // Only update pending items
