@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { ArrowLeft, Mail, ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getTranslations } from '@/lib/i18n/get-translations'
+import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import type { LanguageCode } from '@/lib/types'
+import type { Metadata } from 'next'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +18,16 @@ interface NewsletterSource {
 
 interface PageProps {
   params: Promise<{ lang: string }>
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { lang } = await params
+  return generateLocalizedMetadata({
+    title: 'Quellen — Synthszr',
+    description: 'Newsletter-Quellen für die tägliche Analyse',
+    path: '/sources',
+    locale: lang as LanguageCode,
+  })
 }
 
 // Try to derive a website URL from email domain

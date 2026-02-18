@@ -10,10 +10,13 @@ interface LocalizedMetadataOptions {
   path: string  // Path without locale prefix, e.g., '/posts/my-article'
   availableLocales?: LanguageCode[]  // Which locales have translations
   noIndex?: boolean
+  locale?: LanguageCode
+  ogImage?: string             // Absolute URL to OG image
+  ogType?: 'website' | 'article'
 }
 
 /**
- * Generates metadata with hreflang alternates for SEO
+ * Generates metadata with hreflang alternates, OG and Twitter tags for SEO
  */
 export function generateLocalizedMetadata({
   title,
@@ -21,18 +24,29 @@ export function generateLocalizedMetadata({
   path,
   availableLocales = ALL_LOCALES,
   noIndex = false,
+  locale,
+  ogImage,
+  ogType = 'website',
 }: LocalizedMetadataOptions): Metadata {
   const cleanPath = path === '/' ? '' : path
 
   // Build language alternates
   const languages: Record<string, string> = {}
 
-  for (const locale of availableLocales) {
-    languages[locale] = `${BASE_URL}/${locale}${cleanPath}`
+  for (const loc of availableLocales) {
+    languages[loc] = `${BASE_URL}/${loc}${cleanPath}`
   }
 
   // x-default points to the default locale
   languages['x-default'] = `${BASE_URL}/${DEFAULT_LOCALE}${cleanPath}`
+
+  const url = locale
+    ? `${BASE_URL}/${locale}${cleanPath}`
+    : `${BASE_URL}/${DEFAULT_LOCALE}${cleanPath}`
+
+  const ogLocale = locale
+    ? (locale === 'de' ? 'de_DE' : locale === 'en' ? 'en_US' : `${locale}_${locale.toUpperCase()}`)
+    : 'de_DE'
 
   return {
     title,
@@ -40,6 +54,23 @@ export function generateLocalizedMetadata({
     alternates: {
       canonical: `${BASE_URL}/${DEFAULT_LOCALE}${cleanPath}`,
       languages,
+    },
+    openGraph: {
+      title,
+      description: description || undefined,
+      url,
+      locale: ogLocale,
+      type: ogType,
+      siteName: 'Synthszr',
+      ...(ogImage && {
+        images: [{ url: ogImage, width: 1200, height: 630 }],
+      }),
+    },
+    twitter: {
+      card: ogImage ? 'summary_large_image' : 'summary',
+      title,
+      description: description || undefined,
+      ...(ogImage && { images: [ogImage] }),
     },
     ...(noIndex && {
       robots: {
@@ -56,30 +87,4 @@ export function generateLocalizedMetadata({
 export function getCanonicalUrl(locale: LanguageCode, path: string): string {
   const cleanPath = path === '/' ? '' : path
   return `${BASE_URL}/${locale}${cleanPath}`
-}
-
-/**
- * Generates OpenGraph metadata with locale
- */
-export function generateOGMetadata(
-  locale: LanguageCode,
-  title: string,
-  description?: string,
-  imagePath?: string
-) {
-  return {
-    title,
-    description,
-    locale: locale === 'de' ? 'de_DE' : locale === 'en' ? 'en_US' : `${locale}_${locale.toUpperCase()}`,
-    type: 'website',
-    ...(imagePath && {
-      images: [
-        {
-          url: `${BASE_URL}${imagePath}`,
-          width: 1200,
-          height: 630,
-        },
-      ],
-    }),
-  }
 }

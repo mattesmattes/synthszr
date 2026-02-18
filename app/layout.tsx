@@ -19,9 +19,9 @@ const spaceMono = Space_Mono({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://synthszr.com'),
   title: "Synthszr — AI is about Synthesis not Efficiency.",
   description: "Exploring the intersection of business, design and technology in the age of AI",
-  generator: "v0.app",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "32x32" },
@@ -31,6 +31,14 @@ export const metadata: Metadata = {
     ],
     apple: "/apple-touch-icon.png",
   },
+  openGraph: {
+    type: 'website',
+    siteName: 'Synthszr',
+    locale: 'de_DE',
+  },
+  twitter: {
+    card: 'summary_large_image',
+  },
 }
 
 export default function RootLayout({
@@ -39,7 +47,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="de">
       <body className={`${ibmPlexSerif.variable} ${spaceMono.variable} font-serif antialiased`}>
         {children}
         <Analytics />

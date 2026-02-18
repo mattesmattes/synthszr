@@ -43,7 +43,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const sitemap: MetadataRoute.Sitemap = []
 
   // Static pages - available in all active languages
-  const staticPages = ['', '/archive', '/why', '/datenschutz', '/impressum']
+  const staticPages = ['', '/archive', '/why', '/datenschutz', '/impressum', '/companies', '/sources']
 
   for (const page of staticPages) {
     const languages: Record<string, string> = {}

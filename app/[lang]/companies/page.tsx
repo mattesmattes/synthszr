@@ -3,7 +3,9 @@ import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { CompaniesListClient } from '@/app/companies/companies-list-client'
 import { getTranslations } from '@/lib/i18n/get-translations'
+import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import type { LanguageCode } from '@/lib/types'
+import type { Metadata } from 'next'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +25,16 @@ interface CompanyAggregation {
 
 interface PageProps {
   params: Promise<{ lang: string }>
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { lang } = await params
+  return generateLocalizedMetadata({
+    title: 'Companies — Synthszr',
+    description: 'Alle erwähnten Unternehmen mit Synthszr-Bewertungen',
+    path: '/companies',
+    locale: lang as LanguageCode,
+  })
 }
 
 export default async function CompaniesPage({ params }: PageProps) {

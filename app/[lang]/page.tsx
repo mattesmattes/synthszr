@@ -38,6 +38,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: "Synthszr — AI is about Synthesis not Efficiency.",
     description: t['meta.description'] || "Exploring the intersection of business, design and technology in the age of AI",
     path: '/',
+    locale: locale,
+    ogType: 'website',
   })
 }
 
@@ -158,8 +160,20 @@ export default async function Page({ params }: PageProps) {
     .slice(1)
     .filter(post => new Date(post.created_at) >= sevenDaysAgo)
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'Synthszr',
+    url: 'https://synthszr.com',
+    description: t['meta.description'] || 'Exploring the intersection of business, design and technology in the age of AI',
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* 704px max-width to match cover image and post pages */}
       <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
 

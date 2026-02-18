@@ -47,12 +47,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const supabase = await createClient()
 
   // Try to find post
-  let post: { title: string; excerpt: string | null } | null = null
+  let post: { title: string; excerpt: string | null; cover_image_url?: string | null; created_at?: string } | null = null
   let postId: string | null = null
 
   const { data: manualPost } = await supabase
     .from("posts")
-    .select("title, excerpt")
+    .select("title, excerpt, cover_image_url, created_at")
     .eq("slug", slug)
     .eq("published", true)
     .single()
@@ -63,13 +63,23 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     // Try by original slug
     const { data: aiPost } = await supabase
       .from("generated_posts")
-      .select("id, title, excerpt")
+      .select("id, title, excerpt, cover_image_id, created_at")
       .eq("slug", slug)
       .eq("status", "published")
       .single()
 
     if (aiPost) {
-      post = aiPost
+      // Fetch cover image URL for OG tags
+      let coverImageUrl: string | null = null
+      if (aiPost.cover_image_id) {
+        const { data: coverImage } = await supabase
+          .from("post_images")
+          .select("image_url")
+          .eq("id", aiPost.cover_image_id)
+          .single()
+        coverImageUrl = coverImage?.image_url || null
+      }
+      post = { ...aiPost, cover_image_url: coverImageUrl }
       postId = aiPost.id
     } else if (locale !== 'de') {
       // Try by translated slug
@@ -117,6 +127,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: `${post.title} — Synthszr`,
     description: post.excerpt || undefined,
     path: `/posts/${slug}`,
+    locale: locale,
+    ogImage: post.cover_image_url || undefined,
+    ogType: 'article',
   })
 }
 
@@ -257,6 +270,17 @@ export default async function PostPage({ params }: PageProps) {
     })
   }
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: post.title,
+    datePublished: post.created_at,
+    author: { '@type': 'Organization', name: 'Synthszr' },
+    publisher: { '@type': 'Organization', name: 'Synthszr' },
+    ...(post.excerpt && { description: post.excerpt }),
+    ...(post.cover_image_url && { image: post.cover_image_url }),
+  }
+
   return (
     <SwipeNavigation
       olderPostSlug={olderPost?.slug ? `/${locale}/posts/${olderPost.slug}` : undefined}
@@ -264,6 +288,10 @@ export default async function PostPage({ params }: PageProps) {
       homeUrl={`/${locale}`}
     >
     <div className="min-h-screen bg-background text-foreground">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
 
         <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
 

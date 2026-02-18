@@ -4,7 +4,9 @@ import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { CompanyDetailClient } from '@/app/companies/[slug]/company-detail-client'
 import { getTranslations } from '@/lib/i18n/get-translations'
+import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import type { LanguageCode } from '@/lib/types'
+import type { Metadata } from 'next'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +38,28 @@ interface ArticleInfo {
 
 interface PageProps {
   params: Promise<{ lang: string; slug: string }>
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { lang, slug } = await params
+  const supabase = await createClient()
+
+  // Fetch company name from mentions
+  const { data: mention } = await supabase
+    .from('post_company_mentions')
+    .select('company_name')
+    .eq('company_slug', slug)
+    .limit(1)
+    .single()
+
+  const companyName = mention?.company_name || slug
+
+  return generateLocalizedMetadata({
+    title: `${companyName} — Synthszr`,
+    description: `Alle Artikel und Synthszr-Bewertungen zu ${companyName}`,
+    path: `/companies/${slug}`,
+    locale: lang as LanguageCode,
+  })
 }
 
 export default async function CompanyDetailPage({ params }: PageProps) {
