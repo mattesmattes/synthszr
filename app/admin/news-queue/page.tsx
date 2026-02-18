@@ -464,17 +464,6 @@ export default function NewsQueuePage() {
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-500'
-      case 'selected': return 'bg-blue-500'
-      case 'used': return 'bg-green-500'
-      case 'expired': return 'bg-gray-500'
-      case 'skipped': return 'bg-orange-500'
-      default: return 'bg-gray-400'
-    }
-  }
-
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending': return <Clock className="h-3 w-3" />
@@ -484,15 +473,6 @@ export default function NewsQueuePage() {
       case 'skipped': return <SkipForward className="h-3 w-3" />
       default: return null
     }
-  }
-
-  const formatTimeAgo = (date: string) => {
-    const diff = Date.now() - new Date(date).getTime()
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-    if (hours < 1) return 'vor wenigen Minuten'
-    if (hours < 24) return `vor ${hours}h`
-    const days = Math.floor(hours / 24)
-    return `vor ${days}d`
   }
 
   // Get synthesis score gradient color: cyan (low) → neon yellow (mid) → neon orange (high)
@@ -911,12 +891,22 @@ export default function NewsQueuePage() {
                                 )}
                               </Button>
                             )}
-                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${getStatusColor(item.status)}`} />
                             <div
                               className="min-w-0 flex-1 cursor-pointer"
                               onClick={() => setViewingItem(item)}
                             >
-                              <div className="text-xs font-medium truncate hover:text-primary">{truncateTitle(item.title)}</div>
+                              <div className="text-xs font-medium truncate hover:text-primary flex items-center gap-1.5">
+                                {item.daily_repo?.source_type && (
+                                  <Badge className={`text-[8px] px-1 h-3.5 font-medium border-0 shrink-0 ${
+                                    item.daily_repo.source_type === 'webcrawl'
+                                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                  }`}>
+                                    {item.daily_repo.source_type === 'webcrawl' ? 'Web' : 'NL'}
+                                  </Badge>
+                                )}
+                                <span className="truncate">{truncateTitle(item.title)}</span>
+                              </div>
                               <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                                 <span className="truncate max-w-[150px]">
                                   {item.source_display_name || item.source_identifier}
@@ -924,15 +914,6 @@ export default function NewsQueuePage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
-                              {item.daily_repo?.source_type && (
-                                <Badge className={`text-[8px] px-1 h-3.5 font-medium border-0 ${
-                                  item.daily_repo.source_type === 'webcrawl'
-                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                                }`}>
-                                  {item.daily_repo.source_type === 'webcrawl' ? 'Web' : 'NL'}
-                                </Badge>
-                              )}
                               <Badge
                                 variant="outline"
                                 className="text-[9px] px-1.5 py-0 h-4 font-mono font-bold border-0"
