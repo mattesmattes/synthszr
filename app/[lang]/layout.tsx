@@ -23,6 +23,7 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
 
   return (
     <I18nProvider locale={locale} translations={translations}>
+      <script dangerouslySetInnerHTML={{ __html: `document.documentElement.lang="${locale}"` }} />
       {children}
     </I18nProvider>
   )

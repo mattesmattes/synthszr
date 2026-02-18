@@ -322,9 +322,10 @@ export default async function PostPage({ params }: PageProps) {
                 <Link href={`/${locale}`} className="absolute inset-0 z-0">
                   <img
                     src={post.cover_image_url}
-                    alt=""
+                    alt={post.title}
                     className="w-full h-full object-cover"
                     style={{ imageRendering: 'pixelated' }}
+                    fetchPriority="high"
                   />
                 </Link>
                 {/* Logo centered - w-full on mobile so percentage resolves against cover width */}
@@ -424,7 +425,7 @@ export default async function PostPage({ params }: PageProps) {
               <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
                 LinkedIn
               </a>
-              <a href="https://synthszr.com/en/sources" className="hover:text-accent transition-colors">
+              <a href={`/${locale}/sources`} className="hover:text-accent transition-colors">
                 {t['footer.sources'] || 'Sources'}
               </a>
               <Link href={`/${locale}/impressum`} className="hover:text-accent transition-colors">

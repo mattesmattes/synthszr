@@ -191,7 +191,7 @@ export default async function Page() {
               <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
                 LinkedIn
               </a>
-              <a href="https://synthszr.com/en/sources" className="hover:text-accent transition-colors">
+              <a href="/de/sources" className="hover:text-accent transition-colors">
                 Quellen
               </a>
               <a href="/impressum" className="hover:text-accent transition-colors">

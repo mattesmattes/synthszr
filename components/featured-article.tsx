@@ -47,9 +47,10 @@ export function FeaturedArticle({
               {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
               <img
                 src={coverImageUrl}
-                alt=""
+                alt={title}
                 className="w-full h-full object-cover"
                 style={{ imageRendering: 'pixelated' }}
+                fetchPriority="high"
               />
             </a>
             {/* Logo centered on top - w-full on mobile so percentage resolves against cover width */}

@@ -173,7 +173,7 @@ export async function middleware(request: NextRequest) {
   const cookieLocale = request.cookies.get(LOCALE_COOKIE_NAME)?.value as LocaleType | undefined
   const preferredLocale = cookieLocale && activeLanguages.has(cookieLocale) ? cookieLocale : DEFAULT_LOCALE
 
-  // Redirect to localized URL (307 temporary)
+  // Redirect to localized URL (307 temporary — destination depends on cookie locale)
   const localizedUrl = new URL(`/${preferredLocale}${pathname === '/' ? '' : pathname}`, request.url)
   // Preserve query parameters (e.g., ?stock=Nvidia from newsletter links)
   localizedUrl.search = request.nextUrl.search
