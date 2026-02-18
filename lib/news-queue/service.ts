@@ -238,21 +238,28 @@ export async function queueFromDailyRepo(
   // Fetch the items
   const { data: repoItems, error } = await supabase
     .from('daily_repo')
-    .select('id, title, content, source_email, source_url, email_received_at')
+    .select('id, title, content, source_email, source_url, email_received_at, source_type')
     .in('id', repoItemIds)
 
   if (error || !repoItems) {
     return { added: 0, skipped: 0, errors: [`Failed to fetch items: ${error?.message}`] }
   }
 
-  const items = repoItems.map(item => ({
-    dailyRepoId: item.id,
-    title: item.title || 'Untitled',
-    content: item.content || undefined,
-    sourceEmail: item.source_email,
-    sourceUrl: item.source_url,
-    emailReceivedAt: item.email_received_at,
-  }))
+  const items = repoItems.map(item => {
+    // Manual articles (source_type='article') always get rank 9.0
+    const isManual = item.source_type === 'article'
+    return {
+      dailyRepoId: item.id,
+      title: item.title || 'Untitled',
+      content: item.content || undefined,
+      sourceEmail: item.source_email,
+      sourceUrl: item.source_url,
+      emailReceivedAt: item.email_received_at,
+      synthesisScore: isManual ? 9.0 : undefined,
+      relevanceScore: isManual ? 9.0 : undefined,
+      uniquenessScore: isManual ? 9.0 : undefined,
+    }
+  })
 
   return addToQueue(items)
 }
