@@ -506,8 +506,8 @@ export default function NewsQueuePage() {
     }
   }
 
-  // Extract all synthesis scores for gradient calculation (sorting is now server-side)
-  const allSynthesisScores = items.map(item => item.synthesis_score)
+  // Extract all total scores for gradient calculation (sorting is now server-side)
+  const allTotalScores = items.map(item => item.total_score)
 
   // Group items by import batch (items queued within 10 minutes of each other)
   // This clusters items from the same daily digest import run together
@@ -918,12 +918,12 @@ export default function NewsQueuePage() {
                                 variant="outline"
                                 className="text-[9px] px-1.5 py-0 h-4 font-mono font-bold border-0"
                                 style={{
-                                  backgroundColor: getSynthesisScoreColor(item.synthesis_score, allSynthesisScores),
+                                  backgroundColor: getSynthesisScoreColor(item.total_score, allTotalScores),
                                   color: '#000'
                                 }}
-                                title={`Synthesis: ${item.synthesis_score.toFixed(1)} | Total: ${item.total_score.toFixed(1)}`}
+                                title={`Total: ${item.total_score.toFixed(1)} (S:${item.synthesis_score.toFixed(1)} R:${item.relevance_score.toFixed(1)} U:${item.uniqueness_score.toFixed(1)}${(item as any).source_bonus ? ` +${(item as any).source_bonus}` : ''})`}
                               >
-                                {item.synthesis_score.toFixed(1)}
+                                {item.total_score.toFixed(1)}
                               </Badge>
                               <Button
                                 variant="ghost"
