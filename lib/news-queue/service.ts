@@ -168,6 +168,25 @@ export async function addToQueue(
   let added = 0
   let skipped = 0
 
+  // Batch-lookup premium tiers for all source emails
+  const sourceEmails = [...new Set(items.map(i =>
+    normalizeSourceIdentifier(i.sourceEmail ?? null, i.sourceUrl ?? null)
+  ).filter(e => e !== 'unknown'))]
+
+  const tierBonusMap = new Map<string, number>()
+  if (sourceEmails.length > 0) {
+    const { data: premiumSources } = await supabase
+      .from('newsletter_sources')
+      .select('email, premium_tier')
+      .in('email', sourceEmails)
+      .not('premium_tier', 'is', null)
+
+    for (const s of premiumSources || []) {
+      const bonus = s.premium_tier === 1 ? 3.0 : s.premium_tier === 2 ? 2.0 : s.premium_tier === 3 ? 1.0 : 0
+      tierBonusMap.set(s.email, bonus)
+    }
+  }
+
   for (const item of items) {
     try {
       const sourceIdentifier = normalizeSourceIdentifier(item.sourceEmail ?? null, item.sourceUrl ?? null)
@@ -184,6 +203,7 @@ export async function addToQueue(
         synthesis_score: item.synthesisScore || 0,
         relevance_score: item.relevanceScore || 0,
         uniqueness_score: item.uniquenessScore || 0,
+        source_bonus: tierBonusMap.get(sourceIdentifier) || 0,
         email_received_at: item.emailReceivedAt || null,
         metadata: item.metadata || {}
       }
@@ -201,6 +221,7 @@ export async function addToQueue(
               synthesis_score: record.synthesis_score,
               relevance_score: record.relevance_score,
               uniqueness_score: record.uniqueness_score,
+              source_bonus: record.source_bonus,
             })
             .eq('daily_repo_id', item.dailyRepoId)
             .eq('status', 'pending')  // Only update pending items
