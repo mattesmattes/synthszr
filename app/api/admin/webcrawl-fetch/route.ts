@@ -223,11 +223,11 @@ export async function POST(request: NextRequest) {
 
         const gmailClient = new GmailClient(tokenData.refresh_token)
 
-        // Fetch webcrawler emails (last 48h)
+        // Fetch only the most recent webcrawler email
         const emails = await gmailClient.fetchEmailsBySubject(
           null,
           '+synthszr-webcrawler',
-          5,
+          1,
           FETCH_WINDOW_HOURS
         )
 
