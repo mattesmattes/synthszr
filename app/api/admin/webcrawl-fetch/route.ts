@@ -103,7 +103,7 @@ function parseWebcrawlerArticles(
 
     // For the first section, skip intro text before the first priority label
     if (i === 0) {
-      const priorityIdx = section.search(/^.*\b(?:HIGH|MEDIUM|LOW)\b/im)
+      const priorityIdx = section.search(/^.*\b(?:HIGH|MEDIUM|LOW)\b/m)
       if (priorityIdx > 0) {
         section = section.substring(priorityIdx)
       }
