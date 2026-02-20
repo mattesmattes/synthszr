@@ -509,57 +509,6 @@ export default function NewsQueuePage() {
   // Extract all total scores for gradient calculation (sorting is now server-side)
   const allTotalScores = items.map(item => item.total_score)
 
-  // Group items by import batch (items queued within 10 minutes of each other)
-  // This clusters items from the same daily digest import run together
-  const groupedItems = items.reduce((groups, item) => {
-    const date = new Date(item.queued_at)
-    // Round to 10-minute intervals to cluster import batches
-    const roundedMinutes = Math.floor(date.getMinutes() / 10) * 10
-    const batchDate = new Date(date)
-    batchDate.setMinutes(roundedMinutes, 0, 0)
-
-    // Format: "Mo 27.01. 14:30" (import batch timestamp)
-    const batchKey = batchDate.toLocaleDateString('de-DE', {
-      weekday: 'short',
-      day: '2-digit',
-      month: '2-digit'
-    }) + ' ' + batchDate.toLocaleTimeString('de-DE', {
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-
-    if (!groups[batchKey]) {
-      groups[batchKey] = []
-    }
-    groups[batchKey].push(item)
-    return groups
-  }, {} as Record<string, QueueItem[]>)
-
-  // Sort groups by timestamp (newest first) and items within each group by total_score
-  const importBatches = Object.entries(groupedItems)
-    .sort((a, b) => {
-      // Parse the batch keys back to dates for sorting
-      const dateA = new Date(items.find(i => {
-        const d = new Date(i.queued_at)
-        const rounded = Math.floor(d.getMinutes() / 10) * 10
-        d.setMinutes(rounded, 0, 0)
-        return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }) + ' ' +
-               d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) === a[0]
-      })?.queued_at || 0)
-      const dateB = new Date(items.find(i => {
-        const d = new Date(i.queued_at)
-        const rounded = Math.floor(d.getMinutes() / 10) * 10
-        d.setMinutes(rounded, 0, 0)
-        return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }) + ' ' +
-               d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) === b[0]
-      })?.queued_at || 0)
-      return dateB.getTime() - dateA.getTime()
-    })
-    .map(([key, groupItems]) => [
-      key,
-      groupItems.sort((a, b) => b.total_score - a.total_score)
-    ] as [string, QueueItem[]])
-
   return (
     <Collapsible open={showSidebar} onOpenChange={setShowSidebar}>
     <div className="p-4 md:p-6 max-w-full">
@@ -839,103 +788,96 @@ export default function NewsQueuePage() {
           ) : (
             <Card>
               <CardContent className="p-0">
-                <div className="max-h-[60vh] overflow-y-auto">
-                  {importBatches.map(([batchKey, groupItems]) => (
-                    <div key={batchKey}>
-                      {/* Import batch header */}
-                      <div className="sticky top-0 bg-zinc-800 px-3 py-1.5 border-b border-zinc-700 text-xs font-medium text-white">
-                        Import: {batchKey} ({groupItems.length} Items)
+                <div className="max-h-[60vh] overflow-y-auto divide-y">
+                  {items.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors"
+                    >
+                      {/* Global rank number */}
+                      <span className="text-[10px] font-mono text-muted-foreground w-6 text-right shrink-0">
+                        {currentPage * PAGE_SIZE + idx + 1}.
+                      </span>
+                      {/* Action button on the left */}
+                      {statusFilter === 'pending' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] px-2 shrink-0"
+                          onClick={() => handleSelectSingle(item.id)}
+                          disabled={actionLoading === `select-${item.id}`}
+                        >
+                          {actionLoading === `select-${item.id}` ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <>
+                              <Play className="h-3 w-3 mr-1" />
+                              Select
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      {statusFilter === 'selected' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] px-2 shrink-0 text-muted-foreground hover:text-destructive hover:border-destructive"
+                          onClick={() => handleUnselect(item.id)}
+                          disabled={actionLoading === `unselect-${item.id}`}
+                          title="Zurück zu Pending"
+                        >
+                          {actionLoading === `unselect-${item.id}` ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <>
+                              <X className="h-3 w-3 mr-1" />
+                              Remove
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      <div
+                        className="min-w-0 flex-1 cursor-pointer"
+                        onClick={() => setViewingItem(item)}
+                      >
+                        <div className="text-xs font-medium truncate hover:text-primary flex items-center gap-1.5">
+                          {item.daily_repo?.source_type && (
+                            <Badge className={`text-[8px] px-1 h-3.5 font-medium border-0 shrink-0 ${
+                              item.daily_repo.source_type === 'webcrawl'
+                                ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                            }`}>
+                              {item.daily_repo.source_type === 'webcrawl' ? 'Web' : 'NL'}
+                            </Badge>
+                          )}
+                          <span className="truncate">{truncateTitle(item.title)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                          <span className="truncate max-w-[150px]">
+                            {item.source_display_name || item.source_identifier}
+                          </span>
+                        </div>
                       </div>
-                      {/* Items in this batch */}
-                      <div className="divide-y">
-                        {groupItems.map((item) => (
-                          <div
-                            key={item.id}
-                            className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors"
-                          >
-                            {/* Action button on the left */}
-                            {statusFilter === 'pending' && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-6 text-[10px] px-2 shrink-0"
-                                onClick={() => handleSelectSingle(item.id)}
-                                disabled={actionLoading === `select-${item.id}`}
-                              >
-                                {actionLoading === `select-${item.id}` ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <>
-                                    <Play className="h-3 w-3 mr-1" />
-                                    Select
-                                  </>
-                                )}
-                              </Button>
-                            )}
-                            {statusFilter === 'selected' && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-6 text-[10px] px-2 shrink-0 text-muted-foreground hover:text-destructive hover:border-destructive"
-                                onClick={() => handleUnselect(item.id)}
-                                disabled={actionLoading === `unselect-${item.id}`}
-                                title="Zurück zu Pending"
-                              >
-                                {actionLoading === `unselect-${item.id}` ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <>
-                                    <X className="h-3 w-3 mr-1" />
-                                    Remove
-                                  </>
-                                )}
-                              </Button>
-                            )}
-                            <div
-                              className="min-w-0 flex-1 cursor-pointer"
-                              onClick={() => setViewingItem(item)}
-                            >
-                              <div className="text-xs font-medium truncate hover:text-primary flex items-center gap-1.5">
-                                {item.daily_repo?.source_type && (
-                                  <Badge className={`text-[8px] px-1 h-3.5 font-medium border-0 shrink-0 ${
-                                    item.daily_repo.source_type === 'webcrawl'
-                                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                                  }`}>
-                                    {item.daily_repo.source_type === 'webcrawl' ? 'Web' : 'NL'}
-                                  </Badge>
-                                )}
-                                <span className="truncate">{truncateTitle(item.title)}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                                <span className="truncate max-w-[150px]">
-                                  {item.source_display_name || item.source_identifier}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <Badge
-                                variant="outline"
-                                className="text-[9px] px-1.5 py-0 h-4 font-mono font-bold border-0"
-                                style={{
-                                  backgroundColor: getSynthesisScoreColor(item.total_score, allTotalScores),
-                                  color: '#000'
-                                }}
-                                title={`Total: ${item.total_score.toFixed(1)} (S:${item.synthesis_score.toFixed(1)} R:${item.relevance_score.toFixed(1)} U:${item.uniqueness_score.toFixed(1)}${(item as any).source_bonus ? ` +${(item as any).source_bonus}` : ''})`}
-                              >
-                                {item.total_score.toFixed(1)}
-                              </Badge>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={() => setViewingItem(item)}
-                              >
-                                <Eye className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] px-1.5 py-0 h-4 font-mono font-bold border-0"
+                          style={{
+                            backgroundColor: getSynthesisScoreColor(item.total_score, allTotalScores),
+                            color: '#000'
+                          }}
+                          title={`Total: ${item.total_score.toFixed(1)} (S:${item.synthesis_score.toFixed(1)} R:${item.relevance_score.toFixed(1)} U:${item.uniqueness_score.toFixed(1)}${(item as any).source_bonus ? ` +${(item as any).source_bonus}` : ''})`}
+                        >
+                          {item.total_score.toFixed(1)}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => setViewingItem(item)}
+                        >
+                          <Eye className="h-3 w-3" />
+                        </Button>
                       </div>
                     </div>
                   ))}
