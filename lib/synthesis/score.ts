@@ -60,7 +60,7 @@ async function scoreCandidate(
   // Race between API call and timeout
   const response = await Promise.race([
     anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 256,
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -276,7 +276,7 @@ BEGRÜNDUNG: [1 Satz warum]`
         try {
           const response = await Promise.race([
             anthropic.messages.create({
-              model: 'claude-3-5-haiku-20241022',
+              model: 'claude-haiku-4-5-20251001',
               max_tokens: 256,
               messages: [{ role: 'user', content: prompt }],
             }),

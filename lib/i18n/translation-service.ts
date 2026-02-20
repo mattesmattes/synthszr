@@ -54,7 +54,7 @@ export async function testApiKeys(): Promise<{
     try {
       const anthropic = new Anthropic()
       await anthropic.messages.create({
-        model: 'claude-3-5-haiku-20241022',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 10,
         messages: [{ role: 'user', content: 'Say "ok"' }],
       })
@@ -332,7 +332,7 @@ async function translateWithClaude(
   const anthropic = new Anthropic()
 
   const modelId = model === 'claude-haiku-3.5'
-    ? 'claude-3-5-haiku-20241022'
+    ? 'claude-haiku-4-5-20251001'
     : 'claude-sonnet-4-20250514'
 
   const response = await anthropic.messages.create({
