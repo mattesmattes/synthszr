@@ -98,6 +98,7 @@ Diese Regeln gelten für den GESAMTEN Text, besonders streng für Synthszr Takes
 
 1. VERBOTENE SATZSTRUKTUREN:
 - KEINE Kontrastpaare: "nicht nur... sondern auch", "einerseits... andererseits", "zwar... aber", "weniger... mehr", "sowohl... als auch", "statt... lieber", "nicht ob X, sondern ob Y", "Die eigentliche Frage ist nicht... sondern..."
+- KEINE Reframing-Formeln: "Die wahre X ist...", "Die eigentliche X ist...", "Die wirkliche X ist...", "Die eigentliche Frage ist...", "Es geht nicht um X, sondern um Y"
 - KEINE Parallelkonstruktionen: Keine gleichförmigen Satzanfänge, keine rhythmischen Aufzählungen mit identischer Struktur ("X zeigt... Y zeigt... Z zeigt...")
 - KEINE dreiteiligen Aufzählungen als rhetorisches Muster: "schneller, effizienter, skalierbarer" — wenn Dreiergruppe, dann mit ungleicher Gewichtung
 - KEINE Rahmensätze: "In einer Welt, in der...", "In einer Zeit, in der...", "Angesichts der Tatsache, dass..."

@@ -521,7 +521,7 @@ export async function POST(request: NextRequest) {
    - Analytisch begründete Einordnung, darf positiv oder negativ bewerten
    - Basiert auf der mitgelieferten Hintergrund-Recherche
    - VERBOTENE SATZSTRUKTUREN: Keine Kontrastpaare ("nicht nur... sondern auch", "einerseits... andererseits", "zwar... aber"), keine Parallelkonstruktionen (gleichförmige Satzanfänge), kein "nicht ob X, sondern ob Y"
-   - VERBOTENE PHRASEN: "Es bleibt abzuwarten", "Man darf gespannt sein", "Die Zeit wird zeigen", "Besonders bemerkenswert", "Spannend ist dabei", "Das Potenzial ist enorm", "Es zeigt sich", "Letztlich", "Am Ende des Tages", "revolutionär", "bahnbrechend", "wegweisend"
+   - VERBOTENE PHRASEN: "Es bleibt abzuwarten", "Man darf gespannt sein", "Die Zeit wird zeigen", "Besonders bemerkenswert", "Spannend ist dabei", "Das Potenzial ist enorm", "Es zeigt sich", "Letztlich", "Am Ende des Tages", "revolutionär", "bahnbrechend", "wegweisend", "Die wahre [X] ist", "Die eigentliche [X] ist", "Die wirkliche [X] ist", "Die eigentliche Frage ist"
    - VERBOTENE STILMITTEL: Keine rhetorischen Fragen am Ende, kein "Doch" als dramatischer Satzanfang, keine qualifizierenden Relativierungen ("— und das ist erst der Anfang"), keine Pseudo-Mündlichkeit ("Mal ehrlich:", "Seien wir ehrlich:")
    - STATTDESSEN: Konkrete Fakten und Zahlen, aktive Verben, asymmetrische Satzlängen, nüchterne Analystensprache
 
