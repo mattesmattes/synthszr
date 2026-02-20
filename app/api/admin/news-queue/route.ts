@@ -190,22 +190,20 @@ export async function GET(request: NextRequest) {
           .select('*, daily_repo:daily_repo_id(source_type)', { count: 'exact' })
           .eq('status', status)
 
-        // Sorting: by score first, then newest (for pending)
-        // For other statuses: just by score
+        // Sorting and filtering by status
         if (status === 'pending') {
+          // Only show items from last 48 hours that haven't expired
+          const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
           query = query
-            .order('total_score', { ascending: false })
+            .gt('expires_at', new Date().toISOString())
+            .gte('queued_at', cutoff48h)
             .order('queued_at', { ascending: false })
+            .order('total_score', { ascending: false })
         } else {
           query = query.order('total_score', { ascending: false })
         }
 
         query = query.range(offset, offset + limit - 1)
-
-        // For pending items, only show non-expired ones
-        if (status === 'pending') {
-          query = query.gt('expires_at', new Date().toISOString())
-        }
 
         const { data, error, count } = await query
 

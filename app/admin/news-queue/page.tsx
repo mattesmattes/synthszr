@@ -151,11 +151,15 @@ export default function NewsQueuePage() {
   const fetchData = useCallback(async (page = currentPage) => {
     setLoading(true)
     try {
-      const offset = page * PAGE_SIZE
+      // For pending: fetch all items (48h filter keeps count manageable)
+      // For other statuses: paginate normally
+      const isPending = statusFilter === 'pending'
+      const fetchLimit = isPending ? 500 : PAGE_SIZE
+      const offset = isPending ? 0 : page * PAGE_SIZE
       const [statsRes, distRes, itemsRes] = await Promise.all([
         fetch('/api/admin/news-queue?action=stats'),
         fetch('/api/admin/news-queue?action=distribution'),
-        fetch(`/api/admin/news-queue?action=list&status=${statusFilter}&limit=${PAGE_SIZE}&offset=${offset}`)
+        fetch(`/api/admin/news-queue?action=list&status=${statusFilter}&limit=${fetchLimit}&offset=${offset}`)
       ])
 
       if (statsRes.ok) setStats(await statsRes.json())
@@ -506,8 +510,28 @@ export default function NewsQueuePage() {
     }
   }
 
-  // Extract all total scores for gradient calculation (sorting is now server-side)
+  // Extract all total scores for gradient calculation
   const allTotalScores = items.map(item => item.total_score)
+
+  // Group items by calendar day (newest day first), sorted by score within each day
+  const dayGroups = (() => {
+    const groups = new Map<string, QueueItem[]>()
+    for (const item of items) {
+      const dayKey = new Date(item.queued_at).toLocaleDateString('de-DE', {
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      })
+      if (!groups.has(dayKey)) groups.set(dayKey, [])
+      groups.get(dayKey)!.push(item)
+    }
+    // Sort items within each day by total_score descending
+    for (const [, dayItems] of groups) {
+      dayItems.sort((a, b) => b.total_score - a.total_score)
+    }
+    return Array.from(groups.entries())
+  })()
 
   return (
     <Collapsible open={showSidebar} onOpenChange={setShowSidebar}>
@@ -788,106 +812,124 @@ export default function NewsQueuePage() {
           ) : (
             <Card>
               <CardContent className="p-0">
-                <div className="max-h-[60vh] overflow-y-auto divide-y">
-                  {items.map((item, idx) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors"
-                    >
-                      {/* Global rank number */}
-                      <span className="text-[10px] font-mono text-muted-foreground w-6 text-right shrink-0">
-                        {currentPage * PAGE_SIZE + idx + 1}.
-                      </span>
-                      {/* Action button on the left */}
-                      {statusFilter === 'pending' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 text-[10px] px-2 shrink-0"
-                          onClick={() => handleSelectSingle(item.id)}
-                          disabled={actionLoading === `select-${item.id}`}
-                        >
-                          {actionLoading === `select-${item.id}` ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <>
-                              <Play className="h-3 w-3 mr-1" />
-                              Select
-                            </>
-                          )}
-                        </Button>
-                      )}
-                      {statusFilter === 'selected' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 text-[10px] px-2 shrink-0 text-muted-foreground hover:text-destructive hover:border-destructive"
-                          onClick={() => handleUnselect(item.id)}
-                          disabled={actionLoading === `unselect-${item.id}`}
-                          title="Zurück zu Pending"
-                        >
-                          {actionLoading === `unselect-${item.id}` ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <>
-                              <X className="h-3 w-3 mr-1" />
-                              Remove
-                            </>
-                          )}
-                        </Button>
-                      )}
-                      <div
-                        className="min-w-0 flex-1 cursor-pointer"
-                        onClick={() => setViewingItem(item)}
-                      >
-                        <div className="text-xs font-medium truncate hover:text-primary flex items-center gap-1.5">
-                          {item.daily_repo?.source_type && (
-                            <Badge className={`text-[8px] px-1 h-3.5 font-medium border-0 shrink-0 ${
-                              item.daily_repo.source_type === 'webcrawl'
-                                ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                                : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                            }`}>
-                              {item.daily_repo.source_type === 'webcrawl' ? 'Web' : 'NL'}
-                            </Badge>
-                          )}
-                          <span className="truncate">{truncateTitle(item.title)}</span>
+                <div className="max-h-[60vh] overflow-y-auto">
+                  {(statusFilter === 'pending' ? dayGroups : [['', items] as [string, QueueItem[]]]).map(([dayKey, dayItems], groupIdx) => {
+                    // Calculate rank offset: count items in previous day groups
+                    const rankOffset = statusFilter === 'pending'
+                      ? dayGroups.slice(0, groupIdx).reduce((sum, [, g]) => sum + g.length, 0)
+                      : currentPage * PAGE_SIZE
+                    return (
+                    <div key={dayKey || 'all'}>
+                      {/* Day header (only for pending with day grouping) */}
+                      {statusFilter === 'pending' && dayKey && (
+                        <div className="sticky top-0 bg-zinc-800 px-3 py-1.5 border-b border-zinc-700 text-xs font-medium text-white flex items-center justify-between">
+                          <span>{dayKey}</span>
+                          <span className="text-zinc-400">{dayItems.length} Items</span>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                          <span className="truncate max-w-[150px]">
-                            {item.source_display_name || item.source_identifier}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Badge
-                          variant="outline"
-                          className="text-[9px] px-1.5 py-0 h-4 font-mono font-bold border-0"
-                          style={{
-                            backgroundColor: getSynthesisScoreColor(item.total_score, allTotalScores),
-                            color: '#000'
-                          }}
-                          title={`Total: ${item.total_score.toFixed(1)} (S:${item.synthesis_score.toFixed(1)} R:${item.relevance_score.toFixed(1)} U:${item.uniqueness_score.toFixed(1)}${(item as any).source_bonus ? ` +${(item as any).source_bonus}` : ''})`}
-                        >
-                          {item.total_score.toFixed(1)}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => setViewingItem(item)}
-                        >
-                          <Eye className="h-3 w-3" />
-                        </Button>
+                      )}
+                      <div className="divide-y">
+                        {dayItems.map((item, idx) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors"
+                          >
+                            {/* Rank number within day */}
+                            <span className="text-[10px] font-mono text-muted-foreground w-6 text-right shrink-0">
+                              {rankOffset + idx + 1}.
+                            </span>
+                            {/* Action button on the left */}
+                            {statusFilter === 'pending' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-[10px] px-2 shrink-0"
+                                onClick={() => handleSelectSingle(item.id)}
+                                disabled={actionLoading === `select-${item.id}`}
+                              >
+                                {actionLoading === `select-${item.id}` ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <>
+                                    <Play className="h-3 w-3 mr-1" />
+                                    Select
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                            {statusFilter === 'selected' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-[10px] px-2 shrink-0 text-muted-foreground hover:text-destructive hover:border-destructive"
+                                onClick={() => handleUnselect(item.id)}
+                                disabled={actionLoading === `unselect-${item.id}`}
+                                title="Zurück zu Pending"
+                              >
+                                {actionLoading === `unselect-${item.id}` ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <>
+                                    <X className="h-3 w-3 mr-1" />
+                                    Remove
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                            <div
+                              className="min-w-0 flex-1 cursor-pointer"
+                              onClick={() => setViewingItem(item)}
+                            >
+                              <div className="text-xs font-medium truncate hover:text-primary flex items-center gap-1.5">
+                                {item.daily_repo?.source_type && (
+                                  <Badge className={`text-[8px] px-1 h-3.5 font-medium border-0 shrink-0 ${
+                                    item.daily_repo.source_type === 'webcrawl'
+                                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                  }`}>
+                                    {item.daily_repo.source_type === 'webcrawl' ? 'Web' : 'NL'}
+                                  </Badge>
+                                )}
+                                <span className="truncate">{truncateTitle(item.title)}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                <span className="truncate max-w-[150px]">
+                                  {item.source_display_name || item.source_identifier}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1.5 py-0 h-4 font-mono font-bold border-0"
+                                style={{
+                                  backgroundColor: getSynthesisScoreColor(item.total_score, allTotalScores),
+                                  color: '#000'
+                                }}
+                                title={`Total: ${item.total_score.toFixed(1)} (S:${item.synthesis_score.toFixed(1)} R:${item.relevance_score.toFixed(1)} U:${item.uniqueness_score.toFixed(1)}${(item as any).source_bonus ? ` +${(item as any).source_bonus}` : ''})`}
+                              >
+                                {item.total_score.toFixed(1)}
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => setViewingItem(item)}
+                              >
+                                <Eye className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {/* Pagination - always show when there are items */}
-          {totalItems > 0 && (
+          {/* Pagination - only for non-pending statuses (pending uses 48h fetch-all) */}
+          {totalItems > 0 && statusFilter !== 'pending' && (
             <div className="flex items-center justify-between mt-3 text-xs">
               <div className="text-muted-foreground">
                 Zeige {currentPage * PAGE_SIZE + 1}-{Math.min((currentPage + 1) * PAGE_SIZE, totalItems)} von {totalItems}
@@ -921,6 +963,12 @@ export default function NewsQueuePage() {
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
+            </div>
+          )}
+          {/* Item count for pending (no pagination) */}
+          {totalItems > 0 && statusFilter === 'pending' && (
+            <div className="mt-3 text-xs text-muted-foreground">
+              {totalItems} Items (letzte 48h)
             </div>
           )}
         </div>
