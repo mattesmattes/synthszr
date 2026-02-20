@@ -303,10 +303,12 @@ export async function POST(request: NextRequest) {
    - Jede News bekommt eine eigene Zwischenüberschrift (##)
    - Jeder News-Artikel MUSS exakt 5-7 Sätze haben
 
-2. **SYNTHSZR TAKE LÄNGE:** Jeder "Synthszr Take:" MUSS MINDESTENS 5 Sätze haben (Ziel: 5-8 Sätze). Ein Take mit 2-3 Sätzen ist ZU KURZ!
-   - Der Take ist das analytische Herzstück — er muss LÄNGER sein als die News selbst
+2. **SYNTHSZR TAKE:** Jeder "Synthszr Take:" MUSS MINDESTENS 5 Sätze haben (Ziel: 5-8 Sätze). Ein Take mit 2-3 Sätzen ist ZU KURZ!
    - Analytisch begründete Einordnung, darf positiv oder negativ bewerten
-   - KEINE typischen KI-Formulierungen: keine Kontrastpaare, keine Parallelkonstruktionen, keine Phrasen wie "Es bleibt abzuwarten"
+   - VERBOTENE SATZSTRUKTUREN: Keine Kontrastpaare ("nicht nur... sondern auch", "einerseits... andererseits", "zwar... aber"), keine Parallelkonstruktionen (gleichförmige Satzanfänge), kein "nicht ob X, sondern ob Y"
+   - VERBOTENE PHRASEN: "Es bleibt abzuwarten", "Man darf gespannt sein", "Die Zeit wird zeigen", "Besonders bemerkenswert", "Spannend ist dabei", "Das Potenzial ist enorm", "Es zeigt sich", "Letztlich", "Am Ende des Tages", "revolutionär", "bahnbrechend", "wegweisend"
+   - VERBOTENE STILMITTEL: Keine rhetorischen Fragen am Ende, kein "Doch" als dramatischer Satzanfang, keine qualifizierenden Relativierungen ("— und das ist erst der Anfang"), keine Pseudo-Mündlichkeit ("Mal ehrlich:", "Seien wir ehrlich:")
+   - STATTDESSEN: Konkrete Fakten und Zahlen, aktive Verben, asymmetrische Satzlängen, nüchterne Analystensprache
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 
