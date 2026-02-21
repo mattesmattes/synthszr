@@ -42,14 +42,22 @@ interface Totals {
   podcast_plays: number
 }
 
+interface SubscriberEntry {
+  date: string
+  new: number
+  churned: number
+  net: number
+  total: number
+}
+
 interface StatsResponse {
   period: Period
+  granularity: Granularity
   events: EventData[]
   totals: Totals
   previous_totals: Totals
   subscribers: {
-    monthly: Array<{ month: string; new: number; churned: number; net: number; total: number }>
-    yearly: Array<{ year: string; new: number; churned: number; net: number; total: number }>
+    period_data: SubscriberEntry[]
     current_active: number
   }
 }
@@ -82,8 +90,6 @@ export default function StatisticsPage() {
   const [period, setPeriod] = useState<Period>('7d')
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [loading, setLoading] = useState(true)
-  const [subscriberView, setSubscriberView] = useState<'monthly' | 'yearly'>('monthly')
-
   useEffect(() => {
     setLoading(true)
     setStats(null)
@@ -103,15 +109,10 @@ export default function StatisticsPage() {
     label: formatDateLabel(e.date, granularity),
   }))
 
-  const subscriberData =
-    stats == null
-      ? []
-      : subscriberView === 'monthly'
-        ? stats.subscribers.monthly.map(m => ({
-            ...m,
-            label: formatDateLabel(m.month, 'month'),
-          }))
-        : stats.subscribers.yearly.map(y => ({ ...y, label: y.year }))
+  const subscriberData = (stats?.subscribers.period_data || []).map(s => ({
+    ...s,
+    label: formatDateLabel(s.date, granularity),
+  }))
 
   return (
     <div className="p-8 space-y-8">
@@ -241,24 +242,7 @@ export default function StatisticsPage() {
           {/* Newsletter Subscribers */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium">Newsletter-Abonnenten</CardTitle>
-                <div className="flex gap-1">
-                  {(['monthly', 'yearly'] as const).map(view => (
-                    <button
-                      key={view}
-                      onClick={() => setSubscriberView(view)}
-                      className={`text-xs px-3 py-1 rounded transition-colors ${
-                        subscriberView === view
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-muted-foreground hover:bg-secondary'
-                      }`}
-                    >
-                      {view === 'monthly' ? 'Monatlich' : 'Jährlich'}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <CardTitle className="text-sm font-medium">Newsletter-Abonnenten</CardTitle>
             </CardHeader>
             <CardContent>
               {subscriberData.length === 0 ? (
