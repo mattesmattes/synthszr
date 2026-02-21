@@ -47,6 +47,11 @@ interface ScheduleConfig {
     // Legacy support for old format
     hours?: number[]
   }
+  webcrawlFetch: {
+    enabled: boolean
+    hour: number
+    minute: number
+  }
   dailyAnalysis: {
     enabled: boolean
     hour: number
@@ -65,30 +70,15 @@ interface ScheduleConfig {
 }
 
 const DEFAULT_SCHEDULE: ScheduleConfig = {
-  newsletterFetch: {
-    enabled: true,
-    hour: 6,
-    minute: 0,
-  },
-  dailyAnalysis: {
-    enabled: true,
-    hour: 8,
-    minute: 0,
-  },
-  postGeneration: {
-    enabled: false,
-    hour: 9,
-    minute: 0,
-  },
-  newsletterSend: {
-    enabled: false,
-    hour: 9,
-    minute: 30,
-  },
+  newsletterFetch: { enabled: true,  hour: 4, minute: 0  },  // 04:00 MEZ
+  webcrawlFetch:   { enabled: true,  hour: 4, minute: 30 },  // 04:30 MEZ
+  dailyAnalysis:   { enabled: true,  hour: 5, minute: 0  },  // 05:00 MEZ
+  postGeneration:  { enabled: false, hour: 9, minute: 0  },
+  newsletterSend:  { enabled: false, hour: 9, minute: 30 },
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
-const MINUTES = [0, 10, 20, 30, 40, 50]
+const MINUTES = [0, 30]
 
 // Berlin timezone offset (simplified: +1 in winter, +2 in summer)
 function getBerlinOffset(): number {
@@ -191,6 +181,10 @@ export default function SettingsPage() {
             hour: utcToBerlin(newsletterFetchHour),
             minute: newsletterFetchMinute,
           },
+          webcrawlFetch: data.webcrawlFetch ? {
+            ...data.webcrawlFetch,
+            hour: utcToBerlin(data.webcrawlFetch.hour),
+          } : DEFAULT_SCHEDULE.webcrawlFetch,
           dailyAnalysis: {
             ...data.dailyAnalysis,
             hour: utcToBerlin(data.dailyAnalysis.hour),
@@ -221,6 +215,10 @@ export default function SettingsPage() {
         newsletterFetch: {
           ...schedule.newsletterFetch,
           hour: berlinToUtc(schedule.newsletterFetch.hour),
+        },
+        webcrawlFetch: {
+          ...schedule.webcrawlFetch,
+          hour: berlinToUtc(schedule.webcrawlFetch.hour),
         },
         dailyAnalysis: {
           ...schedule.dailyAnalysis,
@@ -274,6 +272,7 @@ export default function SettingsPage() {
         }
         const taskLabels: Record<string, string> = {
           'newsletterFetch': 'Newsletter Abruf',
+          'webcrawlFetch': 'WebCrawl Abruf',
           'dailyAnalysis': 'News & Synthese',
           'postGeneration': 'Post Generierung',
           'newsletterSend': 'Newsletter Versand',
@@ -553,13 +552,13 @@ export default function SettingsPage() {
               </div>
             ) : (
               <>
-                {/* Newsletter Fetch */}
+                {/* Newsletter Fetch + WebCrawl */}
                 <div className="space-y-3 pb-4 border-b">
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="text-base">Daily Repo Crawl</Label>
                       <p className="text-sm text-muted-foreground">
-                        Wann sollen Newsletter abgerufen werden?
+                        Wann sollen Newsletter und WebCrawl-Artikel abgerufen werden?
                       </p>
                     </div>
                     <Switch
@@ -570,14 +569,77 @@ export default function SettingsPage() {
                     />
                   </div>
                   {schedule.newsletterFetch.enabled && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={schedule.newsletterFetch.hour.toString()}
+                          onValueChange={(value) =>
+                            setSchedule({
+                              ...schedule,
+                              newsletterFetch: { ...schedule.newsletterFetch, hour: parseInt(value) },
+                            })
+                          }
+                        >
+                          <SelectTrigger className="w-24">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {HOURS.map((hour) => (
+                              <SelectItem key={hour} value={hour.toString()}>
+                                {hour.toString().padStart(2, '0')}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-muted-foreground">:</span>
+                        <Select
+                          value={schedule.newsletterFetch.minute.toString()}
+                          onValueChange={(value) =>
+                            setSchedule({
+                              ...schedule,
+                              newsletterFetch: { ...schedule.newsletterFetch, minute: parseInt(value) },
+                            })
+                          }
+                        >
+                          <SelectTrigger className="w-24">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MINUTES.map((minute) => (
+                              <SelectItem key={minute} value={minute.toString()}>
+                                {minute.toString().padStart(2, '0')}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-muted-foreground">Uhr (MEZ)</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* WebCrawl Fetch */}
+                <div className="space-y-3 pb-4 border-b">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base">WebCrawl Abruf</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Wann sollen WebCrawl-Artikel aus Gmail abgerufen werden?
+                      </p>
+                    </div>
+                    <Switch
+                      checked={schedule.webcrawlFetch.enabled}
+                      onCheckedChange={(enabled) =>
+                        setSchedule({ ...schedule, webcrawlFetch: { ...schedule.webcrawlFetch, enabled } })
+                      }
+                    />
+                  </div>
+                  {schedule.webcrawlFetch.enabled && (
                     <div className="flex items-center gap-2">
                       <Select
-                        value={schedule.newsletterFetch.hour.toString()}
+                        value={schedule.webcrawlFetch.hour.toString()}
                         onValueChange={(value) =>
-                          setSchedule({
-                            ...schedule,
-                            newsletterFetch: { ...schedule.newsletterFetch, hour: parseInt(value) },
-                          })
+                          setSchedule({ ...schedule, webcrawlFetch: { ...schedule.webcrawlFetch, hour: parseInt(value) } })
                         }
                       >
                         <SelectTrigger className="w-24">
@@ -593,12 +655,9 @@ export default function SettingsPage() {
                       </Select>
                       <span className="text-muted-foreground">:</span>
                       <Select
-                        value={schedule.newsletterFetch.minute.toString()}
+                        value={schedule.webcrawlFetch.minute.toString()}
                         onValueChange={(value) =>
-                          setSchedule({
-                            ...schedule,
-                            newsletterFetch: { ...schedule.newsletterFetch, minute: parseInt(value) },
-                          })
+                          setSchedule({ ...schedule, webcrawlFetch: { ...schedule.webcrawlFetch, minute: parseInt(value) } })
                         }
                       >
                         <SelectTrigger className="w-24">
