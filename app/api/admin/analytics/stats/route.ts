@@ -192,11 +192,19 @@ export async function GET(request: NextRequest) {
       monthlyChurnedMap.set(key, (monthlyChurnedMap.get(key) || 0) + 1)
     }
     const monthlyBuckets = generateBuckets('month', now - 24 * 30 * 24 * 60 * 60 * 1000, now)
-    const monthly = monthlyBuckets.map(month => {
+    const monthlyRaw = monthlyBuckets.map(month => {
       const newCount = monthlyNewMap.get(month) || 0
       const churned = monthlyChurnedMap.get(month) || 0
       return { month, new: newCount, churned, net: newCount - churned }
     })
+    // Compute cumulative total at end of each month, working backwards from current_active
+    const currentActive = activeCountResult.count || 0
+    let runningTotal = currentActive
+    const monthly = [...monthlyRaw].reverse().map(m => {
+      const result = { ...m, total: runningTotal }
+      runningTotal = runningTotal - m.net
+      return result
+    }).reverse()
 
     // Yearly aggregation (all time)
     const yearlyNewMap = new Map<string, number>()
@@ -212,11 +220,18 @@ export async function GET(request: NextRequest) {
     const allYears = [
       ...new Set([...yearlyNewMap.keys(), ...yearlyChurnedMap.keys()]),
     ].sort()
-    const yearly = allYears.map(year => {
+    const yearlyRaw = allYears.map(year => {
       const newCount = yearlyNewMap.get(year) || 0
       const churned = yearlyChurnedMap.get(year) || 0
       return { year, new: newCount, churned, net: newCount - churned }
     })
+    // Cumulative totals for yearly, working backwards from current_active
+    let runningTotalY = activeCountResult.count || 0
+    const yearly = [...yearlyRaw].reverse().map(y => {
+      const result = { ...y, total: runningTotalY }
+      runningTotalY = runningTotalY - y.net
+      return result
+    }).reverse()
 
     return NextResponse.json({
       period,
