@@ -532,14 +532,17 @@ export async function POST(request: NextRequest) {
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 
-4. **COMPANY TAGGING (PFLICHT):** Ergänze am Ende jedes News-Textes — NACH dem letzten Satz der News, VOR dem "Synthszr Take:" — die relevanten Unternehmens-Tags zusammen mit der Quellenangabe auf einer Zeile. Maximal 3 Tags pro News. Auch setzen wenn das Unternehmen nur im Heading steht.
+4. **COMPANY TAGGING (PFLICHT):** Direkt nach dem letzten Satz der News (VOR dem "Synthszr Take:") eine Zeile einfügen: ERST die Tags in geschweiften Klammern, DANN Pfeil und Quellenname. Maximal 3 Tags. Auch setzen wenn das Unternehmen nur im Heading steht.
 
-   **FORMAT (genau so):** {TagA} {TagB} → Quellenname
-   **BEISPIELE:**
-   - News direkt über OpenAI und Anthropic: {OpenAI} {Anthropic} → Techmeme
-   - News "AI-Inferenz wird billiger": {Groq} {Cerebras} → The Information
-   - News "Autonomes Fahren Regulierung": {Waymo} {Tesla} → Bloomberg
-   - News "Developer Tools Boom": {Vercel} {Supabase} → TechCrunch
+   **REIHENFOLGE ist fest: ZUERST Tags, DANN Quelle — niemals umgekehrt.**
+   **FORMAT:** {TagA} {TagB} → Quellenname
+   **FALSCH:** → Quellenname {TagA} {TagB}
+   **RICHTIG:** {TagA} {TagB} → Quellenname
+   **BEISPIELE (exakt diese Reihenfolge):**
+   - {OpenAI} {Anthropic} → Techmeme
+   - {Groq} {Cerebras} → The Information
+   - {Waymo} {Tesla} → Bloomberg
+   - {Vercel} {Supabase} → TechCrunch
 
    **VERFÜGBARE PUBLIC COMPANIES (börsennotiert):** ${publicCompanyList}
 
