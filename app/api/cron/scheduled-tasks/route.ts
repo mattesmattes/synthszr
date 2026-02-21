@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runSynthesisPipeline } from '@/lib/synthesis/pipeline'
 import { processNewsletters } from '@/lib/newsletter/processor'
+import { processWebcrawl } from '@/lib/webcrawl/processor'
 import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPublishedPostsQueueItems } from '@/lib/news-queue/service'
 import { MAX_DIGEST_SECTIONS, MAX_CONTENT_PREVIEW_CHARS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresholds'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
@@ -16,6 +17,11 @@ interface ScheduleConfig {
     minute: number
     // Legacy support
     hours?: number[]
+  }
+  webcrawlFetch: {
+    enabled: boolean
+    hour: number
+    minute: number
   }
   dailyAnalysis: {
     enabled: boolean
@@ -36,6 +42,11 @@ interface ScheduleConfig {
 
 const DEFAULT_SCHEDULE: ScheduleConfig = {
   newsletterFetch: {
+    enabled: true,
+    hour: 6,
+    minute: 0,
+  },
+  webcrawlFetch: {
     enabled: true,
     hour: 6,
     minute: 0,
@@ -153,6 +164,32 @@ export async function GET(request: NextRequest) {
       }
     } else {
       results.newsletterFetch = recentlyRan ? 'already_ran' : 'skipped'
+    }
+  }
+
+  // Check WebCrawl Fetch
+  if (config.webcrawlFetch?.enabled) {
+    const webcrawlHour = config.webcrawlFetch.hour ?? 6
+    const webcrawlMinute = config.webcrawlFetch.minute ?? 0
+    const shouldRunWebcrawl = runAll || isTimeMatch(webcrawlHour, webcrawlMinute, currentHour, currentMinute)
+    const webcrawlRecentlyRan = !forceRun && await hasRunRecently(supabase, 'webcrawl_fetch', 60)
+
+    if (shouldRunWebcrawl && !webcrawlRecentlyRan) {
+      console.log('[Scheduler] Running webcrawl fetch...')
+      try {
+        const crawlResult = await processWebcrawl()
+        console.log('[Scheduler] WebCrawl fetch completed:', crawlResult.message || `${crawlResult.articles} articles`)
+        await markTaskRun(supabase, 'webcrawl_fetch')
+        results.webcrawlFetch = crawlResult.success ? 'completed' : 'error'
+        if (crawlResult.articles !== undefined) {
+          results.webcrawlArticles = crawlResult.articles.toString()
+        }
+      } catch (error) {
+        console.error('[Scheduler] WebCrawl fetch error:', error)
+        results.webcrawlFetch = 'error'
+      }
+    } else {
+      results.webcrawlFetch = webcrawlRecentlyRan ? 'already_ran' : 'skipped'
     }
   }
 
