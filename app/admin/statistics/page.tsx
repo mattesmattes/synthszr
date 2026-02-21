@@ -17,7 +17,15 @@ import {
   Bar,
 } from 'recharts'
 
-type Period = 'day' | 'week' | 'month'
+type Period = '7d' | '30d' | '90d' | '1y'
+type Granularity = 'day' | 'week' | 'month'
+
+const PERIOD_GRANULARITY: Record<Period, Granularity> = {
+  '7d': 'day',
+  '30d': 'day',
+  '90d': 'week',
+  '1y': 'month',
+}
 
 interface EventData {
   date: string
@@ -46,9 +54,9 @@ interface StatsResponse {
   }
 }
 
-function formatDateLabel(dateStr: string, period: Period): string {
+function formatDateLabel(dateStr: string, granularity: Granularity): string {
   const date = new Date(dateStr)
-  if (period === 'month') {
+  if (granularity === 'month') {
     return date.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' })
   }
   return date.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })
@@ -71,7 +79,7 @@ const SUMMARY_CARDS = [
 ]
 
 export default function StatisticsPage() {
-  const [period, setPeriod] = useState<Period>('day')
+  const [period, setPeriod] = useState<Period>('7d')
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [subscriberView, setSubscriberView] = useState<'monthly' | 'yearly'>('monthly')
@@ -88,9 +96,11 @@ export default function StatisticsPage() {
       .catch(() => setLoading(false))
   }, [period])
 
+  const granularity = PERIOD_GRANULARITY[period]
+
   const chartData = (stats?.events || []).map(e => ({
     ...e,
-    label: formatDateLabel(e.date, period),
+    label: formatDateLabel(e.date, granularity),
   }))
 
   const subscriberData =
@@ -134,9 +144,10 @@ export default function StatisticsPage() {
       {/* Period Tabs */}
       <Tabs value={period} onValueChange={v => setPeriod(v as Period)}>
         <TabsList>
-          <TabsTrigger value="day">30 Tage</TabsTrigger>
-          <TabsTrigger value="week">12 Wochen</TabsTrigger>
-          <TabsTrigger value="month">12 Monate</TabsTrigger>
+          <TabsTrigger value="7d">7 Tage</TabsTrigger>
+          <TabsTrigger value="30d">1 Monat</TabsTrigger>
+          <TabsTrigger value="90d">3 Monate</TabsTrigger>
+          <TabsTrigger value="1y">1 Jahr</TabsTrigger>
         </TabsList>
       </Tabs>
 

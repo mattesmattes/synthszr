@@ -2,20 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 
-type Period = 'day' | 'week' | 'month'
+type Period = '7d' | '30d' | '90d' | '1y'
+type Granularity = 'day' | 'week' | 'month'
 
-const LOOKBACK_MS: Record<Period, number> = {
-  day: 30 * 24 * 60 * 60 * 1000,   // 30 days
-  week: 84 * 24 * 60 * 60 * 1000,  // 12 weeks
-  month: 365 * 24 * 60 * 60 * 1000, // 12 months
+const PERIOD_CONFIG: Record<Period, { lookbackMs: number; granularity: Granularity }> = {
+  '7d':  { lookbackMs: 7 * 24 * 60 * 60 * 1000,   granularity: 'day' },
+  '30d': { lookbackMs: 30 * 24 * 60 * 60 * 1000,  granularity: 'day' },
+  '90d': { lookbackMs: 90 * 24 * 60 * 60 * 1000,  granularity: 'week' },
+  '1y':  { lookbackMs: 365 * 24 * 60 * 60 * 1000, granularity: 'month' },
 }
 
-function truncateDateKey(isoString: string, period: Period): string {
+function truncateDateKey(isoString: string, granularity: Granularity): string {
   const d = new Date(isoString)
-  if (period === 'day') {
+  if (granularity === 'day') {
     return d.toISOString().split('T')[0]
   }
-  if (period === 'month') {
+  if (granularity === 'month') {
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`
   }
   // week: find the Monday of this week
@@ -26,16 +28,16 @@ function truncateDateKey(isoString: string, period: Period): string {
   return monday.toISOString().split('T')[0]
 }
 
-function generateBuckets(period: Period, startMs: number, endMs: number): string[] {
+function generateBuckets(granularity: Granularity, startMs: number, endMs: number): string[] {
   const result: string[] = []
   const current = new Date(startMs)
   const end = new Date(endMs)
 
-  // Normalize start to period boundary
-  if (period === 'month') {
+  // Normalize start to granularity boundary
+  if (granularity === 'month') {
     current.setUTCDate(1)
     current.setUTCHours(0, 0, 0, 0)
-  } else if (period === 'week') {
+  } else if (granularity === 'week') {
     const day = current.getUTCDay()
     current.setUTCDate(current.getUTCDate() + (day === 0 ? -6 : 1 - day))
     current.setUTCHours(0, 0, 0, 0)
@@ -45,11 +47,11 @@ function generateBuckets(period: Period, startMs: number, endMs: number): string
 
   while (current <= end) {
     const key = current.toISOString().split('T')[0]
-    const normalized = truncateDateKey(key, period)
+    const normalized = truncateDateKey(key, granularity)
     if (!result.includes(normalized)) result.push(normalized)
 
-    if (period === 'day') current.setUTCDate(current.getUTCDate() + 1)
-    else if (period === 'week') current.setUTCDate(current.getUTCDate() + 7)
+    if (granularity === 'day') current.setUTCDate(current.getUTCDate() + 1)
+    else if (granularity === 'week') current.setUTCDate(current.getUTCDate() + 7)
     else current.setUTCMonth(current.getUTCMonth() + 1)
   }
 
@@ -63,17 +65,18 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url)
-  const period = (searchParams.get('period') || 'day') as Period
-  if (!['day', 'week', 'month'].includes(period)) {
+  const period = (searchParams.get('period') || '7d') as Period
+  if (!Object.keys(PERIOD_CONFIG).includes(period)) {
     return NextResponse.json({ error: 'Invalid period' }, { status: 400 })
   }
+
+  const { lookbackMs, granularity } = PERIOD_CONFIG[period]
 
   try {
     const supabase = createAdminClient()
     const now = Date.now()
-    const lookback = LOOKBACK_MS[period]
-    const currentStart = new Date(now - lookback).toISOString()
-    const previousStart = new Date(now - 2 * lookback).toISOString()
+    const currentStart = new Date(now - lookbackMs).toISOString()
+    const previousStart = new Date(now - 2 * lookbackMs).toISOString()
 
     // Fetch current + previous period in parallel
     const [analyticsResult, podcastResult, prevAnalyticsResult, prevPodcastResult] = await Promise.all([
@@ -98,7 +101,7 @@ export async function GET(request: NextRequest) {
     ])
 
     // Generate all buckets and initialize to zero
-    const buckets = generateBuckets(period, now - lookback, now)
+    const buckets = generateBuckets(granularity, now - lookbackMs, now)
 
     type BucketData = {
       page_views: number
@@ -113,7 +116,7 @@ export async function GET(request: NextRequest) {
 
     // Aggregate analytics_events
     for (const event of analyticsResult.data || []) {
-      const key = truncateDateKey(event.created_at, period)
+      const key = truncateDateKey(event.created_at, granularity)
       const bucket = countsMap.get(key)
       if (!bucket) continue
       if (event.event_type === 'page_view') bucket.page_views++
@@ -123,7 +126,7 @@ export async function GET(request: NextRequest) {
 
     // Aggregate podcast_plays
     for (const play of podcastResult.data || []) {
-      const key = truncateDateKey(play.played_at, period)
+      const key = truncateDateKey(play.played_at, granularity)
       const bucket = countsMap.get(key)
       if (!bucket) continue
       bucket.podcast_plays++
@@ -235,6 +238,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       period,
+      granularity,
       events,
       totals,
       previous_totals,
