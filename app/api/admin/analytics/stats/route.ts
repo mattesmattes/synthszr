@@ -154,85 +154,48 @@ export async function GET(request: NextRequest) {
       podcast_plays: (prevPodcastResult.data || []).length,
     }
 
-    // Subscriber data
-    const twoYearsAgo = new Date(now - 24 * 30 * 24 * 60 * 60 * 1000).toISOString()
+    // Subscriber data — same period window and granularity as events
+    const [subNewResult, subChurnedResult, activeCountResult] = await Promise.all([
+      supabase
+        .from('subscribers')
+        .select('confirmed_at')
+        .not('confirmed_at', 'is', null)
+        .gte('confirmed_at', currentStart),
+      supabase
+        .from('subscribers')
+        .select('unsubscribed_at')
+        .not('unsubscribed_at', 'is', null)
+        .gte('unsubscribed_at', currentStart),
+      supabase
+        .from('subscribers')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'active'),
+    ])
 
-    const [newSubsResult, churnedSubsResult, allNewSubsResult, allChurnedSubsResult, activeCountResult] =
-      await Promise.all([
-        supabase
-          .from('subscribers')
-          .select('confirmed_at')
-          .not('confirmed_at', 'is', null)
-          .gte('confirmed_at', twoYearsAgo),
-        supabase
-          .from('subscribers')
-          .select('unsubscribed_at')
-          .not('unsubscribed_at', 'is', null)
-          .gte('unsubscribed_at', twoYearsAgo),
-        supabase
-          .from('subscribers')
-          .select('confirmed_at')
-          .not('confirmed_at', 'is', null),
-        supabase
-          .from('subscribers')
-          .select('unsubscribed_at')
-          .not('unsubscribed_at', 'is', null),
-        supabase
-          .from('subscribers')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'active'),
-      ])
+    const subNewMap = new Map<string, number>()
+    for (const s of subNewResult.data || []) {
+      const key = truncateDateKey(s.confirmed_at, granularity)
+      subNewMap.set(key, (subNewMap.get(key) || 0) + 1)
+    }
+    const subChurnedMap = new Map<string, number>()
+    for (const s of subChurnedResult.data || []) {
+      const key = truncateDateKey(s.unsubscribed_at, granularity)
+      subChurnedMap.set(key, (subChurnedMap.get(key) || 0) + 1)
+    }
 
-    // Monthly aggregation (last 24 months)
-    const monthlyNewMap = new Map<string, number>()
-    for (const s of newSubsResult.data || []) {
-      const key = truncateDateKey(s.confirmed_at, 'month')
-      monthlyNewMap.set(key, (monthlyNewMap.get(key) || 0) + 1)
-    }
-    const monthlyChurnedMap = new Map<string, number>()
-    for (const s of churnedSubsResult.data || []) {
-      const key = truncateDateKey(s.unsubscribed_at, 'month')
-      monthlyChurnedMap.set(key, (monthlyChurnedMap.get(key) || 0) + 1)
-    }
-    const monthlyBuckets = generateBuckets('month', now - 24 * 30 * 24 * 60 * 60 * 1000, now)
-    const monthlyRaw = monthlyBuckets.map(month => {
-      const newCount = monthlyNewMap.get(month) || 0
-      const churned = monthlyChurnedMap.get(month) || 0
-      return { month, new: newCount, churned, net: newCount - churned }
+    // Build subscriber series aligned to same buckets as events
+    const subRaw = buckets.map(date => {
+      const newCount = subNewMap.get(date) || 0
+      const churned = subChurnedMap.get(date) || 0
+      return { date, new: newCount, churned, net: newCount - churned }
     })
-    // Compute cumulative total at end of each month, working backwards from current_active
+
+    // Compute cumulative total working backwards from current_active
     const currentActive = activeCountResult.count || 0
     let runningTotal = currentActive
-    const monthly = [...monthlyRaw].reverse().map(m => {
-      const result = { ...m, total: runningTotal }
-      runningTotal = runningTotal - m.net
-      return result
-    }).reverse()
-
-    // Yearly aggregation (all time)
-    const yearlyNewMap = new Map<string, number>()
-    for (const s of allNewSubsResult.data || []) {
-      const year = new Date(s.confirmed_at).getUTCFullYear().toString()
-      yearlyNewMap.set(year, (yearlyNewMap.get(year) || 0) + 1)
-    }
-    const yearlyChurnedMap = new Map<string, number>()
-    for (const s of allChurnedSubsResult.data || []) {
-      const year = new Date(s.unsubscribed_at).getUTCFullYear().toString()
-      yearlyChurnedMap.set(year, (yearlyChurnedMap.get(year) || 0) + 1)
-    }
-    const allYears = [
-      ...new Set([...yearlyNewMap.keys(), ...yearlyChurnedMap.keys()]),
-    ].sort()
-    const yearlyRaw = allYears.map(year => {
-      const newCount = yearlyNewMap.get(year) || 0
-      const churned = yearlyChurnedMap.get(year) || 0
-      return { year, new: newCount, churned, net: newCount - churned }
-    })
-    // Cumulative totals for yearly, working backwards from current_active
-    let runningTotalY = activeCountResult.count || 0
-    const yearly = [...yearlyRaw].reverse().map(y => {
-      const result = { ...y, total: runningTotalY }
-      runningTotalY = runningTotalY - y.net
+    const period_data = [...subRaw].reverse().map(s => {
+      const result = { ...s, total: runningTotal }
+      runningTotal = runningTotal - s.net
       return result
     }).reverse()
 
@@ -243,9 +206,8 @@ export async function GET(request: NextRequest) {
       totals,
       previous_totals,
       subscribers: {
-        monthly,
-        yearly,
-        current_active: activeCountResult.count || 0,
+        period_data,
+        current_active: currentActive,
       },
     })
   } catch (error) {
