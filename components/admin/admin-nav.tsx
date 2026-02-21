@@ -168,6 +168,16 @@ const navGroups: NavGroup[] = [
     ]
   },
   {
+    label: 'Analytics',
+    items: [
+      {
+        label: 'Statistics',
+        href: '/admin/statistics',
+        icon: TrendingUp
+      }
+    ]
+  },
+  {
     label: 'Einstellungen',
     items: [
       {

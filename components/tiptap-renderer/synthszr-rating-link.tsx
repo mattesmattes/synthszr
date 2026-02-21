@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { StockSynthszrLayer } from "../stock-synthszr-layer"
 import { StockQuotePopover } from "../stock-quote-popover"
+import { trackEvent } from "@/lib/analytics/tracker"
 import {
   RATING_BADGE_STYLES,
   RATING_LABELS,
@@ -23,7 +24,7 @@ export function SynthszrRatingLink({ company, displayName, rating, ticker, chang
         {isFirst && <span className="font-bold uppercase text-[0.8125em]">Synthszr Vote:</span>}
         {!isFirst && <span>,</span>}
         <span
-          onClick={hasQuoteData ? () => setShowQuote(true) : undefined}
+          onClick={hasQuoteData ? () => { trackEvent('stock_ticker_click', { company }); setShowQuote(true) } : undefined}
           className={`ml-1 ${hasQuoteData ? 'hover:underline cursor-pointer' : ''}`}
         >
           {displayName}
@@ -35,7 +36,7 @@ export function SynthszrRatingLink({ company, displayName, rating, ticker, chang
           )}
         </span>
         <span
-          onClick={() => setShowSynthszr(true)}
+          onClick={() => { trackEvent('synthszr_vote_click', { company }); setShowSynthszr(true) }}
           className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold not-italic cursor-pointer hover:opacity-80 ${RATING_BADGE_STYLES[rating]}`}
         >
           {RATING_LABELS[rating]}

@@ -4,6 +4,7 @@ import { IBM_Plex_Serif, Space_Mono } from "next/font/google"
 import { Analytics } from "@/components/analytics"
 import { ConsentBanner } from "@/components/consent-banner"
 import { NewsletterPopup } from "@/components/newsletter-popup"
+import { PageTracker } from "@/components/analytics/page-tracker"
 import "./globals.css"
 
 const ibmPlexSerif = IBM_Plex_Serif({
@@ -54,6 +55,7 @@ export default function RootLayout({
       </head>
       <body className={`${ibmPlexSerif.variable} ${spaceMono.variable} font-serif antialiased`}>
         {children}
+        <PageTracker />
         <Analytics />
         <ConsentBanner />
         <NewsletterPopup />

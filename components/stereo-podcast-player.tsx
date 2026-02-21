@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { trackEvent } from '@/lib/analytics/tracker'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Play, Pause, Download, Loader2, Volume2 } from 'lucide-react'
@@ -78,6 +79,7 @@ export function StereoPodcastPlayer({
   }, [duration, isPlaying])
 
   const play = useCallback(async () => {
+    trackEvent('podcast_play')
     try {
       const buffer = await loadAndMix()
 
