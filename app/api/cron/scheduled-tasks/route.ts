@@ -41,31 +41,11 @@ interface ScheduleConfig {
 }
 
 const DEFAULT_SCHEDULE: ScheduleConfig = {
-  newsletterFetch: {
-    enabled: true,
-    hour: 6,
-    minute: 0,
-  },
-  webcrawlFetch: {
-    enabled: true,
-    hour: 6,
-    minute: 0,
-  },
-  dailyAnalysis: {
-    enabled: true,
-    hour: 8,
-    minute: 0,
-  },
-  postGeneration: {
-    enabled: false,
-    hour: 9,
-    minute: 0,
-  },
-  newsletterSend: {
-    enabled: false,
-    hour: 9,
-    minute: 30,
-  },
+  newsletterFetch: { enabled: true, hour: 3, minute: 0 },   // 04:00 MEZ
+  webcrawlFetch:   { enabled: true, hour: 3, minute: 30 },  // 04:30 MEZ
+  dailyAnalysis:   { enabled: true, hour: 4, minute: 0 },   // 05:00 MEZ
+  postGeneration:  { enabled: false, hour: 9, minute: 0 },
+  newsletterSend:  { enabled: false, hour: 9, minute: 30 },
 }
 
 // Helper to check if current time matches a schedule (within 10 min window)
@@ -113,8 +93,9 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
   const now = new Date()
 
-  // Check if runAll mode (for daily cron on Hobby plan)
   const { searchParams } = new URL(request.url)
+  // mode=newsletter: only newsletter fetch (04:00 MEZ cron)
+  // runAll=true: all tasks sequentially (manual trigger via admin UI, bypasses time checks)
   const runAll = searchParams.get('runAll') === 'true'
   const forceRun = searchParams.get('force') === 'true' // Bypass hasRunRecently checks
 
@@ -123,7 +104,7 @@ export async function GET(request: NextRequest) {
   const currentHour = berlinTime.getHours()
   const currentMinute = berlinTime.getMinutes()
 
-  console.log(`[Scheduler] Running at ${currentHour}:${String(currentMinute).padStart(2, '0')} MEZ (${now.getUTCHours()}:${String(now.getUTCMinutes()).padStart(2, '0')} UTC)${runAll ? ' [runAll mode]' : ''}${forceRun ? ' [force mode]' : ''}`)
+  console.log(`[Scheduler] Running at ${currentHour}:${String(currentMinute).padStart(2, '0')} MEZ (${now.getUTCHours()}:${String(now.getUTCMinutes()).padStart(2, '0')} UTC)${runAll ? ' [runAll]' : ''}${forceRun ? ' [force]' : ''}`)
 
   // Get schedule config
   const { data: configData } = await supabase
@@ -136,122 +117,82 @@ export async function GET(request: NextRequest) {
 
   const results: Record<string, string> = {}
 
-  // Check Newsletter Fetch
+  // Newsletter Fetch
   if (config.newsletterFetch.enabled) {
-    // Support both new format (hour/minute) and legacy format (hours array)
-    const fetchHour = config.newsletterFetch.hour ?? config.newsletterFetch.hours?.[0] ?? 6
+    const fetchHour = config.newsletterFetch.hour ?? config.newsletterFetch.hours?.[0] ?? 3
     const fetchMinute = config.newsletterFetch.minute ?? 0
     const shouldRun = runAll || isTimeMatch(fetchHour, fetchMinute, currentHour, currentMinute)
     const recentlyRan = !forceRun && await hasRunRecently(supabase, 'newsletter_fetch', 60)
-
     if (shouldRun && !recentlyRan) {
-      console.log('[Scheduler] Running newsletter fetch directly...')
+      console.log('[Scheduler] Running newsletter fetch...')
       try {
-        // Call processNewsletters directly (no HTTP call = no timeout issues)
         const fetchResult = await processNewsletters()
         console.log('[Scheduler] Newsletter fetch completed:', fetchResult.message)
         await markTaskRun(supabase, 'newsletter_fetch')
         results.newsletterFetch = fetchResult.success ? 'completed' : 'error'
-        if (fetchResult.processed !== undefined) {
-          results.newslettersFetched = fetchResult.processed.toString()
-        }
-        if (fetchResult.articles !== undefined) {
-          results.articlesExtracted = fetchResult.articles.toString()
-        }
+        if (fetchResult.processed !== undefined) results.newslettersFetched = fetchResult.processed.toString()
+        if (fetchResult.articles !== undefined) results.articlesExtracted = fetchResult.articles.toString()
       } catch (error) {
         console.error('[Scheduler] Newsletter fetch error:', error)
         results.newsletterFetch = 'error'
       }
     } else {
-      results.newsletterFetch = recentlyRan ? 'already_ran' : 'skipped'
+      results.newsletterFetch = recentlyRan ? 'already_ran' : 'not_scheduled'
     }
   }
 
-  // Check WebCrawl Fetch
-  if (config.webcrawlFetch?.enabled) {
-    const webcrawlHour = config.webcrawlFetch.hour ?? 6
-    const webcrawlMinute = config.webcrawlFetch.minute ?? 0
-    const shouldRunWebcrawl = runAll || isTimeMatch(webcrawlHour, webcrawlMinute, currentHour, currentMinute)
-    const webcrawlRecentlyRan = !forceRun && await hasRunRecently(supabase, 'webcrawl_fetch', 60)
-
-    if (shouldRunWebcrawl && !webcrawlRecentlyRan) {
+  // WebCrawl Fetch
+  if (config.webcrawlFetch.enabled) {
+    const shouldRun = runAll || isTimeMatch(config.webcrawlFetch.hour, config.webcrawlFetch.minute, currentHour, currentMinute)
+    const recentlyRan = !forceRun && await hasRunRecently(supabase, 'webcrawl_fetch', 60)
+    if (shouldRun && !recentlyRan) {
       console.log('[Scheduler] Running webcrawl fetch...')
       try {
         const crawlResult = await processWebcrawl()
         console.log('[Scheduler] WebCrawl fetch completed:', crawlResult.message || `${crawlResult.articles} articles`)
         await markTaskRun(supabase, 'webcrawl_fetch')
         results.webcrawlFetch = crawlResult.success ? 'completed' : 'error'
-        if (crawlResult.articles !== undefined) {
-          results.webcrawlArticles = crawlResult.articles.toString()
-        }
+        if (crawlResult.articles !== undefined) results.webcrawlArticles = crawlResult.articles.toString()
       } catch (error) {
         console.error('[Scheduler] WebCrawl fetch error:', error)
         results.webcrawlFetch = 'error'
       }
     } else {
-      results.webcrawlFetch = webcrawlRecentlyRan ? 'already_ran' : 'skipped'
+      results.webcrawlFetch = recentlyRan ? 'already_ran' : 'not_scheduled'
     }
   }
 
-  // Check Daily Analysis (News & Synthese Erstellung)
-  // Only run if newsletter fetch completed successfully, was skipped, or already ran
+  // Daily Analysis + News-Synthese
   if (config.dailyAnalysis.enabled) {
-    const shouldRunAnalysis = runAll || isTimeMatch(config.dailyAnalysis.hour, config.dailyAnalysis.minute, currentHour, currentMinute)
-    const analysisRecentlyRan = !forceRun && await hasRunRecently(supabase, 'daily_analysis', 60)
-
-    // Check newsletter fetch dependency - must have succeeded, already ran, or been skipped
-    const newsletterFetchOk = ['completed', 'already_ran', 'skipped'].includes(results.newsletterFetch || '')
-    const newsletterFetchDisabled = !config.newsletterFetch.enabled
-
-    if (shouldRunAnalysis && !analysisRecentlyRan) {
-      if (!newsletterFetchOk && !newsletterFetchDisabled) {
-        console.log('[Scheduler] Skipping daily analysis - newsletter fetch failed')
-        results.dailyAnalysis = 'skipped_dependency_failed'
-      } else {
-        if (results.newsletterFetch === 'completed') {
-          console.log('[Scheduler] Newsletter fetch completed, proceeding with daily analysis...')
-        }
-        console.log('[Scheduler] Triggering daily analysis and synthesis...')
-        try {
-          const digestResult = await runDailyAnalysisAndSynthesis(supabase)
-          await markTaskRun(supabase, 'daily_analysis')
-          results.dailyAnalysis = digestResult.success ? 'completed' : 'error'
-          if (digestResult.digestId) {
-            results.digestId = digestResult.digestId
-          }
-          if (digestResult.synthesesCreated !== undefined) {
-            results.synthesesCreated = digestResult.synthesesCreated.toString()
-          }
-        } catch (error) {
-          console.error('[Scheduler] Daily analysis error:', error)
-          results.dailyAnalysis = 'error'
-        }
+    const shouldRun = runAll || isTimeMatch(config.dailyAnalysis.hour, config.dailyAnalysis.minute, currentHour, currentMinute)
+    const recentlyRan = !forceRun && await hasRunRecently(supabase, 'daily_analysis', 60)
+    if (shouldRun && !recentlyRan) {
+      console.log('[Scheduler] Triggering daily analysis and synthesis...')
+      try {
+        const digestResult = await runDailyAnalysisAndSynthesis(supabase)
+        await markTaskRun(supabase, 'daily_analysis')
+        results.dailyAnalysis = digestResult.success ? 'completed' : 'error'
+        if (digestResult.digestId) results.digestId = digestResult.digestId
+        if (digestResult.synthesesCreated !== undefined) results.synthesesCreated = digestResult.synthesesCreated.toString()
+      } catch (error) {
+        console.error('[Scheduler] Daily analysis error:', error)
+        results.dailyAnalysis = 'error'
       }
-    } else if (analysisRecentlyRan) {
-      results.dailyAnalysis = 'already_ran'
     } else {
-      results.dailyAnalysis = 'not_scheduled'
+      results.dailyAnalysis = recentlyRan ? 'already_ran' : 'not_scheduled'
     }
   }
 
-  // Check Post Generation
-  // Only run if daily analysis completed successfully or already ran
+  // Post Generation (requires daily analysis)
   if (config.postGeneration.enabled) {
-    const shouldRunPostGen = runAll || isTimeMatch(config.postGeneration.hour, config.postGeneration.minute, currentHour, currentMinute)
-    const postGenRecentlyRan = !forceRun && await hasRunRecently(supabase, 'post_generation', 60)
-
-    // Check daily analysis dependency - must have succeeded or already ran
-    const dailyAnalysisOk = ['completed', 'already_ran'].includes(results.dailyAnalysis || '')
-    const dailyAnalysisDisabled = !config.dailyAnalysis.enabled
-
-    if (shouldRunPostGen && !postGenRecentlyRan) {
-      if (!dailyAnalysisOk && !dailyAnalysisDisabled) {
-        console.log('[Scheduler] Skipping post generation - daily analysis failed')
+    const shouldRun = runAll || isTimeMatch(config.postGeneration.hour, config.postGeneration.minute, currentHour, currentMinute)
+    const recentlyRan = !forceRun && await hasRunRecently(supabase, 'post_generation', 60)
+    const analysisOk = ['completed', 'already_ran'].includes(results.dailyAnalysis || '')
+    if (shouldRun && !recentlyRan) {
+      if (!analysisOk && config.dailyAnalysis.enabled) {
+        console.log('[Scheduler] Skipping post generation - daily analysis not completed')
         results.postGeneration = 'skipped_dependency_failed'
       } else {
-        if (results.dailyAnalysis === 'completed') {
-          console.log('[Scheduler] Daily analysis completed, proceeding with post generation...')
-        }
         console.log('[Scheduler] Triggering post generation...')
         try {
           await generateDailyPost(supabase)
@@ -262,14 +203,12 @@ export async function GET(request: NextRequest) {
           results.postGeneration = 'error'
         }
       }
-    } else if (postGenRecentlyRan) {
-      results.postGeneration = 'already_ran'
     } else {
-      results.postGeneration = 'not_scheduled'
+      results.postGeneration = recentlyRan ? 'already_ran' : 'not_scheduled'
     }
   }
 
-  // Check Newsletter Send
+  // Newsletter Send
   if (config.newsletterSend?.enabled) {
     const shouldRunSend = runAll || isTimeMatch(config.newsletterSend.hour, config.newsletterSend.minute, currentHour, currentMinute)
     const sendRecentlyRan = !forceRun && await hasRunRecently(supabase, 'newsletter_send', 60)

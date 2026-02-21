@@ -8,7 +8,7 @@ export interface ScheduleConfig {
     hour: number
     minute: number
   }
-  webcrawlFetch?: {
+  webcrawlFetch: {
     enabled: boolean
     hour: number
     minute: number
@@ -31,21 +31,9 @@ export interface ScheduleConfig {
 }
 
 const DEFAULT_SCHEDULE: ScheduleConfig = {
-  newsletterFetch: {
-    enabled: true,
-    hour: 6,
-    minute: 0,
-  },
-  webcrawlFetch: {
-    enabled: true,
-    hour: 6,
-    minute: 0,
-  },
-  dailyAnalysis: {
-    enabled: true,
-    hour: 8,
-    minute: 0,
-  },
+  newsletterFetch: { enabled: true,  hour: 3, minute: 0  },  // 04:00 MEZ
+  webcrawlFetch:   { enabled: true,  hour: 3, minute: 30 },  // 04:30 MEZ
+  dailyAnalysis:   { enabled: true,  hour: 4, minute: 0  },  // 05:00 MEZ
   postGeneration: {
     enabled: false,
     hour: 9,
