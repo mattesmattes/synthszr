@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { PremarketSynthszrLayer } from "../premarket-synthszr-layer"
+import { trackEvent } from "@/lib/analytics/tracker"
 import { RATING_BADGE_STYLES, RATING_LABELS } from "@/lib/synthszr/rating-styles"
 import type { PremarketRatingLinkProps } from "./types"
 
@@ -11,7 +12,7 @@ export function PremarketRatingLink({ company, displayName, rating, isFirst, isi
   return (
     <>
       <button
-        onClick={() => setShowPremarket(true)}
+        onClick={() => { trackEvent('synthszr_vote_click', { company }); setShowPremarket(true) }}
         className="inline-flex items-baseline gap-1 hover:underline cursor-pointer text-foreground text-[13px]"
       >
         {isFirst ? (
