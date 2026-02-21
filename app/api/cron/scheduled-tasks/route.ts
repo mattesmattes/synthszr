@@ -99,12 +99,14 @@ export async function GET(request: NextRequest) {
   const runAll = searchParams.get('runAll') === 'true'
   const forceRun = searchParams.get('force') === 'true' // Bypass hasRunRecently checks
 
-  // Use Europe/Berlin timezone (MEZ/MESZ) since admin UI uses MEZ
+  // DB stores times in UTC (admin UI converts MEZ→UTC on save), compare with UTC
+  const currentHour = now.getUTCHours()
+  const currentMinute = now.getUTCMinutes()
   const berlinTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }))
-  const currentHour = berlinTime.getHours()
-  const currentMinute = berlinTime.getMinutes()
+  const berlinHour = berlinTime.getHours()
+  const berlinMinute = berlinTime.getMinutes()
 
-  console.log(`[Scheduler] Running at ${currentHour}:${String(currentMinute).padStart(2, '0')} MEZ (${now.getUTCHours()}:${String(now.getUTCMinutes()).padStart(2, '0')} UTC)${runAll ? ' [runAll]' : ''}${forceRun ? ' [force]' : ''}`)
+  console.log(`[Scheduler] Running at ${berlinHour}:${String(berlinMinute).padStart(2, '0')} MEZ (${currentHour}:${String(currentMinute).padStart(2, '0')} UTC)${runAll ? ' [runAll]' : ''}${forceRun ? ' [force]' : ''}`)
 
   // Get schedule config
   const { data: configData } = await supabase
@@ -113,7 +115,13 @@ export async function GET(request: NextRequest) {
     .eq('key', 'schedule_config')
     .single()
 
-  const config: ScheduleConfig = configData?.value || DEFAULT_SCHEDULE
+  const savedConfig = configData?.value || {}
+  const config: ScheduleConfig = {
+    ...DEFAULT_SCHEDULE,
+    ...savedConfig,
+    // Ensure webcrawlFetch exists even if old DB config pre-dates this field
+    webcrawlFetch: savedConfig.webcrawlFetch ?? DEFAULT_SCHEDULE.webcrawlFetch,
+  }
 
   const results: Record<string, string> = {}
 
