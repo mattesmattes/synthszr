@@ -256,15 +256,14 @@ export default function StatisticsPage() {
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
-                  <ComposedChart data={subscriberData} margin={{ top: 5, right: 50, left: 0, bottom: 5 }}>
+                  <ComposedChart data={subscriberData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                    <YAxis yAxisId="left" tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="new" name="Zugänge" fill="#10B981" opacity={0.8} yAxisId="left" />
-                    <Bar dataKey="churned" name="Abgänge" fill="#EF4444" opacity={0.8} yAxisId="left" />
+                    <Bar dataKey="new" name="Zugänge" fill="#10B981" opacity={0.8} />
+                    <Bar dataKey="churned" name="Abgänge" fill="#EF4444" opacity={0.8} />
                     <Line
                       type="monotone"
                       dataKey="total"
@@ -272,7 +271,6 @@ export default function StatisticsPage() {
                       stroke="#3B82F6"
                       dot={false}
                       strokeWidth={2}
-                      yAxisId="right"
                     />
                   </ComposedChart>
                 </ResponsiveContainer>
