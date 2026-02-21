@@ -155,8 +155,12 @@ export async function processSynthszrRatingLinks(
     let textToSearch = ''
     let prevElement = markerContainer.previousElementSibling
     while (prevElement) {
-      if (prevElement.tagName.match(/^H[1-6]$/)) break
       const prevText = (prevElement as HTMLElement).innerText || prevElement.textContent || ''
+      if (prevElement.tagName.match(/^H[1-6]$/)) {
+        // Include heading text (company names often only appear in section headings)
+        textToSearch = prevText + ' ' + textToSearch
+        break
+      }
       if (prevText.toLowerCase().includes('synthszr take') ||
           prevText.toLowerCase().includes('synthszr contra') ||
           prevText.toLowerCase().includes('mattes synthese')) break

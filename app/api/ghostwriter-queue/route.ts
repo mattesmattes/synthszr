@@ -11,6 +11,7 @@ import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
 import { getBalancedSelection, getSelectedItems, selectItemsForArticle } from '@/lib/news-queue/service'
 import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
+import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 
 const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview', 'gpt-5.2', 'gpt-5.2-mini']
 
@@ -292,6 +293,10 @@ export async function POST(request: NextRequest) {
 
     const fullPrompt = promptText + vocabularyContext
 
+    // Build dynamic company lists from the actual data (synced from Glitch Green API)
+    const publicCompanyList = Object.keys(KNOWN_COMPANIES).join(', ')
+    const premarketCompanyList = Object.keys(KNOWN_PREMARKET_COMPANIES).join(', ')
+
     // Enforcement rules appended at the end of content (last thing the LLM sees)
     const enforcementRules = `
 
@@ -312,7 +317,19 @@ export async function POST(request: NextRequest) {
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 
-4. **COMPANY TAGGING:** Wenn eine News thematisch zu einem Unternehmen passt (auch wenn es NICHT explizit genannt wird), ergänze am Ende der News "{Company}" Tags. Maximal 3 Tags pro News.
+4. **COMPANY TAGGING (PFLICHT):** Ergänze am Ende jedes News-Textes — NACH dem letzten Satz der News, VOR dem "Synthszr Take:" — die relevanten Unternehmens-Tags zusammen mit der Quellenangabe auf einer Zeile. Maximal 3 Tags pro News. Auch setzen wenn das Unternehmen nur im Heading steht.
+
+   **FORMAT (genau so):** {TagA} {TagB} → Quellenname
+   **BEISPIELE:**
+   - News direkt über OpenAI und Anthropic: {OpenAI} {Anthropic} → Techmeme
+   - News "AI-Inferenz wird billiger": {Groq} {Cerebras} → The Information
+   - News "Enterprise AI Adoption": {Salesforce} {ServiceNow} → Bloomberg
+
+   **VERFÜGBARE PUBLIC COMPANIES (börsennotiert):** ${publicCompanyList}
+
+   **VERFÜGBARE PREMARKET COMPANIES (nicht börsennotiert):** ${premarketCompanyList}
+
+   Nur Unternehmen aus diesen Listen taggen — exakt so wie dort geschrieben.
 
 5. **EXCERPT FORMAT:** Der EXCERPT im Metadaten-Block MUSS exakt 3 Bullet Points haben:
    - Jeder Bullet beginnt mit • und headlinet pointiert je einen der ersten 3 Artikel

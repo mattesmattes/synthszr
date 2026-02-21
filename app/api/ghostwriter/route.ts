@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
 import { getSynthesesForDigest } from '@/lib/synthesis/pipeline'
 import { sanitizeUrl, isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
+import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 
 const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview', 'gpt-5.2', 'gpt-5.2-mini']
 
@@ -504,6 +505,10 @@ export async function POST(request: NextRequest) {
     // Combine prompt with vocabulary and stylistic rules
     const fullPrompt = promptText + vocabularyContext + stylisticContext
 
+    // Build dynamic company lists from the actual data (synced from Glitch Green API)
+    const publicCompanyList = Object.keys(KNOWN_COMPANIES).join(', ')
+    const premarketCompanyList = Object.keys(KNOWN_PREMARKET_COMPANIES).join(', ')
+
     // Add explicit enforcement rules that appear at the end of the digest content
     // These are harder for the AI to ignore since they're the last thing it sees before generating
     const enforcementRules = `
@@ -527,22 +532,20 @@ export async function POST(request: NextRequest) {
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 
-4. **COMPANY TAGGING für Investment-Relevanz:** Wenn eine News thematisch zu einem Unternehmen passt (auch wenn es NICHT explizit genannt wird), ergänze am Ende der News "{Company}" für relevante Investment-Ideen.
+4. **COMPANY TAGGING (PFLICHT):** Ergänze am Ende jedes News-Textes — NACH dem letzten Satz der News, VOR dem "Synthszr Take:" — die relevanten Unternehmens-Tags zusammen mit der Quellenangabe auf einer Zeile. Maximal 3 Tags pro News. Auch setzen wenn das Unternehmen nur im Heading steht.
 
-   **WANN TAGGEN:** Das Unternehmen wird NICHT in der News genannt, aber der Trend/das Thema wäre relevant für ein Investment in dieses Unternehmen.
-
+   **FORMAT (genau so):** {TagA} {TagB} → Quellenname
    **BEISPIELE:**
-   - News über "AI-Inferenz wird billiger" → Ergänze: {Groq} {Cerebras} {Together AI}
-   - News über "Autonomes Fahren Regulierung" → Ergänze: {Waymo} {Tesla}
-   - News über "Enterprise AI Adoption steigt" → Ergänze: {Salesforce} {ServiceNow} {Palantir}
-   - News über "Developer Tools Boom" → Ergänze: {Vercel} {Supabase} {Replit}
+   - News direkt über OpenAI und Anthropic: {OpenAI} {Anthropic} → Techmeme
+   - News "AI-Inferenz wird billiger": {Groq} {Cerebras} → The Information
+   - News "Autonomes Fahren Regulierung": {Waymo} {Tesla} → Bloomberg
+   - News "Developer Tools Boom": {Vercel} {Supabase} → TechCrunch
 
-   **PUBLIC COMPANIES:** Apple, Microsoft, Google, Alphabet, Amazon, Meta, Nvidia, Tesla, Netflix, Salesforce, Snowflake, Palantir, CrowdStrike, Cloudflare, Intel, AMD, Qualcomm, Broadcom, TSMC, ASML, ARM, Snap, Pinterest, Spotify, Disney, Shopify, PayPal, Block, Oracle, SAP, IBM, Adobe, ServiceNow, Workday, Zoom, Atlassian, Twilio, DocuSign, Uber, Airbnb, Coinbase, Robinhood, Roblox, Unity, Samsung
+   **VERFÜGBARE PUBLIC COMPANIES (börsennotiert):** ${publicCompanyList}
 
-   **PREMARKET COMPANIES:** Anthropic, OpenAI, Mistral AI, Perplexity, Cohere, xAI, Safe Superintelligence, Hugging Face, Scale AI, Databricks, Stripe, SpaceX, ByteDance, Canva, Discord, Figma, Notion, Vercel, Supabase, Replit, Waymo, Runway, ElevenLabs, Midjourney, Stability AI, Character.AI, Pika, Suno, Groq, Cerebras, Together AI, Fireworks AI, Anyscale, Klarna, Revolut, Plaid, Chime, Rippling, Deel, Flexport
+   **VERFÜGBARE PREMARKET COMPANIES (nicht börsennotiert):** ${premarketCompanyList}
 
-   **FORMAT:** Füge die Tags am Ende der News ein, z.B.: "...das könnte den Markt verändern. {Nvidia} {AMD} {TSMC}"
-   **WICHTIG:** Nur taggen wenn thematisch WIRKLICH relevant. Nicht jede News braucht Tags. Maximal 3 Tags pro News.
+   Nur Unternehmen aus diesen Listen taggen — exakt so wie dort geschrieben. Maximal 3 Tags pro News.
 
 5. **EXCERPT FORMAT:** Der EXCERPT im Metadaten-Block MUSS exakt 3 Bullet Points haben:
    - Jeder Bullet beginnt mit • und headlinet pointiert je einen der ersten 3 Artikel

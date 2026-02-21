@@ -509,7 +509,9 @@ export default function CreateArticlePage() {
       .catch(err => console.error('Cover image generation error:', err))
   }
 
-  // Extract {Company} tags from TipTap JSON content
+  // Extract {Company} tags from plain text (markdown or similar)
+  // NOTE: Must be called with raw markdown text, NOT JSON.stringify(tiptapContent)
+  // because the JSON regex would match outer JSON braces instead of {Company} patterns
   function extractCompanyTags(content: string): { public: string[]; premarket: string[] } {
     const publicCompanies: string[] = []
     const premarketCompanies: string[] = []
@@ -550,9 +552,9 @@ export default function CreateArticlePage() {
   }
 
   // Trigger Synthszr rating generation for companies mentioned in the article
-  async function triggerSynthszrRatings(tiptapContent: object) {
-    const contentString = JSON.stringify(tiptapContent)
-    const companies = extractCompanyTags(contentString)
+  // content: raw markdown text (NOT TipTap JSON) — regex only works on plain text
+  async function triggerSynthszrRatings(content: string) {
+    const companies = extractCompanyTags(content)
 
     const totalCompanies = companies.public.length + companies.premarket.length
     if (totalCompanies === 0) {
@@ -685,7 +687,8 @@ export default function CreateArticlePage() {
       }
 
       // Trigger Synthszr ratings for companies with {Company} tags
-      triggerSynthszrRatings(tiptapContent)
+      // Use raw markdown (bodyContent), not TipTap JSON — regex requires plain text
+      triggerSynthszrRatings(bodyContent)
 
       // NOTE: Translations are NOT triggered for drafts
       // They will be triggered when the post is published from the edit page
