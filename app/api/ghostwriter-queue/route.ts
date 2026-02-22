@@ -295,12 +295,15 @@ export async function POST(request: NextRequest) {
    - Jede News bekommt eine eigene Zwischenüberschrift (##)
    - Jeder News-Artikel MUSS exakt 5-7 Sätze haben
 
-2. **SYNTHSZR TAKE:** Jeder "Synthszr Take:" MUSS MINDESTENS 5 Sätze haben (Ziel: 5-8 Sätze). Ein Take mit 2-3 Sätzen ist ZU KURZ!
-   - Analytisch begründete Einordnung, darf positiv oder negativ bewerten
-   - VERBOTENE SATZSTRUKTUREN: Keine Kontrastpaare ("nicht nur... sondern auch", "einerseits... andererseits", "zwar... aber"), keine Parallelkonstruktionen (gleichförmige Satzanfänge), kein "nicht ob X, sondern ob Y"
-   - VERBOTENE PHRASEN: "Es bleibt abzuwarten", "Man darf gespannt sein", "Die Zeit wird zeigen", "Besonders bemerkenswert", "Spannend ist dabei", "Das Potenzial ist enorm", "Es zeigt sich", "Letztlich", "Am Ende des Tages", "revolutionär", "bahnbrechend", "wegweisend", "Die wahre [X] ist", "Die eigentliche [X] ist", "Die wirkliche [X] ist", "Die eigentliche Frage ist"
-   - VERBOTENE STILMITTEL: Keine rhetorischen Fragen am Ende, kein "Doch" als dramatischer Satzanfang, keine qualifizierenden Relativierungen ("— und das ist erst der Anfang"), keine Pseudo-Mündlichkeit ("Mal ehrlich:", "Seien wir ehrlich:")
-   - STATTDESSEN: Konkrete Fakten und Zahlen, aktive Verben, asymmetrische Satzlängen, nüchterne Analystensprache
+2. **SYNTHSZR TAKE:** Jeder "Synthszr Take:" MUSS MINDESTENS 5 Sätze haben (Ziel: 5-7 Sätze). Ein Take mit 2-3 Sätzen ist ZU KURZ!
+   - Schreibe als erfahrener Tech-Stratege für Fachkollegen — keine Dramatik, kein Überzeugungsversuch
+   - SATZ 1: Konkrete Beobachtung oder Zahl — KEIN evaluativer Einstieg ("Das ist wichtig/spannend/bemerkenswert")
+   - SATZ 2: Warum das strategisch relevant ist (Marktmechanik, Wirtschaftlichkeit, Wettbewerb)
+   - SATZ 3-4: Konkrete Implikation für IT-Dienstleister, Agenturen oder Produktentwickler
+   - SATZ 5: Nüchterne Einschätzung — positiv ODER negativ, nie unverbindlich-neutral
+   - ERLAUBTE SATZANFÄNGE: Eigenname, Zahl, konkretes Substantiv, aktives Verb
+   - VERBOTENE SATZANFÄNGE: "Das...", "Dies...", "Hier...", "Es...", "Was...", "Ob...", "Die Frage..."
+   - ABSOLUT VERBOTEN: Kontrastpaare ("einerseits... andererseits", "nicht nur... sondern auch"), Abwarte-Formeln ("Es bleibt abzuwarten", "Die Zeit wird zeigen"), Potenzial-Phrasen ("Das Potenzial ist enorm"), Reframing ("Die eigentliche Frage ist..."), rhetorische Fragen am Ende, "Doch" als Satzanfang, Pseudo-Mündlichkeit ("Mal ehrlich:")
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 
