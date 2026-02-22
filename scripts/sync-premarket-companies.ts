@@ -5,15 +5,21 @@
  * This script fetches all premarket companies from the glitch.green API
  * and generates a TypeScript file with company dictionaries.
  *
+ * Also reads discovered_companies from Supabase (auto-discovered at runtime)
+ * and merges them into the generated file.
+ *
  * Run manually: npx tsx scripts/sync-premarket-companies.ts
  * Or automatically via: npm run prebuild
  */
 
 import * as fs from 'fs'
 import * as path from 'path'
+import { createClient } from '@supabase/supabase-js'
 
 const STOCKS_API_BASE = process.env.STOCKS_API_BASE_URL || 'https://glitch.green'
 const STOCKS_PREMARKET_API_KEY = process.env.STOCKS_PREMARKET_API_KEY || ''
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const OUTPUT_FILE = path.join(__dirname, '..', 'lib', 'data', 'companies.ts')
 
 // Public companies (manually curated) - these have stock tickers
@@ -91,6 +97,13 @@ const KNOWN_PUBLIC_COMPANIES: Record<string, string> = {
   'Databricks': 'databricks',
 }
 
+interface DiscoveredCompanyRow {
+  display_name: string
+  slug: string
+  type: 'public' | 'premarket'
+  ticker?: string | null
+}
+
 interface PremarketItem {
   instrument: {
     name: string | null
@@ -103,6 +116,55 @@ interface PremarketApiResponse {
   pagination?: {
     total: number
     hasMore: boolean
+  }
+}
+
+/**
+ * Fetch auto-discovered companies from Supabase discovered_companies table.
+ * Returns { publicCompanies, premarketCompanies } to merge into the generated file.
+ */
+async function fetchDiscoveredCompanies(): Promise<{
+  publicCompanies: Record<string, string>
+  premarketCompanies: string[]
+}> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.log('Supabase credentials not set — skipping discovered_companies')
+    return { publicCompanies: {}, premarketCompanies: [] }
+  }
+
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    const { data, error } = await supabase
+      .from('discovered_companies')
+      .select('display_name, slug, type, ticker')
+
+    if (error) {
+      console.warn('Could not fetch discovered_companies:', error.message)
+      return { publicCompanies: {}, premarketCompanies: [] }
+    }
+
+    const rows = (data ?? []) as DiscoveredCompanyRow[]
+    const publicCompanies: Record<string, string> = {}
+    const premarketCompanies: string[] = []
+
+    for (const row of rows) {
+      if (row.type === 'public') {
+        publicCompanies[row.display_name] = row.slug
+      } else if (row.type === 'premarket') {
+        premarketCompanies.push(row.display_name)
+      }
+    }
+
+    console.log(
+      `Discovered companies: ${Object.keys(publicCompanies).length} public, ${premarketCompanies.length} premarket`
+    )
+    return { publicCompanies, premarketCompanies }
+  } catch (err) {
+    console.warn('Error fetching discovered_companies:', err)
+    return { publicCompanies: {}, premarketCompanies: [] }
   }
 }
 
@@ -160,12 +222,23 @@ async function fetchPremarketCompanies(): Promise<string[] | null> {
   return uniqueCompanies
 }
 
-function generateTypeScriptFile(premarketCompanies: string[]): string {
-  const premarketEntries = premarketCompanies
+function generateTypeScriptFile(
+  premarketCompanies: string[],
+  discoveredPublic: Record<string, string> = {},
+  discoveredPremarket: string[] = []
+): string {
+  // Merge discovered public companies into the manually curated list
+  const allPublicCompanies = { ...KNOWN_PUBLIC_COMPANIES, ...discoveredPublic }
+
+  // Merge and deduplicate premarket companies
+  const allPremarketSet = new Set([...premarketCompanies, ...discoveredPremarket])
+  const allPremarketCompanies = [...allPremarketSet].sort()
+
+  const premarketEntries = allPremarketCompanies
     .map(name => `  '${name.replace(/'/g, "\\'")}': '${name.replace(/'/g, "\\'")}'`)
     .join(',\n')
 
-  const publicEntries = Object.entries(KNOWN_PUBLIC_COMPANIES)
+  const publicEntries = Object.entries(allPublicCompanies)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, slug]) => `  '${name}': '${slug}'`)
     .join(',\n')
@@ -175,6 +248,10 @@ function generateTypeScriptFile(premarketCompanies: string[]): string {
   const publicBlock = publicEntries ? `${publicEntries},` : ''
 
   const timestamp = new Date().toISOString()
+  const discoveredNote =
+    Object.keys(discoveredPublic).length > 0 || discoveredPremarket.length > 0
+      ? ` (+${Object.keys(discoveredPublic).length} auto-discovered public, +${discoveredPremarket.length} auto-discovered premarket)`
+      : ''
 
   return `/**
  * Company Data - Auto-generated file
@@ -187,7 +264,7 @@ function generateTypeScriptFile(premarketCompanies: string[]): string {
  */
 
 /**
- * Known public companies with stock tickers
+ * Known public companies with stock tickers${discoveredNote}
  * Format: { 'Display Name': 'slug-for-api' }
  */
 export const KNOWN_COMPANIES: Record<string, string> = {
@@ -197,7 +274,7 @@ ${publicBlock}
 /**
  * Known premarket companies from glitch.green API
  * Format: { 'Company Name': 'API Name' }
- * Total: ${premarketCompanies.length} companies
+ * Total: ${allPremarketCompanies.length} companies
  */
 export const KNOWN_PREMARKET_COMPANIES: Record<string, string> = {
 ${premarketBlock}
@@ -244,8 +321,12 @@ async function main() {
       return
     }
 
-    // Generate TypeScript file
-    const content = generateTypeScriptFile(premarketCompanies)
+    // Fetch auto-discovered companies from Supabase
+    const { publicCompanies: discoveredPublic, premarketCompanies: discoveredPremarket } =
+      await fetchDiscoveredCompanies()
+
+    // Generate TypeScript file (merges glitch.green + Supabase discovered)
+    const content = generateTypeScriptFile(premarketCompanies, discoveredPublic, discoveredPremarket)
 
     // Ensure output directory exists
     const outputDir = path.dirname(OUTPUT_FILE)
@@ -256,8 +337,8 @@ async function main() {
     // Write file
     fs.writeFileSync(OUTPUT_FILE, content, 'utf-8')
     console.log(`Generated ${OUTPUT_FILE}`)
-    console.log(`  - ${Object.keys(KNOWN_PUBLIC_COMPANIES).length} public companies`)
-    console.log(`  - ${premarketCompanies.length} premarket companies`)
+    console.log(`  - ${Object.keys(KNOWN_PUBLIC_COMPANIES).length + Object.keys(discoveredPublic).length} public companies (${Object.keys(discoveredPublic).length} auto-discovered)`)
+    console.log(`  - ${premarketCompanies.length + discoveredPremarket.length} premarket companies (${discoveredPremarket.length} auto-discovered)`)
 
   } catch (error) {
     console.error('Error syncing companies:', error)
