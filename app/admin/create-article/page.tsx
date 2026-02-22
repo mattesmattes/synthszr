@@ -190,6 +190,8 @@ export default function CreateArticlePage() {
   const [vocabulary, setVocabulary] = useState<VocabularyEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [pipelineStatus, setPipelineStatus] = useState<string | null>(null)
+  const [pipelineProgress, setPipelineProgress] = useState<{ current: number; total: number } | null>(null)
   const [articleContent, setArticleContent] = useState('')
   const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -340,6 +342,8 @@ export default function CreateArticlePage() {
     }
 
     setGenerating(true)
+    setPipelineStatus(null)
+    setPipelineProgress(null)
     startTransition(() => {
       setArticleContent('')
       setUsedModel(null)
@@ -353,10 +357,11 @@ export default function CreateArticlePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          useSelected: true,  // Use manually selected items first
-          maxItems: maxQueueItems,  // Fallback to balanced selection if no selected items
+          useSelected: true,
+          maxItems: maxQueueItems,
           vocabularyIntensity,
-          model: selectedModel
+          model: selectedModel,
+          pipeline: true,
         }),
         credentials: 'include',
       })
@@ -389,10 +394,17 @@ export default function CreateArticlePage() {
                 startTransition(() => setArticleContent(''))
               }
               if (data.phase === 'deduplication') {
-                console.log('[Ghostwriter-Queue] Deduplication:', data.message)
+                setPipelineStatus('Metaphern-Check...')
+              }
+              if (data.phase === 'pipeline') {
+                setPipelineStatus(data.message || null)
+                if (data.progress) {
+                  setPipelineProgress(data.progress)
+                }
               }
               if (data.started) {
-                console.log(`[Ghostwriter-Queue] Started with ${data.itemCount} items from queue`)
+                const mode = data.pipeline ? 'Pipeline' : 'Single-Pass'
+                console.log(`[Ghostwriter-Queue] Started (${mode}) with ${data.itemCount} items from queue`)
                 if (data.sourceDistribution) {
                   console.log('[Ghostwriter-Queue] Source distribution:', data.sourceDistribution)
                 }
@@ -427,6 +439,8 @@ export default function CreateArticlePage() {
       })
     } finally {
       setGenerating(false)
+      setPipelineStatus(null)
+      setPipelineProgress(null)
     }
   }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity, selectedModel])
 
@@ -1008,7 +1022,7 @@ export default function CreateArticlePage() {
             {generating ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Generiere Artikel...
+                {pipelineStatus ? pipelineStatus.slice(0, 50) : 'Generiere Artikel...'}
               </>
             ) : (
               <>
@@ -1017,6 +1031,22 @@ export default function CreateArticlePage() {
               </>
             )}
           </Button>
+
+          {/* Pipeline progress bar */}
+          {generating && pipelineProgress && (
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Abschnitt {pipelineProgress.current} von {pipelineProgress.total}</span>
+                <span>{Math.round((pipelineProgress.current / pipelineProgress.total) * 100)}%</span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-500"
+                  style={{ width: `${(pipelineProgress.current / pipelineProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column: Output */}

@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
+import { runGhostwriterPipeline, type PipelineItem } from '@/lib/claude/ghostwriter-pipeline'
 import { getBalancedSelection, getSelectedItems, selectItemsForArticle } from '@/lib/news-queue/service'
 import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
@@ -31,15 +32,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       queueItemIds,        // Specific items to use (optional)
-      useSelected = true,  // Use manually selected items (status='selected') - NEW DEFAULT
+      useSelected = true,  // Use manually selected items (status='selected')
       maxItems = 25,       // Max items if using balanced selection (fallback)
       promptId,
       vocabularyIntensity = 50,
-      model: requestedModel
+      model: requestedModel,
+      pipeline = true,     // Two-pass pipeline (default) vs single-pass
     } = body
 
     const model: AIModel = VALID_MODELS.includes(requestedModel) ? requestedModel : 'gemini-2.5-pro'
-    console.log(`[Ghostwriter-Queue] Model: ${model}, Items: ${queueItemIds?.length || 'auto-select'}, useSelected: ${useSelected}`)
+    console.log(`[Ghostwriter-Queue] Model: ${model}, Items: ${queueItemIds?.length || 'auto-select'}, useSelected: ${useSelected}, pipeline: ${pipeline}`)
 
     const supabase = await createClient()
 
@@ -338,63 +340,110 @@ export async function POST(request: NextRequest) {
 **WICHTIG:** Diese Regeln haben Priorität. Halte dich strikt daran. ALLE ${selectedItems.length} News MÜSSEN im Artikel erscheinen.
 `
 
-    const fullContent = digestContent + sourceReference + enforcementRules
-
-    console.log(`[Ghostwriter-Queue] Full content length: ${fullContent.length} chars`)
-    console.log(`[Ghostwriter-Queue] Content preview (first 500 chars):`, fullContent.slice(0, 500))
-
     // Track item IDs for marking as used
     const usedItemIds = selectedItems.map(i => i.id)
-
-    // Stream the response
     const encoder = new TextEncoder()
+
+    // ── TWO-PASS PIPELINE (default) ──────────────────────────────────────────
+    if (pipeline) {
+      // Convert to PipelineItem format (URL already sanitized in digestContent,
+      // but the pipeline needs clean URLs for its own source links)
+      const pipelineItems: PipelineItem[] = selectedItems.map(item => ({
+        id: item.id,
+        title: item.title,
+        content: item.content ? sanitizeContentUrls(item.content) : null,
+        source_display_name: item.source_display_name,
+        source_url: sanitizeUrl(item.source_url) || null,
+        source_identifier: item.source_identifier,
+      }))
+
+      console.log(`[Ghostwriter-Queue] Running TWO-PASS PIPELINE with ${pipelineItems.length} items, model: ${model}`)
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          const send = (data: unknown) =>
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+
+          try {
+            send({ model, started: true, itemCount: selectedItems.length, sourceDistribution: distribution, pipeline: true })
+
+            let fullText = ''
+
+            for await (const event of runGhostwriterPipeline(pipelineItems, fullPrompt, model)) {
+              if (event.type === 'planning') {
+                send({ phase: 'pipeline', message: event.message })
+              } else if (event.type === 'planned') {
+                send({ phase: 'pipeline', message: `Struktur fertig. Schreibe ${event.itemCount} Abschnitte...` })
+              } else if (event.type === 'writing') {
+                send({ phase: 'pipeline', message: `Abschnitt ${event.current} von ${event.total}: ${event.title.slice(0, 60)}...`, progress: { current: event.current, total: event.total } })
+              } else if (event.type === 'metadata' || event.type === 'section') {
+                fullText += event.text
+                send({ text: event.text })
+              } else if (event.type === 'assembling') {
+                send({ phase: 'pipeline', message: 'Artikel fertiggestellt.' })
+              }
+            }
+
+            // Check for duplicate metaphors in assembled text
+            const duplicates = findDuplicateMetaphors(fullText, vocabulary || undefined)
+            if (duplicates.size > 0) {
+              const duplicateList = Array.from(duplicates.entries())
+                .map(([m, p]) => `${m} (${p.length}x)`)
+                .join(', ')
+              send({ phase: 'deduplication', message: `Prüfe auf wiederholte Metaphern: ${duplicateList}...` })
+              send({ clear: true })
+              for await (const chunk of streamMetaphorDeduplication(fullText, duplicates, model)) {
+                send({ text: chunk })
+              }
+            }
+
+            send({ done: true, model, queueItemIds: usedItemIds, pipeline: true })
+          } catch (error) {
+            console.error('[Ghostwriter-Queue] Pipeline error:', error)
+            send({ error: error instanceof Error ? error.message : 'Pipeline fehlgeschlagen' })
+          }
+          controller.close()
+        },
+      })
+
+      return new Response(stream, {
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
+      })
+    }
+
+    // ── SINGLE-PASS FALLBACK (pipeline=false) ────────────────────────────────
+    const fullContent = digestContent + sourceReference + enforcementRules
+    console.log(`[Ghostwriter-Queue] Single-pass, content: ${fullContent.length} chars`)
+
     const stream = new ReadableStream({
       async start(controller) {
+        const send = (data: unknown) =>
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-            model,
-            started: true,
-            itemCount: selectedItems.length,
-            sourceDistribution: distribution
-          })}\n\n`))
+          send({ model, started: true, itemCount: selectedItems.length, sourceDistribution: distribution })
 
           let generatedText = ''
           for await (const chunk of streamGhostwriter(fullContent, fullPrompt, model)) {
             generatedText += chunk
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk })}\n\n`))
+            send({ text: chunk })
           }
 
           // Check for duplicate metaphors
           const duplicates = findDuplicateMetaphors(generatedText, vocabulary || undefined)
-
           if (duplicates.size > 0) {
             const duplicateList = Array.from(duplicates.entries())
               .map(([m, p]) => `${m} (${p.length}x)`)
               .join(', ')
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-              phase: 'deduplication',
-              message: `Prüfe auf wiederholte Metaphern: ${duplicateList}...`
-            })}\n\n`))
-
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ clear: true })}\n\n`))
-
+            send({ phase: 'deduplication', message: `Prüfe auf wiederholte Metaphern: ${duplicateList}...` })
+            send({ clear: true })
             for await (const chunk of streamMetaphorDeduplication(generatedText, duplicates, model)) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk })}\n\n`))
+              send({ text: chunk })
             }
           }
 
-          // Return item IDs for marking as used after save
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-            done: true,
-            model,
-            queueItemIds: usedItemIds
-          })}\n\n`))
+          send({ done: true, model, queueItemIds: usedItemIds })
         } catch (error) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'Ghostwriter fehlgeschlagen' })}\n\n`
-            )
-          )
+          send({ error: error instanceof Error ? error.message : 'Ghostwriter fehlgeschlagen' })
         }
         controller.close()
       },
