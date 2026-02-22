@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { StockSynthszrLayer } from './stock-synthszr-layer'
 import { StockQuotePopover } from './stock-quote-popover'
 import { PremarketSynthszrLayer } from './premarket-synthszr-layer'
+import { ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   RATING_BADGE_STYLES,
@@ -108,6 +109,13 @@ export function SynthszrBadge({
           )}
         >
           {RATING_LABELS[rating]}
+        </button>
+        <button
+          onClick={handleBadgeClick}
+          className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          aria-label="Analyse öffnen"
+        >
+          <ExternalLink className={size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
         </button>
       </span>
 
