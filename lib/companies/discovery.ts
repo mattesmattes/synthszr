@@ -53,6 +53,12 @@ interface EODHDSearchResult {
  * Only scans explicit {Tag} patterns — not natural text mentions.
  * These are reliable signals because the Ghostwriter AI placed them intentionally.
  */
+// Case-insensitive lookup set built once at module load time
+const knownNamesLower = new Set([
+  ...Object.keys(KNOWN_COMPANIES).map(k => k.toLowerCase()),
+  ...Object.keys(KNOWN_PREMARKET_COMPANIES).map(k => k.toLowerCase()),
+])
+
 export function extractUnknownCompanyTags(content: unknown): string[] {
   const text = extractTextFromContent(content)
   if (!text) return []
@@ -66,8 +72,11 @@ export function extractUnknownCompanyTags(content: unknown): string[] {
     const name = match[1].trim()
     if (!name) continue
 
-    // Skip if already known (public or premarket)
-    if (name in KNOWN_COMPANIES || name in KNOWN_PREMARKET_COMPANIES) continue
+    // Skip if already known — case-insensitive to catch {openai} vs "OpenAI"
+    if (knownNamesLower.has(name.toLowerCase())) continue
+
+    // Skip multi-company tags like {Google, YouTube} — not parseable
+    if (name.includes(',')) continue
 
     found.add(name)
   }
