@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { CompanyDetailClient } from '@/app/companies/[slug]/company-detail-client'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
+import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import type { LanguageCode } from '@/lib/types'
 import type { Metadata } from 'next'
 
@@ -44,11 +45,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { lang, slug } = await params
   const supabase = await createClient()
 
-  // Fetch company name from mentions
+  // Fetch company name from mentions (case-insensitive)
   const { data: mention } = await supabase
     .from('post_company_mentions')
     .select('company_name')
-    .eq('company_slug', slug)
+    .ilike('company_slug', slug)
     .limit(1)
     .single()
 
@@ -62,13 +63,35 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   })
 }
 
+/**
+ * Resolve a URL slug (case-insensitive) to a known company entry.
+ * Returns { name, slug, type } or null if unknown.
+ */
+function resolveCompanyBySlug(slug: string): { name: string; slug: string; type: 'public' | 'premarket' } | null {
+  const lower = slug.toLowerCase()
+  for (const [displayName, apiSlug] of Object.entries(KNOWN_COMPANIES)) {
+    if (apiSlug.toLowerCase() === lower) {
+      return { name: displayName, slug: apiSlug, type: 'public' }
+    }
+  }
+  for (const [displayName, apiSlug] of Object.entries(KNOWN_PREMARKET_COMPANIES)) {
+    if (apiSlug.toLowerCase() === lower) {
+      return { name: displayName, slug: apiSlug, type: 'premarket' }
+    }
+  }
+  return null
+}
+
 export default async function CompanyDetailPage({ params }: PageProps) {
   const { lang, slug } = await params
   const locale = lang as LanguageCode
   const supabase = await createClient()
   const t = await getTranslations(locale)
 
-  // Fetch company mentions with article-level detail
+  // Resolve slug case-insensitively against known companies
+  const knownCompany = resolveCompanyBySlug(slug)
+
+  // Fetch company mentions with article-level detail (case-insensitive slug match)
   const { data: mentions, error } = await supabase
     .from('post_company_mentions')
     .select(`
@@ -86,7 +109,7 @@ export default async function CompanyDetailPage({ params }: PageProps) {
         status
       )
     `)
-    .eq('company_slug', slug)
+    .ilike('company_slug', slug)
     .eq('post.status', 'published')
     .order('created_at', { ascending: false })
 
@@ -97,17 +120,16 @@ export default async function CompanyDetailPage({ params }: PageProps) {
   // Cast and filter
   const typedMentions = (mentions || []) as unknown as CompanyMention[]
 
-  if (typedMentions.length === 0) {
+  // 404 only if the slug is not a known company at all
+  if (typedMentions.length === 0 && !knownCompany) {
     notFound()
   }
 
-  // Extract company info
+  // Extract company info (prefer DB data, fall back to known company lookup)
   const firstMention = typedMentions[0]
-  const company = {
-    name: firstMention.company_name,
-    slug: firstMention.company_slug,
-    type: firstMention.company_type,
-  }
+  const company = firstMention
+    ? { name: firstMention.company_name, slug: firstMention.company_slug, type: firstMention.company_type }
+    : knownCompany!
 
   // Build articles list from mentions
   const articles: ArticleInfo[] = typedMentions
