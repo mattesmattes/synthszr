@@ -80,6 +80,11 @@ CATEGORY: [AI & Tech, Marketing, Design, Business, Code, oder Synthese]
 
 Danach folgt der Artikel-Content in Markdown.
 
+SPRACHE — ABSOLUT VERBINDLICH:
+- Der GESAMTE Artikel (TITLE, EXCERPT, alle Zwischenüberschriften (##), Fließtext, Synthszr Takes) MUSS auf DEUTSCH sein.
+- NIEMALS englische Überschriften oder Zwischenüberschriften — auch nicht bei englischsprachigen Quellen oder englischen Fachbegriffen.
+- Fachbegriffe (z.B. "Reasoning", "Token", "Fine-Tuning") dürfen auf Englisch bleiben, müssen aber in deutschen Sätzen eingebettet sein.
+
 HEADLINES — TITEL UND EXCERPT-ZEILEN:
 - Der TITLE soll sophisticated und intelligent klingen — kein Clickbait, kein Buzzword-Salat, sondern eine prägnante These oder ein pointierter Gedanke.
 - Die EXCERPT-Zeilen (Bullet Points) sind eigenständige Miniatur-Headlines: jede soll für sich stehen, neugierig machen und den Kern der jeweiligen Story in einem Satz erfassen.

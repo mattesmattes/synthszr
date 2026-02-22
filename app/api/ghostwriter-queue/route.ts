@@ -220,8 +220,13 @@ export async function POST(request: NextRequest) {
 
     for (const item of selectedItems) {
       digestContent += `### ${item.title}\n`
-      if (item.source_display_name) {
-        digestContent += `**Quelle:** ${item.source_display_name}\n`
+      const sourceName = item.source_display_name || item.source_identifier
+      // SECURITY: Sanitize URLs to prevent tracking parameter leaks
+      const cleanUrl = sanitizeUrl(item.source_url)
+      if (cleanUrl) {
+        digestContent += `**Quelle:** [${sourceName}](${cleanUrl})\n`
+      } else if (sourceName) {
+        digestContent += `**Quelle:** ${sourceName}\n`
       }
       if (item.content) {
         // SECURITY: Sanitize tracking URLs from content before passing to AI
@@ -231,27 +236,9 @@ export async function POST(request: NextRequest) {
       digestContent += '\n---\n\n'
     }
 
-    // Add source reference list
-    let sourceReference = '\n\n---\n\nVERFÜGBARE QUELLEN:\n'
-    sourceReference += '**WICHTIG:** Verwende den NEWSLETTER-NAMEN als Quellenangabe!\n\n'
-
-    for (let i = 0; i < selectedItems.length; i++) {
-      const item = selectedItems[i]
-      const sourceName = item.source_display_name || item.source_identifier
-      // SECURITY: Sanitize URLs to prevent tracking parameter leaks
-      const cleanUrl = sanitizeUrl(item.source_url)
-      if (cleanUrl) {
-        sourceReference += `${i + 1}. "${item.title}" → ${cleanUrl} [QUELLE: ${sourceName}]\n`
-      } else {
-        sourceReference += `${i + 1}. "${item.title}" [QUELLE: ${sourceName}]\n`
-      }
-    }
-
-    // Add diversity info
-    sourceReference += '\n\n**QUELLEN-VERTEILUNG:**\n'
-    for (const d of distribution) {
-      sourceReference += `- ${d.source}: ${d.count} News (${d.percentage}%)\n`
-    }
+    // No separate sourceReference — URL and source name are already inline in digestContent above.
+    // A redundant source list confuses the LLM into duplicating the company tag line.
+    const sourceReference = ''
 
     // Get ghostwriter prompt (with .single() error handling)
     let promptText: string
@@ -317,16 +304,18 @@ export async function POST(request: NextRequest) {
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 
-4. **COMPANY TAGGING (PFLICHT):** Direkt nach dem letzten Satz der News (VOR dem "Synthszr Take:") eine Zeile einfügen: ERST die Tags in geschweiften Klammern, DANN Pfeil und Quellenname. Maximal 3 Tags. Auch setzen wenn das Unternehmen nur im Heading steht.
+4. **COMPANY TAGGING (PFLICHT):** Direkt nach dem letzten Satz der News (VOR dem "Synthszr Take:") eine Zeile einfügen: ERST die Tags in geschweiften Klammern, DANN Pfeil, DANN der Quellenname ebenfalls in geschweiften Klammern. Maximal 3 Company-Tags. Auch setzen wenn das Unternehmen nur im Heading steht.
 
-   **REIHENFOLGE ist fest: ZUERST Tags, DANN Quelle — niemals umgekehrt.**
-   **FORMAT:** {TagA} {TagB} → Quellenname
+   **REIHENFOLGE ist fest: ZUERST Company-Tags, DANN {Quellenname} — niemals umgekehrt.**
+   **FORMAT:** {TagA} {TagB} → {Quellenname}
    **FALSCH:** → Quellenname {TagA} {TagB}
-   **RICHTIG:** {TagA} {TagB} → Quellenname
+   **FALSCH:** {TagA} {TagB} → Quellenname  (ohne geschweifte Klammern um die Quelle)
+   **RICHTIG:** {TagA} {TagB} → {Quellenname}
    **BEISPIELE (exakt diese Reihenfolge):**
-   - {OpenAI} {Anthropic} → Techmeme
-   - {Groq} {Cerebras} → The Information
-   - {Salesforce} {ServiceNow} → Bloomberg
+   - {OpenAI} {Anthropic} → {Techmeme}
+   - {Groq} {Cerebras} → {The Information}
+   - {Salesforce} {ServiceNow} → {Bloomberg}
+   - {Apple} → {Exponential View}
 
    **VERFÜGBARE PUBLIC COMPANIES (börsennotiert):** ${publicCompanyList}
 
@@ -440,7 +429,7 @@ STRUKTUR:
 - Schließe mit einem Call-to-Action oder Ausblick
 
 FORMAT:
-- Schreibe auf Deutsch
+- Schreibe AUSSCHLIESSLICH auf Deutsch — Titel, alle Zwischenüberschriften (##) und der gesamte Fließtext
 - Nutze Markdown für Formatierung
 - Ziel: 800-1200 Wörter
 
