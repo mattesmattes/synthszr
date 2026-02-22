@@ -16,6 +16,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 const STOCKS_API_BASE = process.env.STOCKS_API_BASE_URL || 'https://glitch.green'
 const STOCKS_PREMARKET_API_KEY = process.env.STOCKS_PREMARKET_API_KEY || ''
+const EODHD_API_KEY = process.env.EODHD_API_KEY || ''
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,15 +38,11 @@ interface GlitchGreenResponse {
   data?: GlitchGreenItem[]
 }
 
-interface YahooFinanceQuote {
-  quoteType?: string
-  symbol?: string
-  shortname?: string
-  longname?: string
-}
-
-interface YahooFinanceResponse {
-  quotes?: YahooFinanceQuote[]
+interface EODHDSearchResult {
+  Code?: string
+  Exchange?: string
+  Name?: string
+  Type?: string
 }
 
 // ─── Tag Extraction ───────────────────────────────────────────────────────────
@@ -128,45 +125,38 @@ async function checkGlitchGreen(name: string): Promise<string | null> {
 }
 
 /**
- * Check Yahoo Finance for a publicly traded company.
- * Returns { ticker, name } or null if not found.
+ * Check EODHD for a publicly traded company.
+ * Returns { ticker, exchange } or null if not found.
  *
- * No API key required — uses the public search endpoint.
+ * Uses the EODHD search API — requires EODHD_API_KEY.
+ * Docs: https://eodhistoricaldata.com/financial-apis/search-api-for-stocks-etfs-mutual-funds-and-indices/
  */
-async function checkYahooFinance(name: string): Promise<{ ticker: string; displayName: string } | null> {
+async function checkEODHD(name: string): Promise<{ ticker: string; exchange: string } | null> {
+  if (!EODHD_API_KEY) return null
+
   try {
-    const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(name)}&quotesCount=1&newsCount=0&enableFuzzyQuery=false`
+    const url = `https://eodhistoricaldata.com/api/search/${encodeURIComponent(name)}?api_token=${EODHD_API_KEY}&limit=5&type=stock&fmt=json`
     const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; SynthszrBot/1.0)',
-      },
       signal: AbortSignal.timeout(5000),
     })
 
     if (!response.ok) return null
 
-    const result = (await response.json()) as { finance?: YahooFinanceResponse }
-    const quotes = result.finance?.quotes
+    const results = (await response.json()) as EODHDSearchResult[]
+    if (!Array.isArray(results) || results.length === 0) return null
 
-    if (!quotes || quotes.length === 0) return null
-
-    // Take the first EQUITY result
-    const equity = quotes.find(q => q.quoteType === 'EQUITY' && q.symbol)
-    if (!equity?.symbol) return null
-
-    // Verify the result actually matches the searched name (avoid false positives)
-    const resultName = (equity.shortname || equity.longname || '').toLowerCase()
+    // Take the first Common Stock result that name-matches
     const searchName = name.toLowerCase()
+    const match = results.find(r => {
+      if (!r.Code || r.Type !== 'Common Stock') return false
+      const resultName = (r.Name || '').toLowerCase()
+      // Result name should contain search term or vice versa
+      return resultName.includes(searchName) || searchName.includes(resultName.split(' ')[0])
+    })
 
-    // The result name should contain our search term or vice versa
-    if (!resultName.includes(searchName) && !searchName.includes(resultName.split(' ')[0])) {
-      return null
-    }
+    if (!match?.Code || !match.Exchange) return null
 
-    return {
-      ticker: equity.symbol,
-      displayName: equity.shortname || equity.longname || name,
-    }
+    return { ticker: match.Code, exchange: match.Exchange }
   } catch {
     return null
   }
@@ -231,15 +221,15 @@ export async function discoverAndClassifyCompanies(names: string[]): Promise<voi
       continue
     }
 
-    // 2. Check Yahoo Finance (public)
-    const yahooMatch = await checkYahooFinance(name)
-    if (yahooMatch) {
-      console.log(`[company-discovery] ${name} → public (Yahoo: ${yahooMatch.ticker})`)
+    // 2. Check EODHD (public stock)
+    const eohdMatch = await checkEODHD(name)
+    if (eohdMatch) {
+      console.log(`[company-discovery] ${name} → public (EODHD: ${eohdMatch.ticker}.${eohdMatch.exchange})`)
       toInsert.push({
         display_name: name,
         slug,
         type: 'public',
-        ticker: yahooMatch.ticker,
+        ticker: `${eohdMatch.ticker}.${eohdMatch.exchange}`,
       })
       continue
     }
