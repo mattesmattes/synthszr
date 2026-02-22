@@ -16,7 +16,7 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies
 
 // DOM processors
 import { processMattesSyntheseText } from "@/lib/tiptap/dom-processors/synthese-text"
-import { processSynthszrRatingLinks, injectInlineIcons } from "@/lib/tiptap/dom-processors/rating-links"
+import { processSynthszrRatingLinks, injectCompanyLinks } from "@/lib/tiptap/dom-processors/rating-links"
 import { processNewsHeadings } from "@/lib/tiptap/dom-processors/news-headings"
 import { hideExplicitCompanyTags } from "@/lib/tiptap/dom-processors/company-tags"
 import { sanitizeAllLinks } from "@/lib/tiptap/dom-processors/link-sanitizer"
@@ -47,10 +47,6 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
 
   // Track if mounted (for safe document.body portal usage)
   const [isMounted, setIsMounted] = useState(false)
-
-  // State for inline icon click dialogs (event delegation approach)
-  const [inlineOpenPublic, setInlineOpenPublic] = useState<string | null>(null)
-  const [inlineOpenPremarket, setInlineOpenPremarket] = useState<{ company: string; isin?: string } | null>(null)
 
   // Track companies that have already been triggered for generation (prevents infinite loops)
   const generationTriggeredRef = useRef<Set<string>>(new Set())
@@ -151,26 +147,6 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
     }
   }, [editor, content])
 
-  // Event delegation for inline company icons (single handler for all ↗ icons in text)
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const handleClick = (e: MouseEvent) => {
-      const target = (e.target as HTMLElement).closest('.synthszr-inline-icon') as HTMLElement | null
-      if (!target) return
-      const company = target.dataset.company
-      const type = target.dataset.type
-      const isin = target.dataset.isin
-      if (!company || !type) return
-      if (type === 'public') setInlineOpenPublic(company)
-      else if (type === 'premarket') setInlineOpenPremarket({ company, isin })
-    }
-
-    container.addEventListener('click', handleClick)
-    return () => container.removeEventListener('click', handleClick)
-  }, [isMounted])
-
   // Callback for rating-links processor to re-trigger processing after background generation
   const handleRefreshNeeded = useCallback(() => {
     if (!containerRef.current) return
@@ -186,7 +162,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       setRatingPortals(result.publicPortals)
       setPremarketRatingPortals(result.premarketPortals)
       hideExplicitCompanyTags(containerRef.current!)
-      injectInlineIcons(containerRef.current!, result.inlineIconData)
+      injectCompanyLinks(containerRef.current!, result.companyLinkData)
     }
 
     runProcessing()
@@ -235,8 +211,8 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       // 5. Hide {Company} syntax AFTER company detection and badge placement
       hideExplicitCompanyTags(container)
 
-      // 6. Inject inline ↗ icons AFTER tag hiding to avoid matching {Company} patterns
-      injectInlineIcons(container, result.inlineIconData)
+      // 6. Inject company links AFTER tag hiding to avoid matching {Company} patterns
+      injectCompanyLinks(container, result.companyLinkData)
 
       // 6. Scroll to anchor if URL has hash
       const hash = window.location.hash
@@ -303,23 +279,6 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
           portal.element,
           `thumbnail-${index}`
         )
-      )}
-
-      {/* Inline icon click dialogs (event delegation) */}
-      {isMounted && inlineOpenPublic && createPortal(
-        <StockSynthszrLayer
-          company={inlineOpenPublic}
-          onClose={() => setInlineOpenPublic(null)}
-        />,
-        document.body
-      )}
-      {isMounted && inlineOpenPremarket && createPortal(
-        <PremarketSynthszrLayer
-          company={inlineOpenPremarket.company}
-          isin={inlineOpenPremarket.isin}
-          onClose={() => setInlineOpenPremarket(null)}
-        />,
-        document.body
       )}
 
       {/* Auto-open dialogs from URL params (newsletter email links) */}

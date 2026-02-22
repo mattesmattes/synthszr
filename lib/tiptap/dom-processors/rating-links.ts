@@ -39,20 +39,18 @@ export interface PremarketPortal {
   isin?: string
 }
 
-export interface InlineIconEntry {
+export interface CompanyLinkEntry {
   displayName: string
   apiName: string
-  rating: 'BUY' | 'HOLD' | 'SELL'
   type: 'public' | 'premarket'
-  isin?: string
 }
 
-export type InlineIconData = Map<string, InlineIconEntry> // key: displayName.toLowerCase()
+export type CompanyLinkData = Map<string, CompanyLinkEntry> // key: displayName.toLowerCase()
 
 export interface RatingLinksResult {
   publicPortals: PublicPortal[]
   premarketPortals: PremarketPortal[]
-  inlineIconData: InlineIconData
+  companyLinkData: CompanyLinkData
 }
 
 /**
@@ -72,7 +70,7 @@ export async function processSynthszrRatingLinks(
   generationTriggeredRef: React.RefObject<Set<string>>,
   onRefreshNeeded: () => void,
 ): Promise<RatingLinksResult> {
-  const emptyResult: RatingLinksResult = { publicPortals: [], premarketPortals: [], inlineIconData: new Map() }
+  const emptyResult: RatingLinksResult = { publicPortals: [], premarketPortals: [], companyLinkData: new Map() }
 
   // Find all Synthszr Take / Mattes Synthese markers
   const syntheszrMarkers = container.querySelectorAll('.mattes-synthese, .mattes-synthese-heading')
@@ -464,9 +462,8 @@ export async function processSynthszrRatingLinks(
       section.element.classList.add('synthszr-ratings-processed')
     }
 
-    // Build inlineIconData for injection after tag hiding
-    const inlineIconData: InlineIconData = new Map()
-    // Build premarket displayNames from sectionsToProcess
+    // Build companyLinkData for injecting links into paragraph text
+    const companyLinkData: CompanyLinkData = new Map()
     const premarketDisplayNamesMap = new Map<string, string>()
     for (const section of sectionsToProcess) {
       for (const c of section.premarketCompanies) {
@@ -475,52 +472,47 @@ export async function processSynthszrRatingLinks(
     }
     for (const [apiName, data] of publicQuotesMap) {
       if (data.rating) {
-        inlineIconData.set(data.displayName.toLowerCase(), {
+        companyLinkData.set(data.displayName.toLowerCase(), {
           displayName: data.displayName,
           apiName,
-          rating: data.rating,
           type: 'public',
         })
       }
     }
-    for (const [apiName, data] of premarketRatingsMap) {
+    for (const [apiName] of premarketRatingsMap) {
       const displayName = premarketDisplayNamesMap.get(apiName)
       if (displayName) {
-        inlineIconData.set(displayName.toLowerCase(), {
+        companyLinkData.set(displayName.toLowerCase(), {
           displayName,
           apiName,
-          rating: data.rating,
           type: 'premarket',
-          isin: data.isin,
         })
       }
     }
 
-    return { publicPortals, premarketPortals, inlineIconData }
+    return { publicPortals, premarketPortals, companyLinkData }
   } catch (error) {
     console.error('[TiptapRenderer] Failed to fetch Synthszr ratings:', error)
     return emptyResult
   }
 }
 
-// Colors matching the neon brand palette
-const INLINE_ICON_COLORS: Record<'BUY' | 'HOLD' | 'SELL', string> = {
-  BUY: '#00FF00',
-  HOLD: '#FFFF00',
-  SELL: '#FF4D00',
-}
-
 /**
- * Inject colored ↗ icons inline after company name mentions in paragraph text.
+ * Inject <a> links around company name mentions in paragraph text.
+ * Links point to the company page at /{locale}/companies/{slug}.
  * Must be called AFTER hideExplicitCompanyTags() to avoid matching {Company} tags.
  */
-export function injectInlineIcons(container: HTMLElement, iconData: InlineIconData): void {
-  if (iconData.size === 0) return
+export function injectCompanyLinks(container: HTMLElement, linkData: CompanyLinkData): void {
+  if (linkData.size === 0) return
+
+  // Extract locale from current URL path
+  const pathParts = window.location.pathname.split('/')
+  const locale = ['de', 'en', 'cs', 'nds'].includes(pathParts[1]) ? pathParts[1] : 'de'
 
   const paragraphs = container.querySelectorAll('p')
   for (const para of paragraphs) {
-    if (para.classList.contains('synthszr-inline-icons-processed')) continue
-    para.classList.add('synthszr-inline-icons-processed')
+    if (para.classList.contains('synthszr-company-links-processed')) continue
+    para.classList.add('synthszr-company-links-processed')
 
     // Walk only text nodes, skipping those inside <a> or .synthszr-ratings-container
     const textNodes: Text[] = []
@@ -533,10 +525,7 @@ export function injectInlineIcons(container: HTMLElement, iconData: InlineIconDa
           while (parent && parent !== para) {
             if (
               parent.nodeName === 'A' ||
-              (parent instanceof Element && (
-                parent.classList.contains('synthszr-ratings-container') ||
-                parent.classList.contains('synthszr-inline-icon')
-              ))
+              (parent instanceof Element && parent.classList.contains('synthszr-ratings-container'))
             ) {
               return NodeFilter.FILTER_REJECT
             }
@@ -552,25 +541,19 @@ export function injectInlineIcons(container: HTMLElement, iconData: InlineIconDa
       textNodes.push(node as Text)
     }
 
-    // Process text nodes (collected first to avoid walker invalidation after DOM changes)
     for (const tn of textNodes) {
-      injectIconsIntoTextNode(tn, iconData)
+      injectLinksIntoTextNode(tn, linkData, locale)
     }
   }
 }
 
-function injectIconsIntoTextNode(textNode: Text, iconData: InlineIconData): void {
+function injectLinksIntoTextNode(textNode: Text, linkData: CompanyLinkData, locale: string): void {
   const text = textNode.textContent || ''
   if (!text.trim()) return
 
-  // Collect all company matches with positions
-  const matches: Array<{
-    start: number
-    end: number
-    entry: InlineIconEntry
-  }> = []
+  const matches: Array<{ start: number; end: number; entry: CompanyLinkEntry }> = []
 
-  for (const [, entry] of iconData) {
+  for (const [, entry] of linkData) {
     const escaped = entry.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const regex = new RegExp(`\\b${escaped}\\b`, 'gi')
     let match: RegExpExecArray | null
@@ -596,23 +579,11 @@ function injectIconsIntoTextNode(textNode: Text, iconData: InlineIconData): void
     if (match.start > lastIndex) {
       fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.start)))
     }
-    // Company name text (unchanged)
-    fragment.appendChild(document.createTextNode(text.slice(match.start, match.end)))
-    // Colored icon span
-    const icon = document.createElement('span')
-    icon.className = 'synthszr-inline-icon'
-    icon.dataset.company = match.entry.apiName
-    icon.dataset.type = match.entry.type
-    if (match.entry.isin) icon.dataset.isin = match.entry.isin
-    icon.style.color = INLINE_ICON_COLORS[match.entry.rating]
-    icon.style.cursor = 'pointer'
-    icon.style.fontSize = '0.7em'
-    icon.style.verticalAlign = 'super'
-    icon.style.marginLeft = '1px'
-    icon.style.lineHeight = '1'
-    icon.textContent = '↗'
-    icon.title = 'Click for the detailed SYNTHSZR analysis'
-    fragment.appendChild(icon)
+    const link = document.createElement('a')
+    link.href = `/${locale}/companies/${match.entry.apiName}`
+    link.textContent = text.slice(match.start, match.end)
+    link.className = 'text-foreground underline hover:text-foreground/70'
+    fragment.appendChild(link)
     lastIndex = match.end
   }
 
