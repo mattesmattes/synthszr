@@ -1,7 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { ExternalLink } from "lucide-react"
 import { PremarketSynthszrLayer } from "../premarket-synthszr-layer"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { trackEvent } from "@/lib/analytics/tracker"
 import { RATING_BADGE_STYLES, RATING_LABELS } from "@/lib/synthszr/rating-styles"
 import type { PremarketRatingLinkProps } from "./types"
@@ -23,6 +25,18 @@ export function PremarketRatingLink({ company, displayName, rating, isFirst, isi
         <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold not-italic ${RATING_BADGE_STYLES[rating]}`}>
           {RATING_LABELS[rating]}
         </span>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-muted-foreground hover:text-foreground transition-colors">
+                <ExternalLink className="h-3 w-3" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Click for the detailed SYNTHSZR analysis</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </button>
       {showPremarket && (
         <PremarketSynthszrLayer

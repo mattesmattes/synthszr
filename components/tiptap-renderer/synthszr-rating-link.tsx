@@ -1,8 +1,10 @@
 "use client"
 
 import { useState } from "react"
+import { ExternalLink } from "lucide-react"
 import { StockSynthszrLayer } from "../stock-synthszr-layer"
 import { StockQuotePopover } from "../stock-quote-popover"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { trackEvent } from "@/lib/analytics/tracker"
 import {
   RATING_BADGE_STYLES,
@@ -41,6 +43,22 @@ export function SynthszrRatingLink({ company, displayName, rating, ticker, chang
         >
           {RATING_LABELS[rating]}
         </span>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => { trackEvent('synthszr_vote_click', { company }); setShowSynthszr(true) }}
+                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                aria-label="Analyse öffnen"
+              >
+                <ExternalLink className="h-3 w-3" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Click for the detailed SYNTHSZR analysis</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </span>
       {showSynthszr && (
         <StockSynthszrLayer
