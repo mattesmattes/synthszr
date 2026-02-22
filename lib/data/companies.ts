@@ -38,6 +38,7 @@ export const KNOWN_COMPANIES: Record<string, string> = {
   'DocuSign': 'docusign',
   'DoorDash': 'doordash',
   'Facebook': 'facebook',
+  'Figma': 'figma',
   'Ford': 'ford',
   'GitHub': 'github',
   'GitLab': 'gitlab',

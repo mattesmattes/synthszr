@@ -90,6 +90,7 @@ const KNOWN_PUBLIC_COMPANIES: Record<string, string> = {
   'Unity': 'unity',
   'Robinhood': 'robinhood',
   'Samsung': 'samsung',
+  'Figma': 'figma',
   'GitLab': 'gitlab',
   'GitHub': 'github',
   'Stripe': 'stripe',

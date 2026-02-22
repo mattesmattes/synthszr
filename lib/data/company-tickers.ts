@@ -65,6 +65,7 @@ export const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string 
 
   // DevOps & Developer Tools
   'gitlab': { symbol: 'GTLB', exchange: 'US' },
+  'figma': { symbol: 'FIG', exchange: 'US' },
 
   // Enterprise & SaaS
   'oracle': { symbol: 'ORCL', exchange: 'US' },
