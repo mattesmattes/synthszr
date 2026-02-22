@@ -39,9 +39,20 @@ export interface PremarketPortal {
   isin?: string
 }
 
+export interface InlineIconEntry {
+  displayName: string
+  apiName: string
+  rating: 'BUY' | 'HOLD' | 'SELL'
+  type: 'public' | 'premarket'
+  isin?: string
+}
+
+export type InlineIconData = Map<string, InlineIconEntry> // key: displayName.toLowerCase()
+
 export interface RatingLinksResult {
   publicPortals: PublicPortal[]
   premarketPortals: PremarketPortal[]
+  inlineIconData: InlineIconData
 }
 
 /**
@@ -61,7 +72,7 @@ export async function processSynthszrRatingLinks(
   generationTriggeredRef: React.RefObject<Set<string>>,
   onRefreshNeeded: () => void,
 ): Promise<RatingLinksResult> {
-  const emptyResult: RatingLinksResult = { publicPortals: [], premarketPortals: [] }
+  const emptyResult: RatingLinksResult = { publicPortals: [], premarketPortals: [], inlineIconData: new Map() }
 
   // Find all Synthszr Take / Mattes Synthese markers
   const syntheszrMarkers = container.querySelectorAll('.mattes-synthese, .mattes-synthese-heading')
@@ -453,9 +464,161 @@ export async function processSynthszrRatingLinks(
       section.element.classList.add('synthszr-ratings-processed')
     }
 
-    return { publicPortals, premarketPortals }
+    // Build inlineIconData for injection after tag hiding
+    const inlineIconData: InlineIconData = new Map()
+    // Build premarket displayNames from sectionsToProcess
+    const premarketDisplayNamesMap = new Map<string, string>()
+    for (const section of sectionsToProcess) {
+      for (const c of section.premarketCompanies) {
+        premarketDisplayNamesMap.set(c.apiName.toLowerCase(), c.displayName)
+      }
+    }
+    for (const [apiName, data] of publicQuotesMap) {
+      if (data.rating) {
+        inlineIconData.set(data.displayName.toLowerCase(), {
+          displayName: data.displayName,
+          apiName,
+          rating: data.rating,
+          type: 'public',
+        })
+      }
+    }
+    for (const [apiName, data] of premarketRatingsMap) {
+      const displayName = premarketDisplayNamesMap.get(apiName)
+      if (displayName) {
+        inlineIconData.set(displayName.toLowerCase(), {
+          displayName,
+          apiName,
+          rating: data.rating,
+          type: 'premarket',
+          isin: data.isin,
+        })
+      }
+    }
+
+    return { publicPortals, premarketPortals, inlineIconData }
   } catch (error) {
     console.error('[TiptapRenderer] Failed to fetch Synthszr ratings:', error)
     return emptyResult
   }
+}
+
+// Colors matching the neon brand palette
+const INLINE_ICON_COLORS: Record<'BUY' | 'HOLD' | 'SELL', string> = {
+  BUY: '#00FF00',
+  HOLD: '#FFFF00',
+  SELL: '#FF4D00',
+}
+
+/**
+ * Inject colored ↗ icons inline after company name mentions in paragraph text.
+ * Must be called AFTER hideExplicitCompanyTags() to avoid matching {Company} tags.
+ */
+export function injectInlineIcons(container: HTMLElement, iconData: InlineIconData): void {
+  if (iconData.size === 0) return
+
+  const paragraphs = container.querySelectorAll('p')
+  for (const para of paragraphs) {
+    if (para.classList.contains('synthszr-inline-icons-processed')) continue
+    para.classList.add('synthszr-inline-icons-processed')
+
+    // Walk only text nodes, skipping those inside <a> or .synthszr-ratings-container
+    const textNodes: Text[] = []
+    const walker = document.createTreeWalker(
+      para,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode(node: Node) {
+          let parent = node.parentNode
+          while (parent && parent !== para) {
+            if (
+              parent.nodeName === 'A' ||
+              (parent instanceof Element && (
+                parent.classList.contains('synthszr-ratings-container') ||
+                parent.classList.contains('synthszr-inline-icon')
+              ))
+            ) {
+              return NodeFilter.FILTER_REJECT
+            }
+            parent = parent.parentNode
+          }
+          return NodeFilter.FILTER_ACCEPT
+        }
+      }
+    )
+
+    let node: Node | null
+    while ((node = walker.nextNode())) {
+      textNodes.push(node as Text)
+    }
+
+    // Process text nodes (collected first to avoid walker invalidation after DOM changes)
+    for (const tn of textNodes) {
+      injectIconsIntoTextNode(tn, iconData)
+    }
+  }
+}
+
+function injectIconsIntoTextNode(textNode: Text, iconData: InlineIconData): void {
+  const text = textNode.textContent || ''
+  if (!text.trim()) return
+
+  // Collect all company matches with positions
+  const matches: Array<{
+    start: number
+    end: number
+    entry: InlineIconEntry
+  }> = []
+
+  for (const [, entry] of iconData) {
+    const escaped = entry.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const regex = new RegExp(`\\b${escaped}\\b`, 'gi')
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(text)) !== null) {
+      const hasOverlap = matches.some(m => m.start < match!.index + match![0].length && m.end > match!.index)
+      if (!hasOverlap) {
+        matches.push({ start: match.index, end: match.index + match[0].length, entry })
+      }
+    }
+  }
+
+  if (matches.length === 0) return
+
+  matches.sort((a, b) => a.start - b.start)
+
+  const parent = textNode.parentNode
+  if (!parent) return
+
+  const fragment = document.createDocumentFragment()
+  let lastIndex = 0
+
+  for (const match of matches) {
+    if (match.start > lastIndex) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.start)))
+    }
+    // Company name text (unchanged)
+    fragment.appendChild(document.createTextNode(text.slice(match.start, match.end)))
+    // Colored icon span
+    const icon = document.createElement('span')
+    icon.className = 'synthszr-inline-icon'
+    icon.dataset.company = match.entry.apiName
+    icon.dataset.type = match.entry.type
+    if (match.entry.isin) icon.dataset.isin = match.entry.isin
+    icon.style.color = INLINE_ICON_COLORS[match.entry.rating]
+    icon.style.cursor = 'pointer'
+    icon.style.fontSize = '0.7em'
+    icon.style.verticalAlign = 'super'
+    icon.style.marginLeft = '1px'
+    icon.style.lineHeight = '1'
+    icon.textContent = '↗'
+    icon.title = 'Click for the detailed SYNTHSZR analysis'
+    fragment.appendChild(icon)
+    lastIndex = match.end
+  }
+
+  if (lastIndex < text.length) {
+    fragment.appendChild(document.createTextNode(text.slice(lastIndex)))
+  }
+
+  parent.replaceChild(fragment, textNode)
 }

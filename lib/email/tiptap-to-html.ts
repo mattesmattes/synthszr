@@ -169,6 +169,43 @@ function stripExplicitCompanyTags(text: string): string {
   return text.replace(/\{([^}]+)\}/g, '').replace(/\s{2,}/g, ' ')
 }
 
+// Inline icon colors matching the neon brand palette
+const INLINE_EMAIL_COLORS: Record<'BUY' | 'HOLD' | 'SELL', string> = {
+  BUY: '#00FF00',
+  HOLD: '#CCFF00',
+  SELL: '#FF4D00',
+}
+
+/**
+ * Inject colored ↗ icons after company name mentions in paragraph HTML.
+ * Processes only text portions (not inside HTML tags) to avoid corrupting markup.
+ */
+function injectInlineIconsInHtml(
+  html: string,
+  iconsMap: Map<string, { displayName: string; href: string; rating: 'BUY' | 'HOLD' | 'SELL' }>,
+): string {
+  if (iconsMap.size === 0) return html
+
+  // Split by HTML tags: process only text segments
+  const parts = html.split(/(<[^>]+>)/)
+
+  return parts.map(part => {
+    if (part.startsWith('<')) return part
+
+    let text = part
+    for (const [, data] of iconsMap) {
+      const escaped = data.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(`(\\b${escaped}\\b)`, 'gi')
+      const color = INLINE_EMAIL_COLORS[data.rating]
+      text = text.replace(
+        regex,
+        `$1<a href="${data.href}" style="color: ${color}; text-decoration: none; font-size: 0.75em; vertical-align: super; margin-left: 1px;" title="SYNTHSZR Analysis">↗</a>`
+      )
+    }
+    return text
+  }).join('')
+}
+
 /**
  * Generate HTML for vote badges with ticker and percent
  * Format: "Synthszr Vote: Nvidia (NVDA) ↑5.2% Buy, Tesla (TSLA) ↓2.1% Hold"
@@ -410,6 +447,24 @@ export async function generateEmailContentWithVotes(
     ? await fetchRatings(Array.from(allPublicCompanies), Array.from(allPremarketCompanies), baseUrl)
     : new Map<string, { rating: 'BUY' | 'HOLD' | 'SELL'; type: 'public' | 'premarket'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isin?: string }>()
 
+  // Build inline icons map: displayName(lower) → { displayName, href, rating }
+  const localePath = locale && locale !== 'de' ? `/${locale}` : ''
+  const inlineIconsMap = new Map<string, { displayName: string; href: string; rating: 'BUY' | 'HOLD' | 'SELL' }>()
+  for (const c of allCompaniesInDoc.public) {
+    const ratingData = ratingsMap.get(c.apiName.toLowerCase())
+    if (ratingData?.rating) {
+      const href = post.slug ? `${baseUrl}${localePath}/posts/${post.slug}?stock=${encodeURIComponent(c.displayName)}` : '#'
+      inlineIconsMap.set(c.displayName.toLowerCase(), { displayName: c.displayName, href, rating: ratingData.rating })
+    }
+  }
+  for (const c of allCompaniesInDoc.premarket) {
+    const ratingData = ratingsMap.get(c.apiName.toLowerCase())
+    if (ratingData?.rating) {
+      const href = post.slug ? `${baseUrl}${localePath}/posts/${post.slug}?premarket=${encodeURIComponent(c.displayName)}` : '#'
+      inlineIconsMap.set(c.displayName.toLowerCase(), { displayName: c.displayName, href, rating: ratingData.rating })
+    }
+  }
+
   // Vote color logic: BUY > HOLD > SELL > NONE - colors match website
   const votePriority: Record<string, number> = { 'BUY': 3, 'HOLD': 2, 'SELL': 1 }
   const voteColors: Record<string, string> = {
@@ -511,6 +566,11 @@ export async function generateEmailContentWithVotes(
 
     const baseHtml = convertNodeToHtml(node)
 
+    // Inject inline ↗ icons into paragraph text (not headings)
+    const html = (node.type === 'paragraph' && inlineIconsMap.size > 0)
+      ? injectInlineIconsInHtml(baseHtml, inlineIconsMap)
+      : baseHtml
+
     // Check if this is a Synthszr Take paragraph
     const companies = paragraphCompanies.get(index)
     if (companies && (companies.public.length > 0 || companies.premarket.length > 0)) {
@@ -548,11 +608,11 @@ export async function generateEmailContentWithVotes(
       if (ratings.length > 0) {
         const voteBadges = generateVoteBadgesHtml(ratings, baseUrl, post.slug, locale)
         // Insert badges before closing </p> tag
-        return prefix + baseHtml.replace(/<\/p>$/, `${voteBadges}</p>`)
+        return prefix + html.replace(/<\/p>$/, `${voteBadges}</p>`)
       }
     }
 
-    return prefix + baseHtml
+    return prefix + html
   })
 
   return htmlParts.join('\n')
