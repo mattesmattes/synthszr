@@ -190,10 +190,10 @@ export async function POST(request: NextRequest) {
       .join(', '))
 
     // Build content string with token limit awareness
-    // Gemini has 1M+ token context, but we still limit for reasonable processing
-    // Limit each item to 20k chars, and total to ~2M chars
-    const MAX_CHARS_PER_ITEM = 20000
-    const MAX_TOTAL_CHARS = 2000000
+    // Limit per item and total to stay within Vercel's 5-min function timeout
+    // gemini-2.0-flash handles ~600k chars comfortably within limits
+    const MAX_CHARS_PER_ITEM = 10000
+    const MAX_TOTAL_CHARS = 600000
 
     const contentParts: string[] = []
     let totalChars = 0

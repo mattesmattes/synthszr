@@ -124,8 +124,14 @@ export async function middleware(request: NextRequest) {
     const isAuthenticated = sessionToken ? await verifyToken(sessionToken) : false
 
     if (isProtectedRoute && !isAuthenticated) {
-      // API routes return 401, page routes redirect to login
+      // Allow cron-authenticated API requests to pass through to route handler
       if (pathname.startsWith('/api/')) {
+        const authHeader = request.headers.get('authorization')
+        const cronSecret = process.env.CRON_SECRET
+        const isCronAuth =
+          (cronSecret && authHeader === `Bearer ${cronSecret}`) ||
+          request.headers.get('x-vercel-cron') === '1'
+        if (isCronAuth) return NextResponse.next()
         return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
       }
       const loginUrl = new URL('/login', request.url)
