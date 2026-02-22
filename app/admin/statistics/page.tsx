@@ -262,7 +262,7 @@ export default function StatisticsPage() {
                     <Line
                       type="monotone"
                       dataKey="total"
-                      name="Gesamt"
+                      name="Aktive Subscriber"
                       stroke="#3B82F6"
                       dot={false}
                       strokeWidth={2}
