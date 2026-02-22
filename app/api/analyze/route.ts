@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 import { streamAnalysis } from '@/lib/claude/client'
 
+export const runtime = 'nodejs'
+export const maxDuration = 300 // 5 minutes — Gemini 2.5 Pro with large prompts needs time
+
 // Canonical URLs for newsletter sources that may not have direct article URLs
 const NEWSLETTER_CANONICAL_URLS: Record<string, string> = {
   'techmeme': 'https://techmeme.com',

@@ -612,14 +612,28 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
 
   // Step 1: Stream analysis and collect content
   console.log('[DailyAnalysis] Calling analyze API...')
-  const response = await fetch(`${baseUrl}/api/analyze`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-    },
-    body: JSON.stringify({ date: dateStr }),
-  })
+  const analyzeController = new AbortController()
+  const analyzeTimeoutId = setTimeout(() => analyzeController.abort(), 270000) // 4.5 min timeout
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}/api/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+      },
+      body: JSON.stringify({ date: dateStr }),
+      signal: analyzeController.signal,
+    })
+    clearTimeout(analyzeTimeoutId)
+  } catch (err) {
+    clearTimeout(analyzeTimeoutId)
+    if (err instanceof Error && err.name === 'AbortError') {
+      console.error('[DailyAnalysis] Analyze API timeout after 4.5 minutes')
+      return { success: false, error: 'Analyze API timeout' }
+    }
+    throw err
+  }
 
   if (!response.ok) {
     const errorText = await response.text()
