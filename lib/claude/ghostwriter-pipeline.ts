@@ -164,7 +164,10 @@ export async function writeSection(
   const premarketCompanyList = Object.keys(KNOWN_PREMARKET_COMPANIES).join(', ')
 
   const sourceName = item.source_display_name || item.source_identifier
-  const sourceLink = item.source_url ? `[${sourceName}](${item.source_url})` : sourceName
+  // Company tag line: companies + linked source (the ONE place source appears in output)
+  const tagSourcePart = item.source_url
+    ? `[${sourceName}](${item.source_url})`
+    : `{${sourceName}}`
 
   const userPrompt = `${promptText}
 
@@ -174,28 +177,24 @@ ARTIKEL-KONTEXT: ${thesis}
 
 Schreibe GENAU DIESEN EINEN Abschnitt. Kein Intro, keine anderen News, kein Abschluss.
 
-## ${heading}
-
-**Quelle:** ${sourceLink}
-
+NEWS-INHALT (Quelleninfo nur für dich — Quelle: ${sourceName}${item.source_url ? ` | URL: ${item.source_url}` : ''}):
 ${item.content || 'Kein Inhalt verfügbar.'}
 
 ---
 
-AUFGABE — EXAKT IN DIESER REIHENFOLGE:
+AUFGABE — EXAKT IN DIESER REIHENFOLGE, beginne mit "## ${heading}":
 
-1. **NEWS-ZUSAMMENFASSUNG:** 5-7 Sätze Fließtext (keine Bullet Points), die das Wesentliche der News präzise zusammenfassen.
+1. **NEWS-ZUSAMMENFASSUNG:** 5-7 Sätze Fließtext (keine Bullet Points).
 
-2. **COMPANY TAGGING:** Direkt nach dem letzten Satz der Zusammenfassung (VOR dem Synthszr Take) eine Zeile:
-   FORMAT: {Company1} {Company2} → {${sourceName}}
-   BEISPIEL: {OpenAI} {Anthropic} → {Techmeme}
-   Maximal 3 Company-Tags. Nur Unternehmen aus diesen Listen — exakt so geschrieben:
+2. **COMPANY TAGGING + QUELLE:** Direkt nach dem letzten Satz der Zusammenfassung (VOR dem Synthszr Take) genau eine Zeile:
+   PFLICHT-FORMAT: {Company1} {Company2} → ${tagSourcePart}
+   BEISPIEL: {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
+   Maximal 3 Company-Tags. Nur aus diesen Listen:
    PUBLIC: ${publicCompanyList}
    PREMARKET: ${premarketCompanyList}
+   WICHTIG: Die Quelle erscheint NUR in dieser Zeile — KEIN separates "**Quelle:**" Label davor oder danach.
 
-3. **SYNTHSZR TAKE:** Schreibe "Synthszr Take:" gefolgt von 5-7 Sätzen im Analysten-Stil (sieh System-Prompt).
-
-Beginne den Output direkt mit "## ${heading}" — ohne Präambel.`
+3. **SYNTHSZR TAKE:** "Synthszr Take:" gefolgt von 5-7 Sätzen im Analysten-Stil (sieh System-Prompt).`
 
   const text = await callModelNonStreaming(userPrompt, SECTION_SYSTEM_PROMPT, model)
 

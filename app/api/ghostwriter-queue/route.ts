@@ -225,11 +225,9 @@ export async function POST(request: NextRequest) {
       const sourceName = item.source_display_name || item.source_identifier
       // SECURITY: Sanitize URLs to prevent tracking parameter leaks
       const cleanUrl = sanitizeUrl(item.source_url)
-      if (cleanUrl) {
-        digestContent += `**Quelle:** [${sourceName}](${cleanUrl})\n`
-      } else if (sourceName) {
-        digestContent += `**Quelle:** ${sourceName}\n`
-      }
+      // Source info as context only — not rendered as "**Quelle:**" label.
+      // The LLM should output source ONCE in the company tag line: {Company} → [Name](URL)
+      digestContent += `(Quelleninfo: ${sourceName}${cleanUrl ? ` | URL: ${cleanUrl}` : ''})\n`
       if (item.content) {
         // SECURITY: Sanitize tracking URLs from content before passing to AI
         const cleanContent = sanitizeContentUrls(item.content)
@@ -309,24 +307,22 @@ export async function POST(request: NextRequest) {
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 
-4. **COMPANY TAGGING (PFLICHT):** Direkt nach dem letzten Satz der News (VOR dem "Synthszr Take:") eine Zeile einfügen: ERST die Tags in geschweiften Klammern, DANN Pfeil, DANN der Quellenname ebenfalls in geschweiften Klammern. Maximal 3 Company-Tags. Auch setzen wenn das Unternehmen nur im Heading steht.
+4. **COMPANY TAGGING + QUELLENLINK (PFLICHT):** Direkt nach dem letzten Satz der News-Zusammenfassung (VOR dem "Synthszr Take:") genau eine Zeile. Die Companies stehen VOR der verlinkten Quelle. Die Quelle erscheint NUR hier — kein separates "**Quelle:**" Label.
 
-   **REIHENFOLGE ist fest: ZUERST Company-Tags, DANN {Quellenname} — niemals umgekehrt.**
-   **FORMAT:** {TagA} {TagB} → {Quellenname}
-   **FALSCH:** → Quellenname {TagA} {TagB}
-   **FALSCH:** {TagA} {TagB} → Quellenname  (ohne geschweifte Klammern um die Quelle)
-   **RICHTIG:** {TagA} {TagB} → {Quellenname}
-   **BEISPIELE (exakt diese Reihenfolge):**
-   - {OpenAI} {Anthropic} → {Techmeme}
-   - {Groq} {Cerebras} → {The Information}
-   - {Salesforce} {ServiceNow} → {Bloomberg}
-   - {Apple} → {Exponential View}
+   **FORMAT (mit URL):** {TagA} {TagB} → [Quellenname](URL)
+   **FORMAT (ohne URL):** {TagA} {TagB} → {Quellenname}
+   **FALSCH:** **Quelle:** [Name](URL) ... {TagA} → Name  ← Quelle doppelt
+   **RICHTIG:** {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
+   **BEISPIELE:**
+   - {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
+   - {Groq} {Cerebras} → [The Information](https://theinformation.com)
+   - {Apple} → [Exponential View](https://exponentialview.co)
 
    **VERFÜGBARE PUBLIC COMPANIES (börsennotiert):** ${publicCompanyList}
 
    **VERFÜGBARE PREMARKET COMPANIES (nicht börsennotiert):** ${premarketCompanyList}
 
-   Nur Unternehmen aus diesen Listen taggen — exakt so wie dort geschrieben.
+   Maximal 3 Company-Tags. Nur Unternehmen aus diesen Listen — exakt so wie dort geschrieben.
 
 5. **EXCERPT FORMAT:** Der EXCERPT im Metadaten-Block MUSS exakt 3 Bullet Points haben:
    - Jeder Bullet beginnt mit • und headlinet pointiert je einen der ersten 3 Artikel
