@@ -159,9 +159,8 @@ export async function extractArticleContent(url: string): Promise<ExtractedArtic
       },
     })
 
-    clearTimeout(timeoutId)
-
     if (!response.ok) {
+      clearTimeout(timeoutId)
       console.error(`Failed to fetch ${url}: ${response.status}`)
       return null
     }
@@ -169,11 +168,13 @@ export async function extractArticleContent(url: string): Promise<ExtractedArtic
     // Check Content-Type - reject non-HTML content (PDFs, images, etc.)
     const contentType = response.headers.get('content-type') || ''
     if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
+      clearTimeout(timeoutId)
       console.warn(`[ArticleExtractor] Skipping non-HTML content: ${url} (Content-Type: ${contentType})`)
       return null
     }
 
     const html = await response.text()
+    clearTimeout(timeoutId)
 
     // Additional safety check: reject suspiciously large responses (likely binary/PDF)
     if (html.length > 500000) {
