@@ -1199,9 +1199,24 @@ function AudioPage() {
                             </p>
                           </div>
                         </div>
-                        <a href={podcastAudioUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">
-                          MP3 herunterladen
-                        </a>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={podcastAudioUrl}
+                            download="synthszr-podcast.mp3"
+                            className="text-xs text-blue-500 hover:underline"
+                          >
+                            MP3 ↓
+                          </a>
+                          {selectedPostId && (
+                            <a
+                              href={`/api/podcast/cover-image?postId=${selectedPostId}`}
+                              download="synthszr-podcast-cover.png"
+                              className="text-xs text-green-500 hover:underline"
+                            >
+                              Cover ↓
+                            </a>
+                          )}
+                        </div>
                       </div>
                       <audio
                         ref={audioRef}
