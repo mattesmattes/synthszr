@@ -195,7 +195,11 @@ const navGroups: NavGroup[] = [
   }
 ]
 
-export function AdminNav() {
+interface AdminNavProps {
+  onNavigate?: () => void
+}
+
+export function AdminNav({ onNavigate }: AdminNavProps) {
   const pathname = usePathname()
 
   return (
@@ -220,6 +224,7 @@ export function AdminNav() {
                     href={item.href}
                     target={isExternal ? '_blank' : undefined}
                     rel={isExternal ? 'noopener noreferrer' : undefined}
+                    onClick={onNavigate}
                     className={cn(
                       'flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors',
                       isActive
