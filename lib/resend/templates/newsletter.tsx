@@ -5,6 +5,8 @@ import {
   Body,
   Container,
   Section,
+  Row,
+  Column,
   Text,
   Button,
   Hr,
@@ -234,17 +236,52 @@ export function NewsletterEmail({
                 </Link>
               </Section>
 
-              {/* Audio Player Pill */}
+              {/* Podcast Platform Links */}
               <Section style={playerPillSection}>
-                <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
-                  <Img
-                    src={`${baseUrl}/player.gif`}
-                    alt={strings.listenPodcast}
-                    width="300"
-                    height="52"
-                    style={playerGif}
-                  />
-                </Link>
+                {/* Row 1: Headline */}
+                <Img
+                  src={`${baseUrl}/podcast_hl.png`}
+                  alt="The daily synthszr podcast"
+                  width="300"
+                  height="auto"
+                  style={{ display: 'block', margin: '0 auto 10px' }}
+                />
+                {/* Row 2: Platform badges side by side */}
+                <Row style={{ textAlign: 'center' as const }}>
+                  <Column style={{ textAlign: 'center' as const, verticalAlign: 'middle', paddingRight: '8px' }}>
+                    <Link href="https://open.spotify.com/show/0FJkPjKXvobgqI8U881yiF?si=wMJJ-CQxQdyuW18VXQZQOQ">
+                      <Img
+                        src={`${baseUrl}/podcast_spotify.png`}
+                        alt="Listen on Spotify"
+                        height="36"
+                        width="auto"
+                        style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                      />
+                    </Link>
+                  </Column>
+                  <Column style={{ textAlign: 'center' as const, verticalAlign: 'middle', paddingRight: '8px' }}>
+                    <Link href="https://podcasts.apple.com/de/podcast/synthszr/id1879733990">
+                      <Img
+                        src={`${baseUrl}/podcast_apple.png`}
+                        alt="Listen on Apple Podcasts"
+                        height="36"
+                        width="auto"
+                        style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                      />
+                    </Link>
+                  </Column>
+                  <Column style={{ textAlign: 'center' as const, verticalAlign: 'middle' }}>
+                    <Link href="https://synthszr.com">
+                      <Img
+                        src={`${baseUrl}/podcast_synthszr.png`}
+                        alt="synthszr.com"
+                        height="36"
+                        width="auto"
+                        style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                      />
+                    </Link>
+                  </Column>
+                </Row>
               </Section>
             </>
           )}
@@ -365,11 +402,6 @@ const playerPillSection = {
   textAlign: 'center' as const,
 }
 
-const playerGif = {
-  display: 'inline-block',
-  height: 'auto',
-  borderRadius: '28px',
-}
 
 const contentSection = {
   padding: '32px',
