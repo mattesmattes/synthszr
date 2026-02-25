@@ -679,7 +679,7 @@ function AudioPage() {
     fetch('/api/podcast/translate-metadata', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: post.title, excerpt: post.excerpt || '' }),
+      body: JSON.stringify({ title: post.title, excerpt: post.excerpt || '', script: podcastScript }),
     })
       .then(res => res.json())
       .then(data => {

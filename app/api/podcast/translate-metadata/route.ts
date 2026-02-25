@@ -18,11 +18,14 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { title, excerpt } = body as { title: string; excerpt: string }
+  const { title, excerpt, script } = body as { title: string; excerpt: string; script?: string }
 
   if (!title) {
     return NextResponse.json({ error: 'title is required' }, { status: 400 })
   }
+
+  // Use the first ~2000 chars of the script for description context (avoid huge tokens)
+  const scriptContext = script ? script.slice(0, 2000) : null
 
   try {
     const client = new Anthropic()
@@ -40,10 +43,10 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no explanation
 Rules:
 - title: short punchy episode title (max 80 chars)
 - subtitle: one-line teaser (max 120 chars)
-- description: 2-3 sentences of episode show notes
+- description: 2-3 engaging English sentences summarizing the episode content for show notes${scriptContext ? ' — base it on the script excerpt below' : ''}
 
 German title: ${title}
-German excerpt: ${excerpt || title}`,
+German excerpt: ${excerpt || title}${scriptContext ? `\nScript excerpt (first part): ${scriptContext}` : ''}`,
         },
         {
           role: 'assistant',
