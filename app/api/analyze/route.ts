@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { streamAnalysis } from '@/lib/claude/client'
 
@@ -91,7 +92,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { date, promptId } = body
 
-    const supabase = await createClient()
+    // Use admin client for cron requests (no session, cronSecretValid=true), regular client for user requests
+    const supabase = cronSecretValid ? createAdminClient() : await createClient()
 
     // Get the prompt
     let promptText: string
