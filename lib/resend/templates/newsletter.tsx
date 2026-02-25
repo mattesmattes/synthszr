@@ -224,18 +224,6 @@ export function NewsletterEmail({
           {/* Cover Image with Logo - clicks to article with autoplay */}
           {coverImageUrl && (
             <>
-              <Section style={coverSection}>
-                <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
-                  <Img
-                    src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=1200&logo=true&skipTransform=true`}
-                    alt={subject}
-                    width="600"
-                    height="600"
-                    style={coverImage}
-                  />
-                </Link>
-              </Section>
-
               {/* Podcast Platform Links */}
               <Section style={playerPillSection}>
                 {/* Row 1: Headline */}
@@ -282,6 +270,18 @@ export function NewsletterEmail({
                     </Link>
                   </Column>
                 </Row>
+              </Section>
+
+              <Section style={coverSection}>
+                <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
+                  <Img
+                    src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=1200&logo=true&skipTransform=true`}
+                    alt={subject}
+                    width="600"
+                    height="600"
+                    style={coverImage}
+                  />
+                </Link>
               </Section>
             </>
           )}
