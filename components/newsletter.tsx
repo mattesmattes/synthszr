@@ -48,7 +48,36 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
   }
 
   return (
-    <section className="mt-20 pt-16">
+    <>
+      {/* Podcast block */}
+      <section className="mt-20 pt-16">
+        <div className="mx-auto max-w-2xl text-center">
+          {/* Headline image */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/podcast_hl.png"
+            alt="The daily synthszr podcast"
+            className="mx-auto mb-4 max-w-sm w-full h-auto"
+          />
+          {/* Platform badges */}
+          <div className="flex items-center justify-center gap-6">
+            <a href="https://open.spotify.com/show/0FJkPjKXvobgqI8U881yiF?si=wMJJ-CQxQdyuW18VXQZQOQ" target="_blank" rel="noopener noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/podcast_spotify.png" alt="Listen on Spotify" className="h-9 w-auto" />
+            </a>
+            <a href="https://podcasts.apple.com/de/podcast/synthszr/id1879733990" target="_blank" rel="noopener noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/podcast_apple.png" alt="Listen on Apple Podcasts" className="h-9 w-auto" />
+            </a>
+            <a href="https://synthszr.com" target="_blank" rel="noopener noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/podcast_synthszr.png" alt="synthszr.com" className="h-9 w-auto" />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-8 pt-0">
       <div className="mx-auto max-w-2xl bg-cyan-vivid p-8 rounded-lg">
         <h2 className="font-mono text-2xl font-bold md:text-lg text-black">Subscribe free. Unsubscribe the second it sucks.</h2>
         <p className="mt-4 text-black/70">
@@ -95,6 +124,7 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
           </div>
         )}
       </div>
-    </section>
+      </section>
+    </>
   )
 }
