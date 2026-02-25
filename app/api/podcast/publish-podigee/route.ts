@@ -199,8 +199,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const episode = episodeRes.data as { id: number; url?: string }
+    const episode = episodeRes.data as { id: number; url?: string; permalink?: string }
     const episodeId = episode.id
+    console.log('[Publish Podigee] Episode data:', JSON.stringify(episode))
 
     // ─── Step 4: Request pre-signed upload URL for MP3 ───────────────────────
     const uploadRes = await podigeeRequest('/uploads?filename=podcast.mp3', 'POST')
@@ -270,7 +271,11 @@ export async function POST(request: NextRequest) {
       console.warn('[Publish Podigee] Cover patch warning:', patchRes.data)
     }
 
-    const episodeUrl = (episode.url as string | undefined) || `https://app.podigee.com/episodes/${episodeId}`
+    // Use the URL returned by Podigee, or fall back to the dashboard edit URL
+    const episodeUrl =
+      (episode.url as string | undefined) ||
+      (episode.permalink as string | undefined) ||
+      `https://app.podigee.com/dashboard/podcasts/${podcastId}/episodes/${episodeId}/edit`
 
     console.log(`[Publish Podigee] Successfully published episode ${episodeId}: ${episodeUrl}`)
 
