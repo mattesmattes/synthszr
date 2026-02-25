@@ -16,6 +16,7 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { AudioFileManager, type AudioFile } from '@/components/admin/audio-file-manager'
 import { PodcastTimeMachine } from '@/components/admin/podcast-time-machine'
 import { EnvelopeEditor } from '@/components/admin/envelope-editor'
@@ -627,10 +628,12 @@ function AudioPage() {
   // Podigee publishing state
   const [podigeeTitle, setPodigeeTitle] = useState('')
   const [podigeeSubtitle, setPodigeeSubtitle] = useState('')
+  const [podigeeDescription, setPodigeeDescription] = useState('')
   const [podigeePublishing, setPodigeePublishing] = useState(false)
   const [podigeeEpisodeUrl, setPodigeeEpisodeUrl] = useState<string | null>(null)
   const [podigeeError, setPodigeeError] = useState<string | null>(null)
   const [podigeeTranslating, setPodigeeTranslating] = useState(false)
+  const [coverModalOpen, setCoverModalOpen] = useState(false)
 
   // Job-based podcast generation state
   const [podcastJobId, setPodcastJobId] = useState<string | null>(null)
@@ -682,10 +685,12 @@ function AudioPage() {
       .then(data => {
         setPodigeeTitle(data.title || post.title)
         setPodigeeSubtitle(data.subtitle || '')
+        setPodigeeDescription(data.description || post.excerpt || '')
       })
       .catch(() => {
         setPodigeeTitle(post.title)
         setPodigeeSubtitle('')
+        setPodigeeDescription(post.excerpt || '')
       })
       .finally(() => setPodigeeTranslating(false))
   }, [podcastAudioUrl])
@@ -793,6 +798,7 @@ function AudioPage() {
           audioUrl: podcastAudioUrl,
           title: podigeeTitle,
           subtitle: podigeeSubtitle,
+          description: podigeeDescription,
         }),
       })
       const data = await res.json()
@@ -1302,6 +1308,56 @@ function AudioPage() {
                       </p>
                     ) : (
                       <div className="space-y-2">
+                        {/* Cover preview + MP3 download row */}
+                        <div className="flex items-start gap-3">
+                          {selectedPostId && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setCoverModalOpen(true)}
+                                className="shrink-0 rounded overflow-hidden border border-border hover:opacity-80 transition-opacity"
+                                title="Cover 1:1 anzeigen"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={`/api/podcast/cover-image?postId=${selectedPostId}`}
+                                  alt="Podcast Cover Preview"
+                                  width={64}
+                                  height={64}
+                                  className="block"
+                                />
+                              </button>
+                              <Dialog open={coverModalOpen} onOpenChange={setCoverModalOpen}>
+                                <DialogContent className="max-w-fit p-2 bg-background">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={`/api/podcast/cover-image?postId=${selectedPostId}`}
+                                    alt="Podcast Cover 1400×1400"
+                                    className="max-h-[90vh] max-w-[90vw] block"
+                                  />
+                                </DialogContent>
+                              </Dialog>
+                            </>
+                          )}
+                          <div className="flex flex-col gap-1 text-xs">
+                            <a
+                              href={podcastAudioUrl!}
+                              download="synthszr-podcast.mp3"
+                              className="text-blue-500 hover:underline"
+                            >
+                              MP3 ↓
+                            </a>
+                            {selectedPostId && (
+                              <a
+                                href={`/api/podcast/cover-image?postId=${selectedPostId}`}
+                                download="synthszr-podcast-cover.png"
+                                className="text-green-500 hover:underline"
+                              >
+                                Cover ↓
+                              </a>
+                            )}
+                          </div>
+                        </div>
                         <Input
                           value={podigeeTitle}
                           onChange={(e) => setPodigeeTitle(e.target.value)}
@@ -1313,6 +1369,12 @@ function AudioPage() {
                           onChange={(e) => setPodigeeSubtitle(e.target.value)}
                           placeholder="Subheadline (EN)"
                           className="text-sm"
+                        />
+                        <Textarea
+                          value={podigeeDescription}
+                          onChange={(e) => setPodigeeDescription(e.target.value)}
+                          placeholder="Episode description / show notes (EN)"
+                          className="text-sm min-h-[80px]"
                         />
                         <Button
                           size="sm"

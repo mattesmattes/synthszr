@@ -29,12 +29,15 @@ export async function POST(request: NextRequest) {
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
+      max_tokens: 500,
       messages: [
         {
           role: 'user',
-          content: `Translate these two strings to English podcast-style language. Keep them concise and engaging.
-Return only valid JSON with keys "title" and "subtitle". No markdown, no explanation.
+          content: `Translate the following German podcast episode metadata to English. Keep it engaging and podcast-friendly.
+Return only valid JSON with keys "title", "subtitle", and "description". No markdown, no explanation.
+- title: short, punchy episode title (max 80 chars)
+- subtitle: one-line teaser (max 120 chars)
+- description: 2-3 sentence episode show notes describing the content
 
 Title: ${title}
 Excerpt: ${excerpt || title}`,
@@ -48,13 +51,15 @@ Excerpt: ${excerpt || title}`,
     return NextResponse.json({
       title: parsed.title || title,
       subtitle: parsed.subtitle || '',
+      description: parsed.description || excerpt || '',
     })
   } catch (error) {
     console.error('[Translate Metadata] Error:', error)
-    // Fallback: return original title
+    // Fallback: return original values
     return NextResponse.json({
       title,
       subtitle: excerpt || '',
+      description: excerpt || '',
     })
   }
 }
