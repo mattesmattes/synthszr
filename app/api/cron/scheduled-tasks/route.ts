@@ -620,7 +620,8 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
   console.log('[DailyAnalysis] Calling analyze API...')
   const analyzeController = new AbortController()
   // Timeout covers entire operation including body/stream reading (not just headers)
-  const analyzeTimeoutId = setTimeout(() => analyzeController.abort(), 270000) // 4.5 min timeout
+  // gemini-2.5-flash with 600k input needs up to 8 min; cron total budget is 800s
+  const analyzeTimeoutId = setTimeout(() => analyzeController.abort(), 480000) // 8 min timeout
   let response: Response
   try {
     response = await fetch(`${baseUrl}/api/analyze`, {
@@ -635,7 +636,7 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
   } catch (err) {
     clearTimeout(analyzeTimeoutId)
     if (err instanceof Error && err.name === 'AbortError') {
-      console.error('[DailyAnalysis] Analyze API timeout after 4.5 minutes')
+      console.error('[DailyAnalysis] Analyze API timeout after 8 minutes')
       return { success: false, error: 'Analyze API timeout' }
     }
     throw err

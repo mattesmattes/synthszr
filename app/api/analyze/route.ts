@@ -5,7 +5,7 @@ import { getSession } from '@/lib/auth/session'
 import { streamAnalysis } from '@/lib/claude/client'
 
 export const runtime = 'nodejs'
-export const maxDuration = 300 // 5 minutes — Gemini 2.5 Pro with large prompts needs time
+export const maxDuration = 800 // 13 minutes — allows gemini-2.5-flash to process large repos
 
 // Canonical URLs for newsletter sources that may not have direct article URLs
 const NEWSLETTER_CANONICAL_URLS: Record<string, string> = {
@@ -130,6 +130,41 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // PRE-FILTER: Remove garbage items before sending to Gemini
+    // These waste token budget and cause the model to produce shorter output.
+    // Pattern-based: newsletter footers, tracking pixels, ads, DSGVO notices
+    const GARBAGE_TITLE_PATTERNS = [
+      /^hidden tracker/i,
+      /referral hub/i,
+      /\| subscribe$/i,
+      /^subscribe$/i,
+      /privacy choices/i,
+      /^unsubscribe/i,
+      /view (in|this) (browser|email)/i,
+      /^(marketing brew|tech brew|tldr \w+|morning brew)\s*[\|–]\s*(subscribe|weekly|daily|referral)/i,
+      /^your (free |privacy |cookie )/i,
+      /^(faq|help center)\s*[\|–]/i,
+    ]
+    const MIN_CONTENT_LENGTH = 120  // Tracking pixels and empty items are < 120 chars
+
+    const filteredItems = rawItems.filter(item => {
+      // Remove items with no meaningful content
+      if (!item.content || item.content.length < MIN_CONTENT_LENGTH) return false
+      // Remove items whose title matches known garbage patterns
+      const title = item.title || ''
+      if (GARBAGE_TITLE_PATTERNS.some(p => p.test(title))) return false
+      return true
+    })
+
+    console.log(`[Analyze] Garbage filter: ${rawItems.length} → ${filteredItems.length} items (removed ${rawItems.length - filteredItems.length} garbage items)`)
+
+    if (filteredItems.length === 0) {
+      return new Response(JSON.stringify({ error: 'Keine relevanten Inhalte nach Filterung gefunden' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     // ENFORCE 30% MAX SOURCE DIVERSITY
     // Group items by SPECIFIC newsletter (not platform)
     // e.g., "Machine Learning Pills" and "Lenny's Newsletter" are separate sources,
@@ -154,7 +189,7 @@ export async function POST(request: NextRequest) {
     }
 
     const itemsBySource = new Map<string, typeof rawItems>()
-    for (const item of rawItems) {
+    for (const item of filteredItems) {
       const sourceId = getSourceIdentifier(item)
       if (!itemsBySource.has(sourceId)) {
         itemsBySource.set(sourceId, [])
@@ -163,8 +198,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate max items per source (30% of total, minimum 2)
-    const maxPerSource = Math.max(2, Math.floor(rawItems.length * 0.3))
-    console.log(`[Analyze] Source diversity: max ${maxPerSource} items per source (30% of ${rawItems.length})`)
+    const maxPerSource = Math.max(2, Math.floor(filteredItems.length * 0.3))
+    console.log(`[Analyze] Source diversity: max ${maxPerSource} items per source (30% of ${filteredItems.length})`)
 
     // Filter items to enforce diversity
     const diverseItems: typeof rawItems = []
@@ -186,7 +221,7 @@ export async function POST(request: NextRequest) {
     // Shuffle to mix sources (don't have all items from one source together)
     const items = diverseItems.sort(() => Math.random() - 0.5)
 
-    console.log(`[Analyze] After diversity filter: ${items.length} items (from ${rawItems.length})`)
+    console.log(`[Analyze] After diversity filter: ${items.length} items (from ${filteredItems.length} filtered, ${rawItems.length} total)`)
     console.log(`[Analyze] Source distribution:`, Object.entries(sourceStats)
       .map(([d, s]) => `${d}: ${s.used}/${s.total}`)
       .join(', '))
