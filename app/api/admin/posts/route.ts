@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     // Fetch from generated_posts (AI-generated posts)
     let query = supabase
       .from('generated_posts')
-      .select('id, title, slug, created_at')
+      .select('id, title, slug, created_at, excerpt')
       .order('created_at', { ascending: false })
       .limit(limit)
 

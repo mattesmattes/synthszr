@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { AudioFileManager, type AudioFile } from '@/components/admin/audio-file-manager'
 import { PodcastTimeMachine } from '@/components/admin/podcast-time-machine'
 import { EnvelopeEditor } from '@/components/admin/envelope-editor'
@@ -600,7 +601,7 @@ function AudioPage() {
   const [segmentMetadata, setSegmentMetadata] = useState<SegmentMetadata[]>([])
 
   // Post selection for script generation
-  const [recentPosts, setRecentPosts] = useState<Array<{ id: string; title: string; slug: string; created_at: string }>>([])
+  const [recentPosts, setRecentPosts] = useState<Array<{ id: string; title: string; slug: string; created_at: string; excerpt?: string }>>([])
   const [selectedPostId, setSelectedPostId] = useState<string>('')
   const [selectedLocale, setSelectedLocale] = useState<PodcastLocale>('en')
   const [scriptGenerating, setScriptGenerating] = useState(false)
@@ -622,6 +623,14 @@ function AudioPage() {
 
   // Audio files state
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
+
+  // Podigee publishing state
+  const [podigeeTitle, setPodigeeTitle] = useState('')
+  const [podigeeSubtitle, setPodigeeSubtitle] = useState('')
+  const [podigeePublishing, setPodigeePublishing] = useState(false)
+  const [podigeeEpisodeUrl, setPodigeeEpisodeUrl] = useState<string | null>(null)
+  const [podigeeError, setPodigeeError] = useState<string | null>(null)
+  const [podigeeTranslating, setPodigeeTranslating] = useState(false)
 
   // Job-based podcast generation state
   const [podcastJobId, setPodcastJobId] = useState<string | null>(null)
@@ -655,6 +664,31 @@ function AudioPage() {
       fetchPersonality()
     }
   }, [activeTab])
+
+  // Auto-translate metadata when podcast audio becomes available
+  useEffect(() => {
+    if (!podcastAudioUrl || !selectedPostId) return
+    const post = recentPosts.find(p => p.id === selectedPostId)
+    if (!post) return
+    setPodigeeEpisodeUrl(null)
+    setPodigeeError(null)
+    setPodigeeTranslating(true)
+    fetch('/api/podcast/translate-metadata', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: post.title, excerpt: post.excerpt || '' }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        setPodigeeTitle(data.title || post.title)
+        setPodigeeSubtitle(data.subtitle || '')
+      })
+      .catch(() => {
+        setPodigeeTitle(post.title)
+        setPodigeeSubtitle('')
+      })
+      .finally(() => setPodigeeTranslating(false))
+  }, [podcastAudioUrl])
 
   const fetchPersonality = useCallback(async () => {
     setPersonalityLoading(true)
@@ -743,6 +777,34 @@ function AudioPage() {
       }
     } catch (error) {
       console.error('Error fetching smalltalk topic:', error)
+    }
+  }
+
+  async function publishToPodigee() {
+    if (!podcastAudioUrl || !selectedPostId || !podigeeTitle) return
+    setPodigeePublishing(true)
+    setPodigeeError(null)
+    try {
+      const res = await fetch('/api/podcast/publish-podigee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postId: selectedPostId,
+          audioUrl: podcastAudioUrl,
+          title: podigeeTitle,
+          subtitle: podigeeSubtitle,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setPodigeeError(data.error || 'Unbekannter Fehler')
+      } else {
+        setPodigeeEpisodeUrl(data.episodeUrl)
+      }
+    } catch (error) {
+      setPodigeeError(error instanceof Error ? error.message : 'Netzwerkfehler')
+    } finally {
+      setPodigeePublishing(false)
     }
   }
 
@@ -1229,6 +1291,59 @@ function AudioPage() {
                       />
                     </div>
                   )}
+
+                  {/* Podigee Publish Section */}
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <p className="text-xs font-medium text-muted-foreground">Auf Podigee veröffentlichen</p>
+                    {podigeeTranslating ? (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Übersetze Metadaten…
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        <Input
+                          value={podigeeTitle}
+                          onChange={(e) => setPodigeeTitle(e.target.value)}
+                          placeholder="Episoden-Titel (EN)"
+                          className="text-sm"
+                        />
+                        <Input
+                          value={podigeeSubtitle}
+                          onChange={(e) => setPodigeeSubtitle(e.target.value)}
+                          placeholder="Subheadline (EN)"
+                          className="text-sm"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={publishToPodigee}
+                          disabled={podigeePublishing || !podigeeTitle}
+                        >
+                          {podigeePublishing ? (
+                            <>
+                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                              Veröffentliche…
+                            </>
+                          ) : (
+                            'Podigee ↑'
+                          )}
+                        </Button>
+                        {podigeeEpisodeUrl && (
+                          <a
+                            href={podigeeEpisodeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block text-xs text-green-500 hover:underline"
+                          >
+                            Episode live ↗
+                          </a>
+                        )}
+                        {podigeeError && (
+                          <p className="text-xs text-red-500">{podigeeError}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </CardContent>
