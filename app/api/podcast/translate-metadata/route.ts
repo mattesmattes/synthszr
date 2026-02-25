@@ -34,19 +34,28 @@ export async function POST(request: NextRequest) {
         {
           role: 'user',
           content: `Translate the following German podcast episode metadata to English. Keep it engaging and podcast-friendly.
-Return only valid JSON with keys "title", "subtitle", and "description". No markdown, no explanation.
-- title: short, punchy episode title (max 80 chars)
-- subtitle: one-line teaser (max 120 chars)
-- description: 2-3 sentence episode show notes describing the content
+Respond with ONLY a raw JSON object (no markdown, no code fences, no explanation):
+{"title":"...","subtitle":"...","description":"..."}
 
-Title: ${title}
-Excerpt: ${excerpt || title}`,
+Rules:
+- title: short punchy episode title (max 80 chars)
+- subtitle: one-line teaser (max 120 chars)
+- description: 2-3 sentences of episode show notes
+
+German title: ${title}
+German excerpt: ${excerpt || title}`,
+        },
+        {
+          role: 'assistant',
+          content: '{',
         },
       ],
     })
 
     const text = message.content[0].type === 'text' ? message.content[0].text : ''
-    const parsed = JSON.parse(text.trim())
+    // Prepend the '{' we used as assistant prefix to complete the JSON
+    const raw = ('{' + text).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+    const parsed = JSON.parse(raw)
 
     return NextResponse.json({
       title: parsed.title || title,
