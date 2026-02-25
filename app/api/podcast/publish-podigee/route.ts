@@ -17,7 +17,7 @@ function podigeeHeaders() {
   const apiKey = process.env.PODIGEE_API_KEY
   if (!apiKey) throw new Error('PODIGEE_API_KEY is not configured')
   return {
-    'Authorization': `Token ${apiKey}`,
+    'Authorization': `Token token=${apiKey}`,
     'Content-Type': 'application/json',
   }
 }
