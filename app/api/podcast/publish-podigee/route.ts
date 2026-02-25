@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
     }
 
     const upload = uploadRes.data as { id: number; upload_url: string }
-    const { id: uploadId, upload_url: uploadUrl } = upload
+    const { upload_url: uploadUrl } = upload
 
     // ─── Step 5: Fetch MP3 and PUT to S3 ─────────────────────────────────────
     const mp3Response = await fetch(audioUrl)
@@ -241,33 +241,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ─── Step 6: Create production ────────────────────────────────────────────
-    const productionRes = await podigeeRequest('/productions', 'POST', {
+    // Strip pre-signed query params to get the stable S3 object URL
+    const parsedUploadUrl = new URL(uploadUrl)
+    const fileUrl = `${parsedUploadUrl.origin}${parsedUploadUrl.pathname}`
+
+    // ─── Step 6: Create production + auto-publish ─────────────────────────────
+    // Podigee expects files array with the S3 URL (not upload_id)
+    const productionRes = await podigeeRequest('/productions?publish_episode=true', 'POST', {
       episode_id: episodeId,
-      upload_id: uploadId,
+      files: [{ url: fileUrl }],
     })
 
     if (!productionRes.ok) {
       console.error('[Publish Podigee] Create production error:', productionRes.data)
       return NextResponse.json(
         { error: `Production konnte nicht erstellt werden (${productionRes.status})` },
-        { status: 502 }
-      )
-    }
-
-    const production = productionRes.data as { id: number }
-    const productionId = production.id
-
-    // ─── Step 7: Start encoding + auto-publish ────────────────────────────────
-    const startRes = await podigeeRequest(
-      `/productions/${productionId}/start?publish_episode=true`,
-      'POST'
-    )
-
-    if (!startRes.ok) {
-      console.error('[Publish Podigee] Start production error:', startRes.data)
-      return NextResponse.json(
-        { error: `Encoding konnte nicht gestartet werden (${startRes.status})` },
         { status: 502 }
       )
     }
