@@ -420,9 +420,16 @@ function encodeMP3(leftChannel: Float32Array, rightChannel: Float32Array): Buffe
     throw new Error('MP3 encoding produced 0 bytes - encoder may have failed silently')
   }
 
-  if (compressionRatio < 2) {
+  // Only validate compression ratio for inputs longer than 1 second.
+  // Very short clips (< SAMPLE_RATE samples) naturally have poor compression
+  // because LAME produces fixed-size frames (~417 bytes) regardless of input length.
+  if (inputSamples >= SAMPLE_RATE && compressionRatio < 1.5) {
     console.error(`[Crossfade] WARNING: Compression ratio too low (${compressionRatio.toFixed(1)}x). Output may not be valid MP3!`)
     throw new Error(`MP3 encoding failed - output is ${totalLength} bytes but should be ~${Math.floor(expectedRawBytes / 10)} bytes. Compression ratio: ${compressionRatio.toFixed(1)}x`)
+  }
+
+  if (inputSamples < SAMPLE_RATE) {
+    console.warn(`[Crossfade] Short input: ${inputSamples} samples (${(inputSamples / SAMPLE_RATE * 1000).toFixed(0)}ms), skipping compression ratio check`)
   }
 
   const result = new Uint8Array(totalLength)
