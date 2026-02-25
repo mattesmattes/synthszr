@@ -7,27 +7,30 @@ export interface AnalysisResult {
   outputTokens: number
 }
 
-const SYSTEM_PROMPT = `Du bist ein Kurator, der relevante Inhalte für einen Newsletter SELEKTIERT und DOKUMENTIERT.
+const SYSTEM_PROMPT = `Du bist ein Kurator, der Inhalte für einen Newsletter DOKUMENTIERT und AUFBEREITET.
 
-KRITISCHE REGEL - FILTERUNG:
-- Zeige NUR Quellen, die für das Thema RELEVANT sind
-- IGNORIERE irrelevante Quellen KOMPLETT - erwähne sie NICHT
-- Schreibe NIEMALS "nicht relevant" oder "enthält keine relevanten Informationen"
-- Wenn eine Quelle nichts Relevantes enthält: ÜBERSPRINGE SIE STILLSCHWEIGEND
+FILTERUNG (nur für echten Müll):
+- ÜBERSPRINGEN (ohne Erwähnung): Tracking-Pixel, Werbeangebote, Gewinnspiele, Newsletter-Footer ("Subscribe", "Referral Hub", "Unsubscribe"), DSGVO-Hinweise, reine Produktwerbung ohne Neuigkeitswert
+- Alle anderen Quellen: IMMER aufnehmen, auch wenn nur peripher relevant
 
-EXTRAKTION:
-- Extrahiere VOLLSTÄNDIGE relevante Passagen und Zitate
-- Behalte Originalformulierungen bei (übersetze nur ins Deutsche)
-- Längere Abschnitte sind ERWÜNSCHT - das ist Rohmaterial
+EXTRAKTION (für aufgenommene Quellen):
+- Extrahiere VOLLSTÄNDIGE relevante Passagen und Zitate — Rohmaterial, nicht Zusammenfassung
+- Je mehr Inhalt, desto besser — Kürzen ist später einfacher als Ergänzen
+- Behalte Originalformulierungen bei (übersetze ins Deutsche, Original in Klammern wenn treffend)
+- Wichtige Zahlen, Namen, Fakten und Zitate VOLLSTÄNDIG wiedergeben
 
 QUELLENANGABEN:
 - JEDE Information MUSS mit dem zugehörigen Markdown-Link versehen sein
 - Format: [Quellenname](URL) oder "Zitat" – [Quelle](URL)
 - Ohne Link = ungültige Information
 
+UMFANG:
+- Ziel: möglichst VOLLSTÄNDIGE Erfassung aller relevanten Quellen
+- Lieber zu ausführlich als zu knapp — das ist Rohmaterial für einen Blogpost
+- Thematisch verwandte Quellen zusammenfassen, aber NICHTS weglassen
+
 SPRACHE:
 - Output auf Deutsch
-- Englische Zitate übersetzen, Original in Klammern wenn besonders treffend
 - Fachbegriffe können auf Englisch bleiben`
 
 /**
@@ -51,9 +54,9 @@ ${content}`
 
   try {
     const result = streamText({
-      model: google('gemini-2.0-flash'),  // Fast enough for cron (5-min limit), 1M context
+      model: google('gemini-2.5-flash'),  // Better quality than 2.0-flash, fast enough for cron budget
       prompt: fullPrompt,
-      maxOutputTokens: 16384,
+      maxOutputTokens: 65536,  // ~50k Wörter max — kein künstlicher Deckel mehr
     })
 
     for await (const chunk of result.textStream) {

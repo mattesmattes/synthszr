@@ -203,7 +203,7 @@ function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug
       companyInfo += ` <span style="${percentStyle}">${arrow}${Math.abs(r.changePercent).toFixed(1)}%</span>`
     }
 
-    return `${prefix}<a href="${href}" style="color: inherit; text-decoration: none;">${companyInfo}</a> <a href="${href}" style="${ratingStyle}">${label}</a>`
+    return `${prefix}<a href="${href}" style="color: inherit; text-decoration: none;">${companyInfo}</a> <a href="${href}" style="${ratingStyle}">${label}</a><a href="${href}" style="color: #999; font-size: 11px; text-decoration: none; margin-left: 3px; vertical-align: middle;" title="Click for the detailed SYNTHSZR analysis">↗</a>`
   }).join('')
 
   // Vote badges on new line to avoid forcing wide content

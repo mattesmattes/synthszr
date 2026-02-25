@@ -350,10 +350,9 @@ export class GmailClient {
     const afterDate = new Date(Date.now() - hoursBack * 60 * 60 * 1000)
     const dateStr = afterDate.toISOString().split('T')[0].replace(/-/g, '/')
 
-    // Escape special characters in subject for Gmail query
-    const escapedSubject = subjectContains.replace(/[+]/g, '')
+    // Inside quoted subject searches, + is treated as a literal character by Gmail
     const fromFilter = senderEmail ? `from:${senderEmail} ` : ''
-    const query = `${fromFilter}subject:"${escapedSubject}" after:${dateStr}`
+    const query = `${fromFilter}subject:"${subjectContains}" after:${dateStr}`
 
     console.log('[Gmail] Fetching emails by subject with query:', query)
 

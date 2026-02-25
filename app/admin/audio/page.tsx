@@ -604,6 +604,7 @@ function AudioPage() {
   const [selectedPostId, setSelectedPostId] = useState<string>('')
   const [selectedLocale, setSelectedLocale] = useState<PodcastLocale>('en')
   const [scriptGenerating, setScriptGenerating] = useState(false)
+  const [smalltalkTopic, setSmalltalkTopic] = useState('')
   const [customPrompt, setCustomPrompt] = useState(PODCAST_SCRIPT_PROMPT)
   const [scriptGenerated, setScriptGenerated] = useState(false)
   const [scriptModified, setScriptModified] = useState(false)
@@ -644,6 +645,8 @@ function AudioPage() {
     fetchTTSSettings()
     fetchRecentPosts()
     fetchAudioFiles()
+    fetchSmalltalkTopic()
+    fetchPersonality()
   }, [])
 
   // Fetch personality when Character tab becomes active
@@ -726,6 +729,20 @@ function AudioPage() {
       }
     } catch (error) {
       console.error('Error fetching posts:', error)
+    }
+  }
+
+  async function fetchSmalltalkTopic() {
+    try {
+      const res = await fetch('/api/admin/smalltalk-topic')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.topic) {
+          setSmalltalkTopic(data.topic)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching smalltalk topic:', error)
     }
   }
 
@@ -823,6 +840,7 @@ function AudioPage() {
           postId: selectedPostId,
           locale: selectedLocale,
           durationMinutes: podcastDuration,
+          smalltalkTopic: smalltalkTopic.trim() || undefined,
         }),
       })
       const data = await res.json()
@@ -1001,7 +1019,12 @@ function AudioPage() {
                     <SelectContent>
                       {recentPosts.map((post) => (
                         <SelectItem key={post.id} value={post.id}>
-                          <span className="truncate max-w-[300px] block">{post.title}</span>
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                              {new Date(post.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                            </span>
+                            <span className="truncate">{post.title}</span>
+                          </span>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1025,6 +1048,46 @@ function AudioPage() {
                       <><Sparkles className="mr-2 h-4 w-4" />Script generieren</>
                     )}
                   </Button>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium text-muted-foreground">Smalltalk <span className="font-normal">(optional)</span></Label>
+                  <Textarea
+                    value={smalltalkTopic}
+                    onChange={(e) => setSmalltalkTopic(e.target.value)}
+                    placeholder="z.B. KI-generierte Musik, Deepseek-Überraschung, ..."
+                    className="text-sm h-[80px] resize-y"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Wenn angegeben, sprechen Host und Gast am Anfang kurz über dieses Thema, bevor es ins Hauptthema geht.
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium text-muted-foreground">Mood</Label>
+                  <Select
+                    value={personalityMap[selectedLocale]?.current_mood || 'optimistic'}
+                    onValueChange={async (value) => {
+                      setPersonalityMap(prev => ({
+                        ...prev,
+                        [selectedLocale]: { ...prev[selectedLocale], current_mood: value },
+                      }))
+                      await fetch('/api/admin/podcast-personality', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ locale: selectedLocale, updates: { current_mood: value } }),
+                      })
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="euphoric">Euphorisch</SelectItem>
+                      <SelectItem value="optimistic">Optimistisch</SelectItem>
+                      <SelectItem value="neutral">Neutral</SelectItem>
+                      <SelectItem value="negative">Negativ</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Wird nach jeder Episode automatisch neu gewürfelt</p>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Claude generiert ein Podcast-Script basierend auf dem Post-Content (~{podcastDuration} Min)
@@ -1856,25 +1919,6 @@ function AudioPage() {
                         <RotateCcw className="h-3 w-3 mr-1" />
                         Cooldown (-10% / -5%)
                       </Button>
-                      <div className="space-y-1 pt-2 border-t border-amber-200 dark:border-amber-800">
-                        <Label className="text-sm">Nächste Episode Mood</Label>
-                        <Select
-                          value={personality?.current_mood || 'optimistic'}
-                          onValueChange={(value) => updateRelationship({ current_mood: value })}
-                          disabled={!personality}
-                        >
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="euphoric">Euphorisch</SelectItem>
-                            <SelectItem value="optimistic">Optimistisch</SelectItem>
-                            <SelectItem value="neutral">Neutral</SelectItem>
-                            <SelectItem value="negative">Negativ</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">Wird nach jeder Episode automatisch neu gewürfelt</p>
-                      </div>
                     </div>
                   </div>
 

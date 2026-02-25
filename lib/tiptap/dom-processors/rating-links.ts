@@ -39,9 +39,18 @@ export interface PremarketPortal {
   isin?: string
 }
 
+export interface CompanyLinkEntry {
+  displayName: string
+  apiName: string
+  type: 'public' | 'premarket'
+}
+
+export type CompanyLinkData = Map<string, CompanyLinkEntry> // key: displayName.toLowerCase()
+
 export interface RatingLinksResult {
   publicPortals: PublicPortal[]
   premarketPortals: PremarketPortal[]
+  companyLinkData: CompanyLinkData
 }
 
 /**
@@ -61,7 +70,7 @@ export async function processSynthszrRatingLinks(
   generationTriggeredRef: React.RefObject<Set<string>>,
   onRefreshNeeded: () => void,
 ): Promise<RatingLinksResult> {
-  const emptyResult: RatingLinksResult = { publicPortals: [], premarketPortals: [] }
+  const emptyResult: RatingLinksResult = { publicPortals: [], premarketPortals: [], companyLinkData: new Map() }
 
   // Find all Synthszr Take / Mattes Synthese markers
   const syntheszrMarkers = container.querySelectorAll('.mattes-synthese, .mattes-synthese-heading')
@@ -453,9 +462,134 @@ export async function processSynthszrRatingLinks(
       section.element.classList.add('synthszr-ratings-processed')
     }
 
-    return { publicPortals, premarketPortals }
+    // Build companyLinkData for injecting links into paragraph text
+    const companyLinkData: CompanyLinkData = new Map()
+    const premarketDisplayNamesMap = new Map<string, string>()
+    for (const section of sectionsToProcess) {
+      for (const c of section.premarketCompanies) {
+        premarketDisplayNamesMap.set(c.apiName.toLowerCase(), c.displayName)
+      }
+    }
+    for (const [apiName, data] of publicQuotesMap) {
+      if (data.rating) {
+        companyLinkData.set(data.displayName.toLowerCase(), {
+          displayName: data.displayName,
+          apiName,
+          type: 'public',
+        })
+      }
+    }
+    for (const [apiName] of premarketRatingsMap) {
+      const displayName = premarketDisplayNamesMap.get(apiName)
+      if (displayName) {
+        companyLinkData.set(displayName.toLowerCase(), {
+          displayName,
+          apiName,
+          type: 'premarket',
+        })
+      }
+    }
+
+    return { publicPortals, premarketPortals, companyLinkData }
   } catch (error) {
     console.error('[TiptapRenderer] Failed to fetch Synthszr ratings:', error)
     return emptyResult
   }
+}
+
+/**
+ * Inject <a> links around company name mentions in paragraph text.
+ * Links point to the company page at /{locale}/companies/{slug}.
+ * Must be called AFTER hideExplicitCompanyTags() to avoid matching {Company} tags.
+ */
+export function injectCompanyLinks(container: HTMLElement, linkData: CompanyLinkData): void {
+  if (linkData.size === 0) return
+
+  // Extract locale from current URL path
+  const pathParts = window.location.pathname.split('/')
+  const locale = ['de', 'en', 'cs', 'nds'].includes(pathParts[1]) ? pathParts[1] : 'de'
+
+  const paragraphs = container.querySelectorAll('p')
+  for (const para of paragraphs) {
+    if (para.classList.contains('synthszr-company-links-processed')) continue
+    para.classList.add('synthszr-company-links-processed')
+
+    // Walk only text nodes, skipping those inside <a> or .synthszr-ratings-container
+    const textNodes: Text[] = []
+    const walker = document.createTreeWalker(
+      para,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode(node: Node) {
+          let parent = node.parentNode
+          while (parent && parent !== para) {
+            if (
+              parent.nodeName === 'A' ||
+              (parent instanceof Element && parent.classList.contains('synthszr-ratings-container'))
+            ) {
+              return NodeFilter.FILTER_REJECT
+            }
+            parent = parent.parentNode
+          }
+          return NodeFilter.FILTER_ACCEPT
+        }
+      }
+    )
+
+    let node: Node | null
+    while ((node = walker.nextNode())) {
+      textNodes.push(node as Text)
+    }
+
+    for (const tn of textNodes) {
+      injectLinksIntoTextNode(tn, linkData, locale)
+    }
+  }
+}
+
+function injectLinksIntoTextNode(textNode: Text, linkData: CompanyLinkData, locale: string): void {
+  const text = textNode.textContent || ''
+  if (!text.trim()) return
+
+  const matches: Array<{ start: number; end: number; entry: CompanyLinkEntry }> = []
+
+  for (const [, entry] of linkData) {
+    const escaped = entry.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const regex = new RegExp(`\\b${escaped}\\b`, 'gi')
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(text)) !== null) {
+      const hasOverlap = matches.some(m => m.start < match!.index + match![0].length && m.end > match!.index)
+      if (!hasOverlap) {
+        matches.push({ start: match.index, end: match.index + match[0].length, entry })
+      }
+    }
+  }
+
+  if (matches.length === 0) return
+
+  matches.sort((a, b) => a.start - b.start)
+
+  const parent = textNode.parentNode
+  if (!parent) return
+
+  const fragment = document.createDocumentFragment()
+  let lastIndex = 0
+
+  for (const match of matches) {
+    if (match.start > lastIndex) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.start)))
+    }
+    const link = document.createElement('a')
+    link.href = `/${locale}/companies/${match.entry.apiName}`
+    link.textContent = text.slice(match.start, match.end)
+    link.className = 'text-foreground underline hover:text-foreground/70'
+    fragment.appendChild(link)
+    lastIndex = match.end
+  }
+
+  if (lastIndex < text.length) {
+    fragment.appendChild(document.createTextNode(text.slice(lastIndex)))
+  }
+
+  parent.replaceChild(fragment, textNode)
 }

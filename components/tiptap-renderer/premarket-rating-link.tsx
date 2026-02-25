@@ -17,14 +17,32 @@ export function PremarketRatingLink({ company, displayName, rating, isFirst, isi
         onClick={() => { trackEvent('synthszr_vote_click', { company }); setShowPremarket(true) }}
         className="inline-flex items-baseline gap-1 hover:underline cursor-pointer text-foreground text-[13px]"
       >
-        {isFirst ? (
-          <span><span className="font-bold uppercase text-[0.8125em]">Synthszr Vote:</span> {displayName}</span>
-        ) : (
-          <span>, {displayName}</span>
-        )}
-        <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold not-italic ${RATING_BADGE_STYLES[rating]}`}>
-          {RATING_LABELS[rating]}
-        </span>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {isFirst ? (
+                <span><span className="font-bold uppercase text-[0.8125em]">Synthszr Vote:</span> {displayName}</span>
+              ) : (
+                <span>, {displayName}</span>
+              )}
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Click for the detailed SYNTHSZR analysis</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold not-italic ${RATING_BADGE_STYLES[rating]}`}>
+                {RATING_LABELS[rating]}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Click for the detailed SYNTHSZR analysis</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>

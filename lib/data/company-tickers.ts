@@ -65,6 +65,7 @@ export const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string 
 
   // DevOps & Developer Tools
   'gitlab': { symbol: 'GTLB', exchange: 'US' },
+  'figma': { symbol: 'FIG', exchange: 'US' },
 
   // Enterprise & SaaS
   'oracle': { symbol: 'ORCL', exchange: 'US' },
@@ -102,6 +103,16 @@ export const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string 
   'coinbase': { symbol: 'COIN', exchange: 'US' },
   'global payments': { symbol: 'GPN', exchange: 'US' },
   'global-payments': { symbol: 'GPN', exchange: 'US' },
+  'viatris': { symbol: 'VTRS', exchange: 'US' },
+  'reddit': { symbol: 'RDDT', exchange: 'US' },
+  'hp': { symbol: 'HPQ', exchange: 'US' },
+  'hp inc': { symbol: 'HPQ', exchange: 'US' },
+  'ferrari': { symbol: 'RACE', exchange: 'US' },
+  'match group': { symbol: 'MTCH', exchange: 'US' },
+  'tinder': { symbol: 'MTCH', exchange: 'US' },
+  'hinge': { symbol: 'MTCH', exchange: 'US' },
+  'warner music': { symbol: 'WMG', exchange: 'NASDAQ' },
+  'warner music group': { symbol: 'WMG', exchange: 'NASDAQ' },
 
   // German & European Industrial
   'siemens': { symbol: 'SIE', exchange: 'XETRA' },
@@ -150,8 +161,6 @@ export const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string 
   'unity': { symbol: 'U', exchange: 'US' },
   'robinhood': { symbol: 'HOOD', exchange: 'US' },
   'aes': { symbol: 'AES', exchange: 'US' },
-  'hp': { symbol: 'HPQ', exchange: 'US' },
-  'viatris': { symbol: 'VTRS', exchange: 'US' },
   'everest group': { symbol: 'EG', exchange: 'US' },
   'everest-group': { symbol: 'EG', exchange: 'US' },
 }

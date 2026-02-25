@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { runSynthesisPipeline } from '@/lib/synthesis/pipeline'
+import { runSynthesisPipelineWithProgress } from '@/lib/synthesis/pipeline'
 import { processNewsletters } from '@/lib/newsletter/processor'
 import { processWebcrawl } from '@/lib/webcrawl/processor'
 import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPublishedPostsQueueItems } from '@/lib/news-queue/service'
@@ -8,7 +8,7 @@ import { MAX_DIGEST_SECTIONS, MAX_CONTENT_PREVIEW_CHARS, MIN_ANALYSIS_LENGTH } f
 import { verifyCronAuth } from '@/lib/security/cron-auth'
 
 export const runtime = 'nodejs'
-export const maxDuration = 300 // 5 minutes max
+export const maxDuration = 800 // 13 minutes max (Vercel Pro limit)
 
 interface ScheduleConfig {
   newsletterFetch: {
@@ -596,7 +596,13 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
 
     if (!count || count === 0) {
       console.log(`[DailyAnalysis] Running synthesis for existing digest ${existingDigest.id}`)
-      const synthResult = await runSynthesisPipeline(existingDigest.id)
+      const synthResult = await runSynthesisPipelineWithProgress(
+        existingDigest.id, {}, (event) => {
+          if (event.type === 'partial' || event.type === 'error') {
+            console.log(`[DailyAnalysis] Synthesis progress: ${event.message || event.error}`)
+          }
+        }
+      )
       return {
         success: true,
         digestId: existingDigest.id,
@@ -613,7 +619,9 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
   // Step 1: Stream analysis and collect content
   console.log('[DailyAnalysis] Calling analyze API...')
   const analyzeController = new AbortController()
-  const analyzeTimeoutId = setTimeout(() => analyzeController.abort(), 270000) // 4.5 min timeout
+  // Timeout covers entire operation including body/stream reading (not just headers)
+  // gemini-2.5-flash with 600k input needs up to 8 min; cron total budget is 800s
+  const analyzeTimeoutId = setTimeout(() => analyzeController.abort(), 480000) // 8 min timeout
   let response: Response
   try {
     response = await fetch(`${baseUrl}/api/analyze`, {
@@ -625,17 +633,17 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
       body: JSON.stringify({ date: dateStr }),
       signal: analyzeController.signal,
     })
-    clearTimeout(analyzeTimeoutId)
   } catch (err) {
     clearTimeout(analyzeTimeoutId)
     if (err instanceof Error && err.name === 'AbortError') {
-      console.error('[DailyAnalysis] Analyze API timeout after 4.5 minutes')
+      console.error('[DailyAnalysis] Analyze API timeout after 8 minutes')
       return { success: false, error: 'Analyze API timeout' }
     }
     throw err
   }
 
   if (!response.ok) {
+    clearTimeout(analyzeTimeoutId)
     const errorText = await response.text()
     console.error('[DailyAnalysis] Analyze API failed:', errorText)
     return { success: false, error: `Analyze API failed: ${response.status}` }
@@ -644,6 +652,7 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
   // Read the SSE stream and collect content
   const reader = response.body?.getReader()
   if (!reader) {
+    clearTimeout(analyzeTimeoutId)
     return { success: false, error: 'No response reader' }
   }
 
@@ -677,6 +686,7 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
       }
     }
   } finally {
+    clearTimeout(analyzeTimeoutId) // Cancel timeout only after full stream is read
     reader.releaseLock()
   }
 
@@ -706,10 +716,16 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
 
   console.log(`[DailyAnalysis] Saved digest ${newDigest.id}`)
 
-  // Step 3: Run synthesis pipeline
+  // Step 3: Run synthesis pipeline (with timeout protection)
   console.log('[DailyAnalysis] Starting synthesis pipeline...')
   try {
-    const synthResult = await runSynthesisPipeline(newDigest.id)
+    const synthResult = await runSynthesisPipelineWithProgress(
+      newDigest.id, {}, (event) => {
+        if (event.type === 'partial' || event.type === 'error') {
+          console.log(`[DailyAnalysis] Synthesis progress: ${event.message || event.error}`)
+        }
+      }
+    )
     console.log(`[DailyAnalysis] Synthesis complete: ${synthResult.synthesesDeveloped} syntheses created`)
 
     return {

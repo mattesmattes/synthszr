@@ -16,7 +16,7 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies
 
 // DOM processors
 import { processMattesSyntheseText } from "@/lib/tiptap/dom-processors/synthese-text"
-import { processSynthszrRatingLinks } from "@/lib/tiptap/dom-processors/rating-links"
+import { processSynthszrRatingLinks, injectCompanyLinks } from "@/lib/tiptap/dom-processors/rating-links"
 import { processNewsHeadings } from "@/lib/tiptap/dom-processors/news-headings"
 import { hideExplicitCompanyTags } from "@/lib/tiptap/dom-processors/company-tags"
 import { sanitizeAllLinks } from "@/lib/tiptap/dom-processors/link-sanitizer"
@@ -162,6 +162,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       setRatingPortals(result.publicPortals)
       setPremarketRatingPortals(result.premarketPortals)
       hideExplicitCompanyTags(containerRef.current!)
+      injectCompanyLinks(containerRef.current!, result.companyLinkData)
     }
 
     runProcessing()
@@ -209,6 +210,9 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
 
       // 5. Hide {Company} syntax AFTER company detection and badge placement
       hideExplicitCompanyTags(container)
+
+      // 6. Inject company links AFTER tag hiding to avoid matching {Company} patterns
+      injectCompanyLinks(container, result.companyLinkData)
 
       // 6. Scroll to anchor if URL has hash
       const hash = window.location.hash

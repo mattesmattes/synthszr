@@ -7,6 +7,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { extractCompaniesPerArticle, parseTipTapContent } from './extractor'
+import { extractUnknownCompanyTags, discoverAndClassifyCompanies } from './discovery'
 
 export interface SyncResult {
   success: boolean
@@ -80,6 +81,14 @@ export async function syncPostCompanyMentions(
     // Count unique companies and articles
     const uniqueCompanies = new Set(mentions.map(m => m.company.slug)).size
     const uniqueArticles = new Set(mentions.map(m => m.articleIndex)).size
+
+    // Trigger async discovery for unknown {Company} tags (non-blocking)
+    const unknownTags = extractUnknownCompanyTags(parsedContent)
+    if (unknownTags.length > 0) {
+      discoverAndClassifyCompanies(unknownTags).catch(err => {
+        console.error('[sync-companies] Discovery failed:', err)
+      })
+    }
 
     return { success: true, companiesFound: uniqueCompanies, articlesWithCompanies: uniqueArticles }
   } catch (error) {

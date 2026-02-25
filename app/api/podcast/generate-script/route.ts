@@ -249,6 +249,7 @@ interface GenerateScriptRequest {
   locale?: string
   durationMinutes?: number
   customPrompt?: string
+  smalltalkTopic?: string
 }
 
 /**
@@ -393,13 +394,21 @@ export async function POST(request: NextRequest) {
       ? postDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
       : postDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
-    const prompt = (body.customPrompt || defaultPrompt)
+    let prompt = (body.customPrompt || defaultPrompt)
       .replace('{duration}', String(durationMinutes))
       .replace('{wordCount}', String(wordCount))
       .replace('{title}', postTitle)
       .replace('{content}', postContent)
       .replace('{weekday}', weekday)
       .replace('{date}', date)
+
+    // Inject optional smalltalk section
+    if (body.smalltalkTopic?.trim()) {
+      const smalltalkSection = ttsLang === 'de'
+        ? `\n\n**SMALLTALK AM ANFANG (PFLICHT):**\nNach der Begrüßung ("HOST: [cheerfully] Hey, Hey und Willkommen...") und dem kurzen Themen-Teaser sprechen HOST und GUEST kurz (~1-2 Minuten) locker über folgendes Thema, BEVOR es ins Hauptthema geht:\n"${body.smalltalkTopic}"\nDieser Smalltalk soll natürlich und persönlich wirken. Danach leitet der HOST nahtlos zum Hauptthema über.`
+        : `\n\n**SMALLTALK AT THE START (MANDATORY):**\nAfter the greeting ("HOST: [cheerfully] Hey, Hey and welcome to Synthesizer Daily...") and the brief topic tease, HOST and GUEST briefly (~1-2 minutes) chat casually about the following topic BEFORE getting into the main content:\n"${body.smalltalkTopic}"\nThis smalltalk should feel natural and personal. Afterwards, HOST transitions smoothly into the main topic.`
+      prompt = prompt + smalltalkSection
+    }
 
     // Inject personality brief
     const personalityState = await getPersonalityState(ttsLang)
