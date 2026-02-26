@@ -94,7 +94,6 @@ function formatChange(current: number, previous: number): { value: string; posit
 
 const SUMMARY_CARDS = [
   { title: 'Page Views', key: 'page_views' as keyof Totals, icon: Eye, color: '#3B82F6' },
-  { title: 'Podcast Plays', key: 'podcast_plays' as keyof Totals, icon: Headphones, color: '#10B981' },
   { title: 'Ticker Clicks', key: 'stock_ticker_clicks' as keyof Totals, icon: TrendingUp, color: '#F59E0B' },
   { title: 'Vote Clicks', key: 'synthszr_vote_clicks' as keyof Totals, icon: MousePointerClick, color: '#8B5CF6' },
 ]
@@ -235,14 +234,6 @@ export default function StatisticsPage() {
                     dataKey="page_views"
                     name="Page Views"
                     stroke="#3B82F6"
-                    dot={false}
-                    strokeWidth={2}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="podcast_plays"
-                    name="Podcast Plays"
-                    stroke="#10B981"
                     dot={false}
                     strokeWidth={2}
                   />
