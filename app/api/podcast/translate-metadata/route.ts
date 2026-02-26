@@ -24,15 +24,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'title is required' }, { status: 400 })
   }
 
-  // Use the first ~2000 chars of the script for description context (avoid huge tokens)
-  const scriptContext = script ? script.slice(0, 2000) : null
+  // Use the first ~1500 chars of the script for description context
+  const scriptContext = script ? script.slice(0, 1500) : null
 
   try {
     const client = new Anthropic()
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 500,
+      max_tokens: 1024,
       messages: [
         {
           role: 'user',
@@ -43,7 +43,7 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no explanation
 Rules:
 - title: short punchy episode title (max 80 chars)
 - subtitle: one-line teaser (max 120 chars)
-- description: 2-3 engaging English sentences summarizing the episode content for show notes${scriptContext ? ' — base it on the script excerpt below' : ''}
+- description: exactly 2 engaging English sentences for show notes${scriptContext ? ' — base it on the script excerpt below' : ''}
 
 German title: ${title}
 German excerpt: ${excerpt || title}${scriptContext ? `\nScript excerpt (first part): ${scriptContext}` : ''}`,
@@ -58,20 +58,22 @@ German excerpt: ${excerpt || title}${scriptContext ? `\nScript excerpt (first pa
     const text = message.content[0].type === 'text' ? message.content[0].text : ''
     // Prepend the '{' we used as assistant prefix to complete the JSON
     const raw = ('{' + text).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+    console.log('[Translate Metadata] Raw response:', raw.slice(0, 300))
+
     const parsed = JSON.parse(raw)
 
     return NextResponse.json({
       title: parsed.title || title,
       subtitle: parsed.subtitle || '',
-      description: parsed.description || excerpt || '',
+      description: parsed.description || '',
     })
   } catch (error) {
     console.error('[Translate Metadata] Error:', error)
     // Fallback: return original values
     return NextResponse.json({
       title,
-      subtitle: excerpt || '',
-      description: excerpt || '',
+      subtitle: '',
+      description: '',
     })
   }
 }

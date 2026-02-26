@@ -48,7 +48,7 @@ export default function NewsletterSendPage() {
   const [posts, setPosts] = useState<Post[]>([])
   const [sends, setSends] = useState<NewsletterSend[]>([])
   const [selectedPostId, setSelectedPostId] = useState<string>('')
-  const [testEmail, setTestEmail] = useState('')
+  const [testEmail, setTestEmail] = useState('mattes@gmail.com')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [sendingTest, setSendingTest] = useState(false)
