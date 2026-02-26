@@ -79,25 +79,36 @@ export async function GET(request: NextRequest) {
     const previousStart = new Date(now - 2 * lookbackMs).toISOString()
 
     // Fetch current + previous period in parallel
+    // NOTE: Supabase has a default 1000-row limit — use explicit limit to avoid losing recent events.
+    // At ~500 events/day, 100k covers ~200 days; well within Vercel memory limits (~5 MB payload).
+    const ROW_LIMIT = 100000
     const [analyticsResult, podcastResult, prevAnalyticsResult, prevPodcastResult] = await Promise.all([
       supabase
         .from('analytics_events')
         .select('event_type, created_at')
-        .gte('created_at', currentStart),
+        .gte('created_at', currentStart)
+        .order('created_at', { ascending: false })
+        .limit(ROW_LIMIT),
       supabase
         .from('podcast_plays')
         .select('played_at')
-        .gte('played_at', currentStart),
+        .gte('played_at', currentStart)
+        .order('played_at', { ascending: false })
+        .limit(ROW_LIMIT),
       supabase
         .from('analytics_events')
         .select('event_type, created_at')
         .gte('created_at', previousStart)
-        .lt('created_at', currentStart),
+        .lt('created_at', currentStart)
+        .order('created_at', { ascending: false })
+        .limit(ROW_LIMIT),
       supabase
         .from('podcast_plays')
         .select('played_at')
         .gte('played_at', previousStart)
-        .lt('played_at', currentStart),
+        .lt('played_at', currentStart)
+        .order('played_at', { ascending: false })
+        .limit(ROW_LIMIT),
     ])
 
     // Generate all buckets and initialize to zero
