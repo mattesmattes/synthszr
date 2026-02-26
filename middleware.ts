@@ -99,6 +99,60 @@ function getLocaleFromPathname(pathname: string): LocaleType | null {
   return null
 }
 
+// Ostfriesland cities for NDS locale detection
+const OSTFRIESLAND_CITIES = new Set([
+  'Aurich', 'Emden', 'Leer', 'Norden', 'Wittmund', 'Borkum', 'Norderney',
+  'Juist', 'Baltrum', 'Langeoog', 'Spiekeroog', 'Wangerooge', 'Esens',
+  'Weener', 'Rhauderfehn', 'Moormerland', 'Großefehn', 'Ihlow', 'Krummhörn',
+  'Georgsheil', 'Upgant-Schott', 'Südbrookmerland', 'Wiesmoor',
+])
+
+// Country-to-locale mapping (DE is handled by geo-region logic below)
+const COUNTRY_LOCALE_MAP: Record<string, LocaleType> = {
+  AT: 'de',
+  CH: 'de',
+  US: 'en',
+  GB: 'en',
+  AU: 'en',
+  CA: 'en',
+  FR: 'fr',
+  ES: 'es',
+  IT: 'it',
+  PT: 'pt',
+  BR: 'pt',
+  NL: 'nl',
+  PL: 'pl',
+  CZ: 'cs',
+}
+
+/**
+ * Detect locale from Vercel geo headers
+ * Returns null if no geo match can be determined
+ */
+function detectLocaleFromGeo(request: NextRequest, activeLanguages: Set<string>): LocaleType | null {
+  const country = request.headers.get('x-vercel-ip-country') || ''
+  const region = request.headers.get('x-vercel-ip-country-region') || ''
+  const rawCity = request.headers.get('x-vercel-ip-city') || ''
+  const city = decodeURIComponent(rawCity)
+
+  let detected: LocaleType | null = null
+
+  if (country === 'DE') {
+    // Niedersachsen (NI) + Ostfriesland city → NDS
+    if (region === 'NI' && OSTFRIESLAND_CITIES.has(city)) {
+      detected = 'nds'
+    } else {
+      detected = 'de'
+    }
+  } else {
+    detected = COUNTRY_LOCALE_MAP[country] ?? null
+  }
+
+  // Only return if the locale is active in the DB
+  if (detected && activeLanguages.has(detected)) return detected
+  return null
+}
+
 /**
  * Check if path should be localized
  */
@@ -174,10 +228,14 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // Case 2: URL has no locale prefix - redirect to default
-  // Check cookie for preferred locale
+  // Case 2: URL has no locale prefix - redirect to preferred locale
+  // Priority: cookie > geo detection > default
   const cookieLocale = request.cookies.get(LOCALE_COOKIE_NAME)?.value as LocaleType | undefined
-  const preferredLocale = cookieLocale && activeLanguages.has(cookieLocale) ? cookieLocale : DEFAULT_LOCALE
+  const geoLocale = !cookieLocale ? detectLocaleFromGeo(request, activeLanguages) : null
+  const preferredLocale =
+    (cookieLocale && activeLanguages.has(cookieLocale) ? cookieLocale : null) ??
+    geoLocale ??
+    DEFAULT_LOCALE
 
   // Redirect to localized URL (307 temporary — destination depends on cookie locale)
   const localizedUrl = new URL(`/${preferredLocale}${pathname === '/' ? '' : pathname}`, request.url)
