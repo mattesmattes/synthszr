@@ -20,6 +20,19 @@ import {
 type Period = '7d' | '30d' | '90d' | '1y'
 type Granularity = 'day' | 'week' | 'month'
 
+interface PodigeeDay {
+  date: string
+  total: number
+  apple: number
+  spotify: number
+}
+
+interface PodigeeStats {
+  period: Period
+  days: PodigeeDay[]
+  totals: { total: number; apple: number; spotify: number }
+}
+
 const PERIOD_GRANULARITY: Record<Period, Granularity> = {
   '7d': 'day',
   '30d': 'day',
@@ -90,6 +103,9 @@ export default function StatisticsPage() {
   const [period, setPeriod] = useState<Period>('7d')
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [podigee, setPodigee] = useState<PodigeeStats | null>(null)
+  const [podigeeLoading, setPodigeeLoading] = useState(true)
+
   useEffect(() => {
     setLoading(true)
     setStats(null)
@@ -100,6 +116,18 @@ export default function StatisticsPage() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
+  }, [period])
+
+  useEffect(() => {
+    setPodigeeLoading(true)
+    setPodigee(null)
+    fetch(`/api/admin/podigee-analytics?period=${period}`)
+      .then(res => res.json())
+      .then(data => {
+        setPodigee(data.error ? null : data)
+        setPodigeeLoading(false)
+      })
+      .catch(() => setPodigeeLoading(false))
   }, [period])
 
   const granularity = PERIOD_GRANULARITY[period]
@@ -236,6 +264,68 @@ export default function StatisticsPage() {
                   />
                 </LineChart>
               </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Podigee Podcast Downloads */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Headphones className="h-4 w-4" style={{ color: '#EF4444' }} />
+                Podcast Downloads (Podigee)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {podigeeLoading ? (
+                <div className="flex items-center justify-center h-24">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : !podigee ? (
+                <p className="text-sm text-muted-foreground">Keine Podigee-Daten verfügbar</p>
+              ) : (
+                <div className="space-y-4">
+                  {/* Summary numbers */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center">
+                      <p className="text-3xl font-bold font-mono" style={{ color: '#EF4444' }}>
+                        {podigee.totals.total.toLocaleString('de-DE')}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">Gesamt</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-3xl font-bold font-mono" style={{ color: '#A855F7' }}>
+                        {podigee.totals.apple.toLocaleString('de-DE')}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">Apple Podcasts</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-3xl font-bold font-mono" style={{ color: '#22C55E' }}>
+                        {podigee.totals.spotify.toLocaleString('de-DE')}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">Spotify</p>
+                    </div>
+                  </div>
+                  {/* Trend chart */}
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart
+                      data={podigee.days.map(d => ({
+                        ...d,
+                        label: new Date(d.date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' }),
+                      }))}
+                      margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="total" name="Gesamt" stroke="#EF4444" dot={false} strokeWidth={2} />
+                      <Line type="monotone" dataKey="apple" name="Apple Podcasts" stroke="#A855F7" dot={false} strokeWidth={2} />
+                      <Line type="monotone" dataKey="spotify" name="Spotify" stroke="#22C55E" dot={false} strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </CardContent>
           </Card>
 
