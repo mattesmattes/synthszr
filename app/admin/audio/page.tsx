@@ -567,7 +567,7 @@ function AudioPage() {
   const [ttsSuccess, setTtsSuccess] = useState(false)
 
   // Sync active tab with URL ?tab= param
-  const validTabs = useMemo(() => new Set(['episode', 'recording', 'character', 'timemachine']), [])
+  const validTabs = useMemo(() => new Set(['episode', 'recording', 'character', 'timemachine', 'podigee']), [])
   const tabFromUrl = searchParams.get('tab')
   const activeTab = validTabs.has(tabFromUrl ?? '') ? tabFromUrl! : 'episode'
   const setActiveTab = useCallback((tab: string) => {
@@ -634,6 +634,19 @@ function AudioPage() {
   const [podigeeError, setPodigeeError] = useState<string | null>(null)
   const [podigeeTranslating, setPodigeeTranslating] = useState(false)
   const [coverModalOpen, setCoverModalOpen] = useState(false)
+  // Latest recording from history (used when no recording was generated in this session)
+  const [latestEpisode, setLatestEpisode] = useState<{
+    post_id: string
+    audio_url: string
+    title: string | null
+    script: string | null
+    created_at: string
+  } | null>(null)
+  const [latestEpisodeLoading, setLatestEpisodeLoading] = useState(false)
+
+  // Effective values: prefer current session recording, fall back to latest history
+  const effectiveAudioUrl = podcastAudioUrl || latestEpisode?.audio_url || null
+  const effectivePostId = selectedPostId || latestEpisode?.post_id || ''
 
   // Job-based podcast generation state
   const [podcastJobId, setPodcastJobId] = useState<string | null>(null)
@@ -668,7 +681,22 @@ function AudioPage() {
     }
   }, [activeTab])
 
-  // Auto-translate metadata when podcast audio becomes available
+  // Fetch latest recording when Podigee tab becomes active (only once)
+  useEffect(() => {
+    if (activeTab !== 'podigee') return
+    if (latestEpisode || latestEpisodeLoading) return
+    setLatestEpisodeLoading(true)
+    fetch('/api/admin/podcast-history')
+      .then(res => res.json())
+      .then(data => {
+        const ep = data.episodes?.[0] ?? null
+        setLatestEpisode(ep)
+      })
+      .catch(() => {})
+      .finally(() => setLatestEpisodeLoading(false))
+  }, [activeTab])
+
+  // Auto-translate when a new session recording is ready
   useEffect(() => {
     if (!podcastAudioUrl || !selectedPostId) return
     const post = recentPosts.find(p => p.id === selectedPostId)
@@ -694,6 +722,32 @@ function AudioPage() {
       })
       .finally(() => setPodigeeTranslating(false))
   }, [podcastAudioUrl])
+
+  // Auto-translate from latest history episode (when no session recording exists)
+  useEffect(() => {
+    if (!latestEpisode || podcastAudioUrl || podigeeTitle) return
+    const title = latestEpisode.title || ''
+    if (!title) return
+    setPodigeeEpisodeUrl(null)
+    setPodigeeError(null)
+    setPodigeeTranslating(true)
+    fetch('/api/podcast/translate-metadata', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, excerpt: '', script: latestEpisode.script }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        setPodigeeTitle(data.title || title)
+        setPodigeeSubtitle(data.subtitle || '')
+        setPodigeeDescription(data.description || '')
+      })
+      .catch(() => {
+        setPodigeeTitle(title)
+        setPodigeeSubtitle('')
+      })
+      .finally(() => setPodigeeTranslating(false))
+  }, [latestEpisode])
 
   const fetchPersonality = useCallback(async () => {
     setPersonalityLoading(true)
@@ -786,7 +840,7 @@ function AudioPage() {
   }
 
   async function publishToPodigee() {
-    if (!podcastAudioUrl || !selectedPostId || !podigeeTitle) return
+    if (!effectiveAudioUrl || !effectivePostId || !podigeeTitle) return
     setPodigeePublishing(true)
     setPodigeeError(null)
     try {
@@ -794,8 +848,8 @@ function AudioPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          postId: selectedPostId,
-          audioUrl: podcastAudioUrl,
+          postId: effectivePostId,
+          audioUrl: effectiveAudioUrl,
           title: podigeeTitle,
           subtitle: podigeeSubtitle,
           description: podigeeDescription,
@@ -2109,22 +2163,27 @@ function AudioPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {!podcastAudioUrl ? (
+              {latestEpisodeLoading && !effectiveAudioUrl ? (
+                <p className="text-sm text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Lade letztes Recording…
+                </p>
+              ) : !effectiveAudioUrl ? (
                 <p className="text-sm text-muted-foreground">
-                  Erstelle zuerst ein Recording im Tab &quot;Episode&quot;, um eine Episode zu veröffentlichen.
+                  Noch kein Recording vorhanden. Erstelle ein Recording im Tab &quot;Episode&quot;.
                 </p>
               ) : (
                 <div className="space-y-4 max-w-lg">
-                  {podigeeTranslating ? (
+                  {(podigeeTranslating || latestEpisodeLoading) ? (
                     <p className="text-sm text-muted-foreground flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Übersetze Metadaten…
+                      {latestEpisodeLoading ? 'Lade letztes Recording…' : 'Übersetze Metadaten…'}
                     </p>
                   ) : (
                     <>
                       {/* Cover preview + Downloads */}
                       <div className="flex items-start gap-4">
-                        {selectedPostId && (
+                        {effectivePostId && (
                           <>
                             <button
                               type="button"
@@ -2134,7 +2193,7 @@ function AudioPage() {
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
-                                src={`/api/podcast/cover-image?postId=${selectedPostId}`}
+                                src={`/api/podcast/cover-image?postId=${effectivePostId}`}
                                 alt="Podcast Cover Preview"
                                 width={80}
                                 height={80}
@@ -2145,7 +2204,7 @@ function AudioPage() {
                               <DialogContent className="max-w-fit p-2 bg-background">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
-                                  src={`/api/podcast/cover-image?postId=${selectedPostId}`}
+                                  src={`/api/podcast/cover-image?postId=${effectivePostId}`}
                                   alt="Podcast Cover 1400×1400"
                                   className="max-h-[90vh] max-w-[90vw] block"
                                 />
@@ -2155,15 +2214,15 @@ function AudioPage() {
                         )}
                         <div className="flex flex-col gap-2 text-sm">
                           <a
-                            href={podcastAudioUrl}
+                            href={effectiveAudioUrl}
                             download="synthszr-podcast.mp3"
                             className="text-blue-500 hover:underline"
                           >
                             MP3 herunterladen ↓
                           </a>
-                          {selectedPostId && (
+                          {effectivePostId && (
                             <a
-                              href={`/api/podcast/cover-image?postId=${selectedPostId}`}
+                              href={`/api/podcast/cover-image?postId=${effectivePostId}`}
                               download="synthszr-podcast-cover.png"
                               className="text-green-500 hover:underline"
                             >
