@@ -108,20 +108,10 @@ const OSTFRIESLAND_CITIES = new Set([
 ])
 
 // Country-to-locale mapping (DE is handled by geo-region logic below)
+// Only active locales: de, en, cs, nds
 const COUNTRY_LOCALE_MAP: Record<string, LocaleType> = {
   AT: 'de',
   CH: 'de',
-  US: 'en',
-  GB: 'en',
-  AU: 'en',
-  CA: 'en',
-  FR: 'fr',
-  ES: 'es',
-  IT: 'it',
-  PT: 'pt',
-  BR: 'pt',
-  NL: 'nl',
-  PL: 'pl',
   CZ: 'cs',
 }
 
@@ -145,7 +135,8 @@ function detectLocaleFromGeo(request: NextRequest, activeLanguages: Set<string>)
       detected = 'de'
     }
   } else {
-    detected = COUNTRY_LOCALE_MAP[country] ?? null
+    // For all other countries: use mapped locale or fall back to 'en'
+    detected = COUNTRY_LOCALE_MAP[country] ?? 'en'
   }
 
   // Only return if the locale is active in the DB
