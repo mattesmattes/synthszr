@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users, SlidersHorizontal, RotateCcw, Database, MessageSquare, BrainCircuit, ArrowRight, TrendingUp, BookOpen, History } from 'lucide-react'
+import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users, SlidersHorizontal, RotateCcw, Database, MessageSquare, BrainCircuit, ArrowRight, TrendingUp, BookOpen, History, Radio } from 'lucide-react'
 import { StereoPodcastPlayer } from '@/components/stereo-podcast-player'
 import type { SegmentMetadata } from '@/lib/audio/stereo-mixer'
 import { Badge } from '@/components/ui/badge'
@@ -1041,7 +1041,7 @@ function AudioPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-2xl grid-cols-4">
+        <TabsList className="grid w-full max-w-2xl grid-cols-5">
           <TabsTrigger value="episode" className="flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
             Episode
@@ -1057,6 +1057,10 @@ function AudioPage() {
           <TabsTrigger value="timemachine" className="flex items-center gap-2">
             <History className="h-4 w-4" />
             Time Machine
+          </TabsTrigger>
+          <TabsTrigger value="podigee" className="flex items-center gap-2">
+            <Radio className="h-4 w-4" />
+            Podigee
           </TabsTrigger>
         </TabsList>
 
@@ -1298,114 +1302,7 @@ function AudioPage() {
                     </div>
                   )}
 
-                  {/* Podigee Publish Section */}
-                  <div className="space-y-2 pt-2 border-t border-border">
-                    <p className="text-xs font-medium text-muted-foreground">Auf Podigee veröffentlichen</p>
-                    {podigeeTranslating ? (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        Übersetze Metadaten…
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {/* Cover preview + MP3 download row */}
-                        <div className="flex items-start gap-3">
-                          {selectedPostId && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => setCoverModalOpen(true)}
-                                className="shrink-0 rounded overflow-hidden border border-border hover:opacity-80 transition-opacity"
-                                title="Cover 1:1 anzeigen"
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={`/api/podcast/cover-image?postId=${selectedPostId}`}
-                                  alt="Podcast Cover Preview"
-                                  width={64}
-                                  height={64}
-                                  className="block"
-                                />
-                              </button>
-                              <Dialog open={coverModalOpen} onOpenChange={setCoverModalOpen}>
-                                <DialogContent className="max-w-fit p-2 bg-background">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={`/api/podcast/cover-image?postId=${selectedPostId}`}
-                                    alt="Podcast Cover 1400×1400"
-                                    className="max-h-[90vh] max-w-[90vw] block"
-                                  />
-                                </DialogContent>
-                              </Dialog>
-                            </>
-                          )}
-                          <div className="flex flex-col gap-1 text-xs">
-                            <a
-                              href={podcastAudioUrl!}
-                              download="synthszr-podcast.mp3"
-                              className="text-blue-500 hover:underline"
-                            >
-                              MP3 ↓
-                            </a>
-                            {selectedPostId && (
-                              <a
-                                href={`/api/podcast/cover-image?postId=${selectedPostId}`}
-                                download="synthszr-podcast-cover.png"
-                                className="text-green-500 hover:underline"
-                              >
-                                Cover ↓
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                        <Input
-                          value={podigeeTitle}
-                          onChange={(e) => setPodigeeTitle(e.target.value)}
-                          placeholder="Episoden-Titel (EN)"
-                          className="text-sm"
-                        />
-                        <Input
-                          value={podigeeSubtitle}
-                          onChange={(e) => setPodigeeSubtitle(e.target.value)}
-                          placeholder="Subheadline (EN)"
-                          className="text-sm"
-                        />
-                        <Textarea
-                          value={podigeeDescription}
-                          onChange={(e) => setPodigeeDescription(e.target.value)}
-                          placeholder="Episode description / show notes (EN)"
-                          className="text-sm min-h-[80px]"
-                        />
-                        <Button
-                          size="sm"
-                          onClick={publishToPodigee}
-                          disabled={podigeePublishing || !podigeeTitle}
-                        >
-                          {podigeePublishing ? (
-                            <>
-                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                              Veröffentliche…
-                            </>
-                          ) : (
-                            'Podigee ↑'
-                          )}
-                        </Button>
-                        {podigeeEpisodeUrl && (
-                          <a
-                            href={podigeeEpisodeUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block text-xs text-green-500 hover:underline"
-                          >
-                            Episode live ↗
-                          </a>
-                        )}
-                        {podigeeError && (
-                          <p className="text-xs text-red-500">{podigeeError}</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
+
                 </div>
               )}
             </CardContent>
@@ -2195,6 +2092,153 @@ function AudioPage() {
         {/* ================================================================ */}
         <TabsContent value="timemachine" className="space-y-6">
           <PodcastTimeMachine />
+        </TabsContent>
+
+        {/* ================================================================ */}
+        {/* PODIGEE TAB                                                      */}
+        {/* ================================================================ */}
+        <TabsContent value="podigee" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Radio className="h-5 w-5" />
+                Auf Podigee veröffentlichen
+              </CardTitle>
+              <CardDescription>
+                Episode mit Cover, MP3 und Metadaten auf Podigee publizieren.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!podcastAudioUrl ? (
+                <p className="text-sm text-muted-foreground">
+                  Erstelle zuerst ein Recording im Tab &quot;Episode&quot;, um eine Episode zu veröffentlichen.
+                </p>
+              ) : (
+                <div className="space-y-4 max-w-lg">
+                  {podigeeTranslating ? (
+                    <p className="text-sm text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Übersetze Metadaten…
+                    </p>
+                  ) : (
+                    <>
+                      {/* Cover preview + Downloads */}
+                      <div className="flex items-start gap-4">
+                        {selectedPostId && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setCoverModalOpen(true)}
+                              className="shrink-0 rounded overflow-hidden border border-border hover:opacity-80 transition-opacity"
+                              title="Cover 1:1 anzeigen"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={`/api/podcast/cover-image?postId=${selectedPostId}`}
+                                alt="Podcast Cover Preview"
+                                width={80}
+                                height={80}
+                                className="block"
+                              />
+                            </button>
+                            <Dialog open={coverModalOpen} onOpenChange={setCoverModalOpen}>
+                              <DialogContent className="max-w-fit p-2 bg-background">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={`/api/podcast/cover-image?postId=${selectedPostId}`}
+                                  alt="Podcast Cover 1400×1400"
+                                  className="max-h-[90vh] max-w-[90vw] block"
+                                />
+                              </DialogContent>
+                            </Dialog>
+                          </>
+                        )}
+                        <div className="flex flex-col gap-2 text-sm">
+                          <a
+                            href={podcastAudioUrl}
+                            download="synthszr-podcast.mp3"
+                            className="text-blue-500 hover:underline"
+                          >
+                            MP3 herunterladen ↓
+                          </a>
+                          {selectedPostId && (
+                            <a
+                              href={`/api/podcast/cover-image?postId=${selectedPostId}`}
+                              download="synthszr-podcast-cover.png"
+                              className="text-green-500 hover:underline"
+                            >
+                              Cover herunterladen ↓
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Metadata */}
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Episoden-Titel (EN)</Label>
+                          <Input
+                            value={podigeeTitle}
+                            onChange={(e) => setPodigeeTitle(e.target.value)}
+                            placeholder="Episoden-Titel (EN)"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Subheadline (EN)</Label>
+                          <Input
+                            value={podigeeSubtitle}
+                            onChange={(e) => setPodigeeSubtitle(e.target.value)}
+                            placeholder="Subheadline (EN)"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Show Notes / Description (EN)</Label>
+                          <Textarea
+                            value={podigeeDescription}
+                            onChange={(e) => setPodigeeDescription(e.target.value)}
+                            placeholder="Episode description / show notes (EN)"
+                            className="min-h-[120px]"
+                          />
+                        </div>
+                      </div>
+
+                      <Button
+                        onClick={publishToPodigee}
+                        disabled={podigeePublishing || !podigeeTitle}
+                        className="w-full"
+                      >
+                        {podigeePublishing ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Veröffentliche auf Podigee…
+                          </>
+                        ) : (
+                          <>
+                            <Radio className="mr-2 h-4 w-4" />
+                            Auf Podigee veröffentlichen
+                          </>
+                        )}
+                      </Button>
+
+                      {podigeeEpisodeUrl && (
+                        <a
+                          href={podigeeEpisodeUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block text-sm text-green-500 hover:underline text-center"
+                        >
+                          ✓ Episode live auf Podigee ↗
+                        </a>
+                      )}
+                      {podigeeError && (
+                        <p className="text-sm text-red-500">{podigeeError}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

@@ -165,72 +165,15 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // ENFORCE 30% MAX SOURCE DIVERSITY
-    // Group items by SPECIFIC newsletter (not platform)
-    // e.g., "Machine Learning Pills" and "Lenny's Newsletter" are separate sources,
-    // even though both are on Substack
-    const getSourceIdentifier = (item: typeof rawItems[0]): string => {
-      // Primary: Use the specific sender email as unique identifier
-      // This correctly separates different Substack newsletters
-      if (item.source_email) {
-        // Extract email address from format like "Newsletter Name <email@domain.com>"
-        const emailMatch = item.source_email.match(/<([^>]+)>/)
-        if (emailMatch) return emailMatch[1].toLowerCase()
-        // Or use the whole string if no angle brackets
-        return item.source_email.toLowerCase().trim()
-      }
-      // Fallback: Use URL domain for articles without email source
-      if (item.source_url) {
-        try {
-          return new URL(item.source_url).hostname.replace('www.', '')
-        } catch {}
-      }
-      return 'unknown'
-    }
+    // Shuffle to mix sources
+    const items = filteredItems.sort(() => Math.random() - 0.5)
 
-    const itemsBySource = new Map<string, typeof rawItems>()
-    for (const item of filteredItems) {
-      const sourceId = getSourceIdentifier(item)
-      if (!itemsBySource.has(sourceId)) {
-        itemsBySource.set(sourceId, [])
-      }
-      itemsBySource.get(sourceId)!.push(item)
-    }
-
-    // Calculate max items per source (30% of total, minimum 2)
-    const maxPerSource = Math.max(2, Math.floor(filteredItems.length * 0.3))
-    console.log(`[Analyze] Source diversity: max ${maxPerSource} items per source (30% of ${filteredItems.length})`)
-
-    // Filter items to enforce diversity
-    const diverseItems: typeof rawItems = []
-    const sourceStats: Record<string, { total: number; used: number }> = {}
-
-    for (const [domain, domainItems] of itemsBySource) {
-      sourceStats[domain] = { total: domainItems.length, used: 0 }
-
-      // Take up to maxPerSource items from this source
-      const itemsToUse = domainItems.slice(0, maxPerSource)
-      diverseItems.push(...itemsToUse)
-      sourceStats[domain].used = itemsToUse.length
-
-      if (domainItems.length > maxPerSource) {
-        console.log(`[Analyze] LIMITED ${domain}: ${domainItems.length} → ${maxPerSource} items`)
-      }
-    }
-
-    // Shuffle to mix sources (don't have all items from one source together)
-    const items = diverseItems.sort(() => Math.random() - 0.5)
-
-    console.log(`[Analyze] After diversity filter: ${items.length} items (from ${filteredItems.length} filtered, ${rawItems.length} total)`)
-    console.log(`[Analyze] Source distribution:`, Object.entries(sourceStats)
-      .map(([d, s]) => `${d}: ${s.used}/${s.total}`)
-      .join(', '))
+    console.log(`[Analyze] Processing ${items.length} items (from ${rawItems.length} total, removed ${rawItems.length - filteredItems.length} garbage)`)
 
     // Build content string with token limit awareness
-    // Limit per item and total to stay within Vercel's 5-min function timeout
-    // gemini-2.0-flash handles ~600k chars comfortably within limits
-    const MAX_CHARS_PER_ITEM = 10000
-    const MAX_TOTAL_CHARS = 600000
+    // Gemini Flash supports 1M token input — 2M chars ≈ 500k tokens, well within limits
+    const MAX_CHARS_PER_ITEM = 5000
+    const MAX_TOTAL_CHARS = 2000000
 
     const contentParts: string[] = []
     let totalChars = 0
