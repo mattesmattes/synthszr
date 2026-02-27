@@ -3,6 +3,7 @@ import { isAdminRequest } from '@/lib/auth/session'
 import { runNewsletterFetch, FetchProgress } from '@/lib/newsletter/fetcher'
 
 export const runtime = 'nodejs'
+export const maxDuration = 300 // 5 minutes - newsletter fetch + article extraction can take a while
 
 export async function POST(request: NextRequest) {
   if (!(await isAdminRequest(request))) {

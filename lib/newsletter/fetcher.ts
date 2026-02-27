@@ -969,7 +969,7 @@ export async function runNewsletterFetch(options?: {
     try {
       const backfillResult = await backfillMissingEmbeddings(
         50, // batchSize
-        0,  // maxBatches (0 = unlimited, process all)
+        2,  // maxBatches: max 100 items per fetch run to avoid timeouts
         (progress) => {
           send({
             type: 'embedding_backfill',
