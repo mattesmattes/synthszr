@@ -656,7 +656,20 @@ export async function runNewsletterFetch(options?: {
     // ========================================
 
     // Process all article links in batches of BATCH_SIZE
+    // Deduplicate by URL first, then cap at MAX_ARTICLES to prevent runaway processing
+    const MAX_ARTICLES = 300
+    const seenArticleUrls = new Set<string>()
     const articlesToProcess = articleUrls
+      .filter(a => {
+        if (seenArticleUrls.has(a.url)) return false
+        seenArticleUrls.add(a.url)
+        return true
+      })
+      .slice(0, MAX_ARTICLES)
+
+    if (articleUrls.length !== articlesToProcess.length) {
+      console.log(`[Newsletter Fetch] Articles dedup+cap: ${articleUrls.length} → ${articlesToProcess.length} (${articleUrls.length - seenArticleUrls.size} dupes, cap ${MAX_ARTICLES})`)
+    }
 
     if (articlesToProcess.length > 0) {
       const totalBatches = Math.ceil(articlesToProcess.length / BATCH_SIZE)
@@ -665,7 +678,7 @@ export async function runNewsletterFetch(options?: {
         phase: 'extracting',
         current: 0,
         total: articlesToProcess.length,
-        item: { title: `Artikel werden extrahiert (${totalBatches} Batches)...`, status: 'processing' }
+        item: { title: `Artikel werden extrahiert (${totalBatches} Batches, ${articlesToProcess.length} unique)...`, status: 'processing' }
       })
 
       // Process articles in batches
