@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     const url = `https://app.podigee.com/api/v1/podcasts/${podcastId}/analytics?from=${toDateStr(from)}&to=${toDateStr(to)}&granularity=day`
     const res = await fetch(url, {
       headers: { 'Token': apiKey },
-      next: { revalidate: 3600 }, // cache 1h
+      cache: 'no-store',
     })
 
     if (!res.ok) {
