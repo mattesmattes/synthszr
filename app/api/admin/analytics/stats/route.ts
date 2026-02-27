@@ -133,6 +133,7 @@ export async function GET(request: NextRequest) {
       if (event.event_type === 'page_view') bucket.page_views++
       else if (event.event_type === 'stock_ticker_click') bucket.stock_ticker_clicks++
       else if (event.event_type === 'synthszr_vote_click') bucket.synthszr_vote_clicks++
+      else if (event.event_type === 'podcast_play') bucket.podcast_plays++
     }
 
     // Aggregate podcast_plays
