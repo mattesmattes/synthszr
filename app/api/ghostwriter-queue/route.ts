@@ -14,7 +14,7 @@ import { getBalancedSelection, getSelectedItems, selectItemsForArticle } from '@
 import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 
-const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-3-pro-preview', 'gpt-5.2', 'gpt-5.2-mini']
+const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gpt-5.2', 'gpt-5.2-mini']
 
 export async function POST(request: NextRequest) {
   const session = await getSession()

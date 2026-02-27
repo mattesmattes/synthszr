@@ -215,7 +215,7 @@ async function callModelNonStreaming(
   systemPrompt: string,
   model: AIModel
 ): Promise<string> {
-  if (model === 'gemini-2.5-pro' || model === 'gemini-3-pro-preview') {
+  if (model === 'gemini-2.5-pro' || model === 'gemini-2.0-flash') {
     const geminiModel = genAI.getGenerativeModel({
       model,
       systemInstruction: systemPrompt,

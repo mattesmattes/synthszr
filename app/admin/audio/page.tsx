@@ -822,7 +822,7 @@ function AudioPage() {
 
   async function fetchRecentPosts() {
     try {
-      const res = await fetch('/api/admin/posts?limit=20&published=true')
+      const res = await fetch('/api/admin/posts?limit=20&published=false')
       if (res.ok) {
         const data = await res.json()
         const posts = data.posts || []

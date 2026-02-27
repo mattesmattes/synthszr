@@ -51,13 +51,13 @@ const UNIQUE_METAPHORS = [
   'eisberg',
 ]
 
-export type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro' | 'gemini-3-pro-preview' | 'gpt-5.2' | 'gpt-5.2-mini'
+export type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro' | 'gemini-2.0-flash' | 'gpt-5.2' | 'gpt-5.2-mini'
 
 export const AI_MODEL_LABELS: Record<AIModel, string> = {
   'claude-opus-4': 'Claude Opus 4',
   'claude-sonnet-4': 'Claude Sonnet 4',
   'gemini-2.5-pro': 'Gemini 2.5 Pro',
-  'gemini-3-pro-preview': 'Gemini 3 Pro Preview',
+  'gemini-2.0-flash': 'Gemini 3 Pro Preview',
   'gpt-5.2': 'GPT-5.2',
   'gpt-5.2-mini': 'GPT-5.2 Mini',
 }
@@ -194,7 +194,7 @@ export async function* streamGhostwriter(
 
   if (model === 'gpt-5.2' || model === 'gpt-5.2-mini') {
     yield* streamOpenAI(userMessage, model)
-  } else if (model === 'gemini-2.5-pro' || model === 'gemini-3-pro-preview') {
+  } else if (model === 'gemini-2.5-pro' || model === 'gemini-2.0-flash') {
     yield* streamGemini(userMessage, model)
   } else if (model === 'claude-opus-4' || model === 'claude-sonnet-4') {
     yield* streamClaude(userMessage, model)
@@ -214,7 +214,7 @@ export async function* streamGhostwriter(
  */
 async function* streamGemini(
   userMessage: string,
-  modelId: 'gemini-2.5-pro' | 'gemini-3-pro-preview'
+  modelId: 'gemini-2.5-pro' | 'gemini-2.0-flash'
 ): AsyncGenerator<string, void, unknown> {
   const model = genAI.getGenerativeModel({
     model: modelId,
@@ -401,7 +401,7 @@ ${originalText}`
       const text = chunk.choices[0]?.delta?.content
       if (text) yield text
     }
-  } else if (model === 'gemini-2.5-pro' || model === 'gemini-3-pro-preview') {
+  } else if (model === 'gemini-2.5-pro' || model === 'gemini-2.0-flash') {
     const geminiModel = genAI.getGenerativeModel({
       model: model,
       systemInstruction: deduplicationSystem,
