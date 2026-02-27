@@ -633,6 +633,7 @@ function AudioPage() {
   const [podigeeEpisodeUrl, setPodigeeEpisodeUrl] = useState<string | null>(null)
   const [podigeeError, setPodigeeError] = useState<string | null>(null)
   const [podigeeTranslating, setPodigeeTranslating] = useState(false)
+  const [podigeePublishDate, setPodigeePublishDate] = useState('')
   const [coverModalOpen, setCoverModalOpen] = useState(false)
   // Latest recording from history (used when no recording was generated in this session)
   const [latestEpisode, setLatestEpisode] = useState<{
@@ -695,6 +696,16 @@ function AudioPage() {
       .catch(() => {})
       .finally(() => setLatestEpisodeLoading(false))
   }, [activeTab])
+
+  // Set default Podigee publish date from selected post's created_at
+  useEffect(() => {
+    const post = recentPosts.find(p => p.id === selectedPostId) || recentPosts[0]
+    if (post?.created_at) {
+      setPodigeePublishDate(
+        new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(new Date(post.created_at))
+      )
+    }
+  }, [selectedPostId, recentPosts])
 
   // Auto-translate when a new session recording is ready
   useEffect(() => {
@@ -853,6 +864,7 @@ function AudioPage() {
           title: podigeeTitle,
           subtitle: podigeeSubtitle,
           description: podigeeDescription,
+          ...(podigeePublishDate ? { publishedAt: `${podigeePublishDate}T07:00:00.000+01:00` } : {}),
         }),
       })
       const data = await res.json()
@@ -2257,6 +2269,15 @@ function AudioPage() {
                             onChange={(e) => setPodigeeDescription(e.target.value)}
                             placeholder="Episode description / show notes (EN)"
                             className="min-h-[120px]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Veröffentlichungsdatum</Label>
+                          <Input
+                            type="date"
+                            value={podigeePublishDate}
+                            onChange={(e) => setPodigeePublishDate(e.target.value)}
+                            className="text-sm"
                           />
                         </div>
                       </div>

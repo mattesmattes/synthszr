@@ -200,6 +200,18 @@ export default function CreateArticlePage() {
   const [selectedModel, setSelectedModel] = useState<AIModel>('gemini-2.5-pro')
   const [usedModel, setUsedModel] = useState<AIModel | null>(null)
 
+  // Publish date: smart default (tomorrow if after 17:00 Berlin time, else today)
+  const [publishDate, setPublishDate] = useState<string>(() => {
+    const now = new Date()
+    const berlinHour = parseInt(
+      new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: 'numeric', hour12: false })
+        .format(now)
+    )
+    const target = new Date(now)
+    if (berlinHour >= 17) target.setDate(target.getDate() + 1)
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(target)
+  })
+
   // Cached H2 headings from generated article (survives auto-save reset)
   const [cachedH2Headings, setCachedH2Headings] = useState<string[]>([])
 
@@ -660,7 +672,7 @@ export default function CreateArticlePage() {
         content: JSON.stringify(tiptapContent),
         word_count: bodyContent.split(/\s+/).length,
         status: 'draft',
-        created_at: new Date().toISOString(), // Full timestamp including time
+        created_at: `${publishDate}T07:00:00.000+01:00`, // 7 Uhr MEZ als fester Zeitstempel
         ai_model: usedModel || selectedModel, // Store the model used for generation
         // Store queue item IDs - will be marked as "used" when post is published
         pending_queue_item_ids: usedQueueItemIds.length > 0 ? usedQueueItemIds : [],
@@ -1011,6 +1023,17 @@ export default function CreateArticlePage() {
               </CollapsibleContent>
             </Card>
           </Collapsible>
+
+          {/* Publish Date */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground">Datum:</label>
+            <input
+              type="date"
+              value={publishDate}
+              onChange={e => setPublishDate(e.target.value)}
+              className="text-sm border rounded px-2 py-1 bg-background"
+            />
+          </div>
 
           {/* Generate Button */}
           <Button

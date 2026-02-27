@@ -55,12 +55,13 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { postId, audioUrl, title, subtitle, description } = body as {
+  const { postId, audioUrl, title, subtitle, description, publishedAt } = body as {
     postId: string
     audioUrl: string
     title: string
     subtitle: string
     description?: string
+    publishedAt?: string
   }
 
   if (!postId || !audioUrl || !title) {
@@ -189,6 +190,7 @@ export async function POST(request: NextRequest) {
       title,
       subtitle,
       summary: description || '',
+      ...(publishedAt ? { published_at: publishedAt } : {}),
     })
 
     if (!episodeRes.ok) {
