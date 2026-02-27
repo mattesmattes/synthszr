@@ -75,6 +75,21 @@ interface StatsResponse {
   }
 }
 
+function getDateBucket(dateStr: string, granularity: Granularity): string {
+  const d = new Date(dateStr)
+  if (granularity === 'month') {
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`
+  }
+  if (granularity === 'week') {
+    const day = d.getUTCDay()
+    const monday = new Date(d)
+    monday.setUTCDate(d.getUTCDate() + (day === 0 ? -6 : 1 - day))
+    monday.setUTCHours(0, 0, 0, 0)
+    return monday.toISOString().split('T')[0]
+  }
+  return dateStr.substring(0, 10)
+}
+
 function formatDateLabel(dateStr: string, granularity: Granularity): string {
   const date = new Date(dateStr)
   if (granularity === 'month') {
@@ -141,6 +156,13 @@ export default function StatisticsPage() {
     ...s,
     label: formatDateLabel(s.date, granularity),
   }))
+
+  // Map bucket date → web podcast plays for merging into Podigee chart
+  const podcastPlaysMap = new Map<string, number>()
+  for (const e of stats?.events || []) {
+    podcastPlaysMap.set(e.date, e.podcast_plays)
+  }
+  const webPlaysTotal = stats?.totals.podcast_plays ?? 0
 
   return (
     <div className="p-8 space-y-8">
@@ -277,7 +299,7 @@ export default function StatisticsPage() {
               ) : (
                 <div className="space-y-4">
                   {/* Summary numbers */}
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-4 gap-4">
                     <div className="text-center">
                       <p className="text-3xl font-bold font-mono" style={{ color: '#EF4444' }}>
                         {podigee.totals.total.toLocaleString('de-DE')}
@@ -296,14 +318,24 @@ export default function StatisticsPage() {
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">Spotify</p>
                     </div>
+                    <div className="text-center">
+                      <p className="text-3xl font-bold font-mono" style={{ color: '#9CA3AF' }}>
+                        {webPlaysTotal.toLocaleString('de-DE')}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">Web</p>
+                    </div>
                   </div>
                   {/* Trend chart */}
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart
-                      data={podigee.days.map(d => ({
-                        ...d,
-                        label: new Date(d.date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' }),
-                      }))}
+                      data={podigee.days.map(d => {
+                        const bucket = getDateBucket(d.date, granularity)
+                        return {
+                          ...d,
+                          label: new Date(d.date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' }),
+                          web_plays: podcastPlaysMap.get(bucket) || 0,
+                        }
+                      })}
                       margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -314,6 +346,7 @@ export default function StatisticsPage() {
                       <Line type="monotone" dataKey="total" name="Gesamt" stroke="#EF4444" dot={false} strokeWidth={2} />
                       <Line type="monotone" dataKey="apple" name="Apple Podcasts" stroke="#A855F7" dot={false} strokeWidth={2} />
                       <Line type="monotone" dataKey="spotify" name="Spotify" stroke="#22C55E" dot={false} strokeWidth={2} />
+                      <Line type="monotone" dataKey="web_plays" name="Web" stroke="#9CA3AF" strokeDasharray="5 5" dot={false} strokeWidth={2} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
