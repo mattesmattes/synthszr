@@ -325,8 +325,9 @@ export async function* runGhostwriterPipeline(
       try {
         results[i] = await writeSection(item, heading, plan.thesis, model, promptText)
       } catch (err) {
-        console.error(`[Pipeline] writeSection ${i + 1} failed:`, err)
-        results[i] = `## ${heading}\n\n*Abschnitt konnte nicht generiert werden.*\n`
+        const errMsg = err instanceof Error ? err.message : String(err)
+        console.error(`[Pipeline] writeSection ${i + 1} failed:`, errMsg)
+        results[i] = `## ${heading}\n\n*Fehler: ${errMsg}*\n`
       }
       writtenCount++
       resolvers[i]?.()
