@@ -12,47 +12,58 @@ const PERIOD_CONFIG: Record<Period, { lookbackMs: number; granularity: Granulari
   '1y':  { lookbackMs: 365 * 24 * 60 * 60 * 1000, granularity: 'month' },
 }
 
+const BERLIN_TZ = 'Europe/Berlin'
+
+// Returns "YYYY-MM-DD" string in Europe/Berlin local time
+function toBerlinDateStr(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: BERLIN_TZ }).format(d)
+}
+
 function truncateDateKey(isoString: string, granularity: Granularity): string {
   const d = new Date(isoString)
+  const berlinDate = toBerlinDateStr(d) // "YYYY-MM-DD" in MEZ/MESZ
+
   if (granularity === 'day') {
-    return d.toISOString().split('T')[0]
+    return berlinDate
   }
   if (granularity === 'month') {
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`
+    return berlinDate.substring(0, 7) + '-01'
   }
-  // week: find the Monday of this week
-  const dayOfWeek = d.getUTCDay()
-  const monday = new Date(d)
-  monday.setUTCDate(d.getUTCDate() + (dayOfWeek === 0 ? -6 : 1 - dayOfWeek))
-  monday.setUTCHours(0, 0, 0, 0)
-  return monday.toISOString().split('T')[0]
+  // week: find the Monday of this Berlin week
+  // Use noon UTC of the Berlin date to safely compute day-of-week without DST artifacts
+  const [y, m, day] = berlinDate.split('-').map(Number)
+  const noonUtc = new Date(Date.UTC(y, m - 1, day, 12, 0, 0))
+  const dow = noonUtc.getUTCDay() // 0=Sun, 1=Mon … 6=Sat
+  const daysToMonday = dow === 0 ? -6 : 1 - dow
+  return toBerlinDateStr(new Date(Date.UTC(y, m - 1, day + daysToMonday, 12, 0, 0)))
 }
 
 function generateBuckets(granularity: Granularity, startMs: number, endMs: number): string[] {
   const result: string[] = []
-  const current = new Date(startMs)
-  const end = new Date(endMs)
+
+  let current = toBerlinDateStr(new Date(startMs)) // "YYYY-MM-DD" in Berlin
+  const end = toBerlinDateStr(new Date(endMs))
 
   // Normalize start to granularity boundary
   if (granularity === 'month') {
-    current.setUTCDate(1)
-    current.setUTCHours(0, 0, 0, 0)
+    current = current.substring(0, 7) + '-01'
   } else if (granularity === 'week') {
-    const day = current.getUTCDay()
-    current.setUTCDate(current.getUTCDate() + (day === 0 ? -6 : 1 - day))
-    current.setUTCHours(0, 0, 0, 0)
-  } else {
-    current.setUTCHours(0, 0, 0, 0)
+    current = truncateDateKey(new Date(current + 'T12:00:00Z').toISOString(), 'week')
   }
 
   while (current <= end) {
-    const key = current.toISOString().split('T')[0]
-    const normalized = truncateDateKey(key, granularity)
-    if (!result.includes(normalized)) result.push(normalized)
+    const key = truncateDateKey(new Date(current + 'T12:00:00Z').toISOString(), granularity)
+    if (!result.includes(key)) result.push(key)
 
-    if (granularity === 'day') current.setUTCDate(current.getUTCDate() + 1)
-    else if (granularity === 'week') current.setUTCDate(current.getUTCDate() + 7)
-    else current.setUTCMonth(current.getUTCMonth() + 1)
+    const [y, m, day] = current.split('-').map(Number)
+    if (granularity === 'day') {
+      current = toBerlinDateStr(new Date(Date.UTC(y, m - 1, day + 1, 12, 0, 0)))
+    } else if (granularity === 'week') {
+      current = toBerlinDateStr(new Date(Date.UTC(y, m - 1, day + 7, 12, 0, 0)))
+    } else {
+      // First day of next month at noon UTC
+      current = toBerlinDateStr(new Date(Date.UTC(y, m, 1, 12, 0, 0))).substring(0, 7) + '-01'
+    }
   }
 
   return result
