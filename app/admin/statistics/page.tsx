@@ -301,8 +301,8 @@ export default function StatisticsPage() {
                   {/* Summary numbers */}
                   <div className="grid grid-cols-4 gap-4">
                     <div className="text-center">
-                      <p className="text-3xl font-bold font-mono" style={{ color: '#EF4444' }}>
-                        {podigee.totals.total.toLocaleString('de-DE')}
+                      <p className="text-3xl font-bold font-mono" style={{ color: '#9CA3AF' }}>
+                        {(podigee.totals.apple + podigee.totals.spotify + webPlaysTotal).toLocaleString('de-DE')}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">Gesamt</p>
                     </div>
@@ -319,7 +319,7 @@ export default function StatisticsPage() {
                       <p className="text-xs text-muted-foreground mt-1">Spotify</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-3xl font-bold font-mono" style={{ color: '#9CA3AF' }}>
+                      <p className="text-3xl font-bold font-mono" style={{ color: '#EF4444' }}>
                         {webPlaysTotal.toLocaleString('de-DE')}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">Web</p>
@@ -330,10 +330,12 @@ export default function StatisticsPage() {
                     <LineChart
                       data={podigee.days.map(d => {
                         const bucket = getDateBucket(d.date, granularity)
+                        const web = podcastPlaysMap.get(bucket) || 0
                         return {
                           ...d,
                           label: new Date(d.date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' }),
-                          web_plays: podcastPlaysMap.get(bucket) || 0,
+                          web_plays: web,
+                          total_all: d.apple + d.spotify + web,
                         }
                       })}
                       margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
@@ -343,10 +345,10 @@ export default function StatisticsPage() {
                       <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="total" name="Gesamt" stroke="#EF4444" dot={false} strokeWidth={2} />
+                      <Line type="monotone" dataKey="total_all" name="Gesamt" stroke="#9CA3AF" strokeDasharray="5 5" dot={false} strokeWidth={2} />
                       <Line type="monotone" dataKey="apple" name="Apple Podcasts" stroke="#A855F7" dot={false} strokeWidth={2} />
                       <Line type="monotone" dataKey="spotify" name="Spotify" stroke="#22C55E" dot={false} strokeWidth={2} />
-                      <Line type="monotone" dataKey="web_plays" name="Web" stroke="#9CA3AF" strokeDasharray="5 5" dot={false} strokeWidth={2} />
+                      <Line type="monotone" dataKey="web_plays" name="Web" stroke="#EF4444" dot={false} strokeWidth={2} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
