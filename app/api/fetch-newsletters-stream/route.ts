@@ -14,10 +14,14 @@ export async function POST(request: NextRequest) {
 
   let targetDate: string | undefined
   let force = false
+  let hoursBack: number | undefined
   try {
     const body = await request.json()
     targetDate = body.targetDate
     force = body.force === true
+    if (typeof body.hoursBack === 'number' && body.hoursBack > 0) {
+      hoursBack = body.hoursBack
+    }
   } catch {
     // No body - use defaults
   }
@@ -29,7 +33,7 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
       }
 
-      await runNewsletterFetch({ targetDate, force, onProgress: send })
+      await runNewsletterFetch({ targetDate, force, hoursBack, onProgress: send })
       controller.close()
     }
   })

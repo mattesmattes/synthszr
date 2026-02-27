@@ -4,8 +4,8 @@ import { extractArticleContent, isArticleTooOld, isLikelyArticleUrl, isNonArticl
 import { createAdminClient } from '@/lib/supabase/admin'
 import { backfillMissingEmbeddings } from '@/lib/embeddings/backfill'
 
-// BULLETPROOF APPROACH: Always fetch last 48h, deduplicate by Gmail message ID
-const FETCH_WINDOW_HOURS = 48
+// Default fetch window - can be overridden per request
+const DEFAULT_FETCH_WINDOW_HOURS = 28
 
 // Article processing constants
 const BATCH_SIZE = 10 // Process 10 articles in parallel per batch
@@ -175,6 +175,7 @@ export interface NewsletterFetchResult {
 export async function runNewsletterFetch(options?: {
   targetDate?: string
   force?: boolean
+  hoursBack?: number
   onProgress?: (event: FetchProgress) => void
 }): Promise<NewsletterFetchResult> {
   const send = (event: FetchProgress) => options?.onProgress?.(event)
@@ -214,11 +215,12 @@ export async function runNewsletterFetch(options?: {
     let afterDate: Date
     let beforeDate: Date | undefined
 
-    // BULLETPROOF APPROACH: ALWAYS fetch last 48h, deduplicate by Gmail message ID
+    // BULLETPROOF APPROACH: Fetch configurable time window, deduplicate by Gmail message ID
     // targetDate only controls which newsletter_date the items get assigned to
     // No complex timestamp tracking needed - we simply skip emails already imported
-    afterDate = new Date(Date.now() - FETCH_WINDOW_HOURS * 60 * 60 * 1000)
-    console.log(`[Newsletter Fetch] Fetching last ${FETCH_WINDOW_HOURS}h: since ${afterDate.toISOString()}`)
+    const fetchWindowHours = options?.hoursBack ?? DEFAULT_FETCH_WINDOW_HOURS
+    afterDate = new Date(Date.now() - fetchWindowHours * 60 * 60 * 1000)
+    console.log(`[Newsletter Fetch] Fetching last ${fetchWindowHours}h: since ${afterDate.toISOString()}`)
     if (options?.targetDate) {
       console.log(`[Newsletter Fetch] Items will be assigned to newsletter_date: ${options.targetDate}`)
     }

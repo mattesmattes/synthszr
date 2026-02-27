@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { UnfetchedEmailsDialog } from './unfetched-emails-dialog'
 
@@ -85,6 +86,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
   const [items, setItems] = useState<ProgressItem[]>([])
   const [summary, setSummary] = useState<{ newsletters: number; articles: number; emailNotes: number; errors: number; totalCharacters: number } | null>(null)
   const [forceRefresh, setForceRefresh] = useState(false)
+  const [hoursBack, setHoursBack] = useState(28)
 
   // Unfetched emails dialog
   const [unfetchedEmails, setUnfetchedEmails] = useState<UnfetchedEmail[]>([])
@@ -106,7 +108,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
       const response = await fetch('/api/fetch-newsletters-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetDate, force: forceRefresh }),
+        body: JSON.stringify({ targetDate, force: forceRefresh, hoursBack }),
         credentials: 'include',
       })
 
@@ -231,6 +233,16 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
             Newsletter Abruf
           </CardTitle>
           <div className="flex items-center gap-3 shrink-0">
+            <Select value={String(hoursBack)} onValueChange={(v) => setHoursBack(Number(v))} disabled={isRunning}>
+              <SelectTrigger className="w-[72px] h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[4, 8, 12, 24, 28, 36, 48].map(h => (
+                  <SelectItem key={h} value={String(h)} className="text-xs">{h}h</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <div className="flex items-center gap-2">
               <Switch
                 id="force-refresh"
