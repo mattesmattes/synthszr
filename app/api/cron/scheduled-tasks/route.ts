@@ -41,9 +41,9 @@ interface ScheduleConfig {
 }
 
 const DEFAULT_SCHEDULE: ScheduleConfig = {
-  newsletterFetch: { enabled: true, hour: 3, minute: 0 },   // 04:00 MEZ
-  webcrawlFetch:   { enabled: true, hour: 3, minute: 30 },  // 04:30 MEZ
-  dailyAnalysis:   { enabled: true, hour: 4, minute: 0 },   // 05:00 MEZ
+  newsletterFetch: { enabled: true, hour: 20, minute: 0 },   // 21:00 MEZ
+  webcrawlFetch:   { enabled: true, hour: 20, minute: 30 },  // 21:30 MEZ
+  dailyAnalysis:   { enabled: true, hour: 21, minute: 0 },   // 22:00 MEZ
   postGeneration:  { enabled: false, hour: 9, minute: 0 },
   newsletterSend:  { enabled: false, hour: 9, minute: 30 },
 }
