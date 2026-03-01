@@ -230,49 +230,36 @@ export function NewsletterEmail({
           {coverImageUrl && (
             <>
               {/* Podcast Platform Links */}
-              {/* bgcolor attr on table/td is the only reliable white-bg in Gmail dark mode */}
-              <Section style={playerPillSection} className="promo-section" bgcolor="#ffffff">
-                {/* Row 1: Headline */}
+              {/* Single-cell approach: one <td> with bgcolor covers entire area reliably in Gmail dark mode */}
+              <Section {...({ bgcolor: '#ffffff' } as any)} style={{ backgroundColor: '#ffffff', padding: '0' }} className="promo-section">
                 <Row>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  <Column {...({ bgcolor: '#ffffff' } as any)} style={{ backgroundColor: '#ffffff', textAlign: 'center' as const, paddingBottom: '10px' }}>
+                  <Column {...({ bgcolor: '#ffffff' } as any)} style={{ backgroundColor: '#ffffff', textAlign: 'center' as const, padding: '16px 32px 16px' }}>
                     <Img
                       src={`${baseUrl}/podcast_hl.png`}
                       alt="The daily synthszr podcast"
                       width="300"
                       height="auto"
-                      style={{ display: 'block', margin: '0 auto' }}
+                      style={{ display: 'block', margin: '0 auto 12px' }}
                     />
-                  </Column>
-                </Row>
-                {/* Row 2: Platform badges side by side */}
-                <Row style={{ textAlign: 'center' as const }}>
-                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  <Column {...({ bgcolor: '#ffffff' } as any)} style={{ textAlign: 'center' as const, verticalAlign: 'middle', paddingRight: '8px', backgroundColor: '#ffffff' }}>
                     <Link href="https://open.spotify.com/show/0FJkPjKXvobgqI8U881yiF?si=wMJJ-CQxQdyuW18VXQZQOQ">
                       <Img
                         src={`${baseUrl}/podcast_spotify.png`}
                         alt="Listen on Spotify"
                         height="36"
                         width="auto"
-                        style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                        style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '8px' }}
                       />
                     </Link>
-                  </Column>
-                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  <Column {...({ bgcolor: '#ffffff' } as any)} style={{ textAlign: 'center' as const, verticalAlign: 'middle', paddingRight: '8px', backgroundColor: '#ffffff' }}>
                     <Link href="https://podcasts.apple.com/de/podcast/synthszr/id1879733990">
                       <Img
                         src={`${baseUrl}/podcast_apple.png`}
                         alt="Listen on Apple Podcasts"
                         height="36"
                         width="auto"
-                        style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                        style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '8px' }}
                       />
                     </Link>
-                  </Column>
-                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  <Column {...({ bgcolor: '#ffffff' } as any)} style={{ textAlign: 'center' as const, verticalAlign: 'middle', backgroundColor: '#ffffff' }}>
                     <Link href="https://synthszr.com">
                       <Img
                         src={`${baseUrl}/podcast_synthszr.png`}
@@ -411,11 +398,6 @@ const coverImage = {
   display: 'block',
 }
 
-const playerPillSection = {
-  padding: '16px 32px 0',
-  textAlign: 'center' as const,
-  backgroundColor: '#ffffff',
-}
 
 
 const contentSection = {
