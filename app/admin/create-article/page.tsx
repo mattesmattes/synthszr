@@ -1167,6 +1167,32 @@ export default function CreateArticlePage() {
             </Card>
           )}
 
+          {/* Pipeline Progress Indicator (above article box) */}
+          {generating && pipelineProgress && (
+            <div className="rounded-lg border bg-muted/50 px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  Datum: {new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(publishDate))}
+                </span>
+                <span>{Math.round((pipelineProgress.current / pipelineProgress.total) * 100)}%</span>
+              </div>
+              {pipelineStatus && (
+                <p className="text-xs text-muted-foreground truncate">{pipelineStatus}</p>
+              )}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-500"
+                    style={{ width: `${(pipelineProgress.current / pipelineProgress.total) * 100}%` }}
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  Abschnitt {pipelineProgress.current} von {pipelineProgress.total}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Article Content Card */}
           <Card className="h-full">
             <CardHeader className="pb-3">
