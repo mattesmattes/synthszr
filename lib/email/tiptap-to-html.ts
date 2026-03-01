@@ -410,8 +410,16 @@ export async function generateEmailContentWithVotes(
     ? await fetchRatings(Array.from(allPublicCompanies), Array.from(allPremarketCompanies), baseUrl)
     : new Map<string, { rating: 'BUY' | 'HOLD' | 'SELL'; type: 'public' | 'premarket'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isin?: string }>()
 
-  // Pre-process: find article sections
+  // Pre-process: find article sections and their best vote colors
   // Each article section is from one H2 to the next H2 (excluding Synthszr Take headings)
+  const votePriority: Record<string, number> = { 'BUY': 3, 'HOLD': 2, 'SELL': 1 }
+  const voteColors: Record<string, string> = {
+    'BUY': '#00FF00',
+    'HOLD': '#FFFF00',
+    'SELL': '#FF4D00',
+    'NONE': '#00FFFF'
+  }
+
   const articleSections: Array<{ startIndex: number; endIndex: number }> = []
   let currentArticleStart: number | null = null
 
@@ -419,7 +427,6 @@ export async function generateEmailContentWithVotes(
     if (node.type === 'heading' && (node.attrs?.level === 2 || node.attrs?.level === '2')) {
       const headingText = extractTextFromNode(node).toLowerCase()
       if (!headingText.includes('synthszr take') && !headingText.includes('synthszr contra') && !headingText.includes('mattes synthese')) {
-        // Close previous article section
         if (currentArticleStart !== null) {
           articleSections.push({ startIndex: currentArticleStart, endIndex: index - 1 })
         }
@@ -427,10 +434,27 @@ export async function generateEmailContentWithVotes(
       }
     }
   })
-  // Close the last article section
   if (currentArticleStart !== null) {
     articleSections.push({ startIndex: currentArticleStart, endIndex: doc.content.length - 1 })
   }
+
+  // Calculate best vote color per article section (BUY > HOLD > SELL > NONE)
+  const articleVoteColors: string[] = articleSections.map(section => {
+    let bestVote: 'BUY' | 'HOLD' | 'SELL' | null = null
+    for (let i = section.startIndex; i <= section.endIndex && doc.content; i++) {
+      const nodeText = extractTextFromNode(doc.content[i])
+      const sectionCompanies = findCompaniesInText(nodeText)
+      for (const c of [...sectionCompanies.public, ...sectionCompanies.premarket]) {
+        const ratingData = ratingsMap.get(c.apiName.toLowerCase())
+        if (ratingData?.rating) {
+          if (!bestVote || votePriority[ratingData.rating] > votePriority[bestVote]) {
+            bestVote = ratingData.rating
+          }
+        }
+      }
+    }
+    return bestVote ? voteColors[bestVote] : voteColors['NONE']
+  })
 
   // Track article index for thumbnails (H2 headings that aren't Synthszr Take)
   let articleIndex = 0
@@ -455,7 +479,8 @@ export async function generateEmailContentWithVotes(
           // Add separator and centered circular thumbnail before article
           // Route image through the newsletter thumbnail proxy which composites the
           // vote-color background into the PNG — dark-mode email clients can't override pixels.
-          const bgHex = (thumbnail.vote_color || '#00FFFF').replace('#', '')
+          // Use dynamically calculated vote color from current ratings (same logic as before).
+          const bgHex = (articleVoteColors[articleIndex] || '#00FFFF').replace('#', '')
           const proxiedSrc = `${baseUrl}/api/newsletter/thumbnail-image?url=${encodeURIComponent(thumbnail.image_url)}&bg=${bgHex}`
           const isFirst = articleIndex === 0
           prefix = `${!isFirst ? '<div style="height: 32px;"></div>' : ''}
