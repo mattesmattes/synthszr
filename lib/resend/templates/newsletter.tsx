@@ -154,9 +154,14 @@ export function NewsletterEmail({
   return (
     <Html>
       <Head>
+        <meta name="color-scheme" content="light" />
+        <meta name="supported-color-schemes" content="light" />
         <style>
           {`
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap');
+
+            /* Force white background on promo section (Gmail dark mode override) */
+            .promo-section, .promo-section td { background-color: #ffffff !important; }
 
             .content-area h2 {
               font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -225,7 +230,7 @@ export function NewsletterEmail({
           {coverImageUrl && (
             <>
               {/* Podcast Platform Links */}
-              <Section style={playerPillSection}>
+              <Section style={playerPillSection} className="promo-section">
                 {/* Row 1: Headline */}
                 <Img
                   src={`${baseUrl}/podcast_hl.png`}
