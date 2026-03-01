@@ -230,18 +230,25 @@ export function NewsletterEmail({
           {coverImageUrl && (
             <>
               {/* Podcast Platform Links */}
-              <Section style={playerPillSection} className="promo-section">
+              {/* bgcolor attr on table/td is the only reliable white-bg in Gmail dark mode */}
+              <Section style={playerPillSection} className="promo-section" bgcolor="#ffffff">
                 {/* Row 1: Headline */}
-                <Img
-                  src={`${baseUrl}/podcast_hl.png`}
-                  alt="The daily synthszr podcast"
-                  width="300"
-                  height="auto"
-                  style={{ display: 'block', margin: '0 auto 10px' }}
-                />
+                <Row>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Column {...({ bgcolor: '#ffffff' } as any)} style={{ backgroundColor: '#ffffff', textAlign: 'center' as const, paddingBottom: '10px' }}>
+                    <Img
+                      src={`${baseUrl}/podcast_hl.png`}
+                      alt="The daily synthszr podcast"
+                      width="300"
+                      height="auto"
+                      style={{ display: 'block', margin: '0 auto' }}
+                    />
+                  </Column>
+                </Row>
                 {/* Row 2: Platform badges side by side */}
                 <Row style={{ textAlign: 'center' as const }}>
-                  <Column style={{ textAlign: 'center' as const, verticalAlign: 'middle', paddingRight: '8px' }}>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Column {...({ bgcolor: '#ffffff' } as any)} style={{ textAlign: 'center' as const, verticalAlign: 'middle', paddingRight: '8px', backgroundColor: '#ffffff' }}>
                     <Link href="https://open.spotify.com/show/0FJkPjKXvobgqI8U881yiF?si=wMJJ-CQxQdyuW18VXQZQOQ">
                       <Img
                         src={`${baseUrl}/podcast_spotify.png`}
@@ -252,7 +259,8 @@ export function NewsletterEmail({
                       />
                     </Link>
                   </Column>
-                  <Column style={{ textAlign: 'center' as const, verticalAlign: 'middle', paddingRight: '8px' }}>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Column {...({ bgcolor: '#ffffff' } as any)} style={{ textAlign: 'center' as const, verticalAlign: 'middle', paddingRight: '8px', backgroundColor: '#ffffff' }}>
                     <Link href="https://podcasts.apple.com/de/podcast/synthszr/id1879733990">
                       <Img
                         src={`${baseUrl}/podcast_apple.png`}
@@ -263,7 +271,8 @@ export function NewsletterEmail({
                       />
                     </Link>
                   </Column>
-                  <Column style={{ textAlign: 'center' as const, verticalAlign: 'middle' }}>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Column {...({ bgcolor: '#ffffff' } as any)} style={{ textAlign: 'center' as const, verticalAlign: 'middle', backgroundColor: '#ffffff' }}>
                     <Link href="https://synthszr.com">
                       <Img
                         src={`${baseUrl}/podcast_synthszr.png`}
