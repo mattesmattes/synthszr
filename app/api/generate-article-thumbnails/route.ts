@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 import { createClient } from '@/lib/supabase/server'
-import { generateSatiricalImage, applyDithering } from '@/lib/gemini/image-generator'
+import { generateSatiricalImage, applyDithering, whiteToTransparent } from '@/lib/gemini/image-generator'
 import { getSession } from '@/lib/auth/session'
 
 export const maxDuration = 300 // Allow up to 5 minutes for batch thumbnail generation
@@ -184,55 +184,11 @@ export async function POST(request: NextRequest) {
         // Step 3: Apply dithering (contrast already boosted via normalise)
         const dithered = await applyDithering(squareBase64, 1.0, 1)
 
-        // Step 4: Composite dithered B&W onto vote-color background
-        // This bakes the color into the PNG so dark-mode email clients can't override it.
-        // Parse hex color to RGB
-        const hex = voteColor.replace('#', '')
-        const bgR = parseInt(hex.slice(0, 2), 16)
-        const bgG = parseInt(hex.slice(2, 4), 16)
-        const bgB = parseInt(hex.slice(4, 6), 16)
+        // Step 4: Convert white to transparent (web-compatible transparent PNG)
+        const processed = await whiteToTransparent(dithered.base64)
 
-        // Build a solid-color background square
-        const bgBuffer = await sharp({
-          create: {
-            width: THUMBNAIL_SIZE,
-            height: THUMBNAIL_SIZE,
-            channels: 3,
-            background: { r: bgR, g: bgG, b: bgB },
-          },
-        })
-          .png()
-          .toBuffer()
-
-        // Convert dithered image to RGBA so we can detect white pixels
-        const ditheredBuffer = Buffer.from(dithered.base64, 'base64')
-        const { data: rawPixels, info } = await sharp(ditheredBuffer)
-          .ensureAlpha()
-          .raw()
-          .toBuffer({ resolveWithObject: true })
-
-        // Replace white (luminance >= 128) with transparent, keep black pixels
-        const pixels = new Uint8Array(rawPixels)
-        for (let i = 0; i < pixels.length; i += 4) {
-          const lum = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3
-          if (lum >= 128) {
-            pixels[i + 3] = 0 // transparent (background shows through)
-          } else {
-            pixels[i] = 0; pixels[i + 1] = 0; pixels[i + 2] = 0; pixels[i + 3] = 255
-          }
-        }
-
-        const maskBuffer = await sharp(Buffer.from(pixels), {
-          raw: { width: info.width, height: info.height, channels: 4 },
-        })
-          .png()
-          .toBuffer()
-
-        // Flatten: vote-color background + black dithered foreground
-        const squareThumbnail = await sharp(bgBuffer)
-          .composite([{ input: maskBuffer, blend: 'over' }])
-          .png()
-          .toBuffer()
+        // Convert to buffer for upload
+        const squareThumbnail = Buffer.from(processed.base64, 'base64')
 
         // Upload to Vercel Blob
         const fileName = `post-images/${postId}/thumbnail-${article.index}-${imageRecord.id}.png`
