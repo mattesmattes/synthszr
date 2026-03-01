@@ -410,16 +410,7 @@ export async function generateEmailContentWithVotes(
     ? await fetchRatings(Array.from(allPublicCompanies), Array.from(allPremarketCompanies), baseUrl)
     : new Map<string, { rating: 'BUY' | 'HOLD' | 'SELL'; type: 'public' | 'premarket'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isin?: string }>()
 
-  // Vote color logic: BUY > HOLD > SELL > NONE - colors match website
-  const votePriority: Record<string, number> = { 'BUY': 3, 'HOLD': 2, 'SELL': 1 }
-  const voteColors: Record<string, string> = {
-    'BUY': '#00FF00',
-    'HOLD': '#FFFF00',
-    'SELL': '#FF4D00',
-    'NONE': '#00FFFF'
-  }
-
-  // Pre-process: find article sections and their best vote colors
+  // Pre-process: find article sections
   // Each article section is from one H2 to the next H2 (excluding Synthszr Take headings)
   const articleSections: Array<{ startIndex: number; endIndex: number }> = []
   let currentArticleStart: number | null = null
@@ -441,39 +432,6 @@ export async function generateEmailContentWithVotes(
     articleSections.push({ startIndex: currentArticleStart, endIndex: doc.content.length - 1 })
   }
 
-  // Calculate best vote color for each article section
-  const articleVoteColors: string[] = articleSections.map(section => {
-    let bestVote: 'BUY' | 'HOLD' | 'SELL' | null = null
-
-    // Extract text from this section and find companies
-    for (let i = section.startIndex; i <= section.endIndex && doc.content; i++) {
-      const nodeText = extractTextFromNode(doc.content[i])
-      const sectionCompanies = findCompaniesInText(nodeText)
-
-      // Check public companies
-      for (const c of sectionCompanies.public) {
-        const ratingData = ratingsMap.get(c.apiName.toLowerCase())
-        if (ratingData?.rating) {
-          if (!bestVote || votePriority[ratingData.rating] > votePriority[bestVote]) {
-            bestVote = ratingData.rating
-          }
-        }
-      }
-
-      // Check premarket companies
-      for (const c of sectionCompanies.premarket) {
-        const ratingData = ratingsMap.get(c.apiName.toLowerCase())
-        if (ratingData?.rating) {
-          if (!bestVote || votePriority[ratingData.rating] > votePriority[bestVote]) {
-            bestVote = ratingData.rating
-          }
-        }
-      }
-    }
-
-    return bestVote ? voteColors[bestVote] : voteColors['NONE']
-  })
-
   // Track article index for thumbnails (H2 headings that aren't Synthszr Take)
   let articleIndex = 0
   const thumbnailMap = new Map<number, ArticleThumbnail>()
@@ -494,14 +452,13 @@ export async function generateEmailContentWithVotes(
       if (!headingText.includes('synthszr take') && !headingText.includes('synthszr contra') && !headingText.includes('mattes synthese')) {
         const thumbnail = thumbnailMap.get(articleIndex)
         if (thumbnail?.image_url) {
-          // Use dynamically calculated vote color from article section
-          const bgColor = articleVoteColors[articleIndex] || voteColors['NONE']
           // Add separator and centered circular thumbnail before article
+          // Note: background color is baked into the PNG at generation time (dark-mode safe)
           const isFirst = articleIndex === 0
           prefix = `${!isFirst ? '<div style="height: 32px;"></div>' : ''}
 <div style="text-align: center; margin: 24px 0;">
-  <div style="width: 302px; height: 302px; border-radius: 50%; overflow: hidden; margin: 0 auto; background-color: ${bgColor};">
-    <img src="${thumbnail.image_url}" alt="" style="width: 100%; height: 100%; object-fit: cover;" />
+  <div style="width: 302px; height: 302px; border-radius: 50%; overflow: hidden; margin: 0 auto;">
+    <img src="${thumbnail.image_url}" alt="" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
   </div>
 </div>`
         }
