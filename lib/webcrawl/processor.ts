@@ -3,7 +3,8 @@ import * as cheerio from 'cheerio'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { backfillMissingEmbeddings } from '@/lib/embeddings/backfill'
 
-const FETCH_WINDOW_HOURS = 48
+const FETCH_WINDOW_HOURS = 72
+const MAX_EMAILS = 5
 
 interface ParsedArticle {
   title: string
@@ -140,7 +141,7 @@ export async function processWebcrawl(): Promise<WebcrawlProcessResult> {
   const emails = await gmailClient.fetchEmailsBySubject(
     null,
     '+synthszr-webcrawler',
-    1,
+    MAX_EMAILS,
     FETCH_WINDOW_HOURS
   )
 
@@ -158,8 +159,10 @@ export async function processWebcrawl(): Promise<WebcrawlProcessResult> {
     const htmlContent = email.htmlBody || email.textBody || ''
     const articles = parseWebcrawlerArticles(htmlContent, email.textBody || '')
 
-    console.log(`[WebCrawl] "${email.subject}" → ${articles.length} Artikel`)
+    console.log(`[WebCrawl] "${email.subject}" (${email.date.toISOString()}) → ${articles.length} Artikel geparst`)
 
+    let skippedDuplicates = 0
+    let newArticlesThisEmail = 0
     for (const article of articles) {
       // Dedup by source URL
       if (article.sourceUrl) {
@@ -168,7 +171,10 @@ export async function processWebcrawl(): Promise<WebcrawlProcessResult> {
           .select('id')
           .eq('source_url', article.sourceUrl)
           .single()
-        if (existing) continue
+        if (existing) {
+          skippedDuplicates++
+          continue
+        }
       }
 
       // Fallback dedup by title + source_type
@@ -178,7 +184,10 @@ export async function processWebcrawl(): Promise<WebcrawlProcessResult> {
         .eq('title', article.title)
         .eq('source_type', 'webcrawl')
         .single()
-      if (existingByTitle) continue
+      if (existingByTitle) {
+        skippedDuplicates++
+        continue
+      }
 
       await supabase.from('daily_repo').insert({
         source_type: 'webcrawl',
@@ -191,8 +200,10 @@ export async function processWebcrawl(): Promise<WebcrawlProcessResult> {
       })
 
       processedArticles++
+      newArticlesThisEmail++
     }
 
+    console.log(`[WebCrawl] "${email.subject}" → neu: ${newArticlesThisEmail}, übersprungen (Duplikat): ${skippedDuplicates}`)
     processedEmails++
   }
 
