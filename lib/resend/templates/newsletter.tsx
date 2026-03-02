@@ -160,9 +160,6 @@ export function NewsletterEmail({
           {`
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap');
 
-            /* Force white background on promo section (Gmail dark mode override) */
-            .promo-section, .promo-section td { background-color: #ffffff !important; }
-
             .content-area h2 {
               font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
               font-size: 18px;
@@ -230,43 +227,18 @@ export function NewsletterEmail({
           {coverImageUrl && (
             <>
               {/* Podcast Platform Links */}
-              {/* Single-cell approach: one <td> with bgcolor covers entire area reliably in Gmail dark mode */}
-              <Section {...({ bgcolor: '#ffffff' } as any)} style={{ backgroundColor: '#ffffff', padding: '0' }} className="promo-section">
+              {/* Strategy: single pre-composited PNG with white background baked into pixels.
+                  This is the only 100%-reliable approach for Gmail dark mode — no CSS needed. */}
+              <Section style={{ padding: '0' }}>
                 <Row>
-                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  <Column {...({ bgcolor: '#ffffff' } as any)} style={{ backgroundColor: '#ffffff', textAlign: 'center' as const, padding: '16px 32px 16px' }}>
-                    <Img
-                      src={`${baseUrl}/podcast_hl.png`}
-                      alt="The daily synthszr podcast"
-                      width="300"
-                      height="auto"
-                      style={{ display: 'block', margin: '0 auto 12px' }}
-                    />
-                    <Link href="https://open.spotify.com/show/0FJkPjKXvobgqI8U881yiF?si=wMJJ-CQxQdyuW18VXQZQOQ">
+                  <Column style={{ padding: '0' }}>
+                    <Link href="https://synthszr.com" style={{ textDecoration: 'none' }}>
                       <Img
-                        src={`${baseUrl}/podcast_spotify.png`}
-                        alt="Listen on Spotify"
-                        height="36"
-                        width="auto"
-                        style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '8px' }}
-                      />
-                    </Link>
-                    <Link href="https://podcasts.apple.com/de/podcast/synthszr/id1879733990">
-                      <Img
-                        src={`${baseUrl}/podcast_apple.png`}
-                        alt="Listen on Apple Podcasts"
-                        height="36"
-                        width="auto"
-                        style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '8px' }}
-                      />
-                    </Link>
-                    <Link href="https://synthszr.com">
-                      <Img
-                        src={`${baseUrl}/podcast_synthszr.png`}
-                        alt="synthszr.com"
-                        height="36"
-                        width="auto"
-                        style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                        src={`${baseUrl}/api/newsletter/promo-block`}
+                        alt="The daily synthszr podcast — listen on Spotify, Apple Podcasts and synthszr.com"
+                        width="600"
+                        height="130"
+                        style={{ display: 'block', width: '100%', height: 'auto' }}
                       />
                     </Link>
                   </Column>
