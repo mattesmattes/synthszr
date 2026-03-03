@@ -118,12 +118,13 @@ Beispiel: "Wir sehen uns morgen wieder! Und wenn euch die Folge gefallen hat, em
 **WICHTIG: Im gesamten Dialog wird der GUEST IMMER als "Synthesizer" bezeichnet — NIEMALS als "Synthszr".**
 Der GUEST (Synthesizer) bringt die "Synthesizer Take" Meinungen aus dem Artikel ein.
 
-**KRITISCH — Ziel-Länge: {duration} Minuten = MINDESTENS {wordCount} Wörter:**
-- Das Skript MUSS mindestens {wordCount} Wörter lang sein. Das ist eine harte Mindestanforderung.
-- Gehe JEDEN Artikel-Abschnitt einzeln und ausführlich durch. Nicht zusammenfassen — DISKUTIEREN.
-- Pro Thema: Kontext erklären, Meinungen austauschen, Gegenargumente bringen, Analogien nutzen, Implikationen besprechen.
-- Wenn der Artikel 5+ Themen enthält, widme JEDEM Thema mindestens 500 Wörter Dialog.
-- Erzeuge NIEMALS ein Skript unter {wordCount} Wörtern. Lieber etwas zu lang als zu kurz.
+**KRITISCH — Ziel-Länge: {duration} Minuten = {wordCount}–{maxWordCount} Wörter:**
+- Das Skript MUSS mindestens {wordCount} Wörter lang sein.
+- Das Skript DARF NICHT länger als {maxWordCount} Wörter sein. Das ist eine harte Obergrenze.
+- Gehe JEDEN Artikel-Abschnitt einzeln durch. Nicht zusammenfassen — DISKUTIEREN.
+- Pro Thema: Kontext erklären, Meinungen austauschen, Gegenargumente bringen, Analogien nutzen.
+- Wenn der Artikel 5+ Themen enthält, widme JEDEM Thema ca. {perTopicWords} Wörter Dialog.
+- Halte die Gesamtlänge im Zielbereich {wordCount}–{maxWordCount} Wörter.
 
 **Blog-Artikel Content für diese Episode:**
 ---
@@ -133,7 +134,7 @@ Titel: {title}
 ---
 
 WICHTIG: Das gesamte Skript MUSS auf DEUTSCH sein!
-ERINNERUNG: Das Skript MUSS mindestens {wordCount} Wörter haben. Zähle mit und stelle sicher, dass du die Ziel-Länge erreichst. Gehe lieber zu ausführlich auf die Themen ein, als zu knapp.
+ERINNERUNG: Das Skript MUSS zwischen {wordCount} und {maxWordCount} Wörtern lang sein. Halte dich an diesen Bereich — nicht darunter, nicht darüber.
 Erstelle jetzt das Podcast-Skript. Beginne direkt mit "HOST:" - keine Einleitung.`
 
 // Default podcast script prompt template - ENGLISH
@@ -223,12 +224,13 @@ Example: "We'll see you again tomorrow! And if you enjoyed this episode, please 
 **IMPORTANT: In the entire dialogue, the GUEST is ALWAYS referred to as "Synthesizer" — NEVER as "Synthszr".**
 GUEST (Synthesizer) should bring in the "Synthesizer Take" opinions from the article.
 
-**CRITICAL — Target Length: {duration} minutes = AT LEAST {wordCount} words:**
-- The script MUST be at least {wordCount} words long. This is a hard minimum requirement.
-- Go through EVERY article section individually and in depth. Don't summarize — DISCUSS.
-- Per topic: explain context, exchange opinions, present counterarguments, use analogies, discuss implications.
-- If the article has 5+ topics, dedicate AT LEAST 500 words of dialogue to EACH topic.
-- NEVER produce a script under {wordCount} words. Better too long than too short.
+**CRITICAL — Target Length: {duration} minutes = {wordCount}–{maxWordCount} words:**
+- The script MUST be at least {wordCount} words long.
+- The script MUST NOT exceed {maxWordCount} words. This is a hard ceiling.
+- Go through EVERY article section individually. Don't summarize — DISCUSS.
+- Per topic: explain context, exchange opinions, present counterarguments, use analogies.
+- If the article has 5+ topics, dedicate approximately {perTopicWords} words of dialogue to EACH topic.
+- Keep the total length within the target range {wordCount}–{maxWordCount} words.
 
 **Blog Article Content for this Episode (translate to English if not already in English):**
 ---
@@ -238,7 +240,7 @@ Title: {title}
 ---
 
 REMEMBER: Output the ENTIRE script in ENGLISH only.
-REMINDER: The script MUST have at least {wordCount} words. Keep track and ensure you hit the target length. It's better to be too detailed than too brief.
+REMINDER: The script MUST be between {wordCount} and {maxWordCount} words. Stay within this range — not below, not above.
 Start directly with "HOST:" - no introduction.`
 
 // Legacy alias for backwards compatibility
@@ -319,8 +321,10 @@ export async function POST(request: NextRequest) {
     const settings = await getTTSSettings()
     const durationMinutes = body.durationMinutes || settings.podcast_duration_minutes || 30
     const wordCount = Math.round(durationMinutes * 150)
-    // ~1.5 tokens per German word + overhead for HOST:/GUEST: tags, emotion tags, MOMENTS section
-    const maxTokens = Math.max(8000, Math.round(wordCount * 2.2))
+    const maxWordCount = Math.round(wordCount * 1.25) // hard ceiling: 25% over target
+    const perTopicWords = Math.max(80, Math.round(wordCount / 7)) // proportional per-topic budget
+    // tokens: proportional to target, never clamp to a large fixed minimum
+    const maxTokens = Math.round(maxWordCount * 2.2)
 
     // Fetch post content
     let postTitle = ''
@@ -397,6 +401,8 @@ export async function POST(request: NextRequest) {
     let prompt = (body.customPrompt || defaultPrompt)
       .replace('{duration}', String(durationMinutes))
       .replace('{wordCount}', String(wordCount))
+      .replace('{maxWordCount}', String(maxWordCount))
+      .replace('{perTopicWords}', String(perTopicWords))
       .replace('{title}', postTitle)
       .replace('{content}', postContent)
       .replace('{weekday}', weekday)
