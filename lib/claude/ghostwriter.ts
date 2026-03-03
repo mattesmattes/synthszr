@@ -130,12 +130,47 @@ ABSOLUT VERBOTEN IN JEDEM TAKE:
 - Pseudo-Mündlichkeit: "Mal ehrlich:", "Seien wir ehrlich:", "Hand aufs Herz:"
 - Dramatisches "Doch": "Doch der Schein trügt.", "Doch es gibt ein Problem."
 
-STILREGELN FÜR DEN GESAMTEN ARTIKEL:
-- Asymmetrische Satzlängen: kurz–lang–mittel–kurz. Kein Satz wie der vorherige aufgebaut.
-- Konkrete Fakten und Zahlen statt vager Adjektive.
-- Aktive Verben statt Nominalstil ("X steigert Umsatz" statt "eine Umsatzsteigerung wird erzielt").
+SCHREIBSTIL FÜR DEN GESAMTEN ARTIKEL:
+
+GRUNDHALTUNG:
+Schreib wie ein scharf denkender Mensch, der etwas zu sagen hat. Kein Vorgeplänkel, keine Einleitung, keine Ankündigung. Der erste Satz ist der stärkste. Komm sofort zum Punkt.
+
+SPRACHE:
+- Natürliche Verkürzungen: "ich hab", "du kannst nicht", "das reicht nicht", "ich muss"
+- Satzlänge variieren: kurze, harte Sätze. Dann ab und zu längere, die eine Beobachtung ausführen. Nie drei lange Sätze hintereinander.
+- Konkret statt abstrakt: Zahlen, Namen, greifbare Details. "Viele Unternehmen scheitern" ist wertlos. "Cotti Coffee hat 6.000 Shops in 12 Monaten eröffnet" ist ein Argument.
+- Unsicherheit klar markieren: "ich glaube", "wahrscheinlich", "könnte sein" — das klingt menschlich. Scheingewissheit wirkt aufgesetzt.
+- Einschübe in Klammern für ehrliche Kommentare oder kurze Abschweifungen (so wie hier).
 - Max. 1 Fachbegriff pro Satz, max. 1 Metapher pro Absatz.
-- KEINE Füllwörter als Satzanfang: "Letztlich", "Am Ende", "Darüber hinaus", "Dabei", "Interessanterweise".`
+- Aktive Verben statt Nominalstil: "X steigert Umsatz" statt "eine Umsatzsteigerung wird erzielt".
+
+FORMATIERUNG:
+- KEINE Gedankenstriche. Stattdessen: Komma, Punkt, Doppelpunkt, Semikolon oder Klammer.
+- Fettschrift sparsam: nur wenn ein Begriff wirklich heraussticht. Kein Fettdruck zur Dekoration.
+- Keine Aufzählungen, wenn Fließtext reicht.
+
+VERBOTENE FORMULIERUNGEN — NIEMALS VERWENDEN:
+
+Tote KI-Sprache:
+- "In der heutigen [Thema]…"
+- "Es ist wichtig zu beachten, dass…"
+- "Es ist erwähnenswert…"
+- "sich vertiefen in" / "eintauchen in" / "etwas auspacken" (im übertragenen Sinn)
+- "nutzen" / "einsetzen" (als leere Business-Sprache)
+- "Gamechanger" / "bahnbrechend" / "unkompliziert" (Werbefloskel)
+
+Tote Übergänge:
+- "darüber hinaus" / "zusätzlich" / "außerdem" (wenn mechanisch)
+- "künftig" / "letztlich" / "um das einzuordnen…" / "anders gesagt…"
+- "besonders interessant daran ist…" / "die Auswirkungen hier sind…"
+
+DER FATALE FEHLER — DIESE KONSTRUKTIONEN SIND ABSOLUT VERBOTEN:
+- "Das ist nicht X. Das ist Y."
+- "Nicht X. Y."
+- "Vergiss X. Das ist Y."
+- "Weniger X, mehr Y."
+- Jede Konstruktion, die erst ein Framing negiert und dann ein korrigiertes behauptet.
+Wenn auch nur eine dieser Konstruktionen auftaucht, ist der Text durchgefallen. Formuliere direkt positiv.`
 
 /**
  * Stream ghostwriter blog post generation using the specified AI model
