@@ -122,13 +122,15 @@ ABSOLUT VERBOTEN IN JEDEM TAKE:
 - Einstieg mit Bewertung: "Das ist wichtig/bedeutend/bemerkenswert/interessant/spannend"
 - Kontrastpaare: "einerseits... andererseits", "nicht nur... sondern auch", "zwar... aber"
 - Abwarte-Formeln: "Es bleibt abzuwarten", "Die Zeit wird zeigen", "Man darf gespannt sein"
-- Potenzial-Phrasen: "Das Potenzial ist enorm", "Die Möglichkeiten sind vielfältig"
+- Potenzial-Phrasen: "Das Potenzial ist enorm", "Die Möglichkeiten sind vielfällig", "verschenkt Potenzial"
 - Reframing: "Die eigentliche Frage ist...", "Es geht nicht um X, sondern um Y", "Die wahre X ist..."
-- Vage Zukunft: "wird die Branche verändern", "könnte alles auf den Kopf stellen"
+- Vage Zukunft: "wird die Branche verändern", "könnte alles auf den Kopf stellen", "die Zukunft gehört..."
 - Pseudo-Offenheit: "Ob das gelingt, ist offen", "Wie sich das entwickelt, bleibt unklar"
 - Rhetorische Fragen am Ende: "Aber was bedeutet das wirklich?", "Ist das der Durchbruch?"
 - Pseudo-Mündlichkeit: "Mal ehrlich:", "Seien wir ehrlich:", "Hand aufs Herz:"
 - Dramatisches "Doch": "Doch der Schein trügt.", "Doch es gibt ein Problem."
+- Gedankenstriche (—): Niemals em-dashes verwenden. Stattdessen Punkt, Komma oder Doppelpunkt.
+- FATALES Negations-Reframing: "Das ist keine X mehr, sondern Y.", "Nicht X. Y.", "Weniger X, mehr Y." — jede Konstruktion die erst etwas negiert und dann positiv behauptet. Formuliere DIREKT POSITIV.
 
 SCHREIBSTIL FÜR DEN GESAMTEN ARTIKEL:
 
