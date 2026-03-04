@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth/session'
 import { getActiveLearnedPatterns } from '@/lib/edit-learning/retrieval'
 import {
   detectPatternsInContent,
-  type DetectedPatternMatch,
+  matchesToDecorations,
 } from '@/lib/edit-learning/pattern-detection'
 
 interface TipTapNode {
@@ -69,17 +69,25 @@ export async function POST(request: NextRequest) {
 
     console.log(`[StoreAppliedPatterns] Found ${matches.length} pattern matches`)
 
-    // Store matches in applied_patterns
-    const records = matches.map((m: DetectedPatternMatch) => ({
-      post_id: postId,
-      pattern_id: m.patternId,
-      paragraph_index: m.paragraphIndex,
-      sentence_index: null,
-      char_start: m.charStartInParagraph,
-      char_end: m.charEndInParagraph,
-      actually_written: m.matchedText,
-      would_have_written: m.pattern.original_form || null,
-    }))
+    // Convert paragraph-relative positions to absolute TipTap positions
+    const decorations = matchesToDecorations(content as TipTapNode, matches)
+
+    // Store matches in applied_patterns with absolute positions
+    const records = decorations.map((d) => {
+      const match = matches.find(
+        (m) => m.patternId === d.patternId && m.matchedText === d.matchedText
+      )
+      return {
+        post_id: postId,
+        pattern_id: d.patternId,
+        paragraph_index: match?.paragraphIndex ?? 0,
+        sentence_index: null,
+        char_start: d.from,
+        char_end: d.to,
+        actually_written: d.matchedText,
+        would_have_written: d.pattern.original_form || null,
+      }
+    })
 
     // Delete existing applied patterns for this post (in case of re-generation)
     await supabase
@@ -100,18 +108,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`[StoreAppliedPatterns] Stored ${records.length} applied patterns`)
+    console.log(`[StoreAppliedPatterns] Stored ${records.length} applied patterns (absolute positions)`)
 
     return NextResponse.json({
-      message: `Found and stored ${matches.length} pattern matches`,
+      message: `Found and stored ${records.length} pattern matches`,
       patternsChecked: patterns.length,
       matchesFound: matches.length,
       matchesStored: records.length,
-      patterns: matches.map((m: DetectedPatternMatch) => ({
-        patternId: m.patternId,
-        matchedText: m.matchedText,
-        originalForm: m.pattern.original_form,
-        preferredForm: m.pattern.preferred_form,
+      patterns: decorations.map((d) => ({
+        patternId: d.patternId,
+        matchedText: d.matchedText,
+        from: d.from,
+        to: d.to,
+        originalForm: d.pattern.original_form,
+        preferredForm: d.pattern.preferred_form,
       })),
     })
   } catch (error) {

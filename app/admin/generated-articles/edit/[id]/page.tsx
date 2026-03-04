@@ -306,7 +306,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   }, [id, supabase])
 
   // Fetch applied patterns for highlighting
-  const fetchAppliedPatterns = useCallback(async () => {
+  const fetchAppliedPatterns = useCallback(async (postContent?: Record<string, unknown>, aiModel?: string | null) => {
     const res = await fetch(`/api/admin/pattern-feedback?postId=${id}`)
     if (res.ok) {
       const data = await res.json()
@@ -327,6 +327,52 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
           userAccepted: ap.user_accepted,
         })
       ).filter((ap: AppliedPatternData) => ap.pattern !== null)
+
+      // Auto-redetect: if no patterns found and post was AI-generated, trigger detection
+      if (patterns.length === 0 && aiModel && postContent) {
+        console.log('[PatternHighlight] No patterns found for AI-generated post, triggering auto-detection...')
+        try {
+          const storeRes = await fetch('/api/admin/store-applied-patterns', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ postId: id, content: postContent }),
+          })
+          if (storeRes.ok) {
+            const storeData = await storeRes.json()
+            console.log(`[PatternHighlight] Auto-detection: ${storeData.matchesStored} patterns stored`)
+            if (storeData.matchesStored > 0) {
+              // Re-fetch the newly stored patterns
+              const refetchRes = await fetch(`/api/admin/pattern-feedback?postId=${id}`)
+              if (refetchRes.ok) {
+                const refetchData = await refetchRes.json()
+                const newPatterns: AppliedPatternData[] = (refetchData.appliedPatterns || []).map(
+                  (ap: {
+                    id: string
+                    pattern_id: string
+                    char_start: number
+                    char_end: number
+                    user_accepted: boolean | null
+                    pattern: LearnedPattern | null
+                  }) => ({
+                    id: ap.id,
+                    patternId: ap.pattern_id,
+                    from: ap.char_start || 0,
+                    to: ap.char_end || 0,
+                    pattern: ap.pattern,
+                    userAccepted: ap.user_accepted,
+                  })
+                ).filter((ap: AppliedPatternData) => ap.pattern !== null)
+                setAppliedPatterns(newPatterns)
+                return
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[PatternHighlight] Auto-detection failed:', err)
+        }
+      }
+
       setAppliedPatterns(patterns)
     }
   }, [id])
@@ -454,8 +500,8 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
           fetchQueueItems(itemIds)
         }
 
-        // Load applied patterns for highlighting
-        fetchAppliedPatterns()
+        // Load applied patterns for highlighting (pass content + ai_model for auto-redetection)
+        fetchAppliedPatterns(parsedContent, data.ai_model)
 
         // Load article thumbnails and count
         fetchArticleThumbnails()

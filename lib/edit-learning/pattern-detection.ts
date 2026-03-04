@@ -77,40 +77,28 @@ export function detectPatternsInContent(
 
 /**
  * Find pattern matches in a text string
+ *
+ * Searches for:
+ * - original_form: The "forbidden" form the AI tends to write (all pattern types)
+ * - preferred_form: The desired form that was applied (all pattern types)
+ * - trigger_pattern: Regex-based matching when set
  */
 function findPatternInText(
   text: string,
   pattern: LearnedPattern
 ): Array<{ start: number; end: number; text: string }> {
   const matches: Array<{ start: number; end: number; text: string }> = []
+  const seen = new Set<string>() // Deduplicate by "start:end"
 
-  // For replacement patterns, look for the preferred_form
-  if (pattern.pattern_type === 'replacement' && pattern.preferred_form) {
-    const searchTerm = pattern.preferred_form.toLowerCase()
-    const textLower = text.toLowerCase()
+  // Search for original_form across all pattern types
+  // If the AI wrote the "forbidden" form, highlight it
+  if (pattern.original_form) {
+    findWordBoundaryMatches(text, pattern.original_form, matches, seen)
+  }
 
-    let pos = 0
-    while (pos < textLower.length) {
-      const foundIndex = textLower.indexOf(searchTerm, pos)
-      if (foundIndex === -1) break
-
-      // Check word boundaries
-      const beforeOk =
-        foundIndex === 0 || !isWordChar(textLower[foundIndex - 1])
-      const afterOk =
-        foundIndex + searchTerm.length >= textLower.length ||
-        !isWordChar(textLower[foundIndex + searchTerm.length])
-
-      if (beforeOk && afterOk) {
-        matches.push({
-          start: foundIndex,
-          end: foundIndex + searchTerm.length,
-          text: text.slice(foundIndex, foundIndex + searchTerm.length),
-        })
-      }
-
-      pos = foundIndex + 1
-    }
+  // Search for preferred_form across all pattern types (not just replacement)
+  if (pattern.preferred_form) {
+    findWordBoundaryMatches(text, pattern.preferred_form, matches, seen)
   }
 
   // For trigger-based patterns, use the trigger regex
@@ -120,11 +108,15 @@ function findPatternInText(
       let match
 
       while ((match = regex.exec(text)) !== null) {
-        matches.push({
-          start: match.index,
-          end: match.index + match[0].length,
-          text: match[0],
-        })
+        const key = `${match.index}:${match.index + match[0].length}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          matches.push({
+            start: match.index,
+            end: match.index + match[0].length,
+            text: match[0],
+          })
+        }
       }
     } catch {
       // Invalid regex, skip
@@ -132,6 +124,46 @@ function findPatternInText(
   }
 
   return matches
+}
+
+/**
+ * Find all word-boundary-respecting matches of a search term in text
+ */
+function findWordBoundaryMatches(
+  text: string,
+  searchTerm: string,
+  matches: Array<{ start: number; end: number; text: string }>,
+  seen: Set<string>
+): void {
+  const termLower = searchTerm.toLowerCase()
+  const textLower = text.toLowerCase()
+
+  let pos = 0
+  while (pos < textLower.length) {
+    const foundIndex = textLower.indexOf(termLower, pos)
+    if (foundIndex === -1) break
+
+    // Check word boundaries
+    const beforeOk =
+      foundIndex === 0 || !isWordChar(textLower[foundIndex - 1])
+    const afterOk =
+      foundIndex + termLower.length >= textLower.length ||
+      !isWordChar(textLower[foundIndex + termLower.length])
+
+    if (beforeOk && afterOk) {
+      const key = `${foundIndex}:${foundIndex + termLower.length}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        matches.push({
+          start: foundIndex,
+          end: foundIndex + termLower.length,
+          text: text.slice(foundIndex, foundIndex + termLower.length),
+        })
+      }
+    }
+
+    pos = foundIndex + 1
+  }
 }
 
 function isWordChar(char: string): boolean {
