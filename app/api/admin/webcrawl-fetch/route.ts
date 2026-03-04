@@ -1,170 +1,15 @@
 import { NextRequest } from 'next/server'
 import { GmailClient } from '@/lib/gmail/client'
-import * as cheerio from 'cheerio'
 import { createClient } from '@/lib/supabase/server'
 import { isAdminRequest } from '@/lib/auth/session'
 import { backfillMissingEmbeddings } from '@/lib/embeddings/backfill'
+import { parseWebcrawlerArticles } from '@/lib/webcrawl/processor'
 
 // Always fetch last 48h, deduplicate at article level by source_url/title
 const FETCH_WINDOW_HOURS = 48
 
 // Node.js runtime for cheerio compatibility
 export const runtime = 'nodejs'
-
-interface ParsedArticle {
-  title: string
-  content: string
-  sourceUrl: string | null
-  sourceIdentifier: string | null
-  priority: string | null
-}
-
-/**
- * Convert HTML to text preserving paragraph structure.
- * Unlike cheerio's .text() which collapses ALL whitespace,
- * this inserts newlines for block-level elements.
- */
-function htmlToStructuredText(html: string): string {
-  const $ = cheerio.load(html)
-  $('script, style, head').remove()
-
-  // Replace <br> with newlines
-  $('br').replaceWith('\n')
-
-  // Add newlines around block elements
-  $('p, div, h1, h2, h3, h4, h5, h6, li, tr, blockquote, hr').each((_, el) => {
-    $(el).prepend('\n').append('\n')
-  })
-
-  const text = ($('body').text() || $.root().text())
-    .replace(/[ \t]+/g, ' ')       // collapse horizontal whitespace only
-    .replace(/\n[ \t]+/g, '\n')    // trim leading whitespace on lines
-    .replace(/[ \t]+\n/g, '\n')    // trim trailing whitespace on lines
-    .replace(/\n{3,}/g, '\n\n')    // max 2 consecutive newlines
-    .trim()
-
-  return text
-}
-
-/**
- * Extract all "Artikel lesen" link URLs from the HTML in order.
- * These are the source URLs for each article.
- */
-function extractReadMoreLinks(html: string): string[] {
-  const $ = cheerio.load(html)
-  const urls: string[] = []
-
-  $('a').each((_, el) => {
-    const text = $(el).text().trim()
-    if (/artikel\s*lesen/i.test(text)) {
-      const href = $(el).attr('href')
-      if (href) urls.push(href)
-    }
-  })
-
-  return urls
-}
-
-/**
- * Parse a webcrawler email into individual article blocks.
- * Each article ends with an "Artikel lesen →" link.
- * Articles typically have: priority label, title, excerpt, metadata (📅📰🏷️), body text.
- */
-function parseWebcrawlerArticles(
-  htmlContent: string,
-  textBody: string
-): ParsedArticle[] {
-  // Extract source URLs from "Artikel lesen" links (preserving order)
-  const sourceUrls = extractReadMoreLinks(htmlContent)
-
-  // Get structured text with preserved line breaks
-  const text = htmlToStructuredText(htmlContent) || textBody || ''
-
-  if (!text) return []
-
-  // Split text by "Artikel lesen" markers
-  const sections = text.split(/Artikel\s*lesen\s*→?\s*/i)
-
-  // Need at least 2 sections (1 article + footer)
-  if (sections.length < 2) {
-    console.log('[WebCrawl] No "Artikel lesen" markers found in email')
-    return []
-  }
-
-  // Last section is footer/trailing text — drop it
-  const articleSections = sections.slice(0, -1)
-
-  console.log(`[WebCrawl] Found ${articleSections.length} article sections, ${sourceUrls.length} source URLs`)
-
-  const articles: ParsedArticle[] = []
-
-  for (let i = 0; i < articleSections.length; i++) {
-    let section = articleSections[i]
-
-    // For the first section, skip intro text before the first priority label
-    if (i === 0) {
-      const priorityIdx = section.search(/^.*\b(?:HIGH|MEDIUM|LOW)\b/m)
-      if (priorityIdx > 0) {
-        section = section.substring(priorityIdx)
-      }
-    }
-
-    const lines = section.split('\n').map(l => l.trim()).filter(Boolean)
-    if (lines.length < 2) continue
-
-    let lineIdx = 0
-    let priority: string | null = null
-
-    // Check for priority label (HIGH/MEDIUM/LOW, possibly with emoji prefix)
-    if (lines[lineIdx]?.match(/\b(HIGH|MEDIUM|LOW)\b/i)) {
-      const m = lines[lineIdx].match(/\b(HIGH|MEDIUM|LOW)\b/i)
-      priority = m ? m[1].toUpperCase() : null
-      lineIdx++
-    }
-
-    // Skip URL lines that may appear before the title (source links in the HTML)
-    while (lineIdx < lines.length && /^https?:\/\//i.test(lines[lineIdx])) {
-      lineIdx++
-    }
-
-    // Title
-    const title = lines[lineIdx] || 'Untitled'
-    lineIdx++
-
-    // Excerpt (line before metadata — skip if it looks like metadata or a URL)
-    let excerpt = ''
-    if (lineIdx < lines.length && !lines[lineIdx]?.includes('📅') && !/^https?:\/\//i.test(lines[lineIdx])) {
-      excerpt = lines[lineIdx]
-      lineIdx++
-    }
-
-    // Metadata line: 📅 date | 📰 source | 🏷️ category
-    let sourceIdentifier: string | null = null
-    if (lineIdx < lines.length && lines[lineIdx]?.includes('📅')) {
-      const metaLine = lines[lineIdx]
-      const sourceMatch = metaLine.match(/📰\s*([^|📅🏷️]+)/)
-      sourceIdentifier = sourceMatch ? sourceMatch[1].trim() : null
-      lineIdx++
-    }
-
-    // Content: everything remaining (filter out standalone URL lines)
-    const bodyLines = lines.slice(lineIdx).filter(l => !/^https?:\/\//i.test(l))
-    const bodyContent = bodyLines.join('\n').trim()
-    const fullContent = excerpt ? `${excerpt}\n\n${bodyContent}` : bodyContent
-
-    if (fullContent.length < 50) continue // Skip empty/tiny articles
-
-    articles.push({
-      title,
-      content: fullContent,
-      sourceUrl: sourceUrls[i] || null,
-      sourceIdentifier,
-      priority,
-    })
-  }
-
-  return articles
-}
 
 interface ProgressEvent {
   type: 'start' | 'email' | 'article' | 'embedding_backfill' | 'complete' | 'error'
@@ -262,10 +107,27 @@ export async function POST(request: NextRequest) {
           try {
             const htmlContent = email.htmlBody || email.textBody || ''
 
-            // Parse webcrawler email into individual articles
+            // Parse webcrawler email into individual articles (multi-strategy)
             const articles = parseWebcrawlerArticles(htmlContent, email.textBody || '')
 
             console.log(`[WebCrawl] "${email.subject}" → ${articles.length} Artikel extrahiert`)
+
+            if (articles.length === 0) {
+              send({
+                type: 'email',
+                phase: 'processing',
+                current: i + 1,
+                total: emails.length,
+                item: {
+                  title: `${email.subject} (0 Artikel — alle Strategien fehlgeschlagen)`,
+                  from: email.from,
+                  status: 'error',
+                  error: 'Keine Artikel im Email-Format erkannt'
+                }
+              })
+              processedEmails++
+              continue
+            }
 
             let emailArticlesSaved = 0
 
