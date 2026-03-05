@@ -254,7 +254,7 @@ function generateTypeScriptFile(
 
   const publicEntries = Object.entries(allPublicCompanies)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, slug]) => `  '${name}': '${slug}'`)
+    .map(([name, slug]) => `  '${name.replace(/'/g, "\\'")}': '${slug.replace(/'/g, "\\'")}'`)
     .join(',\n')
 
   // Handle empty entries (no trailing comma when empty)

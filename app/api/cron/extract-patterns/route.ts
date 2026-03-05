@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { generateEmbedding, cosineSimilarity } from '@/lib/embeddings/generator'
 import { parseIntParam, parseFloatParam } from '@/lib/validation/query-params'
 import { requireCronOrAdmin } from '@/lib/auth/session'
+import { getModelForUseCase } from '@/lib/ai/model-config'
 
 // Lazy initialization to avoid build-time errors
 let supabase: SupabaseClient | null = null
@@ -300,8 +301,10 @@ Antworte im exakten JSON-Format:
 }`
 
   try {
+    const patternModel = await getModelForUseCase('pattern_extraction')
+
     const response = await getAnthropic().messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: patternModel,
       max_tokens: 600,
       messages: [{ role: 'user', content: prompt }],
     })

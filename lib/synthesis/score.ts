@@ -5,6 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { SimilarItem, daysBetween } from './search'
+import { getModelForUseCase } from '@/lib/ai/model-config'
 
 export type SynthesisType =
   | 'contradiction'
@@ -44,7 +45,8 @@ async function scoreCandidate(
   currentNews: string,
   historicalNews: string,
   daysAgo: number,
-  scoringPrompt: string
+  scoringPrompt: string,
+  modelId: string
 ): Promise<ScoreResponse> {
   const prompt = scoringPrompt
     .replace('{current_news}', currentNews.slice(0, 2000))
@@ -60,7 +62,7 @@ async function scoreCandidate(
   // Race between API call and timeout
   const response = await Promise.race([
     anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: modelId,
       max_tokens: 256,
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -109,6 +111,7 @@ export async function scoreSynthesisCandidates(
     apiKey: process.env.ANTHROPIC_API_KEY,
   })
 
+  const modelId = await getModelForUseCase('synthesis_scoring')
   const currentNews = `${currentItem.title}\n\n${currentItem.content}`
 
   // Process in batches for rate limiting
@@ -128,7 +131,8 @@ export async function scoreSynthesisCandidates(
             currentNews,
             historicalNews,
             daysAgo,
-            scoringPrompt
+            scoringPrompt,
+            modelId
           )
 
           return {
@@ -221,6 +225,7 @@ export async function scoreContentOnly(
     apiKey: process.env.ANTHROPIC_API_KEY,
   })
 
+  const modelId = await getModelForUseCase('synthesis_scoring')
   const results = new Map<string, ContentScore>()
 
   // Scoring prompt for content-only items
@@ -276,7 +281,7 @@ BEGRÜNDUNG: [1 Satz warum]`
         try {
           const response = await Promise.race([
             anthropic.messages.create({
-              model: 'claude-haiku-4-5-20251001',
+              model: modelId,
               max_tokens: 256,
               messages: [{ role: 'user', content: prompt }],
             }),

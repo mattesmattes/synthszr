@@ -9,6 +9,7 @@ import {
   type LearnedPattern,
   type EditExample,
 } from '@/lib/edit-learning/retrieval'
+import { getModelForUseCase } from '@/lib/ai/model-config'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
@@ -181,12 +182,17 @@ Wenn auch nur eine dieser Konstruktionen auftaucht, ist der Text durchgefallen. 
 export async function* streamGhostwriter(
   digestContent: string,
   prompt: string,
-  model: AIModel = 'gemini-2.5-pro',
+  model?: AIModel,
   options: {
     enableLearning?: boolean
     onPatternsLoaded?: (patterns: LearnedPattern[], examples: EditExample[]) => void
   } = {}
 ): AsyncGenerator<string, void, unknown> {
+  // Resolve model from config if not explicitly provided
+  if (!model) {
+    const configModel = await getModelForUseCase('ghostwriter')
+    model = configModel as AIModel
+  }
   const { enableLearning = true, onPatternsLoaded } = options
 
   let enhancedPrompt = prompt

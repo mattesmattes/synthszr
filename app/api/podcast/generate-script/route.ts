@@ -25,6 +25,7 @@ import { requireAdmin } from '@/lib/auth/session'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
 import { getPersonalityState, buildPersonalityBrief, stripMomentsSection } from '@/lib/podcast/personality'
 import Anthropic from '@anthropic-ai/sdk'
+import { getModelForUseCase } from '@/lib/ai/model-config'
 
 // TTS language mapping for podcast generation
 const LOCALE_TO_TTS_LANG: Record<string, 'de' | 'en'> = {
@@ -423,13 +424,14 @@ export async function POST(request: NextRequest) {
 
     // Generate script with Claude
     const anthropic = new Anthropic()
+    const podcastModel = await getModelForUseCase('podcast_script')
 
     console.log(`[Podcast Script] Generating ${durationMinutes}min script for post ${body.postId} in ${locale} (episode #${personalityState.episode_count + 1}, phase: ${personalityState.relationship_phase})`)
 
-    console.log(`[Podcast Script] Target: ${wordCount} words, max_tokens: ${maxTokens}`)
+    console.log(`[Podcast Script] Target: ${wordCount} words, max_tokens: ${maxTokens}, model: ${podcastModel}`)
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: podcastModel,
       max_tokens: maxTokens,
       messages: [
         {

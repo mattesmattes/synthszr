@@ -5,6 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { ScoredCandidate } from './score'
+import { getModelForUseCase } from '@/lib/ai/model-config'
 
 export interface DevelopedSynthesis {
   candidateId?: string
@@ -163,6 +164,8 @@ async function developSynthesisInternal(
     timeout: 11000, // SDK timeout at 11s
   })
 
+  const modelId = await getModelForUseCase('synthesis_development')
+
   const currentNews = `${candidate.sourceItem.title}\n\n${candidate.sourceItem.content.slice(0, 2000)}`
   const historicalNews = `${candidate.relatedItem.title}\n\n${candidate.relatedItem.content.slice(0, 2000)}`
 
@@ -178,7 +181,7 @@ async function developSynthesisInternal(
   try {
     const response = await anthropic.messages.create(
       {
-        model: 'claude-opus-4-20250514',
+        model: modelId,
         max_tokens: 1024,
         messages: [{ role: 'user', content: prompt }],
       },
@@ -270,6 +273,8 @@ async function developContentSynthesisInternal(
     timeout: 11000,
   })
 
+  const modelId = await getModelForUseCase('synthesis_development')
+
   const currentNews = `${article.title}\n\n${article.content.slice(0, 2000)}`
 
   const prompt = developmentPrompt
@@ -281,7 +286,7 @@ async function developContentSynthesisInternal(
   try {
     const response = await anthropic.messages.create(
       {
-        model: 'claude-opus-4-20250514',
+        model: modelId,
         max_tokens: 1024,
         messages: [{ role: 'user', content: prompt }],
       },

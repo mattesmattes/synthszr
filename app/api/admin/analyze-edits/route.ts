@@ -9,6 +9,7 @@ import {
 } from '@/lib/edit-learning/diff-extractor'
 import { generateEmbedding } from '@/lib/embeddings/generator'
 import { parseIntParam } from '@/lib/validation/query-params'
+import { getModelForUseCase } from '@/lib/ai/model-config'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -225,8 +226,10 @@ Respond in this exact JSON format:
   "explanation": "..."
 }`
 
+    const editModel = await getModelForUseCase('edit_analysis')
+
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: editModel,
       max_tokens: 500,
       messages: [{ role: 'user', content: prompt }],
     })
