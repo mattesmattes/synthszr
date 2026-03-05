@@ -161,6 +161,7 @@ function berlinToUtc(hour: number): number {
 }
 
 function formatPricing(model: ModelInfo): string {
+  if (model.pricing.input === 0 && model.pricing.output === 0) return ''
   return `$${model.pricing.input}/$${model.pricing.output}`
 }
 
@@ -533,16 +534,21 @@ export default function SettingsPage() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {models.map(model => (
-                                  <SelectItem key={model.id} value={model.id}>
-                                    <span className="flex items-center gap-2">
-                                      {model.name}
-                                      <span className="text-xs text-muted-foreground">
-                                        {formatPricing(model)}
+                                {models.map(model => {
+                                  const pricing = formatPricing(model)
+                                  return (
+                                    <SelectItem key={model.id} value={model.id}>
+                                      <span className="flex items-center gap-2">
+                                        {model.name}
+                                        {pricing && (
+                                          <span className="text-xs text-muted-foreground">
+                                            {pricing}
+                                          </span>
+                                        )}
                                       </span>
-                                    </span>
-                                  </SelectItem>
-                                ))}
+                                    </SelectItem>
+                                  )
+                                })}
                                 {models.length === 0 && (
                                   <SelectItem value={info.defaultModel} disabled>
                                     Keine Modelle verfügbar

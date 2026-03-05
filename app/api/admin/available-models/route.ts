@@ -2,7 +2,8 @@
  * GET /api/admin/available-models
  *
  * Fetches available models from all configured AI providers.
- * Merges with static pricing data.
+ * Merges live API results with static pricing data.
+ * New models from providers appear automatically (without pricing).
  * Results are cached for 5 minutes.
  */
 
@@ -21,12 +22,23 @@ interface CachedResult {
 let cache: CachedResult | null = null
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
+// Filter patterns — only include models relevant for text generation
+const ANTHROPIC_INCLUDE = /^claude-/
+const OPENAI_INCLUDE = /^(gpt-|o[0-9])/
+const GOOGLE_INCLUDE = /^gemini-/
+
+// Exclude embedding, moderation, tts, whisper, dall-e etc.
+const OPENAI_EXCLUDE = /embedding|moderation|tts|whisper|dall-e|davinci|babbage|realtime/i
+const GOOGLE_EXCLUDE = /embedding|aqa|vision-only|imagen/i
+
 async function fetchAnthropicModels(): Promise<string[]> {
   if (!process.env.ANTHROPIC_API_KEY) return []
   try {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const response = await anthropic.models.list({ limit: 50 })
-    return response.data.map((m) => m.id)
+    const response = await anthropic.models.list({ limit: 100 })
+    return response.data
+      .map((m) => m.id)
+      .filter(id => ANTHROPIC_INCLUDE.test(id))
   } catch (error) {
     console.error('[AvailableModels] Anthropic fetch failed:', error)
     return []
@@ -38,7 +50,9 @@ async function fetchOpenAIModels(): Promise<string[]> {
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
     const response = await openai.models.list()
-    return response.data.map((m) => m.id)
+    return response.data
+      .map((m) => m.id)
+      .filter(id => OPENAI_INCLUDE.test(id) && !OPENAI_EXCLUDE.test(id))
   } catch (error) {
     console.error('[AvailableModels] OpenAI fetch failed:', error)
     return []
@@ -54,14 +68,36 @@ async function fetchGoogleModels(): Promise<string[]> {
     )
     if (!res.ok) return []
     const data = await res.json()
-    // Google returns models like "models/gemini-2.0-flash" — strip prefix
-    return (data.models || []).map((m: { name: string }) =>
-      m.name.replace('models/', '')
-    )
+    return (data.models || [])
+      .map((m: { name: string }) => m.name.replace('models/', ''))
+      .filter((id: string) => GOOGLE_INCLUDE.test(id) && !GOOGLE_EXCLUDE.test(id))
   } catch (error) {
     console.error('[AvailableModels] Google fetch failed:', error)
     return []
   }
+}
+
+/**
+ * Create a human-readable name from a model ID
+ * e.g. "claude-sonnet-4-20250514" → "claude-sonnet-4-20250514"
+ */
+function humanizeName(id: string, provider: 'anthropic' | 'openai' | 'google'): string {
+  // If we have it in our pricing map, use the curated name
+  if (MODEL_PRICING[id]) return MODEL_PRICING[id].name
+
+  // Otherwise, create a reasonable name from the ID
+  const cleaned = id
+    .replace(/^models\//, '')
+    .replace(/-\d{8}$/, '') // strip date suffixes like -20250514
+  const parts = cleaned.split('-')
+  const capitalized = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
+
+  const providerPrefix: Record<string, string> = {
+    anthropic: '',
+    openai: '',
+    google: '',
+  }
+  return `${providerPrefix[provider]}${capitalized}`
 }
 
 export async function GET() {
@@ -84,55 +120,75 @@ export async function GET() {
     Promise.race([fetchGoogleModels(), timeout(8000, [] as string[])]),
   ])
 
-  // Build available models list — only include models that exist in our pricing map
-  // AND are actually available from the provider
+  console.log(`[AvailableModels] Fetched: ${anthropicIds.length} Anthropic, ${openaiIds.length} OpenAI, ${googleIds.length} Google`)
+
+  // Build models from live API results, enriched with pricing where available
+  const seenIds = new Set<string>()
   const availableModels: ModelInfo[] = []
 
-  for (const [modelId, info] of Object.entries(MODEL_PRICING)) {
-    let isAvailable = false
+  function addModels(ids: string[], provider: 'anthropic' | 'openai' | 'google') {
+    for (const id of ids) {
+      if (seenIds.has(id)) continue
+      seenIds.add(id)
 
-    switch (info.provider) {
-      case 'anthropic':
-        // Check if model ID matches (API returns full IDs)
-        isAvailable = anthropicIds.length > 0 && (
-          anthropicIds.includes(modelId) ||
-          anthropicIds.some(id => modelId.startsWith(id) || id.startsWith(modelId))
-        )
-        // If Anthropic key exists but API listing failed, still include known models
-        if (!isAvailable && process.env.ANTHROPIC_API_KEY) {
-          isAvailable = true
-        }
-        break
-      case 'openai':
-        isAvailable = openaiIds.length > 0 && (
-          openaiIds.includes(modelId) ||
-          openaiIds.some(id => modelId.startsWith(id) || id.startsWith(modelId))
-        )
-        if (!isAvailable && process.env.OPENAI_API_KEY) {
-          isAvailable = true
-        }
-        break
-      case 'google':
-        isAvailable = googleIds.length > 0 && (
-          googleIds.includes(modelId) ||
-          googleIds.some(id => modelId.startsWith(id) || id.startsWith(modelId))
-        )
-        if (!isAvailable && process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-          isAvailable = true
-        }
-        break
-    }
-
-    if (isAvailable) {
-      availableModels.push(info)
+      const known = MODEL_PRICING[id]
+      if (known) {
+        availableModels.push(known)
+      } else {
+        // New model from API — include without pricing
+        availableModels.push({
+          id,
+          name: humanizeName(id, provider),
+          provider,
+          pricing: { input: 0, output: 0 }, // unknown pricing
+        })
+      }
     }
   }
+
+  addModels(anthropicIds, 'anthropic')
+  addModels(openaiIds, 'openai')
+  addModels(googleIds, 'google')
+
+  // Fallback: if a provider API returned nothing but the key exists,
+  // include the known models from our pricing map for that provider
+  if (anthropicIds.length === 0 && process.env.ANTHROPIC_API_KEY) {
+    for (const info of Object.values(MODEL_PRICING)) {
+      if (info.provider === 'anthropic' && !seenIds.has(info.id)) {
+        availableModels.push(info)
+        seenIds.add(info.id)
+      }
+    }
+  }
+  if (openaiIds.length === 0 && process.env.OPENAI_API_KEY) {
+    for (const info of Object.values(MODEL_PRICING)) {
+      if (info.provider === 'openai' && !seenIds.has(info.id)) {
+        availableModels.push(info)
+        seenIds.add(info.id)
+      }
+    }
+  }
+  if (googleIds.length === 0 && process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    for (const info of Object.values(MODEL_PRICING)) {
+      if (info.provider === 'google' && !seenIds.has(info.id)) {
+        availableModels.push(info)
+        seenIds.add(info.id)
+      }
+    }
+  }
+
+  // Sort: known models (with pricing) first, then alphabetically
+  availableModels.sort((a, b) => {
+    const aKnown = a.pricing.input > 0 ? 0 : 1
+    const bKnown = b.pricing.input > 0 ? 0 : 1
+    if (aKnown !== bKnown) return aKnown - bKnown
+    return a.name.localeCompare(b.name)
+  })
 
   // Update cache
   cache = { models: availableModels, timestamp: now }
 
   const config = await getFullModelConfig()
-
   return NextResponse.json({ models: availableModels, config })
 }
 
