@@ -5,8 +5,9 @@ import { isAdminRequest } from '@/lib/auth/session'
 import { backfillMissingEmbeddings } from '@/lib/embeddings/backfill'
 import { parseWebcrawlerArticles } from '@/lib/webcrawl/processor'
 
-// Always fetch last 48h, deduplicate at article level by source_url/title
-const FETCH_WINDOW_HOURS = 48
+// Default: fetch last 48h. When a targetDate is specified, extend to 120h to find older emails.
+const DEFAULT_FETCH_WINDOW_HOURS = 48
+const EXTENDED_FETCH_WINDOW_HOURS = 120
 
 // Node.js runtime for cheerio compatibility
 export const runtime = 'nodejs'
@@ -48,7 +49,17 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        console.log('[WebCrawl] Starting...')
+        // Parse optional targetDate from request body
+        let targetDate: string | null = null
+        try {
+          const body = await request.json()
+          targetDate = body.targetDate || null
+        } catch {
+          // No body or invalid JSON — use defaults
+        }
+
+        const fetchWindowHours = targetDate ? EXTENDED_FETCH_WINDOW_HOURS : DEFAULT_FETCH_WINDOW_HOURS
+        console.log(`[WebCrawl] Starting...${targetDate ? ` (targetDate: ${targetDate})` : ''}`)
         const supabase = await createClient()
 
         // Get Gmail tokens
@@ -64,17 +75,23 @@ export async function POST(request: NextRequest) {
           return
         }
 
-        send({ type: 'start', phase: 'fetching', item: { title: 'Suche +synthszr-webcrawler E-Mails...', status: 'processing' } })
+        send({ type: 'start', phase: 'fetching', item: { title: `Suche +synthszr-webcrawler E-Mails${targetDate ? ` (${targetDate})` : ''}...`, status: 'processing' } })
 
         const gmailClient = new GmailClient(tokenData.refresh_token)
 
-        // Fetch only the most recent webcrawler email
-        const emails = await gmailClient.fetchEmailsBySubject(
+        // When a targetDate is set, fetch more emails so we can filter by date
+        const maxEmails = targetDate ? 10 : 1
+        const allEmails = await gmailClient.fetchEmailsBySubject(
           null,
           '+synthszr-webcrawler',
-          1,
-          FETCH_WINDOW_HOURS
+          maxEmails,
+          fetchWindowHours
         )
+
+        // Filter to emails matching the target date if specified
+        const emails = targetDate
+          ? allEmails.filter(e => e.date.toISOString().split('T')[0] === targetDate)
+          : allEmails
 
         console.log(`[WebCrawl] Found ${emails.length} +synthszr-webcrawler emails`)
 
@@ -94,7 +111,8 @@ export async function POST(request: NextRequest) {
         // Process each webcrawler email: parse articles directly from content
         for (let i = 0; i < emails.length; i++) {
           const email = emails[i]
-          const emailDate = email.date.toISOString().split('T')[0]
+          // Use targetDate if specified, otherwise use the email's actual date
+          const emailDate = targetDate || email.date.toISOString().split('T')[0]
 
           send({
             type: 'email',

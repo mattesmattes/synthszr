@@ -60,6 +60,7 @@ export default function DailyRepoPage() {
   const [webCrawlItems, setWebCrawlItems] = useState<Array<{ title: string; status: string; error?: string }>>([])
   const [webCrawlSummary, setWebCrawlSummary] = useState<{ emails: number; articles: number; errors: number; totalCharacters: number } | null>(null)
   const [webCrawlPhase, setWebCrawlPhase] = useState<string>('idle')
+  const [webCrawlTargetDate, setWebCrawlTargetDate] = useState<string>('')
 
   const supabase = createClient()
 
@@ -254,7 +255,9 @@ export default function DailyRepoPage() {
     try {
       const response = await fetch('/api/admin/webcrawl-fetch', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        body: JSON.stringify({ targetDate: webCrawlTargetDate || undefined }),
       })
 
       if (!response.ok) {
@@ -839,14 +842,26 @@ export default function DailyRepoPage() {
               WebCrawl
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Holt die neueste +synthszr-webcrawler E-Mail und crawlt die enthaltenen Links
+              Importiert Artikel aus +synthszr-webcrawler E-Mails
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-y-auto space-y-3">
             {webCrawlPhase === 'idle' && !webCrawlSummary && (
-              <div className="text-center py-6 text-muted-foreground">
-                <Globe className="h-10 w-10 mx-auto mb-2 opacity-20" />
-                <p className="text-sm">WebCrawl starten um Artikel aus der Webcrawler-Mail zu importieren</p>
+              <div className="space-y-4 py-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Datum (optional)</label>
+                  <input
+                    type="date"
+                    value={webCrawlTargetDate}
+                    onChange={(e) => setWebCrawlTargetDate(e.target.value)}
+                    className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    {webCrawlTargetDate
+                      ? `Importiert E-Mails vom ${new Date(webCrawlTargetDate + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })}`
+                      : 'Leer = neueste E-Mail (letzte 48h)'}
+                  </p>
+                </div>
               </div>
             )}
 
@@ -902,7 +917,7 @@ export default function DailyRepoPage() {
                 ) : (
                   <>
                     <Globe className="h-3 w-3" />
-                    WebCrawl starten
+                    {webCrawlTargetDate ? `Import (${webCrawlTargetDate})` : 'WebCrawl starten'}
                   </>
                 )}
               </Button>
