@@ -2302,7 +2302,7 @@ function AudioPage() {
 
                       {podigeeEpisodeUrl && (
                         <a
-                          href={podigeeEpisodeUrl}
+                          href="https://app.podigee.com/podcasts/87972"
                           target="_blank"
                           rel="noopener noreferrer"
                           className="block text-sm text-green-500 hover:underline text-center"
