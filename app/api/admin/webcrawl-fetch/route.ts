@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { GmailClient } from '@/lib/gmail/client'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { isAdminRequest } from '@/lib/auth/session'
 import { backfillMissingEmbeddings } from '@/lib/embeddings/backfill'
 import { parseWebcrawlerArticles } from '@/lib/webcrawl/processor'
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
         const fetchWindowHours = targetDate ? EXTENDED_FETCH_WINDOW_HOURS : DEFAULT_FETCH_WINDOW_HOURS
         console.log(`[WebCrawl] Starting...${targetDate ? ` (targetDate: ${targetDate})` : ''}`)
-        const supabase = await createClient()
+        const supabase = createAdminClient()
 
         // Get Gmail tokens
         const { data: tokenData, error: tokenError } = await supabase
@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
                   continue
                 }
 
-                await supabase
+                const { error: insertError } = await supabase
                   .from('daily_repo')
                   .insert({
                     source_type: 'webcrawl',
@@ -212,6 +212,10 @@ export async function POST(request: NextRequest) {
                     newsletter_date: emailDate,
                     email_received_at: email.date.toISOString(),
                   })
+
+                if (insertError) {
+                  throw new Error(`Insert fehlgeschlagen: ${insertError.message}`)
+                }
 
                 processedArticles++
                 emailArticlesSaved++
