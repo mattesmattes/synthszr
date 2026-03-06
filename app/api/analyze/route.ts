@@ -114,13 +114,17 @@ export async function POST(request: NextRequest) {
       promptText = activePrompt?.prompt_text || getDefaultPrompt()
     }
 
-    // Get content for the selected date (all items with this newsletter_date)
+    // Get content for the selected date AND previous day
+    // This supports day+1 workflows (e.g. analyzing yesterday's content today)
     const targetDate = date || new Date().toISOString().split('T')[0]
+    const prevDate = new Date(targetDate + 'T12:00:00Z')
+    prevDate.setDate(prevDate.getDate() - 1)
+    const previousDate = prevDate.toISOString().split('T')[0]
 
     const { data: rawItems } = await supabase
       .from('daily_repo')
       .select('id, title, content, source_type, source_email, source_url, collected_at')
-      .eq('newsletter_date', targetDate)
+      .in('newsletter_date', [targetDate, previousDate])
       .order('collected_at', { ascending: false })
 
     if (!rawItems || rawItems.length === 0) {

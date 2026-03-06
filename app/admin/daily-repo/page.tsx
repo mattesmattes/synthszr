@@ -299,9 +299,13 @@ export default function DailyRepoPage() {
 
               if (event.type === 'complete' && event.summary) {
                 setWebCrawlSummary(event.summary)
-                // Refresh data
+                // Refresh data — switch to target date if specified
                 fetchRepoSummaries()
-                fetchItemsForDate(selectedDate)
+                const refreshDate = webCrawlTargetDate || selectedDate
+                if (webCrawlTargetDate && webCrawlTargetDate !== selectedDate) {
+                  setSelectedDate(webCrawlTargetDate)
+                }
+                fetchItemsForDate(refreshDate)
               }
             } catch (e) {
               console.error('Error parsing SSE:', e)
