@@ -12,7 +12,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
-import type { AIModel } from './ghostwriter'
+import { type AIModel, resolveModel } from './ghostwriter'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
@@ -215,21 +215,21 @@ async function callModelNonStreaming(
   systemPrompt: string,
   model: AIModel
 ): Promise<string> {
-  if (model === 'gemini-2.5-pro' || model === 'gemini-2.0-flash') {
+  const resolved = resolveModel(model)
+
+  if (resolved?.provider === 'google') {
     const geminiModel = genAI.getGenerativeModel({
-      model,
+      model: resolved.modelId,
       systemInstruction: systemPrompt,
     })
     const result = await geminiModel.generateContent(prompt)
     return result.response.text()
   }
 
-  if (model === 'claude-opus-4' || model === 'claude-sonnet-4') {
+  if (resolved?.provider === 'anthropic') {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const modelId =
-      model === 'claude-opus-4' ? 'claude-opus-4-20250514' : 'claude-sonnet-4-20250514'
     const response = await anthropic.messages.create({
-      model: modelId,
+      model: resolved.modelId,
       max_tokens: 2048,
       system: systemPrompt,
       messages: [{ role: 'user', content: prompt }],
@@ -237,10 +237,10 @@ async function callModelNonStreaming(
     return (response.content[0] as { type: 'text'; text: string }).text
   }
 
-  if (model === 'gpt-5.2' || model === 'gpt-5.2-mini') {
+  if (resolved?.provider === 'openai') {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
     const response = await openai.chat.completions.create({
-      model,
+      model: resolved.modelId,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt },

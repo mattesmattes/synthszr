@@ -63,6 +63,19 @@ export const AI_MODEL_LABELS: Record<AIModel, string> = {
   'gpt-5.2-mini': 'GPT-5.2 Mini',
 }
 
+/**
+ * Resolve a model ID (full or short) to provider + actual API model ID.
+ * Accepts both short names (e.g. 'claude-sonnet-4') and full IDs (e.g. 'claude-sonnet-4-20250514').
+ */
+export function resolveModel(model: string): { provider: 'anthropic' | 'openai' | 'google'; modelId: string } | null {
+  if (model.startsWith('claude-opus-4')) return { provider: 'anthropic', modelId: model.includes('-2025') ? model : 'claude-opus-4-20250514' }
+  if (model.startsWith('claude-sonnet-4')) return { provider: 'anthropic', modelId: model.includes('-2025') ? model : 'claude-sonnet-4-20250514' }
+  if (model.startsWith('claude-haiku')) return { provider: 'anthropic', modelId: model.includes('-2025') || model.includes('-2024') ? model : 'claude-haiku-4-5-20251001' }
+  if (model.startsWith('gemini')) return { provider: 'google', modelId: model }
+  if (model.startsWith('gpt')) return { provider: 'openai', modelId: model }
+  return null
+}
+
 // Minimaler System-Prompt - nur für Parsing-Anforderungen
 // Alle inhaltlichen Anweisungen kommen aus dem Datenbank-Prompt
 const SYSTEM_PROMPT = `Du bist ein Ghostwriter. Befolge die Anweisungen im User-Prompt exakt.
@@ -233,14 +246,18 @@ export async function* streamGhostwriter(
 
   const userMessage = `${enhancedPrompt}\n\n---\n\nHier ist der Digest, aus dem du einen Blogartikel erstellen sollst:\n\n${digestContent}`
 
-  console.log(`[Ghostwriter] Using model: ${model}`)
+  const resolved = resolveModel(model)
+  console.log(`[Ghostwriter] Using model: ${model} → provider: ${resolved?.provider}, modelId: ${resolved?.modelId}`)
 
-  if (model === 'gpt-5.2' || model === 'gpt-5.2-mini') {
-    yield* streamOpenAI(userMessage, model)
-  } else if (model === 'gemini-2.5-pro' || model === 'gemini-2.0-flash') {
-    yield* streamGemini(userMessage, model)
-  } else if (model === 'claude-opus-4' || model === 'claude-sonnet-4') {
-    yield* streamClaude(userMessage, model)
+  if (!resolved) {
+    console.error(`[Ghostwriter] Unknown model: ${model}, falling back to claude-sonnet-4`)
+    yield* streamClaude(userMessage, 'claude-sonnet-4-20250514')
+  } else if (resolved.provider === 'openai') {
+    yield* streamOpenAI(userMessage, resolved.modelId)
+  } else if (resolved.provider === 'google') {
+    yield* streamGemini(userMessage, resolved.modelId)
+  } else {
+    yield* streamClaude(userMessage, resolved.modelId)
   }
 
   // Track pattern usage after generation
@@ -257,7 +274,7 @@ export async function* streamGhostwriter(
  */
 async function* streamGemini(
   userMessage: string,
-  modelId: 'gemini-2.5-pro' | 'gemini-2.0-flash'
+  modelId: string
 ): AsyncGenerator<string, void, unknown> {
   const model = genAI.getGenerativeModel({
     model: modelId,
@@ -279,16 +296,11 @@ async function* streamGemini(
  */
 async function* streamClaude(
   userMessage: string,
-  model: 'claude-opus-4' | 'claude-sonnet-4'
+  modelId: string
 ): AsyncGenerator<string, void, unknown> {
   const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
   })
-
-  // Map to actual model IDs
-  const modelId = model === 'claude-opus-4'
-    ? 'claude-opus-4-20250514'
-    : 'claude-sonnet-4-20250514'
 
   const stream = anthropic.messages.stream({
     model: modelId,
@@ -309,12 +321,12 @@ async function* streamClaude(
  */
 async function* streamOpenAI(
   userMessage: string,
-  model: 'gpt-5.2' | 'gpt-5.2-mini'
+  modelId: string
 ): AsyncGenerator<string, void, unknown> {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
   const stream = await openai.chat.completions.create({
-    model,
+    model: modelId,
     max_completion_tokens: 16384,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },

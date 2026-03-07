@@ -84,13 +84,18 @@ interface CombinedPost {
   urlIssueCount?: number
 }
 
-type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro' | 'gemini-2.0-flash'
-
-const AI_MODEL_LABELS: Record<AIModel, { label: string; color: string }> = {
+const AI_MODEL_LABELS: Record<string, { label: string; color: string }> = {
+  // Short names (legacy)
   'claude-opus-4': { label: 'Claude Opus 4', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' },
   'claude-sonnet-4': { label: 'Claude Sonnet 4', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
   'gemini-2.5-pro': { label: 'Gemini 2.5 Pro', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' },
-  'gemini-2.0-flash': { label: 'Gemini 3 Pro', color: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200' },
+  'gemini-2.0-flash': { label: 'Gemini 2.0 Flash', color: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200' },
+  'gpt-5.2': { label: 'GPT-5.2', color: 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200' },
+  'gpt-5.2-mini': { label: 'GPT-5.2 Mini', color: 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300' },
+  // Full provider IDs (from settings)
+  'claude-opus-4-20250514': { label: 'Claude Opus 4', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' },
+  'claude-sonnet-4-20250514': { label: 'Claude Sonnet 4', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
+  'claude-haiku-4-5-20251001': { label: 'Claude Haiku 4.5', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200' },
 }
 
 const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese', 'general']
@@ -596,10 +601,10 @@ export default function AdminPage() {
                           {post.category}
                         </Badge>
                       )}
-                      {post.ai_model && AI_MODEL_LABELS[post.ai_model as AIModel] && (
-                        <Badge className={`text-xs ${AI_MODEL_LABELS[post.ai_model as AIModel].color}`}>
+                      {post.ai_model && AI_MODEL_LABELS[post.ai_model] && (
+                        <Badge className={`text-xs ${AI_MODEL_LABELS[post.ai_model].color}`}>
                           <Bot className="h-3 w-3 mr-1" />
-                          {AI_MODEL_LABELS[post.ai_model as AIModel].label}
+                          {AI_MODEL_LABELS[post.ai_model].label}
                         </Badge>
                       )}
                       {post.urlsClean ? (
