@@ -101,15 +101,17 @@ const AI_MODEL_LABELS: Record<string, { label: string; color: string }> = {
   'claude-sonnet-4-6': { label: 'Claude Sonnet 4.6', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
 }
 
-/** Resolve ai_model string to a badge label, with fallback for unknown models */
-function getModelBadge(aiModel: string): { label: string; color: string } | null {
+/** Resolve ai_model string to a badge label via exact or prefix match */
+function getModelBadge(aiModel: string): { label: string; color: string } {
   if (AI_MODEL_LABELS[aiModel]) return AI_MODEL_LABELS[aiModel]
-  // Fuzzy match: try prefix matching for versioned model IDs
   for (const [key, value] of Object.entries(AI_MODEL_LABELS)) {
     if (aiModel.startsWith(key) || key.startsWith(aiModel)) return value
   }
-  // Unknown model — show raw name with neutral styling
-  return { label: aiModel, color: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200' }
+  // Provider-based color for any new model variant
+  if (aiModel.startsWith('claude')) return { label: aiModel, color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' }
+  if (aiModel.startsWith('gpt')) return { label: aiModel, color: 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200' }
+  if (aiModel.startsWith('gemini')) return { label: aiModel, color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' }
+  return { label: aiModel, color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' }
 }
 
 const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese', 'general']
