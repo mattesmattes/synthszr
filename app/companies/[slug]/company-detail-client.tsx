@@ -3,6 +3,13 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { SynthszrBadge } from '@/components/synthszr-badge'
+import { StockSynthszrLayer } from '@/components/stock-synthszr-layer'
+import { PremarketSynthszrLayer } from '@/components/premarket-synthszr-layer'
+import {
+  RATING_BADGE_STYLES,
+  RATING_LABELS,
+} from '@/lib/synthszr/rating-styles'
+import { cn } from '@/lib/utils'
 
 interface CompanyInfo {
   name: string
@@ -25,6 +32,8 @@ interface RatingData {
   changePercent?: number | null
   direction?: 'up' | 'down' | 'neutral' | null
   isin?: string
+  keyTakeaways?: string[]
+  rationale?: string | null
 }
 
 interface CompanyDetailClientProps {
@@ -38,7 +47,7 @@ interface CompanyDetailClientProps {
  * Client component for company detail page
  *
  * Fetches rating data and displays company header with rating badge,
- * followed by list of related articles (H2 sections within posts).
+ * analysis summary box, and list of related articles.
  */
 const defaultTranslations: Record<string, string> = {
   'companies.articles_count_singular': '{count} News erwähnt {company}',
@@ -50,25 +59,42 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
   const t = translations || defaultTranslations
   const [ratingData, setRatingData] = useState<RatingData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showLayer, setShowLayer] = useState(false)
 
   useEffect(() => {
     async function fetchRating() {
       try {
         if (company.type === 'public') {
-          const response = await fetch('/api/stock-synthszr/batch-quotes', {
+          // Use batch-ratings (includes key takeaways + rationale)
+          const response = await fetch('/api/stock-synthszr/batch-ratings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ companies: [company.slug] }),
           })
           const data = await response.json()
-          if (data.ok && data.quotes?.[0]) {
-            const quote = data.quotes[0]
+          if (data.ok && data.ratings?.[0]) {
+            const r = data.ratings[0]
             setRatingData({
-              rating: quote.rating,
+              rating: r.rating,
+              keyTakeaways: r.keyTakeaways,
+              rationale: r.rationale,
+            })
+          }
+          // Also fetch quote data for ticker/change
+          const quoteResponse = await fetch('/api/stock-synthszr/batch-quotes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ companies: [company.slug] }),
+          })
+          const quoteData = await quoteResponse.json()
+          if (quoteData.ok && quoteData.quotes?.[0]) {
+            const quote = quoteData.quotes[0]
+            setRatingData(prev => prev ? {
+              ...prev,
               ticker: quote.ticker,
               changePercent: quote.changePercent,
               direction: quote.direction,
-            })
+            } : null)
           }
         } else {
           const response = await fetch('/api/premarket/batch-ratings', {
@@ -82,6 +108,8 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
             setRatingData({
               rating: rating.rating,
               isin: rating.isin,
+              keyTakeaways: rating.keyTakeaways,
+              rationale: rating.rationale,
             })
           }
         }
@@ -103,10 +131,13 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
     })
   }
 
+  const hasAnalysis = ratingData?.rating && (ratingData.keyTakeaways?.length || ratingData.rationale)
+  const analysisLabel = company.type === 'premarket' ? 'Premarket-Synthszr' : 'Stock-Synthszr'
+
   return (
     <>
       {/* Header */}
-      <div className="mb-12 border-b border-border pb-8">
+      <div className="mb-8 border-b border-border pb-8">
         <div className="flex items-center gap-4 flex-wrap">
           <h1 className="text-3xl font-bold tracking-tight">{company.name}</h1>
           {loading ? (
@@ -139,6 +170,61 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
         )}
       </div>
 
+      {/* Analysis Summary Box */}
+      {loading ? (
+        <div className="mb-8 border border-border rounded-lg p-5 animate-pulse">
+          <div className="h-5 w-40 bg-muted rounded mb-3" />
+          <div className="space-y-2">
+            <div className="h-4 w-full bg-muted rounded" />
+            <div className="h-4 w-3/4 bg-muted rounded" />
+          </div>
+        </div>
+      ) : hasAnalysis ? (
+        <div className="mb-8 border border-border rounded-lg p-5 bg-card">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              {analysisLabel}
+            </span>
+            {ratingData.rating && (
+              <span className={cn(
+                'text-xs font-bold px-2 py-0.5 rounded',
+                RATING_BADGE_STYLES[ratingData.rating]
+              )}>
+                {RATING_LABELS[ratingData.rating]}
+              </span>
+            )}
+          </div>
+
+          {/* Key Takeaways */}
+          {ratingData.keyTakeaways && ratingData.keyTakeaways.length > 0 && (
+            <ul className="space-y-1.5 mb-3">
+              {ratingData.keyTakeaways.map((takeaway, i) => (
+                <li key={i} className="text-sm text-foreground flex gap-2">
+                  <span className="text-muted-foreground shrink-0">•</span>
+                  <span>{takeaway}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Vote Rationale */}
+          {ratingData.rationale && (
+            <p className="text-sm text-muted-foreground mb-3">
+              <span className="font-semibold text-foreground">Vote:</span>{' '}
+              {ratingData.rationale}
+            </p>
+          )}
+
+          {/* Link to full analysis */}
+          <button
+            onClick={() => setShowLayer(true)}
+            className="text-sm font-medium text-accent hover:underline cursor-pointer"
+          >
+            Ausführliche Analyse hier →
+          </button>
+        </div>
+      ) : null}
+
       {/* Articles List */}
       <div className="space-y-4">
         {articles.map((article, idx) => (
@@ -161,6 +247,21 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
           </Link>
         ))}
       </div>
+
+      {/* Analysis Layer */}
+      {showLayer && company.type === 'public' && (
+        <StockSynthszrLayer
+          company={company.slug}
+          onClose={() => setShowLayer(false)}
+        />
+      )}
+      {showLayer && company.type === 'premarket' && (
+        <PremarketSynthszrLayer
+          company={company.slug}
+          isin={ratingData?.isin}
+          onClose={() => setShowLayer(false)}
+        />
+      )}
     </>
   )
 }

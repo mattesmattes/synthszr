@@ -18,6 +18,8 @@ export interface StockRatingResult {
   company: string
   rating: 'BUY' | 'HOLD' | 'SELL' | null
   cached: boolean
+  keyTakeaways?: string[]
+  rationale?: string
 }
 
 /**
@@ -80,6 +82,8 @@ export async function POST(request: NextRequest) {
           company: company.trim(),
           rating: cached.data.final_recommendation.rating,
           cached: true,
+          keyTakeaways: cached.data.key_takeaways?.slice(0, 3),
+          rationale: cached.data.final_recommendation.rationale,
         })
       } else {
         results.push({

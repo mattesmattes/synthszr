@@ -16,6 +16,8 @@ export interface PremarketRatingResult {
   latestPrice: number | null
   currency: string | null
   cached: boolean
+  keyTakeaways?: string[]
+  rationale?: string | null
 }
 
 /**
@@ -90,6 +92,8 @@ export async function POST(request: NextRequest) {
             latestPrice: item.latestPrice,
             currency: item.instrument.currency,
             cached: true, // The API caches responses
+            keyTakeaways: item.synthesis?.keyTakeaways?.slice(0, 3),
+            rationale: item.synthesis?.rationale,
           })
         } else {
           results.push({
