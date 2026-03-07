@@ -10,6 +10,23 @@ import {
 } from '@/lib/synthszr/rating-styles'
 import { trackEvent } from '@/lib/analytics/tracker'
 import { cn } from '@/lib/utils'
+import type { ReactNode } from 'react'
+
+/** Render markdown-style [text](url) links as clickable <a> tags */
+function renderWithLinks(text: string): ReactNode {
+  const parts = text.split(/(\[[^\]]+\]\([^)]+\))/)
+  return parts.map((part, i) => {
+    const match = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+    if (match) {
+      return (
+        <a key={i} href={match[2]} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+          {match[1]}
+        </a>
+      )
+    }
+    return part
+  })
+}
 
 interface CompanyInfo {
   name: string
@@ -179,7 +196,7 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
               {ratingData.keyTakeaways.map((takeaway, i) => (
                 <li key={i} className="text-sm text-foreground flex gap-2">
                   <span className="text-muted-foreground shrink-0">•</span>
-                  <span>{takeaway}</span>
+                  <span>{renderWithLinks(takeaway)}</span>
                 </li>
               ))}
             </ul>
@@ -188,7 +205,7 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
           {ratingData.rationale && (
             <p className="text-sm text-muted-foreground mb-3">
               <span className="font-semibold text-foreground">Vote:</span>{' '}
-              {ratingData.rationale}
+              {renderWithLinks(ratingData.rationale)}
             </p>
           )}
 
