@@ -17,7 +17,6 @@ import {
   Tag,
   Type,
   AlignLeft,
-  Bot,
   ListPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -87,17 +86,6 @@ interface SourceDistribution {
   count: number
   percentage: number
 }
-
-type AIModel = 'claude-opus-4' | 'claude-sonnet-4' | 'gemini-2.5-pro' | 'gemini-2.0-flash' | 'gpt-5.2' | 'gpt-5.2-mini'
-
-const AI_MODELS: { value: AIModel; label: string; description: string }[] = [
-  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Schnell, großer Kontext (1M+ Token)' },
-  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: 'Sehr schnell, kostengünstig' },
-  { value: 'gpt-5.2', label: 'GPT-5.2', description: 'OpenAI Flagship, Reasoning + Writing' },
-  { value: 'gpt-5.2-mini', label: 'GPT-5.2 Mini', description: 'OpenAI schnell, kosteneffizient' },
-  { value: 'claude-sonnet-4', label: 'Claude Sonnet 4', description: 'Ausgewogen, gute Qualität' },
-  { value: 'claude-opus-4', label: 'Claude Opus 4', description: 'Höchste Qualität, langsamer' },
-]
 
 // Generate slug from title
 function generateSlug(title: string): string {
@@ -197,8 +185,7 @@ export default function CreateArticlePage() {
   const [saving, setSaving] = useState(false)
   const [vocabOpen, setVocabOpen] = useState(false)
   const [vocabularyIntensity, setVocabularyIntensity] = useState(10)
-  const [selectedModel, setSelectedModel] = useState<AIModel>('gemini-2.5-pro')
-  const [usedModel, setUsedModel] = useState<AIModel | null>(null)
+  const [usedModel, setUsedModel] = useState<string | null>(null)
 
   // Publish date: smart default (tomorrow if after 17:00 Berlin time, else today)
   const [publishDate, setPublishDate] = useState<string>(() => {
@@ -372,7 +359,6 @@ export default function CreateArticlePage() {
           useSelected: true,
           maxItems: maxQueueItems,
           vocabularyIntensity,
-          model: selectedModel,
           pipeline: true,
         }),
         credentials: 'include',
@@ -454,7 +440,7 @@ export default function CreateArticlePage() {
       setPipelineStatus(null)
       setPipelineProgress(null)
     }
-  }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity, selectedModel])
+  }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity])
 
   function copyToClipboard() {
     navigator.clipboard.writeText(articleContent)
@@ -673,7 +659,7 @@ export default function CreateArticlePage() {
         word_count: bodyContent.split(/\s+/).length,
         status: 'draft',
         created_at: `${publishDate}T07:00:00.000+01:00`, // 7 Uhr MEZ als fester Zeitstempel
-        ai_model: usedModel || selectedModel, // Store the model used for generation
+        ai_model: usedModel || null, // Model comes from settings, stored after generation
         // Store queue item IDs - will be marked as "used" when post is published
         pending_queue_item_ids: usedQueueItemIds.length > 0 ? usedQueueItemIds : [],
       }).select('id').single()
@@ -726,7 +712,7 @@ export default function CreateArticlePage() {
 
       // Initialize edit history with original AI content (for learning from edits)
       if (newPost?.id) {
-        ensureInitialEditHistory(newPost.id, tiptapContent, usedModel || selectedModel, supabase)
+        ensureInitialEditHistory(newPost.id, tiptapContent, usedModel || 'unknown', supabase)
           .then(() => console.log('[EditLearning] Initialized edit history for new post'))
           .catch(err => console.error('[EditLearning] Failed to init history:', err))
 
@@ -896,38 +882,6 @@ export default function CreateArticlePage() {
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Kein aktiver Prompt. Erstelle einen unter Ghostwriter-Prompts.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* AI Model Selection */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Bot className="h-4 w-4" />
-                AI-Modell
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Select value={selectedModel} onValueChange={(value: AIModel) => setSelectedModel(value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Modell wählen..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {AI_MODELS.map(model => (
-                    <SelectItem key={model.value} value={model.value}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{model.label}</span>
-                        <span className="text-xs text-muted-foreground">{model.description}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {usedModel && usedModel !== selectedModel && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Letzter Artikel generiert mit: <Badge variant="outline" className="text-xs">{AI_MODELS.find(m => m.value === usedModel)?.label}</Badge>
                 </p>
               )}
             </CardContent>

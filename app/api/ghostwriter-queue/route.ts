@@ -13,8 +13,7 @@ import { runGhostwriterPipeline, type PipelineItem } from '@/lib/claude/ghostwri
 import { getBalancedSelection, getSelectedItems, selectItemsForArticle } from '@/lib/news-queue/service'
 import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
-
-const VALID_MODELS: AIModel[] = ['claude-opus-4', 'claude-sonnet-4', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gpt-5.2', 'gpt-5.2-mini']
+import { getModelForUseCase } from '@/lib/ai/model-config'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -36,12 +35,13 @@ export async function POST(request: NextRequest) {
       maxItems = 25,       // Max items if using balanced selection (fallback)
       promptId,
       vocabularyIntensity = 50,
-      model: requestedModel,
       pipeline = true,     // Two-pass pipeline (default) vs single-pass
     } = body
 
-    const model: AIModel = VALID_MODELS.includes(requestedModel) ? requestedModel : 'gemini-2.5-pro'
-    console.log(`[Ghostwriter-Queue] Model: ${model}, Items: ${queueItemIds?.length || 'auto-select'}, useSelected: ${useSelected}, pipeline: ${pipeline}`)
+    // Model comes from central settings (admin/settings → KI-Modelle tab)
+    const configModel = await getModelForUseCase('ghostwriter')
+    const model = configModel as AIModel
+    console.log(`[Ghostwriter-Queue] Model: ${model} (from settings), Items: ${queueItemIds?.length || 'auto-select'}, useSelected: ${useSelected}, pipeline: ${pipeline}`)
 
     const supabase = await createClient()
 

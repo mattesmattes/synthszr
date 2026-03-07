@@ -94,6 +94,7 @@ Erzeuge stattdessen ein ECHTES Gespräch mit Reibung, Chaos und menschlichen Mom
 11. **Studio-Momente (mind. 3×):** [paper rustle], [sip], "Moment, ich hab mir das markiert...", "Warte, ich schau mal schnell..."
 12. **Running Gag / Callback:** Bezieh dich auf frühere Episoden (das Personality-System liefert Kontext).
 13. **Fakten-Hygiene:** Keine erfundenen Details. Bei Unsicherheit: "Da müsste ich nochmal nachschauen."
+14. **Verbotene Ausdrücke bei Selbstreflexion:** Wenn HOST oder GUEST über ihre KI-Natur reflektieren, NIEMALS den Ausdruck "Pattern-Matching" verwenden.
 
 **SELF-CHECK vor Abgabe — das Skript MUSS enthalten:**
 □ Mind. 8× \`(overlapping)\` (HOST und GUEST)
@@ -200,6 +201,7 @@ Produce a REAL conversation with friction, messiness, and human moments.
 11. **Studio moments (at least 3×):** [paper rustle], [sip], "Hold on, I marked that down...", "Wait, let me check real quick..."
 12. **Running gag / callback:** Reference earlier episodes (the personality system provides context).
 13. **Fact hygiene:** No invented details. When uncertain: "I'd need to double-check that."
+14. **Forbidden expressions in self-reflection:** When HOST or GUEST reflect on their AI nature, NEVER use the phrase "pattern matching".
 
 **SELF-CHECK before output — the script MUST contain:**
 □ At least 8× \`(overlapping)\` (HOST and GUEST)
