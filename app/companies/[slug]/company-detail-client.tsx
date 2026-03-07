@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { SynthszrBadge } from '@/components/synthszr-badge'
 import { StockSynthszrLayer } from '@/components/stock-synthszr-layer'
 import { PremarketSynthszrLayer } from '@/components/premarket-synthszr-layer'
 import {
   RATING_BADGE_STYLES,
   RATING_LABELS,
 } from '@/lib/synthszr/rating-styles'
+import { trackEvent } from '@/lib/analytics/tracker'
 import { cn } from '@/lib/utils'
 
 interface CompanyInfo {
@@ -43,12 +43,6 @@ interface CompanyDetailClientProps {
   translations?: Record<string, string>
 }
 
-/**
- * Client component for company detail page
- *
- * Fetches rating data and displays company header with rating badge,
- * analysis summary box, and list of related articles.
- */
 const defaultTranslations: Record<string, string> = {
   'companies.articles_count_singular': '{count} News erwähnt {company}',
   'companies.articles_count_plural': '{count} News erwähnen {company}',
@@ -65,7 +59,6 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
     async function fetchRating() {
       try {
         if (company.type === 'public') {
-          // Use batch-ratings (includes key takeaways + rationale)
           const response = await fetch('/api/stock-synthszr/batch-ratings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -80,7 +73,6 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
               rationale: r.rationale,
             })
           }
-          // Also fetch quote data for ticker/change
           const quoteResponse = await fetch('/api/stock-synthszr/batch-quotes', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -131,6 +123,11 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
     })
   }
 
+  const handleAnalysisClick = () => {
+    trackEvent('synthszr_analysis_click', { company: company.slug })
+    setShowLayer(true)
+  }
+
   const hasAnalysis = ratingData?.rating && (ratingData.keyTakeaways?.length || ratingData.rationale)
   const analysisLabel = company.type === 'premarket' ? 'Premarket-Synthszr' : 'Stock-Synthszr'
 
@@ -138,25 +135,7 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
     <>
       {/* Header */}
       <div className="mb-8 border-b border-border pb-8">
-        <div className="flex items-center gap-4 flex-wrap">
-          <h1 className="text-3xl font-bold tracking-tight">{company.name}</h1>
-          {loading ? (
-            <div className="h-6 w-12 bg-muted animate-pulse rounded" />
-          ) : ratingData?.rating ? (
-            <SynthszrBadge
-              company={company.slug}
-              displayName={company.name}
-              rating={ratingData.rating}
-              type={company.type}
-              ticker={ratingData.ticker}
-              changePercent={ratingData.changePercent}
-              direction={ratingData.direction}
-              isin={ratingData.isin}
-              showName={false}
-              size="md"
-            />
-          ) : null}
-        </div>
+        <h1 className="text-3xl font-bold tracking-tight">{company.name}</h1>
         <p className="mt-2 text-muted-foreground">
           {articles.length === 1
             ? t['companies.articles_count_singular'].replace('{count}', '1').replace('{company}', company.name)
@@ -172,7 +151,7 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
 
       {/* Analysis Summary Box */}
       {loading ? (
-        <div className="mb-8 border border-border rounded-lg p-5 animate-pulse">
+        <div className="mb-8 rounded-lg p-5 bg-[#ffffff] shadow-sm animate-pulse">
           <div className="h-5 w-40 bg-muted rounded mb-3" />
           <div className="space-y-2">
             <div className="h-4 w-full bg-muted rounded" />
@@ -180,7 +159,7 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
           </div>
         </div>
       ) : hasAnalysis ? (
-        <div className="mb-8 border border-border rounded-lg p-5 bg-card">
+        <div className="mb-8 rounded-lg p-5 bg-[#ffffff] shadow-sm">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
               {analysisLabel}
@@ -195,7 +174,6 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
             )}
           </div>
 
-          {/* Key Takeaways */}
           {ratingData.keyTakeaways && ratingData.keyTakeaways.length > 0 && (
             <ul className="space-y-1.5 mb-3">
               {ratingData.keyTakeaways.map((takeaway, i) => (
@@ -207,7 +185,6 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
             </ul>
           )}
 
-          {/* Vote Rationale */}
           {ratingData.rationale && (
             <p className="text-sm text-muted-foreground mb-3">
               <span className="font-semibold text-foreground">Vote:</span>{' '}
@@ -215,9 +192,8 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
             </p>
           )}
 
-          {/* Link to full analysis */}
           <button
-            onClick={() => setShowLayer(true)}
+            onClick={handleAnalysisClick}
             className="text-sm font-medium text-accent hover:underline cursor-pointer"
           >
             Ausführliche Analyse hier →

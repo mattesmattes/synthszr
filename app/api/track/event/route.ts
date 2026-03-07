@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createHash } from 'crypto'
 
-const VALID_EVENT_TYPES = ['page_view', 'stock_ticker_click', 'synthszr_vote_click', 'podcast_play']
+const VALID_EVENT_TYPES = ['page_view', 'stock_ticker_click', 'synthszr_vote_click', 'synthszr_analysis_click', 'podcast_play']
 
 export async function POST(request: NextRequest) {
   try {

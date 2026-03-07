@@ -1,5 +1,5 @@
 export function trackEvent(
-  eventType: 'page_view' | 'stock_ticker_click' | 'synthszr_vote_click' | 'podcast_play',
+  eventType: 'page_view' | 'stock_ticker_click' | 'synthszr_vote_click' | 'synthszr_analysis_click' | 'podcast_play',
   options?: { company?: string; locale?: string }
 ) {
   if (typeof window === 'undefined') return
