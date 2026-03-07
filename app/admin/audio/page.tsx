@@ -1997,7 +1997,7 @@ function AudioPage() {
                       </p>
                     </div>
 
-                    {/* Flirtation Meter */}
+                    {/* Flirtation Meter — editable */}
                     <div className={`space-y-2 p-4 rounded-lg border ${personality?.relationship_paused ? 'opacity-50' : ''}`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -2010,12 +2010,17 @@ function AudioPage() {
                           {Math.round((personality?.flirtation_tendency ?? 0) * 100)}%
                         </span>
                       </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-pink-400 transition-all duration-500"
-                          style={{ width: `${(personality?.flirtation_tendency ?? 0) * 100}%` }}
-                        />
-                      </div>
+                      <Slider
+                        value={[Math.round((personality?.flirtation_tendency ?? 0) * 100)]}
+                        min={0}
+                        max={100}
+                        step={5}
+                        disabled={!personality || personality.relationship_paused}
+                        onValueCommit={(value) => {
+                          updateRelationship({ flirtation_tendency: value[0] / 100 })
+                        }}
+                        className="[&_[role=slider]]:bg-pink-400"
+                      />
                       <p className="text-xs text-muted-foreground">
                         Wie oft persönliche Momente aufkommen — werden dann als &quot;nur KI&quot; abgewürgt
                       </p>
