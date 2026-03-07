@@ -96,6 +96,20 @@ const AI_MODEL_LABELS: Record<string, { label: string; color: string }> = {
   'claude-opus-4-20250514': { label: 'Claude Opus 4', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' },
   'claude-sonnet-4-20250514': { label: 'Claude Sonnet 4', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
   'claude-haiku-4-5-20251001': { label: 'Claude Haiku 4.5', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200' },
+  // Variant IDs (from external tools)
+  'claude-opus-4-6': { label: 'Claude Opus 4.6', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' },
+  'claude-sonnet-4-6': { label: 'Claude Sonnet 4.6', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
+}
+
+/** Resolve ai_model string to a badge label, with fallback for unknown models */
+function getModelBadge(aiModel: string): { label: string; color: string } | null {
+  if (AI_MODEL_LABELS[aiModel]) return AI_MODEL_LABELS[aiModel]
+  // Fuzzy match: try prefix matching for versioned model IDs
+  for (const [key, value] of Object.entries(AI_MODEL_LABELS)) {
+    if (aiModel.startsWith(key) || key.startsWith(aiModel)) return value
+  }
+  // Unknown model — show raw name with neutral styling
+  return { label: aiModel, color: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200' }
 }
 
 const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese', 'general']
@@ -601,12 +615,15 @@ export default function AdminPage() {
                           {post.category}
                         </Badge>
                       )}
-                      {post.ai_model && AI_MODEL_LABELS[post.ai_model] && (
-                        <Badge className={`text-xs ${AI_MODEL_LABELS[post.ai_model].color}`}>
-                          <Bot className="h-3 w-3 mr-1" />
-                          {AI_MODEL_LABELS[post.ai_model].label}
-                        </Badge>
-                      )}
+                      {post.ai_model && (() => {
+                        const badge = getModelBadge(post.ai_model)
+                        return badge ? (
+                          <Badge className={`text-xs ${badge.color}`}>
+                            <Bot className="h-3 w-3 mr-1" />
+                            {badge.label}
+                          </Badge>
+                        ) : null
+                      })()}
                       {post.urlsClean ? (
                         <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800">
                           <ShieldCheck className="h-3 w-3 mr-1" />
