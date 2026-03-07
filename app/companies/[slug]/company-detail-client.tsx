@@ -19,7 +19,7 @@ function renderWithLinks(text: string): ReactNode {
     const match = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
     if (match) {
       return (
-        <a key={i} href={match[2]} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+        <a key={i} href={match[2]} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:underline">
           {match[1]}
         </a>
       )
