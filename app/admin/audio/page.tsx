@@ -2016,6 +2016,12 @@ function AudioPage() {
                         max={100}
                         step={5}
                         disabled={!personality || personality.relationship_paused}
+                        onValueChange={(value) => {
+                          // Optimistic UI update during drag
+                          if (personality) {
+                            setPersonalityMap(prev => ({ ...prev, [personalityLocale]: { ...personality, flirtation_tendency: value[0] / 100 } }))
+                          }
+                        }}
                         onValueCommit={(value) => {
                           updateRelationship({ flirtation_tendency: value[0] / 100 })
                         }}
