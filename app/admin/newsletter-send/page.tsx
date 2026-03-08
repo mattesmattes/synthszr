@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, startTransition } from 'react'
-import { Send, FileText, Mail, Loader2, CheckCircle, AlertCircle, Clock, Users, History, Settings, FileEdit, Globe, AlertTriangle, Image } from 'lucide-react'
+import { Send, FileText, Mail, Loader2, CheckCircle, AlertCircle, Clock, Users, History, Settings, FileEdit, Globe, AlertTriangle, Image, Megaphone } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -34,6 +34,11 @@ interface CronSettings {
   minute: number
 }
 
+interface PromotionConfig {
+  enabled: boolean
+  activePromotion: string
+}
+
 interface EmailTemplateSettings {
   subjectTemplate: string
   footerText: string
@@ -59,6 +64,10 @@ export default function NewsletterSendPage() {
   // Cron settings state
   const [cronSettings, setCronSettings] = useState<CronSettings>({ enabled: false, hour: 9, minute: 0 })
   const [savingCron, setSavingCron] = useState(false)
+
+  // Promotion config state
+  const [promotionConfig, setPromotionConfig] = useState<PromotionConfig>({ enabled: false, activePromotion: 'podcast' })
+  const [savingPromotion, setSavingPromotion] = useState(false)
 
   // Template settings state
   const [templateSettings, setTemplateSettings] = useState<EmailTemplateSettings>(DEFAULT_TEMPLATE)
@@ -147,6 +156,17 @@ export default function NewsletterSendPage() {
       setTemplateSettings(templateData.value as EmailTemplateSettings)
     }
 
+    // Fetch promotion config
+    const { data: promotionData } = await supabase
+      .from('newsletter_settings')
+      .select('value')
+      .eq('key', 'promotion_config')
+      .single()
+
+    if (promotionData?.value) {
+      setPromotionConfig(promotionData.value as PromotionConfig)
+    }
+
     setLoading(false)
   }
 
@@ -170,6 +190,29 @@ export default function NewsletterSendPage() {
       setMessage({ type: 'error', text: 'Netzwerkfehler' })
     } finally {
       setSavingTemplate(false)
+      setTimeout(() => setMessage(null), 3000)
+    }
+  }
+
+  async function savePromotionConfig(newConfig: PromotionConfig) {
+    setSavingPromotion(true)
+    try {
+      const res = await fetch('/api/admin/newsletter-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'promotion_config', value: newConfig }),
+      })
+
+      if (res.ok) {
+        setPromotionConfig(newConfig)
+        setMessage({ type: 'success', text: 'Promotion-Einstellungen gespeichert' })
+      } else {
+        setMessage({ type: 'error', text: 'Fehler beim Speichern' })
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Netzwerkfehler' })
+    } finally {
+      setSavingPromotion(false)
       setTimeout(() => setMessage(null), 3000)
     }
   }
@@ -727,6 +770,70 @@ export default function NewsletterSendPage() {
                   <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
                     <Clock className="h-3 w-3 inline mr-1" />
                     Nächster Versand: täglich um {cronSettings.hour.toString().padStart(2, '0')}:{cronSettings.minute.toString().padStart(2, '0')} Uhr
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Megaphone className="h-4 w-4" />
+                  Promotions
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium">Promotion im Header</div>
+                    <div className="text-xs text-muted-foreground">
+                      Promo-Banner über dem Cover-Bild anzeigen
+                    </div>
+                  </div>
+                  <Switch
+                    checked={promotionConfig.enabled}
+                    onCheckedChange={(checked) => {
+                      savePromotionConfig({ ...promotionConfig, enabled: checked })
+                    }}
+                    disabled={savingPromotion}
+                  />
+                </div>
+
+                {promotionConfig.enabled && (
+                  <div className="pt-2 border-t space-y-2">
+                    <label className="text-xs text-muted-foreground block">
+                      Aktive Promotion
+                    </label>
+                    {[
+                      { key: 'podcast', label: 'Synthesizer Daily Podcast', img: '/api/newsletter/promo-block' },
+                      { key: 'codecrash', label: 'CodeCrash Buch', img: '/codecrash-promo.gif' },
+                    ].map((promo) => (
+                      <label
+                        key={promo.key}
+                        className={`flex items-center gap-3 p-2 rounded border cursor-pointer transition-colors ${
+                          promotionConfig.activePromotion === promo.key
+                            ? 'border-primary bg-primary/5'
+                            : 'border-transparent hover:bg-muted/50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="activePromotion"
+                          value={promo.key}
+                          checked={promotionConfig.activePromotion === promo.key}
+                          onChange={() => {
+                            savePromotionConfig({ ...promotionConfig, activePromotion: promo.key })
+                          }}
+                          className="accent-primary"
+                        />
+                        <div className="flex-1 text-sm">{promo.label}</div>
+                        <img
+                          src={promo.img}
+                          alt={promo.label}
+                          className="h-8 w-16 object-cover rounded border"
+                        />
+                      </label>
+                    ))}
                   </div>
                 )}
               </CardContent>
