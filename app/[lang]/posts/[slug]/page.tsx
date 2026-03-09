@@ -355,7 +355,7 @@ export default async function PostPage({ params }: PageProps) {
             href={activePromo.linkUrl}
             target={activePromo.linkUrl.startsWith('http') ? '_blank' : undefined}
             rel={activePromo.linkUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
-            className="block mb-6 -mx-6 rounded-lg overflow-hidden hover:opacity-90 transition-opacity"
+            className="block -mx-6 rounded-lg overflow-hidden hover:opacity-90 transition-opacity"
           >
             <img
               src={activePromo.imageUrl}
