@@ -8,7 +8,7 @@ import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
-import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
+import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, getDefaultGhostwriterPrompt, type AIModel } from '@/lib/claude/ghostwriter'
 import { runGhostwriterPipeline, type PipelineItem } from '@/lib/claude/ghostwriter-pipeline'
 import { getBalancedSelection, getSelectedItems, selectItemsForArticle } from '@/lib/news-queue/service'
 import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
       if (promptError) {
         console.warn(`[Ghostwriter-Queue] Prompt ${promptId} not found, using default`)
       }
-      promptText = prompt?.prompt_text || getDefaultPrompt()
+      promptText = prompt?.prompt_text || getDefaultGhostwriterPrompt()
     } else {
       const { data: activePrompt, error: activeError } = await supabase
         .from('ghostwriter_prompts')
@@ -261,7 +261,7 @@ export async function POST(request: NextRequest) {
       if (activeError) {
         console.warn('[Ghostwriter-Queue] No active prompt found, using default')
       }
-      promptText = activePrompt?.prompt_text || getDefaultPrompt()
+      promptText = activePrompt?.prompt_text || getDefaultGhostwriterPrompt()
     }
 
     // Get vocabulary
@@ -278,7 +278,49 @@ export async function POST(request: NextRequest) {
       vocabularyContext += vocabulary.map(v => `- "${v.term}": ${v.preferred_usage || ''}`).join('\n')
     }
 
-    const fullPrompt = promptText + vocabularyContext
+    // Get stylistic rules (same as digest route)
+    const { data: stylisticRules } = await supabase
+      .from('stylistic_rules')
+      .select('rule_type, name, description, examples, priority')
+      .eq('is_active', true)
+      .order('priority', { ascending: false })
+
+    let stylisticContext = ''
+    if (stylisticRules && stylisticRules.length > 0) {
+      stylisticContext = '\n\n---\n\nSTILISTISCHE RICHTLINIEN (Matthias Schrader Stil):\n'
+
+      const rulesByType = stylisticRules.reduce((acc, r) => {
+        if (!acc[r.rule_type]) acc[r.rule_type] = []
+        acc[r.rule_type].push(r)
+        return acc
+      }, {} as Record<string, typeof stylisticRules>)
+
+      if (rulesByType['sprachregister']) {
+        stylisticContext += `\n**SPRACHREGISTER:** ${rulesByType['sprachregister'][0].description}\n`
+      }
+      if (rulesByType['personalpronomina']) {
+        stylisticContext += `\n**PERSPEKTIVE:** ${rulesByType['personalpronomina'][0].description}\n`
+      }
+      if (rulesByType['interpunktion']) {
+        stylisticContext += `\n**INTERPUNKTION:** ${rulesByType['interpunktion'][0].description}\n`
+      }
+      if (rulesByType['textlaenge']) {
+        stylisticContext += `\n**SATZSTRUKTUR:** ${rulesByType['textlaenge'][0].description}\n`
+      }
+      if (rulesByType['metapherntyp'] && rulesByType['metapherntyp'].length > 0) {
+        stylisticContext += `\n**BEVORZUGTE METAPHERN-BEREICHE:**\n`
+        stylisticContext += rulesByType['metapherntyp'].map(r => `- ${r.description}`).join('\n')
+      }
+      if (rulesByType['autorenzitat'] && rulesByType['autorenzitat'].length > 0) {
+        stylisticContext += `\n\n**HÄUFIG ZITIERTE AUTOREN:** ${rulesByType['autorenzitat'].map(r => r.name).join(', ')}\n`
+      }
+      if (rulesByType['stilregel']) {
+        stylisticContext += `\n**WEITERE STILREGELN:**\n`
+        stylisticContext += rulesByType['stilregel'].map(r => `- ${r.description}`).join('\n')
+      }
+    }
+
+    const fullPrompt = promptText + vocabularyContext + stylisticContext
 
     // Build dynamic company lists from the actual data (synced from Glitch Green API)
     const publicCompanyList = Object.keys(KNOWN_COMPANIES).join(', ')
@@ -304,6 +346,12 @@ export async function POST(request: NextRequest) {
    - ERLAUBTE SATZANFÄNGE: Eigenname, Zahl, konkretes Substantiv, aktives Verb
    - VERBOTENE SATZANFÄNGE: "Das...", "Dies...", "Hier...", "Es...", "Was...", "Ob...", "Die Frage..."
    - ABSOLUT VERBOTEN: Kontrastpaare ("einerseits... andererseits", "nicht nur... sondern auch"), Abwarte-Formeln ("Es bleibt abzuwarten", "Die Zeit wird zeigen"), Potenzial-Phrasen ("Das Potenzial ist enorm"), Reframing ("Die eigentliche Frage ist..."), rhetorische Fragen am Ende, "Doch" als Satzanfang, Pseudo-Mündlichkeit ("Mal ehrlich:")
+   - GEDANKENSTRICHE: Niemals em-dashes (—) verwenden. Punkt, Komma, Doppelpunkt oder Semikolon nutzen.
+   - NEGATIONS-REFRAMING (FATALER FEHLER): "nicht X, sondern Y", "Das ist keine X, sondern Y", "Weniger X, mehr Y" — formuliere DIREKT POSITIV.
+   - TOTE KI-SPRACHE: "In der heutigen...", "Es ist wichtig zu beachten", "Gamechanger", "bahnbrechend", "unkompliziert"
+   - TOTE ÜBERGÄNGE: "darüber hinaus", "zusätzlich", "außerdem" (wenn mechanisch), "besonders interessant daran ist..."
+   - GUTER TAKE: "Anthropic monetarisiert Compliance-Arbeit. Enterprise-Kunden zahlen für ein Modell, das den Security-Review besteht, Intelligenz ist sekundär. Für Agenturen verschiebt sich der Pitch: 'ISO-27001-ready und auditierbar' schlägt jedes Performance-Argument."
+   - SCHLECHTER TAKE (VERMEIDEN): "Das ist ein bedeutender Schritt. Einerseits zeigt dies das Potenzial, andererseits bleibt abzuwarten..." [evaluativer Einstieg + Kontrastpaar + Abwarte-Formel]
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 
@@ -461,27 +509,4 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function getDefaultPrompt(): string {
-  return `Du bist ein erfahrener Tech-Blogger und schreibst für den Synthzr Newsletter.
-
-STIL UND TONALITÄT:
-- Schreibe in einem persönlichen, aber professionellen Ton
-- Nutze aktive Sprache und direkte Ansprache
-- Vermeide Buzzwords und leere Phrasen
-- Sei konkret und praxisorientiert
-
-STRUKTUR:
-- Beginne mit einem fesselnden Hook
-- Gliedere den Artikel in klare Abschnitte
-- Nutze Zwischenüberschriften für bessere Lesbarkeit
-- Schließe mit einem Call-to-Action oder Ausblick
-
-FORMAT:
-- Schreibe AUSSCHLIESSLICH auf Deutsch — Titel, alle Zwischenüberschriften (##) und der gesamte Fließtext
-- Nutze Markdown für Formatierung
-- Ziel: 800-1200 Wörter
-
-QUELLEN-DIVERSITÄT:
-- Achte darauf, News aus verschiedenen Quellen zu verwenden
-- Keine Quelle sollte den Artikel dominieren`
-}
+// Default prompt is now imported from '@/lib/claude/ghostwriter' as getDefaultGhostwriterPrompt

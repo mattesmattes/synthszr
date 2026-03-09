@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
-import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
+import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, getDefaultGhostwriterPrompt, type AIModel } from '@/lib/claude/ghostwriter'
 import { getSynthesesForDigest } from '@/lib/synthesis/pipeline'
 import { sanitizeUrl, isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
@@ -351,7 +351,7 @@ export async function POST(request: NextRequest) {
         .select('prompt_text')
         .eq('is_active', true)
         .single()
-      promptText = activePrompt?.prompt_text || getDefaultGhostwriterPrompt()
+      promptText = activePrompt?.prompt_text || getDefaultGhostwriterPrompt()  // shared default
     }
 
     // Get vocabulary dictionary
@@ -522,13 +522,21 @@ export async function POST(request: NextRequest) {
    - Satz 3-4: Kontext und Bedeutung
    - Satz 5-7: Einordnung und weiterführender Gedanke
 
-2. **SYNTHSZR TAKE:** Jeder "Synthszr Take:" MUSS MINDESTENS 5 Sätze haben (Ziel: 5-8 Sätze). Ein Take mit 2-3 Sätzen ist ZU KURZ!
-   - Analytisch begründete Einordnung, darf positiv oder negativ bewerten
-   - Basiert auf der mitgelieferten Hintergrund-Recherche
-   - VERBOTENE SATZSTRUKTUREN: Keine Kontrastpaare ("nicht nur... sondern auch", "einerseits... andererseits", "zwar... aber"), keine Parallelkonstruktionen (gleichförmige Satzanfänge), kein "nicht ob X, sondern ob Y"
-   - VERBOTENE PHRASEN: "Es bleibt abzuwarten", "Man darf gespannt sein", "Die Zeit wird zeigen", "Besonders bemerkenswert", "Spannend ist dabei", "Das Potenzial ist enorm", "Es zeigt sich", "Letztlich", "Am Ende des Tages", "revolutionär", "bahnbrechend", "wegweisend", "Die wahre [X] ist", "Die eigentliche [X] ist", "Die wirkliche [X] ist", "Die eigentliche Frage ist"
-   - VERBOTENE STILMITTEL: Keine rhetorischen Fragen am Ende, kein "Doch" als dramatischer Satzanfang, keine qualifizierenden Relativierungen ("— und das ist erst der Anfang"), keine Pseudo-Mündlichkeit ("Mal ehrlich:", "Seien wir ehrlich:")
-   - STATTDESSEN: Konkrete Fakten und Zahlen, aktive Verben, asymmetrische Satzlängen, nüchterne Analystensprache
+2. **SYNTHSZR TAKE:** Jeder "Synthszr Take:" MUSS MINDESTENS 5 Sätze haben (Ziel: 5-7 Sätze). Ein Take mit 2-3 Sätzen ist ZU KURZ!
+   - Schreibe als erfahrener Tech-Stratege für Fachkollegen — keine Dramatik, kein Überzeugungsversuch
+   - SATZ 1: Konkrete Beobachtung oder Zahl — KEIN evaluativer Einstieg ("Das ist wichtig/spannend/bemerkenswert")
+   - SATZ 2: Warum das strategisch relevant ist (Marktmechanik, Wirtschaftlichkeit, Wettbewerb)
+   - SATZ 3-4: Konkrete Implikation für IT-Dienstleister, Agenturen oder Produktentwickler
+   - SATZ 5: Nüchterne Einschätzung — positiv ODER negativ, nie unverbindlich-neutral
+   - ERLAUBTE SATZANFÄNGE: Eigenname, Zahl, konkretes Substantiv, aktives Verb
+   - VERBOTENE SATZANFÄNGE: "Das...", "Dies...", "Hier...", "Es...", "Was...", "Ob...", "Die Frage..."
+   - ABSOLUT VERBOTEN: Kontrastpaare ("einerseits... andererseits", "nicht nur... sondern auch"), Abwarte-Formeln ("Es bleibt abzuwarten", "Die Zeit wird zeigen"), Potenzial-Phrasen ("Das Potenzial ist enorm"), Reframing ("Die eigentliche Frage ist..."), rhetorische Fragen am Ende, "Doch" als Satzanfang, Pseudo-Mündlichkeit ("Mal ehrlich:")
+   - GEDANKENSTRICHE: Niemals em-dashes (—) verwenden. Punkt, Komma, Doppelpunkt oder Semikolon nutzen.
+   - NEGATIONS-REFRAMING (FATALER FEHLER): "nicht X, sondern Y", "Das ist keine X, sondern Y", "Weniger X, mehr Y" — formuliere DIREKT POSITIV.
+   - TOTE KI-SPRACHE: "In der heutigen...", "Es ist wichtig zu beachten", "Gamechanger", "bahnbrechend", "unkompliziert"
+   - TOTE ÜBERGÄNGE: "darüber hinaus", "zusätzlich", "außerdem" (wenn mechanisch), "besonders interessant daran ist..."
+   - GUTER TAKE: "Anthropic monetarisiert Compliance-Arbeit. Enterprise-Kunden zahlen für ein Modell, das den Security-Review besteht, Intelligenz ist sekundär. Für Agenturen verschiebt sich der Pitch: 'ISO-27001-ready und auditierbar' schlägt jedes Performance-Argument."
+   - SCHLECHTER TAKE (VERMEIDEN): "Das ist ein bedeutender Schritt. Einerseits zeigt dies das Potenzial, andererseits bleibt abzuwarten..." [evaluativer Einstieg + Kontrastpaar + Abwarte-Formel]
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
 
@@ -637,23 +645,4 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function getDefaultGhostwriterPrompt(): string {
-  return `Du bist ein erfahrener Tech-Blogger und schreibst für den Synthzr Newsletter.
-
-STIL UND TONALITÄT:
-- Schreibe in einem persönlichen, aber professionellen Ton
-- Nutze aktive Sprache und direkte Ansprache
-- Vermeide Buzzwords und leere Phrasen
-- Sei konkret und praxisorientiert
-
-STRUKTUR:
-- Beginne mit einem fesselnden Hook
-- Gliedere den Artikel in klare Abschnitte
-- Nutze Zwischenüberschriften für bessere Lesbarkeit
-- Schließe mit einem Call-to-Action oder Ausblick
-
-FORMAT:
-- Schreibe auf Deutsch
-- Nutze Markdown für Formatierung
-- Ziel: 800-1200 Wörter`
-}
+// Default prompt is now imported from '@/lib/claude/ghostwriter' as getDefaultGhostwriterPrompt

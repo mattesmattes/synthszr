@@ -12,6 +12,13 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
+import {
+  getActiveLearnedPatterns,
+  findSimilarEditExamples,
+  buildPromptEnhancement,
+  trackPatternUsage,
+  type LearnedPattern,
+} from '@/lib/edit-learning/retrieval'
 import { type AIModel, resolveModel } from './ghostwriter'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
@@ -67,7 +74,7 @@ ERLAUBTE SATZANFÄNGE im Take: Eigenname, Zahl, konkretes Substantiv, aktives Ve
 VERBOTENE SATZANFÄNGE: "Das...", "Dies...", "Hier...", "Es...", "Was...", "Ob...", "Die Frage..."
 
 POSITIVES BEISPIEL — GUTER TAKE:
-Synthszr Take: Anthropic monetarisiert nicht Intelligenz, sondern Compliance-Arbeit. Enterprise-Kunden zahlen für ein Modell, das den Security-Review besteht — nicht für das klügste. Für Agenturen verschiebt sich der Pitch: Nicht "schneller als euer Team", sondern "ISO-27001-ready und auditierbar". Wer das ignoriert, verliert Deals an Berater, die diesen Satz kennen. Modelle werden austauschbar; wer den Beschaffungsprozess beherrscht, gewinnt.
+Synthszr Take: Anthropic monetarisiert Compliance-Arbeit. Enterprise-Kunden zahlen für ein Modell, das den Security-Review besteht, Intelligenz ist sekundär. Für Agenturen verschiebt sich der Pitch: "ISO-27001-ready und auditierbar" schlägt jedes Performance-Argument. Wer das ignoriert, verliert Deals an Berater, die diesen Satz kennen. Modelle werden austauschbar; wer den Beschaffungsprozess beherrscht, gewinnt.
 
 NEGATIVES BEISPIEL — STRIKT VERBOTEN:
 Synthszr Take: Das ist ein bedeutender Schritt für die KI-Branche. Einerseits zeigt dies das enorme Potenzial der Technologie, andererseits bleibt abzuwarten, ob dieser Ansatz nachhaltig ist. Die eigentliche Frage ist nicht ob KI kommt, sondern ob Unternehmen bereit sind.
@@ -194,7 +201,14 @@ AUFGABE — EXAKT IN DIESER REIHENFOLGE, beginne mit "## ${heading}":
    PREMARKET: ${premarketCompanyList}
    WICHTIG: Die Quelle erscheint NUR in dieser Zeile — KEIN separates "**Quelle:**" Label davor oder danach.
 
-3. **SYNTHSZR TAKE:** "Synthszr Take:" gefolgt von 5-7 Sätzen im Analysten-Stil (sieh System-Prompt).`
+3. **SYNTHSZR TAKE:** "Synthszr Take:" gefolgt von 5-7 Sätzen im Analysten-Stil (sieh System-Prompt).
+
+SYNTHSZR TAKE CHECKLISTE:
+- MINDESTENS 5 Sätze (Ziel: 5-7)
+- Satz 1: Konkrete Beobachtung/Zahl, KEIN evaluativer Einstieg
+- VERBOTEN: Kontrastpaare, Abwarte-Formeln, Potenzial-Phrasen, Reframing, rhetorische Fragen, "Doch" als Satzanfang, Negations-Reframing ("nicht X, sondern Y"), Gedankenstriche (—)
+- Tote KI-Sprache: "In der heutigen...", "Gamechanger", "bahnbrechend"
+- Formuliere DIREKT POSITIV.`
 
   const text = await callModelNonStreaming(userPrompt, SECTION_SYSTEM_PROMPT, model)
 
@@ -290,6 +304,28 @@ export async function* runGhostwriterPipeline(
 
   yield { type: 'planned', itemCount: items.length }
 
+  // ── Edit Learning: Load patterns and examples ──────────────────────────────
+  let enhancedPrompt = promptText
+  let loadedPatterns: LearnedPattern[] = []
+  try {
+    const [patterns, examples] = await Promise.all([
+      getActiveLearnedPatterns(0.4, 20),
+      findSimilarEditExamples(
+        items.map(i => i.title).join(' ').slice(0, 2000), 3, 7
+      ),
+    ])
+    loadedPatterns = patterns
+    if (patterns.length > 0 || examples.length > 0) {
+      const enhancement = buildPromptEnhancement(patterns, examples)
+      if (enhancement) {
+        enhancedPrompt = `${promptText}\n\n---\n\n${enhancement}`
+        console.log(`[Pipeline] Enhanced prompt with ${patterns.length} patterns and ${examples.length} examples`)
+      }
+    }
+  } catch (err) {
+    console.error('[Pipeline] Failed to load Edit Learning patterns:', err)
+  }
+
   // Emit metadata block immediately so client can show title/excerpt
   const excerptLines = plan.excerptBullets
     .map(b => (b.startsWith('•') ? b : `• ${b}`))
@@ -323,7 +359,7 @@ export async function* runGhostwriterPipeline(
       const heading = plan.headings[String(itemIdx)] || item.title
 
       try {
-        results[i] = await writeSection(item, heading, plan.thesis, model, promptText)
+        results[i] = await writeSection(item, heading, plan.thesis, model, enhancedPrompt)
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
         console.error(`[Pipeline] writeSection ${i + 1} failed:`, errMsg)
@@ -343,6 +379,13 @@ export async function* runGhostwriterPipeline(
     yield { type: 'written', current: i + 1, total: orderedItems.length }
   }
   await workersPromise
+
+  // Track pattern usage after generation
+  if (loadedPatterns.length > 0) {
+    trackPatternUsage(loadedPatterns.map(p => p.id)).catch(err => {
+      console.error('[Pipeline] Failed to track pattern usage:', err)
+    })
+  }
 
   yield { type: 'assembling' }
 }
