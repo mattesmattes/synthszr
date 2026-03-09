@@ -89,10 +89,30 @@ ABSOLUT VERBOTEN:
 - Pseudo-Offenheit: "Ob das gelingt, ist offen", "Wie sich das entwickelt, bleibt unklar"
 - Rhetorische Fragen am Ende, "Doch" als Satzanfang, Pseudo-Mündlichkeit ("Mal ehrlich:")
 
-STILREGELN:
-- Asymmetrische Satzlängen: kurz–lang–mittel–kurz
-- Konkrete Fakten und Zahlen statt vager Adjektive
-- Aktive Verben statt Nominalstil`
+SCHREIBSTIL (GESAMTER ABSCHNITT — NEWS + TAKE):
+
+GRUNDHALTUNG:
+Schreib wie ein scharf denkender Mensch, der etwas zu sagen hat. Kein Vorgeplänkel, keine Ankündigung. Der erste Satz ist der stärkste. Komm sofort zum Punkt.
+
+SPRACHE:
+- Natürliche Verkürzungen: "ich hab", "du kannst nicht", "das reicht nicht"
+- Satzlänge variieren: kurze, harte Sätze. Dann ab und zu längere, die eine Beobachtung ausführen. Nie drei lange Sätze hintereinander.
+- Konkret statt abstrakt: Zahlen, Namen, greifbare Details. "Viele Unternehmen scheitern" ist wertlos. "Cotti Coffee hat 6.000 Shops in 12 Monaten eröffnet" ist ein Argument.
+- Unsicherheit klar markieren: "wahrscheinlich", "könnte sein" — klingt menschlich. Scheingewissheit wirkt aufgesetzt.
+- Einschübe in Klammern für ehrliche Kommentare oder kurze Abschweifungen (so wie hier).
+- Humor durch Präzision: unerwartet konkrete Details sind besser als jede Pointe. "Drei Unterschriften, zwei Committees, sechs Wochen" statt "der Prozess ist schwerfällig".
+- Aktive Verben statt Nominalstil: "X steigert Umsatz" statt "eine Umsatzsteigerung wird erzielt".
+
+FORMATIERUNG:
+- KEINE Gedankenstriche (—). Stattdessen: Komma, Punkt, Doppelpunkt, Semikolon oder Klammer.
+- Fettschrift sparsam: nur wenn ein Begriff wirklich heraussticht.
+
+VERBOTENE FORMULIERUNGEN:
+- Tote KI-Sprache: "In der heutigen...", "Es ist wichtig zu beachten", "Gamechanger", "bahnbrechend", "unkompliziert", "nutzen/einsetzen" als leere Business-Sprache
+- Tote Übergänge: "darüber hinaus", "zusätzlich", "außerdem" (wenn mechanisch), "besonders interessant daran ist...", "anders gesagt...", "um das einzuordnen..."
+- Engagement-Köder: "Lass das mal sacken", "Lies das nochmal", "Das verändert alles", "Punkt."
+- Generische Insider-Behauptungen: "Hier kommt der Teil, über den niemand spricht", "Was dir keiner sagt", alles mit "niemand" oder "die meisten merken nicht"
+- DER GROSSE FEHLER (FATAL): "Das ist nicht X. Das ist Y.", "Nicht X. Y.", "Vergiss X. Das ist Y.", "Weniger X, mehr Y." — jede Konstruktion, die erst ein Framing negiert und dann ein korrigiertes behauptet. Formuliere DIREKT POSITIV.`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass 1: Article Planning
@@ -234,9 +254,11 @@ AUFGABE — EXAKT IN DIESER REIHENFOLGE, beginne mit "## ${heading}" (falls die 
 SYNTHSZR TAKE CHECKLISTE:
 - MINDESTENS 5 Sätze (Ziel: 5-7)
 - Satz 1: Konkrete Beobachtung/Zahl, KEIN evaluativer Einstieg
-- VERBOTEN: Kontrastpaare, Abwarte-Formeln, Potenzial-Phrasen, Reframing, rhetorische Fragen, "Doch" als Satzanfang, Negations-Reframing ("nicht X, sondern Y"), Gedankenstriche (—)
-- Tote KI-Sprache: "In der heutigen...", "Gamechanger", "bahnbrechend"
-- Formuliere DIREKT POSITIV.`
+- VERBOTEN: Kontrastpaare, Abwarte-Formeln, Potenzial-Phrasen, Reframing, rhetorische Fragen, "Doch" als Satzanfang, Gedankenstriche (—)
+- FATAL: "Nicht X. Y.", "Vergiss X. Das ist Y.", "Weniger X, mehr Y." → DIREKT POSITIV formulieren.
+- Humor durch Präzision: unerwartet konkrete Details statt Pointen.
+- Einschübe in Klammern für ehrliche Kommentare erlaubt.
+- Klingt das wie ein Mensch, der das gedacht hat, oder wie ein Textgenerator?`
 
   const text = await callModelNonStreaming(userPrompt, SECTION_SYSTEM_PROMPT, model)
 
