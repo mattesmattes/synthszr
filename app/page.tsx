@@ -98,6 +98,30 @@ export default async function Page() {
     .slice(1)
     .filter(post => new Date(post.created_at) >= sevenDaysAgo)
 
+  // Fetch promotion config (same as newsletter send)
+  const { data: promoConfigData } = await supabase
+    .from('newsletter_settings')
+    .select('value')
+    .eq('key', 'promotion_config')
+    .single()
+
+  const promoConfig = promoConfigData?.value as { enabled: boolean; activePromotion: string } | null
+  const PROMOTIONS: Record<string, { imageUrl: string; linkUrl: string; alt: string }> = {
+    podcast: {
+      imageUrl: '/api/newsletter/promo-block',
+      linkUrl: '/',
+      alt: 'The daily synthszr podcast',
+    },
+    codecrash: {
+      imageUrl: '/codecrash-promo.gif',
+      linkUrl: 'https://codecrash.ai',
+      alt: 'CodeCrash — AI is pushing the cost of software toward zero',
+    },
+  }
+  const activePromo = promoConfig?.enabled && promoConfig?.activePromotion
+    ? PROMOTIONS[promoConfig.activePromotion] || null
+    : null
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* <BlogHeader /> */}
@@ -119,6 +143,21 @@ export default async function Page() {
                 Die News Synthese zum Start in den Tag.
               </span>
             </Link>
+
+            {activePromo && (
+              <a
+                href={activePromo.linkUrl}
+                target={activePromo.linkUrl.startsWith('http') ? '_blank' : undefined}
+                rel={activePromo.linkUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+                className="block mb-6 -mx-6 rounded-lg overflow-hidden hover:opacity-90 transition-opacity"
+              >
+                <img
+                  src={activePromo.imageUrl}
+                  alt={activePromo.alt}
+                  className="w-full h-auto"
+                />
+              </a>
+            )}
 
             <FeaturedArticle
               slug={featuredPost.slug}

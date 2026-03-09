@@ -98,19 +98,17 @@ STILREGELN:
 // Pass 1: Article Planning
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function planArticle(items: PipelineItem[]): Promise<ArticlePlan> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
-
+export async function planArticle(items: PipelineItem[], model: AIModel): Promise<ArticlePlan> {
   const itemList = items
     .map(
       (item, i) =>
-        `${i + 1}. TITEL: ${item.title}\n   QUELLE: ${item.source_display_name || item.source_identifier}\n   VORSCHAU: ${(item.content || '').slice(0, 200).replace(/\n/g, ' ')}`
+        `${i + 1}. TITEL: ${item.title}\n   QUELLE: ${item.source_display_name || item.source_identifier}\n   INHALT: ${(item.content || '').slice(0, 600).replace(/\n/g, ' ')}`
     )
     .join('\n\n')
 
-  const planPrompt = `Du bist Redakteur des Synthszr Newsletters (Tech-Strategie für IT-Dienstleister und Agenturen).
+  const planSystemPrompt = `Du bist Chef-Redakteur des Synthszr Newsletters. Dein Output ist ausschließlich valides JSON — keine Erklärungen, kein Markdown.`
 
-Analysiere diese ${items.length} News-Items und erstelle einen Artikel-Plan.
+  const planPrompt = `Analysiere diese ${items.length} News-Items und erstelle einen Artikel-Plan für den Synthszr Newsletter (Tech-Strategie für IT-Dienstleister und Agenturen).
 
 ITEMS:
 ${itemList}
@@ -120,19 +118,26 @@ REIHENFOLGE-PRINZIP:
 - MITTE: Unternehmensstrategien, Marktdynamiken, Funding, Partnerschaften
 - UNTEN: Politik, Regulierung, gesellschaftliche Debatten
 
-Erstelle folgenden JSON-Plan (antworte NUR mit validem JSON, keine Erklärungen):
+HEADLINE-STIL (HÖCHSTE PRIORITÄT):
+- articleTitle: Eine prägnante THESE oder ein pointierter Gedanke. Klug, trocken, gelegentlich lakonisch — wie ein Economist-Cover, nicht wie ein LinkedIn-Post.
+- VERBOTEN: Generische Titel wie "KI-Update", "Die wichtigsten News", "Was diese Woche passiert ist", "Neue Woche, neue Tools"
+- STATTDESSEN: Eine konkrete Aussage, die zum Weiterlesen zwingt. Was ist die übergreifende Erkenntnis aus ALLEN Items zusammen?
+- headings: Keine Nacherzählung ("X launcht Y"), sondern eine These oder Implikation ("Warum X das Spiel ändert" oder "X macht Y obsolet")
+- excerptBullets: Eigenständige Mini-Headlines, je max 65 Zeichen. Jede soll für sich stehen und neugierig machen.
+- thesis: Der rote Faden, der die verschiedenen News verbindet. Nicht die offensichtliche Gemeinsamkeit ("alles über KI"), sondern die tiefere Verbindung.
+
+Erstelle folgenden JSON-Plan:
 {
   "thesis": "Ein Satz — thematischer Kern als Leitfaden für den Ghostwriter",
   "ordering": [1, 3, 7, 2],
-  "headings": {"1": "Deutsche Überschrift für Item 1", "2": "..."},
-  "articleTitle": "Konkreter Artikel-Titel — keine generischen 'KI-Update'-Titel, sondern eine These oder einen pointierten Gedanken",
-  "excerptBullets": ["Max 65 Zeichen, eigenständige Mini-Headline", "...", "..."],
+  "headings": {"1": "Deutsche Überschrift als These für Item 1", "2": "..."},
+  "articleTitle": "Konkrete These oder pointierter Gedanke auf Deutsch",
+  "excerptBullets": ["Max 65 Zeichen Mini-Headline", "...", "..."],
   "category": "AI & Tech",
-  "introParagraph": "2-3 Sätze Einleitung auf Deutsch. Direkter Einstieg mit konkreter Beobachtung — kein 'In einer Welt in der...', kein LLM-Stil."
+  "introParagraph": "2-3 Sätze Einleitung auf Deutsch. Direkter Einstieg mit konkreter Beobachtung, kein LLM-Stil."
 }`
 
-  const result = await model.generateContent(planPrompt)
-  const text = result.response.text()
+  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model)
 
   // Strip possible markdown code fences
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || text.match(/(\{[\s\S]*\})/)
@@ -287,7 +292,7 @@ export async function* runGhostwriterPipeline(
 
   let plan: ArticlePlan
   try {
-    plan = await planArticle(items)
+    plan = await planArticle(items, model)
   } catch (err) {
     console.error('[Pipeline] planArticle failed:', err)
     // Fallback plan: sequential order, item titles as headings
