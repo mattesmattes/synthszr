@@ -6,8 +6,21 @@ const VALID_EVENT_TYPES = ['page_view', 'stock_ticker_click', 'synthszr_vote_cli
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { eventType, path, company, locale } = body
+    // Robust body parsing: sendBeacon with Blob may arrive with varying Content-Type
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      const text = await request.text()
+      body = JSON.parse(text)
+    }
+
+    const { eventType, path, company, locale } = body as {
+      eventType?: string
+      path?: string
+      company?: string
+      locale?: string
+    }
 
     if (!eventType || !VALID_EVENT_TYPES.includes(eventType)) {
       return NextResponse.json({ tracked: false })
@@ -23,17 +36,22 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    await supabase.from('analytics_events').insert({
+    const { error } = await supabase.from('analytics_events').insert({
       event_type: eventType,
-      path: path?.slice(0, 500) || null,
-      company: company?.slice(0, 200) || null,
+      path: typeof path === 'string' ? path.slice(0, 500) : null,
+      company: typeof company === 'string' ? company.slice(0, 200) : null,
       session_hash: sessionHash,
-      locale: locale || 'de',
+      locale: (locale as string) || 'de',
     })
 
+    if (error) {
+      console.error('[Track] Insert failed:', error.message, { eventType, path })
+      return NextResponse.json({ tracked: false })
+    }
+
     return NextResponse.json({ tracked: true })
-  } catch {
-    // Tracking should never block UX — silently return OK
+  } catch (err) {
+    console.error('[Track] Unexpected error:', err)
     return NextResponse.json({ tracked: false })
   }
 }
