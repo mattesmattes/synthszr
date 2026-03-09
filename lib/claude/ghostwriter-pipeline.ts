@@ -62,7 +62,7 @@ const SECTION_SYSTEM_PROMPT = `Du bist ein Ghostwriter und schreibst EINEN einze
 SPRACHE: Gesamter Output auf DEUTSCH. Fachbegriffe dürfen auf Englisch bleiben.
 
 SYNTHSZR TAKE — PERSONA (HÖCHSTE PRIORITÄT):
-Schreibe als erfahrener Tech-Stratege für informierte Fachkollegen — kein LinkedIn-Stil, keine Dramatik, keine rhetorischen Fragen. Nur: Was bedeutet das konkret für IT-Dienstleister, Agenturen oder Produktentwickler?
+Schreibe als erfahrener Tech-Stratege für informierte Leser — kein LinkedIn-Stil, keine Dramatik, keine rhetorischen Fragen.
 
 TAKE-STRUKTUR (5-7 Sätze, diese Reihenfolge):
 1. Konkrete Beobachtung oder Zahl aus der News — KEIN evaluativer Einstieg
@@ -74,7 +74,7 @@ ERLAUBTE SATZANFÄNGE im Take: Eigenname, Zahl, konkretes Substantiv, aktives Ve
 VERBOTENE SATZANFÄNGE: "Das...", "Dies...", "Hier...", "Es...", "Was...", "Ob...", "Die Frage..."
 
 POSITIVES BEISPIEL — GUTER TAKE:
-Synthszr Take: Anthropic monetarisiert Compliance-Arbeit. Enterprise-Kunden zahlen für ein Modell, das den Security-Review besteht, Intelligenz ist sekundär. Für Agenturen verschiebt sich der Pitch: "ISO-27001-ready und auditierbar" schlägt jedes Performance-Argument. Wer das ignoriert, verliert Deals an Berater, die diesen Satz kennen. Modelle werden austauschbar; wer den Beschaffungsprozess beherrscht, gewinnt.
+Synthszr Take: Anthropic monetarisiert Compliance-Arbeit. Enterprise-Kunden zahlen für ein Modell, das den Security-Review besteht, Intelligenz ist sekundär. "ISO-27001-ready und auditierbar" schlägt jedes Performance-Argument im Vertrieb. Modelle werden austauschbar; wer den Beschaffungsprozess beherrscht, gewinnt.
 
 NEGATIVES BEISPIEL — STRIKT VERBOTEN:
 Synthszr Take: Das ist ein bedeutender Schritt für die KI-Branche. Einerseits zeigt dies das enorme Potenzial der Technologie, andererseits bleibt abzuwarten, ob dieser Ansatz nachhaltig ist. Die eigentliche Frage ist nicht ob KI kommt, sondern ob Unternehmen bereit sind.
@@ -108,7 +108,7 @@ export async function planArticle(items: PipelineItem[], model: AIModel): Promis
 
   const planSystemPrompt = `Du bist Chef-Redakteur des Synthszr Newsletters. Dein Output ist ausschließlich valides JSON — keine Erklärungen, kein Markdown.`
 
-  const planPrompt = `Analysiere diese ${items.length} News-Items und erstelle einen Artikel-Plan für den Synthszr Newsletter (Tech-Strategie für IT-Dienstleister und Agenturen).
+  const planPrompt = `Analysiere diese ${items.length} News-Items und erstelle einen Artikel-Plan für den Synthszr Newsletter.
 
 ITEMS:
 ${itemList}
@@ -297,7 +297,7 @@ export async function* runGhostwriterPipeline(
     console.error('[Pipeline] planArticle failed:', err)
     // Fallback plan: sequential order, item titles as headings
     plan = {
-      thesis: 'Aktuelle Tech-News für IT-Dienstleister und Agenturen',
+      thesis: 'Aktuelle Tech-News und Marktanalyse',
       ordering: items.map((_, i) => i + 1),
       headings: Object.fromEntries(items.map((item, i) => [String(i + 1), item.title])),
       articleTitle: 'Tech-Digest',

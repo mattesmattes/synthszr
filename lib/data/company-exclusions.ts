@@ -29,6 +29,7 @@ export const EXCLUDED_COMPANY_NAMES: Set<string> = new Set([
   'Digital',       // too generic
   'Tech',          // too generic
   'Pilot',         // common noun (e.g., "pilot project")
+  'Well',          // common English word, not a company
 ])
 
 /**

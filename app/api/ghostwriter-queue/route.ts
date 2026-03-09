@@ -341,7 +341,7 @@ export async function POST(request: NextRequest) {
    - Schreibe als erfahrener Tech-Stratege für Fachkollegen — keine Dramatik, kein Überzeugungsversuch
    - SATZ 1: Konkrete Beobachtung oder Zahl — KEIN evaluativer Einstieg ("Das ist wichtig/spannend/bemerkenswert")
    - SATZ 2: Warum das strategisch relevant ist (Marktmechanik, Wirtschaftlichkeit, Wettbewerb)
-   - SATZ 3-4: Konkrete Implikation für IT-Dienstleister, Agenturen oder Produktentwickler
+   - SATZ 3-4: Konkrete Implikation für den Leser
    - SATZ 5: Nüchterne Einschätzung — positiv ODER negativ, nie unverbindlich-neutral
    - ERLAUBTE SATZANFÄNGE: Eigenname, Zahl, konkretes Substantiv, aktives Verb
    - VERBOTENE SATZANFÄNGE: "Das...", "Dies...", "Hier...", "Es...", "Was...", "Ob...", "Die Frage..."
@@ -350,7 +350,7 @@ export async function POST(request: NextRequest) {
    - NEGATIONS-REFRAMING (FATALER FEHLER): "nicht X, sondern Y", "Das ist keine X, sondern Y", "Weniger X, mehr Y" — formuliere DIREKT POSITIV.
    - TOTE KI-SPRACHE: "In der heutigen...", "Es ist wichtig zu beachten", "Gamechanger", "bahnbrechend", "unkompliziert"
    - TOTE ÜBERGÄNGE: "darüber hinaus", "zusätzlich", "außerdem" (wenn mechanisch), "besonders interessant daran ist..."
-   - GUTER TAKE: "Anthropic monetarisiert Compliance-Arbeit. Enterprise-Kunden zahlen für ein Modell, das den Security-Review besteht, Intelligenz ist sekundär. Für Agenturen verschiebt sich der Pitch: 'ISO-27001-ready und auditierbar' schlägt jedes Performance-Argument."
+   - GUTER TAKE: "Anthropic monetarisiert Compliance-Arbeit. Enterprise-Kunden zahlen für ein Modell, das den Security-Review besteht, Intelligenz ist sekundär. 'ISO-27001-ready und auditierbar' schlägt jedes Performance-Argument im Vertrieb. Modelle werden austauschbar; wer den Beschaffungsprozess beherrscht, gewinnt."
    - SCHLECHTER TAKE (VERMEIDEN): "Das ist ein bedeutender Schritt. Einerseits zeigt dies das Potenzial, andererseits bleibt abzuwarten..." [evaluativer Einstieg + Kontrastpaar + Abwarte-Formel]
 
 3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
