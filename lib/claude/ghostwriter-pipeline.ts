@@ -225,7 +225,7 @@ export async function writeSection(
   // Company tag line: companies + linked source (the ONE place source appears in output)
   const tagSourcePart = item.source_url
     ? `[${sourceName}](${item.source_url})`
-    : `{${sourceName}}`
+    : sourceName
 
   const userPrompt = `${promptText}
 
