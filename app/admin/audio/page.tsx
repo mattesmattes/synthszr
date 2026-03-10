@@ -991,8 +991,46 @@ function AudioPage() {
     }
   }
 
-  async function generatePodcast() {
-    if (!podcastScript.trim()) {
+  async function generateScriptAndPodcast() {
+    if (!selectedPostId) {
+      setPodcastError('Bitte wähle einen Post aus')
+      return
+    }
+    setScriptGenerating(true)
+    setPodcastError(null)
+    let generatedScript: string
+    try {
+      const res = await fetch('/api/podcast/generate-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postId: selectedPostId,
+          locale: selectedLocale,
+          durationMinutes: podcastDuration,
+          smalltalkTopic: smalltalkTopic.trim() || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Script-Generierung fehlgeschlagen')
+      generatedScript = data.script
+      setPodcastScript(generatedScript)
+      setScriptGenerated(true)
+      setScriptModified(false)
+      setPodcastAudioUrl(null)
+    } catch (error) {
+      console.error('Script generation error:', error)
+      setPodcastError(error instanceof Error ? error.message : 'Unbekannter Fehler')
+      setScriptGenerating(false)
+      return
+    }
+    setScriptGenerating(false)
+    // Automatically proceed to audio generation with the freshly generated script
+    generatePodcast(generatedScript)
+  }
+
+  async function generatePodcast(scriptOverride?: string) {
+    const script = scriptOverride || podcastScript
+    if (!script.trim()) {
       setPodcastError('Bitte gib ein Script ein')
       return
     }
@@ -1005,7 +1043,7 @@ function AudioPage() {
     try {
       const requestBody = podcastProvider === 'openai'
         ? {
-            script: podcastScript,
+            script,
             hostVoiceId: openaiHostVoice,
             guestVoiceId: openaiGuestVoice,
             provider: 'openai' as const,
@@ -1015,7 +1053,7 @@ function AudioPage() {
             sourceLocale: selectedLocale,
           }
         : {
-            script: podcastScript,
+            script,
             hostVoiceId: ttsSettings?.podcast_host_voice_id,
             guestVoiceId: ttsSettings?.podcast_guest_voice_id,
             model: ttsSettings?.elevenlabs_model || 'eleven_v3',
@@ -1179,12 +1217,17 @@ function AudioPage() {
                     </SelectContent>
                   </Select>
 
-                  <Button onClick={generateScriptFromPost} disabled={scriptGenerating || !selectedPostId} variant="secondary">
+                  <Button onClick={generateScriptAndPodcast} disabled={scriptGenerating || podcastGenerating || !selectedPostId}>
                     {scriptGenerating ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generiere...</>
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Script wird generiert...</>
+                    ) : podcastGenerating ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Audio wird generiert...</>
                     ) : (
-                      <><Sparkles className="mr-2 h-4 w-4" />Script generieren</>
+                      <><Sparkles className="mr-2 h-4 w-4" />Script + Audio generieren</>
                     )}
+                  </Button>
+                  <Button onClick={generateScriptFromPost} disabled={scriptGenerating || !selectedPostId} variant="outline" size="sm">
+                    Nur Script
                   </Button>
                 </div>
                 <div className="space-y-1">
@@ -1262,7 +1305,7 @@ function AudioPage() {
 
               {/* Generate Button & Status */}
               <div className="flex items-center gap-4">
-                <Button onClick={generatePodcast} disabled={podcastGenerating || !podcastScript.trim()} className="min-w-[180px]">
+                <Button onClick={() => generatePodcast()} disabled={podcastGenerating || !podcastScript.trim()} className="min-w-[180px]">
                   {podcastGenerating ? (
                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generiere...</>
                   ) : (
