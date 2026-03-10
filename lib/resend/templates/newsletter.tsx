@@ -43,7 +43,7 @@ const NEWSLETTER_PROMOTIONS: Record<string, {
   podcast: {
     imageUrl: '/api/newsletter/promo-block',
     linkUrl: 'https://synthszr.com',
-    alt: 'The daily synthszr podcast — listen on Spotify, Apple Podcasts and synthszr.com',
+    alt: 'The daily synthszr podcast — listen on Apple Podcasts, Spotify, YouTube and Audible',
     width: 600,
     height: 130,
   },

@@ -7,12 +7,13 @@ export const runtime = 'nodejs'
 
 /**
  * GET /api/newsletter/promo-block
- * Returns a pre-composited 1200×260px PNG of the podcast promo section
+ * Returns a pre-composited PNG of the podcast promo section
  * (white background baked in — dark-mode-safe for all email clients).
  *
- * Layout (@2x retina, displayed at 600×130px in email):
- *   - podcast_hl.png  → 600px wide, centered, 24px top margin
- *   - 3 badge images  → 72px tall each, inline with 16px gaps, centered
+ * Layout (@2x retina, displayed at 600px wide in email):
+ *   - podcast-headline.png → 600px wide, centered
+ *   - 4 badge images       → 72px tall each, inline with 16px gaps, centered
+ *     (Apple, Spotify, YouTube, Audible)
  */
 export async function GET() {
   try {
@@ -26,10 +27,11 @@ export async function GET() {
     const GAP_BADGES = 16
 
     // Load source images from public folder
-    const hlBuf      = readFileSync(join(process.cwd(), 'public', 'podcast_hl.png'))
-    const spotifyBuf = readFileSync(join(process.cwd(), 'public', 'podcast_spotify.png'))
-    const appleBuf   = readFileSync(join(process.cwd(), 'public', 'podcast_apple.png'))
-    const szrBuf     = readFileSync(join(process.cwd(), 'public', 'podcast_synthszr.png'))
+    const hlBuf      = readFileSync(join(process.cwd(), 'public', 'podcast-headline.png'))
+    const appleBuf   = readFileSync(join(process.cwd(), 'public', 'podcast-apple.png'))
+    const spotifyBuf = readFileSync(join(process.cwd(), 'public', 'podcast-spotify.png'))
+    const youtubeBuf = readFileSync(join(process.cwd(), 'public', 'podcast-youtube.png'))
+    const audibleBuf = readFileSync(join(process.cwd(), 'public', 'podcast-audible.png'))
 
     // Resize headline to HL_W wide (preserve aspect ratio)
     const hlMeta = await sharp(hlBuf).metadata()
@@ -50,14 +52,15 @@ export async function GET() {
       return { buf: resized, w }
     }
 
-    const [spotify, apple, szr] = await Promise.all([
-      resizeBadge(Buffer.from(spotifyBuf)),
+    const [apple, spotify, youtube, audible] = await Promise.all([
       resizeBadge(Buffer.from(appleBuf)),
-      resizeBadge(Buffer.from(szrBuf)),
+      resizeBadge(Buffer.from(spotifyBuf)),
+      resizeBadge(Buffer.from(youtubeBuf)),
+      resizeBadge(Buffer.from(audibleBuf)),
     ])
 
     // Total width of badge row
-    const badgesW = spotify.w + GAP_BADGES + apple.w + GAP_BADGES + szr.w
+    const badgesW = apple.w + GAP_BADGES + spotify.w + GAP_BADGES + youtube.w + GAP_BADGES + audible.w
     const badgesLeft = Math.round((W - badgesW) / 2)
 
     // Total canvas height
@@ -68,15 +71,18 @@ export async function GET() {
     const hlTop  = PAD_TOP
     const badgesTop = PAD_TOP + HL_H + GAP_HL_BADGES
 
+    let xOffset = badgesLeft
+
     // Composite all elements onto a white background
     const result = await sharp({
       create: { width: W, height: H, channels: 3, background: { r: 255, g: 255, b: 255 } },
     })
       .composite([
-        { input: hlResized,     top: hlTop,    left: hlLeft },
-        { input: spotify.buf,   top: badgesTop, left: badgesLeft },
-        { input: apple.buf,     top: badgesTop, left: badgesLeft + spotify.w + GAP_BADGES },
-        { input: szr.buf,       top: badgesTop, left: badgesLeft + spotify.w + GAP_BADGES + apple.w + GAP_BADGES },
+        { input: hlResized,      top: hlTop,     left: hlLeft },
+        { input: apple.buf,      top: badgesTop,  left: xOffset },
+        { input: spotify.buf,    top: badgesTop,  left: xOffset += apple.w + GAP_BADGES },
+        { input: youtube.buf,    top: badgesTop,  left: xOffset += spotify.w + GAP_BADGES },
+        { input: audible.buf,    top: badgesTop,  left: xOffset += youtube.w + GAP_BADGES },
       ])
       .png({ compressionLevel: 6 })
       .toBuffer()
