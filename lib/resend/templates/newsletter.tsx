@@ -5,8 +5,6 @@ import {
   Body,
   Container,
   Section,
-  Row,
-  Column,
   Text,
   Button,
   Hr,
@@ -30,30 +28,6 @@ interface NewsletterEmailProps {
   postDate?: string
   baseUrl?: string
   locale?: LanguageCode
-  activePromotion?: string | null
-}
-
-const NEWSLETTER_PROMOTIONS: Record<string, {
-  imageUrl: string
-  linkUrl: string
-  alt: string
-  width: number
-  height: number
-}> = {
-  podcast: {
-    imageUrl: '/api/newsletter/promo-block',
-    linkUrl: 'https://synthszr.com',
-    alt: 'The daily synthszr podcast — listen on Apple Podcasts, Spotify, YouTube and Audible',
-    width: 600,
-    height: 130,
-  },
-  codecrash: {
-    imageUrl: '/codecrash-promo.gif',
-    linkUrl: 'https://codecrash.ai',
-    alt: 'CodeCrash — AI is pushing the cost of software toward zero',
-    width: 600,
-    height: 130,
-  },
 }
 
 // Localized UI strings
@@ -170,7 +144,6 @@ export function NewsletterEmail({
   postDate,
   baseUrl = 'https://synthszr.vercel.app',
   locale = 'de',
-  activePromotion,
 }: NewsletterEmailProps) {
   const formattedDate = postDate ? formatUpdateDate(postDate, locale) : null
   const strings = UI_STRINGS[locale] || UI_STRINGS.de
@@ -248,44 +221,44 @@ export function NewsletterEmail({
       {previewText && <Preview>{previewText}</Preview>}
       <Body style={main}>
         <Container style={container}>
+          {/* CodeCrash Promo Banner (above cover image) */}
+          <Section style={{ padding: '0' }}>
+            <Link href="https://codecrash.ai" style={{ textDecoration: 'none' }}>
+              <Img
+                src={`${baseUrl}/codecrash-promo.gif`}
+                alt="CodeCrash — AI is pushing the cost of software toward zero"
+                width="600"
+                style={{ display: 'block', width: '100%', height: 'auto' }}
+              />
+            </Link>
+          </Section>
+
           {/* Cover Image with Logo - clicks to article with autoplay */}
           {coverImageUrl && (
-            <>
-              <Section style={coverSection}>
-                <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
-                  <Img
-                    src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=1200&logo=true`}
-                    alt={subject}
-                    width="600"
-                    height="600"
-                    style={coverImage}
-                  />
-                </Link>
-              </Section>
-
-              {/* Promotion Banner (below cover image) */}
-              {activePromotion && NEWSLETTER_PROMOTIONS[activePromotion] && (() => {
-                const promo = NEWSLETTER_PROMOTIONS[activePromotion]
-                return (
-                  <Section style={{ padding: '0' }}>
-                    <Row>
-                      <Column style={{ padding: '0' }}>
-                        <Link href={promo.linkUrl} style={{ textDecoration: 'none' }}>
-                          <Img
-                            src={promo.imageUrl.startsWith('/') ? `${baseUrl}${promo.imageUrl}` : promo.imageUrl}
-                            alt={promo.alt}
-                            width={String(promo.width)}
-                            height={String(promo.height)}
-                            style={{ display: 'block', width: '100%', height: 'auto' }}
-                          />
-                        </Link>
-                      </Column>
-                    </Row>
-                  </Section>
-                )
-              })()}
-            </>
+            <Section style={coverSection}>
+              <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
+                <Img
+                  src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=1200&logo=true`}
+                  alt={subject}
+                  width="600"
+                  height="600"
+                  style={coverImage}
+                />
+              </Link>
+            </Section>
           )}
+
+          {/* Podcast Promo Block (below cover image) */}
+          <Section style={{ padding: '0' }}>
+            <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
+              <Img
+                src={`${baseUrl}/api/newsletter/promo-block`}
+                alt="The daily synthszr podcast — listen on Apple Podcasts, Spotify, YouTube and Audible"
+                width="600"
+                style={{ display: 'block', width: '100%', height: 'auto' }}
+              />
+            </Link>
+          </Section>
 
           {/* Main Content */}
           <Section style={contentSection}>

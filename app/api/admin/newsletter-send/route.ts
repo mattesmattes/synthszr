@@ -109,18 +109,6 @@ export async function POST(request: NextRequest) {
     const subjectTemplate = templates.subjectTemplate || '{{title}}'
     const footerText = templates.footerText || 'Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.'
 
-    // Fetch promotion config
-    const { data: promotionSettings } = await supabase
-      .from('newsletter_settings')
-      .select('value')
-      .eq('key', 'promotion_config')
-      .single()
-
-    const promotionConfig = promotionSettings?.value as { enabled?: boolean; activePromotion?: string } || {}
-    const activePromotion = promotionConfig.enabled && promotionConfig.activePromotion
-      ? promotionConfig.activePromotion
-      : null
-
     // Apply template variables
     const subject = subjectTemplate.replace(/\{\{title\}\}/g, post.title)
     const previewText = post.excerpt || ''
@@ -152,7 +140,6 @@ export async function POST(request: NextRequest) {
           postDate,
           baseUrl: BASE_URL,
           locale: testLocale,
-          activePromotion,
         })
       )
 
@@ -288,7 +275,6 @@ export async function POST(request: NextRequest) {
           postDate,
           baseUrl: BASE_URL,
           locale: locale as LanguageCode,
-          activePromotion,
         })
       )
 
