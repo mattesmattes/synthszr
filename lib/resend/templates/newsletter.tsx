@@ -251,7 +251,19 @@ export function NewsletterEmail({
           {/* Cover Image with Logo - clicks to article with autoplay */}
           {coverImageUrl && (
             <>
-              {/* Promotion Banner (configurable via admin) */}
+              <Section style={coverSection}>
+                <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
+                  <Img
+                    src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=1200&logo=true`}
+                    alt={subject}
+                    width="600"
+                    height="600"
+                    style={coverImage}
+                  />
+                </Link>
+              </Section>
+
+              {/* Promotion Banner (below cover image) */}
               {activePromotion && NEWSLETTER_PROMOTIONS[activePromotion] && (() => {
                 const promo = NEWSLETTER_PROMOTIONS[activePromotion]
                 return (
@@ -272,18 +284,6 @@ export function NewsletterEmail({
                   </Section>
                 )
               })()}
-
-              <Section style={coverSection}>
-                <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
-                  <Img
-                    src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=1200&logo=true`}
-                    alt={subject}
-                    width="600"
-                    height="600"
-                    style={coverImage}
-                  />
-                </Link>
-              </Section>
             </>
           )}
 

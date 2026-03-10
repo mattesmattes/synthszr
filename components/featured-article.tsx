@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import { PostContentView } from "./post-content-view"
 import { AudioPlayer } from "./audio-player"
+import { PodcastBadges } from "./podcast-badges"
 import { formatUpdateDate } from "@/lib/i18n/config"
 import type { LanguageCode } from "@/lib/types"
 
@@ -70,6 +71,7 @@ export function FeaturedArticle({
               </div>
             )}
           </div>
+          <PodcastBadges />
         </div>
       )}
 

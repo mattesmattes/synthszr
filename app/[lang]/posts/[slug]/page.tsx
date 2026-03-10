@@ -8,6 +8,7 @@ import { SwipeNavigation } from "@/components/swipe-navigation"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 import { AudioPlayer } from "@/components/audio-player"
+import { PodcastBadges } from "@/components/podcast-badges"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
@@ -270,30 +271,6 @@ export default async function PostPage({ params }: PageProps) {
     })
   }
 
-  // Fetch promotion config
-  const { data: promoConfigData } = await supabase
-    .from('newsletter_settings')
-    .select('value')
-    .eq('key', 'promotion_config')
-    .single()
-
-  const promoConfig = promoConfigData?.value as { enabled: boolean; activePromotion: string } | null
-  const PROMOTIONS: Record<string, { imageUrl: string; linkUrl: string; alt: string }> = {
-    podcast: {
-      imageUrl: '/api/newsletter/promo-block',
-      linkUrl: '/',
-      alt: 'The daily synthszr podcast',
-    },
-    codecrash: {
-      imageUrl: '/codecrash-promo.gif',
-      linkUrl: 'https://codecrash.ai',
-      alt: 'CodeCrash — AI is pushing the cost of software toward zero',
-    },
-  }
-  const activePromo = promoConfig?.enabled && promoConfig?.activePromotion
-    ? PROMOTIONS[promoConfig.activePromotion] || null
-    : null
-
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Article',
@@ -350,21 +327,6 @@ export default async function PostPage({ params }: PageProps) {
           </span>
         </Link>
 
-        {activePromo && (
-          <a
-            href={activePromo.linkUrl}
-            target={activePromo.linkUrl.startsWith('http') ? '_blank' : undefined}
-            rel={activePromo.linkUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
-            className="block -mx-6 rounded-lg overflow-hidden hover:opacity-90 transition-opacity"
-          >
-            <img
-              src={activePromo.imageUrl}
-              alt={activePromo.alt}
-              className="w-full h-auto"
-            />
-          </a>
-        )}
-
         <article>
           {/* Cover Image with centered Logo overlay - links to home */}
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
@@ -397,6 +359,7 @@ export default async function PostPage({ params }: PageProps) {
                   </Suspense>
                 </div>
               </div>
+              <PodcastBadges />
             </div>
           )}
 
