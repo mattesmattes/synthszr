@@ -19,12 +19,12 @@ export async function GET() {
   try {
     // Canvas dimensions (@2x retina, displayed at 600px in email)
     const W = 1200
-    const BADGE_H = 100     // 50px @2x
-    const HL_W = 1000       // 500px @2x (~83% of email width)
-    const PAD_TOP = 40
-    const PAD_BOT = 40
-    const GAP_HL_BADGES = 28
-    const GAP_BADGES = 24
+    const BADGE_H = 72      // 36px @2x (correct size)
+    const HL_W = 1100       // 550px @2x (~92% of email width)
+    const PAD_TOP = 32
+    const PAD_BOT = 32
+    const GAP_HL_BADGES = 24
+    const GAP_BADGES = 16
 
     // Load source images from public folder
     const hlBuf      = readFileSync(join(process.cwd(), 'public', 'podcast-headline.png'))
