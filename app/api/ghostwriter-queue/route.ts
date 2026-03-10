@@ -76,10 +76,14 @@ export async function POST(request: NextRequest) {
 
       if (manuallySelected.length > 0) {
         console.log(`[Ghostwriter-Queue] Using ${manuallySelected.length} manually selected items (maxItems=${maxItems})`)
-        selectedItems = manuallySelected
+        // Cap manually selected items to maxItems
+        selectedItems = manuallySelected.slice(0, maxItems)
+        if (manuallySelected.length > maxItems) {
+          console.log(`[Ghostwriter-Queue] Capped from ${manuallySelected.length} to ${maxItems} items`)
+        }
 
         // Fill up with balanced items if selected < maxItems
-        if (manuallySelected.length < maxItems) {
+        if (selectedItems.length < maxItems) {
           const neededCount = maxItems - manuallySelected.length
           console.log(`[Ghostwriter-Queue] Need ${neededCount} more items from balanced selection to reach ${maxItems}`)
 
