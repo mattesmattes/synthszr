@@ -23,13 +23,14 @@ const PODCAST_LINKS = [
 
 export function PodcastBadges() {
   return (
-    <div className="bg-white">
+    <div className="bg-white px-4 py-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/podcast-headline.png"
         alt="The daily synthszr podcast"
-        className="mx-auto h-9 w-auto"
+        className="mx-auto max-w-[280px] w-full h-auto"
       />
-      <div className="flex items-center justify-center gap-3 pt-2 pb-3">
+      <div className="flex items-center justify-center gap-3 pt-2">
         {PODCAST_LINKS.map((link) => (
           <a
             key={link.name}
@@ -38,10 +39,11 @@ export function PodcastBadges() {
             rel="noopener noreferrer"
             className="hover:opacity-80 transition-opacity"
           >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={link.image}
               alt={link.name}
-              className="h-7 w-auto"
+              className="h-[18px] w-auto"
             />
           </a>
         ))}
