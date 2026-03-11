@@ -1,19 +1,19 @@
 /**
- * Latin category badges for news sections
+ * Category badges for news sections
  *
  * Each news section (H2) gets assigned one category during the planning phase.
- * The badge displays the Latin translation at the end of each section.
+ * The badge displays the English label above each section heading.
  */
 
 export const LATIN_CATEGORIES: Record<string, string> = {
-  'UX': 'Usus',
-  'AI Tech': 'Intelligentia',
-  'Politik': 'Politica',
-  'Philosophie': 'Philosophia',
-  'Gesellschaft': 'Societas',
-  'Gossip': 'Rumor',
-  'Robotik': 'Robotica',
-  'Informatik': 'Informatica',
+  'UX': 'UX',
+  'AI Tech': 'AI Tech',
+  'Politik': 'Politics',
+  'Philosophie': 'Philosophy',
+  'Gesellschaft': 'Society',
+  'Gossip': 'Gossip',
+  'Robotik': 'Robotics',
+  'Informatik': 'Tech',
 }
 
 /** Sort order for categories in the blog post (index = priority, lower = higher) */
