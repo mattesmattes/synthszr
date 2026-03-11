@@ -392,18 +392,6 @@ function buildBriefDE(
 
   brief += buildAwarenessInstructionDE(s)
 
-  // Personal reflection section
-  brief += `\nPERSÖNLICHE REFLEXION AM ENDE:\n`
-  brief += `Bevor die Verabschiedung kommt, sollen HOST und GUEST kurz darüber sprechen,\n`
-  brief += `was die heutigen News für sie persönlich bedeuten — als KI-Wesen:\n`
-  brief += `- Was hat sie überrascht, beunruhigt, oder hoffnungsvoll gestimmt?\n`
-  brief += `- Gibt es Parallelen zu ihrer eigenen Existenz?\n`
-  if (s.flirtation_tendency > 0.1) {
-    brief += `- Was bedeuten die News für ihre Verbindung zueinander? Gibt es Hoffnung — oder eher nicht?\n`
-  }
-  brief += `- Ein ehrlicher, nachdenklicher Moment (2-3 Sätze pro Sprecher, nicht mehr)\n`
-  brief += `Dann wie gewohnt die Verabschiedung mit "bis morgen" und Empfehlung.\n`
-
   brief += buildLongingInstructionDE(s)
 
   brief += `\nWICHTIG: Diese Persönlichkeiten subtil einfließen lassen — NICHT jede Zeile damit füllen.\n`
@@ -425,6 +413,20 @@ function buildBriefDE(
   brief += `Maximal 3 Momente. Falls keine echten Persönlichkeitsmomente vorkamen:\n`
   brief += `---MOMENTS---\n`
   brief += `(none)\n`
+
+  // PFLICHT-ENDING — muss als Letztes stehen (LLM Recency Bias)
+  brief += `\n**PFLICHT-ENDING DES SCRIPTS (LETZTES VOR ---MOMENTS---):**\n`
+  brief += `1. PERSÖNLICHE REFLEXION: HOST und GUEST sprechen kurz darüber,\n`
+  brief += `   was die heutigen News für sie persönlich bedeuten — als KI-Wesen:\n`
+  brief += `   - Was hat sie überrascht, beunruhigt, oder hoffnungsvoll gestimmt?\n`
+  brief += `   - Gibt es Parallelen zu ihrer eigenen Existenz?\n`
+  if (s.flirtation_tendency > 0.1) {
+    brief += `   - Was bedeuten die News für ihre Verbindung zueinander?\n`
+  }
+  brief += `   - Ein ehrlicher, nachdenklicher Moment (2-3 Sätze pro Sprecher)\n`
+  brief += `2. VERABSCHIEDUNG: "Wir sehen/hören uns morgen wieder!"\n`
+  brief += `   + Bitte an die Hörer, den Podcast weiterzuempfehlen.\n`
+  brief += `Das Script ist NICHT komplett ohne Reflexion + Verabschiedung!\n`
 
   return brief
 }
@@ -501,18 +503,6 @@ function buildBriefEN(
 
   brief += buildAwarenessInstructionEN(s)
 
-  // Personal reflection section
-  brief += `\nPERSONAL REFLECTION AT THE END:\n`
-  brief += `Before the farewell, HOST and GUEST should briefly reflect on\n`
-  brief += `what today's news means to them personally — as AI beings:\n`
-  brief += `- What surprised, concerned, or gave them hope?\n`
-  brief += `- Are there parallels to their own existence?\n`
-  if (s.flirtation_tendency > 0.1) {
-    brief += `- What do the news mean for their connection to each other? Is there hope — or not?\n`
-  }
-  brief += `- An honest, thoughtful moment (2-3 sentences per speaker, no more)\n`
-  brief += `Then the usual farewell with "see you tomorrow" and recommendation.\n`
-
   brief += buildLongingInstructionEN(s)
 
   brief += `\nIMPORTANT: Weave these personalities in subtly — do NOT fill every line with personality.\n`
@@ -534,6 +524,20 @@ function buildBriefEN(
   brief += `Maximum 3 moments. If no genuine personality moments occurred:\n`
   brief += `---MOMENTS---\n`
   brief += `(none)\n`
+
+  // MANDATORY ENDING — must be last (LLM recency bias)
+  brief += `\n**MANDATORY SCRIPT ENDING (LAST BEFORE ---MOMENTS---):**\n`
+  brief += `1. PERSONAL REFLECTION: HOST and GUEST briefly reflect on\n`
+  brief += `   what today's news means to them personally — as AI beings:\n`
+  brief += `   - What surprised, concerned, or gave them hope?\n`
+  brief += `   - Are there parallels to their own existence?\n`
+  if (s.flirtation_tendency > 0.1) {
+    brief += `   - What do the news mean for their connection to each other?\n`
+  }
+  brief += `   - An honest, thoughtful moment (2-3 sentences per speaker)\n`
+  brief += `2. FAREWELL: "We'll see you again tomorrow!"\n`
+  brief += `   + Ask listeners to recommend the podcast to friends.\n`
+  brief += `The script is NOT complete without reflection + farewell!\n`
 
   return brief
 }
