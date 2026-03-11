@@ -137,6 +137,7 @@ Titel: {title}
 
 WICHTIG: Das gesamte Skript MUSS auf DEUTSCH sein!
 ERINNERUNG: Das Skript MUSS zwischen {wordCount} und {maxWordCount} Wörtern lang sein. Halte dich an diesen Bereich — nicht darunter, nicht darüber.
+PFLICHT-OUTRO: Der Podcast MUSS mit einer freundlichen Verabschiedung enden — Hinweis auf die morgige Sendung + Bitte an die Hörer, den Podcast weiterzuempfehlen. Kein Skript ohne Outro!
 Erstelle jetzt das Podcast-Skript. Beginne direkt mit "HOST:" - keine Einleitung.`
 
 // Default podcast script prompt template - ENGLISH
@@ -244,6 +245,7 @@ Title: {title}
 
 REMEMBER: Output the ENTIRE script in ENGLISH only.
 REMINDER: The script MUST be between {wordCount} and {maxWordCount} words. Stay within this range — not below, not above.
+MANDATORY OUTRO: The podcast MUST end with a friendly farewell — mention tomorrow's episode + ask listeners to recommend the podcast to friends. No script without outro!
 Start directly with "HOST:" - no introduction.`
 
 // Legacy alias for backwards compatibility
