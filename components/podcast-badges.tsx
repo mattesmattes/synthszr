@@ -28,7 +28,7 @@ export function PodcastBadges() {
       <img
         src="/podcast-headline.png"
         alt="The daily synthszr podcast"
-        className="mx-auto max-w-[280px] w-full h-auto"
+        className="mx-auto max-w-[840px] w-full h-auto"
       />
       <div className="flex items-center justify-center gap-3 pt-2">
         {PODCAST_LINKS.map((link) => (
@@ -43,7 +43,7 @@ export function PodcastBadges() {
             <img
               src={link.image}
               alt={link.name}
-              className="h-[18px] w-auto"
+              className="h-9 w-auto"
             />
           </a>
         ))}
