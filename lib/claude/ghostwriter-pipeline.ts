@@ -258,10 +258,7 @@ AUFGABE — EXAKT IN DIESER REIHENFOLGE, beginne mit "## ${heading}" (falls die 
    PREMARKET: ${premarketCompanyList}
    WICHTIG: Die Quelle erscheint NUR in dieser Zeile — KEIN separates "**Quelle:**" Label davor oder danach.
 
-3. **KATEGORIE:** Direkt nach der H2-Zeile einen HTML-Kommentar einfügen:
-   <!-- category: ${sectionCategory || 'AI Tech'} -->
-
-4. **SYNTHSZR TAKE:** "Synthszr Take:" gefolgt von 5-7 Sätzen im Analysten-Stil (sieh System-Prompt).
+3. **SYNTHSZR TAKE:** "Synthszr Take:" gefolgt von 5-7 Sätzen im Analysten-Stil (sieh System-Prompt).
 
 SYNTHSZR TAKE CHECKLISTE:
 - INHALT-PFLICHT: Dein Take MUSS sich auf die Fakten im NEWS-INHALT oben beziehen. Nenne mindestens eine konkrete Zahl, einen Namen oder ein Detail AUS DIESER NEWS. Schreibe NIEMALS über ein anderes Thema.
@@ -277,10 +274,16 @@ SYNTHSZR TAKE CHECKLISTE:
   const text = await callModelNonStreaming(userPrompt, SECTION_SYSTEM_PROMPT, model)
 
   // Ensure section starts with the correct heading
-  const trimmed = text.trim()
+  let trimmed = text.trim()
   if (!trimmed.startsWith('##')) {
-    return `## ${heading}\n\n${trimmed}`
+    trimmed = `## ${heading}\n\n${trimmed}`
   }
+
+  // Inject category comment right after the H2 line (deterministic, not LLM-dependent)
+  if (sectionCategory) {
+    trimmed = trimmed.replace(/^(## .+)$/m, `$1\n<!-- category: ${sectionCategory} -->`)
+  }
+
   return trimmed
 }
 
