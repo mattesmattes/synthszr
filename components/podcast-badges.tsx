@@ -30,20 +30,21 @@ export function PodcastBadges() {
         alt="The daily synthszr podcast"
         className="mx-auto max-w-[840px] w-full h-auto"
       />
-      <div className="flex items-center justify-center gap-3 pt-2">
+      <div className="flex items-center justify-center gap-2 sm:gap-3 pt-2">
         {PODCAST_LINKS.map((link) => (
           <a
             key={link.name}
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:opacity-80 transition-opacity"
+            className="hover:opacity-80 transition-opacity flex-shrink min-w-0"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={link.image}
               alt={link.name}
-              className="h-9 w-auto"
+              className="h-auto w-full max-h-9"
+              style={{ aspectRatio: '4 / 1' }}
             />
           </a>
         ))}
