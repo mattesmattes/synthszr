@@ -12,7 +12,7 @@ const PODCAST_LINKS = [
   {
     name: 'YouTube',
     image: '/podcast-youtube.png',
-    url: 'https://www.youtube.com/@synthszr',
+    url: 'https://www.youtube.com/playlist?list=PLbU5G7ZFFIS7ULvNAYfEGlMojSzs3NyBf',
   },
   {
     name: 'Audible',
