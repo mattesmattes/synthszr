@@ -328,8 +328,9 @@ export async function POST(request: NextRequest) {
     const wordCount = Math.round(durationMinutes * 150)
     const maxWordCount = Math.round(wordCount * 1.25) // hard ceiling: 25% over target
     const perTopicWords = Math.max(80, Math.round(wordCount / 7)) // proportional per-topic budget
-    // tokens: proportional to target, never clamp to a large fixed minimum
-    const maxTokens = Math.round(maxWordCount * 2.2)
+    // tokens: proportional to target — podcast scripts with emotion tags,
+    // stage directions, and formatting need ~3x tokens per word
+    const maxTokens = Math.max(12000, Math.round(maxWordCount * 3.0))
 
     // Fetch post content
     let postTitle = ''
@@ -404,14 +405,14 @@ export async function POST(request: NextRequest) {
       : postDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
     let prompt = (body.customPrompt || defaultPrompt)
-      .replace('{duration}', String(durationMinutes))
-      .replace('{wordCount}', String(wordCount))
-      .replace('{maxWordCount}', String(maxWordCount))
-      .replace('{perTopicWords}', String(perTopicWords))
-      .replace('{title}', postTitle)
-      .replace('{content}', postContent)
-      .replace('{weekday}', weekday)
-      .replace('{date}', date)
+      .replaceAll('{duration}', String(durationMinutes))
+      .replaceAll('{wordCount}', String(wordCount))
+      .replaceAll('{maxWordCount}', String(maxWordCount))
+      .replaceAll('{perTopicWords}', String(perTopicWords))
+      .replaceAll('{title}', postTitle)
+      .replaceAll('{content}', postContent)
+      .replaceAll('{weekday}', weekday)
+      .replaceAll('{date}', date)
 
     // Inject optional smalltalk section
     if (body.smalltalkTopic?.trim()) {
@@ -450,6 +451,10 @@ export async function POST(request: NextRequest) {
       .filter(block => block.type === 'text')
       .map(block => (block as { type: 'text'; text: string }).text)
       .join('\n')
+
+    if (message.stop_reason === 'max_tokens') {
+      console.warn(`[Podcast Script] WARNING: Script truncated at max_tokens (${maxTokens}). Output used ${message.usage?.output_tokens} tokens.`)
+    }
 
     if (!scriptContent.trim()) {
       return NextResponse.json({ error: 'AI generated empty script' }, { status: 500 })
