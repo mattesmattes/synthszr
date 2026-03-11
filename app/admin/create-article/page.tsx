@@ -41,7 +41,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
 import ReactMarkdown from 'react-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
-import { embedQueueItemIds } from '@/lib/utils/embed-queue-ids'
+import { embedQueueItemIds, extractCategoryMap, embedCategories } from '@/lib/utils/embed-queue-ids'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { ensureInitialEditHistory } from '@/lib/edit-learning/history'
 import { sanitizeTiptapUrls } from '@/lib/utils/url-verifier'
@@ -624,10 +624,21 @@ export default function CreateArticlePage() {
       const title = metadata.title || `Artikel vom ${new Date().toLocaleDateString('de-DE')}`
       const slug = metadata.slug || generateSlug(title)
 
-      // Convert markdown to TipTap JSON and stringify for TEXT column
-      let tiptapContent = markdownToTiptap(bodyContent)
+      // 1. Extract category map from markdown comments (before removing them)
+      const categoryMap = extractCategoryMap(bodyContent)
 
-      // Embed queue item IDs into H2 headings for stable thumbnail matching
+      // 2. Remove category comments from markdown
+      const cleanedBody = bodyContent.replace(/<!--\s*category:\s*.+?\s*-->\n?/g, '')
+
+      // 3. Convert markdown to TipTap JSON
+      let tiptapContent = markdownToTiptap(cleanedBody)
+
+      // 4. Embed categories into H2 headings
+      if (categoryMap.size > 0) {
+        tiptapContent = embedCategories(categoryMap, tiptapContent)
+      }
+
+      // 5. Embed queue item IDs into H2 headings for stable thumbnail matching
       // This allows thumbnails to follow H2s when users reorder articles in the editor
       if (usedQueueItemIds.length > 0) {
         // Fetch queue item titles for matching

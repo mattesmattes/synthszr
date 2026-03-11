@@ -1,6 +1,7 @@
 // DOM processor: Process news headings (favicon, source links, thumbnails)
 
 import { sanitizeUrl } from '@/lib/utils/url-sanitizer'
+import { LATIN_CATEGORIES } from '@/lib/data/categories'
 
 export interface ArticleThumbnail {
   id: string
@@ -158,6 +159,27 @@ export function processNewsHeadings(
         }
       } catch {
         // Invalid URL, skip favicon
+      }
+    }
+
+    // Render Latin category badge at the end of the section
+    const category = h2.getAttribute('data-category')
+    if (category) {
+      const latinLabel = LATIN_CATEGORIES[category]
+      if (latinLabel) {
+        // Find the last element before the next H2 or separator
+        let insertAfter: Element | null = null
+        let sibling = h2.nextElementSibling
+        while (sibling && !sibling.matches('h2, .article-thumbnail-container, .article-separator')) {
+          insertAfter = sibling
+          sibling = sibling.nextElementSibling
+        }
+        if (insertAfter) {
+          const badge = document.createElement('div')
+          badge.className = 'mt-4 mb-2'
+          badge.innerHTML = `<span class="inline-block px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest text-white bg-black rounded-sm">${latinLabel}</span>`
+          insertAfter.after(badge)
+        }
       }
     }
   })

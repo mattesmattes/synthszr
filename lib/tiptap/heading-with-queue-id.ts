@@ -26,6 +26,18 @@ export const HeadingWithQueueId = Heading.extend({
           }
         },
       },
+      category: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-category'),
+        renderHTML: attributes => {
+          if (!attributes.category) {
+            return {}
+          }
+          return {
+            'data-category': attributes.category,
+          }
+        },
+      },
     }
   },
 })

@@ -12,6 +12,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
+import { CATEGORY_ORDER } from '@/lib/data/categories'
 import {
   getActiveLearnedPatterns,
   findSimilarEditExamples,
@@ -44,6 +45,7 @@ export interface ArticlePlan {
   excerptBullets: string[]  // genau 3 Einträge
   category: string
   introParagraph: string
+  categories?: Record<string, string>  // item index → Kategorie (z.B. "AI Tech", "Politik")
 }
 
 export type PipelineEvent =
@@ -136,10 +138,12 @@ export async function planArticle(items: PipelineItem[], model: AIModel): Promis
 ITEMS:
 ${itemList}
 
-REIHENFOLGE-PRINZIP:
-- OBEN: Praktische Tools, API-Updates, Produkt-Launches, Developer-News
-- MITTE: Unternehmensstrategien, Marktdynamiken, Funding, Partnerschaften
-- UNTEN: Politik, Regulierung, gesellschaftliche Debatten
+KATEGORIEN — jedes Item bekommt genau EINE Kategorie:
+[AI Tech|Gossip|Politik|UX|Informatik|Robotik|Gesellschaft|Philosophie]
+
+SORTIERUNG nach Kategorie (HÖCHSTE PRIORITÄT für ordering):
+1. AI Tech → 2. Gossip → 3. Politik → 4. UX → 5. Informatik → 6. Robotik → 7. Gesellschaft → 8. Philosophie
+Innerhalb derselben Kategorie: nach journalistischer Relevanz sortieren.
 
 SPRACHE — ABSOLUT VERBINDLICH:
 - ALLE Outputs (articleTitle, headings, excerptBullets, thesis, introParagraph) MÜSSEN auf DEUTSCH sein.
@@ -176,6 +180,7 @@ Erstelle folgenden JSON-Plan:
 {
   "thesis": "Ein Satz auf DEUTSCH — thematischer Kern als Leitfaden",
   "ordering": [1, 3, 7, 2],
+  "categories": {"1": "AI Tech", "3": "Politik", "7": "UX", "2": "Philosophie"},
   "headings": {"1": "Pointierte These auf DEUTSCH — kein 'X launcht Y'", "2": "..."},
   "articleTitle": "Witzige, scharfe These auf DEUTSCH — Humor durch Präzision",
   "excerptBullets": ["Max 65 Zeichen, DEUTSCH, pointiert", "...", "..."],
@@ -216,7 +221,8 @@ export async function writeSection(
   heading: string,
   thesis: string,
   model: AIModel,
-  promptText: string
+  promptText: string,
+  sectionCategory?: string
 ): Promise<string> {
   const publicCompanyList = Object.keys(KNOWN_COMPANIES).join(', ')
   const premarketCompanyList = Object.keys(KNOWN_PREMARKET_COMPANIES).join(', ')
@@ -252,7 +258,10 @@ AUFGABE — EXAKT IN DIESER REIHENFOLGE, beginne mit "## ${heading}" (falls die 
    PREMARKET: ${premarketCompanyList}
    WICHTIG: Die Quelle erscheint NUR in dieser Zeile — KEIN separates "**Quelle:**" Label davor oder danach.
 
-3. **SYNTHSZR TAKE:** "Synthszr Take:" gefolgt von 5-7 Sätzen im Analysten-Stil (sieh System-Prompt).
+3. **KATEGORIE:** Direkt nach der H2-Zeile einen HTML-Kommentar einfügen:
+   <!-- category: ${sectionCategory || 'AI Tech'} -->
+
+4. **SYNTHSZR TAKE:** "Synthszr Take:" gefolgt von 5-7 Sätzen im Analysten-Stil (sieh System-Prompt).
 
 SYNTHSZR TAKE CHECKLISTE:
 - INHALT-PFLICHT: Dein Take MUSS sich auf die Fakten im NEWS-INHALT oben beziehen. Nenne mindestens eine konkrete Zahl, einen Namen oder ein Detail AUS DIESER NEWS. Schreibe NIEMALS über ein anderes Thema.
@@ -357,6 +366,15 @@ export async function* runGhostwriterPipeline(
     }
   }
 
+  // Re-sort ordering by category priority (deterministic fallback if LLM didn't sort correctly)
+  if (plan.categories) {
+    plan.ordering.sort((a, b) => {
+      const catA = plan.categories![String(a)] || 'Philosophie'
+      const catB = plan.categories![String(b)] || 'Philosophie'
+      return CATEGORY_ORDER.indexOf(catA) - CATEGORY_ORDER.indexOf(catB)
+    })
+  }
+
   yield { type: 'planned', itemCount: items.length }
 
   // ── Edit Learning: Load patterns and examples ──────────────────────────────
@@ -414,7 +432,8 @@ export async function* runGhostwriterPipeline(
       const heading = plan.headings[String(itemIdx)] || item.title
 
       try {
-        results[i] = await writeSection(item, heading, plan.thesis, model, enhancedPrompt)
+        const category = plan.categories?.[String(itemIdx)]
+        results[i] = await writeSection(item, heading, plan.thesis, model, enhancedPrompt, category)
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
         console.error(`[Pipeline] writeSection ${i + 1} failed:`, errMsg)
