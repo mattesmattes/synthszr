@@ -2,6 +2,57 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 
+export async function DELETE(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
+  const { id } = await request.json()
+  if (!id) {
+    return NextResponse.json({ error: 'id is required' }, { status: 400 })
+  }
+
+  const supabase = createAdminClient()
+
+  // Fetch the podcast to get audio_url before deleting
+  const { data: podcast } = await supabase
+    .from('post_podcasts')
+    .select('id, audio_url')
+    .eq('id', id)
+    .single()
+
+  if (!podcast) {
+    return NextResponse.json({ error: 'Podcast nicht gefunden' }, { status: 404 })
+  }
+
+  // Delete audio file from storage if it exists
+  if (podcast.audio_url) {
+    // Extract storage path from URL (format: .../storage/v1/object/public/podcasts/...)
+    const match = podcast.audio_url.match(/\/podcasts\/(.+)$/)
+    if (match) {
+      const { error: storageError } = await supabase.storage
+        .from('podcasts')
+        .remove([match[1]])
+      if (storageError) {
+        console.error('[Podcast Delete] Storage delete failed:', storageError.message)
+      }
+    }
+  }
+
+  // Delete the database record
+  const { error } = await supabase
+    .from('post_podcasts')
+    .delete()
+    .eq('id', id)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
+}
+
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) {

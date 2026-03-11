@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { History, Search, Download, ChevronDown, ChevronUp, Clock, FileText, Loader2 } from 'lucide-react'
+import { History, Search, Download, ChevronDown, ChevronUp, Clock, FileText, Loader2, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -58,6 +58,7 @@ export function PodcastTimeMachine() {
   const [episodes, setEpisodes] = useState<PodcastEpisode[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const fetchEpisodes = useCallback(async () => {
     setLoading(true)
@@ -92,6 +93,29 @@ export function PodcastTimeMachine() {
       setLoading(false)
     }
   }, [dateFrom, dateTo, search])
+
+  const deleteEpisode = useCallback(async (ep: PodcastEpisode) => {
+    if (!window.confirm(`"${ep.title || 'Ohne Titel'}" wirklich löschen? Audio-Datei und DB-Eintrag werden entfernt.`)) return
+    setDeletingId(ep.id)
+    try {
+      const res = await fetch('/api/admin/podcast-history', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: ep.id }),
+      })
+      if (res.ok) {
+        setEpisodes(prev => prev.filter(e => e.id !== ep.id))
+      } else {
+        const json = await res.json()
+        alert(`Fehler: ${json.error || 'Unbekannter Fehler'}`)
+      }
+    } catch (err) {
+      alert('Netzwerkfehler beim Löschen')
+      console.error(err)
+    } finally {
+      setDeletingId(null)
+    }
+  }, [])
 
   // Initial load + refetch on filter change
   useEffect(() => {
@@ -200,6 +224,21 @@ export function PodcastTimeMachine() {
                         </Button>
                       </a>
                     )}
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      title="Episode löschen"
+                      disabled={deletingId === ep.id}
+                      onClick={(e) => { e.stopPropagation(); deleteEpisode(ep) }}
+                    >
+                      {deletingId === ep.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
                   </div>
 
                   {/* Expanded Script */}
