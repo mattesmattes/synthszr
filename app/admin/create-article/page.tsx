@@ -168,6 +168,7 @@ export default function CreateArticlePage() {
   const [queueStats, setQueueStats] = useState<QueueStats>({ pending: 0, selected: 0, used: 0, oldestSelectedAt: null })
   const [sourceDistribution, setSourceDistribution] = useState<SourceDistribution[]>([])
   const [usedQueueItemIds, setUsedQueueItemIds] = useState<string[]>([])
+  const [articleCategories, setArticleCategories] = useState<Record<number, string>>({})
   const [maxQueueItems, setMaxQueueItems] = useState(20)
 
   // Keep digests for reference (image generation uses digest content)
@@ -347,6 +348,7 @@ export default function CreateArticlePage() {
       setArticleContent('')
       setUsedModel(null)
       setUsedQueueItemIds([])
+      setArticleCategories({})
     })
 
     try {
@@ -406,6 +408,10 @@ export default function CreateArticlePage() {
                 if (data.sourceDistribution) {
                   console.log('[Ghostwriter-Queue] Source distribution:', data.sourceDistribution)
                 }
+              }
+              if (data.categories) {
+                setArticleCategories(data.categories)
+                console.log(`[Ghostwriter-Queue] Received ${Object.keys(data.categories).length} category assignments`)
               }
               if (data.text) {
                 startTransition(() => setArticleContent(prev => prev + data.text))
@@ -624,10 +630,18 @@ export default function CreateArticlePage() {
       const title = metadata.title || `Artikel vom ${new Date().toLocaleDateString('de-DE')}`
       const slug = metadata.slug || generateSlug(title)
 
-      // 1. Extract category map from markdown comments (before removing them)
-      const categoryMap = extractCategoryMap(bodyContent)
+      // 1. Build category map: prefer pipeline event data, fallback to markdown comments
+      let categoryMap: Map<number, string>
+      const eventCategoryKeys = Object.keys(articleCategories)
+      if (eventCategoryKeys.length > 0) {
+        categoryMap = new Map(eventCategoryKeys.map(k => [Number(k), articleCategories[Number(k)]]))
+        console.log(`[Save] Using ${categoryMap.size} categories from pipeline event`)
+      } else {
+        categoryMap = extractCategoryMap(bodyContent)
+        console.log(`[Save] Extracted ${categoryMap.size} categories from markdown comments`)
+      }
 
-      // 2. Remove category comments from markdown
+      // 2. Remove category comments from markdown (if any)
       const cleanedBody = bodyContent.replace(/<!--\s*category:\s*.+?\s*-->\n?/g, '')
 
       // 3. Convert markdown to TipTap JSON
@@ -748,6 +762,7 @@ export default function CreateArticlePage() {
       setArticleContent('')
       setMetadata({ title: '', excerpt: '', category: 'AI & Tech', slug: '' })
       setUsedQueueItemIds([])
+      setArticleCategories({})
     } catch (error) {
       console.error('Save error:', error)
       alert('Fehler beim Speichern')

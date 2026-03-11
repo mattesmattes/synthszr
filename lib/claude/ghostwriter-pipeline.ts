@@ -51,6 +51,7 @@ export interface ArticlePlan {
 export type PipelineEvent =
   | { type: 'planning'; message: string }
   | { type: 'planned'; itemCount: number }
+  | { type: 'categories'; data: Record<number, string> }
   | { type: 'writing'; current: number; total: number; title: string }
   | { type: 'written'; current: number; total: number }
   | { type: 'assembling' }
@@ -379,6 +380,16 @@ export async function* runGhostwriterPipeline(
   }
 
   yield { type: 'planned', itemCount: items.length }
+
+  // Emit h2Index → category map (client uses this for embedding, survives deduplication)
+  if (plan.categories) {
+    const h2Categories: Record<number, string> = {}
+    plan.ordering.forEach((itemIdx, h2Idx) => {
+      const cat = plan.categories![String(itemIdx)]
+      if (cat) h2Categories[h2Idx] = cat
+    })
+    yield { type: 'categories', data: h2Categories }
+  }
 
   // ── Edit Learning: Load patterns and examples ──────────────────────────────
   let enhancedPrompt = promptText
