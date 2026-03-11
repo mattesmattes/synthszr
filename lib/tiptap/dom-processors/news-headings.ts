@@ -168,7 +168,7 @@ export function processNewsHeadings(
       const latinLabel = LATIN_CATEGORIES[category]
       if (latinLabel) {
         const badge = document.createElement('div')
-        badge.className = 'mt-6 mb-1 category-badge'
+        badge.className = 'mt-6 mb-0 category-badge'
         badge.innerHTML = `<span class="inline-block px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest text-white bg-black rounded-sm">${latinLabel}</span>`
         h2.parentNode?.insertBefore(badge, h2)
         h2.classList.add('category-badge-added')
