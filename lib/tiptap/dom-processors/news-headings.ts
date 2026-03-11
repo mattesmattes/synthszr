@@ -162,25 +162,16 @@ export function processNewsHeadings(
       }
     }
 
-    // Render Latin category badge at the end of the section (once only)
+    // Render Latin category badge directly above the H2 heading (once only)
     const category = h2.getAttribute('data-category')
     if (category && !h2.classList.contains('category-badge-added')) {
       const latinLabel = LATIN_CATEGORIES[category]
       if (latinLabel) {
-        // Find the last element before the next H2 or separator
-        let insertAfter: Element | null = null
-        let sibling = h2.nextElementSibling
-        while (sibling && !sibling.matches('h2, .article-thumbnail-container, .article-separator')) {
-          insertAfter = sibling
-          sibling = sibling.nextElementSibling
-        }
-        if (insertAfter) {
-          const badge = document.createElement('div')
-          badge.className = 'mt-4 mb-2 category-badge'
-          badge.innerHTML = `<span class="inline-block px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest text-white bg-black rounded-sm">${latinLabel}</span>`
-          insertAfter.after(badge)
-          h2.classList.add('category-badge-added')
-        }
+        const badge = document.createElement('div')
+        badge.className = 'mt-6 mb-1 category-badge'
+        badge.innerHTML = `<span class="inline-block px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest text-white bg-black rounded-sm">${latinLabel}</span>`
+        h2.parentNode?.insertBefore(badge, h2)
+        h2.classList.add('category-badge-added')
       }
     }
   })
