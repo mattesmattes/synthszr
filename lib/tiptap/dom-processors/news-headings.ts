@@ -154,7 +154,8 @@ export function processNewsHeadings(
             const prevSibling = linkToRemove.previousSibling
             if (prevSibling && prevSibling.nodeType === Node.TEXT_NODE) {
               const text = prevSibling.textContent || ''
-              prevSibling.textContent = text.replace(/\s*$/, '')
+              // Remove trailing arrow + whitespace (e.g. "→ " or " → ")
+              prevSibling.textContent = text.replace(/\s*→\s*$/, '')
             }
             linkToRemove.remove()
             const nextNode = parent.lastChild
@@ -163,6 +164,11 @@ export function processNewsHeadings(
               if (text.trim() === '.' || text.trim() === '') {
                 nextNode.textContent = text.replace(/\.\s*$/, '')
               }
+            }
+            // Remove paragraph entirely if empty after cleanup
+            const parentEl = parent as HTMLElement
+            if (parentEl.tagName?.toLowerCase() === 'p' && !parentEl.textContent?.trim()) {
+              parentEl.remove()
             }
           }
         }
