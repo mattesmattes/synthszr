@@ -244,6 +244,104 @@ export function generateEmailContent(post: { content?: unknown; excerpt?: string
 }
 
 /**
+ * Pre-process TipTap JSON: extract source links (→ [Source](url)) from paragraphs
+ * after H2 headings and embed them as favicon + link into the heading itself.
+ * Mirrors the DOM-based processNewsHeadings() used in the web renderer.
+ */
+function processSourceLinksIntoHeadings(doc: TiptapDoc): void {
+  if (!doc.content) return
+
+  for (let i = 0; i < doc.content.length; i++) {
+    const node = doc.content[i]
+    if (node.type !== 'heading' || Number(node.attrs?.level) !== 2) continue
+
+    const headingText = extractTextFromNode(node).toLowerCase()
+    if (headingText.includes('synthszr take') || headingText.includes('synthszr contra') || headingText.includes('mattes synthese')) continue
+
+    // Search next 1-3 paragraphs for a source link with arrow
+    for (let j = i + 1; j < Math.min(i + 4, doc.content.length); j++) {
+      const sibling = doc.content[j]
+      if (sibling.type === 'heading') break
+      if (sibling.type !== 'paragraph' || !sibling.content) continue
+
+      let sourceUrl: string | null = null
+      let sourceLinkIndex = -1
+
+      for (let k = 0; k < sibling.content.length; k++) {
+        const child = sibling.content[k]
+
+        // Case 1: Link text starts with → (e.g. "→ Techmeme")
+        if (child.type === 'text' && child.marks?.some(m => m.type === 'link')) {
+          if (child.text?.trim().startsWith('→')) {
+            sourceUrl = child.marks.find(m => m.type === 'link')?.attrs?.href || null
+            sourceLinkIndex = k
+            break
+          }
+        }
+
+        // Case 2: Arrow in preceding text node, link follows
+        if (child.type === 'text' && child.text?.includes('→') && !child.marks?.some(m => m.type === 'link')) {
+          const next = sibling.content[k + 1]
+          if (next?.type === 'text' && next.marks?.some(m => m.type === 'link')) {
+            sourceUrl = next.marks!.find(m => m.type === 'link')?.attrs?.href || null
+            sourceLinkIndex = k
+            break
+          }
+        }
+      }
+
+      if (!sourceUrl) continue
+
+      // Extract favicon domain
+      let faviconDomain: string
+      try {
+        faviconDomain = new URL(sourceUrl).hostname
+      } catch {
+        break
+      }
+      const cleanUrl = sanitizeUrl(sourceUrl) || sourceUrl
+
+      // Mark heading with source info for convertNodeToHtml to render favicon + link
+      node.attrs = {
+        ...node.attrs,
+        sourceUrl: cleanUrl,
+        faviconDomain,
+      }
+
+      // Remove the arrow + source link from the paragraph
+      if (sourceLinkIndex >= 0) {
+        // Remove arrow text node (clean up → and whitespace)
+        const arrowNode = sibling.content[sourceLinkIndex]
+        if (arrowNode.marks?.some(m => m.type === 'link')) {
+          // Case 1: Arrow is inside the link — just remove the link node
+          sibling.content.splice(sourceLinkIndex, 1)
+        } else {
+          // Case 2: Arrow is in a text node, link is next node
+          arrowNode.text = (arrowNode.text || '').replace(/\s*→\s*$/, '').replace(/\s*→\s*/, '')
+          if (!arrowNode.text.trim()) {
+            sibling.content.splice(sourceLinkIndex, 1)
+          }
+          // Remove the link node that follows
+          const linkIdx = sibling.content.findIndex((c, idx) =>
+            idx >= sourceLinkIndex && c.type === 'text' && c.marks?.some(m => m.type === 'link' && m.attrs?.href === sourceUrl)
+          )
+          if (linkIdx >= 0) sibling.content.splice(linkIdx, 1)
+        }
+
+        // Clean trailing period/empty text
+        const lastChild = sibling.content[sibling.content.length - 1]
+        if (lastChild?.type === 'text') {
+          lastChild.text = (lastChild.text || '').replace(/\.\s*$/, '').replace(/\s+$/, '')
+          if (!lastChild.text) sibling.content.pop()
+        }
+      }
+
+      break // Found source for this heading, move on
+    }
+  }
+}
+
+/**
  * Convert post content to email-friendly HTML with Synthszr Vote badges
  * Async version that fetches ratings (with ticker/percent for public companies) from APIs
  * Optionally includes article thumbnails before H2 headings
@@ -301,6 +399,9 @@ export async function generateEmailContentWithVotes(
       companySourceDoc = originalContent as TiptapDoc
     }
   }
+
+  // Pre-process: extract source links from paragraphs into H2 headings (favicon + link)
+  processSourceLinksIntoHeadings(doc)
 
   // Extract full text from ORIGINAL content to find ALL companies
   // This ensures company tags are detected even when translations don't preserve them
@@ -829,7 +930,17 @@ function convertNodeToHtml(node: TiptapNode): string {
         6: '14px',
       }
       const fontSize = headingSizes[Number(level)] || '22px'
-      return `<h${level} style="font-size: ${fontSize}; margin: 16px 0 8px 0;">${renderContent(node.content)}</h${level}>`
+      let headingHtml = renderContent(node.content)
+
+      // If heading has a source link, wrap content with favicon + link
+      const srcUrl = node.attrs?.sourceUrl as string | undefined
+      const favDomain = node.attrs?.faviconDomain as string | undefined
+      if (srcUrl && favDomain) {
+        const favicon = `<img src="https://www.google.com/s2/favicons?domain=${favDomain}&sz=32" alt="" width="16" height="16" style="vertical-align: middle; margin-right: 6px; opacity: 0.7;" />`
+        headingHtml = `${favicon}<a href="${srcUrl}" style="color: inherit; text-decoration: none;">${headingHtml}</a>`
+      }
+
+      return `<h${level} style="font-size: ${fontSize}; margin: 16px 0 8px 0;">${headingHtml}</h${level}>`
     }
     case 'bulletList':
       return `<ul>${node.content?.map(li => `<li>${renderContent(li.content?.[0]?.content)}</li>`).join('')}</ul>`
