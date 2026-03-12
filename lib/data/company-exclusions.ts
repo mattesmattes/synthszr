@@ -30,6 +30,10 @@ export const EXCLUDED_COMPANY_NAMES: Set<string> = new Set([
   'Tech',          // too generic
   'Pilot',         // common noun (e.g., "pilot project")
   'Well',          // common English word, not a company
+  'Pentagon',      // US military headquarters, not a company
+  'Tempo',         // common noun (speed/pace)
+  'Every',         // common English word
+  'Clay',          // common noun (material)
 ])
 
 /**
