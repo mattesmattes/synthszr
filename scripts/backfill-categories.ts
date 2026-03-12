@@ -1,111 +1,78 @@
 /**
  * Backfill category attributes on existing articles' H2 headings.
- * Uses keyword matching on FULL SECTION TEXT (heading + all paragraphs until next H2).
+ * Uses Claude Haiku to categorize each section based on full text.
  *
  * Usage: npx tsx scripts/backfill-categories.ts [--force] [slug]
  *   --force  Overwrite existing categories
  *   slug     Process only this specific post
  */
 
+import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
 import { config } from 'dotenv'
 config({ path: '.env.local' })
 
 const supabaseUrl = 'https://zadrjbyszvsusukajsbp.supabase.co'
 const supabase = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
-// Keywords per category — scored against FULL section text (heading + body).
-// "ki" and "ai" are intentionally EXCLUDED from AI Tech because
-// in an AI-focused blog, every section mentions them.
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  'Robotik': [
-    'roboter', 'robotik', 'drohne', 'drohnen', 'autonom', 'humanoid',
-    'hardware', 'sensor', 'actuator', 'robotics', 'robotik-chef',
-    'manipulator', 'greifer', 'laufmaschine',
-  ],
-  'Politik': [
-    'politik', 'regulierung', 'gesetz', 'regierung', 'militär', 'militärisch',
-    'krieg', 'iran', 'sanktion', 'verteidigung', 'sicherheit', 'nato',
-    'pentagon', 'gericht', 'klage', 'konflikt', 'angriff', 'waffe',
-    'überwachung', 'geheimdienst', 'bahrain', 'rüstung', 'verbot',
-    'richtlinie', 'kommission', 'bundesregierung', 'kongress', 'senat',
-    'souveränität', 'spionage', 'zensur', 'export', 'embargo',
-  ],
-  'Gossip': [
-    'ceo', 'chef', 'verlässt', 'wechsel', 'skandal', 'deal', 'übernahme',
-    'funding', 'bewertung', 'milliard', 'million', 'investor', 'aktie',
-    'börse', 'markt', 'märkte', 'quartal', 'umsatz', 'gewinn',
-    'wall street', 'kurs', 'analyst', 'entlassung', 'gefeuert', 'abgang',
-    'nachfolger', 'gerücht', 'personal', 'verteidigt', 'brief',
-    'rücktritt', 'gründer', 'vorstand', 'aufsichtsrat', 'ipo',
-    'kapital', 'rendite', 'bilanz',
-  ],
-  'UX': [
-    'ux', 'design', 'interface', 'usability', 'nutzer', 'benutzer',
-    'user experience', 'accessibility', 'ui', 'oberfläche', 'barrierefreiheit',
-    'interaktion', 'prototyp', 'figma', 'wireframe',
-  ],
-  'Informatik': [
-    'code', 'programmier', 'software', 'developer', 'api', 'framework',
-    'compiler', 'ide', 'github', 'open source', 'infrastruktur', 'cloud',
-    'server', 'oracle', 'datenbank', 'stack', 'backend', 'frontend',
-    'devops', 'kubernetes', 'docker', 'architektur', 'deployment',
-    'microservice', 'rechenzentrum', 'latenz', 'skalier',
-  ],
-  'Gesellschaft': [
-    'gesellschaft', 'ethik', 'arbeit', 'job', 'bildung', 'mensch',
-    'bestattung', 'digitalisier', 'langweilig', 'branche', 'alltag',
-    'beruf', 'handwerk', 'dienstleistung', 'gesundheit', 'pflege',
-    'schule', 'universität', 'geschäft', 'unternehmen', 'plattform',
-    'wandel', 'transformation', 'kultur', 'medien', 'journalismus',
-    'demokratie', 'verantwortung', 'vertrauen',
-  ],
-  'Philosophie': [
-    'philosophie', 'denken', 'bewusstsein', 'existenz', 'bedeutung',
-    'sinn', 'paradox', 'ironie', 'illusion', 'reflexion', 'essay',
-    'moral', 'utopie', 'dystopie', 'menschlichkeit', 'freiheit',
-    'determinismus', 'zukunft',
-  ],
-  'AI Tech': [
-    // Only specific AI technology terms — NOT generic "ki"/"ai"
-    'openai', 'anthropic', 'gemini', 'claude', 'gpt', 'llm',
-    'modell', 'token', 'reasoning', 'neural', 'machine learning',
-    'deep learning', 'transformer', 'chatbot', 'copilot', 'inference',
-    'training', 'fine-tuning', 'benchmark', 'wissensgraph', 'knowledge graph',
-    'rag', 'embedding', 'prompt', 'multimodal', 'sprachmodell',
-    'forschung', 'paper', 'release', 'parameter', 'kontext',
-    'halluzination', 'alignment', 'grammarly', 'feature',
-  ],
-}
+const VALID_CATEGORIES = [
+  'AI Tech', 'Gossip', 'Politik', 'UX', 'Informatik', 'Robotik', 'Gesellschaft', 'Philosophie',
+]
 
 interface SectionData {
   headingText: string
   bodyText: string
 }
 
-function categorizeSection(section: SectionData): string {
-  // Combine heading + body for full-text scoring
-  const fullText = `${section.headingText} ${section.bodyText}`.toLowerCase()
+async function categorizeSections(sections: SectionData[]): Promise<string[]> {
+  const sectionsText = sections.map((s, i) =>
+    `--- SECTION ${i + 1} ---\nHeadline: ${s.headingText}\n${s.bodyText.slice(0, 800)}`
+  ).join('\n\n')
 
-  let bestCategory = 'Gesellschaft' // fallback — NOT "AI Tech"
-  let bestScore = 0
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    max_tokens: 512,
+    messages: [{
+      role: 'user',
+      content: `Categorize each news section into exactly ONE category. Focus on what the section is PRIMARILY about, not surface-level keyword matches.
 
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    let score = 0
-    for (const kw of keywords) {
-      if (fullText.includes(kw)) score++
-    }
-    // AI Tech needs higher threshold to win (it's the fallback-of-last-resort in an AI blog)
-    if (category === 'AI Tech') {
-      score = Math.max(0, score - 1)
-    }
-    if (score > bestScore) {
-      bestScore = score
-      bestCategory = category
-    }
+CATEGORIES:
+- AI Tech: Core AI technology, models, research, benchmarks, new AI product features
+- Gossip: Business deals, personnel changes, funding, earnings, market reactions, company drama
+- Politik: Government regulation, military, geopolitics, court cases, laws, censorship
+- UX: User experience, design, interfaces, accessibility
+- Informatik: Software engineering, infrastructure, cloud, programming tools, databases
+- Robotik: Robots, drones, autonomous hardware, humanoids
+- Gesellschaft: Society, ethics, jobs, education, industry transformation, cultural impact
+- Philosophie: Philosophical reflections, existential questions, essays about meaning
+
+IMPORTANT: This is an AI-focused blog, so almost every section mentions AI/KI. Do NOT default to "AI Tech" just because AI is mentioned. Categorize by the PRIMARY THEME:
+- A CEO leaving a company → Gossip (not AI Tech)
+- Military using AI dashboards → Politik (not AI Tech)
+- AI replacing jobs in boring industries → Gesellschaft (not AI Tech)
+- A new LLM benchmark or model release → AI Tech
+
+${sectionsText}
+
+Respond with ONLY a JSON array of category strings, one per section. Example: ["Gossip", "AI Tech", "Politik"]`,
+    }],
+  })
+
+  const text = (response.choices[0].message.content || '').trim()
+  const match = text.match(/\[[\s\S]*\]/)
+  if (!match) {
+    console.error('  LLM response not parseable:', text)
+    return sections.map(() => 'Gesellschaft')
   }
 
-  return bestCategory
+  try {
+    const categories: string[] = JSON.parse(match[0])
+    return categories.map(c => VALID_CATEGORIES.includes(c) ? c : 'Gesellschaft')
+  } catch {
+    console.error('  JSON parse error:', text)
+    return sections.map(() => 'Gesellschaft')
+  }
 }
 
 interface TiptapNode {
@@ -121,9 +88,6 @@ function extractText(node: TiptapNode): string {
   return ''
 }
 
-/**
- * Extract sections from TipTap content: each section = H2 heading + all nodes until next H2.
- */
 function extractSections(content: TiptapNode): { node: TiptapNode; section: SectionData }[] {
   if (!content.content) return []
 
@@ -133,7 +97,6 @@ function extractSections(content: TiptapNode): { node: TiptapNode; section: Sect
 
   for (const child of content.content) {
     if (child.type === 'heading' && child.attrs?.level === 2) {
-      // Flush previous section
       if (currentH2) {
         const headingText = extractText(currentH2)
         const lower = headingText.toLowerCase()
@@ -147,12 +110,10 @@ function extractSections(content: TiptapNode): { node: TiptapNode; section: Sect
       currentH2 = child
       currentBody = []
     } else if (currentH2) {
-      // Accumulate body text for current section
       currentBody.push(extractText(child))
     }
   }
 
-  // Flush last section
   if (currentH2) {
     const headingText = extractText(currentH2)
     const lower = headingText.toLowerCase()
@@ -167,24 +128,38 @@ function extractSections(content: TiptapNode): { node: TiptapNode; section: Sect
   return sections
 }
 
-function addCategoriesToContent(content: TiptapNode, force: boolean): { modified: boolean; categories: string[] } {
-  const sections = extractSections(content)
+async function addCategoriesToContent(content: TiptapNode, force: boolean): Promise<{ modified: boolean; categories: string[] }> {
+  const allSections = extractSections(content)
+
+  // Filter sections that need categorization
+  const toProcess: { index: number; node: TiptapNode; section: SectionData }[] = []
   const categories: string[] = []
-  let modified = false
 
-  for (const { node, section } of sections) {
-    // Skip if already has category (unless --force)
+  for (let i = 0; i < allSections.length; i++) {
+    const { node, section } = allSections[i]
     if (node.attrs?.category && !force) {
-      categories.push(node.attrs.category as string)
-      continue
+      categories[i] = node.attrs.category as string
+    } else {
+      toProcess.push({ index: i, node, section })
     }
+  }
 
-    const category = categorizeSection(section)
+  if (toProcess.length === 0) {
+    return { modified: false, categories: allSections.map(s => (s.node.attrs?.category as string) || 'Gesellschaft') }
+  }
+
+  // Batch categorize via LLM
+  const llmCategories = await categorizeSections(toProcess.map(s => s.section))
+
+  let modified = false
+  for (let j = 0; j < toProcess.length; j++) {
+    const { index, node, section } = toProcess[j]
+    const category = llmCategories[j] || 'Gesellschaft'
     if (!node.attrs) node.attrs = { level: 2 }
     node.attrs.category = category
-    categories.push(category)
+    categories[index] = category
     modified = true
-    console.log(`  H2: "${section.headingText.slice(0, 60)}..." → ${category}`)
+    console.log(`  H2: "${section.headingText.slice(0, 60)}…" → ${category}`)
   }
 
   return { modified, categories }
@@ -221,7 +196,7 @@ async function main() {
   console.log(`Found ${posts.length} post(s) to process.${force ? ' (FORCE mode)' : ''}\n`)
 
   for (const post of posts) {
-    console.log(`\nProcessing: "${post.title?.slice(0, 60)}..." (${post.slug})`)
+    console.log(`\nProcessing: "${post.title?.slice(0, 60)}…" (${post.slug})`)
 
     if (!post.content) {
       console.log('  Skipped: no content')
@@ -236,7 +211,7 @@ async function main() {
       continue
     }
 
-    const { modified, categories } = addCategoriesToContent(content, force)
+    const { modified, categories } = await addCategoriesToContent(content, force)
 
     if (!modified) {
       console.log('  Skipped: all H2s already have categories')
@@ -245,7 +220,6 @@ async function main() {
 
     console.log(`  Assigned ${categories.length} categories: ${categories.join(', ')}`)
 
-    // Update the post
     const { error: updateError } = await supabase
       .from('generated_posts')
       .update({ content: JSON.stringify(content) })
@@ -254,7 +228,7 @@ async function main() {
     if (updateError) {
       console.error(`  Error updating: ${updateError.message}`)
     } else {
-      console.log('  Updated successfully!')
+      console.log('  ✓ Updated')
     }
   }
 
