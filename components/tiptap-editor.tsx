@@ -5,7 +5,7 @@ import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
-import { HeadingWithQueueIdEditor } from "@/lib/tiptap/heading-with-queue-id-editor"
+import { HeadingWithQueueId } from "@/lib/tiptap/heading-with-queue-id"
 import { Bold, Italic, Strikethrough, List, ListOrdered, Heading1, Heading2, Quote, Undo, Redo, Link as LinkIcon, Unlink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -33,7 +33,7 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
       StarterKit.configure({
         heading: false, // Use HeadingWithQueueId instead
       }),
-      HeadingWithQueueIdEditor.configure({
+      HeadingWithQueueId.configure({
         levels: [1, 2, 3, 4, 5, 6],
       }),
       Link.configure({

@@ -12,7 +12,6 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
-import { CATEGORY_ORDER } from '@/lib/data/categories'
 import {
   getActiveLearnedPatterns,
   findSimilarEditExamples,
@@ -45,13 +44,11 @@ export interface ArticlePlan {
   excerptBullets: string[]  // genau 3 Einträge
   category: string
   introParagraph: string
-  categories?: Record<string, string>  // item index → Kategorie (z.B. "AI Tech", "Politik")
 }
 
 export type PipelineEvent =
   | { type: 'planning'; message: string }
   | { type: 'planned'; itemCount: number }
-  | { type: 'categories'; data: Record<number, string> }
   | { type: 'writing'; current: number; total: number; title: string }
   | { type: 'written'; current: number; total: number }
   | { type: 'assembling' }
@@ -181,7 +178,6 @@ Erstelle folgenden JSON-Plan:
 {
   "thesis": "Ein Satz auf DEUTSCH — thematischer Kern als Leitfaden",
   "ordering": [1, 3, 7, 2],
-  "categories": {"1": "AI Tech", "3": "Politik", "7": "UX", "2": "Philosophie"},
   "headings": {"1": "Pointierte These auf DEUTSCH — kein 'X launcht Y'", "2": "..."},
   "articleTitle": "Witzige, scharfe These auf DEUTSCH — Humor durch Präzision",
   "excerptBullets": ["Max 65 Zeichen, DEUTSCH, pointiert", "...", "..."],
@@ -223,7 +219,6 @@ export async function writeSection(
   thesis: string,
   model: AIModel,
   promptText: string,
-  sectionCategory?: string
 ): Promise<string> {
   const publicCompanyList = Object.keys(KNOWN_COMPANIES).join(', ')
   const premarketCompanyList = Object.keys(KNOWN_PREMARKET_COMPANIES).join(', ')
@@ -278,11 +273,6 @@ SYNTHSZR TAKE CHECKLISTE:
   let trimmed = text.trim()
   if (!trimmed.startsWith('##')) {
     trimmed = `## ${heading}\n\n${trimmed}`
-  }
-
-  // Inject category comment right after the H2 line (deterministic, not LLM-dependent)
-  if (sectionCategory) {
-    trimmed = trimmed.replace(/^(## .+)$/m, `$1\n<!-- category: ${sectionCategory} -->`)
   }
 
   return trimmed
@@ -370,26 +360,7 @@ export async function* runGhostwriterPipeline(
     }
   }
 
-  // Re-sort ordering by category priority (deterministic fallback if LLM didn't sort correctly)
-  if (plan.categories) {
-    plan.ordering.sort((a, b) => {
-      const catA = plan.categories![String(a)] || 'Philosophie'
-      const catB = plan.categories![String(b)] || 'Philosophie'
-      return CATEGORY_ORDER.indexOf(catA) - CATEGORY_ORDER.indexOf(catB)
-    })
-  }
-
   yield { type: 'planned', itemCount: items.length }
-
-  // Emit h2Index → category map (client uses this for embedding, survives deduplication)
-  if (plan.categories) {
-    const h2Categories: Record<number, string> = {}
-    plan.ordering.forEach((itemIdx, h2Idx) => {
-      const cat = plan.categories![String(itemIdx)]
-      if (cat) h2Categories[h2Idx] = cat
-    })
-    yield { type: 'categories', data: h2Categories }
-  }
 
   // ── Edit Learning: Load patterns and examples ──────────────────────────────
   let enhancedPrompt = promptText
@@ -446,8 +417,7 @@ export async function* runGhostwriterPipeline(
       const heading = plan.headings[String(itemIdx)] || item.title
 
       try {
-        const category = plan.categories?.[String(itemIdx)]
-        results[i] = await writeSection(item, heading, plan.thesis, model, enhancedPrompt, category)
+        results[i] = await writeSection(item, heading, plan.thesis, model, enhancedPrompt)
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
         console.error(`[Pipeline] writeSection ${i + 1} failed:`, errMsg)

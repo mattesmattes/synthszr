@@ -422,8 +422,6 @@ export async function POST(request: NextRequest) {
                 send({ phase: 'pipeline', message: event.message })
               } else if (event.type === 'planned') {
                 send({ phase: 'pipeline', message: `Struktur fertig. Schreibe ${event.itemCount} Abschnitte...` })
-              } else if (event.type === 'categories') {
-                send({ categories: event.data })
               } else if (event.type === 'writing') {
                 send({ phase: 'pipeline', message: `Abschnitt ${event.current} von ${event.total}: ${event.title.slice(0, 60)}...`, progress: { current: event.current, total: event.total } })
               } else if (event.type === 'metadata' || event.type === 'section') {

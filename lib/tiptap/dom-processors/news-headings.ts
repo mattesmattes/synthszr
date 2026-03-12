@@ -1,7 +1,6 @@
 // DOM processor: Process news headings (favicon, source links, thumbnails)
 
 import { sanitizeUrl } from '@/lib/utils/url-sanitizer'
-import { LATIN_CATEGORIES } from '@/lib/data/categories'
 
 export interface ArticleThumbnail {
   id: string
@@ -51,10 +50,8 @@ export function processNewsHeadings(
     const expectedQueueItemId = domQueueItemId || arrayQueueItemId
 
     // THUMBNAIL INSERTION: Check separately from main processing
-    // Check past a possible category-badge element between thumbnail and H2
     const prevSibling = h2.previousElementSibling
-    const hasThumbnailAlready = prevSibling?.classList.contains('article-thumbnail-container') ||
-      (prevSibling?.classList.contains('category-badge') && prevSibling?.previousElementSibling?.classList.contains('article-thumbnail-container'))
+    const hasThumbnailAlready = prevSibling?.classList.contains('article-thumbnail-container')
     if (!hasThumbnailAlready) {
       const thumbnail = thumbnails.find(t => {
         if (t.generation_status !== 'completed') return false
@@ -64,21 +61,15 @@ export function processNewsHeadings(
         return t.article_index === articleIndex
       })
       if (thumbnail) {
-        // Insert before any existing category badge, or before the H2 directly
-        // This ensures order: separator → thumbnail → badge → H2
-        const badgeBefore = h2.previousElementSibling?.classList.contains('category-badge')
-          ? h2.previousElementSibling : null
-        const insertRef = badgeBefore || h2
-
         // Add separator before thumbnail (except for first article)
         if (articleIndex > 0) {
           const separator = document.createElement('div')
           separator.className = 'article-separator h-8 my-8'
-          h2.parentNode?.insertBefore(separator, insertRef)
+          h2.parentNode?.insertBefore(separator, h2)
         }
         const thumbnailContainer = document.createElement('div')
         thumbnailContainer.className = 'article-thumbnail-container flex justify-center my-4'
-        h2.parentNode?.insertBefore(thumbnailContainer, insertRef)
+        h2.parentNode?.insertBefore(thumbnailContainer, h2)
         newThumbnailPortals.push({ element: thumbnailContainer, thumbnail, h2Element: h2 as HTMLElement })
       }
     }
@@ -172,19 +163,6 @@ export function processNewsHeadings(
       }
     }
 
-    // Render category badge directly above the H2 heading (once only)
-    const category = h2.getAttribute('data-category')
-    if (category && !h2.classList.contains('category-badge-added')) {
-      const latinLabel = LATIN_CATEGORIES[category]
-      if (latinLabel) {
-        const badge = document.createElement('div')
-        badge.className = 'mt-6 mb-0 category-badge'
-        badge.innerHTML = `<span class="inline-block px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest text-white bg-black/60 rounded-sm">${latinLabel}</span>`
-        h2.parentNode?.insertBefore(badge, h2)
-        ;(h2 as HTMLElement).style.marginTop = '0'
-        h2.classList.add('category-badge-added')
-      }
-    }
   })
 
   return newThumbnailPortals
