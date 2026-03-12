@@ -45,47 +45,55 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Static pages - available in all active languages
   const staticPages = ['', '/archive', '/why', '/datenschutz', '/impressum', '/companies', '/sources']
 
+  // Static pages - each locale gets its own <url> entry with full alternates
   for (const page of staticPages) {
-    const languages: Record<string, string> = {}
+    const alternates: Record<string, string> = {}
     for (const locale of activeLocales) {
-      languages[locale] = `${BASE_URL}/${locale}${page}`
+      alternates[locale] = `${BASE_URL}/${locale}${page}`
     }
-    languages['x-default'] = `${BASE_URL}/${DEFAULT_LOCALE}${page}`
+    alternates['x-default'] = `${BASE_URL}/${DEFAULT_LOCALE}${page}`
 
-    sitemap.push({
-      url: `${BASE_URL}/${DEFAULT_LOCALE}${page}`,
-      lastModified: new Date(),
-      changeFrequency: page === '' ? 'daily' : 'monthly',
-      priority: page === '' ? 1 : 0.8,
-      alternates: { languages },
-    })
+    for (const locale of activeLocales) {
+      sitemap.push({
+        url: `${BASE_URL}/${locale}${page}`,
+        lastModified: new Date(),
+        changeFrequency: page === '' ? 'daily' : 'monthly',
+        priority: page === '' ? 1 : (locale === DEFAULT_LOCALE ? 0.8 : 0.6),
+        alternates: { languages: alternates },
+      })
+    }
   }
 
-  // Posts - only include languages with completed translations
+  // Posts - each available locale gets its own <url> entry
   for (const post of posts || []) {
     const availableTranslations = postTranslations.get(post.slug) || new Set()
 
-    // Build language alternates for this post
-    const languages: Record<string, string> = {
-      // Default language is always available
-      [DEFAULT_LOCALE]: `${BASE_URL}/${DEFAULT_LOCALE}/posts/${post.slug}`,
-      'x-default': `${BASE_URL}/${DEFAULT_LOCALE}/posts/${post.slug}`,
-    }
-
-    // Add translated versions
+    // Collect all available locales for this post
+    const availableLocales = [DEFAULT_LOCALE]
     for (const locale of activeLocales) {
       if (locale !== DEFAULT_LOCALE && availableTranslations.has(locale)) {
-        languages[locale] = `${BASE_URL}/${locale}/posts/${post.slug}`
+        availableLocales.push(locale)
       }
     }
 
-    sitemap.push({
-      url: `${BASE_URL}/${DEFAULT_LOCALE}/posts/${post.slug}`,
-      lastModified: new Date(post.updated_at || post.created_at),
-      changeFrequency: 'weekly',
-      priority: 0.9,
-      alternates: { languages },
-    })
+    // Build alternates map
+    const alternates: Record<string, string> = {
+      'x-default': `${BASE_URL}/${DEFAULT_LOCALE}/posts/${post.slug}`,
+    }
+    for (const locale of availableLocales) {
+      alternates[locale] = `${BASE_URL}/${locale}/posts/${post.slug}`
+    }
+
+    // Create a <url> entry for each available locale
+    for (const locale of availableLocales) {
+      sitemap.push({
+        url: `${BASE_URL}/${locale}/posts/${post.slug}`,
+        lastModified: new Date(post.updated_at || post.created_at),
+        changeFrequency: 'weekly',
+        priority: locale === DEFAULT_LOCALE ? 0.9 : 0.7,
+        alternates: { languages: alternates },
+      })
+    }
   }
 
   return sitemap
