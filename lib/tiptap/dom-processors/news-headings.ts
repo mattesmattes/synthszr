@@ -93,7 +93,15 @@ export function processNewsHeadings(
         const links = nextSibling.querySelectorAll('a')
         links.forEach((link) => {
           const linkText = link.textContent || ''
-          if (linkText.trim().startsWith('\u2192') || linkText.trim().match(/^\u2192\s/)) {
+          // Case 1: Arrow inside link text — [→ Source](url)
+          if (linkText.trim().startsWith('\u2192')) {
+            sourceUrl = link.getAttribute('href')
+            sourceLinkElement = link
+            return
+          }
+          // Case 2: Arrow in preceding text node — → [Source](url)
+          const prevNode = link.previousSibling
+          if (prevNode?.nodeType === Node.TEXT_NODE && prevNode.textContent?.includes('\u2192')) {
             sourceUrl = link.getAttribute('href')
             sourceLinkElement = link
           }
