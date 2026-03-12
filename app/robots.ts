@@ -9,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ['/admin/', '/api/', '/login', '/newsletter/'],
       },
     ],
-    sitemap: 'https://synthszr.com/sitemap.xml',
+    sitemap: 'https://www.synthszr.com/sitemap.xml',
   }
 }
