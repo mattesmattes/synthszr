@@ -239,6 +239,24 @@
   margin-bottom: 0.5rem;
 }
 
+/* Category badge shown above H2 in editor */
+.ProseMirror h2[data-category]::before {
+  content: attr(data-category);
+  display: block;
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: white;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 1px 8px;
+  border-radius: 2px;
+  width: fit-content;
+  margin-bottom: 2px;
+  margin-top: 8px;
+}
+
 .ProseMirror ul,
 .ProseMirror ol {
   padding-left: 1.5rem;
