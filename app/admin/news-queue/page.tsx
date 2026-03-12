@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Link,
   X
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -131,6 +132,12 @@ export default function NewsQueuePage() {
   const [candidateItems, setCandidateItems] = useState<SynthesisCandidateItem[]>([])
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set())
   const [loadingCandidates, setLoadingCandidates] = useState(false)
+
+  // Manual add dialog
+  const [showManualAddDialog, setShowManualAddDialog] = useState(false)
+  const [manualUrl, setManualUrl] = useState('')
+  const [manualTitle, setManualTitle] = useState('')
+  const [manualText, setManualText] = useState('')
 
   // Embedding status
   const [embeddingStatus, setEmbeddingStatus] = useState<{
@@ -321,6 +328,48 @@ export default function NewsQueuePage() {
     } else {
       setSelectedCandidates(new Set(candidateItems.map(i => i.id)))
     }
+  }
+
+  const handleManualAdd = async () => {
+    if (!manualUrl || !manualTitle || !manualText) return
+    setActionLoading('manual-add')
+    try {
+      let sourceEmail: string
+      try {
+        sourceEmail = new URL(manualUrl).hostname
+      } catch {
+        sourceEmail = manualUrl
+      }
+      const res = await fetch('/api/admin/news-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add',
+          items: [{
+            title: manualTitle,
+            content: manualText,
+            excerpt: manualText.slice(0, 200),
+            sourceUrl: manualUrl,
+            sourceEmail,
+            synthesisScore: 9.0,
+            relevanceScore: 9.0,
+            uniquenessScore: 9.0,
+          }]
+        })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        alert(`${data.added} Artikel hinzugefügt`)
+        setShowManualAddDialog(false)
+        setManualUrl('')
+        setManualTitle('')
+        setManualText('')
+        fetchData()
+      }
+    } catch (error) {
+      console.error('Manual add failed:', error)
+    }
+    setActionLoading(null)
   }
 
   const handleExpire = async () => {
@@ -557,6 +606,15 @@ export default function NewsQueuePage() {
           >
             <Plus className="h-3 w-3 mr-1" />
             Manuell nachimportieren
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs"
+            onClick={() => setShowManualAddDialog(true)}
+          >
+            <Link className="h-3 w-3 mr-1" />
+            Artikel hinzufügen
           </Button>
           <Button
             size="sm"
@@ -1112,6 +1170,74 @@ export default function NewsQueuePage() {
               }}
             >
               Alle auswählen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Add Dialog */}
+      <Dialog open={showManualAddDialog} onOpenChange={setShowManualAddDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <Link className="h-4 w-4" />
+              Artikel hinzufügen
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Artikel direkt per URL und Text zur Queue hinzufügen
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium mb-1 block">URL</label>
+              <input
+                type="url"
+                value={manualUrl}
+                onChange={(e) => setManualUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full rounded border px-3 py-2 text-sm bg-background"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Titel</label>
+              <input
+                type="text"
+                value={manualTitle}
+                onChange={(e) => setManualTitle(e.target.value)}
+                placeholder="Artikeltitel"
+                className="w-full rounded border px-3 py-2 text-sm bg-background"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Text</label>
+              <textarea
+                value={manualText}
+                onChange={(e) => setManualText(e.target.value)}
+                placeholder="Artikelinhalt einfügen..."
+                rows={6}
+                className="w-full rounded border px-3 py-2 text-sm bg-background resize-y"
+              />
+            </div>
+          </div>
+          <DialogFooter className="pt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowManualAddDialog(false)}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleManualAdd}
+              disabled={!manualUrl || !manualTitle || !manualText || actionLoading === 'manual-add'}
+            >
+              {actionLoading === 'manual-add' ? (
+                <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+              ) : (
+                <Plus className="h-3 w-3 mr-2" />
+              )}
+              Hinzufügen
             </Button>
           </DialogFooter>
         </DialogContent>
