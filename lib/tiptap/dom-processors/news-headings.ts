@@ -64,15 +64,21 @@ export function processNewsHeadings(
         return t.article_index === articleIndex
       })
       if (thumbnail) {
+        // Insert before any existing category badge, or before the H2 directly
+        // This ensures order: separator → thumbnail → badge → H2
+        const badgeBefore = h2.previousElementSibling?.classList.contains('category-badge')
+          ? h2.previousElementSibling : null
+        const insertRef = badgeBefore || h2
+
         // Add separator before thumbnail (except for first article)
         if (articleIndex > 0) {
           const separator = document.createElement('div')
           separator.className = 'article-separator h-8 my-8'
-          h2.parentNode?.insertBefore(separator, h2)
+          h2.parentNode?.insertBefore(separator, insertRef)
         }
         const thumbnailContainer = document.createElement('div')
         thumbnailContainer.className = 'article-thumbnail-container flex justify-center my-4'
-        h2.parentNode?.insertBefore(thumbnailContainer, h2)
+        h2.parentNode?.insertBefore(thumbnailContainer, insertRef)
         newThumbnailPortals.push({ element: thumbnailContainer, thumbnail, h2Element: h2 as HTMLElement })
       }
     }
