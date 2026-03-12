@@ -178,7 +178,7 @@ async function main() {
   if (targetSlug) {
     query = query.eq('slug', targetSlug)
   } else {
-    query = query.limit(50)
+    query = query.limit(500)
   }
 
   const { data: posts, error } = await query
