@@ -165,11 +165,6 @@ export function processNewsHeadings(
                 nextNode.textContent = text.replace(/\.\s*$/, '')
               }
             }
-            // Remove paragraph entirely if empty after cleanup
-            const parentEl = parent as HTMLElement
-            if (parentEl.tagName?.toLowerCase() === 'p' && !parentEl.textContent?.trim()) {
-              parentEl.remove()
-            }
           }
         }
       } catch {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, type ReactNode } from 'react'
 import {
   TrendingUp,
   Loader2,
@@ -36,6 +36,23 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import type { PremarketItem, PremarketApiResponse, PremarketPagination } from '@/lib/premarket/types'
+
+/** Render markdown links [text](url) as clickable <a> tags, keep rest as text */
+function renderMarkdownLinks(text: string): ReactNode {
+  const parts = text.split(/(\[[^\]]+\]\([^)]+\))/)
+  if (parts.length === 1) return text
+  return parts.map((part, i) => {
+    const match = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+    if (match) {
+      return (
+        <a key={i} href={match[2]} target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">
+          {match[1]}
+        </a>
+      )
+    }
+    return part
+  })
+}
 
 const RATING_COLORS: Record<string, string> = {
   BUY: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
@@ -345,7 +362,7 @@ export default function PremarketPage() {
                     <div className="space-y-2">
                       {item.synthesis.rationale && (
                         <p className="text-sm text-muted-foreground line-clamp-2">
-                          {item.synthesis.rationale}
+                          {renderMarkdownLinks(item.synthesis.rationale)}
                         </p>
                       )}
                       <div className="flex items-center gap-2 flex-wrap">
@@ -359,7 +376,7 @@ export default function PremarketPage() {
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p className="max-w-xs">{item.synthesis.googleTrends.trend_summary}</p>
+                                <p className="max-w-xs">{renderMarkdownLinks(item.synthesis.googleTrends.trend_summary)}</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
@@ -464,7 +481,7 @@ export default function PremarketPage() {
                     {selectedItem.synthesis.rationale && (
                       <div>
                         <h4 className="text-sm font-medium text-muted-foreground mb-2">Begründung</h4>
-                        <p className="text-sm">{selectedItem.synthesis.rationale}</p>
+                        <p className="text-sm">{renderMarkdownLinks(selectedItem.synthesis.rationale)}</p>
                       </div>
                     )}
 
@@ -476,7 +493,7 @@ export default function PremarketPage() {
                           {selectedItem.synthesis.keyTakeaways.map((takeaway, i) => (
                             <li key={i} className="text-sm flex gap-2">
                               <span className="text-primary font-mono">{i + 1}.</span>
-                              {takeaway}
+                              <span>{renderMarkdownLinks(takeaway)}</span>
                             </li>
                           ))}
                         </ul>
@@ -498,7 +515,7 @@ export default function PremarketPage() {
                                   </span>
                                 )}
                               </div>
-                              <p className="text-sm">{idea.thesis}</p>
+                              <p className="text-sm">{renderMarkdownLinks(idea.thesis)}</p>
                               {idea.risk_flags && idea.risk_flags.length > 0 && (
                                 <div className="flex gap-1 mt-2 flex-wrap">
                                   {idea.risk_flags.map((flag, j) => (
@@ -522,7 +539,7 @@ export default function PremarketPage() {
                           {selectedItem.synthesis.contrarianInsights.map((insight, i) => (
                             <li key={i} className="text-sm flex gap-2">
                               <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                              {insight}
+                              <span>{renderMarkdownLinks(insight)}</span>
                             </li>
                           ))}
                         </ul>
@@ -540,7 +557,7 @@ export default function PremarketPage() {
                               {selectedItem.synthesis.googleTrends.trend_direction}
                             </span>
                           </div>
-                          <p className="text-sm">{selectedItem.synthesis.googleTrends.trend_summary}</p>
+                          <p className="text-sm">{renderMarkdownLinks(selectedItem.synthesis.googleTrends.trend_summary)}</p>
                           <p className="text-xs text-muted-foreground mt-2">
                             Peak: {selectedItem.synthesis.googleTrends.peak_interest_period}
                           </p>

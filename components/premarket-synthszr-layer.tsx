@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   X,
   RefreshCcw,
@@ -14,6 +14,23 @@ import {
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
 import type { PremarketItem, PremarketSynthesis } from '@/lib/premarket/types'
+
+/** Render markdown links [text](url) as clickable <a> tags, keep rest as text */
+function renderMarkdownLinks(text: string): ReactNode {
+  const parts = text.split(/(\[[^\]]+\]\([^)]+\))/)
+  if (parts.length === 1) return text
+  return parts.map((part, i) => {
+    const match = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+    if (match) {
+      return (
+        <a key={i} href={match[2]} target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">
+          {match[1]}
+        </a>
+      )
+    }
+    return part
+  })
+}
 
 interface PremarketSynthszrLayerProps {
   /** Search term for the company */
@@ -214,7 +231,7 @@ function PremarketSynthesisContent({ synthesis }: { synthesis: PremarketSynthesi
               <span>Empfehlung</span>
             </div>
             {synthesis.rationale && (
-              <p className="text-sm leading-relaxed">{synthesis.rationale}</p>
+              <p className="text-sm leading-relaxed">{renderMarkdownLinks(synthesis.rationale)}</p>
             )}
           </div>
         </section>
@@ -229,7 +246,7 @@ function PremarketSynthesisContent({ synthesis }: { synthesis: PremarketSynthesi
           <ol className="list-decimal space-y-2 pl-5 text-sm">
             {synthesis.keyTakeaways.map((item, index) => (
               <li key={`takeaway-${index}`} className="leading-relaxed">
-                {item}
+                {renderMarkdownLinks(item)}
               </li>
             ))}
           </ol>
@@ -262,7 +279,7 @@ function PremarketSynthesisContent({ synthesis }: { synthesis: PremarketSynthesi
                     {idea.rating}
                   </span>
                 </div>
-                <p className="text-sm leading-relaxed">{idea.thesis}</p>
+                <p className="text-sm leading-relaxed">{renderMarkdownLinks(idea.thesis)}</p>
                 {typeof idea.time_horizon_months === 'number' && (
                   <p className="mt-3 text-xs text-muted-foreground">
                     Zeithorizont: {idea.time_horizon_months} {idea.time_horizon_months === 1 ? 'Monat' : 'Monate'}
@@ -309,7 +326,7 @@ function PremarketSynthesisContent({ synthesis }: { synthesis: PremarketSynthesi
               })()}
               <span className="font-medium">{synthesis.googleTrends.trend_direction}</span>
             </div>
-            <p className="text-sm leading-relaxed">{synthesis.googleTrends.trend_summary}</p>
+            <p className="text-sm leading-relaxed">{renderMarkdownLinks(synthesis.googleTrends.trend_summary)}</p>
             <p className="mt-2 text-xs text-muted-foreground">
               Peak: {synthesis.googleTrends.peak_interest_period}
             </p>
@@ -326,7 +343,7 @@ function PremarketSynthesisContent({ synthesis }: { synthesis: PremarketSynthesi
           </header>
           <ul className="space-y-2 rounded-lg border border-[#CCFF00]/30 bg-[#CCFF00]/10 p-4 text-sm leading-relaxed">
             {synthesis.contrarianInsights.map((insight, index) => (
-              <li key={`contrarian-${index}`}>• {insight}</li>
+              <li key={`contrarian-${index}`}>• {renderMarkdownLinks(insight)}</li>
             ))}
           </ul>
         </section>
