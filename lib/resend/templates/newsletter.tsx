@@ -538,7 +538,7 @@ const ccPromoLabel = {
 
 const ccPromoHeading = {
   fontFamily: "'SF Mono', Monaco, monospace",
-  fontSize: '18px',
+  fontSize: '20px',
   fontWeight: '700',
   color: '#000000',
   margin: '0 0 10px',
@@ -547,7 +547,7 @@ const ccPromoHeading = {
 
 const ccPromoCopy = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '11px',
+  fontSize: '14px',
   lineHeight: '1.5',
   color: 'rgba(0,0,0,0.65)',
   margin: '0 0 12px',
