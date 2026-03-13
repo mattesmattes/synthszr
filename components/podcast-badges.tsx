@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 const PODCAST_LINKS = [
   {
     name: 'Apple Podcasts',
@@ -21,7 +23,7 @@ const PODCAST_LINKS = [
   },
 ]
 
-export function PodcastBadges() {
+export function PodcastBadges({ children }: { children?: ReactNode }) {
   return (
     <div className="bg-white px-4 py-3">
       <p className="text-center text-lg italic text-[#1a1a1a] font-serif mx-auto py-1 whitespace-nowrap">
@@ -46,6 +48,7 @@ export function PodcastBadges() {
           </a>
         ))}
       </div>
+      {children}
     </div>
   )
 }

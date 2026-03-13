@@ -184,14 +184,14 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
                     className="h-20 md:h-24 w-auto"
                   />
                 </Link>
-                {/* Audio Player - directly under logo */}
-                <div className="relative z-10 mt-3">
+              </div>
+              <PodcastBadges>
+                <div className="flex justify-center pt-3">
                   <Suspense fallback={null}>
                     <AudioPlayer postId={post.id} locale="de" />
                   </Suspense>
                 </div>
-              </div>
-              <PodcastBadges />
+              </PodcastBadges>
             </div>
           )}
 

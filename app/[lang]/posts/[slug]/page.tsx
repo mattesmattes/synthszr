@@ -365,14 +365,14 @@ export default async function PostPage({ params }: PageProps) {
                     className="h-auto w-[80%] md:h-24 md:w-auto md:max-w-[400px]"
                   />
                 </Link>
-                {/* Audio Player - directly under logo */}
-                <div className="relative z-10 mt-3 flex items-center gap-2">
+              </div>
+              <PodcastBadges>
+                <div className="flex justify-center pt-3">
                   <Suspense fallback={null}>
                     <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
                   </Suspense>
                 </div>
-              </div>
-              <PodcastBadges />
+              </PodcastBadges>
             </div>
           )}
 
