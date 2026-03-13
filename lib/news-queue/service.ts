@@ -12,7 +12,7 @@ import type {
   BalancedQueueSelection
 } from '@/lib/supabase/types'
 
-const SOURCE_LIMIT_PERCENTAGE = 0.35 // 35% max from any single source
+const SOURCE_LIMIT_PERCENTAGE = 1.0 // No source limit — all items pass through
 
 /**
  * Patterns that indicate a queue item is NOT a real article

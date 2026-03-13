@@ -1,15 +1,14 @@
 /**
  * Synthesis Pipeline
- * Orchestrates the full synthesis process: search → score → develop → store
+ * Scores all digest items via Claude Haiku (SUBSTANZ/RELEVANZ/NEUHEIT)
+ * and queues them to the news queue. No historical comparison.
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { generateEmbedding, prepareTextForEmbedding } from '@/lib/embeddings/generator'
-import { findSimilarItems, getItemEmbedding, SimilarItem } from './search'
-import { scoreSynthesisCandidates, getTopCandidates, scoreContentOnly, ScoredCandidate, SynthesisType } from './score'
-import { developSyntheses, developContentSynthesis, DevelopedSynthesis } from './develop'
 import { addToQueue } from '@/lib/news-queue'
 import { isJunkTitle } from '@/lib/news-queue/service'
+import { scoreContentOnly } from './score'
+import type { DevelopedSynthesis } from './develop'
 
 export interface SynthesisPipelineResult {
   success: boolean
@@ -17,7 +16,7 @@ export interface SynthesisPipelineResult {
   itemsProcessed: number
   candidatesFound: number
   synthesesDeveloped: number
-  remainingSyntheses: number  // Candidates that still need development
+  remainingSyntheses: number
   errors: string[]
 }
 
@@ -40,48 +39,30 @@ export interface SynthesisPrompt {
   name: string
   scoring_prompt: string
   development_prompt: string
-  content_prompt?: string  // Prompt for content-only syntheses (no historical reference)
+  content_prompt?: string
   core_thesis: string
 }
 
-/**
- * Get the active synthesis prompt from the database
- */
-async function getActiveSynthesisPrompt(): Promise<SynthesisPrompt | null> {
-  const supabase = createAdminClient()
-
-  const { data, error } = await supabase
-    .from('synthesis_prompts')
-    .select('*')
-    .eq('is_active', true)
-    .single()
-
-  if (error || !data) {
-    console.error('[Pipeline] No active synthesis prompt found')
-    return null
-  }
-
-  return data as SynthesisPrompt
-}
+// Max items per Supabase .in() query to avoid payload limits
+const SUPABASE_BATCH_SIZE = 200
 
 /**
- * Get daily_repo items associated with a digest
- * If sources_used is empty, try to match items by title from the digest content
+ * Get daily_repo items associated with a digest (no item cap)
  */
 async function getDigestItems(digestId: string): Promise<
   Array<{
     id: string
     title: string
     content: string
-    embedding: string | number[] | null  // Can be string from DB, array if newly generated, or null
+    source_email: string | null
+    source_url: string | null
   }>
 > {
   const supabase = createAdminClient()
 
-  // Get the digest to find its date and content
   const { data: digest, error: digestError } = await supabase
     .from('daily_digests')
-    .select('digest_date, sources_used, analysis_content')
+    .select('digest_date, sources_used')
     .eq('id', digestId)
     .single()
 
@@ -89,480 +70,189 @@ async function getDigestItems(digestId: string): Promise<
     throw new Error(`Digest not found: ${digestId}`)
   }
 
-  // If sources_used is available, use those specific items
+  let rawItems: Array<{ id: string; title: string; content: string; source_email: string | null; source_url: string | null }>
+
   if (digest.sources_used && digest.sources_used.length > 0) {
-    console.log(`[Pipeline] Using ${digest.sources_used.length} sources from sources_used`)
+    console.log(`[Pipeline] Fetching ${digest.sources_used.length} sources from sources_used`)
+
+    // Batch fetch to avoid Supabase payload limits
+    const allItems: typeof rawItems = []
+    const ids: string[] = digest.sources_used
+    for (let i = 0; i < ids.length; i += SUPABASE_BATCH_SIZE) {
+      const batch = ids.slice(i, i + SUPABASE_BATCH_SIZE)
+      const { data, error } = await supabase
+        .from('daily_repo')
+        .select('id, title, content, source_email, source_url')
+        .in('id', batch)
+
+      if (error) throw error
+      if (data) allItems.push(...data)
+    }
+
+    rawItems = allItems
+  } else {
+    // Fallback: get ALL items from that date
     const { data, error } = await supabase
       .from('daily_repo')
-      .select('id, title, content, embedding')
-      .in('id', digest.sources_used)
+      .select('id, title, content, source_email, source_url')
+      .eq('newsletter_date', digest.digest_date)
 
     if (error) throw error
-    if (!data) return []
-
-    // Deduplicate by title even for sources_used (in case duplicates were stored)
-    const seenTitles = new Set<string>()
-    const uniqueItems = data.filter(item => {
-      const normalizedTitle = item.title.trim().toLowerCase().slice(0, 100)
-      if (seenTitles.has(normalizedTitle)) {
-        console.log(`[Pipeline] Skipping duplicate in sources_used: "${item.title.slice(0, 40)}..."`)
-        return false
-      }
-      seenTitles.add(normalizedTitle)
-      return true
-    })
-
-    console.log(`[Pipeline] After deduplication: ${uniqueItems.length} unique items (from ${data.length} sources_used)`)
-    return uniqueItems
+    rawItems = data || []
   }
 
-  // Get ALL items from that date - no content matching filter
-  // The old approach filtered by title appearing in digest content, which was too strict
-  const { data: allItems, error } = await supabase
-    .from('daily_repo')
-    .select('id, title, content, embedding')
-    .eq('newsletter_date', digest.digest_date)
+  console.log(`[Pipeline] Fetched ${rawItems.length} raw items`)
 
-  if (error) throw error
-  if (!allItems || allItems.length === 0) return []
-
-  console.log(`[Pipeline] Found ${allItems.length} items for date ${digest.digest_date}`)
-
-  // Deduplicate by title - keep only the FIRST item per unique title
-  // This fixes the issue where the same article is imported multiple times with different IDs
+  // Deduplicate by title
   const seenTitles = new Set<string>()
-  const uniqueItems = allItems.filter(item => {
-    // Normalize title for comparison (trim, lowercase first 100 chars)
-    const normalizedTitle = item.title.trim().toLowerCase().slice(0, 100)
-    if (seenTitles.has(normalizedTitle)) {
-      console.log(`[Pipeline] Skipping duplicate: "${item.title.slice(0, 40)}..."`)
-      return false
-    }
-    seenTitles.add(normalizedTitle)
+  const uniqueItems = rawItems.filter(item => {
+    const normalized = item.title.trim().toLowerCase().slice(0, 100)
+    if (seenTitles.has(normalized)) return false
+    seenTitles.add(normalized)
     return true
   })
 
-  console.log(`[Pipeline] After deduplication: ${uniqueItems.length} unique items (removed ${allItems.length - uniqueItems.length} duplicates)`)
+  const dupeCount = rawItems.length - uniqueItems.length
+  if (dupeCount > 0) {
+    console.log(`[Pipeline] Removed ${dupeCount} duplicates, ${uniqueItems.length} unique items`)
+  }
 
   return uniqueItems
 }
 
 /**
- * Store synthesis candidates in the database
+ * Score items via Claude Haiku and queue them to the news queue in batches.
+ * Scoring criteria: SUBSTANZ, RELEVANZ, NEUHEIT (each 0-10).
  */
-async function storeCandidates(
-  digestId: string,
-  candidates: ScoredCandidate[]
-): Promise<void> {
-  if (candidates.length === 0) return
-
-  const supabase = createAdminClient()
-
-  const records = candidates.map((c) => ({
-    source_item_id: c.sourceItem.id,
-    related_item_id: c.relatedItem.id,
-    similarity_score: c.similarityScore,
-    synthesis_type: c.synthesisType,
-    originality_score: c.originalityScore,
-    relevance_score: c.relevanceScore,
-    reasoning: c.reasoning,
-    digest_id: digestId,
-  }))
-
-  const { error } = await supabase.from('synthesis_candidates').upsert(records, {
-    onConflict: 'source_item_id,related_item_id,digest_id',
-  })
-
-  if (error) {
-    console.error('[Pipeline] Failed to store candidates:', error)
-  }
-}
-
-/**
- * Auto-queue synthesis candidates for article generation
- * This adds scored candidates to the news_queue for source-diversified selection
- * Filters out junk items (games, privacy policies, etc.)
- */
-async function queueCandidatesForArticle(
-  candidates: ScoredCandidate[]
-): Promise<{ added: number; skipped: number }> {
-  if (candidates.length === 0) {
-    return { added: 0, skipped: 0 }
+async function scoreAndQueueItems(
+  items: Array<{
+    id: string
+    title: string
+    content: string
+    source_email: string | null
+    source_url: string | null
+  }>,
+  onProgress?: (phase: 'scoring' | 'queuing', current: number, total: number) => void
+): Promise<{ added: number; skipped: number; junkFiltered: number; scored: number }> {
+  // Filter junk
+  const validItems = items.filter(item => !isJunkTitle(item.title))
+  const junkFiltered = items.length - validItems.length
+  if (junkFiltered > 0) {
+    console.log(`[Pipeline] Filtered ${junkFiltered} junk items`)
   }
 
-  // Filter out junk candidates
-  const validCandidates = candidates.filter(c => {
-    if (isJunkTitle(c.sourceItem.title)) {
-      console.log(`[Pipeline] Skipping junk candidate: "${c.sourceItem.title.slice(0, 50)}..."`)
-      return false
+  if (validItems.length === 0) {
+    return { added: 0, skipped: 0, junkFiltered, scored: 0 }
+  }
+
+  // Phase 1: Score all items via Haiku (SUBSTANZ/RELEVANZ/NEUHEIT)
+  console.log(`[Pipeline] Scoring ${validItems.length} items via Haiku...`)
+  const scoreMap = await scoreContentOnly(
+    validItems.map(item => ({ id: item.id, title: item.title, content: item.content || '' })),
+    { concurrency: 10 }
+  )
+  console.log(`[Pipeline] Scored ${scoreMap.size} items`)
+
+  if (onProgress) {
+    onProgress('scoring', scoreMap.size, validItems.length)
+  }
+
+  // Phase 2: Queue all items with their real scores
+  let totalAdded = 0
+  let totalSkipped = 0
+  const QUEUE_BATCH_SIZE = 50
+
+  for (let i = 0; i < validItems.length; i += QUEUE_BATCH_SIZE) {
+    const batch = validItems.slice(i, i + QUEUE_BATCH_SIZE)
+
+    const queueItems = batch.map(item => {
+      const scores = scoreMap.get(item.id)
+      return {
+        dailyRepoId: item.id,
+        title: item.title,
+        content: item.content || undefined,
+        sourceEmail: item.source_email || undefined,
+        sourceUrl: item.source_url || undefined,
+        synthesisScore: scores?.synthesisScore ?? 5,
+        relevanceScore: scores?.relevanceScore ?? 5,
+        uniquenessScore: scores?.uniquenessScore ?? 5,
+      }
+    })
+
+    try {
+      const result = await addToQueue(queueItems)
+      totalAdded += result.added
+      totalSkipped += result.skipped
+    } catch (error) {
+      console.error(`[Pipeline] Batch queue error at offset ${i}:`, error)
+      totalSkipped += batch.length
     }
-    return true
-  })
 
-  const junkCount = candidates.length - validCandidates.length
-  if (junkCount > 0) {
-    console.log(`[Pipeline] Filtered out ${junkCount} junk candidates`)
-  }
-
-  if (validCandidates.length === 0) {
-    return { added: 0, skipped: candidates.length }
-  }
-
-  const supabase = createAdminClient()
-
-  // Get source info from daily_repo for each candidate
-  const sourceItemIds = validCandidates.map(c => c.sourceItem.id)
-  const { data: sourceItems } = await supabase
-    .from('daily_repo')
-    .select('id, source_email, source_url')
-    .in('id', sourceItemIds)
-
-  const sourceMap = new Map<string, { source_email: string | null; source_url: string | null }>()
-  if (sourceItems) {
-    for (const item of sourceItems) {
-      sourceMap.set(item.id, {
-        source_email: item.source_email,
-        source_url: item.source_url
-      })
+    if (onProgress) {
+      onProgress('queuing', Math.min(i + QUEUE_BATCH_SIZE, validItems.length), validItems.length)
     }
   }
 
-  // Map candidates to queue items
-  const queueItems = validCandidates.map(c => {
-    const source = sourceMap.get(c.sourceItem.id)
-    return {
-      dailyRepoId: c.sourceItem.id,
-      title: c.sourceItem.title,
-      content: c.sourceItem.content || undefined,
-      sourceEmail: source?.source_email || undefined,
-      sourceUrl: source?.source_url || undefined,
-      synthesisScore: c.originalityScore,
-      relevanceScore: c.relevanceScore,
-      uniquenessScore: 5 // Default, will be recalculated by queue service
-    }
-  })
-
-  console.log(`[Pipeline] Auto-queuing ${queueItems.length} valid candidates for article generation`)
-
-  try {
-    const result = await addToQueue(queueItems)
-    console.log(`[Pipeline] Queued ${result.added} items, skipped ${result.skipped}`)
-    return result
-  } catch (error) {
-    console.error('[Pipeline] Failed to queue candidates:', error)
-    return { added: 0, skipped: candidates.length }
-  }
+  console.log(`[Pipeline] Queued ${totalAdded} items, ${totalSkipped} skipped (duplicates), ${junkFiltered} junk filtered`)
+  return { added: totalAdded, skipped: totalSkipped, junkFiltered, scored: scoreMap.size }
 }
 
 /**
- * Store content-only syntheses (no candidate reference)
- */
-async function storeContentSyntheses(
-  digestId: string,
-  syntheses: Map<string, DevelopedSynthesis>
-): Promise<void> {
-  if (syntheses.size === 0) return
-
-  const supabase = createAdminClient()
-
-  const records = Array.from(syntheses.values()).map((synthesis) => ({
-    candidate_id: null,  // Content-only syntheses have no candidate
-    digest_id: digestId,
-    synthesis_content: synthesis.content,
-    synthesis_headline: synthesis.headline,
-    historical_reference: synthesis.historicalReference || null,  // null for content-only
-    core_thesis_alignment: synthesis.coreThesisAlignment,
-  }))
-
-  const { error } = await supabase.from('developed_syntheses').insert(records)
-
-  if (error) {
-    console.error('[Pipeline] Failed to store content syntheses:', error)
-  }
-}
-
-/**
- * Store developed syntheses in the database
- */
-async function storeSyntheses(
-  digestId: string,
-  syntheses: Map<string, DevelopedSynthesis>,
-  candidateIds: Map<string, string>
-): Promise<void> {
-  if (syntheses.size === 0) return
-
-  const supabase = createAdminClient()
-
-  const records = Array.from(syntheses.entries()).map(([key, synthesis]) => ({
-    candidate_id: candidateIds.get(key) || null,
-    digest_id: digestId,
-    synthesis_content: synthesis.content,
-    synthesis_headline: synthesis.headline,
-    historical_reference: synthesis.historicalReference,
-    core_thesis_alignment: synthesis.coreThesisAlignment,
-  }))
-
-  const { error } = await supabase.from('developed_syntheses').insert(records)
-
-  if (error) {
-    console.error('[Pipeline] Failed to store syntheses:', error)
-  }
-}
-
-/**
- * Run the full synthesis pipeline for a digest
- * Creates exactly ONE synthesis per article (the highest scoring one)
+ * Run the synthesis pipeline for a digest (non-streaming version)
+ * Queues all items to the news queue without historical comparison
  */
 export async function runSynthesisPipeline(
   digestId: string,
-  options: {
+  _options: {
     maxItemsToProcess?: number
     maxCandidatesPerItem?: number
     minSimilarity?: number
     maxAgeDays?: number
   } = {}
 ): Promise<SynthesisPipelineResult> {
-  const {
-    maxItemsToProcess = 150, // Increased from 50 to handle larger batches
-    maxCandidatesPerItem = 2, // Reduced from 5 to speed up scoring
-    minSimilarity = 0.5, // Lower threshold to find more candidates
-    maxAgeDays = 90,
-  } = options
-
   const errors: string[] = []
-  let candidatesFound = 0
-  let synthesesDeveloped = 0
 
-  console.log(`[Pipeline] Starting synthesis pipeline for digest ${digestId}`)
+  console.log(`[Pipeline] Starting pipeline for digest ${digestId}`)
 
-  const supabase = createAdminClient()
+  try {
+    const items = await getDigestItems(digestId)
+    console.log(`[Pipeline] Processing ${items.length} items (no cap)`)
 
-  // Clean up any existing syntheses/candidates for this digest (prevents duplicates on re-run)
-  await supabase.from('developed_syntheses').delete().eq('digest_id', digestId)
-  await supabase.from('synthesis_candidates').delete().eq('digest_id', digestId)
-  console.log(`[Pipeline] Cleaned up existing data for digest ${digestId}`)
+    const result = await scoreAndQueueItems(items)
 
-  // Get active synthesis prompt
-  const prompt = await getActiveSynthesisPrompt()
-  if (!prompt) {
+    return {
+      success: true,
+      digestId,
+      itemsProcessed: items.length,
+      candidatesFound: result.added,
+      synthesesDeveloped: 0,
+      remainingSyntheses: 0,
+      errors,
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error(`[Pipeline] Error:`, msg)
+    errors.push(msg)
     return {
       success: false,
       digestId,
       itemsProcessed: 0,
       candidatesFound: 0,
       synthesesDeveloped: 0,
-      errors: ['No active synthesis prompt found'],
-      remainingSyntheses: 0,
-    }
-  }
-
-  // Get items from the digest
-  const items = await getDigestItems(digestId)
-  const itemsToProcess = items.slice(0, maxItemsToProcess)
-
-  console.log(`[Pipeline] Processing ${itemsToProcess.length} items`)
-
-  const allCandidates: ScoredCandidate[] = []
-  // Track items without similar articles for direct queuing
-  const itemsWithoutSimilar: Array<{ id: string; title: string; content: string }> = []
-
-  // For each item, find and score similar items
-  for (const item of itemsToProcess) {
-    try {
-      // Get or generate embedding
-      // Embedding can be a string (from DB) or array (newly generated) or null
-      let embedding: string | number[] | null = item.embedding
-      const hasValidEmbedding = embedding && (
-        (typeof embedding === 'string' && embedding.length > 10) ||
-        (Array.isArray(embedding) && embedding.length > 0)
-      )
-
-      if (!hasValidEmbedding) {
-        console.log(`[Pipeline] Generating embedding for "${item.title.slice(0, 30)}..."`)
-        const text = prepareTextForEmbedding(item.title, item.content)
-        const newEmbedding = await generateEmbedding(text)
-
-        // Store the embedding for future use
-        const embeddingString = `[${newEmbedding.join(',')}]`
-        await supabase
-          .from('daily_repo')
-          .update({ embedding: embeddingString })
-          .eq('id', item.id)
-
-        embedding = embeddingString
-      }
-
-      // Find similar items (embedding is now guaranteed to be a valid string or array)
-      const similarItems = await findSimilarItems(item.id, embedding as string | number[], {
-        maxAge: maxAgeDays,
-        limit: maxCandidatesPerItem, // Reduced to speed up scoring
-        minSimilarity,
-      })
-
-      if (similarItems.length === 0) {
-        // Track for direct queuing - these are valid news items without historical comparison
-        itemsWithoutSimilar.push({ id: item.id, title: item.title, content: item.content })
-        console.log(`[Pipeline] No similar items for "${item.title.slice(0, 30)}..." - will queue directly`)
-        continue
-      }
-
-      console.log(`[Pipeline] Found ${similarItems.length} similar items for "${item.title.slice(0, 30)}..."`)
-
-      // Score candidates
-      const scoredCandidates = await scoreSynthesisCandidates(
-        { id: item.id, title: item.title, content: item.content },
-        similarItems,
-        prompt.scoring_prompt,
-        { minTotalScore: 6 }
-      )
-
-      // Get the BEST candidate for this item (exactly 1)
-      if (scoredCandidates.length > 0) {
-        const bestCandidate = scoredCandidates[0] // Already sorted by score
-        allCandidates.push(bestCandidate)
-        candidatesFound++
-        console.log(`[Pipeline] Best candidate score: ${bestCandidate.totalScore} (${bestCandidate.synthesisType})`)
-      } else {
-        console.log(`[Pipeline] No candidates passed scoring threshold`)
-      }
-    } catch (error) {
-      const msg = `Error processing item ${item.id}: ${error}`
-      console.error(`[Pipeline] ${msg}`)
-      errors.push(msg)
-    }
-  }
-
-  // Store all candidates
-  await storeCandidates(digestId, allCandidates)
-
-  // Auto-queue candidates for article generation (source-diversified)
-  await queueCandidatesForArticle(allCandidates)
-
-  // Also queue items WITHOUT similar articles - they're still valid news
-  // NOW WITH PROPER CONTENT SCORING instead of default scores!
-  if (itemsWithoutSimilar.length > 0) {
-    // Filter out junk before scoring (saves API calls)
-    const validItems = itemsWithoutSimilar.filter(item => {
-      if (isJunkTitle(item.title)) {
-        console.log(`[Pipeline] Skipping junk item: "${item.title.slice(0, 50)}..."`)
-        return false
-      }
-      return true
-    })
-
-    const junkCount = itemsWithoutSimilar.length - validItems.length
-    if (junkCount > 0) {
-      console.log(`[Pipeline] Filtered out ${junkCount} junk items before content scoring`)
-    }
-
-    if (validItems.length > 0) {
-      console.log(`[Pipeline] Content scoring ${validItems.length} items with Haiku...`)
-
-      // Score items using Claude Haiku for content quality
-      const contentScores = await scoreContentOnly(validItems, { concurrency: 5 })
-      console.log(`[Pipeline] Content scoring complete: ${contentScores.size} items scored`)
-
-      const itemIds = validItems.map(i => i.id)
-      const { data: sourceItems } = await supabase
-        .from('daily_repo')
-        .select('id, source_email, source_url')
-        .in('id', itemIds)
-
-      const sourceMap = new Map<string, { source_email: string | null; source_url: string | null }>()
-      if (sourceItems) {
-        for (const item of sourceItems) {
-          sourceMap.set(item.id, { source_email: item.source_email, source_url: item.source_url })
-        }
-      }
-
-      // Queue with AI-scored values (not defaults!)
-      const queueItems = validItems.map(item => {
-        const source = sourceMap.get(item.id)
-        const score = contentScores.get(item.id)
-        return {
-          dailyRepoId: item.id,
-          title: item.title,
-          content: item.content || undefined,
-          sourceEmail: source?.source_email || undefined,
-          sourceUrl: source?.source_url || undefined,
-          synthesisScore: score?.synthesisScore ?? 3,
-          relevanceScore: score?.relevanceScore ?? 3,
-          uniquenessScore: score?.uniquenessScore ?? 3
-        }
-      })
-
-      const result = await addToQueue(queueItems)
-      console.log(`[Pipeline] Queued ${result.added} AI-scored items (${result.skipped} skipped as duplicates)`)
-    } else {
-      console.log(`[Pipeline] No valid items to queue (all ${itemsWithoutSimilar.length} were junk)`)
-    }
-  }
-
-  // allCandidates now contains exactly 1 candidate per item (the best one)
-  if (allCandidates.length === 0) {
-    console.log('[Pipeline] No candidates to develop')
-    return {
-      success: true,
-      digestId,
-      itemsProcessed: itemsToProcess.length,
-      candidatesFound,
-      synthesesDeveloped: 0,
       remainingSyntheses: 0,
       errors,
     }
-  }
-
-  console.log(`[Pipeline] Developing ${allCandidates.length} syntheses with Claude Opus (1 per article)`)
-
-  // Develop syntheses for ALL candidates (one per article)
-  const syntheses = await developSyntheses(
-    allCandidates,
-    prompt.development_prompt,
-    prompt.core_thesis,
-    { maxSyntheses: allCandidates.length } // No limit - process all
-  )
-
-  synthesesDeveloped = syntheses.size
-
-  // Get candidate IDs for linking (we need to query them from DB after insert)
-  const { data: storedCandidates } = await supabase
-    .from('synthesis_candidates')
-    .select('id, source_item_id, related_item_id')
-    .eq('digest_id', digestId)
-
-  const candidateIdMap = new Map<string, string>()
-  if (storedCandidates) {
-    for (const c of storedCandidates) {
-      candidateIdMap.set(`${c.source_item_id}-${c.related_item_id}`, c.id)
-    }
-  }
-
-  // Store syntheses
-  await storeSyntheses(digestId, syntheses, candidateIdMap)
-
-  console.log(`[Pipeline] Synthesis pipeline complete: ${synthesesDeveloped} syntheses developed`)
-
-  return {
-    success: true,
-    digestId,
-    itemsProcessed: itemsToProcess.length,
-    candidatesFound,
-    synthesesDeveloped,
-    remainingSyntheses: 0,  // Non-streaming version processes all in one go
-    errors,
   }
 }
 
 /**
  * Get developed syntheses for a digest, including the source article title
- * Handles both candidate-based syntheses AND content-only syntheses
  */
 export async function getSynthesesForDigest(
   digestId: string
 ): Promise<DevelopedSynthesis[]> {
   const supabase = createAdminClient()
 
-  // Use left join to include content-only syntheses (where candidate_id is null)
   const { data, error } = await supabase
     .from('developed_syntheses')
     .select(`
@@ -586,20 +276,19 @@ export async function getSynthesesForDigest(
     content: s.synthesis_content,
     historicalReference: s.historical_reference,
     coreThesisAlignment: s.core_thesis_alignment,
-    // Extract source article title from the joined data (null for content-only)
     sourceArticleTitle: s.synthesis_candidates?.daily_repo?.title || null,
   }))
 }
 
 /**
  * Run the synthesis pipeline with progress callbacks for streaming UI
+ * Queues ALL digest items to news queue in batches.
  */
-// Pipeline version for deployment verification
-const PIPELINE_VERSION = 'v14-show-existing-syntheses'
+const PIPELINE_VERSION = 'v15-queue-all'
 
 export async function runSynthesisPipelineWithProgress(
   digestId: string,
-  options: {
+  _options: {
     maxItemsToProcess?: number
     maxCandidatesPerItem?: number
     minSimilarity?: number
@@ -607,662 +296,71 @@ export async function runSynthesisPipelineWithProgress(
   } = {},
   onProgress: (event: SynthesisProgressEvent) => void
 ): Promise<SynthesisPipelineResult> {
-  // CRITICAL: Start timing from function entry to account for Phase 1 time
-  const PIPELINE_TIMEOUT_MS = 250000 // 250 seconds - leave 50s buffer before Vercel's 300s limit
   const pipelineStartTime = Date.now()
-
   console.log(`[Pipeline ${PIPELINE_VERSION}] Starting for digest ${digestId}`)
 
-  const {
-    maxItemsToProcess = 150, // Increased from 50 to handle larger batches
-    maxCandidatesPerItem = 2, // Reduced from 5 to speed up scoring (was 10 similar items!)
-    minSimilarity = 0.5,
-    maxAgeDays = 90,
-  } = options
-
   const errors: string[] = []
-  let candidatesFound = 0
-  let synthesesDeveloped = 0
 
-  console.log(`[Pipeline] Starting streaming synthesis pipeline for digest ${digestId}`)
+  try {
+    // Get all items from digest (no cap)
+    const items = await getDigestItems(digestId)
 
-  const supabase = createAdminClient()
+    onProgress({
+      type: 'init',
+      totalItems: items.length,
+      message: `${items.length} Artikel gefunden, Scoring läuft...`,
+    })
 
-  // NOTE: We keep BOTH syntheses AND candidates to support continuation
-  // The pipeline will skip items that already have candidates
-  console.log(`[Pipeline] Continuation mode: keeping existing syntheses and candidates`)
+    // Score via Haiku and queue with progress
+    const result = await scoreAndQueueItems(items, (phase, current, total) => {
+      if (phase === 'scoring') {
+        onProgress({
+          type: 'scoring',
+          currentItem: current,
+          totalItems: total,
+          message: `${current}/${total} Artikel bewertet...`,
+        })
+      } else {
+        onProgress({
+          type: 'scoring',
+          currentItem: current,
+          totalItems: total,
+          message: `${current}/${total} Artikel zur Queue hinzugefügt...`,
+        })
+      }
+    })
 
-  // Get active synthesis prompt
-  const prompt = await getActiveSynthesisPrompt()
-  if (!prompt) {
-    onProgress({ type: 'error', error: 'Kein aktiver Synthese-Prompt gefunden' })
+    const elapsed = Math.round((Date.now() - pipelineStartTime) / 1000)
+    console.log(`[Pipeline ${PIPELINE_VERSION}] Complete in ${elapsed}s: ${result.scored} scored, ${result.added} queued, ${result.skipped} skipped, ${result.junkFiltered} junk`)
+
+    onProgress({
+      type: 'complete',
+      totalItems: items.length,
+      message: `Fertig: ${result.scored} bewertet, ${result.added} in der Queue, ${result.skipped} Duplikate, ${result.junkFiltered} Junk.`,
+    })
+
+    return {
+      success: true,
+      digestId,
+      itemsProcessed: items.length,
+      candidatesFound: result.added,
+      synthesesDeveloped: 0,
+      remainingSyntheses: 0,
+      errors,
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error(`[Pipeline ${PIPELINE_VERSION}] Error:`, msg)
+    errors.push(msg)
+    onProgress({ type: 'error', error: msg })
     return {
       success: false,
       digestId,
       itemsProcessed: 0,
       candidatesFound: 0,
       synthesesDeveloped: 0,
-      errors: ['No active synthesis prompt found'],
-      remainingSyntheses: 0,
-    }
-  }
-
-  // Get items from the digest
-  const items = await getDigestItems(digestId)
-  const itemsToProcess = items.slice(0, maxItemsToProcess)
-
-  // Get existing candidates to check if Phase 1 already ran
-  const { data: existingCandidates, count: existingCandidateCount } = await supabase
-    .from('synthesis_candidates')
-    .select('source_item_id', { count: 'exact' })
-    .eq('digest_id', digestId)
-
-  // OPTIMIZATION: If candidates already exist, skip Phase 1 entirely
-  // Phase 1 (scoring) is expensive and only needs to run once per digest
-  const skipPhase1 = (existingCandidateCount || 0) > 0
-
-  if (skipPhase1) {
-    console.log(`[Pipeline] Phase 1 SKIPPED: ${existingCandidateCount} candidates already exist. Going directly to Phase 2.`)
-    onProgress({
-      type: 'init',
-      totalItems: existingCandidateCount || 0,
-      message: `${existingCandidateCount} Kandidaten gefunden, überspringe Bewertung...`,
-    })
-  }
-
-  const allCandidates: ScoredCandidate[] = []
-  // Track items without similar articles for content-only synthesis
-  const itemsWithoutSimilar: Array<{ id: string; title: string; content: string }> = []
-
-  // Phase 1: Search and score for each item (ONLY if no candidates exist yet)
-  if (!skipPhase1) {
-    onProgress({
-      type: 'init',
-      totalItems: itemsToProcess.length,
-    })
-
-    // Reserve 60s for Phase 2 - stop Phase 1 early if needed
-    const PHASE1_TIMEOUT_MS = PIPELINE_TIMEOUT_MS - 60000
-    // After 60% of Phase 1 time, switch to fast mode (queue without scoring)
-    const PHASE1_FAST_MODE_MS = PHASE1_TIMEOUT_MS * 0.6
-    let fastModeEnabled = false
-
-    for (let i = 0; i < itemsToProcess.length; i++) {
-      const item = itemsToProcess[i]
-
-      // Check timeout during Phase 1 - leave time for Phase 2
-      const phase1Elapsed = Date.now() - pipelineStartTime
-      if (phase1Elapsed > PHASE1_TIMEOUT_MS) {
-        const remaining = itemsToProcess.length - i
-        console.log(`[Pipeline] Phase 1 time limit reached at item ${i + 1}/${itemsToProcess.length} - ${remaining} items remaining`)
-        onProgress({
-          type: 'partial',
-          message: `Phase 1 Zeit-Limit bei Item ${i + 1}/${itemsToProcess.length}. ${candidatesFound} neue Kandidaten.`,
-        })
-        break
-      }
-
-      // Enable fast mode after 60% of Phase 1 time - queue items without scoring
-      if (!fastModeEnabled && phase1Elapsed > PHASE1_FAST_MODE_MS) {
-        const remaining = itemsToProcess.length - i
-        console.log(`[Pipeline] Switching to fast mode at item ${i + 1} - ${remaining} items will be queued without scoring`)
-        fastModeEnabled = true
-        onProgress({
-          type: 'partial',
-          message: `Fast-Mode aktiviert: Verbleibende ${remaining} Items werden direkt zur Queue hinzugefügt.`,
-        })
-      }
-
-      onProgress({
-        type: 'searching',
-        currentItem: i + 1,
-        totalItems: itemsToProcess.length,
-        itemTitle: item.title,
-      })
-
-      try {
-        // FAST MODE: Skip scoring and queue directly
-        if (fastModeEnabled) {
-          itemsWithoutSimilar.push({ id: item.id, title: item.title, content: item.content })
-          console.log(`[Pipeline] Fast mode: queuing "${item.title.slice(0, 40)}..." without scoring`)
-          continue
-        }
-
-        // Get or generate embedding
-        let embedding: string | number[] | null = item.embedding
-        const hasValidEmbedding = embedding && (
-          (typeof embedding === 'string' && embedding.length > 10) ||
-          (Array.isArray(embedding) && embedding.length > 0)
-        )
-
-        if (!hasValidEmbedding) {
-          const text = prepareTextForEmbedding(item.title, item.content)
-          const newEmbedding = await generateEmbedding(text)
-
-          const embeddingString = `[${newEmbedding.join(',')}]`
-          await supabase
-            .from('daily_repo')
-            .update({ embedding: embeddingString })
-            .eq('id', item.id)
-
-          embedding = embeddingString
-        }
-
-        // Find similar items
-        const similarItems = await findSimilarItems(item.id, embedding as string | number[], {
-          maxAge: maxAgeDays,
-          limit: maxCandidatesPerItem,
-          minSimilarity,
-        })
-
-        if (similarItems.length === 0) {
-          itemsWithoutSimilar.push({ id: item.id, title: item.title, content: item.content })
-          console.log(`[Pipeline] No similar items for "${item.title.slice(0, 40)}..." - queued for content synthesis`)
-          continue
-        }
-
-        onProgress({
-          type: 'scoring',
-          currentItem: i + 1,
-          totalItems: itemsToProcess.length,
-          itemTitle: item.title,
-        })
-
-        // Score candidates
-        const scoredCandidates = await scoreSynthesisCandidates(
-          { id: item.id, title: item.title, content: item.content },
-          similarItems,
-          prompt.scoring_prompt,
-          { minTotalScore: 6, concurrency: 3 }
-        )
-
-        if (scoredCandidates.length > 0) {
-          const bestCandidate = scoredCandidates[0]
-          allCandidates.push(bestCandidate)
-          candidatesFound++
-        }
-      } catch (error) {
-        const msg = `Error processing item ${item.id}: ${error}`
-        console.error(`[Pipeline] ${msg}`)
-        errors.push(msg)
-      }
-    }
-
-    // Store new candidates (if any)
-    if (allCandidates.length > 0) {
-      await storeCandidates(digestId, allCandidates)
-      await queueCandidatesForArticle(allCandidates)
-    }
-  } // End of Phase 1 block (skipPhase1 === false)
-
-  // Queue items WITHOUT similar articles (only if Phase 1 ran)
-  // These are valid news items that just don't have historical comparisons
-  // They should still be available for Ghostwriter selection
-  // NOW WITH PROPER CONTENT SCORING instead of default scores!
-  if (itemsWithoutSimilar.length > 0) {
-    console.log(`[Pipeline] Scoring and queuing ${itemsWithoutSimilar.length} items without similar articles...`)
-
-    // First, filter out junk items before scoring (saves API calls)
-    const validItems = itemsWithoutSimilar.filter(item => {
-      if (isJunkTitle(item.title)) {
-        console.log(`[Pipeline] Skipping junk item before scoring: "${item.title.slice(0, 50)}..."`)
-        return false
-      }
-      return true
-    })
-
-    const junkCount = itemsWithoutSimilar.length - validItems.length
-    if (junkCount > 0) {
-      console.log(`[Pipeline] Filtered out ${junkCount} junk items before content scoring`)
-    }
-
-    if (validItems.length > 0) {
-      // Score items using Claude Haiku for content quality
-      console.log(`[Pipeline] Content scoring ${validItems.length} items with Haiku...`)
-      const contentScores = await scoreContentOnly(validItems, { concurrency: 5 })
-      console.log(`[Pipeline] Content scoring complete: ${contentScores.size} items scored`)
-
-      // Get source info for these items
-      const itemIds = validItems.map(i => i.id)
-      const { data: sourceItems } = await supabase
-        .from('daily_repo')
-        .select('id, source_email, source_url')
-        .in('id', itemIds)
-
-      const sourceMap = new Map<string, { source_email: string | null; source_url: string | null }>()
-      if (sourceItems) {
-        for (const item of sourceItems) {
-          sourceMap.set(item.id, {
-            source_email: item.source_email,
-            source_url: item.source_url
-          })
-        }
-      }
-
-      // Queue with AI-scored values (not defaults!)
-      const queueItems = validItems.map(item => {
-        const source = sourceMap.get(item.id)
-        const score = contentScores.get(item.id)
-        return {
-          dailyRepoId: item.id,
-          title: item.title,
-          sourceEmail: source?.source_email || undefined,
-          sourceUrl: source?.source_url || undefined,
-          synthesisScore: score?.synthesisScore ?? 3,  // Use AI score or low default
-          relevanceScore: score?.relevanceScore ?? 3,  // Use AI score or low default
-          uniquenessScore: score?.uniquenessScore ?? 3  // Use AI score or low default
-        }
-      })
-
-      // Log sample scores for debugging
-      const sampleScores = queueItems.slice(0, 3).map(q => ({
-        title: q.title.slice(0, 40),
-        scores: `S:${q.synthesisScore} R:${q.relevanceScore} U:${q.uniquenessScore}`
-      }))
-      console.log(`[Pipeline] Sample content scores:`, sampleScores)
-
-      const result = await addToQueue(queueItems)
-      console.log(`[Pipeline] Queued ${result.added} AI-scored items (${result.skipped} skipped as duplicates)`)
-    } else {
-      console.log(`[Pipeline] No valid items to score (all ${itemsWithoutSimilar.length} were junk)`)
-    }
-  }
-
-  // Phase 2: Develop syntheses ONE BY ONE - no parallelization
-  const synthesesMap = new Map<string, DevelopedSynthesis>()
-
-  // Check if Phase 1 already used too much time
-  const phase1Time = Date.now() - pipelineStartTime
-  console.log(`[Pipeline] Phase 1 completed in ${Math.round(phase1Time / 1000)}s, found ${candidatesFound} new candidates`)
-  if (phase1Time > PIPELINE_TIMEOUT_MS) {
-    console.log(`[Pipeline] Phase 1 already exceeded timeout (${phase1Time}ms > ${PIPELINE_TIMEOUT_MS}ms)`)
-    onProgress({
-      type: 'partial',
-      message: `Phase 1 dauerte zu lange (${Math.round(phase1Time / 1000)}s). Bitte erneut starten.`,
-    })
-    // Count remaining candidates that need development
-    const { count: totalCandidates } = await supabase
-      .from('synthesis_candidates')
-      .select('id', { count: 'exact', head: true })
-      .eq('digest_id', digestId)
-
-    return {
-      success: true,
-      digestId,
-      candidatesFound,
-      synthesesDeveloped: 0,
-      remainingSyntheses: totalCandidates || 0,
-      itemsProcessed: itemsToProcess.length,
-      errors,
-    }
-  }
-
-  // Get ALL candidates from DB for Phase 2 (includes previous runs)
-  // Include source_email and source_url for queue population
-  const { data: dbCandidates } = await supabase
-    .from('synthesis_candidates')
-    .select(`
-      id,
-      source_item_id,
-      related_item_id,
-      similarity_score,
-      synthesis_type,
-      originality_score,
-      relevance_score,
-      reasoning,
-      daily_repo!synthesis_candidates_source_item_id_fkey(id, title, content, source_email, source_url),
-      related:daily_repo!synthesis_candidates_related_item_id_fkey(id, title, content, collected_at, source_type, source_email)
-    `)
-    .eq('digest_id', digestId)
-
-  if (!dbCandidates || dbCandidates.length === 0) {
-    console.log(`[Pipeline] No candidates found in database`)
-    return {
-      success: true,
-      digestId,
-      itemsProcessed: itemsToProcess.length,
-      candidatesFound,
-      synthesesDeveloped: 0,
       remainingSyntheses: 0,
       errors,
     }
-  }
-
-  // Convert DB candidates to ScoredCandidate format
-  type DbRecord = { id?: string; title?: string; content?: string; collected_at?: string; source_type?: string; source_email?: string | null; source_url?: string | null }
-  const allDbCandidates: ScoredCandidate[] = dbCandidates.map(c => {
-    // Supabase returns single object for !inner joins
-    const sourceData = c.daily_repo as DbRecord | null
-    const relatedData = c.related as DbRecord | null
-    return {
-      sourceItem: {
-        id: c.source_item_id,
-        title: sourceData?.title || '',
-        content: sourceData?.content || '',
-      },
-      relatedItem: {
-        id: c.related_item_id,
-        title: relatedData?.title || '',
-        content: relatedData?.content || '',
-        collected_at: relatedData?.collected_at || '',
-        source_type: relatedData?.source_type || 'unknown',
-        source_email: relatedData?.source_email || null,
-        similarity: c.similarity_score,
-      },
-      similarityScore: c.similarity_score,
-      originalityScore: c.originality_score,
-      relevanceScore: c.relevance_score,
-      synthesisType: c.synthesis_type as SynthesisType,
-      reasoning: c.reasoning || '',
-      daysAgo: 0,
-      totalScore: c.originality_score + c.relevance_score,
-      // Store source info for queue population
-      _sourceEmail: sourceData?.source_email || null,
-      _sourceUrl: sourceData?.source_url || null,
-    }
-  }) as (ScoredCandidate & { _sourceEmail?: string | null; _sourceUrl?: string | null })[]
-
-  console.log(`[Pipeline] Found ${allDbCandidates.length} total candidates in database`)
-
-  // Auto-queue ALL candidates from DB for article generation (source-diversified)
-  // This ensures queue is populated even when re-running synthesis
-  if (allDbCandidates.length > 0) {
-    const queueItems = allDbCandidates.map(c => ({
-      dailyRepoId: c.sourceItem.id,
-      title: c.sourceItem.title,
-      sourceEmail: (c as { _sourceEmail?: string | null })._sourceEmail || undefined,
-      sourceUrl: (c as { _sourceUrl?: string | null })._sourceUrl || undefined,
-      synthesisScore: c.originalityScore,
-      relevanceScore: c.relevanceScore,
-      uniquenessScore: 5
-    }))
-
-    console.log(`[Pipeline] Queuing ${queueItems.length} candidates to news_queue...`)
-    const queueResult = await addToQueue(queueItems)
-    console.log(`[Pipeline] Queue result: ${queueResult.added} added, ${queueResult.skipped} skipped (duplicates)`)
-  }
-
-  // Direct import, no dynamic import
-  const { developSynthesis } = await import('./develop')
-
-  // Check which items already have syntheses (for continuation)
-  // Fetch full synthesis data so we can send them to the UI
-  const { data: existingSynthesesData } = await supabase
-    .from('developed_syntheses')
-    .select(`
-      id,
-      synthesis_headline,
-      synthesis_content,
-      historical_reference,
-      candidate_id,
-      synthesis_candidates(source_item_id, daily_repo!synthesis_candidates_source_item_id_fkey(title))
-    `)
-    .eq('digest_id', digestId)
-
-  const processedSourceIds = new Set<string>()
-  if (existingSynthesesData) {
-    for (const s of existingSynthesesData) {
-      // Handle both array and single object cases from Supabase join
-      const candidates = s.synthesis_candidates as unknown as { source_item_id: string }[] | { source_item_id: string } | null
-      if (Array.isArray(candidates)) {
-        for (const c of candidates) {
-          if (c?.source_item_id) processedSourceIds.add(c.source_item_id)
-        }
-      } else if (candidates?.source_item_id) {
-        processedSourceIds.add(candidates.source_item_id)
-      }
-    }
-  }
-
-  // Send existing syntheses to UI so they appear in the progress dialog
-  // This ensures the UI shows all syntheses, not just newly created ones
-  if (existingSynthesesData && existingSynthesesData.length > 0) {
-    console.log(`[Pipeline] Sending ${existingSynthesesData.length} existing syntheses to UI`)
-    for (const s of existingSynthesesData) {
-      // Handle Supabase join result - can be array or single object
-      const candidateData = s.synthesis_candidates as unknown as
-        | { source_item_id: string; daily_repo?: { title?: string } | null }
-        | { source_item_id: string; daily_repo?: { title?: string } | null }[]
-        | null
-      let sourceTitle = 'Unbekannt'
-      if (candidateData) {
-        if (Array.isArray(candidateData) && candidateData[0]?.daily_repo?.title) {
-          sourceTitle = candidateData[0].daily_repo.title
-        } else if (!Array.isArray(candidateData) && candidateData.daily_repo?.title) {
-          sourceTitle = candidateData.daily_repo.title
-        }
-      }
-
-      onProgress({
-        type: 'developed',
-        currentItem: processedSourceIds.size,
-        totalItems: allDbCandidates.length,
-        itemTitle: sourceTitle,
-        synthesis: {
-          headline: s.synthesis_headline,
-          content: s.synthesis_content,
-          historicalReference: s.historical_reference || '',
-        },
-      })
-      synthesesDeveloped++
-    }
-  }
-
-  // Filter out already processed items
-  const remainingCandidates = allDbCandidates.filter(
-    c => !processedSourceIds.has(c.sourceItem.id)
-  )
-
-  const skippedCount = allDbCandidates.length - remainingCandidates.length
-  if (skippedCount > 0) {
-    console.log(`[Pipeline] Skipping ${skippedCount} already processed items (syntheses already exist)`)
-  }
-
-  console.log(`[Pipeline ${PIPELINE_VERSION}] Phase 2: Processing ${remainingCandidates.length} items sequentially (${skippedCount} already done)`)
-
-  // Simple sequential loop - NO Promise.all, NO batching
-  for (let i = 0; i < remainingCandidates.length; i++) {
-    const candidate = remainingCandidates[i]
-
-    // Check global timeout - stop with enough buffer to save results
-    const elapsed = Date.now() - pipelineStartTime
-    if (elapsed > PIPELINE_TIMEOUT_MS) {
-      const remaining = remainingCandidates.length - i
-      console.log(`[Pipeline] Time limit reached after ${elapsed}ms - ${remaining} items remaining`)
-      onProgress({
-        type: 'partial',
-        message: `Zeit-Limit erreicht. ${synthesesDeveloped} Synthesen erstellt, ${remaining} verbleibend. Starte erneut für Rest.`,
-      })
-      break
-    }
-
-    // Show progress (include skipped count in total)
-    const overallProgress = skippedCount + i + 1
-    const overallTotal = skippedCount + remainingCandidates.length
-    onProgress({
-      type: 'developing',
-      currentItem: overallProgress,
-      totalItems: overallTotal,
-      itemTitle: candidate.sourceItem.title.slice(0, 50),
-    })
-
-    console.log(`[Pipeline] Item ${i + 1}/${remainingCandidates.length}: Starting "${candidate.sourceItem.title.slice(0, 40)}..."`)
-    const itemStartTime = Date.now()
-
-    try {
-      // Simple await - no Promise.all, no Promise.race wrapper here
-      const synthesis = await developSynthesis(
-        candidate,
-        prompt.development_prompt,
-        prompt.core_thesis
-      )
-
-      const itemElapsed = Date.now() - itemStartTime
-      console.log(`[Pipeline] Item ${i + 1}: Completed in ${itemElapsed}ms`)
-
-      // Store result
-      const key = `${candidate.sourceItem.id}-${candidate.relatedItem.id}`
-      synthesesMap.set(key, {
-        ...synthesis,
-        candidateId: key,
-      })
-      synthesesDeveloped++
-
-      // Send progress
-      onProgress({
-        type: 'developed',
-        currentItem: overallProgress,
-        totalItems: overallTotal,
-        itemTitle: candidate.sourceItem.title,
-        synthesis: {
-          headline: synthesis.headline,
-          content: synthesis.content,
-          historicalReference: synthesis.historicalReference || '',
-        },
-      })
-    } catch (error) {
-      const itemElapsed = Date.now() - itemStartTime
-      console.error(`[Pipeline] Item ${i + 1}: Failed after ${itemElapsed}ms:`, error)
-      errors.push(`Failed: ${candidate.sourceItem.title}`)
-    }
-
-    // Small delay between items
-    if (i < remainingCandidates.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-    }
-  }
-
-  // Get candidate IDs for linking
-  const { data: storedCandidates } = await supabase
-    .from('synthesis_candidates')
-    .select('id, source_item_id, related_item_id')
-    .eq('digest_id', digestId)
-
-  const candidateIdMap = new Map<string, string>()
-  if (storedCandidates) {
-    for (const c of storedCandidates) {
-      candidateIdMap.set(`${c.source_item_id}-${c.related_item_id}`, c.id)
-    }
-  }
-
-  // Store syntheses from Phase 2
-  await storeSyntheses(digestId, synthesesMap, candidateIdMap)
-
-  // Phase 3: Content-only syntheses for items without similar articles
-  const contentSynthesesMap = new Map<string, DevelopedSynthesis>()
-
-  // Check remaining time budget
-  const phase3StartTime = Date.now()
-  const phase3TimeRemaining = PIPELINE_TIMEOUT_MS - (phase3StartTime - pipelineStartTime)
-
-  if (itemsWithoutSimilar.length > 0 && phase3TimeRemaining > 15000) {
-    console.log(`[Pipeline ${PIPELINE_VERSION}] Phase 3: Processing ${itemsWithoutSimilar.length} content-only items (${Math.round(phase3TimeRemaining / 1000)}s remaining)`)
-
-    // Default content-only prompt (used if no content_prompt in DB)
-    const contentPrompt = prompt.content_prompt || `Erstelle einen originellen Insight aus diesem Artikel:
-
-NEWS: {current_news}
-
-KERNTHESE ZUR ORIENTIERUNG:
-{core_thesis}
-
-Generiere einen prägnanten Synthese-Kommentar (2-4 Sätze), der:
-1. Das Kernthema zusammenfasst
-2. Einen originellen Insight liefert
-3. Zur Kernthese passt (falls relevant)
-
-Format:
-HEADLINE: [Kurze, prägnante Überschrift]
-SYNTHESE: [Der Insight-Text]`
-
-    for (let i = 0; i < itemsWithoutSimilar.length; i++) {
-      const item = itemsWithoutSimilar[i]
-
-      // Check timeout
-      const elapsed = Date.now() - pipelineStartTime
-      if (elapsed > PIPELINE_TIMEOUT_MS) {
-        console.log(`[Pipeline] Phase 3 time limit reached - ${itemsWithoutSimilar.length - i} content items remaining`)
-        break
-      }
-
-      onProgress({
-        type: 'developing',
-        currentItem: skippedCount + remainingCandidates.length + i + 1,
-        totalItems: skippedCount + remainingCandidates.length + itemsWithoutSimilar.length,
-        itemTitle: `[Content] ${item.title.slice(0, 40)}`,
-      })
-
-      try {
-        const synthesis = await developContentSynthesis(
-          item,
-          contentPrompt,
-          prompt.core_thesis
-        )
-
-        // Use item.id as the key (no related item)
-        const key = `content-${item.id}`
-        contentSynthesesMap.set(key, {
-          ...synthesis,
-          candidateId: undefined,  // No candidate for content-only
-          sourceArticleTitle: item.title,
-        })
-        synthesesDeveloped++
-
-        onProgress({
-          type: 'developed',
-          currentItem: skippedCount + remainingCandidates.length + i + 1,
-          totalItems: skippedCount + remainingCandidates.length + itemsWithoutSimilar.length,
-          itemTitle: item.title,
-          synthesis: {
-            headline: synthesis.headline,
-            content: synthesis.content,
-            historicalReference: synthesis.historicalReference || '',
-          },
-        })
-
-        console.log(`[Pipeline] Content synthesis ${i + 1}/${itemsWithoutSimilar.length}: "${synthesis.headline.slice(0, 40)}"`)
-      } catch (error) {
-        console.error(`[Pipeline] Content synthesis failed for "${item.title.slice(0, 40)}":`, error)
-        errors.push(`Content synthesis failed: ${item.title}`)
-      }
-
-      // Small delay between items
-      if (i < itemsWithoutSimilar.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 300))
-      }
-    }
-
-    // Store content-only syntheses (with candidate_id = null)
-    if (contentSynthesesMap.size > 0) {
-      await storeContentSyntheses(digestId, contentSynthesesMap)
-      console.log(`[Pipeline] Stored ${contentSynthesesMap.size} content-only syntheses`)
-    }
-  } else if (itemsWithoutSimilar.length > 0) {
-    console.log(`[Pipeline] Skipping Phase 3 - not enough time remaining (${Math.round(phase3TimeRemaining / 1000)}s)`)
-  }
-
-  // Calculate remaining syntheses by counting candidates without developed syntheses
-  const { count: totalCandidatesCount } = await supabase
-    .from('synthesis_candidates')
-    .select('id', { count: 'exact', head: true })
-    .eq('digest_id', digestId)
-
-  const { count: developedCount } = await supabase
-    .from('developed_syntheses')
-    .select('id', { count: 'exact', head: true })
-    .eq('digest_id', digestId)
-
-  const remaining = Math.max(0, (totalCandidatesCount || 0) - (developedCount || 0))
-
-  console.log(`[Pipeline] Final: ${developedCount} syntheses developed, ${remaining} candidates remaining`)
-
-  return {
-    success: true,
-    digestId,
-    itemsProcessed: itemsToProcess.length,
-    candidatesFound,
-    synthesesDeveloped,
-    remainingSyntheses: remaining,
-    errors,
   }
 }

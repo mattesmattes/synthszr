@@ -24,12 +24,9 @@ const PODCAST_LINKS = [
 export function PodcastBadges() {
   return (
     <div className="bg-white px-4 py-3">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/podcast-headline.png"
-        alt="The daily synthszr podcast"
-        className="mx-auto max-w-[840px] w-full h-auto"
-      />
+      <p className="text-center text-lg italic text-[#1a1a1a] font-serif mx-auto max-w-[840px] py-1">
+        Start your day with something<br />new, weird, and interesting.
+      </p>
       <div className="flex items-center justify-center gap-2 sm:gap-3 pt-2">
         {PODCAST_LINKS.map((link) => (
           <a

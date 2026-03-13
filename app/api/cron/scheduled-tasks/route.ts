@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
       try {
         const fetchResult = await processNewsletters()
         console.log('[Scheduler] Newsletter fetch completed:', fetchResult.message)
-        await markTaskRun(supabase, 'newsletter_fetch')
+        if (fetchResult.success) await markTaskRun(supabase, 'newsletter_fetch')
         results.newsletterFetch = fetchResult.success ? 'completed' : 'error'
         if (fetchResult.processed !== undefined) results.newslettersFetched = fetchResult.processed.toString()
         if (fetchResult.articles !== undefined) results.articlesExtracted = fetchResult.articles.toString()
@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
       try {
         const crawlResult = await processWebcrawl()
         console.log('[Scheduler] WebCrawl fetch completed:', crawlResult.message || `${crawlResult.articles} articles`)
-        await markTaskRun(supabase, 'webcrawl_fetch')
+        if (crawlResult.success) await markTaskRun(supabase, 'webcrawl_fetch')
         results.webcrawlFetch = crawlResult.success ? 'completed' : 'error'
         if (crawlResult.articles !== undefined) results.webcrawlArticles = crawlResult.articles.toString()
       } catch (error) {
@@ -178,7 +178,7 @@ export async function GET(request: NextRequest) {
       console.log('[Scheduler] Triggering daily analysis and synthesis...')
       try {
         const digestResult = await runDailyAnalysisAndSynthesis(supabase)
-        await markTaskRun(supabase, 'daily_analysis')
+        if (digestResult.success) await markTaskRun(supabase, 'daily_analysis')
         results.dailyAnalysis = digestResult.success ? 'completed' : 'error'
         if (digestResult.digestId) results.digestId = digestResult.digestId
         if (digestResult.synthesesCreated !== undefined) results.synthesesCreated = digestResult.synthesesCreated.toString()

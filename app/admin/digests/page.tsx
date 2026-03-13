@@ -76,7 +76,8 @@ interface SynthesisProgress {
     historicalReference: string
   }>
   error?: string
-  remainingSyntheses?: number  // Candidates that still need development
+  message?: string
+  remainingSyntheses?: number
 }
 
 export default function DigestsPage() {
@@ -341,6 +342,7 @@ export default function DigestsPage() {
                   setSynthesisProgress(prev => ({
                     ...prev,
                     totalItems: event.totalItems,
+                    message: event.message,
                   }))
                 } else if (event.type === 'searching' || event.type === 'scoring') {
                   setSynthesisProgress(prev => ({
@@ -349,6 +351,7 @@ export default function DigestsPage() {
                     currentItem: event.currentItem,
                     totalItems: event.totalItems,
                     itemTitle: event.itemTitle,
+                    message: event.message,
                   }))
                 } else if (event.type === 'developing') {
                   setSynthesisProgress(prev => ({
@@ -370,6 +373,7 @@ export default function DigestsPage() {
                     ...prev,
                     phase: 'complete',
                     remainingSyntheses: remaining,
+                    message: event.message,
                   }))
                   // Auto-continue if there are remaining syntheses
                   if (remaining > 0) {
@@ -1114,12 +1118,12 @@ export default function DigestsPage() {
             </DialogTitle>
             <DialogDescription className="text-xs">
               {synthesisProgress.phase === 'complete'
-                ? `${synthesisProgress.syntheses.length} Synthesen erstellt${synthesisProgress.remainingSyntheses ? ` • ${synthesisProgress.remainingSyntheses} verbleibend, Fortsetzung läuft...` : ''}`
+                ? synthesisProgress.message || 'Artikel bewertet und zur Queue hinzugefügt.'
                 : synthesisProgress.phase === 'error'
                 ? 'Fehler bei der Synthese'
                 : synthesisProgress.phase === 'partial'
-                ? `${synthesisProgress.syntheses.length} Synthesen erstellt, automatische Fortsetzung...`
-                : 'Historische Verbindungen werden analysiert...'}
+                ? synthesisProgress.message || 'Verarbeitung läuft...'
+                : synthesisProgress.message || 'Artikel werden bewertet und zur Queue hinzugefügt...'}
             </DialogDescription>
           </DialogHeader>
 
@@ -1129,10 +1133,10 @@ export default function DigestsPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">
-                    {synthesisProgress.phase === 'searching' && '🔍 Suche ähnliche Artikel...'}
-                    {synthesisProgress.phase === 'scoring' && '📊 Bewerte Kandidaten...'}
-                    {synthesisProgress.phase === 'developing' && '✨ Generiere Synthese...'}
-                    {synthesisProgress.phase === 'partial' && '⏱️ Automatische Fortsetzung...'}
+                    {synthesisProgress.phase === 'searching' && '🔍 Suche Artikel...'}
+                    {synthesisProgress.phase === 'scoring' && '📊 Bewerte & queue Artikel...'}
+                    {synthesisProgress.phase === 'developing' && '📊 Verarbeitung...'}
+                    {synthesisProgress.phase === 'partial' && '⏱️ Verarbeitung läuft...'}
                   </span>
                   <span className="font-medium">
                     {synthesisProgress.currentItem} / {synthesisProgress.totalItems}
