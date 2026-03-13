@@ -288,12 +288,6 @@ export function NewsletterEmail({
               dangerouslySetInnerHTML={{ __html: content }}
             />
 
-            <Hr style={hr} />
-
-            {/* CTA Button */}
-            <Button style={button} href={postUrl}>
-              {strings.readArticle}
-            </Button>
           </Section>
 
           {/* CodeCrash Promo Box */}
