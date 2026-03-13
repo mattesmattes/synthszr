@@ -75,16 +75,16 @@ export function FeaturedArticle({
                 className="h-auto w-[80%] md:h-24 md:w-auto md:max-w-[400px]"
               />
             </a>
-            {/* Audio Player - directly under logo */}
+          </div>
+          <PodcastBadges>
             {postId && (
-              <div className="relative z-10 mt-3">
+              <div className="flex justify-center pt-3">
                 <Suspense fallback={null}>
                   <AudioPlayer postId={postId} locale={locale === 'de' ? 'de' : 'en'} />
                 </Suspense>
               </div>
             )}
-          </div>
-          <PodcastBadges />
+          </PodcastBadges>
         </div>
       )}
 
