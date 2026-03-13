@@ -547,8 +547,8 @@
 
 .ai-glow-active {
   animation:
-    ai-glow-spectrum 6s linear infinite,
-    ai-glow-morph 8s ease-in-out infinite;
+    ai-glow-spectrum 3s linear infinite,
+    ai-glow-morph 4s ease-in-out infinite;
   box-shadow:
     -40px var(--glow-ya) 18px -8px var(--glow-c1),
     -20px var(--glow-yb) 18px -8px var(--glow-c2),

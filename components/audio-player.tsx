@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'next/navigation'
-import { Play, Pause, Loader2, X } from 'lucide-react'
+import { Play, Pause, Loader2, X, RotateCcw, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface AudioPlayerProps {
@@ -254,6 +254,12 @@ export function AudioPlayer({ postId }: AudioPlayerProps) {
     audioRef.current.currentTime = ratio * duration
   }, [duration])
 
+  // Skip forward/backward
+  const skip = useCallback((seconds: number) => {
+    if (!audioRef.current || !duration) return
+    audioRef.current.currentTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + seconds))
+  }, [duration])
+
   // Close flying nav and stop playback
   const handleClose = useCallback(() => {
     audioRef.current?.pause()
@@ -269,7 +275,17 @@ export function AudioPlayer({ postId }: AudioPlayerProps) {
 
   // Shared player content (used by both cover pill and flying nav)
   const playerContent = (opts: { showClose?: boolean }) => (
-    <div className="relative z-10 flex items-center gap-3 pl-1.5 pr-2 py-1.5">
+    <div className="relative z-10 flex items-center gap-2 pl-1.5 pr-2 py-1.5">
+      {/* Skip back 30s */}
+      <button
+        onClick={() => skip(-30)}
+        className="relative flex items-center justify-center w-7 h-7 rounded-full hover:bg-black/8 dark:hover:bg-white/10 transition-colors shrink-0"
+        aria-label="30 Sekunden zurück"
+      >
+        <RotateCcw className="h-3.5 w-3.5 text-black/50 dark:text-white/50" strokeWidth={2.5} />
+        <span className="absolute text-[6px] font-bold text-black/50 dark:text-white/50 mt-px">30</span>
+      </button>
+
       {/* Play/Pause */}
       <button
         onClick={togglePlayback}
@@ -284,6 +300,16 @@ export function AudioPlayer({ postId }: AudioPlayerProps) {
         ) : (
           <Play className="h-3.5 w-3.5 text-white dark:text-black fill-white dark:fill-black ml-0.5" />
         )}
+      </button>
+
+      {/* Skip forward 30s */}
+      <button
+        onClick={() => skip(30)}
+        className="relative flex items-center justify-center w-7 h-7 rounded-full hover:bg-black/8 dark:hover:bg-white/10 transition-colors shrink-0"
+        aria-label="30 Sekunden vorspulen"
+      >
+        <RotateCw className="h-3.5 w-3.5 text-black/50 dark:text-white/50" strokeWidth={2.5} />
+        <span className="absolute text-[6px] font-bold text-black/50 dark:text-white/50 mt-px">30</span>
       </button>
 
       {/* Progress bar */}
