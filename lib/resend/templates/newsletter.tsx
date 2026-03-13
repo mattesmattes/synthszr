@@ -221,18 +221,6 @@ export function NewsletterEmail({
       {previewText && <Preview>{previewText}</Preview>}
       <Body style={main}>
         <Container style={container}>
-          {/* CodeCrash Promo Banner (above cover image) */}
-          <Section style={{ padding: '0' }}>
-            <Link href="https://codecrash.ai" style={{ textDecoration: 'none' }}>
-              <Img
-                src={`${baseUrl}/codecrash-promo.gif`}
-                alt="CodeCrash — AI is pushing the cost of software toward zero"
-                width="600"
-                style={{ display: 'block', width: '100%', height: 'auto' }}
-              />
-            </Link>
-          </Section>
-
           {/* Cover Image with Logo - clicks to article with autoplay */}
           {coverImageUrl && (
             <Section style={coverSection}>
@@ -312,31 +300,34 @@ export function NewsletterEmail({
           <Section style={{ padding: '0' }}>
             <table width="100%" cellPadding={0} cellSpacing={0} style={{ borderCollapse: 'collapse' as const }}>
               <tr>
-                <td width="33.33%" valign="top" style={{ padding: 0, backgroundColor: '#003333' }}>
+                <td width="50%" valign="top" style={{ padding: 0, backgroundColor: '#003333' }}>
                   <Link href="https://codecrash.ai" style={{ textDecoration: 'none' }}>
                     <Img
                       src={`${baseUrl}/cc-box-cover-cyan.png`}
                       alt="Code Crash — Matthias Schrader"
-                      width="200"
+                      width="300"
                       style={{ display: 'block', width: '100%', height: 'auto' }}
                     />
                   </Link>
                 </td>
-                <td width="33.33%" valign="top" style={{ padding: 0, backgroundColor: '#D4D4D4' }}>
+                <td width="50%" valign="top" style={{ padding: 0, backgroundColor: '#D4D4D4' }}>
                   <Link href="https://codecrash.ai" style={{ textDecoration: 'none' }}>
                     <Img
                       src={`${baseUrl}/cc-box-mattes.png`}
                       alt="Matthias Schrader"
-                      width="200"
+                      width="300"
                       style={{ display: 'block', width: '100%', height: 'auto' }}
                     />
                   </Link>
                 </td>
-                <td width="33.33%" valign="top" style={ccPromoTextCell}>
-                  <Text style={ccPromoLabel}>Das Update des Bestsellers</Text>
-                  <Text style={ccPromoHeading}>Code Crash</Text>
+              </tr>
+              <tr>
+                <td colSpan={2} style={ccPromoTextCell}>
+                  <Text style={ccPromoLabel}>CODE CRASH</Text>
+                  <Text style={ccPromoHeading}>Now available</Text>
                   <Text style={ccPromoCopy}>
-                    Warum Künstliche Intelligenz Code in Intent verwandelt und wir die Chance haben, die Digitalisierung endlich richtig zu machen.
+                    AI isn't just an efficiency tool. It unlocks entirely new ways to create value.
+                    Matthias Schrader's new book shows you how — now available in German and English.
                   </Text>
                   <Link href="https://codecrash.ai" style={ccPromoLink}>
                     codecrash.ai →
