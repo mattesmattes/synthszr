@@ -2,6 +2,7 @@ import Link from "next/link"
 import { BlogHeader } from "@/components/blog-header"
 import { FeaturedArticle } from "@/components/featured-article"
 import { Newsletter } from "@/components/newsletter"
+import { CodecrashPromo } from "@/components/codecrash-promo"
 import { createClient } from "@/lib/supabase/server"
 
 // Disable caching to always show current cover images
@@ -178,6 +179,7 @@ export default async function Page() {
           </div>
         )}
 
+        <CodecrashPromo />
         <Newsletter />
       </main>
 

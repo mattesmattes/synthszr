@@ -251,7 +251,7 @@ export function NewsletterEmail({
           {/* Podcast Promo Section */}
           <Section style={{ padding: '0', backgroundColor: '#ffffff' }}>
             <Text style={podcastHeadline}>
-              Start your day with something new, weird, and interesting.
+              Start your day with something<br />new, weird, and interesting.
             </Text>
             <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
               <Img
@@ -306,6 +306,44 @@ export function NewsletterEmail({
             <Button style={button} href={postUrl}>
               {strings.readArticle}
             </Button>
+          </Section>
+
+          {/* CodeCrash Promo Box */}
+          <Section style={{ padding: '0' }}>
+            <table width="100%" cellPadding={0} cellSpacing={0} style={{ borderCollapse: 'collapse' as const }}>
+              <tr>
+                <td width="33.33%" valign="top" style={{ padding: 0, backgroundColor: '#003333' }}>
+                  <Link href="https://codecrash.ai" style={{ textDecoration: 'none' }}>
+                    <Img
+                      src={`${baseUrl}/cc-box-cover-cyan.png`}
+                      alt="Code Crash — Matthias Schrader"
+                      width="200"
+                      style={{ display: 'block', width: '100%', height: 'auto' }}
+                    />
+                  </Link>
+                </td>
+                <td width="33.33%" valign="top" style={{ padding: 0, backgroundColor: '#D4D4D4' }}>
+                  <Link href="https://codecrash.ai" style={{ textDecoration: 'none' }}>
+                    <Img
+                      src={`${baseUrl}/cc-box-mattes.png`}
+                      alt="Matthias Schrader"
+                      width="200"
+                      style={{ display: 'block', width: '100%', height: 'auto' }}
+                    />
+                  </Link>
+                </td>
+                <td width="33.33%" valign="top" style={ccPromoTextCell}>
+                  <Text style={ccPromoLabel}>Das Update des Bestsellers</Text>
+                  <Text style={ccPromoHeading}>Code Crash</Text>
+                  <Text style={ccPromoCopy}>
+                    Warum Künstliche Intelligenz Code in Intent verwandelt und wir die Chance haben, die Digitalisierung endlich richtig zu machen.
+                  </Text>
+                  <Link href="https://codecrash.ai" style={ccPromoLink}>
+                    codecrash.ai →
+                  </Link>
+                </td>
+              </tr>
+            </table>
           </Section>
 
           {/* Footer */}
@@ -487,6 +525,49 @@ const unsubscribeLink = {
 const linkSeparator = {
   color: '#9ca3af',
   margin: '0 8px',
+}
+
+// CodeCrash Promo styles
+const ccPromoTextCell = {
+  backgroundColor: '#DDD0BC',
+  padding: '16px',
+  verticalAlign: 'middle' as const,
+}
+
+const ccPromoLabel = {
+  fontFamily: "'SF Mono', Monaco, monospace",
+  fontSize: '9px',
+  fontWeight: '500',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.5px',
+  color: 'rgba(0,0,0,0.45)',
+  margin: '0 0 2px',
+  lineHeight: '1.2',
+}
+
+const ccPromoHeading = {
+  fontFamily: "'SF Mono', Monaco, monospace",
+  fontSize: '18px',
+  fontWeight: '700',
+  color: '#000000',
+  margin: '0 0 10px',
+  lineHeight: '1.1',
+}
+
+const ccPromoCopy = {
+  fontFamily: "'Source Serif 4', Georgia, serif",
+  fontSize: '11px',
+  lineHeight: '1.5',
+  color: 'rgba(0,0,0,0.65)',
+  margin: '0 0 12px',
+}
+
+const ccPromoLink = {
+  fontFamily: "'SF Mono', Monaco, monospace",
+  fontSize: '11px',
+  fontWeight: '600',
+  color: '#000000',
+  textDecoration: 'none',
 }
 
 export default NewsletterEmail

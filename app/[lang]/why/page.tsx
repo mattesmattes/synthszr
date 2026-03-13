@@ -2,6 +2,7 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
 import { Newsletter } from "@/components/newsletter"
+import { CodecrashPromo } from "@/components/codecrash-promo"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ArrowLeft } from "lucide-react"
 import { getTranslations } from "@/lib/i18n/get-translations"
@@ -92,6 +93,7 @@ export default async function WhyPage({ params }: PageProps) {
           </div>
         </article>
 
+        <CodecrashPromo />
         <Newsletter locale={locale} />
       </main>
 
