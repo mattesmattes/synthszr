@@ -9,7 +9,7 @@ export function CodecrashPromo() {
         rel="noopener noreferrer"
         className="mx-auto block max-w-2xl overflow-hidden rounded-lg"
       >
-        <div className="grid grid-cols-2 md:grid-cols-3">
+        <div className="grid grid-cols-2">
           {/* Book Cover — cyan multiply blend */}
           <div className="relative bg-neon-cyan">
             <img
@@ -30,15 +30,16 @@ export function CodecrashPromo() {
           </div>
 
           {/* Text box */}
-          <div className="col-span-2 flex flex-col justify-center bg-[#DDD0BC] p-6 md:col-span-1 md:p-5">
+          <div className="col-span-2 flex flex-col justify-center bg-[#DDD0BC] p-6">
             <p className="font-mono text-[10px] font-medium uppercase tracking-wider text-black/50">
-              Das Update des Bestsellers
+              CODE CRASH
             </p>
-            <h2 className="mt-1 font-mono text-xl font-bold leading-tight text-black md:text-lg">
-              Code Crash
+            <h2 className="mt-1 font-mono text-xl font-bold leading-tight text-black">
+              Now available
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-black/70" style={{ fontFamily: 'var(--font-serif), serif' }}>
-              Warum Künstliche Intelligenz Code in Intent verwandelt und wir die Chance haben, die Digitalisierung endlich richtig zu machen.
+              AI isn't just an efficiency tool. It unlocks entirely new ways to create value.
+              Matthias Schrader's new book shows you how — now available in German and English.
             </p>
             <span className="mt-4 inline-block font-mono text-xs font-semibold text-black">
               codecrash.ai →
