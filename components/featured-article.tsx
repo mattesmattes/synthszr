@@ -35,19 +35,6 @@ export function FeaturedArticle({
 
   return (
     <article className="mb-16 border-b border-border pb-16">
-      <a
-        href="https://codecrash.ai"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block -mx-6 mb-0 hover:opacity-90 transition-opacity"
-      >
-        <img
-          src="/codecrash-promo.gif"
-          alt="CodeCrash — AI is pushing the cost of software toward zero"
-          className="w-full h-auto"
-        />
-      </a>
-
       {coverImageUrl && (
         <div className="relative mb-8 overflow-hidden -mx-6">
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
