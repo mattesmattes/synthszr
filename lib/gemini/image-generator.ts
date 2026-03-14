@@ -566,6 +566,7 @@ export async function generateAndProcessImage(
   }
 
   const targetWidth = options?.targetWidth
+  console.log(`[Gemini] Processing options: targetWidth=${targetWidth}, enableDithering=${enableDithering}, imageScale=${imageScale}`)
 
   try {
     let processedBase64 = rawBase64
@@ -638,11 +639,10 @@ export async function generateAndProcessImage(
     }
   } catch (error) {
     console.error('[Gemini] Image processing error:', error)
-    // Return original image if processing fails
+    // Fail explicitly so caller knows processing didn't work
     return {
-      success: true,
-      imageBase64: rawBase64,
-      mimeType: 'image/png',
+      success: false,
+      error: `Image processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     }
   }
 }
