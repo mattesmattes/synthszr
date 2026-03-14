@@ -35,11 +35,12 @@ export function CodecrashPromo() {
               CODE CRASH
             </p>
             <h2 className="mt-1 font-mono text-xl font-bold leading-tight text-black">
-              Now available
+              Now available in German and English
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-black/70" style={{ fontFamily: 'var(--font-serif), serif' }}>
-              AI isn't just an efficiency tool. It unlocks entirely new ways to create value.
-              Matthias Schrader's new book shows you how — now available in German and English.
+              Most companies treat AI as an optimization layer. That's a mistake. The real opportunity is building
+              entirely new categories of value — and the window to act is closing fast. In Code Crash, Matthias Schrader
+              lays out a practical framework for leaders who want to move beyond pilots and into production.
             </p>
             <span className="mt-4 inline-block font-mono text-xs font-semibold text-black">
               codecrash.ai →
