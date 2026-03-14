@@ -79,27 +79,12 @@ export async function PATCH(request: NextRequest) {
       .update({ cover_image_id: imageId })
       .eq('id', postId)
 
-    // Delete old email cover versions — they no longer match the selected cover.
-    const { data: oldEmailCovers } = await supabase
+    // Delete old email cover DB records (but keep blobs — they may be referenced by already-sent newsletters)
+    await supabase
       .from('post_images')
-      .select('id, image_url')
+      .delete()
       .eq('post_id', postId)
       .eq('image_type', 'cover_email')
-
-    if (oldEmailCovers && oldEmailCovers.length > 0) {
-      for (const ec of oldEmailCovers) {
-        if (ec.image_url) {
-          try { await del(ec.image_url) } catch (e) {
-            console.error('Failed to delete old email cover blob:', e)
-          }
-        }
-      }
-      await supabase
-        .from('post_images')
-        .delete()
-        .eq('post_id', postId)
-        .eq('image_type', 'cover_email')
-    }
 
     // Regenerate email cover from raw image (if available)
     const { data: newCoverImage } = await supabase
@@ -347,25 +332,12 @@ export async function PUT(request: NextRequest) {
     // If this is a cover image, regenerate email cover too
     if (image.is_cover) {
       try {
-        // Delete old email covers
-        const { data: oldEmailCovers } = await supabase
+        // Delete old email cover DB records (keep blobs — may be referenced by sent newsletters)
+        await supabase
           .from('post_images')
-          .select('id, image_url')
+          .delete()
           .eq('post_id', image.post_id)
           .eq('image_type', 'cover_email')
-
-        if (oldEmailCovers) {
-          for (const ec of oldEmailCovers) {
-            if (ec.image_url) {
-              try { await del(ec.image_url) } catch {}
-            }
-          }
-          await supabase
-            .from('post_images')
-            .delete()
-            .eq('post_id', image.post_id)
-            .eq('image_type', 'cover_email')
-        }
 
         // Generate new email cover from raw
         const emailCover = await generateEmailCover(rawResult.imageBase64)
