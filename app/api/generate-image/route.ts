@@ -68,32 +68,47 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate the image with processing options
-    // Always include targetWidth for cover-quality output (clean 2:1 retina scaling)
+    // Step 1: Generate raw image
+    const rawResult = await generateSatiricalImage(newsText)
+    if (!rawResult.success || !rawResult.imageBase64) {
+      await supabase
+        .from('post_images')
+        .update({
+          generation_status: 'failed',
+          error_message: rawResult.error || 'Unknown error',
+        })
+        .eq('id', imageRecord.id)
+
+      return NextResponse.json(
+        { error: rawResult.error || 'Image generation failed' },
+        { status: 500 }
+      )
+    }
+
+    // Step 2: Process web version (resize to 1408px → dither → pad to square → transparent)
     const processingOptions: ImageProcessingOptions = {
       ...(enableDithering !== undefined ? { enableDithering } : {}),
       ...(ditheringGain !== undefined ? { ditheringGain } : {}),
       targetWidth: 1408,
     }
-    const result = await generateAndProcessImage(newsText, processingOptions)
+    const result = await generateAndProcessImage(newsText, processingOptions, rawResult.imageBase64)
 
     if (!result.success || !result.imageBase64) {
-      // Update record with error
       await supabase
         .from('post_images')
         .update({
           generation_status: 'failed',
-          error_message: result.error || 'Unknown error',
+          error_message: result.error || 'Processing failed',
         })
         .eq('id', imageRecord.id)
 
       return NextResponse.json(
-        { error: result.error || 'Image generation failed' },
+        { error: result.error || 'Image processing failed' },
         { status: 500 }
       )
     }
 
-    // Upload to Vercel Blob
+    // Upload web version to Vercel Blob
     const fileName = `post-images/${postId}/${imageRecord.id}.png`
     const imageBuffer = Buffer.from(result.imageBase64, 'base64')
 
@@ -143,7 +158,6 @@ export async function POST(request: NextRequest) {
       .eq('generation_status', 'completed')
 
     if (count === 1) {
-      // This is the first completed image - set as cover
       await supabase
         .from('post_images')
         .update({ is_cover: true })
@@ -153,6 +167,46 @@ export async function POST(request: NextRequest) {
         .from('generated_posts')
         .update({ cover_image_id: imageRecord.id })
         .eq('id', postId)
+    }
+
+    // Step 3: Generate email cover version (non-fatal)
+    try {
+      const emailCover = await generateEmailCover(rawResult.imageBase64)
+
+      const { data: emailRecord, error: emailInsertError } = await supabase
+        .from('post_images')
+        .insert({
+          post_id: postId,
+          daily_repo_id: dailyRepoId || null,
+          image_url: '',
+          source_text: newsText.slice(0, 5000),
+          generation_status: 'generating',
+          image_type: 'cover_email',
+        })
+        .select()
+        .single()
+
+      if (!emailInsertError && emailRecord) {
+        const emailFileName = `post-images/${postId}/${emailRecord.id}-cover-email.png`
+        const emailBuffer = Buffer.from(emailCover.base64, 'base64')
+
+        const emailBlob = await put(emailFileName, emailBuffer, {
+          access: 'public',
+          contentType: 'image/png',
+        })
+
+        await supabase
+          .from('post_images')
+          .update({
+            image_url: emailBlob.url,
+            generation_status: 'completed',
+          })
+          .eq('id', emailRecord.id)
+
+        console.log(`[Gemini] Email cover generated successfully for postId=${postId}`)
+      }
+    } catch (emailError) {
+      console.error('[Gemini] Email cover generation failed (non-fatal):', emailError)
     }
 
     return NextResponse.json({
