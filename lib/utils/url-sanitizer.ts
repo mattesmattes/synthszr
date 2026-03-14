@@ -147,8 +147,69 @@ function isSuspiciousParamValue(value: string): boolean {
 }
 
 /**
+ * Extract the destination domain from a tracking redirect URL.
+ * Tries query params first, then URL-encoded values in the path.
+ * Returns just the origin (e.g. "https://techmeme.com") or null.
+ */
+function extractRedirectDomain(url: string): string | null {
+  try {
+    const parsed = new URL(url)
+
+    // 1. Check common redirect query params for an embedded URL
+    const redirectParams = ['url', 'u', 'to', 'href', 'link', 'target', 'redirect_url', 'redirect', 'destination']
+    for (const param of redirectParams) {
+      const value = parsed.searchParams.get(param)
+      if (value) {
+        try {
+          const dest = new URL(value)
+          if (dest.protocol === 'https:' || dest.protocol === 'http:') {
+            return dest.origin
+          }
+        } catch { /* not a valid URL */ }
+        // Try URL-decoding the value
+        try {
+          const decoded = decodeURIComponent(value)
+          const dest = new URL(decoded)
+          if (dest.protocol === 'https:' || dest.protocol === 'http:') {
+            return dest.origin
+          }
+        } catch { /* not a valid URL */ }
+      }
+    }
+
+    // 2. Scan ALL query param values for embedded URLs (some trackers use opaque param names)
+    for (const [, value] of parsed.searchParams) {
+      if (value.startsWith('http://') || value.startsWith('https://')) {
+        try {
+          const dest = new URL(value)
+          // Ignore if destination is also a tracking domain
+          if (!isTrackingRedirectUrl(dest.origin)) {
+            return dest.origin
+          }
+        } catch { /* not a valid URL */ }
+      }
+    }
+
+    // 3. Look for URL-encoded URLs in the path (e.g. /redirect/https%3A%2F%2Ftarget.com%2F...)
+    const decodedPath = decodeURIComponent(parsed.pathname)
+    const urlInPath = decodedPath.match(/https?:\/\/[^\s/]+/)
+    if (urlInPath) {
+      try {
+        const dest = new URL(urlInPath[0])
+        if (!isTrackingRedirectUrl(dest.origin)) {
+          return dest.origin
+        }
+      } catch { /* not a valid URL */ }
+    }
+  } catch { /* ignore parse errors */ }
+
+  return null
+}
+
+/**
  * Sanitize a URL by removing tracking parameters
- * Returns the cleaned URL or null if the URL is a tracking redirect that can't be cleaned
+ * For tracking redirect URLs: extracts the destination domain (no path/slug)
+ * Returns the cleaned URL or null if no usable URL can be determined
  */
 export function sanitizeUrl(url: string | null | undefined): string | null {
   if (!url) return null
@@ -156,9 +217,14 @@ export function sanitizeUrl(url: string | null | undefined): string | null {
   try {
     const parsed = new URL(url)
 
-    // If this is a tracking redirect URL, return null (shouldn't be used)
+    // If this is a tracking redirect URL, try to extract the destination domain
     if (isTrackingRedirectUrl(url)) {
-      console.log(`[URL Sanitizer] Blocked tracking redirect: ${url.slice(0, 80)}...`)
+      const domain = extractRedirectDomain(url)
+      if (domain) {
+        console.log(`[URL Sanitizer] Tracking redirect → domain: ${domain} (from ${url.slice(0, 60)}...)`)
+        return domain
+      }
+      console.log(`[URL Sanitizer] Blocked tracking redirect (no destination found): ${url.slice(0, 80)}...`)
       return null
     }
 
