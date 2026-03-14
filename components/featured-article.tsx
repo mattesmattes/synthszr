@@ -47,7 +47,7 @@ export function FeaturedArticle({
           >
             {/* Clickable background */}
             <a href={postUrl} className="absolute inset-0 z-0">
-              <picture>
+              <picture className="block w-full h-full">
                 {desktopCoverUrl && (
                   <source media="(min-width: 768px)" srcSet={desktopCoverUrl} />
                 )}

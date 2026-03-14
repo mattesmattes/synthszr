@@ -352,7 +352,7 @@ export default async function PostPage({ params }: PageProps) {
               <div className="relative flex flex-col items-center justify-center mx-auto w-[704px] max-w-full aspect-square md:aspect-[11/6] bg-neon-cyan">
                 {/* Clickable background to home */}
                 <Link href={`/${locale}`} className="absolute inset-0 z-0">
-                  <picture>
+                  <picture className="block w-full h-full">
                     {post.desktop_cover_url && (
                       <source media="(min-width: 768px)" srcSet={post.desktop_cover_url} />
                     )}
