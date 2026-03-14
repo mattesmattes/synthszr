@@ -226,7 +226,7 @@ export function NewsletterEmail({
             <Section style={coverSection}>
               <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
                 <Img
-                  src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=1200&logo=true`}
+                  src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=604&logo=true`}
                   alt={subject}
                   width="600"
                   height="600"
