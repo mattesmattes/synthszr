@@ -273,13 +273,12 @@ export async function PUT(request: NextRequest) {
     }
 
     // If no explicit dithering settings provided, let generator use DB settings
-    const processingOptions: ImageProcessingOptions | undefined =
-      enableDithering !== undefined || ditheringGain !== undefined
-        ? {
-            enableDithering: enableDithering ?? false,
-            ditheringGain: ditheringGain ?? 1.0,
-          }
-        : undefined
+    // Always include targetWidth: 1408 so covers are dithered at display resolution
+    const processingOptions: ImageProcessingOptions = {
+      ...(enableDithering !== undefined ? { enableDithering } : {}),
+      ...(ditheringGain !== undefined ? { ditheringGain } : {}),
+      targetWidth: 1408,
+    }
 
     const supabase = await createClient()
     const results: Array<{ success: boolean; error?: string; imageId?: string }> = []
