@@ -329,19 +329,6 @@ export default async function PostPage({ params }: PageProps) {
         </Link>
 
         <article>
-          <a
-            href="https://codecrash.ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block -mx-6 mb-0 hover:opacity-90 transition-opacity"
-          >
-            <img
-              src="/codecrash-promo.gif"
-              alt="CodeCrash — AI is pushing the cost of software toward zero"
-              className="w-full h-auto"
-            />
-          </a>
-
           {/* Cover Image with centered Logo overlay - links to home */}
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
           {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
