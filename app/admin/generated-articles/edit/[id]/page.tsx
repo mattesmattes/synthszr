@@ -293,13 +293,9 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         }),
       })
         .then(res => {
-          res.json().then(data => {
-            if (!res.ok) {
-              console.error('[CoverImages] Generation failed:', data)
-            } else {
-              console.log('[CoverImages] Generation complete:', data.debug)
-            }
-          })
+          if (!res.ok) {
+            res.json().then(data => console.error('[CoverImages] Generation failed:', data))
+          }
         })
         .catch(err => console.error('[CoverImages] Generation error:', err))
     } catch (err) {

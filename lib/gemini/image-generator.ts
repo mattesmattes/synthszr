@@ -566,7 +566,6 @@ export async function generateAndProcessImage(
   }
 
   const targetWidth = options?.targetWidth
-  console.log(`[Gemini] Processing options: targetWidth=${targetWidth}, enableDithering=${enableDithering}, imageScale=${imageScale}`)
 
   try {
     let processedBase64 = rawBase64
