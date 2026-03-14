@@ -513,6 +513,7 @@ export interface ImageProcessingOptions {
   ditheringGain?: number       // 0.5-2.0, default 1.0
   ditheringCoarseness?: number // 1-8, default 1 (higher = larger dots, prevents moiré)
   imageScale?: number          // 0.25-2.0, default 1.0
+  targetWidth?: number         // Fixed width before dithering (keeps aspect ratio). Prevents moiré from browser rescaling.
 }
 
 /**
@@ -562,6 +563,8 @@ export async function generateAndProcessImage(
     rawBase64 = result.imageBase64
   }
 
+  const targetWidth = options?.targetWidth
+
   try {
     let processedBase64 = rawBase64
 
@@ -570,6 +573,23 @@ export async function generateAndProcessImage(
       console.log(`[Gemini] Scaling image by ${(imageScale * 100).toFixed(0)}%...`)
       const scaled = await scaleImage(processedBase64, imageScale)
       processedBase64 = scaled.base64
+    }
+
+    // Resize to fixed target width before dithering (keeps aspect ratio)
+    // This ensures the dither pattern is created at the exact display resolution,
+    // preventing moiré from browser rescaling
+    if (targetWidth) {
+      const buf = Buffer.from(processedBase64, 'base64')
+      const meta = await sharp(buf).metadata()
+      if (meta.width && meta.width !== targetWidth) {
+        console.log(`[Gemini] Resizing to targetWidth=${targetWidth} (was ${meta.width}x${meta.height})...`)
+        const resized = await sharp(buf)
+          .resize(targetWidth, null, { kernel: sharp.kernel.lanczos3 })
+          .normalise()
+          .png()
+          .toBuffer()
+        processedBase64 = resized.toString('base64')
+      }
     }
 
     // Apply dithering if enabled

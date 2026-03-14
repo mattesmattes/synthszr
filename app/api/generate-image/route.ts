@@ -274,8 +274,9 @@ export async function PUT(request: NextRequest) {
         })
       }
 
-      // Step 2: Process web version (scale → dither → transparent)
-      const result = await generateAndProcessImage(coverNews, processingOptions, rawResult.imageBase64)
+      // Step 2: Process web version (scale → resize to 1408px → dither → transparent)
+      const webOptions: ImageProcessingOptions = { ...processingOptions, targetWidth: 1408 }
+      const result = await generateAndProcessImage(coverNews, webOptions, rawResult.imageBase64)
 
       if (!result.success || !result.imageBase64) {
         await supabase
