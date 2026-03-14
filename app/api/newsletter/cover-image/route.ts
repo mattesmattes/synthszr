@@ -86,14 +86,15 @@ export async function GET(request: NextRequest) {
       // Skip color transformation - just crop and resize (for already-processed images)
       finalImage = await sharp(imageBuffer)
         .extract({ left, top, width: cropSize, height: cropSize })
-        .resize(size, size, { fit: 'fill' })
+        .resize(size, size, { fit: 'fill', kernel: sharp.kernel.nearest })
         .png()
         .toBuffer()
     } else {
       // Full processing with color transformation
+      // Use nearest-neighbor to preserve dithered B&W dots (lanczos3 creates gray values)
       const croppedBuffer = await sharp(imageBuffer)
         .extract({ left, top, width: cropSize, height: cropSize })
-        .resize(size, size, { fit: 'fill' })
+        .resize(size, size, { fit: 'fill', kernel: sharp.kernel.nearest })
         .ensureAlpha()
         .raw()
         .toBuffer({ resolveWithObject: true })

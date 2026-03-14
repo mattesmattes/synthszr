@@ -160,7 +160,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
                   <img
                     src={post.cover_image_url}
                     alt=""
-                    className="w-full h-full object-cover md:[image-rendering:pixelated]"
+                    className="w-full h-full object-cover"
                   />
                 </Link>
                 {/* Logo centered */}

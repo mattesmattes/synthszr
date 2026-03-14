@@ -467,15 +467,30 @@ export async function PUT(request: NextRequest) {
           continue
         }
 
-        // Generate the image with processing options
-        const result = await generateAndProcessImage(item.text, processingOptions)
+        // Step 1: Generate raw image
+        const rawResult = await generateSatiricalImage(item.text)
+        if (!rawResult.success || !rawResult.imageBase64) {
+          await supabase
+            .from('post_images')
+            .update({
+              generation_status: 'failed',
+              error_message: rawResult.error || 'Unknown error',
+            })
+            .eq('id', imageRecord.id)
+
+          results.push({ success: false, error: rawResult.error, imageId: imageRecord.id })
+          continue
+        }
+
+        // Step 2: Process web version
+        const result = await generateAndProcessImage(item.text, processingOptions, rawResult.imageBase64)
 
         if (!result.success || !result.imageBase64) {
           await supabase
             .from('post_images')
             .update({
               generation_status: 'failed',
-              error_message: result.error || 'Unknown error',
+              error_message: result.error || 'Processing failed',
             })
             .eq('id', imageRecord.id)
 
@@ -518,6 +533,38 @@ export async function PUT(request: NextRequest) {
               .from('generated_posts')
               .update({ cover_image_id: imageRecord.id })
               .eq('id', postId)
+
+            // Generate email cover version (non-fatal)
+            try {
+              const emailCover = await generateEmailCover(rawResult.imageBase64)
+              const { data: emailRecord } = await supabase
+                .from('post_images')
+                .insert({
+                  post_id: postId,
+                  daily_repo_id: item.dailyRepoId || null,
+                  image_url: '',
+                  source_text: item.text.slice(0, 5000),
+                  generation_status: 'generating',
+                  image_type: 'cover_email',
+                })
+                .select()
+                .single()
+
+              if (emailRecord) {
+                const emailBlob = await put(
+                  `post-images/${postId}/${emailRecord.id}-cover-email.png`,
+                  Buffer.from(emailCover.base64, 'base64'),
+                  { access: 'public', contentType: 'image/png' }
+                )
+                await supabase
+                  .from('post_images')
+                  .update({ image_url: emailBlob.url, generation_status: 'completed' })
+                  .eq('id', emailRecord.id)
+                console.log(`[Gemini] Email cover generated for postId=${postId}`)
+              }
+            } catch (emailErr) {
+              console.error('[Gemini] Email cover failed (non-fatal):', emailErr)
+            }
           }
 
           results.push({ success: true, imageId: imageRecord.id })

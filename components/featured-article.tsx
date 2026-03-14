@@ -45,11 +45,10 @@ export function FeaturedArticle({
           >
             {/* Clickable background */}
             <a href={postUrl} className="absolute inset-0 z-0">
-              {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
               <img
                 src={coverImageUrl}
                 alt={title}
-                className="w-full h-full object-cover md:[image-rendering:pixelated]"
+                className="w-full h-full object-cover"
                 fetchPriority="high"
               />
             </a>
