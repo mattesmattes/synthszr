@@ -339,7 +339,7 @@ export default async function PostPage({ params }: PageProps) {
           </span>
           <br />
           <span className="text-sm text-muted-foreground">
-            The morning news synthesis to start your day.
+            Your morning news and podcast synthesis to start the day.
           </span>
         </Link>
 
