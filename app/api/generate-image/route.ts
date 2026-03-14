@@ -108,9 +108,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Verify output dimensions
+    const imageBuffer = Buffer.from(result.imageBase64, 'base64')
+    const sharp = (await import('sharp')).default
+    const outputMeta = await sharp(imageBuffer).metadata()
+    console.log(`[Gemini] POST output dimensions: ${outputMeta.width}x${outputMeta.height}`)
+
     // Upload web version to Vercel Blob
     const fileName = `post-images/${postId}/${imageRecord.id}.png`
-    const imageBuffer = Buffer.from(result.imageBase64, 'base64')
 
     let blobUrl: string
     try {
@@ -219,6 +224,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       image: updatedImage,
+      debug: { outputWidth: outputMeta.width, outputHeight: outputMeta.height },
     })
   } catch (error) {
     console.error('Generate image error:', error)
