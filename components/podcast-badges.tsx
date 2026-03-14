@@ -26,9 +26,6 @@ const PODCAST_LINKS = [
 export function PodcastBadges({ children }: { children?: ReactNode }) {
   return (
     <div className="px-4 py-3" style={{ backgroundColor: '#ffffff' }}>
-      <p className="text-center text-sm italic text-[#1a1a1a] font-serif mx-auto py-1">
-        Start your day with something new, weird, and interesting.
-      </p>
       <div className="flex items-center justify-center gap-2 sm:gap-3 pt-2">
         {PODCAST_LINKS.map((link) => (
           <a
