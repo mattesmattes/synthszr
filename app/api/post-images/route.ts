@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { del, put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
-import { generateAndProcessImage, generateEmailCover } from '@/lib/gemini/image-generator'
+import { generateAndProcessImage, generateEmailCover, generateSatiricalImage } from '@/lib/gemini/image-generator'
 
 // Get images for a post
 export async function GET(request: NextRequest) {
@@ -268,16 +268,34 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Generate new image
+    // Step 1: Generate raw image
     console.log(`[Recreate] Regenerating image ${imageId}...`)
-    const result = await generateAndProcessImage(image.source_text)
+    const rawResult = await generateSatiricalImage(image.source_text)
+
+    if (!rawResult.success || !rawResult.imageBase64) {
+      await supabase
+        .from('post_images')
+        .update({
+          generation_status: 'failed',
+          error_message: rawResult.error || 'Raw generation failed',
+        })
+        .eq('id', imageId)
+
+      return NextResponse.json(
+        { error: rawResult.error || 'Regeneration failed' },
+        { status: 500 }
+      )
+    }
+
+    // Step 2: Process web version (resize to 1408px → dither → pad to square)
+    const result = await generateAndProcessImage(image.source_text, { targetWidth: 1408 }, rawResult.imageBase64)
 
     if (!result.success || !result.imageBase64) {
       await supabase
         .from('post_images')
         .update({
           generation_status: 'failed',
-          error_message: result.error || 'Regeneration failed',
+          error_message: result.error || 'Processing failed',
         })
         .eq('id', imageId)
 
@@ -287,7 +305,20 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Upload to Vercel Blob
+    // Upload raw image for later email cover regeneration
+    let rawBlobUrl: string | null = null
+    try {
+      const rawBlob = await put(
+        `post-images/${image.post_id}/${imageId}-raw.png`,
+        Buffer.from(rawResult.imageBase64, 'base64'),
+        { access: 'public', contentType: 'image/png' }
+      )
+      rawBlobUrl = rawBlob.url
+    } catch (rawErr) {
+      console.error('Failed to upload raw image (non-fatal):', rawErr)
+    }
+
+    // Upload processed web version to Vercel Blob
     const fileName = `post-images/${image.post_id}/${imageId}-${Date.now()}.png`
     const imageBuffer = Buffer.from(result.imageBase64, 'base64')
 
@@ -303,6 +334,7 @@ export async function PUT(request: NextRequest) {
         image_url: blob.url,
         generation_status: 'completed',
         error_message: null,
+        ...(rawBlobUrl ? { raw_image_url: rawBlobUrl } : {}),
       })
       .eq('id', imageId)
       .select()
@@ -310,6 +342,59 @@ export async function PUT(request: NextRequest) {
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+
+    // If this is a cover image, regenerate email cover too
+    if (image.is_cover) {
+      try {
+        // Delete old email covers
+        const { data: oldEmailCovers } = await supabase
+          .from('post_images')
+          .select('id, image_url')
+          .eq('post_id', image.post_id)
+          .eq('image_type', 'cover_email')
+
+        if (oldEmailCovers) {
+          for (const ec of oldEmailCovers) {
+            if (ec.image_url) {
+              try { await del(ec.image_url) } catch {}
+            }
+          }
+          await supabase
+            .from('post_images')
+            .delete()
+            .eq('post_id', image.post_id)
+            .eq('image_type', 'cover_email')
+        }
+
+        // Generate new email cover from raw
+        const emailCover = await generateEmailCover(rawResult.imageBase64)
+        const { data: emailRecord } = await supabase
+          .from('post_images')
+          .insert({
+            post_id: image.post_id,
+            image_url: '',
+            generation_status: 'generating',
+            image_type: 'cover_email',
+          })
+          .select()
+          .single()
+
+        if (emailRecord) {
+          const emailBlob = await put(
+            `post-images/${image.post_id}/${emailRecord.id}-cover-email.png`,
+            Buffer.from(emailCover.base64, 'base64'),
+            { access: 'public', contentType: 'image/png' }
+          )
+          await supabase
+            .from('post_images')
+            .update({ image_url: emailBlob.url, generation_status: 'completed' })
+            .eq('id', emailRecord.id)
+          console.log(`[Recreate] Email cover regenerated for postId=${image.post_id}`)
+        }
+      } catch (emailErr) {
+        console.error('[Recreate] Email cover regeneration failed (non-fatal):', emailErr)
+      }
     }
 
     console.log(`[Recreate] Image ${imageId} regenerated successfully`)
