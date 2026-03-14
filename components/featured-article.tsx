@@ -105,9 +105,6 @@ export function FeaturedArticle({
         <PostContentView content={content} postId={postId} queueItemIds={queueItemIds} />
       </div>
 
-      <a href={postUrl} className="mt-8 inline-block font-mono text-xs text-accent hover:underline">
-        Permalink →
-      </a>
     </article>
   )
 }
