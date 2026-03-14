@@ -135,6 +135,8 @@ export default async function Page() {
               queueItemIds={featuredPost.pending_queue_item_ids || undefined}
             />
 
+            <CodecrashPromo />
+
             {/* Last 7 Days Headlines */}
             {recentPosts.length > 0 && (
               <section className="mt-12">
@@ -179,7 +181,6 @@ export default async function Page() {
           </div>
         )}
 
-        <CodecrashPromo />
         <Newsletter />
       </main>
 
