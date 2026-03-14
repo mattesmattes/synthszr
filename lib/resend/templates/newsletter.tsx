@@ -240,10 +240,7 @@ export function NewsletterEmail({
 
           {/* Podcast Promo Section */}
           <Section style={{ padding: '0', backgroundColor: '#ffffff' }}>
-            <Text style={podcastHeadline}>
-              Start your day with something<br />new, weird, and interesting.
-            </Text>
-            <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
+<Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
               <Img
                 src={`${baseUrl}/api/newsletter/promo-block`}
                 alt="Listen on Apple Podcasts, Spotify, YouTube and Audible"
@@ -387,18 +384,6 @@ const container = {
   margin: '0 auto',
   maxWidth: '600px',
 }
-
-const podcastHeadline = {
-  fontFamily: "'Source Serif 4', Georgia, 'Times New Roman', serif",
-  fontStyle: 'italic' as const,
-  fontSize: '20px',
-  lineHeight: '1.3',
-  textAlign: 'center' as const,
-  color: '#1a1a1a',
-  margin: '0',
-  padding: '28px 40px 12px',
-}
-
 const coverSection = {
   padding: '0',
   textAlign: 'center' as const,
