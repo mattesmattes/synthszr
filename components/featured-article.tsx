@@ -49,8 +49,7 @@ export function FeaturedArticle({
               <img
                 src={coverImageUrl}
                 alt={title}
-                className="w-full h-full object-cover"
-                style={{ imageRendering: 'pixelated' }}
+                className="w-full h-full object-cover md:[image-rendering:pixelated]"
                 fetchPriority="high"
               />
             </a>

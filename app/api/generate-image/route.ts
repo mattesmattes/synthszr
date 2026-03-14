@@ -69,14 +69,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate the image with processing options
-    // If no explicit dithering settings provided, let generator use DB settings
-    const processingOptions: ImageProcessingOptions | undefined =
-      enableDithering !== undefined || ditheringGain !== undefined
-        ? {
-            enableDithering: enableDithering ?? false,
-            ditheringGain: ditheringGain ?? 1.0,
-          }
-        : undefined
+    // Always include targetWidth for cover-quality output (clean 2:1 retina scaling)
+    const processingOptions: ImageProcessingOptions = {
+      ...(enableDithering !== undefined ? { enableDithering } : {}),
+      ...(ditheringGain !== undefined ? { ditheringGain } : {}),
+      targetWidth: 1408,
+    }
     const result = await generateAndProcessImage(newsText, processingOptions)
 
     if (!result.success || !result.imageBase64) {

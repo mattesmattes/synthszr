@@ -340,8 +340,7 @@ export default async function PostPage({ params }: PageProps) {
                   <img
                     src={post.cover_image_url}
                     alt={post.title}
-                    className="w-full h-full object-cover"
-                    style={{ imageRendering: 'pixelated' }}
+                    className="w-full h-full object-cover md:[image-rendering:pixelated]"
                     fetchPriority="high"
                   />
                 </Link>

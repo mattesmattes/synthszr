@@ -604,6 +604,31 @@ export async function generateAndProcessImage(
     // Process for transparency
     console.log('[Gemini] Processing image for transparency...')
     const processed = await whiteToTransparent(processedBase64)
+
+    // Pad to square for clean 2:1 object-cover scaling (cover images only)
+    // Without this, object-cover uses height-fill at non-integer ratios = moiré
+    if (targetWidth) {
+      const padBuf = Buffer.from(processed.base64, 'base64')
+      const padMeta = await sharp(padBuf).metadata()
+      if (padMeta.width && padMeta.height && padMeta.height < padMeta.width) {
+        const diff = padMeta.width - padMeta.height
+        console.log(`[Gemini] Padding to square: ${padMeta.width}x${padMeta.height} → ${padMeta.width}x${padMeta.width}`)
+        const padded = await sharp(padBuf)
+          .extend({
+            top: Math.ceil(diff / 2),
+            bottom: Math.floor(diff / 2),
+            background: { r: 0, g: 0, b: 0, alpha: 0 }
+          })
+          .png()
+          .toBuffer()
+        return {
+          success: true,
+          imageBase64: padded.toString('base64'),
+          mimeType: 'image/png'
+        }
+      }
+    }
+
     console.log('[Gemini] Image processing complete')
 
     return {
