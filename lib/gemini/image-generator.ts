@@ -531,17 +531,19 @@ export async function generateAndProcessImage(
   mimeType?: string
   error?: string
 }> {
-  // If no options provided, get settings from active prompt in database
+  // Get dithering/scale settings: explicit options override DB settings
+  // Note: options with only targetWidth should still fall back to DB for dithering
+  const hasExplicitDitheringOptions = options?.enableDithering !== undefined || options?.ditheringGain !== undefined || options?.ditheringCoarseness !== undefined || options?.imageScale !== undefined
   let enableDithering: boolean
   let ditheringGain: number
   let ditheringCoarseness: number
   let imageScale: number
 
-  if (options) {
-    enableDithering = options.enableDithering ?? false
-    ditheringGain = options.ditheringGain ?? 1.0
-    ditheringCoarseness = options.ditheringCoarseness ?? 1
-    imageScale = options.imageScale ?? 1.0
+  if (hasExplicitDitheringOptions) {
+    enableDithering = options!.enableDithering ?? false
+    ditheringGain = options!.ditheringGain ?? 1.0
+    ditheringCoarseness = options!.ditheringCoarseness ?? 1
+    imageScale = options!.imageScale ?? 1.0
   } else {
     const promptSettings = await getActiveImagePromptSettings()
     enableDithering = promptSettings.enableDithering
