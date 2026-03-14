@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
-import { generateAndProcessImage, generateEmailCover, generateSatiricalImage, ImageProcessingOptions, CoverImageNews } from '@/lib/gemini/image-generator'
+import { generateAndProcessImage, generateEmailCover, generateDesktopCover, generateSatiricalImage, ImageProcessingOptions, CoverImageNews } from '@/lib/gemini/image-generator'
 import { getSession } from '@/lib/auth/session'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 
@@ -215,6 +215,38 @@ export async function POST(request: NextRequest) {
       }
     } catch (emailError) {
       console.error('[Gemini] Email cover generation failed (non-fatal):', emailError)
+    }
+
+    // Step 4: Generate desktop cover version (non-fatal)
+    try {
+      const desktopCover = await generateDesktopCover(rawResult.imageBase64)
+      const { data: desktopRecord } = await supabase
+        .from('post_images')
+        .insert({
+          post_id: postId,
+          daily_repo_id: dailyRepoId || null,
+          image_url: '',
+          source_text: newsText.slice(0, 5000),
+          generation_status: 'generating',
+          image_type: 'cover_desktop',
+        })
+        .select()
+        .single()
+
+      if (desktopRecord) {
+        const desktopBlob = await put(
+          `post-images/${postId}/${desktopRecord.id}-cover-desktop.png`,
+          Buffer.from(desktopCover.base64, 'base64'),
+          { access: 'public', contentType: 'image/png' }
+        )
+        await supabase
+          .from('post_images')
+          .update({ image_url: desktopBlob.url, generation_status: 'completed' })
+          .eq('id', desktopRecord.id)
+        console.log(`[Gemini] Desktop cover generated successfully for postId=${postId}`)
+      }
+    } catch (desktopError) {
+      console.error('[Gemini] Desktop cover generation failed (non-fatal):', desktopError)
     }
 
     return NextResponse.json({
@@ -459,6 +491,39 @@ export async function PUT(request: NextRequest) {
         // Non-fatal: web cover is already saved, email will fall back to runtime API
       }
 
+      // Step 4: Generate desktop cover version (non-fatal)
+      try {
+        const desktopCover = await generateDesktopCover(rawResult.imageBase64!)
+        const { data: desktopRecord } = await supabase
+          .from('post_images')
+          .insert({
+            post_id: postId,
+            daily_repo_id: null,
+            image_url: '',
+            source_text: sourceText,
+            generation_status: 'generating',
+            image_type: 'cover_desktop',
+          })
+          .select()
+          .single()
+
+        if (desktopRecord) {
+          const desktopBlob = await put(
+            `post-images/${postId}/${desktopRecord.id}-cover-desktop.png`,
+            Buffer.from(desktopCover.base64, 'base64'),
+            { access: 'public', contentType: 'image/png' }
+          )
+          await supabase
+            .from('post_images')
+            .update({ image_url: desktopBlob.url, generation_status: 'completed' })
+            .eq('id', desktopRecord.id)
+          console.log(`[Gemini] Desktop cover generated for postId=${postId}`)
+          coverResults.push({ success: true, imageId: desktopRecord.id })
+        }
+      } catch (desktopError) {
+        console.error('[Gemini] Desktop cover generation failed (non-fatal):', desktopError)
+      }
+
       return NextResponse.json({
         success: true,
         results: coverResults,
@@ -598,6 +663,38 @@ export async function PUT(request: NextRequest) {
               }
             } catch (emailErr) {
               console.error('[Gemini] Email cover failed (non-fatal):', emailErr)
+            }
+
+            // Generate desktop cover version (non-fatal)
+            try {
+              const desktopCover = await generateDesktopCover(rawResult.imageBase64)
+              const { data: desktopRecord } = await supabase
+                .from('post_images')
+                .insert({
+                  post_id: postId,
+                  daily_repo_id: item.dailyRepoId || null,
+                  image_url: '',
+                  source_text: item.text.slice(0, 5000),
+                  generation_status: 'generating',
+                  image_type: 'cover_desktop',
+                })
+                .select()
+                .single()
+
+              if (desktopRecord) {
+                const desktopBlob = await put(
+                  `post-images/${postId}/${desktopRecord.id}-cover-desktop.png`,
+                  Buffer.from(desktopCover.base64, 'base64'),
+                  { access: 'public', contentType: 'image/png' }
+                )
+                await supabase
+                  .from('post_images')
+                  .update({ image_url: desktopBlob.url, generation_status: 'completed' })
+                  .eq('id', desktopRecord.id)
+                console.log(`[Gemini] Desktop cover generated for postId=${postId}`)
+              }
+            } catch (desktopErr) {
+              console.error('[Gemini] Desktop cover failed (non-fatal):', desktopErr)
             }
           }
 

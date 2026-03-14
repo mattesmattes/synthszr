@@ -23,6 +23,7 @@ interface CombinedPost {
   category: string
   created_at: string
   cover_image_url?: string | null
+  desktop_cover_url?: string | null
   pending_queue_item_ids?: string[] | null
 }
 
@@ -108,6 +109,21 @@ export default async function Page({ params }: PageProps) {
     (coverImages || []).map(img => [img.id, img.image_url])
   )
 
+  // Fetch desktop cover images for AI posts
+  const postIds = (aiPosts || []).map(p => p.id)
+  const { data: desktopCovers } = postIds.length > 0
+    ? await supabase
+        .from('post_images')
+        .select('post_id, image_url')
+        .in('post_id', postIds)
+        .eq('image_type', 'cover_desktop')
+        .eq('generation_status', 'completed')
+    : { data: [] }
+
+  const desktopCoverMap = new Map(
+    (desktopCovers || []).map(img => [img.post_id, img.image_url])
+  )
+
   // Parse AI posts content from JSON string if needed, apply translations
   const parsedAiPosts: CombinedPost[] = (aiPosts || []).map(post => {
     const translation = translationsMap.get(post.id)
@@ -121,6 +137,7 @@ export default async function Page({ params }: PageProps) {
       slug: translation?.slug || post.slug || post.id,
       category: post.category || 'AI & Tech',
       cover_image_url: post.cover_image_id ? coverImageMap.get(post.cover_image_id) : null,
+      desktop_cover_url: desktopCoverMap.get(post.id) || null,
       pending_queue_item_ids: post.pending_queue_item_ids
     }
   })
@@ -207,6 +224,7 @@ export default async function Page({ params }: PageProps) {
               readTime={estimateReadTime(featuredPost.content)}
               category={featuredPost.category.toUpperCase()}
               coverImageUrl={featuredPost.cover_image_url}
+              desktopCoverUrl={featuredPost.desktop_cover_url}
               locale={locale}
               postId={featuredPost.id}
               queueItemIds={featuredPost.pending_queue_item_ids || undefined}

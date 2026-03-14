@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { del, put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
-import { generateAndProcessImage, generateEmailCover, generateSatiricalImage } from '@/lib/gemini/image-generator'
+import { generateAndProcessImage, generateEmailCover, generateDesktopCover, generateSatiricalImage } from '@/lib/gemini/image-generator'
 
 // Get images for a post
 export async function GET(request: NextRequest) {
@@ -79,14 +79,14 @@ export async function PATCH(request: NextRequest) {
       .update({ cover_image_id: imageId })
       .eq('id', postId)
 
-    // Delete old email cover DB records (but keep blobs — they may be referenced by already-sent newsletters)
+    // Delete old email + desktop cover DB records (keep blobs — may be referenced by sent newsletters)
     await supabase
       .from('post_images')
       .delete()
       .eq('post_id', postId)
-      .eq('image_type', 'cover_email')
+      .in('image_type', ['cover_email', 'cover_desktop'])
 
-    // Regenerate email cover from raw image (if available)
+    // Regenerate email + desktop covers from raw image (if available)
     const { data: newCoverImage } = await supabase
       .from('post_images')
       .select('raw_image_url')
@@ -128,11 +128,37 @@ export async function PATCH(request: NextRequest) {
 
           console.log(`[Cover Change] Email cover regenerated for postId=${postId}`)
         }
-      } catch (emailError) {
-        console.error('[Cover Change] Email cover regeneration failed (non-fatal):', emailError)
+
+        // Generate desktop cover (natively dithered at 1408×768)
+        const desktopCover = await generateDesktopCover(rawBase64)
+        const { data: desktopRecord } = await supabase
+          .from('post_images')
+          .insert({
+            post_id: postId,
+            image_url: '',
+            generation_status: 'generating',
+            image_type: 'cover_desktop',
+          })
+          .select()
+          .single()
+
+        if (desktopRecord) {
+          const desktopBlob = await put(
+            `post-images/${postId}/${desktopRecord.id}-cover-desktop.png`,
+            Buffer.from(desktopCover.base64, 'base64'),
+            { access: 'public', contentType: 'image/png' }
+          )
+          await supabase
+            .from('post_images')
+            .update({ image_url: desktopBlob.url, generation_status: 'completed' })
+            .eq('id', desktopRecord.id)
+          console.log(`[Cover Change] Desktop cover regenerated for postId=${postId}`)
+        }
+      } catch (coverError) {
+        console.error('[Cover Change] Cover variant regeneration failed (non-fatal):', coverError)
       }
     } else {
-      console.warn(`[Cover Change] No raw_image_url for imageId=${imageId}, newsletter will use runtime API fallback`)
+      console.warn(`[Cover Change] No raw_image_url for imageId=${imageId}, cover variants will use runtime fallback`)
     }
 
     return NextResponse.json({ success: true })
@@ -329,15 +355,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    // If this is a cover image, regenerate email cover too
+    // If this is a cover image, regenerate email + desktop covers too
     if (image.is_cover) {
       try {
-        // Delete old email cover DB records (keep blobs — may be referenced by sent newsletters)
+        // Delete old email + desktop cover DB records (keep blobs — may be referenced by sent newsletters)
         await supabase
           .from('post_images')
           .delete()
           .eq('post_id', image.post_id)
-          .eq('image_type', 'cover_email')
+          .in('image_type', ['cover_email', 'cover_desktop'])
 
         // Generate new email cover from raw
         const emailCover = await generateEmailCover(rawResult.imageBase64)
@@ -364,8 +390,34 @@ export async function PUT(request: NextRequest) {
             .eq('id', emailRecord.id)
           console.log(`[Recreate] Email cover regenerated for postId=${image.post_id}`)
         }
-      } catch (emailErr) {
-        console.error('[Recreate] Email cover regeneration failed (non-fatal):', emailErr)
+
+        // Generate new desktop cover from raw
+        const desktopCover = await generateDesktopCover(rawResult.imageBase64)
+        const { data: desktopRecord } = await supabase
+          .from('post_images')
+          .insert({
+            post_id: image.post_id,
+            image_url: '',
+            generation_status: 'generating',
+            image_type: 'cover_desktop',
+          })
+          .select()
+          .single()
+
+        if (desktopRecord) {
+          const desktopBlob = await put(
+            `post-images/${image.post_id}/${desktopRecord.id}-cover-desktop.png`,
+            Buffer.from(desktopCover.base64, 'base64'),
+            { access: 'public', contentType: 'image/png' }
+          )
+          await supabase
+            .from('post_images')
+            .update({ image_url: desktopBlob.url, generation_status: 'completed' })
+            .eq('id', desktopRecord.id)
+          console.log(`[Recreate] Desktop cover regenerated for postId=${image.post_id}`)
+        }
+      } catch (coverErr) {
+        console.error('[Recreate] Cover variant regeneration failed (non-fatal):', coverErr)
       }
     }
 

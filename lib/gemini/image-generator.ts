@@ -646,6 +646,51 @@ export async function generateAndProcessImage(
   }
 }
 
+/**
+ * Generates a desktop-optimized cover image from a raw Gemini image.
+ * Natively dithered at 1408×768 — exact pixel match for desktop display container.
+ *
+ * Pipeline:
+ * 1. Scale-to-cover at 1408×768 (center-crop, lanczos3)
+ * 2. Normalise for full contrast range
+ * 3. Floyd-Steinberg dithering at native 1408×768
+ * 4. White-to-transparent (same as web cover — black dots on transparent)
+ */
+export async function generateDesktopCover(
+  rawImageBase64: string
+): Promise<{ base64: string; mimeType: string }> {
+  const DESKTOP_WIDTH = 1408
+  const DESKTOP_HEIGHT = 768
+  const imageBuffer = Buffer.from(rawImageBase64, 'base64')
+
+  // Get image metadata for center-crop
+  const metadata = await sharp(imageBuffer).metadata()
+  const { width, height } = metadata
+  if (!width || !height) throw new Error('Invalid image dimensions')
+
+  // Step 1+2: Scale-to-cover at 1408×768, normalise contrast
+  const resizedBuffer = await sharp(imageBuffer)
+    .resize(DESKTOP_WIDTH, DESKTOP_HEIGHT, { fit: 'cover', position: 'centre', kernel: sharp.kernel.lanczos3 })
+    .normalise()
+    .png()
+    .toBuffer()
+
+  const resizedBase64 = resizedBuffer.toString('base64')
+
+  // Step 3: Dither at native 1408×768 (gain 1.0, coarseness 1)
+  const dithered = await applyDithering(resizedBase64, 1.0, 1)
+
+  // Step 4: White-to-transparent (black dots on transparent — same as web cover)
+  const result = await whiteToTransparent(dithered.base64)
+
+  console.log(`[DesktopCover] Generated ${DESKTOP_WIDTH}x${DESKTOP_HEIGHT} desktop cover with native dithering`)
+
+  return {
+    base64: result.base64,
+    mimeType: 'image/png',
+  }
+}
+
 // Neon yellow RGB values (matches cover-image API)
 const NEON_YELLOW = { r: 204, g: 255, b: 0 }
 

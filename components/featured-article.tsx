@@ -15,6 +15,7 @@ interface FeaturedArticleProps {
   readTime: string
   category: string
   coverImageUrl?: string | null
+  desktopCoverUrl?: string | null
   locale?: LanguageCode
   postId?: string // For article thumbnails
   queueItemIds?: string[] // For stable thumbnail matching
@@ -27,6 +28,7 @@ export function FeaturedArticle({
   content,
   createdAt,
   coverImageUrl,
+  desktopCoverUrl,
   locale = 'de',
   postId,
   queueItemIds
@@ -45,12 +47,17 @@ export function FeaturedArticle({
           >
             {/* Clickable background */}
             <a href={postUrl} className="absolute inset-0 z-0">
-              <img
-                src={coverImageUrl}
-                alt={title}
-                className="w-full h-full object-cover"
-                fetchPriority="high"
-              />
+              <picture>
+                {desktopCoverUrl && (
+                  <source media="(min-width: 768px)" srcSet={desktopCoverUrl} />
+                )}
+                <img
+                  src={coverImageUrl}
+                  alt={title}
+                  className="w-full h-full object-cover"
+                  fetchPriority="high"
+                />
+              </picture>
             </a>
             {/* Logo centered on top - w-full on mobile so percentage resolves against cover width */}
             <a href={postUrl} className="relative z-10 w-full flex justify-center md:w-auto">

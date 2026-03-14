@@ -30,6 +30,7 @@ interface PostData {
   category: string
   created_at: string
   cover_image_url?: string | null
+  desktop_cover_url?: string | null
   pending_queue_item_ids?: string[] | null
 }
 
@@ -192,6 +193,19 @@ export default async function PostPage({ params }: PageProps) {
         coverImageUrl = coverImage?.image_url || null
       }
 
+      // Fetch desktop cover if exists
+      let desktopCoverUrl: string | null = null
+      if (aiPost.id) {
+        const { data: desktopCover } = await supabase
+          .from('post_images')
+          .select('image_url')
+          .eq('post_id', aiPost.id)
+          .eq('image_type', 'cover_desktop')
+          .eq('generation_status', 'completed')
+          .single()
+        desktopCoverUrl = desktopCover?.image_url || null
+      }
+
       // Parse original content
       const originalContent = typeof aiPost.content === 'string' ? JSON.parse(aiPost.content) : aiPost.content
 
@@ -227,6 +241,7 @@ export default async function PostPage({ params }: PageProps) {
         // Pass original German content for company detection when using translation
         originalContent: hasTranslation ? originalContent : undefined,
         cover_image_url: coverImageUrl,
+        desktop_cover_url: desktopCoverUrl,
         pending_queue_item_ids: aiPost.pending_queue_item_ids
       } as PostData
     }
@@ -337,12 +352,17 @@ export default async function PostPage({ params }: PageProps) {
               <div className="relative flex flex-col items-center justify-center mx-auto w-[704px] max-w-full aspect-square md:aspect-[11/6] bg-neon-cyan">
                 {/* Clickable background to home */}
                 <Link href={`/${locale}`} className="absolute inset-0 z-0">
-                  <img
-                    src={post.cover_image_url}
-                    alt={post.title}
-                    className="w-full h-full object-cover"
-                    fetchPriority="high"
-                  />
+                  <picture>
+                    {post.desktop_cover_url && (
+                      <source media="(min-width: 768px)" srcSet={post.desktop_cover_url} />
+                    )}
+                    <img
+                      src={post.cover_image_url}
+                      alt={post.title}
+                      className="w-full h-full object-cover"
+                      fetchPriority="high"
+                    />
+                  </picture>
                 </Link>
                 {/* Logo centered - w-full on mobile so percentage resolves against cover width */}
                 <Link href={`/${locale}`} className="relative z-10 w-full flex justify-center md:w-auto">
