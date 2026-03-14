@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Synthszr',
     short_name: 'Synthszr',
-    description: 'AI is about Synthesis not Efficiency. Your morning news and podcast synthesis to start the day.',
+    description: 'AI is about Synthesis not Efficiency. Your news and podcast synthesis to start the day.',
     start_url: '/de',
     display: 'standalone',
     background_color: '#0a0a0a',

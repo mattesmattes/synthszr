@@ -143,7 +143,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           </span>
           <br />
           <span className="text-sm text-muted-foreground">
-            Your morning news and podcast synthesis to start the day.
+            Your news and podcast synthesis to start the day.
           </span>
         </Link>
 
