@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
       // Full processing with color transformation
       const croppedBuffer = await sharp(imageBuffer)
         .extract({ left, top, width: cropSize, height: cropSize })
-        .resize(size, size, { fit: 'fill', kernel: sharp.kernel.nearest })
+        .resize(size, size, { fit: 'fill' })
         .ensureAlpha()
         .raw()
         .toBuffer({ resolveWithObject: true })
