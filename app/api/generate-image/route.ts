@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     const processingOptions: ImageProcessingOptions = {
       ...(enableDithering !== undefined ? { enableDithering } : {}),
       ...(ditheringGain !== undefined ? { ditheringGain } : {}),
-      targetWidth: 1408,
+      targetWidth: 1408, targetHeight: 768,
     }
     const result = await generateAndProcessImage(newsText, processingOptions, rawResult.imageBase64)
 
@@ -268,11 +268,11 @@ export async function PUT(request: NextRequest) {
     }
 
     // If no explicit dithering settings provided, let generator use DB settings
-    // Always include targetWidth: 1408 so covers are dithered at display resolution
+    // Always include target dimensions so covers are dithered at exact display resolution (1408×768 @2x = 704×384 CSS)
     const processingOptions: ImageProcessingOptions = {
       ...(enableDithering !== undefined ? { enableDithering } : {}),
       ...(ditheringGain !== undefined ? { ditheringGain } : {}),
-      targetWidth: 1408,
+      targetWidth: 1408, targetHeight: 768,
     }
 
     const supabase = await createClient()
@@ -334,7 +334,7 @@ export async function PUT(request: NextRequest) {
       }
 
       // Step 2: Process web version (scale → resize to 1408px → dither → transparent)
-      const webOptions: ImageProcessingOptions = { ...processingOptions, targetWidth: 1408 }
+      const webOptions: ImageProcessingOptions = { ...processingOptions, targetWidth: 1408, targetHeight: 768 }
       const result = await generateAndProcessImage(coverNews, webOptions, rawResult.imageBase64)
 
       if (!result.success || !result.imageBase64) {

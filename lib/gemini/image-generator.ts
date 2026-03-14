@@ -513,7 +513,8 @@ export interface ImageProcessingOptions {
   ditheringGain?: number       // 0.5-2.0, default 1.0
   ditheringCoarseness?: number // 1-8, default 1 (higher = larger dots, prevents moiré)
   imageScale?: number          // 0.25-2.0, default 1.0
-  targetWidth?: number         // Fixed width before dithering (keeps aspect ratio). Prevents moiré from browser rescaling.
+  targetWidth?: number         // Target width for cover images (e.g. 1408)
+  targetHeight?: number        // Target height for cover images (e.g. 768). Together with targetWidth: scale-to-cover + center-crop.
 }
 
 /**
@@ -577,10 +578,27 @@ export async function generateAndProcessImage(
       processedBase64 = scaled.base64
     }
 
-    // Resize to fixed target width before dithering (keeps aspect ratio)
-    // This ensures the dither pattern is created at the exact display resolution,
-    // preventing moiré from browser rescaling
-    if (targetWidth) {
+    // Resize + crop to exact display dimensions before dithering.
+    // Scale-to-cover: scale up so both dimensions fill the target, then center-crop.
+    // This ensures the dither pattern is created at exact pixel resolution = no moiré.
+    const targetHeight = options?.targetHeight
+    if (targetWidth && targetHeight) {
+      const buf = Buffer.from(processedBase64, 'base64')
+      const meta = await sharp(buf).metadata()
+      if (meta.width && meta.height) {
+        console.log(`[Gemini] Scale-to-cover ${targetWidth}x${targetHeight} (was ${meta.width}x${meta.height})...`)
+        const resized = await sharp(buf)
+          .resize(targetWidth, targetHeight, {
+            kernel: sharp.kernel.lanczos3,
+            fit: 'cover',
+            position: 'centre',
+          })
+          .normalise()
+          .png()
+          .toBuffer()
+        processedBase64 = resized.toString('base64')
+      }
+    } else if (targetWidth) {
       const buf = Buffer.from(processedBase64, 'base64')
       const meta = await sharp(buf).metadata()
       if (meta.width && meta.width !== targetWidth) {
@@ -604,30 +622,6 @@ export async function generateAndProcessImage(
     // Process for transparency
     console.log('[Gemini] Processing image for transparency...')
     const processed = await whiteToTransparent(processedBase64)
-
-    // Pad to square for clean 2:1 object-cover scaling (cover images only)
-    // Without this, object-cover uses height-fill at non-integer ratios = moiré
-    if (targetWidth) {
-      const padBuf = Buffer.from(processed.base64, 'base64')
-      const padMeta = await sharp(padBuf).metadata()
-      if (padMeta.width && padMeta.height && padMeta.height < padMeta.width) {
-        const diff = padMeta.width - padMeta.height
-        console.log(`[Gemini] Padding to square: ${padMeta.width}x${padMeta.height} → ${padMeta.width}x${padMeta.width}`)
-        const padded = await sharp(padBuf)
-          .extend({
-            top: Math.ceil(diff / 2),
-            bottom: Math.floor(diff / 2),
-            background: { r: 0, g: 0, b: 0, alpha: 0 }
-          })
-          .png()
-          .toBuffer()
-        return {
-          success: true,
-          imageBase64: padded.toString('base64'),
-          mimeType: 'image/png'
-        }
-      }
-    }
 
     console.log('[Gemini] Image processing complete')
 
