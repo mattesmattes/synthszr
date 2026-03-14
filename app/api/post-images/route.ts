@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { del, put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
-import { generateAndProcessImage } from '@/lib/gemini/image-generator'
+import { generateAndProcessImage, generateEmailCover } from '@/lib/gemini/image-generator'
 
 // Get images for a post
 export async function GET(request: NextRequest) {
@@ -78,6 +78,77 @@ export async function PATCH(request: NextRequest) {
       .from('generated_posts')
       .update({ cover_image_id: imageId })
       .eq('id', postId)
+
+    // Delete old email cover versions — they no longer match the selected cover.
+    const { data: oldEmailCovers } = await supabase
+      .from('post_images')
+      .select('id, image_url')
+      .eq('post_id', postId)
+      .eq('image_type', 'cover_email')
+
+    if (oldEmailCovers && oldEmailCovers.length > 0) {
+      for (const ec of oldEmailCovers) {
+        if (ec.image_url) {
+          try { await del(ec.image_url) } catch (e) {
+            console.error('Failed to delete old email cover blob:', e)
+          }
+        }
+      }
+      await supabase
+        .from('post_images')
+        .delete()
+        .eq('post_id', postId)
+        .eq('image_type', 'cover_email')
+    }
+
+    // Regenerate email cover from raw image (if available)
+    const { data: newCoverImage } = await supabase
+      .from('post_images')
+      .select('raw_image_url')
+      .eq('id', imageId)
+      .single()
+
+    if (newCoverImage?.raw_image_url) {
+      try {
+        // Fetch raw image from blob storage
+        const rawResponse = await fetch(newCoverImage.raw_image_url)
+        const rawBuffer = Buffer.from(await rawResponse.arrayBuffer())
+        const rawBase64 = rawBuffer.toString('base64')
+
+        // Generate email cover (natively dithered at 604px)
+        const emailCover = await generateEmailCover(rawBase64)
+
+        // Create record + upload
+        const { data: emailRecord } = await supabase
+          .from('post_images')
+          .insert({
+            post_id: postId,
+            image_url: '',
+            generation_status: 'generating',
+            image_type: 'cover_email',
+          })
+          .select()
+          .single()
+
+        if (emailRecord) {
+          const emailBlob = await put(
+            `post-images/${postId}/${emailRecord.id}-cover-email.png`,
+            Buffer.from(emailCover.base64, 'base64'),
+            { access: 'public', contentType: 'image/png' }
+          )
+          await supabase
+            .from('post_images')
+            .update({ image_url: emailBlob.url, generation_status: 'completed' })
+            .eq('id', emailRecord.id)
+
+          console.log(`[Cover Change] Email cover regenerated for postId=${postId}`)
+        }
+      } catch (emailError) {
+        console.error('[Cover Change] Email cover regeneration failed (non-fatal):', emailError)
+      }
+    } else {
+      console.warn(`[Cover Change] No raw_image_url for imageId=${imageId}, newsletter will use runtime API fallback`)
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

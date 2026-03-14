@@ -135,12 +135,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Upload raw (pre-dithered) image for later email cover regeneration
+    let rawBlobUrl: string | null = null
+    try {
+      const rawFileName = `post-images/${postId}/${imageRecord.id}-raw.png`
+      const rawBuffer = Buffer.from(rawResult.imageBase64, 'base64')
+      const rawBlob = await put(rawFileName, rawBuffer, {
+        access: 'public',
+        contentType: 'image/png',
+      })
+      rawBlobUrl = rawBlob.url
+    } catch (rawUploadError) {
+      console.error('Failed to upload raw image (non-fatal):', rawUploadError)
+    }
+
     // Update record with success
     const { data: updatedImage, error: updateError } = await supabase
       .from('post_images')
       .update({
         image_url: blobUrl,
         generation_status: 'completed',
+        ...(rawBlobUrl ? { raw_image_url: rawBlobUrl } : {}),
       })
       .eq('id', imageRecord.id)
       .select()
@@ -338,6 +353,20 @@ export async function PUT(request: NextRequest) {
         })
       }
 
+      // Upload raw (pre-dithered) image for later email cover regeneration
+      let rawBlobUrlCover: string | null = null
+      try {
+        const rawFileName = `post-images/${postId}/${imageRecord.id}-raw.png`
+        const rawBuffer = Buffer.from(rawResult.imageBase64!, 'base64')
+        const rawBlob = await put(rawFileName, rawBuffer, {
+          access: 'public',
+          contentType: 'image/png',
+        })
+        rawBlobUrlCover = rawBlob.url
+      } catch (rawUploadError) {
+        console.error('Failed to upload raw cover image (non-fatal):', rawUploadError)
+      }
+
       // Upload web version to Vercel Blob
       const fileName = `post-images/${postId}/${imageRecord.id}-cover.png`
       const imageBuffer = Buffer.from(result.imageBase64, 'base64')
@@ -353,6 +382,7 @@ export async function PUT(request: NextRequest) {
           .update({
             image_url: blob.url,
             generation_status: 'completed',
+            ...(rawBlobUrlCover ? { raw_image_url: rawBlobUrlCover } : {}),
           })
           .eq('id', imageRecord.id)
 
@@ -491,6 +521,20 @@ export async function PUT(request: NextRequest) {
           continue
         }
 
+        // Upload raw (pre-dithered) image for later email cover regeneration
+        let rawBlobUrlBatch: string | null = null
+        try {
+          const rawFileName = `post-images/${postId}/${imageRecord.id}-raw.png`
+          const rawBuffer = Buffer.from(rawResult.imageBase64, 'base64')
+          const rawBlob = await put(rawFileName, rawBuffer, {
+            access: 'public',
+            contentType: 'image/png',
+          })
+          rawBlobUrlBatch = rawBlob.url
+        } catch (rawUploadError) {
+          console.error('Failed to upload raw image (non-fatal):', rawUploadError)
+        }
+
         // Upload to Vercel Blob
         const fileName = `post-images/${postId}/${imageRecord.id}.png`
         const imageBuffer = Buffer.from(result.imageBase64, 'base64')
@@ -506,6 +550,7 @@ export async function PUT(request: NextRequest) {
             .update({
               image_url: blob.url,
               generation_status: 'completed',
+              ...(rawBlobUrlBatch ? { raw_image_url: rawBlobUrlBatch } : {}),
             })
             .eq('id', imageRecord.id)
 
