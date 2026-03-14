@@ -39,7 +39,7 @@ export function CodecrashPromo() {
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-black/70" style={{ fontFamily: 'var(--font-serif), serif' }}>
               Most companies treat AI as an optimization layer. That's a mistake. The real opportunity is building
-              entirely new categories of value — and the window to act is closing fast. In Code Crash, Matthias Schrader
+              entirely new categories of value — and the window to act is closing fast. In <em>CODE CRASH</em>, Matthias Schrader
               lays out a practical framework for leaders who want to move beyond pilots and into production.
             </p>
             <span className="mt-4 inline-block font-mono text-xs font-semibold text-black">

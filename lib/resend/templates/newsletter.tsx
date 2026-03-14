@@ -323,7 +323,7 @@ export function NewsletterEmail({
                   <Text style={ccPromoHeading}>Now available in German and English</Text>
                   <Text style={ccPromoCopy}>
                     Most companies treat AI as an optimization layer. That's a mistake. The real opportunity is building
-                    entirely new categories of value — and the window to act is closing fast. In Code Crash, Matthias Schrader
+                    entirely new categories of value — and the window to act is closing fast. In <em>CODE CRASH</em>, Matthias Schrader
                     lays out a practical framework for leaders who want to move beyond pilots and into production.
                   </Text>
                   <Link href="https://codecrash.ai" style={ccPromoLink}>
