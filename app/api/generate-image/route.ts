@@ -150,24 +150,16 @@ export async function POST(request: NextRequest) {
       console.error('Failed to update image record:', updateError)
     }
 
-    // Check if this is the first image for this post - if so, set as cover
-    const { count } = await supabase
+    // Set as cover image and update post reference
+    await supabase
       .from('post_images')
-      .select('*', { count: 'exact', head: true })
-      .eq('post_id', postId)
-      .eq('generation_status', 'completed')
+      .update({ is_cover: true })
+      .eq('id', imageRecord.id)
 
-    if (count === 1) {
-      await supabase
-        .from('post_images')
-        .update({ is_cover: true })
-        .eq('id', imageRecord.id)
-
-      await supabase
-        .from('generated_posts')
-        .update({ cover_image_id: imageRecord.id })
-        .eq('id', postId)
-    }
+    await supabase
+      .from('generated_posts')
+      .update({ cover_image_id: imageRecord.id })
+      .eq('id', postId)
 
     // Step 3: Generate email cover version (non-fatal)
     try {
@@ -444,6 +436,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Standard mode: Process images sequentially (one per news item)
+    let coverSetInBatch = false
     for (const item of newsItems) {
       try {
         console.log(`[Gemini] Starting image generation for postId=${postId}`)
@@ -516,14 +509,10 @@ export async function PUT(request: NextRequest) {
             })
             .eq('id', imageRecord.id)
 
-          // Set as cover if first completed image
-          const { count } = await supabase
-            .from('post_images')
-            .select('*', { count: 'exact', head: true })
-            .eq('post_id', postId)
-            .eq('generation_status', 'completed')
+          // Set first image in batch as cover + generate email version
+          if (!coverSetInBatch) {
+            coverSetInBatch = true
 
-          if (count === 1) {
             await supabase
               .from('post_images')
               .update({ is_cover: true })
