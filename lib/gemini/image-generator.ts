@@ -667,8 +667,8 @@ export async function generateDesktopCover(
   }
 }
 
-// Neon yellow RGB values (matches cover-image API)
-const NEON_YELLOW = { r: 204, g: 255, b: 0 }
+// Neon cyan RGB values (matches web cover bg-neon-cyan)
+const NEON_CYAN_RGB = { r: 0, g: 255, b: 255 }
 
 /**
  * Generates an email-optimized cover image from a raw Gemini image.
@@ -679,7 +679,7 @@ const NEON_YELLOW = { r: 204, g: 255, b: 0 }
  * 2. Resize to 604px with lanczos3
  * 3. Normalise for full contrast range
  * 4. Floyd-Steinberg dithering at native 604px
- * 5. Color transform: white/bright → neon yellow, dark → black
+ * 5. Color transform: white/bright → neon cyan, dark → black
  * 6. Composite Synthszr logo (65% width, centered)
  */
 export async function generateEmailCover(
@@ -725,10 +725,10 @@ export async function generateEmailCover(
     const luminance = (r + g + b) / 3
 
     if (luminance >= 128) {
-      // Bright → neon yellow
-      pixels[i] = NEON_YELLOW.r
-      pixels[i + 1] = NEON_YELLOW.g
-      pixels[i + 2] = NEON_YELLOW.b
+      // Bright → neon cyan (matches web cover background)
+      pixels[i] = NEON_CYAN_RGB.r
+      pixels[i + 1] = NEON_CYAN_RGB.g
+      pixels[i + 2] = NEON_CYAN_RGB.b
       pixels[i + 3] = 255
     } else {
       // Dark → pure black
