@@ -1,4 +1,6 @@
 import sharp from 'sharp'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { createClient } from '@/lib/supabase/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
@@ -520,7 +522,8 @@ export interface ImageProcessingOptions {
  */
 export async function generateAndProcessImage(
   newsTextOrItems: string | CoverImageNews,
-  options?: ImageProcessingOptions
+  options?: ImageProcessingOptions,
+  preloadedRawBase64?: string
 ): Promise<{
   success: boolean
   imageBase64?: string
@@ -547,15 +550,20 @@ export async function generateAndProcessImage(
     console.log(`[Gemini] Using DB settings: dithering=${enableDithering}, gain=${ditheringGain}, coarseness=${ditheringCoarseness}, scale=${imageScale}`)
   }
 
-  // Generate the image
-  const result = await generateSatiricalImage(newsTextOrItems)
-
-  if (!result.success || !result.imageBase64) {
-    return result
+  // Generate the image (or use preloaded raw if provided)
+  let rawBase64: string
+  if (preloadedRawBase64) {
+    rawBase64 = preloadedRawBase64
+  } else {
+    const result = await generateSatiricalImage(newsTextOrItems)
+    if (!result.success || !result.imageBase64) {
+      return result
+    }
+    rawBase64 = result.imageBase64
   }
 
   try {
-    let processedBase64 = result.imageBase64
+    let processedBase64 = rawBase64
 
     // Apply scaling first (before dithering for better quality)
     if (imageScale !== 1.0) {
@@ -584,6 +592,112 @@ export async function generateAndProcessImage(
   } catch (error) {
     console.error('[Gemini] Image processing error:', error)
     // Return original image if processing fails
-    return result
+    return {
+      success: true,
+      imageBase64: rawBase64,
+      mimeType: 'image/png',
+    }
+  }
+}
+
+// Neon yellow RGB values (matches cover-image API)
+const NEON_YELLOW = { r: 204, g: 255, b: 0 }
+
+/**
+ * Generates an email-optimized cover image from a raw Gemini image.
+ * Natively dithered at 604px — no runtime rescaling of dither patterns.
+ *
+ * Pipeline (mirrors article-thumbnail approach):
+ * 1. Center-crop to square
+ * 2. Resize to 604px with lanczos3
+ * 3. Normalise for full contrast range
+ * 4. Floyd-Steinberg dithering at native 604px
+ * 5. Color transform: white/bright → neon yellow, dark → black
+ * 6. Composite Synthszr logo (65% width, centered)
+ */
+export async function generateEmailCover(
+  rawImageBase64: string
+): Promise<{ base64: string; mimeType: string }> {
+  const EMAIL_COVER_SIZE = 604
+  const imageBuffer = Buffer.from(rawImageBase64, 'base64')
+
+  // Get image metadata for center-crop
+  const metadata = await sharp(imageBuffer).metadata()
+  const { width, height } = metadata
+  if (!width || !height) throw new Error('Invalid image dimensions')
+
+  // Step 1+2+3: Center-crop to square, resize to 604px, normalise contrast
+  const cropSize = Math.min(width, height)
+  const left = Math.floor((width - cropSize) / 2)
+  const top = Math.floor((height - cropSize) / 2)
+
+  const resizedBuffer = await sharp(imageBuffer)
+    .extract({ left, top, width: cropSize, height: cropSize })
+    .resize(EMAIL_COVER_SIZE, EMAIL_COVER_SIZE, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
+    .normalise()
+    .png()
+    .toBuffer()
+
+  const resizedBase64 = resizedBuffer.toString('base64')
+
+  // Step 4: Dither at native 604px (gain 1.0, coarseness 1)
+  const dithered = await applyDithering(resizedBase64, 1.0, 1)
+
+  // Step 5: Color transform — white→neon yellow, dark→black
+  const ditheredBuffer = Buffer.from(dithered.base64, 'base64')
+  const { data, info } = await sharp(ditheredBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+
+  const pixels = new Uint8Array(data)
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i]
+    const g = pixels[i + 1]
+    const b = pixels[i + 2]
+    const luminance = (r + g + b) / 3
+
+    if (luminance >= 128) {
+      // Bright → neon yellow
+      pixels[i] = NEON_YELLOW.r
+      pixels[i + 1] = NEON_YELLOW.g
+      pixels[i + 2] = NEON_YELLOW.b
+      pixels[i + 3] = 255
+    } else {
+      // Dark → pure black
+      pixels[i] = 0
+      pixels[i + 1] = 0
+      pixels[i + 2] = 0
+      pixels[i + 3] = 255
+    }
+  }
+
+  let finalImage = await sharp(Buffer.from(pixels), {
+    raw: { width: info.width, height: info.height, channels: 4 },
+  })
+    .png()
+    .toBuffer()
+
+  // Step 6: Composite Synthszr logo (65% width, centered)
+  const logoSvgRaw = readFileSync(join(process.cwd(), 'public', 'synthszr-logo.svg'), 'utf-8')
+  const logoWidth = Math.round(EMAIL_COVER_SIZE * 0.65)
+  const logoHeight = Math.round(logoWidth / 4.475) // viewBox aspect ratio ~4.475
+  const logoSvg = logoSvgRaw
+    .replace(/<svg([^>]*)>/, `<svg$1 width="${logoWidth}" height="${logoHeight}">`)
+
+  finalImage = await sharp(finalImage)
+    .composite([{
+      input: Buffer.from(logoSvg),
+      top: Math.round((EMAIL_COVER_SIZE - logoHeight) / 2),
+      left: Math.round((EMAIL_COVER_SIZE - logoWidth) / 2),
+    }])
+    .png()
+    .toBuffer()
+
+  console.log(`[EmailCover] Generated ${EMAIL_COVER_SIZE}x${EMAIL_COVER_SIZE} email cover with native dithering`)
+
+  return {
+    base64: finalImage.toString('base64'),
+    mimeType: 'image/png',
   }
 }

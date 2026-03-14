@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
 
     const { data: todaysPosts } = await supabase
       .from('generated_posts')
-      .select('id, title, slug, excerpt, content')
+      .select('id, title, slug, excerpt, content, created_at')
       .eq('status', 'published')
       .gte('created_at', today.toISOString())
       .order('created_at', { ascending: false })
@@ -79,6 +79,29 @@ export async function GET(request: NextRequest) {
     }
 
     const post = todaysPosts[0]
+
+    // Fetch cover image
+    const { data: coverData } = await supabase
+      .from('post_images')
+      .select('image_url')
+      .eq('post_id', post.id)
+      .eq('image_type', 'cover')
+      .eq('generation_status', 'completed')
+      .eq('is_cover', true)
+      .single()
+
+    const coverImageUrl = coverData?.image_url || null
+
+    // Fetch pre-generated email cover (natively dithered at 604px)
+    const { data: emailCoverData } = await supabase
+      .from('post_images')
+      .select('image_url')
+      .eq('post_id', post.id)
+      .eq('image_type', 'cover_email')
+      .eq('generation_status', 'completed')
+      .single()
+
+    const emailCoverImageUrl = emailCoverData?.image_url || null
 
     // Fetch article thumbnails for this post
     const { data: thumbnailsData } = await supabase
@@ -240,6 +263,9 @@ export async function GET(request: NextRequest) {
           unsubscribeUrl: '{{UNSUBSCRIBE_URL}}',
           preferencesUrl: '{{PREFERENCES_URL}}',
           footerText,
+          coverImageUrl,
+          emailCoverImageUrl,
+          postDate: post.created_at,
           baseUrl: BASE_URL,
           locale: locale as LanguageCode,
         })

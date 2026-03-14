@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
-import { generateAndProcessImage, ImageProcessingOptions, CoverImageNews } from '@/lib/gemini/image-generator'
+import { generateAndProcessImage, generateEmailCover, generateSatiricalImage, ImageProcessingOptions, CoverImageNews } from '@/lib/gemini/image-generator'
 import { getSession } from '@/lib/auth/session'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 
@@ -230,6 +230,9 @@ export async function PUT(request: NextRequest) {
         news3: newsItems[2]?.text,
       }
 
+      const sourceText = [coverNews.news1, coverNews.news2, coverNews.news3]
+        .filter(Boolean).join('\n---\n').slice(0, 5000)
+
       // Create pending image record for cover
       const { data: imageRecord, error: insertError } = await supabase
         .from('post_images')
@@ -237,8 +240,7 @@ export async function PUT(request: NextRequest) {
           post_id: postId,
           daily_repo_id: null, // Cover combines multiple sources
           image_url: '',
-          source_text: [coverNews.news1, coverNews.news2, coverNews.news3]
-            .filter(Boolean).join('\n---\n').slice(0, 5000),
+          source_text: sourceText,
           generation_status: 'generating',
           is_cover: true,
         })
@@ -253,26 +255,45 @@ export async function PUT(request: NextRequest) {
         )
       }
 
-      // Generate the combined cover image
-      const result = await generateAndProcessImage(coverNews, processingOptions)
+      // Step 1: Generate raw image (once — used for both web + email versions)
+      const rawResult = await generateSatiricalImage(coverNews)
+
+      if (!rawResult.success || !rawResult.imageBase64) {
+        await supabase
+          .from('post_images')
+          .update({
+            generation_status: 'failed',
+            error_message: rawResult.error || 'Unknown error',
+          })
+          .eq('id', imageRecord.id)
+
+        return NextResponse.json({
+          success: false,
+          error: rawResult.error || 'Cover image generation failed',
+          results: [{ success: false, error: rawResult.error, imageId: imageRecord.id }]
+        })
+      }
+
+      // Step 2: Process web version (scale → dither → transparent)
+      const result = await generateAndProcessImage(coverNews, processingOptions, rawResult.imageBase64)
 
       if (!result.success || !result.imageBase64) {
         await supabase
           .from('post_images')
           .update({
             generation_status: 'failed',
-            error_message: result.error || 'Unknown error',
+            error_message: result.error || 'Processing failed',
           })
           .eq('id', imageRecord.id)
 
         return NextResponse.json({
           success: false,
-          error: result.error || 'Cover image generation failed',
+          error: result.error || 'Cover image processing failed',
           results: [{ success: false, error: result.error, imageId: imageRecord.id }]
         })
       }
 
-      // Upload to Vercel Blob
+      // Upload web version to Vercel Blob
       const fileName = `post-images/${postId}/${imageRecord.id}-cover.png`
       const imageBuffer = Buffer.from(result.imageBase64, 'base64')
 
@@ -296,11 +317,7 @@ export async function PUT(request: NextRequest) {
           .update({ cover_image_id: imageRecord.id })
           .eq('id', postId)
 
-        console.log(`[Gemini] Cover image generated successfully for postId=${postId}`)
-        return NextResponse.json({
-          success: true,
-          results: [{ success: true, imageId: imageRecord.id }]
-        })
+        console.log(`[Gemini] Web cover generated successfully for postId=${postId}`)
       } catch (uploadError) {
         console.error('Failed to upload cover image:', uploadError)
         await supabase
@@ -317,6 +334,60 @@ export async function PUT(request: NextRequest) {
           results: [{ success: false, error: 'Upload failed', imageId: imageRecord.id }]
         })
       }
+
+      // Step 3: Generate email version (natively dithered at 604px)
+      const coverResults: Array<{ success: boolean; error?: string; imageId?: string }> = [
+        { success: true, imageId: imageRecord.id }
+      ]
+
+      try {
+        const emailCover = await generateEmailCover(rawResult.imageBase64!)
+
+        // Create email cover record
+        const { data: emailRecord, error: emailInsertError } = await supabase
+          .from('post_images')
+          .insert({
+            post_id: postId,
+            daily_repo_id: null,
+            image_url: '',
+            source_text: sourceText,
+            generation_status: 'generating',
+            image_type: 'cover_email',
+          })
+          .select()
+          .single()
+
+        if (emailInsertError || !emailRecord) {
+          console.error('Failed to create email cover record:', emailInsertError)
+        } else {
+          const emailFileName = `post-images/${postId}/${emailRecord.id}-cover-email.png`
+          const emailBuffer = Buffer.from(emailCover.base64, 'base64')
+
+          const emailBlob = await put(emailFileName, emailBuffer, {
+            access: 'public',
+            contentType: 'image/png',
+          })
+
+          await supabase
+            .from('post_images')
+            .update({
+              image_url: emailBlob.url,
+              generation_status: 'completed',
+            })
+            .eq('id', emailRecord.id)
+
+          console.log(`[Gemini] Email cover generated successfully for postId=${postId}`)
+          coverResults.push({ success: true, imageId: emailRecord.id })
+        }
+      } catch (emailError) {
+        console.error('[Gemini] Email cover generation failed (non-fatal):', emailError)
+        // Non-fatal: web cover is already saved, email will fall back to runtime API
+      }
+
+      return NextResponse.json({
+        success: true,
+        results: coverResults,
+      })
     }
 
     // Standard mode: Process images sequentially (one per news item)

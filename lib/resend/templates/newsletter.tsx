@@ -25,6 +25,7 @@ interface NewsletterEmailProps {
   preferencesUrl?: string
   footerText?: string
   coverImageUrl?: string | null
+  emailCoverImageUrl?: string | null
   postDate?: string
   baseUrl?: string
   locale?: LanguageCode
@@ -141,6 +142,7 @@ export function NewsletterEmail({
   preferencesUrl,
   footerText,
   coverImageUrl,
+  emailCoverImageUrl,
   postDate,
   baseUrl = 'https://synthszr.vercel.app',
   locale = 'de',
@@ -226,7 +228,7 @@ export function NewsletterEmail({
             <Section style={coverSection}>
               <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
                 <Img
-                  src={`${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=604&logo=true`}
+                  src={emailCoverImageUrl || `${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=604&logo=true`}
                   alt={subject}
                   width="600"
                   height="600"

@@ -83,6 +83,17 @@ export async function POST(request: NextRequest) {
     // Extract cover image URL
     const coverImageUrl = (post.post_images as { image_url?: string } | null)?.image_url || null
 
+    // Look up pre-generated email cover (natively dithered at 604px)
+    const { data: emailCoverData } = await supabase
+      .from('post_images')
+      .select('image_url')
+      .eq('post_id', postId)
+      .eq('image_type', 'cover_email')
+      .eq('generation_status', 'completed')
+      .single()
+
+    const emailCoverImageUrl = emailCoverData?.image_url || null
+
     // Fetch article thumbnails for this post
     const { data: thumbnailsData } = await supabase
       .from('post_images')
@@ -137,6 +148,7 @@ export async function POST(request: NextRequest) {
           preferencesUrl: `${BASE_URL}/newsletter/preferences?token=test`,
           footerText,
           coverImageUrl,
+          emailCoverImageUrl,
           postDate,
           baseUrl: BASE_URL,
           locale: testLocale,
@@ -272,6 +284,7 @@ export async function POST(request: NextRequest) {
           preferencesUrl: '{{PREFERENCES_URL}}',
           footerText,
           coverImageUrl,
+          emailCoverImageUrl,
           postDate,
           baseUrl: BASE_URL,
           locale: locale as LanguageCode,
