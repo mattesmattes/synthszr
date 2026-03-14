@@ -273,7 +273,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Step 2: Process web version (resize to 1408px → dither → pad to square)
-    const result = await generateAndProcessImage(image.source_text, { targetWidth: 1408, targetHeight: 768 }, rawResult.imageBase64)
+    const result = await generateAndProcessImage(image.source_text, { targetWidth: 1408 }, rawResult.imageBase64)
 
     if (!result.success || !result.imageBase64) {
       await supabase
