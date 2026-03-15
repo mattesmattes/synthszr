@@ -19,6 +19,8 @@
  * }
  */
 
+export const maxDuration = 300 // Allow up to 5 minutes for AI script generation
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/session'
