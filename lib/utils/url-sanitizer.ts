@@ -224,8 +224,10 @@ export function sanitizeUrl(url: string | null | undefined): string | null {
         console.log(`[URL Sanitizer] Tracking redirect → domain: ${domain} (from ${url.slice(0, 60)}...)`)
         return domain
       }
-      console.log(`[URL Sanitizer] Blocked tracking redirect (no destination found): ${url.slice(0, 80)}...`)
-      return null
+      // Keep the original URL rather than losing the source entirely.
+      // A tracking redirect is better than no URL at all.
+      console.log(`[URL Sanitizer] Keeping tracking redirect (no destination found): ${url.slice(0, 80)}...`)
+      return url
     }
 
     // Remove known tracking parameters

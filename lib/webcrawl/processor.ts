@@ -2,9 +2,43 @@ import { GmailClient } from '@/lib/gmail/client'
 import * as cheerio from 'cheerio'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { backfillMissingEmbeddings } from '@/lib/embeddings/backfill'
+import { isTrackingRedirectUrl, sanitizeUrl } from '@/lib/utils/url-sanitizer'
 
 const FETCH_WINDOW_HOURS = 72
 const MAX_EMAILS = 5
+
+/**
+ * Resolve tracking redirect URLs (beehiiv, convertkit, etc.) to their
+ * actual destination by following HTTP redirects.
+ * Falls back to sanitizeUrl() if resolution fails.
+ */
+async function resolveTrackingUrl(url: string | null): Promise<string | null> {
+  if (!url) return null
+  if (!isTrackingRedirectUrl(url)) return sanitizeUrl(url)
+
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(5000),
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SynthszrBot/1.0)' },
+    })
+
+    const resolvedUrl = response.url
+    if (resolvedUrl && resolvedUrl !== url && !isTrackingRedirectUrl(resolvedUrl)) {
+      const cleaned = sanitizeUrl(resolvedUrl)
+      if (cleaned) {
+        console.log(`[WebCrawl] Resolved tracking URL → ${cleaned}`)
+        return cleaned
+      }
+    }
+  } catch (err) {
+    console.warn(`[WebCrawl] Failed to resolve tracking URL: ${url.slice(0, 60)}...`, err)
+  }
+
+  // Fallback: keep the original URL (sanitizeUrl no longer returns null for tracking redirects)
+  return sanitizeUrl(url)
+}
 
 export interface ParsedArticle {
   title: string
@@ -472,12 +506,18 @@ export async function processWebcrawl(): Promise<WebcrawlProcessResult> {
       let newArticlesThisEmail = 0
       for (const article of articles) {
         try {
-          // Dedup by source URL
-          if (article.sourceUrl) {
+          // Resolve tracking redirect URLs to actual article URLs first
+          // (needed for accurate dedup against already-resolved URLs in DB)
+          const resolvedUrl = await resolveTrackingUrl(article.sourceUrl)
+
+          // Dedup by source URL (check both resolved and original)
+          if (resolvedUrl || article.sourceUrl) {
+            const urlsToCheck = [resolvedUrl, article.sourceUrl].filter(Boolean) as string[]
             const { data: existing } = await supabase
               .from('daily_repo')
               .select('id')
-              .eq('source_url', article.sourceUrl)
+              .in('source_url', urlsToCheck)
+              .limit(1)
               .single()
             if (existing) {
               skippedDuplicates++
@@ -499,7 +539,7 @@ export async function processWebcrawl(): Promise<WebcrawlProcessResult> {
 
           await supabase.from('daily_repo').insert({
             source_type: 'webcrawl',
-            source_url: article.sourceUrl,
+            source_url: resolvedUrl,
             source_email: article.sourceIdentifier || email.from,
             title: article.title,
             content: article.content,
