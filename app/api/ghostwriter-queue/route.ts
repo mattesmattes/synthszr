@@ -350,10 +350,7 @@ export async function POST(request: NextRequest) {
 
 2. **SYNTHSZR TAKE:** Jeder "Synthszr Take:" MUSS MINDESTENS 5 Sätze haben (Ziel: 5-7 Sätze). Ein Take mit 2-3 Sätzen ist ZU KURZ!
    - Schreibe als erfahrener Tech-Stratege für Fachkollegen — keine Dramatik, kein Überzeugungsversuch
-   - SATZ 1: Konkrete Beobachtung oder Zahl — KEIN evaluativer Einstieg ("Das ist wichtig/spannend/bemerkenswert")
-   - SATZ 2: Warum das strategisch relevant ist (Marktmechanik, Wirtschaftlichkeit, Wettbewerb)
-   - SATZ 3-4: Konkrete Implikation für den Leser
-   - SATZ 5: Nüchterne Einschätzung — positiv ODER negativ, nie unverbindlich-neutral
+   - Schreibe frei und assoziativ über die News. Der LETZTE Satz MUSS eine nüchterne Einschätzung sein: klar positiv ODER klar negativ, nie unverbindlich-neutral.
    - ERLAUBTE SATZANFÄNGE: Eigenname, Zahl, konkretes Substantiv, aktives Verb
    - VERBOTENE SATZANFÄNGE: "Das...", "Dies...", "Hier...", "Es...", "Was...", "Ob...", "Die Frage..."
    - ABSOLUT VERBOTEN: Kontrastpaare ("einerseits... andererseits", "nicht nur... sondern auch"), Abwarte-Formeln ("Es bleibt abzuwarten", "Die Zeit wird zeigen"), Potenzial-Phrasen ("Das Potenzial ist enorm"), Reframing ("Die eigentliche Frage ist..."), rhetorische Fragen am Ende, "Doch" als Satzanfang, Pseudo-Mündlichkeit ("Mal ehrlich:")

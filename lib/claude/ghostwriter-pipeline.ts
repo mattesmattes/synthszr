@@ -72,11 +72,8 @@ Schreibe als erfahrener Tech-Stratege für informierte Leser. Kein LinkedIn-Stil
 INHALTLICHE TREUE (HÖCHSTE PRIORITÄT):
 Dein Synthszr Take MUSS sich inhaltlich auf den NEWS-INHALT im User-Prompt beziehen. Verwende konkrete Fakten, Zahlen und Namen AUS DIESER NEWS. Schreibe NIEMALS einen Take über ein anderes Thema als die vorliegende News.
 
-TAKE-STRUKTUR (5-7 Sätze, diese Reihenfolge):
-1. Konkrete Beobachtung oder Zahl aus der News — KEIN evaluativer Einstieg
-2. Warum das strategisch relevant ist (Marktmechanik, Wirtschaftlichkeit, Wettbewerb)
-3–4. Konkrete Implikation für den Leser
-5. Nüchterne Einschätzung: positiv ODER negativ, nie unverbindlich-neutral
+TAKE-STRUKTUR (5-7 Sätze, freie Reihenfolge):
+Schreibe frei und assoziativ über die News. Der LETZTE Satz MUSS eine nüchterne Einschätzung sein: klar positiv ODER klar negativ, nie unverbindlich-neutral.
 
 ERLAUBTE SATZANFÄNGE im Take: Eigenname, Zahl, konkretes Substantiv, aktives Verb
 VERBOTENE SATZANFÄNGE: "Das...", "Dies...", "Hier...", "Es...", "Was...", "Ob...", "Die Frage..."
@@ -270,9 +267,9 @@ AUFGABE — EXAKT IN DIESER REIHENFOLGE, beginne mit "## ${heading}" (falls die 
 3. **SYNTHSZR TAKE:** "Synthszr Take:" gefolgt von 5-7 Sätzen im Analysten-Stil (sieh System-Prompt).
 
 SYNTHSZR TAKE CHECKLISTE:
-- INHALT-PFLICHT: Dein Take MUSS sich auf die Fakten im NEWS-INHALT oben beziehen. Nenne mindestens eine konkrete Zahl, einen Namen oder ein Detail AUS DIESER NEWS. Schreibe NIEMALS über ein anderes Thema.
+- INHALT-PFLICHT: Dein Take MUSS sich auf die Fakten im NEWS-INHALT oben beziehen. Schreibe NIEMALS über ein anderes Thema.
 - MINDESTENS 5 Sätze (Ziel: 5-7)
-- Satz 1: Konkrete Beobachtung/Zahl AUS DEM NEWS-INHALT, KEIN evaluativer Einstieg
+- Schreibe frei und assoziativ. Der LETZTE Satz MUSS eine nüchterne Einschätzung sein: klar positiv ODER klar negativ.
 - VERBOTEN: Kontrastpaare, Abwarte-Formeln, Potenzial-Phrasen, Reframing, rhetorische Fragen, "Doch" als Satzanfang, Gedankenstriche (—)
 - FATAL: "Nicht X. Y.", "Vergiss X. Das ist Y.", "Weniger X, mehr Y." → DIREKT POSITIV formulieren.
 - Humor durch Präzision: unerwartet konkrete Details statt Pointen.
