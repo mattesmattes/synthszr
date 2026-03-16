@@ -10,7 +10,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, getDefaultGhostwriterPrompt, type AIModel } from '@/lib/claude/ghostwriter'
 import { runGhostwriterPipeline, type PipelineItem } from '@/lib/claude/ghostwriter-pipeline'
-import { getBalancedSelection, getSelectedItems, selectItemsForArticle, domainFromUrl } from '@/lib/news-queue/service'
+import { getBalancedSelection, getSelectedItems, selectItemsForArticle, domainFromUrl, deriveSourceUrl } from '@/lib/news-queue/service'
 import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { getModelForUseCase } from '@/lib/ai/model-config'
@@ -234,10 +234,12 @@ export async function POST(request: NextRequest) {
       const sourceName = hasValidSource
         ? rawSourceName
         : (cleanUrl ? domainFromUrl(cleanUrl) : null)
+      // Derive usable URL: sanitized source_url or email domain fallback
+      const effectiveUrl = cleanUrl || deriveSourceUrl(null, item.source_identifier)
       // Source info as context only — not rendered as "**Quelle:**" label.
       // The LLM should output source ONCE in the company tag line: {Company} → [Name](URL)
-      if (sourceName || cleanUrl) {
-        digestContent += `(Quelleninfo: ${sourceName || 'unbekannte Quelle'}${cleanUrl ? ` | URL: ${cleanUrl}` : ''})\n`
+      if (sourceName || effectiveUrl) {
+        digestContent += `(Quelleninfo: ${sourceName || 'unbekannte Quelle'}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''})\n`
       }
       if (item.content) {
         // SECURITY: Sanitize tracking URLs from content before passing to AI
@@ -407,7 +409,7 @@ export async function POST(request: NextRequest) {
         title: item.title,
         content: item.content ? sanitizeContentUrls(item.content) : null,
         source_display_name: item.source_display_name,
-        source_url: sanitizeUrl(item.source_url) || null,
+        source_url: sanitizeUrl(item.source_url) || deriveSourceUrl(null, item.source_identifier),
         source_identifier: item.source_identifier,
       }))
 

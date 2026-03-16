@@ -93,6 +93,25 @@ export function domainFromUrl(url: string | null): string | null {
 }
 
 /**
+ * Derive a usable source URL from available data.
+ * Falls back to email domain homepage when source_url is missing.
+ */
+export function deriveSourceUrl(sourceUrl: string | null, sourceIdentifier: string): string | null {
+  if (sourceUrl) {
+    const domain = domainFromUrl(sourceUrl)
+    if (domain) return sourceUrl
+  }
+  if (sourceIdentifier && sourceIdentifier !== 'unknown') {
+    const atIdx = sourceIdentifier.indexOf('@')
+    if (atIdx !== -1) {
+      const domain = sourceIdentifier.slice(atIdx + 1)
+      if (domain && domain.includes('.')) return `https://${domain}`
+    }
+  }
+  return null
+}
+
+/**
  * Extract normalized source identifier from email or plain source name.
  * e.g., "Newsletter Name <email@domain.com>" → "email@domain.com"
  *       "Hacker News" → "hacker news" (plain webcrawl source name)

@@ -23,10 +23,7 @@ import { type AIModel, resolveModel } from './ghostwriter'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
-function domainFromUrl(url: string | null): string | null {
-  if (!url) return null
-  try { return new URL(url).hostname.replace('www.', '') } catch { return null }
-}
+import { domainFromUrl, deriveSourceUrl } from '@/lib/news-queue/service'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -231,10 +228,12 @@ export async function writeSection(
   const sourceName = hasValidSource
     ? rawSourceName
     : (item.source_url ? domainFromUrl(item.source_url) : null)
+  // Derive a usable URL: source_url or fallback from email domain
+  const effectiveUrl = deriveSourceUrl(item.source_url, item.source_identifier)
   // Company tag line: companies + linked source (the ONE place source appears in output)
   // When no meaningful source can be determined, omit the arrow+source entirely
-  const tagSourcePart = item.source_url && sourceName
-    ? `[${sourceName}](${item.source_url})`
+  const tagSourcePart = effectiveUrl && sourceName
+    ? `[${sourceName}](${effectiveUrl})`
     : sourceName || null
 
   const userPrompt = `${promptText}
@@ -245,7 +244,7 @@ ARTIKEL-KONTEXT: ${thesis}
 
 Schreibe GENAU DIESEN EINEN Abschnitt. Kein Intro, keine anderen News, kein Abschluss.
 
-NEWS-INHALT (Quelleninfo nur für dich${sourceName ? ` — Quelle: ${sourceName}` : ''}${item.source_url ? ` | URL: ${item.source_url}` : ''}):
+NEWS-INHALT (Quelleninfo nur für dich${sourceName ? ` — Quelle: ${sourceName}` : ''}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''}):
 ${item.content || 'Kein Inhalt verfügbar.'}
 
 ---

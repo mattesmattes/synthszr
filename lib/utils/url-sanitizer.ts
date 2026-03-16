@@ -190,7 +190,22 @@ function extractRedirectDomain(url: string): string | null {
       }
     }
 
-    // 3. Look for URL-encoded URLs in the path (e.g. /redirect/https%3A%2F%2Ftarget.com%2F...)
+    // 3. Customer.io Base64-JSON redirect URLs (path contains base64-encoded JSON with "href")
+    if (parsed.hostname.includes('customeriomail.com')) {
+      const pathParts = parsed.pathname.split('/')
+      const b64Part = pathParts[pathParts.length - 1]
+      if (b64Part && b64Part.length > 20) {
+        try {
+          const decoded = JSON.parse(Buffer.from(b64Part, 'base64').toString())
+          if (decoded.href) {
+            const dest = new URL(decoded.href)
+            return dest.origin
+          }
+        } catch { /* not valid base64 JSON */ }
+      }
+    }
+
+    // 4. Look for URL-encoded URLs in the path (e.g. /redirect/https%3A%2F%2Ftarget.com%2F...)
     const decodedPath = decodeURIComponent(parsed.pathname)
     const urlInPath = decodedPath.match(/https?:\/\/[^\s/]+/)
     if (urlInPath) {
