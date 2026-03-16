@@ -9,7 +9,7 @@
 
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
-import { MODEL_PRICING, type ModelInfo } from '@/lib/ai/model-pricing'
+import { MODEL_PRICING, PRICING_LAST_UPDATED, type ModelInfo } from '@/lib/ai/model-pricing'
 import { getFullModelConfig, saveModelConfig, type LlmModelConfig } from '@/lib/ai/model-config'
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
@@ -189,7 +189,7 @@ export async function GET() {
   cache = { models: availableModels, timestamp: now }
 
   const config = await getFullModelConfig()
-  return NextResponse.json({ models: availableModels, config })
+  return NextResponse.json({ models: availableModels, config, pricingLastUpdated: PRICING_LAST_UPDATED })
 }
 
 /**

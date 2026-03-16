@@ -84,7 +84,7 @@ const USE_CASE_DEFINITIONS: Record<string, UseCaseInfo> = {
   ghostwriter: {
     label: 'Ghostwriter',
     description: 'Blog-Artikel aus dem Digest generieren',
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-sonnet-4-6-20260301',
     allowedProviders: ['anthropic', 'openai', 'google'],
   },
   synthesis_scoring: {
@@ -102,19 +102,19 @@ const USE_CASE_DEFINITIONS: Record<string, UseCaseInfo> = {
   podcast_script: {
     label: 'Podcast-Skript',
     description: 'Podcast-Skripte aus Blog-Artikeln generieren',
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-sonnet-4-6-20260301',
     allowedProviders: ['anthropic'],
   },
   edit_analysis: {
     label: 'Edit-Analyse',
     description: 'Manuelle Edits klassifizieren und analysieren',
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-sonnet-4-6-20260301',
     allowedProviders: ['anthropic'],
   },
   pattern_extraction: {
     label: 'Pattern-Extraktion',
     description: 'Muster aus wiederkehrenden Edits extrahieren',
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-sonnet-4-6-20260301',
     allowedProviders: ['anthropic'],
   },
 }
@@ -173,6 +173,7 @@ export default function SettingsPage() {
   // Model config state
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
   const [modelConfig, setModelConfig] = useState<Record<string, string>>({})
+  const [pricingLastUpdated, setPricingLastUpdated] = useState<string | null>(null)
   const [modelsLoading, setModelsLoading] = useState(true)
   const [savingModels, setSavingModels] = useState(false)
   const [modelsSaved, setModelsSaved] = useState(false)
@@ -209,6 +210,7 @@ export default function SettingsPage() {
       const data = await res.json()
       setAvailableModels(data.models || [])
       setModelConfig(data.config || {})
+      setPricingLastUpdated(data.pricingLastUpdated || null)
     } catch (err) {
       console.error('Error fetching models:', err)
     } finally {
@@ -583,18 +585,31 @@ export default function SettingsPage() {
                   </CardContent>
                 </Card>
 
-                {/* Save Button */}
-                <div className="flex items-center gap-4">
-                  <Button onClick={saveModelConfiguration} disabled={savingModels}>
-                    {savingModels ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    Modelle speichern
-                  </Button>
-                  {modelsSaved && (
-                    <span className="text-sm text-green-600 flex items-center gap-1">
-                      <CheckCircle className="h-4 w-4" />
-                      Gespeichert
-                    </span>
-                  )}
+                {/* Save Button + Pricing Freshness */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <Button onClick={saveModelConfiguration} disabled={savingModels}>
+                      {savingModels ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      Modelle speichern
+                    </Button>
+                    {modelsSaved && (
+                      <span className="text-sm text-green-600 flex items-center gap-1">
+                        <CheckCircle className="h-4 w-4" />
+                        Gespeichert
+                      </span>
+                    )}
+                  </div>
+                  {pricingLastUpdated && (() => {
+                    const daysSince = Math.floor((Date.now() - new Date(pricingLastUpdated).getTime()) / 86400000)
+                    const isStale = daysSince > 30
+                    return (
+                      <span className={`text-xs flex items-center gap-1 ${isStale ? 'text-orange-500' : 'text-muted-foreground'}`}>
+                        {isStale && <AlertTriangle className="h-3 w-3" />}
+                        Preise aktualisiert: {new Date(pricingLastUpdated).toLocaleDateString('de-DE')}
+                        {isStale && ` (${daysSince} Tage)`}
+                      </span>
+                    )
+                  })()}
                 </div>
               </>
             )}
