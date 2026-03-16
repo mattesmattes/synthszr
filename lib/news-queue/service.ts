@@ -93,8 +93,9 @@ export function domainFromUrl(url: string | null): string | null {
 }
 
 /**
- * Extract normalized source identifier from email
+ * Extract normalized source identifier from email or plain source name.
  * e.g., "Newsletter Name <email@domain.com>" → "email@domain.com"
+ *       "Hacker News" → "hacker news" (plain webcrawl source name)
  * For aggregator newsletters (e.g. Techmeme), uses the article URL domain instead.
  */
 export function normalizeSourceIdentifier(email: string | null, url: string | null): string {
@@ -108,8 +109,11 @@ export function normalizeSourceIdentifier(email: string | null, url: string | nu
     // Extract email address from format like "Name <email@domain.com>"
     const match = email.match(/<([^>]+)>/)
     if (match) return match[1].toLowerCase()
-    // If no angle brackets, treat whole string as email
+    // If it contains @, treat as email
     if (email.includes('@')) return email.toLowerCase().trim()
+    // Plain text source name (e.g. "Hacker News", "Dev.to Machine Learning" from webcrawl)
+    const trimmed = email.trim()
+    if (trimmed.length > 0) return trimmed.toLowerCase()
   }
 
   if (url) {
@@ -121,7 +125,7 @@ export function normalizeSourceIdentifier(email: string | null, url: string | nu
 }
 
 /**
- * Extract human-readable source name from email
+ * Extract human-readable source name from email or plain source name.
  * For aggregator newsletters, uses the article URL domain instead.
  */
 export function extractSourceDisplayName(email: string | null, url?: string | null): string | null {
@@ -140,6 +144,12 @@ export function extractSourceDisplayName(email: string | null, url?: string | nu
     if (!name.includes('@') && name.length > 0) {
       return name
     }
+  }
+
+  // Plain text source name without email format (e.g. "Hacker News" from webcrawl)
+  const trimmed = email.trim()
+  if (!trimmed.includes('@') && !trimmed.includes('<') && trimmed.length > 0) {
+    return trimmed
   }
 
   return null
