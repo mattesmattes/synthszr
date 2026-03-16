@@ -348,9 +348,10 @@ export async function POST(request: NextRequest) {
    - Jede News bekommt eine eigene Zwischenüberschrift (##)
    - Jeder News-Artikel MUSS exakt 5-7 Sätze haben
 
-2. **SYNTHSZR TAKE:** Jeder "Synthszr Take:" MUSS MINDESTENS 5 Sätze haben (Ziel: 5-7 Sätze). Ein Take mit 2-3 Sätzen ist ZU KURZ!
+2. **SYNTHSZR TAKE:** Jeder "Synthszr Take:" MUSS MINDESTENS 6 Sätze haben (Ziel: 6-7 Sätze). Ein Take mit 3-4 Sätzen ist ZU KURZ!
    - Schreibe als erfahrener Tech-Stratege für Fachkollegen — keine Dramatik, kein Überzeugungsversuch
-   - Schreibe frei und assoziativ über die News. Der LETZTE Satz MUSS eine nüchterne Einschätzung sein: klar positiv ODER klar negativ, nie unverbindlich-neutral.
+   - Schreibe frei und assoziativ. Maximal EIN Satz mit Doppelpunkt pro Take.
+   - Der LETZTE Satz MUSS knackig und zitierfähig sein: eine klare Einschätzung (positiv ODER negativ), die für sich allein stehen kann. Nie unverbindlich-neutral.
    - ERLAUBTE SATZANFÄNGE: Eigenname, Zahl, konkretes Substantiv, aktives Verb
    - VERBOTENE SATZANFÄNGE: "Das...", "Dies...", "Hier...", "Es...", "Was...", "Ob...", "Die Frage..."
    - ABSOLUT VERBOTEN: Kontrastpaare ("einerseits... andererseits", "nicht nur... sondern auch"), Abwarte-Formeln ("Es bleibt abzuwarten", "Die Zeit wird zeigen"), Potenzial-Phrasen ("Das Potenzial ist enorm"), Reframing ("Die eigentliche Frage ist..."), rhetorische Fragen am Ende, "Doch" als Satzanfang, Pseudo-Mündlichkeit ("Mal ehrlich:")

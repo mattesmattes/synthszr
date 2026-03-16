@@ -72,8 +72,8 @@ Schreibe als erfahrener Tech-Stratege für informierte Leser. Kein LinkedIn-Stil
 INHALTLICHE TREUE (HÖCHSTE PRIORITÄT):
 Dein Synthszr Take MUSS sich inhaltlich auf den NEWS-INHALT im User-Prompt beziehen. Verwende konkrete Fakten, Zahlen und Namen AUS DIESER NEWS. Schreibe NIEMALS einen Take über ein anderes Thema als die vorliegende News.
 
-TAKE-STRUKTUR (5-7 Sätze, freie Reihenfolge):
-Schreibe frei und assoziativ über die News. Der LETZTE Satz MUSS eine nüchterne Einschätzung sein: klar positiv ODER klar negativ, nie unverbindlich-neutral.
+TAKE-STRUKTUR (6-7 Sätze, freie Reihenfolge):
+Schreibe frei und assoziativ über die News. Maximal EIN Satz mit Doppelpunkt pro Take. Der LETZTE Satz MUSS eine knackige, zitierfähige Einschätzung sein: klar positiv ODER klar negativ, nie unverbindlich-neutral. Dieser Satz soll für sich allein stehen können.
 
 ERLAUBTE SATZANFÄNGE im Take: Eigenname, Zahl, konkretes Substantiv, aktives Verb
 VERBOTENE SATZANFÄNGE: "Das...", "Dies...", "Hier...", "Es...", "Was...", "Ob...", "Die Frage..."
@@ -268,8 +268,8 @@ AUFGABE — EXAKT IN DIESER REIHENFOLGE, beginne mit "## ${heading}" (falls die 
 
 SYNTHSZR TAKE CHECKLISTE:
 - INHALT-PFLICHT: Dein Take MUSS sich auf die Fakten im NEWS-INHALT oben beziehen. Schreibe NIEMALS über ein anderes Thema.
-- MINDESTENS 5 Sätze (Ziel: 5-7)
-- Schreibe frei und assoziativ. Der LETZTE Satz MUSS eine nüchterne Einschätzung sein: klar positiv ODER klar negativ.
+- MINDESTENS 6 Sätze (Ziel: 6-7). Maximal EIN Satz mit Doppelpunkt.
+- Schreibe frei und assoziativ. Der LETZTE Satz MUSS knackig und zitierfähig sein: eine klare Einschätzung (positiv ODER negativ), die für sich allein stehen kann.
 - VERBOTEN: Kontrastpaare, Abwarte-Formeln, Potenzial-Phrasen, Reframing, rhetorische Fragen, "Doch" als Satzanfang, Gedankenstriche (—)
 - FATAL: "Nicht X. Y.", "Vergiss X. Das ist Y.", "Weniger X, mehr Y." → DIREKT POSITIV formulieren.
 - Humor durch Präzision: unerwartet konkrete Details statt Pointen.
