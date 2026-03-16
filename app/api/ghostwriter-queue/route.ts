@@ -10,7 +10,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, getDefaultGhostwriterPrompt, type AIModel } from '@/lib/claude/ghostwriter'
 import { runGhostwriterPipeline, type PipelineItem } from '@/lib/claude/ghostwriter-pipeline'
-import { getBalancedSelection, getSelectedItems, selectItemsForArticle } from '@/lib/news-queue/service'
+import { getBalancedSelection, getSelectedItems, selectItemsForArticle, domainFromUrl } from '@/lib/news-queue/service'
 import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { getModelForUseCase } from '@/lib/ai/model-config'
@@ -226,12 +226,19 @@ export async function POST(request: NextRequest) {
 
     for (const item of selectedItems) {
       digestContent += `### ${item.title}\n`
-      const sourceName = item.source_display_name || item.source_identifier
+      const rawSourceName = item.source_display_name || item.source_identifier
+      const hasValidSource = rawSourceName && rawSourceName !== 'unknown'
       // SECURITY: Sanitize URLs to prevent tracking parameter leaks
       const cleanUrl = sanitizeUrl(item.source_url)
+      // Derive meaningful source name: prefer display_name > identifier > URL domain
+      const sourceName = hasValidSource
+        ? rawSourceName
+        : (cleanUrl ? domainFromUrl(cleanUrl) : null)
       // Source info as context only — not rendered as "**Quelle:**" label.
       // The LLM should output source ONCE in the company tag line: {Company} → [Name](URL)
-      digestContent += `(Quelleninfo: ${sourceName}${cleanUrl ? ` | URL: ${cleanUrl}` : ''})\n`
+      if (sourceName || cleanUrl) {
+        digestContent += `(Quelleninfo: ${sourceName || 'unbekannte Quelle'}${cleanUrl ? ` | URL: ${cleanUrl}` : ''})\n`
+      }
       if (item.content) {
         // SECURITY: Sanitize tracking URLs from content before passing to AI
         const cleanContent = sanitizeContentUrls(item.content)
@@ -362,7 +369,8 @@ export async function POST(request: NextRequest) {
 4. **COMPANY TAGGING + QUELLENLINK (PFLICHT):** Direkt nach dem letzten Satz der News-Zusammenfassung (VOR dem "Synthszr Take:") genau eine Zeile. Die Companies stehen VOR der verlinkten Quelle. Die Quelle erscheint NUR hier — kein separates "**Quelle:**" Label.
 
    **FORMAT (mit URL):** {TagA} {TagB} → [Quellenname](URL)
-   **FORMAT (ohne URL):** {TagA} {TagB} → {Quellenname}
+   **FORMAT (ohne Quelle):** {TagA} {TagB}
+   **FALSCH:** {TagA} → unknown  ← "unknown" ist KEIN gültiger Quellenname, einfach weglassen!
    **FALSCH:** **Quelle:** [Name](URL) ... {TagA} → Name  ← Quelle doppelt
    **RICHTIG:** {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
    **BEISPIELE:**

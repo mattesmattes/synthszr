@@ -38,7 +38,7 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
   synthesis_development: {
     label: 'Synthese (Development)',
     description: 'Synthese-Texte aus Artikelpaaren entwickeln',
-    defaultModel: 'claude-opus-4-20250514',
+    defaultModel: 'claude-haiku-4-5-20251001',
     allowedProviders: ['anthropic'],
   },
   podcast_script: {
@@ -103,10 +103,13 @@ export async function getModelForUseCase(useCase: UseCase): Promise<string> {
   const configured = config[useCase]
 
   if (configured) {
+    console.log(`[ModelConfig] ${useCase} → ${configured} (from DB)`)
     return configured
   }
 
-  return USE_CASE_DEFINITIONS[useCase].defaultModel
+  const fallback = USE_CASE_DEFINITIONS[useCase].defaultModel
+  console.log(`[ModelConfig] ${useCase} → ${fallback} (FALLBACK default)`)
+  return fallback
 }
 
 /**

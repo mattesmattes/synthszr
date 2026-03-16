@@ -96,7 +96,7 @@ const USE_CASE_DEFINITIONS: Record<string, UseCaseInfo> = {
   synthesis_development: {
     label: 'Synthese (Development)',
     description: 'Synthese-Texte aus Artikelpaaren entwickeln',
-    defaultModel: 'claude-opus-4-20250514',
+    defaultModel: 'claude-haiku-4-5-20251001',
     allowedProviders: ['anthropic'],
   },
   podcast_script: {

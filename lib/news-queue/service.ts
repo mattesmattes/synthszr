@@ -83,7 +83,7 @@ function isAggregatorEmail(email: string | null): boolean {
  * Extract domain display name from a URL
  * e.g., "https://www.reuters.com/article/..." → "reuters.com"
  */
-function domainFromUrl(url: string | null): string | null {
+export function domainFromUrl(url: string | null): string | null {
   if (!url) return null
   try {
     return new URL(url).hostname.replace('www.', '')

@@ -23,6 +23,11 @@ import { type AIModel, resolveModel } from './ghostwriter'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
+function domainFromUrl(url: string | null): string | null {
+  if (!url) return null
+  try { return new URL(url).hostname.replace('www.', '') } catch { return null }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -223,11 +228,17 @@ export async function writeSection(
   const publicCompanyList = Object.keys(KNOWN_COMPANIES).join(', ')
   const premarketCompanyList = Object.keys(KNOWN_PREMARKET_COMPANIES).join(', ')
 
-  const sourceName = item.source_display_name || item.source_identifier
+  const rawSourceName = item.source_display_name || item.source_identifier
+  const hasValidSource = rawSourceName && rawSourceName !== 'unknown'
+  // Derive a meaningful display name: prefer display_name > identifier > URL domain
+  const sourceName = hasValidSource
+    ? rawSourceName
+    : (item.source_url ? domainFromUrl(item.source_url) : null)
   // Company tag line: companies + linked source (the ONE place source appears in output)
-  const tagSourcePart = item.source_url
+  // When no meaningful source can be determined, omit the arrow+source entirely
+  const tagSourcePart = item.source_url && sourceName
     ? `[${sourceName}](${item.source_url})`
-    : sourceName
+    : sourceName || null
 
   const userPrompt = `${promptText}
 
@@ -237,7 +248,7 @@ ARTIKEL-KONTEXT: ${thesis}
 
 Schreibe GENAU DIESEN EINEN Abschnitt. Kein Intro, keine anderen News, kein Abschluss.
 
-NEWS-INHALT (Quelleninfo nur für dich — Quelle: ${sourceName}${item.source_url ? ` | URL: ${item.source_url}` : ''}):
+NEWS-INHALT (Quelleninfo nur für dich${sourceName ? ` — Quelle: ${sourceName}` : ''}${item.source_url ? ` | URL: ${item.source_url}` : ''}):
 ${item.content || 'Kein Inhalt verfügbar.'}
 
 ---
@@ -246,8 +257,10 @@ AUFGABE — EXAKT IN DIESER REIHENFOLGE, beginne mit "## ${heading}" (falls die 
 
 1. **NEWS-ZUSAMMENFASSUNG:** 5-7 Sätze Fließtext (keine Bullet Points).
 
-2. **COMPANY TAGGING + QUELLE:** Direkt nach dem letzten Satz der Zusammenfassung (VOR dem Synthszr Take) genau eine Zeile:
-   PFLICHT-FORMAT: {Company1} {Company2} → ${tagSourcePart}
+2. **COMPANY TAGGING + QUELLE:** Direkt nach dem letzten Satz der Zusammenfassung (VOR dem Synthszr Take) genau eine Zeile:${tagSourcePart ? `
+   PFLICHT-FORMAT: {Company1} {Company2} → ${tagSourcePart}` : `
+   PFLICHT-FORMAT: {Company1} {Company2}
+   HINWEIS: Für diesen Artikel ist keine Quellenangabe verfügbar. NUR Company-Tags, KEIN Pfeil (→) und KEIN Quellenname.`}
    BEISPIEL: {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
    Maximal 3 Company-Tags. Nur aus diesen Listen:
    PUBLIC: ${publicCompanyList}
