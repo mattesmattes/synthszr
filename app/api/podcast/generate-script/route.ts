@@ -437,7 +437,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Podcast Script] Target: ${wordCount} words, max_tokens: ${maxTokens}, model: ${podcastModel}`)
 
-    const message = await anthropic.messages.create({
+    const stream = anthropic.messages.stream({
       model: podcastModel,
       max_tokens: maxTokens,
       messages: [
@@ -447,6 +447,8 @@ export async function POST(request: NextRequest) {
         },
       ],
     })
+
+    const message = await stream.finalMessage()
 
     // Extract text from response
     const scriptContent = message.content
