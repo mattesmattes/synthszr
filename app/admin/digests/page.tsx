@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Play, Calendar, Loader2, Copy, Check, Save, PenTool, FileText, Gauge, Mail, Link2, Hash, ChevronDown, BookOpen, ExternalLink, Trash2, Clock, AlertCircle, ImageIcon, Lightbulb } from 'lucide-react'
+import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -63,7 +64,14 @@ interface RepoDate {
   count: number
 }
 
-
+interface SynthesisProgress {
+  phase: 'searching' | 'scoring' | 'developing' | 'complete' | 'partial' | 'error'
+  currentItem: number
+  totalItems: number
+  itemTitle: string
+  message?: string
+  error?: string
+}
 
 export default function DigestsPage() {
   const [digests, setDigests] = useState<Digest[]>([])
@@ -91,6 +99,14 @@ export default function DigestsPage() {
   const [digestSyntheses, setDigestSyntheses] = useState<DevelopedSynthesis[]>([])
   const [loadingDigestSyntheses, setLoadingDigestSyntheses] = useState(false)
 
+  // Synthesis progress dialog state
+  const [synthesisProgressOpen, setSynthesisProgressOpen] = useState(false)
+  const [synthesisProgress, setSynthesisProgress] = useState<SynthesisProgress>({
+    phase: 'searching',
+    currentItem: 0,
+    totalItems: 0,
+    itemTitle: '',
+  })
 
   const [ghostwriterOpen, setGhostwriterOpen] = useState(false)
   const [ghostwriterDigest, setGhostwriterDigest] = useState<Digest | null>(null)
@@ -251,6 +267,10 @@ export default function DigestsPage() {
       setStreamedContent('')
       setSaving(false)
 
+      // Start synthesis pipeline (scoring + queue) after save
+      if (data?.id) {
+        startSynthesisWithProgress(data.id)
+      }
     } catch (error) {
       console.error('Save error:', error)
       alert('Fehler beim Speichern')
@@ -258,6 +278,90 @@ export default function DigestsPage() {
     }
   }
 
+  async function startSynthesisWithProgress(digestId: string) {
+    setSynthesisProgress({
+      phase: 'searching',
+      currentItem: 0,
+      totalItems: 0,
+      itemTitle: '',
+    })
+    setSynthesisProgressOpen(true)
+
+    try {
+      const response = await fetch('/api/synthesis-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ digestId }),
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Synthese fehlgeschlagen')
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No reader')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6))
+
+              if (event.type === 'init') {
+                setSynthesisProgress(prev => ({
+                  ...prev,
+                  totalItems: event.totalItems,
+                  message: event.message,
+                }))
+              } else if (event.type === 'scoring') {
+                setSynthesisProgress(prev => ({
+                  ...prev,
+                  phase: 'scoring',
+                  currentItem: event.currentItem,
+                  totalItems: event.totalItems,
+                  message: event.message,
+                }))
+              } else if (event.type === 'complete') {
+                setSynthesisProgress(prev => ({
+                  ...prev,
+                  phase: 'complete',
+                  message: event.message || prev.message,
+                }))
+              } else if (event.type === 'error') {
+                setSynthesisProgress(prev => ({
+                  ...prev,
+                  phase: 'error',
+                  error: event.error,
+                }))
+              }
+            } catch (e) {
+              if (e instanceof SyntaxError) continue
+              throw e
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Synthesis stream error:', error)
+      setSynthesisProgress(prev => ({
+        ...prev,
+        phase: 'error',
+        error: error instanceof Error ? error.message : 'Unbekannter Fehler',
+      }))
+    }
+  }
 
   function copyToClipboard() {
     navigator.clipboard.writeText(streamedContent)
@@ -293,6 +397,10 @@ export default function DigestsPage() {
     setLoadingDigestSyntheses(false)
   }
 
+  async function triggerSynthesis(digest: Digest) {
+    setViewingDigest(null)
+    startSynthesisWithProgress(digest.id)
+  }
 
   function openGhostwriter(digest: Digest) {
     setGhostwriterDigest(digest)
@@ -917,12 +1025,93 @@ export default function DigestsPage() {
             <Button variant="outline" size="sm" onClick={() => setViewingDigest(null)} className="text-xs h-7">
               Schließen
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => viewingDigest && triggerSynthesis(viewingDigest)}
+              className="gap-1.5 text-xs h-7"
+            >
+              <Lightbulb className="h-3 w-3" />
+              Scoring starten
+            </Button>
             <Button size="sm" onClick={() => {
               setViewingDigest(null)
               if (viewingDigest) openGhostwriter(viewingDigest)
             }} className="gap-1.5 text-xs h-7">
               <PenTool className="h-3 w-3" />
               Blogpost erstellen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Synthesis/Scoring Progress Dialog */}
+      <Dialog open={synthesisProgressOpen} onOpenChange={setSynthesisProgressOpen}>
+        <DialogContent className="w-[95vw] max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <Lightbulb className="h-4 w-4 text-[#E8FF00]" />
+              Scoring & News Queue
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {synthesisProgress.phase === 'complete'
+                ? synthesisProgress.message || 'Artikel bewertet und zur Queue hinzugefügt.'
+                : synthesisProgress.phase === 'error'
+                ? 'Fehler beim Scoring'
+                : synthesisProgress.message || 'Artikel werden bewertet und zur Queue hinzugefügt...'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            {synthesisProgress.phase !== 'complete' && synthesisProgress.phase !== 'error' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">
+                    {synthesisProgress.phase === 'searching' && 'Suche Artikel...'}
+                    {synthesisProgress.phase === 'scoring' && 'Bewerte & queue Artikel...'}
+                  </span>
+                  <span className="font-medium">
+                    {synthesisProgress.currentItem} / {synthesisProgress.totalItems}
+                  </span>
+                </div>
+                <Progress
+                  value={
+                    synthesisProgress.totalItems > 0
+                      ? (synthesisProgress.currentItem / synthesisProgress.totalItems) * 100
+                      : 0
+                  }
+                  className="h-2"
+                />
+              </div>
+            )}
+
+            {synthesisProgress.phase === 'error' && (
+              <div className="flex items-center gap-2 p-3 rounded bg-destructive/10 border border-destructive/30 text-destructive text-xs">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{synthesisProgress.error}</span>
+              </div>
+            )}
+
+            {synthesisProgress.phase === 'complete' && (
+              <div className="flex flex-col items-center justify-center py-6 text-center">
+                <Check className="h-8 w-8 text-[#E8FF00] mb-3" />
+                <p className="text-xs text-muted-foreground">
+                  {synthesisProgress.message}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="border-t pt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSynthesisProgressOpen(false)}
+              className="text-xs h-7"
+            >
+              {synthesisProgress.phase === 'complete' || synthesisProgress.phase === 'error'
+                ? 'Schließen'
+                : 'Im Hintergrund fortsetzen'}
             </Button>
           </DialogFooter>
         </DialogContent>
