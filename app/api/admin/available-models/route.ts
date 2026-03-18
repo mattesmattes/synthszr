@@ -27,9 +27,10 @@ const ANTHROPIC_INCLUDE = /^claude-/
 const OPENAI_INCLUDE = /^(gpt-|o[0-9])/
 const GOOGLE_INCLUDE = /^gemini-/
 
-// Exclude embedding, moderation, tts, whisper, dall-e etc.
+// Exclude non-text-generation models
+const ANTHROPIC_EXCLUDE = /haiku-3|claude-3-/i
 const OPENAI_EXCLUDE = /embedding|moderation|tts|whisper|dall-e|davinci|babbage|realtime/i
-const GOOGLE_EXCLUDE = /embedding|aqa|vision-only|imagen/i
+const GOOGLE_EXCLUDE = /embedding|aqa|vision-only|imagen|preview|audio|image|tts|computer-use|latest$/i
 
 async function fetchAnthropicModels(): Promise<string[]> {
   if (!process.env.ANTHROPIC_API_KEY) return []
@@ -38,7 +39,7 @@ async function fetchAnthropicModels(): Promise<string[]> {
     const response = await anthropic.models.list({ limit: 100 })
     return response.data
       .map((m) => m.id)
-      .filter(id => ANTHROPIC_INCLUDE.test(id))
+      .filter(id => ANTHROPIC_INCLUDE.test(id) && !ANTHROPIC_EXCLUDE.test(id))
   } catch (error) {
     console.error('[AvailableModels] Anthropic fetch failed:', error)
     return []
@@ -78,26 +79,33 @@ async function fetchGoogleModels(): Promise<string[]> {
 }
 
 /**
+ * Find pricing info for a model ID.
+ * Tries exact match, then strips date suffixes to match aliases.
+ * e.g. "claude-opus-4-6" matches "claude-opus-4-6-20260301"
+ * e.g. "claude-sonnet-4-5-20250929" matches "claude-sonnet-4-5-20250514"
+ */
+function findPricing(id: string): ModelInfo | undefined {
+  if (MODEL_PRICING[id]) return MODEL_PRICING[id]
+  const base = id.replace(/-\d{8}$/, '')
+  for (const [key, info] of Object.entries(MODEL_PRICING)) {
+    const keyBase = key.replace(/-\d{8}$/, '')
+    if (base === keyBase || base === key || id === keyBase) return info
+  }
+  return undefined
+}
+
+/**
  * Create a human-readable name from a model ID
- * e.g. "claude-sonnet-4-20250514" → "claude-sonnet-4-20250514"
  */
 function humanizeName(id: string, provider: 'anthropic' | 'openai' | 'google'): string {
-  // If we have it in our pricing map, use the curated name
-  if (MODEL_PRICING[id]) return MODEL_PRICING[id].name
+  const priced = findPricing(id)
+  if (priced) return priced.name
 
-  // Otherwise, create a reasonable name from the ID
   const cleaned = id
     .replace(/^models\//, '')
-    .replace(/-\d{8}$/, '') // strip date suffixes like -20250514
+    .replace(/-\d{8}$/, '')
   const parts = cleaned.split('-')
-  const capitalized = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
-
-  const providerPrefix: Record<string, string> = {
-    anthropic: '',
-    openai: '',
-    google: '',
-  }
-  return `${providerPrefix[provider]}${capitalized}`
+  return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
 }
 
 export async function GET(request: Request) {
@@ -117,7 +125,7 @@ export async function GET(request: Request) {
   const now = Date.now()
   if (cache && now - cache.timestamp < CACHE_TTL_MS) {
     const config = await getFullModelConfig()
-    return NextResponse.json({ models: cache.models, config })
+    return NextResponse.json({ models: cache.models, config, pricingLastUpdated: PRICING_LAST_UPDATED })
   }
 
   // Fetch from all providers in parallel (with timeout)
@@ -138,16 +146,16 @@ export async function GET(request: Request) {
       if (seenIds.has(id)) continue
       seenIds.add(id)
 
-      const known = MODEL_PRICING[id]
+      const known = findPricing(id)
       if (known) {
-        availableModels.push(known)
+        // Use pricing data but keep the actual API model ID
+        availableModels.push({ ...known, id })
       } else {
-        // New model from API — include without pricing
         availableModels.push({
           id,
           name: humanizeName(id, provider),
           provider,
-          pricing: { input: 0, output: 0 }, // unknown pricing
+          pricing: { input: 0, output: 0 },
         })
       }
     }

@@ -52,7 +52,19 @@ export const MODEL_PRICING: Record<string, ModelInfo> = {
     provider: 'anthropic',
     pricing: { input: 1, output: 5 },
   },
+  'claude-opus-4-5-20251101': {
+    id: 'claude-opus-4-5-20251101',
+    name: 'Claude Opus 4.5',
+    provider: 'anthropic',
+    pricing: { input: 5, output: 25 },
+  },
   // Legacy — still returned by API but superseded
+  'claude-opus-4-1-20250805': {
+    id: 'claude-opus-4-1-20250805',
+    name: 'Claude Opus 4.1 (Legacy)',
+    provider: 'anthropic',
+    pricing: { input: 15, output: 75 },
+  },
   'claude-opus-4-20250514': {
     id: 'claude-opus-4-20250514',
     name: 'Claude Opus 4 (Legacy)',
