@@ -23,8 +23,8 @@ export interface ModelInfo {
   pricing: ModelPricing
 }
 
-// Last verified: 2026-03-16
-export const PRICING_LAST_UPDATED = '2026-03-16'
+// Last verified: 2026-03-18
+export const PRICING_LAST_UPDATED = '2026-03-18'
 
 export const MODEL_PRICING: Record<string, ModelInfo> = {
   // ── Anthropic (verified 2026-03-16) ───────────────────────────────────────
@@ -50,7 +50,7 @@ export const MODEL_PRICING: Record<string, ModelInfo> = {
     id: 'claude-haiku-4-5-20251001',
     name: 'Claude Haiku 4.5',
     provider: 'anthropic',
-    pricing: { input: 0.25, output: 1.25 },
+    pricing: { input: 1, output: 5 },
   },
   // Legacy — still returned by API but superseded
   'claude-opus-4-20250514': {
@@ -71,19 +71,25 @@ export const MODEL_PRICING: Record<string, ModelInfo> = {
     id: 'gpt-5.4',
     name: 'GPT-5.4',
     provider: 'openai',
-    pricing: { input: 2.5, output: 10 },
+    pricing: { input: 2.5, output: 15 },
+  },
+  'gpt-5.4-mini': {
+    id: 'gpt-5.4-mini',
+    name: 'GPT-5.4 Mini',
+    provider: 'openai',
+    pricing: { input: 0.75, output: 4.50 },
+  },
+  'gpt-5.4-nano': {
+    id: 'gpt-5.4-nano',
+    name: 'GPT-5.4 Nano',
+    provider: 'openai',
+    pricing: { input: 0.20, output: 1.25 },
   },
   'gpt-5.2': {
     id: 'gpt-5.2',
     name: 'GPT-5.2',
     provider: 'openai',
     pricing: { input: 1.75, output: 14 },
-  },
-  'gpt-5.2-mini': {
-    id: 'gpt-5.2-mini',
-    name: 'GPT-5.2 Mini',
-    provider: 'openai',
-    pricing: { input: 0.15, output: 0.6 },
   },
   'gpt-4o': {
     id: 'gpt-4o',

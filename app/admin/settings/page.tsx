@@ -175,6 +175,8 @@ export default function SettingsPage() {
   const [modelConfig, setModelConfig] = useState<Record<string, string>>({})
   const [pricingLastUpdated, setPricingLastUpdated] = useState<string | null>(null)
   const [modelsLoading, setModelsLoading] = useState(true)
+  const [refreshingModels, setRefreshingModels] = useState(false)
+  const [refreshSuccess, setRefreshSuccess] = useState(false)
   const [savingModels, setSavingModels] = useState(false)
   const [modelsSaved, setModelsSaved] = useState(false)
   const [testingKeys, setTestingKeys] = useState(false)
@@ -203,10 +205,11 @@ export default function SettingsPage() {
 
   // --- Fetchers ---
 
-  async function fetchModelsAndConfig() {
-    setModelsLoading(true)
+  async function fetchModelsAndConfig(refresh = false) {
+    if (!refresh) setModelsLoading(true)
     try {
-      const res = await fetch('/api/admin/available-models')
+      const url = refresh ? '/api/admin/available-models?refresh=true' : '/api/admin/available-models'
+      const res = await fetch(url)
       const data = await res.json()
       setAvailableModels(data.models || [])
       setModelConfig(data.config || {})
@@ -216,6 +219,15 @@ export default function SettingsPage() {
     } finally {
       setModelsLoading(false)
     }
+  }
+
+  async function refreshModels() {
+    setRefreshingModels(true)
+    setRefreshSuccess(false)
+    await fetchModelsAndConfig(true)
+    setRefreshingModels(false)
+    setRefreshSuccess(true)
+    setTimeout(() => setRefreshSuccess(false), 3000)
   }
 
   async function saveModelConfiguration() {
@@ -599,17 +611,29 @@ export default function SettingsPage() {
                       </span>
                     )}
                   </div>
-                  {pricingLastUpdated && (() => {
-                    const daysSince = Math.floor((Date.now() - new Date(pricingLastUpdated).getTime()) / 86400000)
-                    const isStale = daysSince > 30
-                    return (
-                      <span className={`text-xs flex items-center gap-1 ${isStale ? 'text-orange-500' : 'text-muted-foreground'}`}>
-                        {isStale && <AlertTriangle className="h-3 w-3" />}
-                        Preise aktualisiert: {new Date(pricingLastUpdated).toLocaleDateString('de-DE')}
-                        {isStale && ` (${daysSince} Tage)`}
+                  <div className="flex items-center gap-3">
+                    {pricingLastUpdated && (() => {
+                      const daysSince = Math.floor((Date.now() - new Date(pricingLastUpdated).getTime()) / 86400000)
+                      const isStale = daysSince > 30
+                      return (
+                        <span className={`text-xs flex items-center gap-1 ${isStale ? 'text-orange-500' : 'text-muted-foreground'}`}>
+                          {isStale && <AlertTriangle className="h-3 w-3" />}
+                          Preise aktualisiert: {new Date(pricingLastUpdated).toLocaleDateString('de-DE')}
+                          {isStale && ` (${daysSince} Tage)`}
+                        </span>
+                      )
+                    })()}
+                    <Button variant="ghost" size="sm" onClick={refreshModels} disabled={refreshingModels}>
+                      <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshingModels ? 'animate-spin' : ''}`} />
+                      Modelle aktualisieren
+                    </Button>
+                    {refreshSuccess && (
+                      <span className="text-xs text-green-600 flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        Aktualisiert
                       </span>
-                    )
-                  })()}
+                    )}
+                  </div>
                 </div>
               </>
             )}

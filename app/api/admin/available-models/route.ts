@@ -100,10 +100,17 @@ function humanizeName(id: string, provider: 'anthropic' | 'openai' | 'google'): 
   return `${providerPrefix[provider]}${capitalized}`
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getSession()
   if (!session) {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
+  // Allow cache bypass via ?refresh=true
+  const { searchParams } = new URL(request.url)
+  const forceRefresh = searchParams.get('refresh') === 'true'
+  if (forceRefresh) {
+    cache = null
   }
 
   // Return cached result if fresh
