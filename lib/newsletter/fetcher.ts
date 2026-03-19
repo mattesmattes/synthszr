@@ -137,8 +137,15 @@ interface UnfetchedEmail {
   latestDate: string
 }
 
+export interface ArticleToExtract {
+  url: string
+  title: string
+  newsletterTitle: string
+  newsletterEmail: string
+}
+
 export interface FetchProgress {
-  type: 'start' | 'newsletter' | 'article' | 'email_note' | 'unfetched_emails' | 'embedding_backfill' | 'complete' | 'error'
+  type: 'start' | 'newsletter' | 'article' | 'article_urls' | 'email_note' | 'unfetched_emails' | 'embedding_backfill' | 'complete' | 'error'
   phase: 'fetching' | 'processing' | 'extracting' | 'importing_notes' | 'scanning_unfetched' | 'embedding_backfill' | 'done'
   current?: number
   total?: number
@@ -161,6 +168,7 @@ export interface FetchProgress {
     totalCharacters: number
   }
   unfetchedEmails?: UnfetchedEmail[]
+  articleUrls?: ArticleToExtract[]
 }
 
 export interface NewsletterFetchResult {
@@ -176,6 +184,7 @@ export async function runNewsletterFetch(options?: {
   targetDate?: string
   force?: boolean
   hoursBack?: number
+  scanOnly?: boolean
   onProgress?: (event: FetchProgress) => void
 }): Promise<NewsletterFetchResult> {
   const send = (event: FetchProgress) => options?.onProgress?.(event)
@@ -670,129 +679,25 @@ export async function runNewsletterFetch(options?: {
     }
 
     if (articlesToProcess.length > 0) {
-      const totalBatches = Math.ceil(articlesToProcess.length / BATCH_SIZE)
-      send({
-        type: 'article',
-        phase: 'extracting',
-        current: 0,
-        total: articlesToProcess.length,
-        item: { title: `Artikel werden extrahiert (${totalBatches} Batches, ${articlesToProcess.length} unique)...`, status: 'processing' }
-      })
-
-      // Process articles in batches
-      for (let batchStart = 0; batchStart < articlesToProcess.length; batchStart += BATCH_SIZE) {
-        const batch = articlesToProcess.slice(batchStart, batchStart + BATCH_SIZE)
-        const batchNum = Math.floor(batchStart / BATCH_SIZE) + 1
-
-        // Process batch in parallel
-        const batchResults = await Promise.all(batch.map(async (article, batchIndex) => {
-          const globalIndex = batchStart + batchIndex
-          try {
-            // Check if article already exists
-            const { data: existingArticle } = await supabase
-              .from('daily_repo')
-              .select('id')
-              .eq('source_url', article.url)
-              .single()
-
-            if (existingArticle) {
-              if (options?.force) {
-                await supabase.from('daily_repo').delete().eq('id', existingArticle.id)
-              } else {
-                return { globalIndex, article, status: 'skipped' as const, title: article.title, url: article.url }
-              }
-            }
-
-            const extracted = await extractArticleContent(article.url)
-
-            if (extracted && extracted.content) {
-              const resolvedUrl = extracted.finalUrl || article.url
-
-              // CRITICAL: Check if RESOLVED URL is a non-article page
-              // The original URL might be a tracking URL that resolves to LinkedIn, user profiles, etc.
-              if (!isLikelyArticleUrl(resolvedUrl)) {
-                console.log(`[Newsletter Fetch] Filtered RESOLVED URL: ${resolvedUrl.slice(0, 80)}`)
-                return {
-                  globalIndex, article, status: 'skipped' as const,
-                  title: extracted.title || article.title, url: resolvedUrl,
-                  error: 'Resolved URL is not an article'
-                }
-              }
-
-              // Check if article is too old (max 48 hours)
-              if (isArticleTooOld(extracted.publishedDate, 48)) {
-                const ageInfo = extracted.publishedDate
-                  ? ` (${Math.round((Date.now() - extracted.publishedDate.getTime()) / (1000 * 60 * 60 * 24))} Tage alt)`
-                  : ''
-                return {
-                  globalIndex, article, status: 'skipped' as const,
-                  title: extracted.title || article.title, url: article.url,
-                  error: `Artikel zu alt${ageInfo}`
-                }
-              }
-
-              // Check if resolved URL exists
-              if (extracted.finalUrl) {
-                const { data: existingResolved } = await supabase
-                  .from('daily_repo')
-                  .select('id')
-                  .eq('source_url', resolvedUrl)
-                  .single()
-
-                if (existingResolved && !options?.force) {
-                  return { globalIndex, article, status: 'skipped' as const, title: extracted.title || article.title, url: resolvedUrl }
-                }
-              }
-
-              await supabase
-                .from('daily_repo')
-                .insert({
-                  source_type: 'article',
-                  source_url: resolvedUrl,
-                  source_email: article.newsletterEmail,
-                  title: extracted.title || article.title,
-                  content: extracted.content,
-                  newsletter_date: fetchDate,
-                  email_received_at: new Date().toISOString(),
-                })
-
-              return {
-                globalIndex, article, status: 'success' as const,
-                title: extracted.title || article.title, url: resolvedUrl,
-                contentLength: extracted.content.length
-              }
-            } else {
-              return { globalIndex, article, status: 'error' as const, title: article.title, url: article.url, error: 'Kein Inhalt extrahiert' }
-            }
-          } catch (err) {
-            return {
-              globalIndex, article, status: 'error' as const,
-              title: article.title, url: article.url,
-              error: err instanceof Error ? err.message : 'Extraction failed'
-            }
-          }
-        }))
-
-        // Send results for this batch
-        for (const result of batchResults) {
-          if (result.status === 'success') {
-            processedArticles++
-            totalCharacters += result.contentLength || 0
-          }
-          send({
-            type: 'article',
-            phase: 'extracting',
-            current: result.globalIndex + 1,
-            total: articlesToProcess.length,
-            batch: { current: batchNum, total: totalBatches },
-            item: {
-              title: result.title,
-              url: result.url,
-              status: result.status,
-              error: result.error
-            }
-          })
-        }
+      if (options?.scanOnly) {
+        // In scan mode: just return the article URLs for the frontend to process in batches
+        send({
+          type: 'article_urls',
+          phase: 'extracting',
+          articleUrls: articlesToProcess,
+          item: { title: `${articlesToProcess.length} Artikel-URLs gesammelt`, status: 'success' }
+        })
+      } else {
+        // Legacy: process all articles in one go (used by cron jobs etc.)
+        const result = await runArticleExtraction({
+          articles: articlesToProcess,
+          fetchDate,
+          force: options?.force,
+          onProgress: send,
+        })
+        processedArticles = result.articles
+        totalCharacters += result.totalCharacters
+        errors += result.errors
       }
     }
 
@@ -1051,4 +956,153 @@ export async function runNewsletterFetch(options?: {
       totalCharacters: 0
     }
   }
+}
+
+/**
+ * Extract articles from a batch of URLs. Called by the frontend in chunks.
+ */
+export async function runArticleExtraction(options: {
+  articles: ArticleToExtract[]
+  fetchDate: string
+  force?: boolean
+  globalOffset?: number
+  globalTotal?: number
+  onProgress?: (event: FetchProgress) => void
+}): Promise<{ articles: number; errors: number; totalCharacters: number }> {
+  const { articles, fetchDate, force, globalOffset = 0, globalTotal, onProgress } = options
+  const send = (event: FetchProgress) => onProgress?.(event)
+  const supabase = createAdminClient()
+  const total = globalTotal || articles.length
+
+  let processedArticles = 0
+  let errors = 0
+  let totalCharacters = 0
+
+  const totalBatches = Math.ceil(articles.length / BATCH_SIZE)
+
+  send({
+    type: 'article',
+    phase: 'extracting',
+    current: globalOffset,
+    total,
+    item: { title: `Extrahiere ${articles.length} Artikel...`, status: 'processing' }
+  })
+
+  for (let batchStart = 0; batchStart < articles.length; batchStart += BATCH_SIZE) {
+    const batch = articles.slice(batchStart, batchStart + BATCH_SIZE)
+    const batchNum = Math.floor(batchStart / BATCH_SIZE) + 1
+
+    const batchResults = await Promise.all(batch.map(async (article, batchIndex) => {
+      const localIndex = batchStart + batchIndex
+      const globalIndex = globalOffset + localIndex
+      try {
+        const { data: existingArticle } = await supabase
+          .from('daily_repo')
+          .select('id')
+          .eq('source_url', article.url)
+          .single()
+
+        if (existingArticle) {
+          if (force) {
+            await supabase.from('daily_repo').delete().eq('id', existingArticle.id)
+          } else {
+            return { globalIndex, article, status: 'skipped' as const, title: article.title, url: article.url }
+          }
+        }
+
+        const extracted = await extractArticleContent(article.url)
+
+        if (extracted && extracted.content) {
+          const resolvedUrl = extracted.finalUrl || article.url
+
+          if (!isLikelyArticleUrl(resolvedUrl)) {
+            return {
+              globalIndex, article, status: 'skipped' as const,
+              title: extracted.title || article.title, url: resolvedUrl,
+              error: 'Resolved URL is not an article'
+            }
+          }
+
+          if (isArticleTooOld(extracted.publishedDate, 48)) {
+            const ageInfo = extracted.publishedDate
+              ? ` (${Math.round((Date.now() - extracted.publishedDate.getTime()) / (1000 * 60 * 60 * 24))} Tage alt)`
+              : ''
+            return {
+              globalIndex, article, status: 'skipped' as const,
+              title: extracted.title || article.title, url: article.url,
+              error: `Artikel zu alt${ageInfo}`
+            }
+          }
+
+          if (extracted.finalUrl) {
+            const { data: existingResolved } = await supabase
+              .from('daily_repo')
+              .select('id')
+              .eq('source_url', resolvedUrl)
+              .single()
+
+            if (existingResolved && !force) {
+              return { globalIndex, article, status: 'skipped' as const, title: extracted.title || article.title, url: resolvedUrl }
+            }
+          }
+
+          await supabase
+            .from('daily_repo')
+            .insert({
+              source_type: 'article',
+              source_url: resolvedUrl,
+              source_email: article.newsletterEmail,
+              title: extracted.title || article.title,
+              content: extracted.content,
+              newsletter_date: fetchDate,
+              email_received_at: new Date().toISOString(),
+            })
+
+          return {
+            globalIndex, article, status: 'success' as const,
+            title: extracted.title || article.title, url: resolvedUrl,
+            contentLength: extracted.content.length
+          }
+        } else {
+          return { globalIndex, article, status: 'error' as const, title: article.title, url: article.url, error: 'Kein Inhalt extrahiert' }
+        }
+      } catch (err) {
+        return {
+          globalIndex, article, status: 'error' as const,
+          title: article.title, url: article.url,
+          error: err instanceof Error ? err.message : 'Extraction failed'
+        }
+      }
+    }))
+
+    for (const result of batchResults) {
+      if (result.status === 'success') {
+        processedArticles++
+        totalCharacters += result.contentLength || 0
+      } else if (result.status === 'error') {
+        errors++
+      }
+      send({
+        type: 'article',
+        phase: 'extracting',
+        current: result.globalIndex + 1,
+        total,
+        batch: { current: batchNum, total: totalBatches },
+        item: {
+          title: result.title,
+          url: result.url,
+          status: result.status,
+          error: result.error
+        }
+      })
+    }
+  }
+
+  send({
+    type: 'complete',
+    phase: 'done',
+    summary: { newsletters: 0, articles: processedArticles, emailNotes: 0, errors, totalCharacters }
+  })
+
+  return { articles: processedArticles, errors, totalCharacters }
 }

@@ -40,9 +40,16 @@ interface UnfetchedEmail {
   latestDate: string
 }
 
+interface ArticleToExtract {
+  url: string
+  title: string
+  newsletterTitle: string
+  newsletterEmail: string
+}
+
 interface ProgressEvent {
-  type: 'start' | 'newsletter' | 'article' | 'email_note' | 'unfetched_emails' | 'complete' | 'error'
-  phase: 'fetching' | 'processing' | 'extracting' | 'importing_notes' | 'scanning_unfetched' | 'done'
+  type: 'start' | 'newsletter' | 'article' | 'article_urls' | 'email_note' | 'unfetched_emails' | 'embedding_backfill' | 'complete' | 'error'
+  phase: 'fetching' | 'processing' | 'extracting' | 'importing_notes' | 'scanning_unfetched' | 'embedding_backfill' | 'done'
   current?: number
   total?: number
   item?: ProgressItem
@@ -54,6 +61,7 @@ interface ProgressEvent {
     totalCharacters: number
   }
   unfetchedEmails?: UnfetchedEmail[]
+  articleUrls?: ArticleToExtract[]
 }
 
 const statusIcons = {
@@ -64,19 +72,22 @@ const statusIcons = {
   skipped: <SkipForward className="h-4 w-4 text-yellow-500" />,
 }
 
-const phaseLabels = {
+const phaseLabels: Record<string, string> = {
   fetching: 'Emails abrufen',
   processing: 'Newsletter verarbeiten',
   importing_notes: '+dailyrepo importieren',
   extracting: 'Artikel extrahieren',
   scanning_unfetched: 'Scanne alle Mails',
+  embedding_backfill: 'Embeddings generieren',
   done: 'Abgeschlossen',
   error: 'Fehler aufgetreten',
 }
 
+const EXTRACT_BATCH_SIZE = 100 // Articles per API request
+
 interface FetchProgressProps {
   onComplete?: () => void
-  targetDate?: string // Optional: YYYY-MM-DD format for fetching specific date
+  targetDate?: string
 }
 
 export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
@@ -88,12 +99,41 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
   const [forceRefresh, setForceRefresh] = useState(false)
   const [hoursBack, setHoursBack] = useState(28)
 
-  // Unfetched emails dialog
   const [unfetchedEmails, setUnfetchedEmails] = useState<UnfetchedEmail[]>([])
   const [showUnfetchedDialog, setShowUnfetchedDialog] = useState(false)
 
-  // Live stats during fetch
   const [liveStats, setLiveStats] = useState({ newsletters: 0, articles: 0, emailNotes: 0, errors: 0, totalCharacters: 0 })
+
+  // Helper: consume an SSE stream and call handler for each event
+  async function consumeSSEStream(
+    response: Response,
+    onEvent: (event: ProgressEvent) => void
+  ) {
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('No reader')
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            onEvent(JSON.parse(line.slice(6)))
+          } catch (e) {
+            console.error('Error parsing SSE:', e)
+          }
+        }
+      }
+    }
+  }
 
   const startFetch = useCallback(async () => {
     setIsRunning(true)
@@ -104,114 +144,179 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
     setUnfetchedEmails([])
     setLiveStats({ newsletters: 0, articles: 0, emailNotes: 0, errors: 0, totalCharacters: 0 })
 
+    let scanSummary = { newsletters: 0, articles: 0, emailNotes: 0, errors: 0, totalCharacters: 0 }
+    let receivedUnfetchedEmails: UnfetchedEmail[] = []
+    let articleUrls: ArticleToExtract[] = []
+    let fetchDate = targetDate || new Date().toISOString().split('T')[0]
+
     try {
-      const response = await fetch('/api/fetch-newsletters-stream', {
+      // ========================================
+      // PHASE 1: Scan — fetch emails, parse newsletters, collect article URLs
+      // ========================================
+      const scanResponse = await fetch('/api/fetch-newsletters-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetDate, force: forceRefresh, hoursBack }),
+        body: JSON.stringify({ targetDate, force: forceRefresh, hoursBack, mode: 'scan' }),
         credentials: 'include',
       })
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error')
-        throw new Error(`Fetch failed (${response.status}): ${errorText}`)
+      if (!scanResponse.ok) {
+        const errorText = await scanResponse.text().catch(() => 'Unknown error')
+        throw new Error(`Scan failed (${scanResponse.status}): ${errorText}`)
       }
 
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('No reader')
+      await consumeSSEStream(scanResponse, (event) => {
+        if (event.phase) setPhase(event.phase)
 
-      const decoder = new TextDecoder()
-      let buffer = ''
-      // Track unfetched emails locally to avoid React state timing issues
-      let receivedUnfetchedEmails: UnfetchedEmail[] = []
+        if (event.current !== undefined && event.total !== undefined) {
+          setProgress({ current: event.current, total: event.total })
+        }
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+        if (event.item) {
+          const itemWithType: ProgressItem = {
+            ...event.item,
+            type: event.type === 'newsletter' || event.type === 'article' || event.type === 'email_note'
+              ? event.type : undefined
+          }
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const event: ProgressEvent = JSON.parse(line.slice(6))
-
-              if (event.phase) {
-                setPhase(event.phase)
-              }
-
-              if (event.current !== undefined && event.total !== undefined) {
-                setProgress({ current: event.current, total: event.total })
-              }
-
-              if (event.item) {
-                // Add type from event to the item
-                const itemWithType: ProgressItem = {
-                  ...event.item,
-                  type: event.type === 'newsletter' || event.type === 'article' || event.type === 'email_note'
-                    ? event.type
-                    : undefined
-                }
-
-                setItems(prev => {
-                  // Update existing item or add new one
-                  const existing = prev.findIndex(
-                    i => i.title === itemWithType.title && i.from === itemWithType.from && i.url === itemWithType.url
-                  )
-                  if (existing >= 0) {
-                    const updated = [...prev]
-                    updated[existing] = itemWithType
-                    return updated
-                  }
-                  return [...prev, itemWithType]
-                })
-
-                // Update live stats when item succeeds
-                if (event.item.status === 'success') {
-                  setLiveStats(prev => ({
-                    ...prev,
-                    newsletters: prev.newsletters + (event.type === 'newsletter' ? 1 : 0),
-                    articles: prev.articles + (event.type === 'article' ? 1 : 0),
-                    emailNotes: prev.emailNotes + (event.type === 'email_note' ? 1 : 0),
-                    totalCharacters: prev.totalCharacters + (event.type === 'newsletter' ? 5000 : event.type === 'email_note' ? 2000 : 3000) // Estimated
-                  }))
-                } else if (event.item.status === 'error') {
-                  setLiveStats(prev => ({ ...prev, errors: prev.errors + 1 }))
-                }
-              }
-
-              // Handle unfetched emails event
-              if (event.type === 'unfetched_emails' && event.unfetchedEmails) {
-                console.log('[FetchProgress] Received unfetched_emails event:', event.unfetchedEmails.length, 'emails')
-                receivedUnfetchedEmails = event.unfetchedEmails
-                setUnfetchedEmails(event.unfetchedEmails)
-              }
-
-              if (event.type === 'complete' && event.summary) {
-                console.log('[FetchProgress] Received complete event, unfetched emails:', receivedUnfetchedEmails.length)
-                setSummary(event.summary)
-                // Show unfetched emails dialog if any were received
-                if (receivedUnfetchedEmails.length > 0) {
-                  console.log('[FetchProgress] Opening unfetched emails dialog')
-                  setShowUnfetchedDialog(true)
-                  // Don't call onComplete yet - wait for dialog to be handled
-                } else {
-                  // No unfetched emails, complete immediately
-                  onComplete?.()
-                }
-              }
-            } catch (e) {
-              console.error('Error parsing SSE:', e)
+          setItems(prev => {
+            const existing = prev.findIndex(
+              i => i.title === itemWithType.title && i.from === itemWithType.from && i.url === itemWithType.url
+            )
+            if (existing >= 0) {
+              const updated = [...prev]
+              updated[existing] = itemWithType
+              return updated
             }
+            return [...prev, itemWithType]
+          })
+
+          if (event.item.status === 'success') {
+            setLiveStats(prev => ({
+              ...prev,
+              newsletters: prev.newsletters + (event.type === 'newsletter' ? 1 : 0),
+              articles: prev.articles + (event.type === 'article' ? 1 : 0),
+              emailNotes: prev.emailNotes + (event.type === 'email_note' ? 1 : 0),
+              totalCharacters: prev.totalCharacters + (event.type === 'newsletter' ? 5000 : event.type === 'email_note' ? 2000 : 3000)
+            }))
+          } else if (event.item.status === 'error') {
+            setLiveStats(prev => ({ ...prev, errors: prev.errors + 1 }))
           }
         }
+
+        // Collect article URLs from scan
+        if (event.type === 'article_urls' && event.articleUrls) {
+          articleUrls = event.articleUrls
+          console.log(`[FetchProgress] Received ${articleUrls.length} article URLs to extract`)
+        }
+
+        if (event.type === 'unfetched_emails' && event.unfetchedEmails) {
+          receivedUnfetchedEmails = event.unfetchedEmails
+          setUnfetchedEmails(event.unfetchedEmails)
+        }
+
+        if (event.type === 'complete' && event.summary) {
+          scanSummary = event.summary
+        }
+      })
+
+      // ========================================
+      // PHASE 2: Extract articles in batches
+      // ========================================
+      if (articleUrls.length > 0) {
+        const totalArticles = articleUrls.length
+        const totalBatches = Math.ceil(totalArticles / EXTRACT_BATCH_SIZE)
+
+        setPhase('extracting')
+        setProgress({ current: 0, total: totalArticles })
+
+        let totalExtracted = 0
+        let totalExtractErrors = 0
+        let totalExtractChars = 0
+
+        for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+          const batchStart = batchIdx * EXTRACT_BATCH_SIZE
+          const batch = articleUrls.slice(batchStart, batchStart + EXTRACT_BATCH_SIZE)
+
+          console.log(`[FetchProgress] Extracting batch ${batchIdx + 1}/${totalBatches} (${batch.length} articles)`)
+
+          const extractResponse = await fetch('/api/fetch-newsletters-stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'extract',
+              articles: batch,
+              fetchDate,
+              force: forceRefresh,
+              globalOffset: batchStart,
+              globalTotal: totalArticles,
+            }),
+            credentials: 'include',
+          })
+
+          if (!extractResponse.ok) {
+            console.error(`[FetchProgress] Extract batch ${batchIdx + 1} failed: ${extractResponse.status}`)
+            setLiveStats(prev => ({ ...prev, errors: prev.errors + batch.length }))
+            totalExtractErrors += batch.length
+            continue
+          }
+
+          await consumeSSEStream(extractResponse, (event) => {
+            if (event.current !== undefined && event.total !== undefined) {
+              setProgress({ current: event.current, total: event.total })
+            }
+
+            if (event.item && event.type === 'article') {
+              const itemWithType: ProgressItem = { ...event.item, type: 'article' }
+              setItems(prev => {
+                const updated = [...prev]
+                if (updated.length > 50) updated.splice(0, updated.length - 50)
+                return [...updated, itemWithType]
+              })
+
+              if (event.item.status === 'success') {
+                totalExtracted++
+                setLiveStats(prev => ({
+                  ...prev,
+                  articles: prev.articles + 1,
+                  totalCharacters: prev.totalCharacters + 3000
+                }))
+              } else if (event.item.status === 'error') {
+                totalExtractErrors++
+                setLiveStats(prev => ({ ...prev, errors: prev.errors + 1 }))
+              }
+            }
+
+            if (event.type === 'complete' && event.summary) {
+              totalExtractChars += event.summary.totalCharacters
+            }
+          })
+        }
+
+        // Merge scan + extraction summaries
+        scanSummary = {
+          ...scanSummary,
+          articles: scanSummary.articles + totalExtracted,
+          errors: scanSummary.errors + totalExtractErrors,
+          totalCharacters: scanSummary.totalCharacters + totalExtractChars,
+        }
       }
+
+      // ========================================
+      // DONE
+      // ========================================
+      setPhase('done')
+      setSummary(scanSummary)
+
+      if (receivedUnfetchedEmails.length > 0) {
+        setShowUnfetchedDialog(true)
+      } else {
+        onComplete?.()
+      }
+
     } catch (error) {
       console.error('Fetch error:', error)
       setPhase('error')
-      // Show error in items list for visibility
       setItems(prev => [...prev, {
         title: 'Kritischer Fehler',
         status: 'error',
@@ -220,7 +325,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
     } finally {
       setIsRunning(false)
     }
-  }, [onComplete, targetDate, forceRefresh])
+  }, [onComplete, targetDate, forceRefresh, hoursBack])
 
   const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
 
@@ -286,7 +391,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
         {phase !== 'idle' && (
           <div className="space-y-2 w-full min-w-0 max-w-full">
             <div className="flex items-center justify-between text-sm min-w-0">
-              <span className="text-muted-foreground truncate">{phaseLabels[phase as keyof typeof phaseLabels] || phase}</span>
+              <span className="text-muted-foreground truncate">{phaseLabels[phase] || phase}</span>
               {progress.total > 0 && (
                 <span className="font-medium shrink-0 ml-2">{progress.current} / {progress.total}</span>
               )}
@@ -395,14 +500,12 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
                   item.status === 'skipped' && "bg-yellow-50/50"
                 )}
               >
-                {/* Type icon */}
                 <div className="shrink-0 mt-0.5">
                   {item.type === 'newsletter' && <Mail className="h-4 w-4 text-blue-500" />}
                   {item.type === 'article' && <FileText className="h-4 w-4 text-green-500" />}
                   {item.type === 'email_note' && <StickyNote className="h-4 w-4 text-orange-500" />}
                   {!item.type && <div className="w-4" />}
                 </div>
-                {/* Status icon */}
                 {statusIcons[item.status]}
                 <div className="flex-1 min-w-0 overflow-hidden">
                   <div className="font-medium truncate">{item.title}</div>
@@ -411,7 +514,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
                   )}
                   {item.url && (
                     <div className="text-xs text-muted-foreground truncate max-w-full">
-                      {item.url.length > 50 ? item.url.slice(0, 50) + '…' : item.url}
+                      {item.url.length > 50 ? item.url.slice(0, 50) + '...' : item.url}
                     </div>
                   )}
                   {item.error && (
@@ -427,17 +530,15 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
         {phase === 'idle' && items.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
             <Mail className="h-12 w-12 mx-auto mb-3 opacity-20" />
-            <p>Klicke auf "Jetzt abrufen" um Newsletter zu laden</p>
+            <p>Klicke auf &quot;Jetzt abrufen&quot; um Newsletter zu laden</p>
           </div>
         )}
       </CardContent>
 
-      {/* Unfetched emails dialog */}
       <UnfetchedEmailsDialog
         open={showUnfetchedDialog}
         onOpenChange={(open) => {
           setShowUnfetchedDialog(open)
-          // When dialog is closed, call onComplete to close parent dialog
           if (!open) {
             console.log('[FetchProgress] Unfetched dialog closed, calling onComplete')
             onComplete?.()
@@ -446,9 +547,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
         emails={unfetchedEmails}
         onComplete={(result) => {
           console.log('[FetchProgress] Sources managed:', result)
-          // Clear unfetched emails after handling
           setUnfetchedEmails([])
-          // onComplete will be called by onOpenChange when dialog closes
         }}
       />
     </Card>
