@@ -280,7 +280,7 @@ export async function writeSection(
 Schreibe GENAU DIESEN EINEN Abschnitt. Kein Intro, keine anderen News, kein Abschluss.
 
 NEWS-INHALT (Quelleninfo nur für dich${sourceName ? ` — Quelle: ${sourceName}` : ''}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''}):
-${item.content || 'Kein Inhalt verfügbar.'}
+${(item.content || 'Kein Inhalt verfügbar.').slice(0, 3000)}
 
 ---
 
@@ -390,7 +390,8 @@ export async function* runGhostwriterPipeline(
 
   let plan: ArticlePlan
   try {
-    plan = await planArticle(items, model)
+    // Planning is structural (JSON output), doesn't need the expensive writing model
+    plan = await planArticle(items, 'gemini-2.0-flash')
   } catch (err) {
     console.error('[Pipeline] planArticle failed:', err)
     // Fallback plan: sequential order, item titles as headings
