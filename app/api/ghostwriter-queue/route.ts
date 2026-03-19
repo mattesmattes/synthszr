@@ -425,7 +425,7 @@ export async function POST(request: NextRequest) {
 
             let fullText = ''
 
-            for await (const event of runGhostwriterPipeline(pipelineItems, fullPrompt, model)) {
+            for await (const event of runGhostwriterPipeline(pipelineItems, fullPrompt, model, { vocabularyContext })) {
               if (event.type === 'planning') {
                 send({ phase: 'pipeline', message: event.message })
               } else if (event.type === 'planned') {

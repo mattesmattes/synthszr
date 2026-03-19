@@ -56,6 +56,32 @@ export type PipelineEvent =
   | { type: 'assembling' }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Company extraction: find mentioned companies in item text (avoids sending all 492 names per call)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function extractRelevantCompanies(text: string): { public: string[]; premarket: string[] } {
+  const textLower = (text || '').toLowerCase()
+  const pub: string[] = []
+  const pre: string[] = []
+
+  for (const name of Object.keys(KNOWN_COMPANIES)) {
+    if (name.length < 3) continue
+    if (textLower.includes(name.toLowerCase())) {
+      pub.push(name)
+    }
+  }
+
+  for (const name of Object.keys(KNOWN_PREMARKET_COMPANIES)) {
+    if (name.length < 3) continue
+    if (textLower.includes(name.toLowerCase())) {
+      pre.push(name)
+    }
+  }
+
+  return { public: pub, premarket: pre }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // System Prompt for per-item section writing (focused, no article-level rules)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -218,10 +244,14 @@ export async function writeSection(
   heading: string,
   thesis: string,
   model: AIModel,
-  promptText: string,
+  context: {
+    vocabularyContext?: string
+    editLearningContext?: string
+    relevantCompanies: { public: string[]; premarket: string[] }
+  },
 ): Promise<string> {
-  const publicCompanyList = Object.keys(KNOWN_COMPANIES).join(', ')
-  const premarketCompanyList = Object.keys(KNOWN_PREMARKET_COMPANIES).join(', ')
+  const publicCompanyList = context.relevantCompanies.public.join(', ') || '(keine erkannt)'
+  const premarketCompanyList = context.relevantCompanies.premarket.join(', ') || '(keine erkannt)'
 
   const rawSourceName = item.source_display_name || item.source_identifier
   const hasValidSource = rawSourceName && rawSourceName !== 'unknown'
@@ -239,11 +269,13 @@ export async function writeSection(
     ? `[${sourceName}](${effectiveUrl})`
     : sourceName || null
 
-  const userPrompt = `${promptText}
+  // Build trimmed context (vocabulary + edit learning only — style rules are in SECTION_SYSTEM_PROMPT)
+  const contextParts: string[] = []
+  if (context.vocabularyContext) contextParts.push(context.vocabularyContext)
+  if (context.editLearningContext) contextParts.push(context.editLearningContext)
+  const additionalContext = contextParts.length > 0 ? contextParts.join('\n\n') + '\n\n' : ''
 
----
-
-ARTIKEL-KONTEXT: ${thesis}
+  const userPrompt = `${additionalContext}ARTIKEL-KONTEXT: ${thesis}
 
 Schreibe GENAU DIESEN EINEN Abschnitt. Kein Intro, keine anderen News, kein Abschluss.
 
@@ -350,8 +382,9 @@ export async function* runGhostwriterPipeline(
   items: PipelineItem[],
   promptText: string,
   model: AIModel,
-  concurrency = 3
+  options: { concurrency?: number; vocabularyContext?: string } = {},
 ): AsyncGenerator<PipelineEvent | { type: 'section'; text: string } | { type: 'metadata'; text: string }> {
+  const { concurrency = 3, vocabularyContext } = options
   // ── Pass 1: Plan ────────────────────────────────────────────────────────────
   yield { type: 'planning', message: `Struktur für ${items.length} Items planen...` }
 
@@ -375,7 +408,7 @@ export async function* runGhostwriterPipeline(
   yield { type: 'planned', itemCount: items.length }
 
   // ── Edit Learning: Load patterns and examples ──────────────────────────────
-  let enhancedPrompt = promptText
+  let editLearningContext = ''
   let loadedPatterns: LearnedPattern[] = []
   try {
     const [patterns, examples] = await Promise.all([
@@ -388,12 +421,18 @@ export async function* runGhostwriterPipeline(
     if (patterns.length > 0 || examples.length > 0) {
       const enhancement = buildPromptEnhancement(patterns, examples)
       if (enhancement) {
-        enhancedPrompt = `${promptText}\n\n---\n\n${enhancement}`
-        console.log(`[Pipeline] Enhanced prompt with ${patterns.length} patterns and ${examples.length} examples`)
+        editLearningContext = enhancement
+        console.log(`[Pipeline] Edit learning: ${patterns.length} patterns, ${examples.length} examples`)
       }
     }
   } catch (err) {
     console.error('[Pipeline] Failed to load Edit Learning patterns:', err)
+  }
+
+  // ── Pre-extract relevant companies per item (avoids sending all 492 names per call) ──
+  const companiesPerItem = new Map<string, { public: string[]; premarket: string[] }>()
+  for (const item of items) {
+    companiesPerItem.set(item.id, extractRelevantCompanies(`${item.title} ${item.content || ''}`))
   }
 
   // Emit metadata block immediately so client can show title/excerpt
@@ -429,7 +468,12 @@ export async function* runGhostwriterPipeline(
       const heading = plan.headings[String(itemIdx)] || item.title
 
       try {
-        results[i] = await writeSection(item, heading, plan.thesis, model, enhancedPrompt)
+        const itemCompanies = companiesPerItem.get(item.id) || { public: [], premarket: [] }
+        results[i] = await writeSection(item, heading, plan.thesis, model, {
+          vocabularyContext,
+          editLearningContext,
+          relevantCompanies: itemCompanies,
+        })
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
         console.error(`[Pipeline] writeSection ${i + 1} failed:`, errMsg)
