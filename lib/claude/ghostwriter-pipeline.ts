@@ -114,7 +114,8 @@ VERBOTENE FORMULIERUNGEN:
 - Tote Übergänge: "darüber hinaus", "zusätzlich", "außerdem" (wenn mechanisch), "besonders interessant daran ist...", "anders gesagt...", "um das einzuordnen..."
 - Engagement-Köder: "Lass das mal sacken", "Lies das nochmal", "Das verändert alles", "Punkt."
 - Generische Insider-Behauptungen: "Hier kommt der Teil, über den niemand spricht", "Was dir keiner sagt", alles mit "niemand" oder "die meisten merken nicht"
-- DER GROSSE FEHLER (FATAL): "Das ist nicht X. Das ist Y.", "Nicht X. Y.", "Vergiss X. Das ist Y.", "Weniger X, mehr Y." — jede Konstruktion, die erst ein Framing negiert und dann ein korrigiertes behauptet. Formuliere DIREKT POSITIV.`
+- DER GROSSE FEHLER (FATAL): "Das ist nicht X. Das ist Y.", "Nicht X. Y.", "Vergiss X. Das ist Y.", "Weniger X, mehr Y." — jede Konstruktion, die erst ein Framing negiert und dann ein korrigiertes behauptet. Formuliere DIREKT POSITIV.
+- "verschiebt" — vermeide dieses Wort komplett. Nutze stattdessen präzisere Alternativen: "verlagert", "ändert", "bewegt", "rückt", "wandelt".`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass 1: Article Planning
@@ -228,8 +229,10 @@ export async function writeSection(
   const sourceName = hasValidSource
     ? rawSourceName
     : (item.source_url ? domainFromUrl(item.source_url) : null)
-  // Derive a usable URL: source_url or fallback from email domain
-  const effectiveUrl = deriveSourceUrl(item.source_url, item.source_identifier)
+  // Derive a usable URL: prefer article URL, fall back to email domain homepage
+  const articleUrl = item.source_url || deriveSourceUrl(null, item.source_identifier)
+  // For the source link, use the article URL directly (so readers can click through)
+  const effectiveUrl = articleUrl
   // Company tag line: companies + linked source (the ONE place source appears in output)
   // When no meaningful source can be determined, omit the arrow+source entirely
   const tagSourcePart = effectiveUrl && sourceName

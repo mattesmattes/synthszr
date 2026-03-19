@@ -95,6 +95,7 @@ export function domainFromUrl(url: string | null): string | null {
 /**
  * Derive a usable source URL from available data.
  * Falls back to email domain homepage when source_url is missing.
+ * Also handles plain text source names containing domains (e.g. "Dev.to Startup" → "https://dev.to")
  */
 export function deriveSourceUrl(sourceUrl: string | null, sourceIdentifier: string): string | null {
   if (sourceUrl) {
@@ -102,10 +103,21 @@ export function deriveSourceUrl(sourceUrl: string | null, sourceIdentifier: stri
     if (domain) return sourceUrl
   }
   if (sourceIdentifier && sourceIdentifier !== 'unknown') {
+    // Email address: extract domain
     const atIdx = sourceIdentifier.indexOf('@')
     if (atIdx !== -1) {
       const domain = sourceIdentifier.slice(atIdx + 1)
       if (domain && domain.includes('.')) return `https://${domain}`
+    }
+    // Plain text source name: try to find a domain-like word (e.g. "dev.to", "techcrunch.com")
+    const words = sourceIdentifier.split(/\s+/)
+    for (const word of words) {
+      if (word.includes('.') && !word.includes('@') && word.length > 3) {
+        try {
+          const url = new URL(`https://${word}`)
+          if (url.hostname.includes('.')) return url.origin
+        } catch { /* not a valid domain */ }
+      }
     }
   }
   return null
