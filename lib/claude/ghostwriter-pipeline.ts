@@ -386,7 +386,6 @@ async function callModelNonStreaming(
 
 export async function* runGhostwriterPipeline(
   items: PipelineItem[],
-  promptText: string,
   model: AIModel,
   options: { concurrency?: number; vocabularyContext?: string } = {},
 ): AsyncGenerator<PipelineEvent | { type: 'section'; text: string } | { type: 'metadata'; text: string }> {

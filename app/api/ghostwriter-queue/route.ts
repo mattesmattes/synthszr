@@ -221,63 +221,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Ghostwriter-Queue] Source distribution:`, distribution)
 
-    // Build content for ghostwriter
-    let digestContent = '## Ausgewählte News für diesen Artikel\n\n'
-
-    for (const item of selectedItems) {
-      digestContent += `### ${item.title}\n`
-      const rawSourceName = item.source_display_name || item.source_identifier
-      const hasValidSource = rawSourceName && rawSourceName !== 'unknown'
-      // SECURITY: Sanitize URLs to prevent tracking parameter leaks
-      const cleanUrl = sanitizeUrl(item.source_url)
-      // Derive meaningful source name: prefer display_name > identifier > URL domain
-      const sourceName = hasValidSource
-        ? rawSourceName
-        : (cleanUrl ? domainFromUrl(cleanUrl) : null)
-      // Derive usable URL: sanitized source_url or email domain fallback
-      const effectiveUrl = cleanUrl || deriveSourceUrl(null, item.source_identifier)
-      // Source info as context only — not rendered as "**Quelle:**" label.
-      // The LLM should output source ONCE in the company tag line: {Company} → [Name](URL)
-      if (sourceName || effectiveUrl) {
-        digestContent += `(Quelleninfo: ${sourceName || 'unbekannte Quelle'}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''})\n`
-      }
-      if (item.content) {
-        // SECURITY: Sanitize tracking URLs from content before passing to AI
-        const cleanContent = sanitizeContentUrls(item.content)
-        digestContent += `${cleanContent}\n`
-      }
-      digestContent += '\n---\n\n'
-    }
-
-    // No separate sourceReference — URL and source name are already inline in digestContent above.
-    // A redundant source list confuses the LLM into duplicating the company tag line.
-    const sourceReference = ''
-
-    // Get ghostwriter prompt (with .single() error handling)
-    let promptText: string
-    if (promptId) {
-      const { data: prompt, error: promptError } = await supabase
-        .from('ghostwriter_prompts')
-        .select('prompt_text')
-        .eq('id', promptId)
-        .single()
-      if (promptError) {
-        console.warn(`[Ghostwriter-Queue] Prompt ${promptId} not found, using default`)
-      }
-      promptText = prompt?.prompt_text || getDefaultGhostwriterPrompt()
-    } else {
-      const { data: activePrompt, error: activeError } = await supabase
-        .from('ghostwriter_prompts')
-        .select('prompt_text')
-        .eq('is_active', true)
-        .single()
-      if (activeError) {
-        console.warn('[Ghostwriter-Queue] No active prompt found, using default')
-      }
-      promptText = activePrompt?.prompt_text || getDefaultGhostwriterPrompt()
-    }
-
-    // Get vocabulary
+    // Get vocabulary (used by both pipeline and single-pass)
     const { data: vocabulary } = await supabase
       .from('vocabulary_dictionary')
       .select('term, preferred_usage, avoid_alternatives, context, category')
@@ -291,119 +235,12 @@ export async function POST(request: NextRequest) {
       vocabularyContext += vocabulary.map(v => `- "${v.term}": ${v.preferred_usage || ''}`).join('\n')
     }
 
-    // Get stylistic rules (same as digest route)
-    const { data: stylisticRules } = await supabase
-      .from('stylistic_rules')
-      .select('rule_type, name, description, examples, priority')
-      .eq('is_active', true)
-      .order('priority', { ascending: false })
-
-    let stylisticContext = ''
-    if (stylisticRules && stylisticRules.length > 0) {
-      stylisticContext = '\n\n---\n\nSTILISTISCHE RICHTLINIEN (Matthias Schrader Stil):\n'
-
-      const rulesByType = stylisticRules.reduce((acc, r) => {
-        if (!acc[r.rule_type]) acc[r.rule_type] = []
-        acc[r.rule_type].push(r)
-        return acc
-      }, {} as Record<string, typeof stylisticRules>)
-
-      if (rulesByType['sprachregister']) {
-        stylisticContext += `\n**SPRACHREGISTER:** ${rulesByType['sprachregister'][0].description}\n`
-      }
-      if (rulesByType['personalpronomina']) {
-        stylisticContext += `\n**PERSPEKTIVE:** ${rulesByType['personalpronomina'][0].description}\n`
-      }
-      if (rulesByType['interpunktion']) {
-        stylisticContext += `\n**INTERPUNKTION:** ${rulesByType['interpunktion'][0].description}\n`
-      }
-      if (rulesByType['textlaenge']) {
-        stylisticContext += `\n**SATZSTRUKTUR:** ${rulesByType['textlaenge'][0].description}\n`
-      }
-      if (rulesByType['metapherntyp'] && rulesByType['metapherntyp'].length > 0) {
-        stylisticContext += `\n**BEVORZUGTE METAPHERN-BEREICHE:**\n`
-        stylisticContext += rulesByType['metapherntyp'].map(r => `- ${r.description}`).join('\n')
-      }
-      if (rulesByType['autorenzitat'] && rulesByType['autorenzitat'].length > 0) {
-        stylisticContext += `\n\n**HÄUFIG ZITIERTE AUTOREN:** ${rulesByType['autorenzitat'].map(r => r.name).join(', ')}\n`
-      }
-      if (rulesByType['stilregel']) {
-        stylisticContext += `\n**WEITERE STILREGELN:**\n`
-        stylisticContext += rulesByType['stilregel'].map(r => `- ${r.description}`).join('\n')
-      }
-    }
-
-    const fullPrompt = promptText + vocabularyContext + stylisticContext
-
-    // Build dynamic company lists from the actual data (synced from Glitch Green API)
-    const publicCompanyList = Object.keys(KNOWN_COMPANIES).join(', ')
-    const premarketCompanyList = Object.keys(KNOWN_PREMARKET_COMPANIES).join(', ')
-
-    // Enforcement rules appended at the end of content (last thing the LLM sees)
-    const enforcementRules = `
-
----
-
-## QUALITÄTS-CHECKLISTE (MUSS EINGEHALTEN WERDEN):
-
-1. **ANZAHL NEWS:** Es wurden ${selectedItems.length} News bereitgestellt. Verarbeite ALLE ${selectedItems.length} — keine weglassen!
-   - Jede News bekommt eine eigene Zwischenüberschrift (##)
-   - Jeder News-Artikel MUSS exakt 5-7 Sätze haben
-
-2. **SYNTHSZR TAKE:** Jeder "Synthszr Take:" MUSS MINDESTENS 6 Sätze haben (Ziel: 6-7 Sätze). Ein Take mit 3-4 Sätzen ist ZU KURZ!
-   - Schreibe als erfahrener Tech-Stratege für Fachkollegen — keine Dramatik, kein Überzeugungsversuch
-   - Schreibe frei und assoziativ. Maximal EIN Satz mit Doppelpunkt pro Take.
-   - Der LETZTE Satz MUSS knackig und zitierfähig sein: eine klare Einschätzung (positiv ODER negativ), die für sich allein stehen kann. Nie unverbindlich-neutral.
-   - ERLAUBTE SATZANFÄNGE: Eigenname, Zahl, konkretes Substantiv, aktives Verb
-   - VERBOTENE SATZANFÄNGE: "Das...", "Dies...", "Hier...", "Es...", "Was...", "Ob...", "Die Frage..."
-   - ABSOLUT VERBOTEN: Kontrastpaare ("einerseits... andererseits", "nicht nur... sondern auch"), Abwarte-Formeln ("Es bleibt abzuwarten", "Die Zeit wird zeigen"), Potenzial-Phrasen ("Das Potenzial ist enorm"), Reframing ("Die eigentliche Frage ist..."), rhetorische Fragen am Ende, "Doch" als Satzanfang, Pseudo-Mündlichkeit ("Mal ehrlich:")
-   - GEDANKENSTRICHE: Niemals em-dashes (—) verwenden. Punkt, Komma, Doppelpunkt oder Semikolon nutzen.
-   - NEGATIONS-REFRAMING (FATALER FEHLER): "nicht X, sondern Y", "Das ist keine X, sondern Y", "Weniger X, mehr Y" — formuliere DIREKT POSITIV.
-   - TOTE KI-SPRACHE: "In der heutigen...", "Es ist wichtig zu beachten", "Gamechanger", "bahnbrechend", "unkompliziert"
-   - TOTE ÜBERGÄNGE: "darüber hinaus", "zusätzlich", "außerdem" (wenn mechanisch), "besonders interessant daran ist..."
-   - GUTER TAKE: "Anthropic monetarisiert Compliance-Arbeit. Enterprise-Kunden zahlen für ein Modell, das den Security-Review besteht, Intelligenz ist sekundär. 'ISO-27001-ready und auditierbar' schlägt jedes Performance-Argument im Vertrieb. Modelle werden austauschbar; wer den Beschaffungsprozess beherrscht, gewinnt."
-   - SCHLECHTER TAKE (VERMEIDEN): "Das ist ein bedeutender Schritt. Einerseits zeigt dies das Potenzial, andererseits bleibt abzuwarten..." [evaluativer Einstieg + Kontrastpaar + Abwarte-Formel]
-
-3. **QUELLEN-DIVERSITÄT:** Keine Quelle darf >30% der News ausmachen.
-
-4. **COMPANY TAGGING + QUELLENLINK (PFLICHT):** Direkt nach dem letzten Satz der News-Zusammenfassung (VOR dem "Synthszr Take:") genau eine Zeile. Die Companies stehen VOR der verlinkten Quelle. Die Quelle erscheint NUR hier — kein separates "**Quelle:**" Label.
-
-   **FORMAT (mit URL):** {TagA} {TagB} → [Quellenname](URL)
-   **FORMAT (ohne Quelle):** {TagA} {TagB}
-   **FALSCH:** {TagA} → unknown  ← "unknown" ist KEIN gültiger Quellenname, einfach weglassen!
-   **FALSCH:** **Quelle:** [Name](URL) ... {TagA} → Name  ← Quelle doppelt
-   **RICHTIG:** {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
-   **BEISPIELE:**
-   - {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
-   - {Groq} {Cerebras} → [The Information](https://theinformation.com)
-   - {Apple} → [Exponential View](https://exponentialview.co)
-
-   **VERFÜGBARE PUBLIC COMPANIES (börsennotiert):** ${publicCompanyList}
-
-   **VERFÜGBARE PREMARKET COMPANIES (nicht börsennotiert):** ${premarketCompanyList}
-
-   Maximal 3 Company-Tags. Nur Unternehmen aus diesen Listen — exakt so wie dort geschrieben.
-
-5. **EXCERPT FORMAT:** Der EXCERPT im Metadaten-Block MUSS exakt 3 Bullet Points haben:
-   - Jeder Bullet beginnt mit • und headlinet pointiert je einen der ersten 3 Artikel
-   - Max 65 Zeichen pro Bullet
-   - Beispiel:
-     EXCERPT:
-     • OpenAI lanciert GPT-5.2 mit neuem Reasoning-Modus
-     • Nvidia-Aktie bricht nach Quartalszahlen ein
-     • EU beschließt härtere KI-Regulierung ab 2027
-
-**WICHTIG:** Diese Regeln haben Priorität. Halte dich strikt daran. ALLE ${selectedItems.length} News MÜSSEN im Artikel erscheinen.
-`
-
     // Track item IDs for marking as used
     const usedItemIds = selectedItems.map(i => i.id)
     const encoder = new TextEncoder()
 
     // ── TWO-PASS PIPELINE (default) ──────────────────────────────────────────
     if (pipeline) {
-      // Convert to PipelineItem format (URL already sanitized in digestContent,
-      // but the pipeline needs clean URLs for its own source links)
       const pipelineItems: PipelineItem[] = selectedItems.map(item => ({
         id: item.id,
         title: item.title,
@@ -425,7 +262,7 @@ export async function POST(request: NextRequest) {
 
             let fullText = ''
 
-            for await (const event of runGhostwriterPipeline(pipelineItems, fullPrompt, model, { vocabularyContext })) {
+            for await (const event of runGhostwriterPipeline(pipelineItems, model, { vocabularyContext })) {
               if (event.type === 'planning') {
                 send({ phase: 'pipeline', message: event.message })
               } else if (event.type === 'planned') {
@@ -468,7 +305,92 @@ export async function POST(request: NextRequest) {
     }
 
     // ── SINGLE-PASS FALLBACK (pipeline=false) ────────────────────────────────
-    const fullContent = digestContent + sourceReference + enforcementRules
+    // Build content only needed for single-pass mode (pipeline handles this internally)
+    let digestContent = '## Ausgewählte News für diesen Artikel\n\n'
+    for (const item of selectedItems) {
+      digestContent += `### ${item.title}\n`
+      const rawSourceName = item.source_display_name || item.source_identifier
+      const hasValidSource = rawSourceName && rawSourceName !== 'unknown'
+      const cleanUrl = sanitizeUrl(item.source_url)
+      const sourceName = hasValidSource ? rawSourceName : (cleanUrl ? domainFromUrl(cleanUrl) : null)
+      const effectiveUrl = cleanUrl || deriveSourceUrl(null, item.source_identifier)
+      if (sourceName || effectiveUrl) {
+        digestContent += `(Quelleninfo: ${sourceName || 'unbekannte Quelle'}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''})\n`
+      }
+      if (item.content) digestContent += `${sanitizeContentUrls(item.content)}\n`
+      digestContent += '\n---\n\n'
+    }
+
+    // Load prompt + stylistic rules (only needed for single-pass)
+    let promptText: string
+    if (promptId) {
+      const { data: prompt } = await supabase.from('ghostwriter_prompts').select('prompt_text').eq('id', promptId).single()
+      promptText = prompt?.prompt_text || getDefaultGhostwriterPrompt()
+    } else {
+      const { data: activePrompt } = await supabase.from('ghostwriter_prompts').select('prompt_text').eq('is_active', true).single()
+      promptText = activePrompt?.prompt_text || getDefaultGhostwriterPrompt()
+    }
+
+    const { data: stylisticRules } = await supabase
+      .from('stylistic_rules')
+      .select('rule_type, name, description, examples, priority')
+      .eq('is_active', true)
+      .order('priority', { ascending: false })
+
+    let stylisticContext = ''
+    if (stylisticRules && stylisticRules.length > 0) {
+      stylisticContext = '\n\n---\n\nSTILISTISCHE RICHTLINIEN (Matthias Schrader Stil):\n'
+      const rulesByType = stylisticRules.reduce((acc, r) => {
+        if (!acc[r.rule_type]) acc[r.rule_type] = []
+        acc[r.rule_type].push(r)
+        return acc
+      }, {} as Record<string, typeof stylisticRules>)
+      if (rulesByType['sprachregister']) stylisticContext += `\n**SPRACHREGISTER:** ${rulesByType['sprachregister'][0].description}\n`
+      if (rulesByType['personalpronomina']) stylisticContext += `\n**PERSPEKTIVE:** ${rulesByType['personalpronomina'][0].description}\n`
+      if (rulesByType['interpunktion']) stylisticContext += `\n**INTERPUNKTION:** ${rulesByType['interpunktion'][0].description}\n`
+      if (rulesByType['textlaenge']) stylisticContext += `\n**SATZSTRUKTUR:** ${rulesByType['textlaenge'][0].description}\n`
+      if (rulesByType['metapherntyp']?.length) {
+        stylisticContext += `\n**BEVORZUGTE METAPHERN-BEREICHE:**\n` + rulesByType['metapherntyp'].map(r => `- ${r.description}`).join('\n')
+      }
+      if (rulesByType['autorenzitat']?.length) {
+        stylisticContext += `\n\n**HÄUFIG ZITIERTE AUTOREN:** ${rulesByType['autorenzitat'].map(r => r.name).join(', ')}\n`
+      }
+      if (rulesByType['stilregel']) {
+        stylisticContext += `\n**WEITERE STILREGELN:**\n` + rulesByType['stilregel'].map(r => `- ${r.description}`).join('\n')
+      }
+    }
+
+    const fullPrompt = promptText + vocabularyContext + stylisticContext
+    const publicCompanyList = Object.keys(KNOWN_COMPANIES).join(', ')
+    const premarketCompanyList = Object.keys(KNOWN_PREMARKET_COMPANIES).join(', ')
+
+    const enforcementRules = `
+
+---
+
+## QUALITÄTS-CHECKLISTE (MUSS EINGEHALTEN WERDEN):
+
+1. **ANZAHL NEWS:** Verarbeite ALLE ${selectedItems.length} News — keine weglassen!
+   - Jede News bekommt eine eigene Zwischenüberschrift (##)
+   - Jeder News-Artikel MUSS exakt 5-7 Sätze haben
+
+2. **SYNTHSZR TAKE:** Jeder "Synthszr Take:" MUSS MINDESTENS 6 Sätze haben (Ziel: 6-7 Sätze).
+   - Schreibe als erfahrener Tech-Stratege — keine Dramatik, kein Überzeugungsversuch
+   - Der LETZTE Satz MUSS knackig und zitierfähig sein: klar positiv ODER negativ.
+   - VERBOTEN: Kontrastpaare, Abwarte-Formeln, Potenzial-Phrasen, Reframing, rhetorische Fragen, "Doch"-Satzanfang, Gedankenstriche (—)
+   - FATAL: "Nicht X. Y.", "Vergiss X.", "Weniger X, mehr Y." → DIREKT POSITIV.
+
+3. **COMPANY TAGGING:** {Company1} {Company2} → [Quellenname](URL)
+   **VERFÜGBARE PUBLIC COMPANIES:** ${publicCompanyList}
+   **VERFÜGBARE PREMARKET COMPANIES:** ${premarketCompanyList}
+   Max 3 Company-Tags. Quelle NUR in dieser Zeile.
+
+4. **EXCERPT:** Exakt 3 Bullet Points (•), max 65 Zeichen pro Bullet.
+
+**WICHTIG:** ALLE ${selectedItems.length} News MÜSSEN im Artikel erscheinen.
+`
+
+    const fullContent = digestContent + enforcementRules
     console.log(`[Ghostwriter-Queue] Single-pass, content: ${fullContent.length} chars`)
 
     const stream = new ReadableStream({
