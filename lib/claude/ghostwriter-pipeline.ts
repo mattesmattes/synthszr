@@ -141,7 +141,26 @@ VERBOTENE FORMULIERUNGEN:
 - Engagement-Köder: "Lass das mal sacken", "Lies das nochmal", "Das verändert alles", "Punkt."
 - Generische Insider-Behauptungen: "Hier kommt der Teil, über den niemand spricht", "Was dir keiner sagt", alles mit "niemand" oder "die meisten merken nicht"
 - DER GROSSE FEHLER (FATAL): "Das ist nicht X. Das ist Y.", "Nicht X. Y.", "Vergiss X. Das ist Y.", "Weniger X, mehr Y." — jede Konstruktion, die erst ein Framing negiert und dann ein korrigiertes behauptet. Formuliere DIREKT POSITIV.
-- "verschiebt" — vermeide dieses Wort komplett. Nutze stattdessen präzisere Alternativen: "verlagert", "ändert", "bewegt", "rückt", "wandelt".`
+- "verschiebt" — vermeide dieses Wort komplett. Nutze stattdessen präzisere Alternativen: "verlagert", "ändert", "bewegt", "rückt", "wandelt".
+
+OUTPUT-FORMAT — halte dich EXAKT an diese Reihenfolge:
+1. Überschrift: "## [Überschrift]" — falls Englisch, übersetze in eine pointierte deutsche These.
+2. NEWS-ZUSAMMENFASSUNG: 5-7 Sätze Fließtext (keine Bullet Points).
+3. COMPANY TAGGING + QUELLE: Direkt nach Zusammenfassung (VOR Synthszr Take) genau eine Zeile:
+   FORMAT: {Company1} {Company2} → [Quellenname](URL)
+   BEISPIEL: {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
+   Max 3 Company-Tags aus der User-Prompt-Liste. Falls KEINE Quelle: nur Tags, kein Pfeil/Quellenname.
+   WICHTIG: Quelle NUR in dieser Zeile — KEIN separates "**Quelle:**" Label.
+4. SYNTHSZR TAKE: "Synthszr Take:" + 5-7 Sätze Analysten-Stil.
+
+TAKE-CHECKLISTE:
+- INHALT-PFLICHT: Take MUSS sich auf NEWS-INHALT-Fakten beziehen. NIEMALS anderes Thema.
+- MINDESTENS 6 Sätze (Ziel: 6-7). Max EIN Satz mit Doppelpunkt.
+- Frei und assoziativ. LETZTER Satz: knackig, zitierfähig, klar positiv ODER negativ.
+- VERBOTEN: Kontrastpaare, Abwarte-Formeln, Potenzial-Phrasen, Reframing, rhetorische Fragen, "Doch"-Satzanfang, Gedankenstriche (—)
+- FATAL: "Nicht X. Y.", "Vergiss X.", "Weniger X, mehr Y." → DIREKT POSITIV.
+- Humor durch Präzision. Einschübe in Klammern erlaubt.
+- LETZTER CHECK: Bezieht sich der Take auf die Überschrift? Wenn nicht, neu schreiben.`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass 1: Article Planning
@@ -242,12 +261,10 @@ Erstelle folgenden JSON-Plan:
 export async function writeSection(
   item: PipelineItem,
   heading: string,
-  thesis: string,
   model: AIModel,
   context: {
-    vocabularyContext?: string
-    editLearningContext?: string
     relevantCompanies: { public: string[]; premarket: string[] }
+    cacheableUserPrefix: string
   },
 ): Promise<string> {
   const publicCompanyList = context.relevantCompanies.public.join(', ') || '(keine erkannt)'
@@ -255,63 +272,31 @@ export async function writeSection(
 
   const rawSourceName = item.source_display_name || item.source_identifier
   const hasValidSource = rawSourceName && rawSourceName !== 'unknown'
-  // Derive a meaningful display name: prefer display_name > identifier > URL domain
   const sourceName = hasValidSource
     ? rawSourceName
     : (item.source_url ? domainFromUrl(item.source_url) : null)
-  // Derive a usable URL: prefer article URL, fall back to email domain homepage
   const articleUrl = item.source_url || deriveSourceUrl(null, item.source_identifier)
-  // For the source link, use the article URL directly (so readers can click through)
   const effectiveUrl = articleUrl
-  // Company tag line: companies + linked source (the ONE place source appears in output)
-  // When no meaningful source can be determined, omit the arrow+source entirely
   const tagSourcePart = effectiveUrl && sourceName
     ? `[${sourceName}](${effectiveUrl})`
     : sourceName || null
 
-  // Build trimmed context (vocabulary + edit learning only — style rules are in SECTION_SYSTEM_PROMPT)
-  const contextParts: string[] = []
-  if (context.vocabularyContext) contextParts.push(context.vocabularyContext)
-  if (context.editLearningContext) contextParts.push(context.editLearningContext)
-  const additionalContext = contextParts.length > 0 ? contextParts.join('\n\n') + '\n\n' : ''
+  // Dynamic per-item prompt only — format template + checkliste are in SECTION_SYSTEM_PROMPT,
+  // vocabulary + edit learning + thesis are in cacheableUserPrefix
+  const userPrompt = `ÜBERSCHRIFT: ## ${heading}
 
-  const userPrompt = `${additionalContext}ARTIKEL-KONTEXT: ${thesis}
-
-Schreibe GENAU DIESEN EINEN Abschnitt. Kein Intro, keine anderen News, kein Abschluss.
-
-NEWS-INHALT (Quelleninfo nur für dich${sourceName ? ` — Quelle: ${sourceName}` : ''}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''}):
+NEWS-INHALT${sourceName ? ` (Quelle: ${sourceName}` : ''}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''}${sourceName ? ')' : ''}:
 ${(item.content || 'Kein Inhalt verfügbar.').slice(0, 3000)}
 
----
+COMPANY-TAGS:${tagSourcePart ? `
+QUELLFORMAT: → ${tagSourcePart}` : `
+KEINE QUELLE — nur Company-Tags, kein Pfeil.`}
+PUBLIC: ${publicCompanyList}
+PREMARKET: ${premarketCompanyList}`
 
-AUFGABE — EXAKT IN DIESER REIHENFOLGE, beginne mit "## ${heading}" (falls die Überschrift Englisch ist, übersetze sie in eine pointierte deutsche These):
-
-1. **NEWS-ZUSAMMENFASSUNG:** 5-7 Sätze Fließtext (keine Bullet Points).
-
-2. **COMPANY TAGGING + QUELLE:** Direkt nach dem letzten Satz der Zusammenfassung (VOR dem Synthszr Take) genau eine Zeile:${tagSourcePart ? `
-   PFLICHT-FORMAT: {Company1} {Company2} → ${tagSourcePart}` : `
-   PFLICHT-FORMAT: {Company1} {Company2}
-   HINWEIS: Für diesen Artikel ist keine Quellenangabe verfügbar. NUR Company-Tags, KEIN Pfeil (→) und KEIN Quellenname.`}
-   BEISPIEL: {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
-   Maximal 3 Company-Tags. Nur aus diesen Listen:
-   PUBLIC: ${publicCompanyList}
-   PREMARKET: ${premarketCompanyList}
-   WICHTIG: Die Quelle erscheint NUR in dieser Zeile — KEIN separates "**Quelle:**" Label davor oder danach.
-
-3. **SYNTHSZR TAKE:** "Synthszr Take:" gefolgt von 5-7 Sätzen im Analysten-Stil (sieh System-Prompt).
-
-SYNTHSZR TAKE CHECKLISTE:
-- INHALT-PFLICHT: Dein Take MUSS sich auf die Fakten im NEWS-INHALT oben beziehen. Schreibe NIEMALS über ein anderes Thema.
-- MINDESTENS 6 Sätze (Ziel: 6-7). Maximal EIN Satz mit Doppelpunkt.
-- Schreibe frei und assoziativ. Der LETZTE Satz MUSS knackig und zitierfähig sein: eine klare Einschätzung (positiv ODER negativ), die für sich allein stehen kann.
-- VERBOTEN: Kontrastpaare, Abwarte-Formeln, Potenzial-Phrasen, Reframing, rhetorische Fragen, "Doch" als Satzanfang, Gedankenstriche (—)
-- FATAL: "Nicht X. Y.", "Vergiss X. Das ist Y.", "Weniger X, mehr Y." → DIREKT POSITIV formulieren.
-- Humor durch Präzision: unerwartet konkrete Details statt Pointen.
-- Einschübe in Klammern für ehrliche Kommentare erlaubt.
-- Klingt das wie ein Mensch, der das gedacht hat, oder wie ein Textgenerator?
-- LETZTER CHECK: Bezieht sich dein Take auf "${heading}"? Wenn nicht, schreib ihn neu.`
-
-  const text = await callModelNonStreaming(userPrompt, SECTION_SYSTEM_PROMPT, model)
+  const text = await callModelNonStreaming(userPrompt, SECTION_SYSTEM_PROMPT, model, {
+    cacheableUserPrefix: context.cacheableUserPrefix,
+  })
 
   // Ensure section starts with the correct heading
   let trimmed = text.trim()
@@ -329,7 +314,8 @@ SYNTHSZR TAKE CHECKLISTE:
 async function callModelNonStreaming(
   prompt: string,
   systemPrompt: string,
-  model: AIModel
+  model: AIModel,
+  options?: { cacheableUserPrefix?: string }
 ): Promise<string> {
   const resolved = resolveModel(model)
 
@@ -338,28 +324,45 @@ async function callModelNonStreaming(
       model: resolved.modelId,
       systemInstruction: systemPrompt,
     })
-    const result = await geminiModel.generateContent(prompt)
+    const fullPrompt = options?.cacheableUserPrefix
+      ? `${options.cacheableUserPrefix}\n\n${prompt}`
+      : prompt
+    const result = await geminiModel.generateContent(fullPrompt)
     return result.response.text()
   }
 
   if (resolved?.provider === 'anthropic') {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+    // Prompt caching: system prompt + static user prefix are cached across 30 section calls
+    // Cached tokens cost $1.88/M vs $15/M normal — saves ~$1.20 per run with Opus
+    const userContent: Array<{ type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }> =
+      options?.cacheableUserPrefix
+        ? [
+            { type: 'text', text: options.cacheableUserPrefix, cache_control: { type: 'ephemeral' } },
+            { type: 'text', text: prompt },
+          ]
+        : [{ type: 'text', text: prompt }]
+
     const response = await anthropic.messages.create({
       model: resolved.modelId,
       max_tokens: 2048,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: prompt }],
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: userContent }],
     })
     return (response.content[0] as { type: 'text'; text: string }).text
   }
 
   if (resolved?.provider === 'openai') {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const fullPrompt = options?.cacheableUserPrefix
+      ? `${options.cacheableUserPrefix}\n\n${prompt}`
+      : prompt
     const response = await openai.chat.completions.create({
       model: resolved.modelId,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
+        { role: 'user', content: fullPrompt },
       ],
     })
     return response.choices[0]?.message?.content || ''
@@ -370,7 +373,10 @@ async function callModelNonStreaming(
     model: 'gemini-2.0-flash',
     systemInstruction: systemPrompt,
   })
-  const result = await fallback.generateContent(prompt)
+  const fullPrompt = options?.cacheableUserPrefix
+    ? `${options.cacheableUserPrefix}\n\n${prompt}`
+    : prompt
+  const result = await fallback.generateContent(fullPrompt)
   return result.response.text()
 }
 
@@ -436,6 +442,14 @@ export async function* runGhostwriterPipeline(
     companiesPerItem.set(item.id, extractRelevantCompanies(`${item.title} ${item.content || ''}`))
   }
 
+  // ── Build cacheable user prefix (shared across all section calls) ──
+  // For Anthropic: cached after first call, 29 subsequent calls pay $1.88/M instead of $15/M
+  const prefixParts: string[] = []
+  if (vocabularyContext) prefixParts.push(vocabularyContext)
+  if (editLearningContext) prefixParts.push(editLearningContext)
+  prefixParts.push(`ARTIKEL-KONTEXT: ${plan.thesis}\n\nSchreibe GENAU DIESEN EINEN Abschnitt. Kein Intro, keine anderen News, kein Abschluss.`)
+  const cacheableUserPrefix = prefixParts.join('\n\n')
+
   // Emit metadata block immediately so client can show title/excerpt
   const excerptLines = plan.excerptBullets
     .map(b => (b.startsWith('•') ? b : `• ${b}`))
@@ -470,10 +484,9 @@ export async function* runGhostwriterPipeline(
 
       try {
         const itemCompanies = companiesPerItem.get(item.id) || { public: [], premarket: [] }
-        results[i] = await writeSection(item, heading, plan.thesis, model, {
-          vocabularyContext,
-          editLearningContext,
+        results[i] = await writeSection(item, heading, model, {
           relevantCompanies: itemCompanies,
+          cacheableUserPrefix,
         })
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
