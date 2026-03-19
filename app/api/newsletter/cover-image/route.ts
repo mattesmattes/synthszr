@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
     if (addLogo) {
       const logoSvgRaw = readFileSync(join(process.cwd(), 'public', 'synthszr-logo.svg'), 'utf-8')
       // Original viewBox: 0 0 464.93 103.82 → aspect ratio ~4.475
-      const logoWidth = Math.round(size * 0.78)
+      const logoWidth = Math.round(size * 0.80)
       const logoHeight = Math.round(logoWidth / 4.475)
       // Replace viewBox-only SVG with explicit width/height for sharp
       const logoSvg = logoSvgRaw
