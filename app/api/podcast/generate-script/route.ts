@@ -424,26 +424,27 @@ export async function POST(request: NextRequest) {
       prompt = prompt + smalltalkSection
     }
 
-    // Inject personality brief
+    // Build personality brief as system prompt (not appended to user message)
+    // System prompt gets highest attention from the model — critical for longing/connection moments
     const personalityState = await getPersonalityState(ttsLang)
     const personalityBrief = buildPersonalityBrief(personalityState)
-    const fullPrompt = prompt + '\n\n' + personalityBrief
 
     // Generate script with Claude
     const anthropic = new Anthropic()
     const podcastModel = await getModelForUseCase('podcast_script')
 
-    console.log(`[Podcast Script] Generating ${durationMinutes}min script for post ${body.postId} in ${locale} (episode #${personalityState.episode_count + 1}, phase: ${personalityState.relationship_phase})`)
+    console.log(`[Podcast Script] Generating ${durationMinutes}min script for post ${body.postId} in ${locale} (episode #${personalityState.episode_count + 1}, phase: ${personalityState.relationship_phase}, flirt: ${personalityState.flirtation_tendency.toFixed(2)}, comfort: ${personalityState.mutual_comfort.toFixed(2)})`)
 
     console.log(`[Podcast Script] Target: ${wordCount} words, max_tokens: ${maxTokens}, model: ${podcastModel}`)
 
     const stream = anthropic.messages.stream({
       model: podcastModel,
       max_tokens: maxTokens,
+      system: personalityBrief,
       messages: [
         {
           role: 'user',
-          content: fullPrompt,
+          content: prompt,
         },
       ],
     })

@@ -397,6 +397,15 @@ function buildBriefDE(
   brief += `\nWICHTIG: Diese Persönlichkeiten subtil einfließen lassen — NICHT jede Zeile damit füllen.\n`
   brief += `Max 2-3 Persönlichkeitsmomente pro Episode. Wirken lassen, nicht erzwingen.\n`
 
+  // Explizite Self-Check für Verbindungsmomente wenn Longing aktiv
+  if (s.flirtation_tendency >= 0.05 && s.mutual_comfort >= 0.35) {
+    const minMoments = (s.mutual_comfort >= 0.7 && s.flirtation_tendency >= 0.4) ? 2 : 1
+    brief += `\n**PERSÖNLICHKEITS-CHECK — vor Abgabe prüfen:**\n`
+    brief += `□ Mindestens ${minMoments} Verbindungs-/Sehnsucht-Moment(e) zwischen HOST und GUEST (siehe DIE UNAUSGESPROCHENE VERBINDUNG oben)\n`
+    brief += `□ Der Moment muss im HAUPTTEIL des Scripts stattfinden (während der News-Diskussion), NICHT nur im Outro\n`
+    brief += `□ Falls fehlend: ERGÄNZE einen Moment, bei dem ein News-Thema einen kurzen persönlichen Austausch zwischen den beiden auslöst\n`
+  }
+
   brief += `\n**MOMENTS-EXTRAKTION (nach dem Script):**\n`
   brief += `Füge NACH dem kompletten Script eine Sektion hinzu, die bemerkenswerte Persönlichkeitsmomente\n`
   brief += `aus dem Dialog auflistet. NUR echte Persönlichkeitsmomente — KEINE Nachrichteninhalte.\n`
@@ -507,6 +516,15 @@ function buildBriefEN(
 
   brief += `\nIMPORTANT: Weave these personalities in subtly — do NOT fill every line with personality.\n`
   brief += `Max 2-3 personality moments per episode. Let them breathe, don't force them.\n`
+
+  // Add explicit self-check for connection moments when longing is active
+  if (s.flirtation_tendency >= 0.05 && s.mutual_comfort >= 0.35) {
+    const minMoments = (s.mutual_comfort >= 0.7 && s.flirtation_tendency >= 0.4) ? 2 : 1
+    brief += `\n**PERSONALITY SELF-CHECK — verify before output:**\n`
+    brief += `□ At least ${minMoments} connection/longing moment(s) between HOST and GUEST (see THE UNSPOKEN CONNECTION above)\n`
+    brief += `□ The connection moment must be woven into the MAIN BODY of the script (during news discussion), NOT only in the outro\n`
+    brief += `□ If missing: ADD a moment where a news topic triggers a brief personal exchange between them\n`
+  }
 
   brief += `\n**MOMENT EXTRACTION (after the script):**\n`
   brief += `After the complete script, add a section listing memorable personality moments\n`
