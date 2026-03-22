@@ -10,6 +10,80 @@ import { isJunkTitle } from '@/lib/news-queue/service'
 import { scoreContentOnly } from './score'
 import type { DevelopedSynthesis } from './develop'
 
+// ── Topic Deduplication ──────────────────────────────────────────
+
+function titleBigrams(title: string): Set<string> {
+  const words = title.toLowerCase().replace(/[^a-zäöüß0-9\s]/g, '').split(/\s+/).filter(w => w.length > 1)
+  const bigrams = new Set<string>()
+  for (let i = 0; i < words.length - 1; i++) {
+    bigrams.add(`${words[i]} ${words[i + 1]}`)
+  }
+  return bigrams
+}
+
+function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 0
+  let intersection = 0
+  for (const item of a) {
+    if (b.has(item)) intersection++
+  }
+  const union = a.size + b.size - intersection
+  return union === 0 ? 0 : intersection / union
+}
+
+/**
+ * Apply novelty penalty to items with similar titles.
+ * Items sorted by base score descending. For each duplicate match (Jaccard > 0.5),
+ * the lower-scored item loses 2 uniqueness points (floor at 0).
+ * Mutates the scores in-place via the scoreMap.
+ */
+function applyNoveltyPenalty(
+  items: Array<{ id: string; title: string }>,
+  scoreMap: Map<string, { synthesisScore: number; relevanceScore: number; uniquenessScore: number; reasoning: string }>
+): number {
+  // Build bigram index
+  const indexed = items
+    .map(item => {
+      const scores = scoreMap.get(item.id)
+      const baseScore = scores
+        ? scores.synthesisScore * 0.4 + scores.relevanceScore * 0.3 + scores.uniquenessScore * 0.3
+        : 0
+      return { id: item.id, title: item.title, bigrams: titleBigrams(item.title), baseScore }
+    })
+    .sort((a, b) => b.baseScore - a.baseScore)
+
+  let penaltiesApplied = 0
+
+  // Track which items have already been penalized and how many times
+  const penaltyCount = new Map<string, number>()
+
+  for (let i = 0; i < indexed.length; i++) {
+    for (let j = i + 1; j < indexed.length; j++) {
+      const sim = jaccardSimilarity(indexed[i].bigrams, indexed[j].bigrams)
+      if (sim > 0.5) {
+        // Penalize the lower-scored duplicate
+        const targetId = indexed[j].id
+        const count = (penaltyCount.get(targetId) || 0) + 1
+        penaltyCount.set(targetId, count)
+
+        const scores = scoreMap.get(targetId)
+        if (scores) {
+          const penalty = 2.0
+          scores.uniquenessScore = Math.max(0, scores.uniquenessScore - penalty)
+          penaltiesApplied++
+          console.log(
+            `[Pipeline] Novelty penalty: "${indexed[j].title.slice(0, 50)}" ` +
+            `(sim=${sim.toFixed(2)} with "${indexed[i].title.slice(0, 50)}") ` +
+            `→ uniqueness=${scores.uniquenessScore.toFixed(1)}`
+          )
+        }
+      }
+    }
+  }
+
+  return penaltiesApplied
+}
+
 export interface SynthesisPipelineResult {
   success: boolean
   digestId: string
@@ -152,6 +226,12 @@ async function scoreAndQueueItems(
     { concurrency: 10 }
   )
   console.log(`[Pipeline] Scored ${scoreMap.size} items`)
+
+  // Phase 1.5: Apply novelty penalty for topic deduplication
+  const penaltiesApplied = applyNoveltyPenalty(validItems, scoreMap)
+  if (penaltiesApplied > 0) {
+    console.log(`[Pipeline] Applied ${penaltiesApplied} novelty penalties`)
+  }
 
   if (onProgress) {
     onProgress('scoring', scoreMap.size, validItems.length)

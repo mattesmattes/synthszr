@@ -963,7 +963,7 @@ export default function NewsQueuePage() {
                                   backgroundColor: getSynthesisScoreColor(item.total_score, allTotalScores),
                                   color: '#000'
                                 }}
-                                title={`Total: ${item.total_score.toFixed(1)} (S:${item.synthesis_score.toFixed(1)} R:${item.relevance_score.toFixed(1)} U:${item.uniqueness_score.toFixed(1)}${(item as any).source_bonus ? ` +${(item as any).source_bonus}` : ''})`}
+                                title={`Total: ${item.total_score.toFixed(1)} = (S:${item.synthesis_score.toFixed(1)}×0.4 + R:${item.relevance_score.toFixed(1)}×0.3 + U:${item.uniqueness_score.toFixed(1)}×0.3)${(item as any).source_bonus ? ` × ${(1 + (item as any).source_bonus / 10).toFixed(2)} [Tier-Bonus]` : ''}`}
                               >
                                 {item.total_score.toFixed(1)}
                               </Badge>
@@ -1063,7 +1063,7 @@ export default function NewsQueuePage() {
                 <div className="text-muted-foreground mb-1">Total Score</div>
                 <div className="font-mono font-bold text-lg">{viewingItem.total_score.toFixed(1)}</div>
                 <div className="text-[10px] text-muted-foreground">
-                  = 0.4×Synthesis + 0.3×Relevance + 0.3×Uniqueness
+                  = (0.4×Synthesis + 0.3×Relevance + 0.3×Uniqueness) × Tier-Multiplier
                 </div>
               </div>
               {viewingItem.content ? (
