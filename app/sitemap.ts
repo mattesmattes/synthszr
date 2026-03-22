@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import { DEFAULT_LOCALE } from '@/lib/i18n/config'
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://synthszr.com'
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = await createClient()

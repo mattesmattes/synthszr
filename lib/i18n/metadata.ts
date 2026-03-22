@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import type { LanguageCode } from '@/lib/types'
 import { ALL_LOCALES, DEFAULT_LOCALE } from './config'
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://synthszr.com'
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
 
 interface LocalizedMetadataOptions {
   title: string

@@ -20,7 +20,7 @@ const spaceMono = Space_Mono({
 })
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://synthszr.com'),
+  metadataBase: new URL('https://www.synthszr.com'),
   title: "Synthszr — AI is about Synthesis not Efficiency.",
   description: "Exploring the intersection of business, design and technology in the age of AI",
   icons: {
