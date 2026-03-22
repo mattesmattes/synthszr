@@ -33,12 +33,26 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png",
   },
   openGraph: {
-    type: 'website',
+    title: 'Synthszr — AI is about Synthesis not Efficiency.',
+    description: 'Exploring the intersection of business, design and technology in the age of AI',
+    url: 'https://synthszr.com',
     siteName: 'Synthszr',
+    images: [
+      {
+        url: 'https://synthszr.com/og-image.jpg',
+        width: 1200,
+        height: 630,
+        alt: 'Synthszr — AI is about Synthesis not Efficiency.',
+      },
+    ],
     locale: 'de_DE',
+    type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
+    title: 'Synthszr — AI is about Synthesis not Efficiency.',
+    description: 'Exploring the intersection of business, design and technology in the age of AI',
+    images: ['https://synthszr.com/og-image.jpg'],
   },
 }
 
