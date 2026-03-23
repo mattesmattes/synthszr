@@ -267,42 +267,43 @@ export function extractEmotionTag(text: string): { emotion: string | null; clean
 
 /**
  * Legacy lookup table for known single-word emotion tags.
- * Optimized for gpt-4o-mini-tts: vivid, physical, action-oriented instructions
- * that the model can translate into audible vocal changes.
+ * Format follows OpenAI's recommended pattern for gpt-4o-mini-tts instructions:
+ * Voice Affect + Tone + Pacing + Emotion descriptors.
  */
 const LEGACY_EMOTION_INSTRUCTIONS: Record<string, string> = {
-  cheerfully: 'Smile while speaking. Raise your pitch slightly, speed up a little, sound genuinely happy and warm.',
-  thoughtfully: 'Slow down noticeably. Lower your pitch. Pause mid-sentence as if the thought is forming in real time. Sound contemplative.',
-  seriously: 'Drop your pitch. Slow your pace. Speak with weight and gravity, as if every word matters. No smile.',
-  excitedly: 'Speed up! Raise your pitch. Let your voice crack slightly with enthusiasm. Sound like you can barely contain yourself.',
-  skeptically: 'Narrow your tone. Raise one eyebrow audibly — slight uptick at the end of phrases. Sound unconvinced, questioning.',
-  laughing: 'Let a genuine laugh break through. Speak through a smile, let your voice wobble with amusement between words.',
-  sighing: 'Start with an audible exhale. Sound tired or reflective. Let your voice drop and slow after the sigh.',
-  whispering: 'Drop your volume significantly. Speak softly and intimately, as if sharing a secret. Breathy, close-mic feel.',
-  interrupting: 'Start abruptly mid-breath. Speak fast, overlap urgently. Sound like you physically cannot wait to say this.',
-  curiously: 'Lean into the question. Raise your pitch at key words. Sound genuinely fascinated, like you need to know more.',
-  dramatically: 'Go big. Pause before key reveals. Vary your pitch wildly. Emphasize words with theatrical flair.',
-  calmly: 'Speak evenly and slowly. Keep your pitch steady and low. Sound grounded, reassuring, unshakeable.',
-  enthusiastically: 'Pour energy into every word. Speed up, pitch up, sound genuinely thrilled. Your excitement should be infectious.',
+  cheerfully: 'Voice Affect: Cheerful and warm. Tone: Upbeat and positive, genuinely happy. Pacing: Slightly faster, energetic.',
+  thoughtfully: 'Voice Affect: Contemplative and measured. Tone: Reflective, as if weighing each word. Pacing: Slower, with natural pauses between thoughts.',
+  seriously: 'Voice Affect: Grave and authoritative. Tone: Earnest, conveying importance and weight. Pacing: Deliberate and measured, no rushing.',
+  excitedly: 'Voice Affect: Enthusiastic, barely contained energy. Tone: Thrilled, infectious excitement. Pacing: Fast, breathless, words tumbling out.',
+  skeptically: 'Voice Affect: Doubtful, questioning. Tone: Unconvinced, probing. Pacing: Measured, with slight rises at the end of phrases.',
+  laughing: 'Voice Affect: Amused, speaking through laughter. Tone: Warm, genuine amusement. Emotion: Let a real laugh break through between words.',
+  sighing: 'Voice Affect: Reflective, slightly weary. Tone: Resigned or exasperated. Pacing: Start with an audible exhale, then slower delivery.',
+  whispering: 'Voice Affect: Soft, intimate, conspiratorial. Tone: Secretive, drawing the listener in. Pacing: Slower, breathy, low volume.',
+  interrupting: 'Voice Affect: Urgent, assertive. Tone: Cannot wait to speak, jumping in. Pacing: Abrupt start, fast, overlapping energy.',
+  curiously: 'Voice Affect: Inquisitive, fascinated. Tone: Genuinely interested, wanting to know more. Pacing: Engaged, slight rises at key words.',
+  dramatically: 'Voice Affect: Theatrical, expressive. Tone: Grand, with flair. Pacing: Varied — pauses before reveals, emphasis on key words.',
+  calmly: 'Voice Affect: Steady, grounded, reassuring. Tone: Composed, unshakeable. Pacing: Even and unhurried.',
+  enthusiastically: 'Voice Affect: Passionate, high energy. Tone: Genuinely thrilled, infectious. Pacing: Fast, animated, pouring energy into every word.',
 }
 
 /**
  * Map emotion description to a natural language instruction for gpt-4o-mini-tts.
- * The instructions parameter directly controls voice delivery — be specific and physical.
+ * Uses OpenAI's recommended structured format: Voice Affect, Tone, Pacing, Emotion.
+ * See: https://cookbook.openai.com/examples/gpt_with_vision_for_video_understanding
  */
 export function emotionToInstruction(emotion: string | null): string {
-  const BASE = 'You are a natural, engaging podcast conversationalist. Speak like a real person — not a narrator, not an announcer.'
+  const BASE = 'Voice Affect: Natural, conversational podcast speaker — not a narrator or announcer.'
 
   if (!emotion) return BASE
 
   // Check legacy lookup table first
   const legacyInstruction = LEGACY_EMOTION_INSTRUCTIONS[emotion.toLowerCase()]
   if (legacyInstruction) {
-    return `${BASE} ${legacyInstruction}`
+    return legacyInstruction
   }
 
-  // Free-form description — frame as explicit, physical delivery direction
-  return `${BASE} Deliver this line: ${emotion}. Commit fully to this emotion — adjust your pitch, pace, volume, and breath to make it unmistakably audible.`
+  // Free-form description — wrap in OpenAI's structured format
+  return `${BASE} Tone: ${emotion}. Commit fully to this delivery.`
 }
 
 /**

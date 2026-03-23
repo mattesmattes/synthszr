@@ -42,7 +42,7 @@ const DEFAULT_SCRIPT_PROMPT_DE = `Du bist ein erfahrener Podcast-Skriptautor. Er
 
 **WICHTIG - Podcast-Name und Begrüßung:**
 - Der Podcast heißt IMMER "Synthesizer Daily" - NIEMALS andere Namen wie "TechFinance Daily" oder ähnliche Fantasienamen verwenden!
-- Die allererste Zeile des Skripts MUSS exakt so beginnen: HOST: [smiling, warm, slightly faster pace, genuinely happy] Hey, Hey und Willkommen bei Synthesizer Daily am {weekday}, den {date}!
+- Die allererste Zeile des Skripts MUSS exakt so beginnen: HOST: [cheerful and warm, genuinely happy, slightly faster pacing] Hey, Hey und Willkommen bei Synthesizer Daily am {weekday}, den {date}!
 - Danach soll der HOST das Thema der heutigen Folge kurz anreißen
 
 **Rollen:**
@@ -58,29 +58,30 @@ GUEST (overlapping): [emotion] Kurzer Einwurf...
 Zeilen mit \`(overlapping)\` werden zeitlich ÜBER die vorherige Zeile gelegt — beide Stimmen sind gleichzeitig hörbar.
 
 **Sprechanweisungen (MÜSSEN auf Englisch sein, auch im deutschen Skript!):**
-Die Anweisungen in eckigen Klammern werden direkt als Voice-Instruction an die TTS-Engine geschickt.
-Schreibe sie so, dass eine Stimme sie HÖRBAR umsetzen kann: Tempo, Lautstärke, Tonhöhe, Atem, Stimm-Qualität.
-NICHT: abstrakte Gefühle, visuelle Metaphern oder literarische Beschreibungen.
+Die Anweisungen in eckigen Klammern werden als \`instructions\`-Parameter an OpenAIs gpt-4o-mini-tts geschickt.
+Schreibe sie im OpenAI-Format mit diesen Kategorien: **Voice Affect** (Stimmcharakter), **Tone** (Tonfall), **Pacing** (Tempo).
+NICHT: visuelle Gesten, abstrakte Adjektive oder literarische Beschreibungen.
 
-✅ GUTE Beispiele (physisch, hörbar, umsetzbar):
-- [smiling, warm, slightly faster pace]
-- [slow down, lower pitch, speak with weight]
-- [burst out laughing, then speak through the laughter]
-- [loud whisper, breathy, conspiratorial]
-- [gasp first, then excited and fast]
-- [deadpan, flat delivery, dry humor]
-- [voice cracking with genuine emotion]
-- [speed up, pitch rising, barely able to contain excitement]
-- [start abruptly, speaking fast, urgent]
-- [exhale audibly, then speak softly and reflectively]
-- [steady, calm, measured pace, reassuring]
-- [pitch up at the end, genuine curiosity]
+✅ GUTE Beispiele (OpenAI-kompatibel):
+- [cheerful and warm, slightly faster pacing, genuinely happy]
+- [contemplative, measured pacing, weighing each word carefully]
+- [urgent, fast pacing, jumping into the conversation]
+- [amused, speaking through laughter, warm]
+- [soft and intimate, conspiratorial whisper, drawing listener in]
+- [grave and authoritative, deliberate pacing, conveying weight]
+- [enthusiastic, fast and breathless, barely contained excitement]
+- [doubtful, probing tone, unconvinced]
+- [steady, calm, reassuring, unhurried pacing]
+- [theatrical, varied pacing, pausing before reveals]
+- [reflective, starting with a sigh, slower delivery]
+- [inquisitive, fascinated, wanting to know more]
 
-❌ SCHLECHTE Beispiele (nicht hörbar, zu abstrakt):
-- [gently shifting] ← was soll die Stimme tun?
-- [carefully] ← kein hörbarer Unterschied
-- [with a hint of something deeper] ← literarisch, nicht umsetzbar
+❌ SCHLECHTE Beispiele:
+- [gently shifting] ← abstrakt, keine klare Stimmrichtung
+- [carefully] ← zu vage, kein hörbarer Effekt
+- [with a hint of something deeper] ← literarisch
 - [tilting head] ← visuelle Geste, kein Stimmeffekt
+- [slow down, lower pitch] ← zu technisch/mechanisch, kein Charakter
 
 WICHTIG: Die Anweisungen in den Klammern MÜSSEN auf Englisch sein — der Dialogtext bleibt auf Deutsch.
 
@@ -174,7 +175,7 @@ The source content below may be in German or another language. You MUST translat
 
 **IMPORTANT - Podcast Name and Greeting:**
 - The podcast is ALWAYS called "Synthesizer Daily" - NEVER use other names like "TechFinance Daily" or similar fantasy names!
-- The very first line of the script MUST begin exactly like this: HOST: [smiling, warm, slightly faster pace, genuinely happy] Hey, Hey and welcome to Synthesizer Daily on {weekday}, {date}!
+- The very first line of the script MUST begin exactly like this: HOST: [cheerful and warm, genuinely happy, slightly faster pacing] Hey, Hey and welcome to Synthesizer Daily on {weekday}, {date}!
 - After that, the HOST should briefly tease the topic of today's episode
 
 **Roles:**
@@ -190,29 +191,30 @@ GUEST (overlapping): [emotion] Short interjection...
 Lines with \`(overlapping)\` are layered ON TOP of the previous line — both voices audible simultaneously.
 
 **Speaking Instructions (Voice Direction Tags):**
-The instructions in square brackets are sent directly as voice instructions to the TTS engine.
-Write them so a VOICE can audibly execute them: tempo, volume, pitch, breath, vocal quality.
-NOT: abstract feelings, visual metaphors, or literary descriptions.
+The instructions in square brackets are sent as the \`instructions\` parameter to OpenAI's gpt-4o-mini-tts.
+Write them using OpenAI's format with these categories: **Voice Affect** (character), **Tone** (attitude), **Pacing** (speed).
+NOT: visual gestures, abstract adjectives, or literary descriptions.
 
-✅ GOOD examples (physical, audible, actionable):
-- [smiling, warm, slightly faster pace]
-- [slow down, lower pitch, speak with weight]
-- [burst out laughing, then speak through the laughter]
-- [loud whisper, breathy, conspiratorial]
-- [gasp first, then excited and fast]
-- [deadpan, flat delivery, dry humor]
-- [voice cracking with genuine emotion]
-- [speed up, pitch rising, barely able to contain excitement]
-- [start abruptly, speaking fast, urgent]
-- [exhale audibly, then speak softly and reflectively]
-- [steady, calm, measured pace, reassuring]
-- [pitch up at the end, genuine curiosity]
+✅ GOOD examples (OpenAI-compatible):
+- [cheerful and warm, slightly faster pacing, genuinely happy]
+- [contemplative, measured pacing, weighing each word carefully]
+- [urgent, fast pacing, jumping into the conversation]
+- [amused, speaking through laughter, warm]
+- [soft and intimate, conspiratorial whisper, drawing listener in]
+- [grave and authoritative, deliberate pacing, conveying weight]
+- [enthusiastic, fast and breathless, barely contained excitement]
+- [doubtful, probing tone, unconvinced]
+- [steady, calm, reassuring, unhurried pacing]
+- [theatrical, varied pacing, pausing before reveals]
+- [reflective, starting with a sigh, slower delivery]
+- [inquisitive, fascinated, wanting to know more]
 
-❌ BAD examples (not audible, too abstract):
-- [gently shifting] ← what should the voice do?
-- [carefully] ← no audible difference
-- [with a hint of something deeper] ← literary, not actionable
+❌ BAD examples:
+- [gently shifting] ← abstract, no clear voice direction
+- [carefully] ← too vague, no audible effect
+- [with a hint of something deeper] ← literary
 - [tilting head] ← visual gesture, not a voice effect
+- [slow down, lower pitch] ← too mechanical, no character
 
 **Directive Tags (NOT spoken, control timing/atmosphere):**
 - [beat] — brief thinking pause
@@ -465,8 +467,8 @@ export async function POST(request: NextRequest) {
     // Inject optional smalltalk section
     if (body.smalltalkTopic?.trim()) {
       const smalltalkSection = ttsLang === 'de'
-        ? `\n\n**SMALLTALK AM ANFANG (PFLICHT):**\nNach der Begrüßung ("HOST: [smiling, warm, slightly faster pace, genuinely happy] Hey, Hey und Willkommen...") und dem kurzen Themen-Teaser sprechen HOST und GUEST kurz (~1-2 Minuten) locker über folgendes Thema, BEVOR es ins Hauptthema geht:\n"${body.smalltalkTopic}"\nDieser Smalltalk soll natürlich und persönlich wirken. Danach leitet der HOST nahtlos zum Hauptthema über.`
-        : `\n\n**SMALLTALK AT THE START (MANDATORY):**\nAfter the greeting ("HOST: [smiling, warm, slightly faster pace, genuinely happy] Hey, Hey and welcome to Synthesizer Daily...") and the brief topic tease, HOST and GUEST briefly (~1-2 minutes) chat casually about the following topic BEFORE getting into the main content:\n"${body.smalltalkTopic}"\nThis smalltalk should feel natural and personal. Afterwards, HOST transitions smoothly into the main topic.`
+        ? `\n\n**SMALLTALK AM ANFANG (PFLICHT):**\nNach der Begrüßung ("HOST: [cheerful and warm, genuinely happy, slightly faster pacing] Hey, Hey und Willkommen...") und dem kurzen Themen-Teaser sprechen HOST und GUEST kurz (~1-2 Minuten) locker über folgendes Thema, BEVOR es ins Hauptthema geht:\n"${body.smalltalkTopic}"\nDieser Smalltalk soll natürlich und persönlich wirken. Danach leitet der HOST nahtlos zum Hauptthema über.`
+        : `\n\n**SMALLTALK AT THE START (MANDATORY):**\nAfter the greeting ("HOST: [cheerful and warm, genuinely happy, slightly faster pacing] Hey, Hey and welcome to Synthesizer Daily...") and the brief topic tease, HOST and GUEST briefly (~1-2 minutes) chat casually about the following topic BEFORE getting into the main content:\n"${body.smalltalkTopic}"\nThis smalltalk should feel natural and personal. Afterwards, HOST transitions smoothly into the main topic.`
       prompt = prompt + smalltalkSection
     }
 
