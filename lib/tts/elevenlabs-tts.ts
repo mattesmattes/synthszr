@@ -289,7 +289,7 @@ export type PodcastProvider = 'elevenlabs' | 'openai'
 /**
  * OpenAI TTS voice IDs
  */
-export type OpenAIVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer' | 'coral' | 'ash' | 'sage' | 'ballad' | 'verse'
+export type OpenAIVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer' | 'coral' | 'ash' | 'sage' | 'ballad' | 'verse' | 'marin' | 'cedar'
 
 /**
  * OpenAI TTS model

@@ -27,7 +27,7 @@ import { legacyIntroToEnvelopes, legacyOutroToEnvelopes } from '@/lib/audio/enve
 // Types
 // ---------------------------------------------------------------------------
 
-type TTSVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer' | 'coral' | 'ash' | 'sage' | 'ballad' | 'verse'
+type TTSVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer' | 'coral' | 'ash' | 'sage' | 'ballad' | 'verse' | 'marin' | 'cedar'
 type TTSModel = 'tts-1' | 'tts-1-hd' | 'gpt-4o-mini-tts'
 type TTSProvider = 'openai' | 'elevenlabs'
 type ElevenLabsModel = 'eleven_multilingual_v2' | 'eleven_turbo_v2_5' | 'eleven_turbo_v2'
@@ -187,6 +187,8 @@ const OPENAI_PODCAST_VOICES: Array<{ id: TTSVoice; name: string; description: st
   { id: 'sage', name: 'Sage', description: 'Calm, composed' },
   { id: 'ballad', name: 'Ballad', description: 'Melodic, storytelling' },
   { id: 'verse', name: 'Verse', description: 'Versatile, dynamic' },
+  { id: 'marin', name: 'Marin', description: 'Warm, recommended' },
+  { id: 'cedar', name: 'Cedar', description: 'Natural, recommended' },
 ]
 
 const EXAMPLE_PODCAST_SCRIPT = `HOST: [cheerfully] Good morning and welcome to Synthszr Daily! I'm your host, and today we have some exciting market news to discuss.
