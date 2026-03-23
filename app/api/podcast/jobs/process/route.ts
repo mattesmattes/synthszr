@@ -141,8 +141,11 @@ async function generateSegmentOpenAI(
   let cleanText: string
   let instructions: string | undefined
 
+  let emotionTag: string | null = null
+
   if (isGpt4oMiniTts) {
     const { emotion, cleanText: stripped } = extractEmotionTag(text)
+    emotionTag = emotion
     cleanText = prepareTTSText(stripped)
     instructions = emotionToInstruction(emotion)
   } else {
@@ -151,7 +154,7 @@ async function generateSegmentOpenAI(
 
   if (!cleanText.trim()) return Buffer.alloc(0)
 
-  console.log(`[TTS-OpenAI] Request: model=${model}, voice=${voice}, textLength=${cleanText.length}${instructions ? ', instructions=yes' : ''}`)
+  console.log(`[TTS-OpenAI] model=${model}, voice=${voice}, len=${cleanText.length}${emotionTag ? `, emotion="${emotionTag}"` : ', tags=stripped'}`)
 
   return withRetry(async () => {
     const body: Record<string, unknown> = {

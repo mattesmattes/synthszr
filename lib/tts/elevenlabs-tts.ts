@@ -266,32 +266,32 @@ export function extractEmotionTag(text: string): { emotion: string | null; clean
 }
 
 /**
- * Legacy lookup table for known single-word emotion tags
+ * Legacy lookup table for known single-word emotion tags.
+ * Optimized for gpt-4o-mini-tts: vivid, physical, action-oriented instructions
+ * that the model can translate into audible vocal changes.
  */
 const LEGACY_EMOTION_INSTRUCTIONS: Record<string, string> = {
-  cheerfully: 'Speak in a cheerful, upbeat and positive tone. Sound genuinely happy and energetic.',
-  thoughtfully: 'Speak in a thoughtful, contemplative tone. Pause slightly as if considering your words carefully.',
-  seriously: 'Speak in a serious, measured tone. Convey gravity and importance.',
-  excitedly: 'Speak with excitement and enthusiasm. Let your energy come through in your voice.',
-  skeptically: 'Speak with a skeptical, questioning tone. Sound doubtful but curious.',
-  laughing: 'Speak with a light laugh in your voice. Sound amused and warm.',
-  sighing: 'Speak with a slight sigh. Sound reflective or mildly exasperated.',
-  whispering: 'Speak in a softer, more intimate tone. Lower your volume slightly for dramatic effect.',
-  interrupting: 'Speak with urgency, as if jumping into the conversation. Start quickly and assertively.',
-  curiously: 'Speak with genuine curiosity and interest. Sound inquisitive and engaged.',
-  dramatically: 'Speak with dramatic flair. Emphasize key words and use expressive intonation.',
-  calmly: 'Speak in a calm, steady and reassuring tone. Be measured and composed.',
-  enthusiastically: 'Speak with great enthusiasm and passion. Sound genuinely thrilled about the topic.',
+  cheerfully: 'Smile while speaking. Raise your pitch slightly, speed up a little, sound genuinely happy and warm.',
+  thoughtfully: 'Slow down noticeably. Lower your pitch. Pause mid-sentence as if the thought is forming in real time. Sound contemplative.',
+  seriously: 'Drop your pitch. Slow your pace. Speak with weight and gravity, as if every word matters. No smile.',
+  excitedly: 'Speed up! Raise your pitch. Let your voice crack slightly with enthusiasm. Sound like you can barely contain yourself.',
+  skeptically: 'Narrow your tone. Raise one eyebrow audibly — slight uptick at the end of phrases. Sound unconvinced, questioning.',
+  laughing: 'Let a genuine laugh break through. Speak through a smile, let your voice wobble with amusement between words.',
+  sighing: 'Start with an audible exhale. Sound tired or reflective. Let your voice drop and slow after the sigh.',
+  whispering: 'Drop your volume significantly. Speak softly and intimately, as if sharing a secret. Breathy, close-mic feel.',
+  interrupting: 'Start abruptly mid-breath. Speak fast, overlap urgently. Sound like you physically cannot wait to say this.',
+  curiously: 'Lean into the question. Raise your pitch at key words. Sound genuinely fascinated, like you need to know more.',
+  dramatically: 'Go big. Pause before key reveals. Vary your pitch wildly. Emphasize words with theatrical flair.',
+  calmly: 'Speak evenly and slowly. Keep your pitch steady and low. Sound grounded, reassuring, unshakeable.',
+  enthusiastically: 'Pour energy into every word. Speed up, pitch up, sound genuinely thrilled. Your excitement should be infectious.',
 }
 
 /**
  * Map emotion description to a natural language instruction for gpt-4o-mini-tts.
- * Supports both legacy single-word tags and free-form descriptions:
- * - "cheerfully" → lookup table → "Speak in a cheerful, upbeat..."
- * - "warm and upbeat, like greeting a friend" → passed through directly
+ * The instructions parameter directly controls voice delivery — be specific and physical.
  */
 export function emotionToInstruction(emotion: string | null): string {
-  const BASE = 'You are a podcast host or guest having a natural, engaging conversation.'
+  const BASE = 'You are a natural, engaging podcast conversationalist. Speak like a real person — not a narrator, not an announcer.'
 
   if (!emotion) return BASE
 
@@ -301,8 +301,8 @@ export function emotionToInstruction(emotion: string | null): string {
     return `${BASE} ${legacyInstruction}`
   }
 
-  // Free-form description — pass through directly
-  return `${BASE} ${emotion}`
+  // Free-form description — frame as explicit, physical delivery direction
+  return `${BASE} Deliver this line: ${emotion}. Commit fully to this emotion — adjust your pitch, pace, volume, and breath to make it unmistakably audible.`
 }
 
 /**
