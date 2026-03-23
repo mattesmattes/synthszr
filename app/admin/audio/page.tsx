@@ -867,6 +867,12 @@ function AudioPage() {
         if (data.tts_model) {
           setOpenaiModel(data.tts_model as TTSModel)
         }
+        if (data.podcast_host_voice_en) {
+          setOpenaiHostVoice(data.podcast_host_voice_en as TTSVoice)
+        }
+        if (data.podcast_guest_voice_en) {
+          setOpenaiGuestVoice(data.podcast_guest_voice_en as TTSVoice)
+        }
       }
     } catch (error) {
       console.error('Error fetching TTS settings:', error)
@@ -890,6 +896,8 @@ function AudioPage() {
         body: JSON.stringify({
           ...ttsSettings,
           tts_model: openaiModel,
+          podcast_host_voice_en: openaiHostVoice,
+          podcast_guest_voice_en: openaiGuestVoice,
           podcast_duration_minutes: podcastDuration,
           podcast_script_prompt: customPrompt !== PODCAST_SCRIPT_PROMPT ? customPrompt : null,
         }),
