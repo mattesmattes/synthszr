@@ -17,7 +17,6 @@ import {
   stripEmotionTags,
   extractEmotionTag,
   emotionToInstruction,
-  convertToElevenLabsTags,
   type OpenAIVoice,
   type SegmentMetadata,
 } from '@/lib/tts/elevenlabs-tts'
@@ -90,41 +89,6 @@ function prepareTTSText(text: string): string {
     result = result.replaceAll(from, to)
   }
   return result
-}
-
-async function generateSegmentElevenLabs(
-  text: string,
-  voiceId: string,
-  model: string = 'eleven_v3'
-): Promise<Buffer> {
-  const apiKey = process.env.ELEVENLABS_API_KEY
-  if (!apiKey) throw new Error('ELEVENLABS_API_KEY not set')
-
-  // Convert free-form emotion tags to ElevenLabs-compatible tags
-  // e.g. "[warm and upbeat, like greeting a friend]" → "[cheerfully]"
-  const ttsText = prepareTTSText(convertToElevenLabsTags(text))
-
-  return withRetry(async () => {
-    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-      method: 'POST',
-      headers: {
-        'xi-api-key': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        text: ttsText,
-        model_id: model,
-        output_format: 'mp3_44100_128',
-      }),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
-    }
-
-    return Buffer.from(await response.arrayBuffer())
-  }, `ElevenLabs TTS (${voiceId})`)
 }
 
 async function generateSegmentOpenAI(
@@ -246,7 +210,6 @@ export async function POST(request: NextRequest) {
       throw new Error('Script has no valid dialogue lines')
     }
 
-    const provider = job.provider || 'elevenlabs'
     const segments: AudioSegment[] = []
     const segmentMetadata: SegmentMetadata[] = []
 
@@ -256,7 +219,7 @@ export async function POST(request: NextRequest) {
       .replace(/[^a-z0-9]+/g, '-')
       .slice(0, 50)
 
-    console.log(`[Podcast Jobs] Generating ${lines.length} segments with ${provider} (parallel batches of ${TTS_BATCH_SIZE})`)
+    console.log(`[Podcast Jobs] Generating ${lines.length} segments with OpenAI (parallel batches of ${TTS_BATCH_SIZE})`)
 
     // Generate TTS + upload each segment immediately (don't accumulate in memory)
     const segmentUrls: string[] = new Array(lines.length).fill('')
@@ -282,12 +245,7 @@ export async function POST(request: NextRequest) {
           return null
         }
 
-        let buffer: Buffer
-        if (provider === 'openai') {
-          buffer = await generateSegmentOpenAI(ttsText, voiceId as OpenAIVoice, job.model || 'tts-1')
-        } else {
-          buffer = await generateSegmentElevenLabs(ttsText, voiceId, job.model || 'eleven_v3')
-        }
+        const buffer = await generateSegmentOpenAI(ttsText, voiceId as OpenAIVoice, job.model || 'gpt-4o-mini-tts')
 
         // Upload segment immediately after generation
         const fileName = `podcasts/${safeTitle}-${timestamp}-seg${globalIndex.toString().padStart(3, '0')}.mp3`

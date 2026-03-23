@@ -32,8 +32,6 @@ import {
   estimatePodcastDuration,
   validateScriptEmotions,
   type PodcastLine,
-  type ElevenLabsModel,
-  type PodcastProvider,
   type OpenAIModel,
 } from '@/lib/tts/elevenlabs-tts'
 
@@ -42,9 +40,6 @@ interface GeneratePodcastRequest {
   hostVoiceId?: string
   guestVoiceId?: string
   title?: string
-  model?: ElevenLabsModel
-  // Provider selection
-  provider?: PodcastProvider
   openaiModel?: OpenAIModel
 }
 
@@ -87,18 +82,14 @@ export async function POST(request: NextRequest) {
     // Get voice settings from database or use overrides
     const settings = await getTTSSettings()
 
-    // Determine provider (default: elevenlabs, can be overridden)
-    const provider = body.provider || 'elevenlabs'
-
     const hostVoiceId = body.hostVoiceId || settings.podcast_host_voice_id
     const guestVoiceId = body.guestVoiceId || settings.podcast_guest_voice_id
-    const model = body.model || (settings.elevenlabs_model as ElevenLabsModel)
-    const openaiModel = body.openaiModel || 'tts-1'
+    const openaiModel = body.openaiModel || 'gpt-4o-mini-tts'
 
     // Estimate duration before generation
     const estimatedDuration = estimatePodcastDuration(lines)
     console.log(`[Podcast] Generating podcast with ${lines.length} lines, estimated ${estimatedDuration}s`)
-    console.log(`[Podcast] Provider: ${provider}, model: ${provider === 'openai' ? openaiModel : model}`)
+    console.log(`[Podcast] Model: ${openaiModel}`)
     console.log(`[Podcast] Voices - host: ${hostVoiceId}, guest: ${guestVoiceId}`)
 
     // Generate the podcast audio
@@ -106,8 +97,6 @@ export async function POST(request: NextRequest) {
       lines,
       hostVoiceId,
       guestVoiceId,
-      model,
-      provider,
       openaiModel,
     })
 
@@ -183,23 +172,17 @@ export async function GET() {
       hostVoiceId: 'string - Override host voice ID (optional)',
       guestVoiceId: 'string - Override guest voice ID (optional)',
       title: 'string - Podcast title for filename (optional)',
-      model: 'ElevenLabsModel - TTS model to use (optional)',
+      openaiModel: 'OpenAIModel - gpt-4o-mini-tts (default), tts-1, or tts-1-hd (optional)',
     },
     scriptFormat: {
-      rawText: 'HOST: [emotion] text\\nGUEST: [emotion] text',
+      rawText: 'HOST: [voice direction] text\\nGUEST: [voice direction] text',
       structured: '[{ speaker: "HOST" | "GUEST", text: "..." }]',
     },
-    supportedEmotions: [
-      'cheerfully', 'thoughtfully', 'seriously', 'excitedly',
-      'skeptically', 'laughing', 'sighing', 'whispering',
-      'interrupting', 'curiously', 'dramatically', 'calmly',
-      'enthusiastically',
-    ],
     example: {
-      script: `HOST: [cheerfully] Good morning! Welcome to today's market analysis.
-GUEST: [thoughtfully] Thanks! We have some interesting developments to discuss.
-HOST: [curiously] Let's start with the biggest story - what caught your attention?
-GUEST: [excitedly] Well, the Fed announcement really moved markets yesterday.`,
+      script: `HOST: [cheerful and warm, faster pacing] Good morning! Welcome to today's market analysis.
+GUEST: [thoughtful, measured pace] Thanks! We have some interesting developments to discuss.
+HOST: [curious, engaged] Let's start with the biggest story - what caught your attention?
+GUEST: [excited, energetic] Well, the Fed announcement really moved markets yesterday.`,
       title: 'market-analysis-2024-02-05',
     },
   })

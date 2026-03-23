@@ -9,25 +9,17 @@ import OpenAI from 'openai'
 import { put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
 import { createHash } from 'crypto'
-import { generateSpeechElevenLabs, type ElevenLabsModel } from './elevenlabs-tts'
-
 // OpenAI TTS voices
 export type TTSVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer'
 export type TTSModel = 'tts-1' | 'tts-1-hd' | 'gpt-4o-mini-tts'
-export type TTSProvider = 'openai' | 'elevenlabs'
 
 export interface TTSSettings {
-  tts_provider: TTSProvider
   tts_news_voice_de: TTSVoice
   tts_news_voice_en: TTSVoice
   tts_synthszr_voice_de: TTSVoice
   tts_synthszr_voice_en: TTSVoice
   tts_model: TTSModel
   tts_enabled: boolean
-  // ElevenLabs settings
-  elevenlabs_news_voice_en: string
-  elevenlabs_synthszr_voice_en: string
-  elevenlabs_model: string
   // Podcast settings - legacy (backwards compatible)
   podcast_host_voice_id: string
   podcast_guest_voice_id: string
@@ -258,16 +250,12 @@ export async function getTTSSettings(): Promise<TTSSettings> {
     .from('settings')
     .select('key, value')
     .in('key', [
-      'tts_provider',
       'tts_news_voice_de',
       'tts_news_voice_en',
       'tts_synthszr_voice_de',
       'tts_synthszr_voice_en',
       'tts_model',
       'tts_enabled',
-      'elevenlabs_news_voice_en',
-      'elevenlabs_synthszr_voice_en',
-      'elevenlabs_model',
       'podcast_host_voice_id',
       'podcast_guest_voice_id',
       'podcast_host_voice_de',
@@ -287,17 +275,12 @@ export async function getTTSSettings(): Promise<TTSSettings> {
   }
 
   return {
-    tts_provider: (settingsMap.tts_provider as TTSProvider) || 'openai',
     tts_news_voice_de: (settingsMap.tts_news_voice_de as TTSVoice) || 'nova',
     tts_news_voice_en: (settingsMap.tts_news_voice_en as TTSVoice) || 'nova',
     tts_synthszr_voice_de: (settingsMap.tts_synthszr_voice_de as TTSVoice) || 'onyx',
     tts_synthszr_voice_en: (settingsMap.tts_synthszr_voice_en as TTSVoice) || 'onyx',
-    tts_model: (settingsMap.tts_model as TTSModel) || 'tts-1',
+    tts_model: (settingsMap.tts_model as TTSModel) || 'gpt-4o-mini-tts',
     tts_enabled: settingsMap.tts_enabled !== false, // Default to true
-    // ElevenLabs defaults - Lily for news, Daniel for Synthszr Take
-    elevenlabs_news_voice_en: (settingsMap.elevenlabs_news_voice_en as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
-    elevenlabs_synthszr_voice_en: (settingsMap.elevenlabs_synthszr_voice_en as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
-    elevenlabs_model: (settingsMap.elevenlabs_model as string) || 'eleven_v3',
     // Podcast legacy (backwards compatible)
     podcast_host_voice_id: (settingsMap.podcast_host_voice_id as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
     podcast_guest_voice_id: (settingsMap.podcast_guest_voice_id as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
@@ -371,8 +354,6 @@ export async function generatePostAudio(
     }
 
     // Create or update pending record
-    // Track which provider and voices are being used
-    const isElevenLabs = settings.tts_provider === 'elevenlabs'
     const { data: audioRecord, error: upsertError } = await supabase
       .from('post_audio')
       .upsert({
@@ -381,9 +362,9 @@ export async function generatePostAudio(
         audio_url: '',
         generation_status: 'generating',
         content_hash: contentHash,
-        news_voice: isElevenLabs ? settings.elevenlabs_news_voice_en : settings.tts_news_voice_en,
-        synthszr_voice: isElevenLabs ? settings.elevenlabs_synthszr_voice_en : settings.tts_synthszr_voice_en,
-        model: isElevenLabs ? settings.elevenlabs_model : settings.tts_model,
+        news_voice: settings.tts_news_voice_en,
+        synthszr_voice: settings.tts_synthszr_voice_en,
+        model: settings.tts_model,
       }, {
         onConflict: 'post_id,locale',
       })
@@ -398,26 +379,17 @@ export async function generatePostAudio(
     // Generate audio for each section
     const audioBuffers: Buffer[] = []
 
-    // Helper function to generate speech with selected provider
+    // Helper function to generate speech
     const generateAudio = async (text: string, isEditorial: boolean): Promise<Buffer> => {
-      if (isElevenLabs) {
-        const voiceId = isEditorial
-          ? settings.elevenlabs_synthszr_voice_en
-          : settings.elevenlabs_news_voice_en
-        return generateSpeechElevenLabs(text, voiceId, settings.elevenlabs_model as ElevenLabsModel)
-      } else {
-        // OpenAI - always use English voices
-        const voice = isEditorial
-          ? settings.tts_synthszr_voice_en
-          : settings.tts_news_voice_en
-        return generateSpeech(text, voice, settings.tts_model)
-      }
+      const voice = isEditorial
+        ? settings.tts_synthszr_voice_en
+        : settings.tts_news_voice_en
+      return generateSpeech(text, voice, settings.tts_model)
     }
 
     // Generate intro greeting first
     try {
-      const providerName = isElevenLabs ? 'ElevenLabs' : 'OpenAI'
-      console.log(`[TTS] Generating intro with ${providerName}`)
+      console.log(`[TTS] Generating intro with OpenAI`)
       const introBuffer = await generateAudio(INTRO_TEXT, false)
       audioBuffers.push(introBuffer)
     } catch (error) {
@@ -429,8 +401,7 @@ export async function generatePostAudio(
       const isEditorial = section.type === 'synthszr_take'
 
       try {
-        const providerName = isElevenLabs ? 'ElevenLabs' : 'OpenAI'
-        console.log(`[TTS] Generating ${section.type} section (${section.text.length} chars) with ${providerName}`)
+        console.log(`[TTS] Generating ${section.type} section (${section.text.length} chars) with OpenAI`)
         const audioBuffer = await generateAudio(section.text, isEditorial)
         audioBuffers.push(audioBuffer)
       } catch (error) {

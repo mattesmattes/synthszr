@@ -17,7 +17,6 @@ import { getTTSSettings } from '@/lib/tts/openai-tts'
 import {
   generatePodcastDialogue,
   parseScriptText,
-  type ElevenLabsModel,
 } from '@/lib/tts/elevenlabs-tts'
 import { concatenateWithCrossfade, mixingSettingsToCrossfadeOptions, type AudioSegment } from '@/lib/audio/crossfade'
 import { getPersonalityState, buildPersonalityBrief, advanceState } from '@/lib/podcast/personality'
@@ -342,7 +341,7 @@ async function generatePodcastForPost(
       lines,
       hostVoiceId,
       guestVoiceId,
-      model: settings.elevenlabs_model as ElevenLabsModel,
+      openaiModel: 'gpt-4o-mini-tts',
     })
 
     if (!audioResult.success || !audioResult.segmentBuffers || audioResult.segmentBuffers.length === 0) {
