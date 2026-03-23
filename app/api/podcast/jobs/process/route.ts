@@ -146,7 +146,9 @@ async function generateSegmentOpenAI(
   if (isGpt4oMiniTts) {
     const { emotion, cleanText: stripped } = extractEmotionTag(text)
     emotionTag = emotion
-    cleanText = prepareTTSText(stripped)
+    // Strip remaining emotion tags from the text — only the first one becomes
+    // the instructions parameter, any mid-sentence tags would be spoken aloud
+    cleanText = prepareTTSText(stripEmotionTags(stripped))
     instructions = emotionToInstruction(emotion)
   } else {
     cleanText = prepareTTSText(stripEmotionTags(text))
