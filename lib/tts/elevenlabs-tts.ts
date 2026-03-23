@@ -155,21 +155,24 @@ const LEGACY_EMOTION_INSTRUCTIONS: Record<string, string> = {
 
 /**
  * Map emotion description to a natural language instruction for gpt-4o-mini-tts.
- * Uses OpenAI's recommended structured format: Voice Affect, Tone, Pacing, Emotion.
+ *
+ * The script generator already produces rich, structured emotion descriptions
+ * like "[cheerful and warm, genuinely happy, slightly faster pacing]".
+ * These are passed directly as the instruction — no wrapping needed.
+ * Adding a generic base instruction dilutes the specific emotion.
  */
 export function emotionToInstruction(emotion: string | null): string {
-  const BASE = 'Voice Affect: Natural, conversational podcast speaker — not a narrator or announcer.'
+  if (!emotion) return 'Speak naturally as a conversational podcast host.'
 
-  if (!emotion) return BASE
-
-  // Check legacy lookup table first
+  // Check legacy lookup table for single-word tags (backwards compat)
   const legacyInstruction = LEGACY_EMOTION_INSTRUCTIONS[emotion.toLowerCase()]
   if (legacyInstruction) {
     return legacyInstruction
   }
 
-  // Free-form description — wrap in OpenAI's structured format
-  return `${BASE} Tone: ${emotion}. Commit fully to this delivery.`
+  // Free-form descriptions from the script generator are already rich enough.
+  // Pass them directly — the model responds better to concise, specific direction.
+  return emotion
 }
 
 /**
