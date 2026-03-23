@@ -13,7 +13,7 @@ import { generateSpeechElevenLabs, type ElevenLabsModel } from './elevenlabs-tts
 
 // OpenAI TTS voices
 export type TTSVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer'
-export type TTSModel = 'tts-1' | 'tts-1-hd'
+export type TTSModel = 'tts-1' | 'tts-1-hd' | 'gpt-4o-mini-tts'
 export type TTSProvider = 'openai' | 'elevenlabs'
 
 export interface TTSSettings {

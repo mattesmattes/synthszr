@@ -900,6 +900,9 @@ function AudioPage() {
         if (data.mixing_settings) {
           setMixing({ ...DEFAULT_MIXING, ...data.mixing_settings })
         }
+        if (data.tts_model) {
+          setOpenaiModel(data.tts_model as TTSModel)
+        }
       }
     } catch (error) {
       console.error('Error fetching TTS settings:', error)
@@ -922,6 +925,7 @@ function AudioPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...ttsSettings,
+          tts_model: openaiModel,
           podcast_duration_minutes: podcastDuration,
           podcast_script_prompt: customPrompt !== PODCAST_SCRIPT_PROMPT ? customPrompt : null,
         }),
