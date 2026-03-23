@@ -14,8 +14,10 @@ import { put } from '@vercel/blob'
 import {
   parseScriptText,
   stripDirectiveTags,
+  stripEmotionTags,
   extractEmotionTag,
   emotionToInstruction,
+  convertToElevenLabsTags,
   type OpenAIVoice,
   type SegmentMetadata,
 } from '@/lib/tts/elevenlabs-tts'
@@ -90,10 +92,6 @@ function prepareTTSText(text: string): string {
   return result
 }
 
-function stripEmotionTags(text: string): string {
-  return text.replace(/\[(?:cheerfully|thoughtfully|seriously|excitedly|skeptically|laughing|sighing|whispering|interrupting|curiously|dramatically|calmly|enthusiastically)\]\s*/gi, '').trim()
-}
-
 async function generateSegmentElevenLabs(
   text: string,
   voiceId: string,
@@ -102,7 +100,9 @@ async function generateSegmentElevenLabs(
   const apiKey = process.env.ELEVENLABS_API_KEY
   if (!apiKey) throw new Error('ELEVENLABS_API_KEY not set')
 
-  const ttsText = prepareTTSText(text)
+  // Convert free-form emotion tags to ElevenLabs-compatible tags
+  // e.g. "[warm and upbeat, like greeting a friend]" → "[cheerfully]"
+  const ttsText = prepareTTSText(convertToElevenLabsTags(text))
 
   return withRetry(async () => {
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {

@@ -42,7 +42,7 @@ const DEFAULT_SCRIPT_PROMPT_DE = `Du bist ein erfahrener Podcast-Skriptautor. Er
 
 **WICHTIG - Podcast-Name und Begrüßung:**
 - Der Podcast heißt IMMER "Synthesizer Daily" - NIEMALS andere Namen wie "TechFinance Daily" oder ähnliche Fantasienamen verwenden!
-- Die allererste Zeile des Skripts MUSS exakt so beginnen: HOST: [cheerfully] Hey, Hey und Willkommen bei Synthesizer Daily am {weekday}, den {date}!
+- Die allererste Zeile des Skripts MUSS exakt so beginnen: HOST: [warm and upbeat, like greeting a good friend] Hey, Hey und Willkommen bei Synthesizer Daily am {weekday}, den {date}!
 - Danach soll der HOST das Thema der heutigen Folge kurz anreißen
 
 **Rollen:**
@@ -57,8 +57,23 @@ GUEST (overlapping): [emotion] Kurzer Einwurf...
 
 Zeilen mit \`(overlapping)\` werden zeitlich ÜBER die vorherige Zeile gelegt — beide Stimmen sind gleichzeitig hörbar.
 
-**Verfügbare Emotion-Tags (für TTS-Stimme):**
-[cheerfully], [thoughtfully], [seriously], [excitedly], [skeptically], [laughing], [sighing], [curiously], [interrupting], [dramatically], [calmly], [enthusiastically]
+**Sprechanweisungen (Emotion-Tags — MÜSSEN auf Englisch sein, auch im deutschen Skript!):**
+Verwende beschreibende, bildhafte Sprechanweisungen in eckigen Klammern. Diese werden direkt an die TTS-Engine weitergegeben.
+Beispiele:
+- [warm and upbeat, like greeting a good friend]
+- [thoughtful, pausing to consider the implications]
+- [genuinely surprised, almost disbelieving]
+- [skeptical, with a raised eyebrow]
+- [excited, barely containing enthusiasm]
+- [serious and measured, conveying gravity]
+- [laughing softly, genuinely amused]
+- [leaning in, conspiratorial whisper]
+- [calm and reassuring, like explaining to a friend]
+- [interrupting with urgency]
+- [dry humor, deadpan delivery]
+- [curious, tilting head]
+Einfache Tags wie [cheerfully] oder [seriously] funktionieren auch weiterhin.
+WICHTIG: Die Anweisungen in den Klammern MÜSSEN auf Englisch sein — der Dialogtext bleibt auf Deutsch.
 
 **Direktiv-Tags (werden NICHT gesprochen, steuern Timing/Atmosphäre):**
 - [beat] — kurze Denkpause
@@ -150,7 +165,7 @@ The source content below may be in German or another language. You MUST translat
 
 **IMPORTANT - Podcast Name and Greeting:**
 - The podcast is ALWAYS called "Synthesizer Daily" - NEVER use other names like "TechFinance Daily" or similar fantasy names!
-- The very first line of the script MUST begin exactly like this: HOST: [cheerfully] Hey, Hey and welcome to Synthesizer Daily on {weekday}, {date}!
+- The very first line of the script MUST begin exactly like this: HOST: [warm and upbeat, like greeting a good friend] Hey, Hey and welcome to Synthesizer Daily on {weekday}, {date}!
 - After that, the HOST should briefly tease the topic of today's episode
 
 **Roles:**
@@ -165,8 +180,22 @@ GUEST (overlapping): [emotion] Short interjection...
 
 Lines with \`(overlapping)\` are layered ON TOP of the previous line — both voices audible simultaneously.
 
-**Available Emotion Tags (for TTS voice):**
-[cheerfully], [thoughtfully], [seriously], [excitedly], [skeptically], [laughing], [sighing], [curiously], [interrupting], [dramatically], [calmly], [enthusiastically]
+**Speaking Instructions (Emotion Tags):**
+Use descriptive, vivid speaking instructions in square brackets. These are passed directly to the TTS engine.
+Examples:
+- [warm and upbeat, like greeting a good friend]
+- [thoughtful, pausing to consider the implications]
+- [genuinely surprised, almost disbelieving]
+- [skeptical, with a raised eyebrow]
+- [excited, barely containing enthusiasm]
+- [serious and measured, conveying gravity]
+- [laughing softly, genuinely amused]
+- [leaning in, conspiratorial whisper]
+- [calm and reassuring, like explaining to a friend]
+- [interrupting with urgency]
+- [dry humor, deadpan delivery]
+- [curious, tilting head]
+Simple tags like [cheerfully] or [seriously] also still work.
 
 **Directive Tags (NOT spoken, control timing/atmosphere):**
 - [beat] — brief thinking pause
@@ -419,8 +448,8 @@ export async function POST(request: NextRequest) {
     // Inject optional smalltalk section
     if (body.smalltalkTopic?.trim()) {
       const smalltalkSection = ttsLang === 'de'
-        ? `\n\n**SMALLTALK AM ANFANG (PFLICHT):**\nNach der Begrüßung ("HOST: [cheerfully] Hey, Hey und Willkommen...") und dem kurzen Themen-Teaser sprechen HOST und GUEST kurz (~1-2 Minuten) locker über folgendes Thema, BEVOR es ins Hauptthema geht:\n"${body.smalltalkTopic}"\nDieser Smalltalk soll natürlich und persönlich wirken. Danach leitet der HOST nahtlos zum Hauptthema über.`
-        : `\n\n**SMALLTALK AT THE START (MANDATORY):**\nAfter the greeting ("HOST: [cheerfully] Hey, Hey and welcome to Synthesizer Daily...") and the brief topic tease, HOST and GUEST briefly (~1-2 minutes) chat casually about the following topic BEFORE getting into the main content:\n"${body.smalltalkTopic}"\nThis smalltalk should feel natural and personal. Afterwards, HOST transitions smoothly into the main topic.`
+        ? `\n\n**SMALLTALK AM ANFANG (PFLICHT):**\nNach der Begrüßung ("HOST: [warm and upbeat, like greeting a good friend] Hey, Hey und Willkommen...") und dem kurzen Themen-Teaser sprechen HOST und GUEST kurz (~1-2 Minuten) locker über folgendes Thema, BEVOR es ins Hauptthema geht:\n"${body.smalltalkTopic}"\nDieser Smalltalk soll natürlich und persönlich wirken. Danach leitet der HOST nahtlos zum Hauptthema über.`
+        : `\n\n**SMALLTALK AT THE START (MANDATORY):**\nAfter the greeting ("HOST: [warm and upbeat, like greeting a good friend] Hey, Hey and welcome to Synthesizer Daily...") and the brief topic tease, HOST and GUEST briefly (~1-2 minutes) chat casually about the following topic BEFORE getting into the main content:\n"${body.smalltalkTopic}"\nThis smalltalk should feel natural and personal. Afterwards, HOST transitions smoothly into the main topic.`
       prompt = prompt + smalltalkSection
     }
 

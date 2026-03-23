@@ -128,7 +128,7 @@ export function getRecommendedVoices(
  */
 export interface PodcastLine {
   speaker: 'HOST' | 'GUEST'
-  text: string // Can include emotion tags like [cheerfully], [thoughtfully]
+  text: string // Can include emotion tags like [cheerfully] or free-form [warm and upbeat, like greeting a friend]
   overlapping?: boolean // True when marked with (overlapping) — both speakers audible simultaneously
 }
 
@@ -177,10 +177,10 @@ export interface PodcastGenerationResult {
 }
 
 /**
- * Emotion tags supported by ElevenLabs for natural dialogue
+ * Emotion tags natively supported by ElevenLabs eleven_v3
  * These can be placed at the start of text: "[cheerfully] Great news today!"
  */
-export const EMOTION_TAGS = [
+export const ELEVENLABS_EMOTION_TAGS = [
   'cheerfully',
   'thoughtfully',
   'seriously',
@@ -196,7 +196,13 @@ export const EMOTION_TAGS = [
   'enthusiastically',
 ] as const
 
-export type EmotionTag = typeof EMOTION_TAGS[number]
+/** @deprecated Use ELEVENLABS_EMOTION_TAGS instead */
+export const EMOTION_TAGS = ELEVENLABS_EMOTION_TAGS
+
+export type ElevenLabsEmotionTag = typeof ELEVENLABS_EMOTION_TAGS[number]
+
+/** @deprecated Use ElevenLabsEmotionTag instead */
+export type EmotionTag = ElevenLabsEmotionTag
 
 /**
  * Pronunciation replacements for TTS
@@ -221,55 +227,134 @@ function prepareTTSText(text: string): string {
 }
 
 /**
+ * Directive tags that control timing/atmosphere and should NOT be stripped as emotion tags.
+ * These are handled separately by stripDirectiveTags().
+ */
+const DIRECTIVE_TAG_NAMES = new Set(['beat', 'short pause', 'longer pause', 'paper rustle', 'sip'])
+
+/**
  * Strip emotion tags from text (for providers that don't support them, like OpenAI tts-1/tts-1-hd)
- * "[cheerfully] Hello world!" -> "Hello world!"
+ * Strips any [...] block EXCEPT directive tags (beat, short pause, etc.)
+ * "[warm and upbeat] Hello world!" -> "Hello world!"
+ * "[beat] Hello world!" -> "[beat] Hello world!" (preserved)
  */
 export function stripEmotionTags(text: string): string {
-  return text.replace(/\[(?:cheerfully|thoughtfully|seriously|excitedly|skeptically|laughing|sighing|whispering|interrupting|curiously|dramatically|calmly|enthusiastically)\]\s*/gi, '').trim()
+  return text.replace(/\[([^\]]+)\]\s*/g, (match, content: string) => {
+    if (DIRECTIVE_TAG_NAMES.has(content.toLowerCase().trim())) return match
+    return ''
+  }).trim()
 }
 
 /**
  * Extract emotion tag from text (for gpt-4o-mini-tts instructions parameter)
- * "[cheerfully] Hello world!" -> { emotion: 'cheerfully', cleanText: 'Hello world!' }
- * "Hello world!" -> { emotion: null, cleanText: 'Hello world!' }
+ * Supports both legacy single-word tags and free-form descriptions:
+ * "[cheerfully] Hello!" -> { emotion: 'cheerfully', cleanText: 'Hello!' }
+ * "[warm and upbeat, like greeting a friend] Hello!" -> { emotion: 'warm and upbeat, like greeting a friend', cleanText: 'Hello!' }
+ * "Hello!" -> { emotion: null, cleanText: 'Hello!' }
  */
-export function extractEmotionTag(text: string): { emotion: EmotionTag | null; cleanText: string } {
-  const match = text.match(/^\[(\w+)\]\s*/)
+export function extractEmotionTag(text: string): { emotion: string | null; cleanText: string } {
+  const match = text.match(/^\[([^\]]+)\]\s*/)
   if (match) {
-    const tag = match[1].toLowerCase()
-    const validTags = new Set<string>(EMOTION_TAGS)
-    if (validTags.has(tag)) {
-      return { emotion: tag as EmotionTag, cleanText: text.slice(match[0].length) }
+    const content = match[1].trim()
+    // Skip directive tags — those are timing annotations, not emotions
+    if (DIRECTIVE_TAG_NAMES.has(content.toLowerCase())) {
+      return { emotion: null, cleanText: text }
     }
+    return { emotion: content, cleanText: text.slice(match[0].length) }
   }
   return { emotion: null, cleanText: text }
 }
 
 /**
- * Map emotion tag to a natural language instruction for gpt-4o-mini-tts
+ * Legacy lookup table for known single-word emotion tags
  */
-export function emotionToInstruction(emotion: EmotionTag | null): string {
+const LEGACY_EMOTION_INSTRUCTIONS: Record<string, string> = {
+  cheerfully: 'Speak in a cheerful, upbeat and positive tone. Sound genuinely happy and energetic.',
+  thoughtfully: 'Speak in a thoughtful, contemplative tone. Pause slightly as if considering your words carefully.',
+  seriously: 'Speak in a serious, measured tone. Convey gravity and importance.',
+  excitedly: 'Speak with excitement and enthusiasm. Let your energy come through in your voice.',
+  skeptically: 'Speak with a skeptical, questioning tone. Sound doubtful but curious.',
+  laughing: 'Speak with a light laugh in your voice. Sound amused and warm.',
+  sighing: 'Speak with a slight sigh. Sound reflective or mildly exasperated.',
+  whispering: 'Speak in a softer, more intimate tone. Lower your volume slightly for dramatic effect.',
+  interrupting: 'Speak with urgency, as if jumping into the conversation. Start quickly and assertively.',
+  curiously: 'Speak with genuine curiosity and interest. Sound inquisitive and engaged.',
+  dramatically: 'Speak with dramatic flair. Emphasize key words and use expressive intonation.',
+  calmly: 'Speak in a calm, steady and reassuring tone. Be measured and composed.',
+  enthusiastically: 'Speak with great enthusiasm and passion. Sound genuinely thrilled about the topic.',
+}
+
+/**
+ * Map emotion description to a natural language instruction for gpt-4o-mini-tts.
+ * Supports both legacy single-word tags and free-form descriptions:
+ * - "cheerfully" → lookup table → "Speak in a cheerful, upbeat..."
+ * - "warm and upbeat, like greeting a friend" → passed through directly
+ */
+export function emotionToInstruction(emotion: string | null): string {
   const BASE = 'You are a podcast host or guest having a natural, engaging conversation.'
 
   if (!emotion) return BASE
 
-  const map: Record<EmotionTag, string> = {
-    cheerfully: 'Speak in a cheerful, upbeat and positive tone. Sound genuinely happy and energetic.',
-    thoughtfully: 'Speak in a thoughtful, contemplative tone. Pause slightly as if considering your words carefully.',
-    seriously: 'Speak in a serious, measured tone. Convey gravity and importance.',
-    excitedly: 'Speak with excitement and enthusiasm. Let your energy come through in your voice.',
-    skeptically: 'Speak with a skeptical, questioning tone. Sound doubtful but curious.',
-    laughing: 'Speak with a light laugh in your voice. Sound amused and warm.',
-    sighing: 'Speak with a slight sigh. Sound reflective or mildly exasperated.',
-    whispering: 'Speak in a softer, more intimate tone. Lower your volume slightly for dramatic effect.',
-    interrupting: 'Speak with urgency, as if jumping into the conversation. Start quickly and assertively.',
-    curiously: 'Speak with genuine curiosity and interest. Sound inquisitive and engaged.',
-    dramatically: 'Speak with dramatic flair. Emphasize key words and use expressive intonation.',
-    calmly: 'Speak in a calm, steady and reassuring tone. Be measured and composed.',
-    enthusiastically: 'Speak with great enthusiasm and passion. Sound genuinely thrilled about the topic.',
+  // Check legacy lookup table first
+  const legacyInstruction = LEGACY_EMOTION_INSTRUCTIONS[emotion.toLowerCase()]
+  if (legacyInstruction) {
+    return `${BASE} ${legacyInstruction}`
   }
 
-  return `${BASE} ${map[emotion]}`
+  // Free-form description — pass through directly
+  return `${BASE} ${emotion}`
+}
+
+/**
+ * Map a free-form emotion description to the closest ElevenLabs emotion tag.
+ * Uses keyword matching. Returns null if no reasonable match found.
+ */
+export function mapToElevenLabsTag(emotion: string): ElevenLabsEmotionTag | null {
+  const lower = emotion.toLowerCase()
+
+  // Check if it's already a known tag
+  const knownTags = new Set<string>(ELEVENLABS_EMOTION_TAGS)
+  if (knownTags.has(lower)) return lower as ElevenLabsEmotionTag
+
+  // Keyword-based mapping (order matters — first match wins)
+  const keywordMap: Array<[string[], ElevenLabsEmotionTag]> = [
+    [['laugh', 'amused', 'chuckl', 'giggl', 'funny'], 'laughing'],
+    [['whisper', 'soft', 'quiet', 'intimate', 'hushed'], 'whispering'],
+    [['sigh', 'exasperat', 'resigned', 'weary'], 'sighing'],
+    [['interrupt', 'urgent', 'jump in', 'cutting in'], 'interrupting'],
+    [['excit', 'thrilled', 'fired up', 'pumped', 'energiz'], 'excitedly'],
+    [['enthusiast', 'passion', 'eager', 'fervent'], 'enthusiastically'],
+    [['cheer', 'upbeat', 'happy', 'bright', 'joyful', 'warm and upbeat'], 'cheerfully'],
+    [['skeptic', 'doubt', 'unconvinced', 'suspicious', 'questioning'], 'skeptically'],
+    [['serious', 'grave', 'solemn', 'stern', 'somber'], 'seriously'],
+    [['thought', 'contemplat', 'reflective', 'pensive', 'consider'], 'thoughtfully'],
+    [['curious', 'intrigued', 'fascinated', 'wonder'], 'curiously'],
+    [['dramatic', 'theatrical', 'intense', 'suspense'], 'dramatically'],
+    [['calm', 'steady', 'composed', 'reassur', 'sooth', 'gentle'], 'calmly'],
+    [['warm', 'friendly', 'welcoming', 'kind'], 'cheerfully'],
+  ]
+
+  for (const [keywords, tag] of keywordMap) {
+    if (keywords.some(kw => lower.includes(kw))) return tag
+  }
+
+  return null
+}
+
+/**
+ * Convert free-form emotion tags in text to ElevenLabs-compatible tags.
+ * "[warm and upbeat, like greeting a friend] Hello!" → "[cheerfully] Hello!"
+ * Unknown emotions are stripped entirely.
+ */
+export function convertToElevenLabsTags(text: string): string {
+  return text.replace(/\[([^\]]+)\]\s*/g, (match, content: string) => {
+    const trimmed = content.trim()
+    // Preserve directive tags
+    if (DIRECTIVE_TAG_NAMES.has(trimmed.toLowerCase())) return match
+    // Try to map to ElevenLabs tag
+    const elevenTag = mapToElevenLabsTag(trimmed)
+    return elevenTag ? `[${elevenTag}] ` : ''
+  })
 }
 
 /**
@@ -851,24 +936,10 @@ export function estimatePodcastDuration(script: PodcastLine[]): number {
 }
 
 /**
- * Validate that a script uses proper emotion tags
- * Returns warnings for any invalid tags found
+ * Validate that a script uses proper emotion tags.
+ * With free-form emotions, all bracketed content is valid — always returns empty.
+ * Kept for backwards compatibility.
  */
-export function validateScriptEmotions(script: PodcastLine[]): string[] {
-  const warnings: string[] = []
-  const validTags = new Set(EMOTION_TAGS)
-
-  for (let i = 0; i < script.length; i++) {
-    const line = script[i]
-    const emotionMatches = line.text.matchAll(/\[(\w+)\]/g)
-
-    for (const match of emotionMatches) {
-      const tag = match[1].toLowerCase()
-      if (!validTags.has(tag as EmotionTag)) {
-        warnings.push(`Line ${i + 1}: Unknown emotion tag [${match[1]}]`)
-      }
-    }
-  }
-
-  return warnings
+export function validateScriptEmotions(_script: PodcastLine[]): string[] {
+  return []
 }

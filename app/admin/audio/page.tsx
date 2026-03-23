@@ -191,14 +191,14 @@ const OPENAI_PODCAST_VOICES: Array<{ id: TTSVoice; name: string; description: st
   { id: 'cedar', name: 'Cedar', description: 'Natural, recommended' },
 ]
 
-const EXAMPLE_PODCAST_SCRIPT = `HOST: [cheerfully] Good morning and welcome to Synthszr Daily! I'm your host, and today we have some exciting market news to discuss.
-GUEST: [thoughtfully] Thanks for having me. And yes... the markets are definitely giving us a lot to talk about today.
-HOST: [curiously] Let's dive right in. What caught your attention this morning?
-GUEST: [excitedly] Well, the Fed minutes came out and... [seriously] I have to say, the hawkish tone surprised me a bit.
-HOST: [thoughtfully] Interesting. How do you think that will impact tech stocks?
-GUEST: [skeptically] Look... the market has been pricing in rate cuts for months now. If those get pushed back, we could see some volatility.
-HOST: [cheerfully] Great insights as always! That's all the time we have for today.
-GUEST: [laughing] Until next time!`
+const EXAMPLE_PODCAST_SCRIPT = `HOST: [warm and upbeat, like greeting a good friend] Good morning and welcome to Synthszr Daily! I'm your host, and today we have some exciting market news to discuss.
+GUEST: [thoughtful, pausing to consider] Thanks for having me. And yes... the markets are definitely giving us a lot to talk about today.
+HOST: [curious, tilting head] Let's dive right in. What caught your attention this morning?
+GUEST: [excited, barely containing enthusiasm] Well, the Fed minutes came out and... [serious and measured, conveying gravity] I have to say, the hawkish tone surprised me a bit.
+HOST: [genuinely intrigued] Interesting. How do you think that will impact tech stocks?
+GUEST: [skeptical, with a raised eyebrow] Look... the market has been pricing in rate cuts for months now. If those get pushed back, we could see some volatility.
+HOST: [warm and appreciative] Great insights as always! That's all the time we have for today.
+GUEST: [laughing softly, genuinely amused] Until next time!`
 
 const PODCAST_SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erstelle ein lebendiges, natürliches Gespräch zwischen einem Host und einem Gast für einen Finance/Tech-Podcast.
 
@@ -207,20 +207,12 @@ const PODCAST_SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erste
 - GUEST: Synthesizer - der AI-Analyst mit pointierten Meinungen
 
 **Output-Format (WICHTIG - exakt dieses Format pro Zeile):**
-HOST: [emotion] Dialog text...
-GUEST: [emotion] Dialog text...
+HOST: [sprechanweisung] Dialog text...
+GUEST: [sprechanweisung] Dialog text...
 
-**Verfügbare Emotion-Tags:**
-- [cheerfully] - fröhlich, begeistert
-- [thoughtfully] - nachdenklich, überlegend
-- [seriously] - ernst, wichtig
-- [excitedly] - aufgeregt, enthusiastisch
-- [skeptically] - skeptisch, hinterfragend
-- [laughing] - lachend
-- [sighing] - seufzend
-- [whispering] - flüsternd (für dramatische Effekte)
-- [interrupting] - unterbrechend
-- [curiously] - neugierig
+**Sprechanweisungen (MÜSSEN auf Englisch sein!):**
+Verwende beschreibende Sprechanweisungen in eckigen Klammern. Diese steuern Tonfall und Emotion der TTS-Stimme.
+Beispiele: [warm and upbeat], [thoughtful, pausing to consider], [skeptical, with a raised eyebrow], [excited, barely containing enthusiasm], [laughing softly], [serious and measured], [curious, tilting head], [dry humor, deadpan delivery]
 
 **Stilregeln für natürliche Dialoge:**
 1. Nutze Füllwörter: "Also...", "Hmm...", "Weißt du...", "Naja..."
@@ -232,11 +224,11 @@ GUEST: [emotion] Dialog text...
 7. WICHTIG: Der GUEST wird im Dialog IMMER als "Synthesizer" bezeichnet, NIE als "Synthszr"
 
 **Beispiel:**
-HOST: [cheerfully] Willkommen bei Synthszr Daily! Heute haben wir wieder einiges zu besprechen...
-GUEST: [thoughtfully] Ja, und ich muss sagen... die Zahlen haben mich wirklich überrascht.
-HOST: [excitedly] Genau da wollte ich anfangen! Was genau—
-GUEST: [interrupting] Also, warte mal. Bevor wir da reingehen... [seriously] die Zahlen sind gut, klar. Aber der Markt preist schon Perfektion ein.
-HOST: [curiously] Interessant! Kannst du das genauer erklären?
+HOST: [warm and upbeat, like greeting a good friend] Willkommen bei Synthszr Daily! Heute haben wir wieder einiges zu besprechen...
+GUEST: [thoughtful, pausing to consider] Ja, und ich muss sagen... die Zahlen haben mich wirklich überrascht.
+HOST: [excited, barely containing enthusiasm] Genau da wollte ich anfangen! Was genau—
+GUEST: [interrupting with urgency] Also, warte mal. Bevor wir da reingehen... [serious and measured, conveying gravity] die Zahlen sind gut, klar. Aber der Markt preist schon Perfektion ein.
+HOST: [curious, tilting head] Interessant! Kannst du das genauer erklären?
 
 **Ziel-Länge:** {duration} Minuten (ca. {wordCount} Wörter)
 
@@ -1306,11 +1298,11 @@ function AudioPage() {
                     setPodcastScript(e.target.value)
                     if (scriptGenerated) setScriptModified(true)
                   }}
-                  placeholder="HOST: [cheerfully] Welcome to the show!&#10;GUEST: [thoughtfully] Thanks for having me..."
+                  placeholder="HOST: [warm and upbeat] Welcome to the show!&#10;GUEST: [thoughtful, pausing to consider] Thanks for having me..."
                   className="font-mono text-sm h-[300px]"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Format: <code className="bg-muted px-1 rounded">HOST:</code> oder <code className="bg-muted px-1 rounded">GUEST:</code> gefolgt von optionalen Emotion-Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code>.
+                  Format: <code className="bg-muted px-1 rounded">HOST:</code> oder <code className="bg-muted px-1 rounded">GUEST:</code> gefolgt von optionalen Sprechanweisungen wie <code className="bg-muted px-1 rounded">[warm and upbeat]</code>.
                 </p>
               </div>
 
@@ -1448,12 +1440,10 @@ function AudioPage() {
               <div className="mt-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="space-y-2">
-                    <p className="text-sm font-medium">Verfügbare Emotion-Tags:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {['[cheerfully]', '[thoughtfully]', '[seriously]', '[excitedly]', '[skeptically]', '[laughing]', '[sighing]', '[whispering]', '[interrupting]'].map((tag) => (
-                        <Badge key={tag} variant="outline" className="font-mono text-xs">{tag}</Badge>
-                      ))}
-                    </div>
+                    <p className="text-sm font-medium">Sprechanweisungen (Free-Form):</p>
+                    <p className="text-xs text-muted-foreground">
+                      Beschreibende Anweisungen in eckigen Klammern, z.B. <code className="bg-muted px-1 rounded">[warm and upbeat]</code>, <code className="bg-muted px-1 rounded">[skeptical, with a raised eyebrow]</code>, <code className="bg-muted px-1 rounded">[laughing softly]</code>. Legacy-Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code> funktionieren weiterhin.
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={() => setCustomPrompt(PODCAST_SCRIPT_PROMPT)} disabled={customPrompt === PODCAST_SCRIPT_PROMPT}>
@@ -1690,7 +1680,7 @@ function AudioPage() {
                 Podcast-Einstellungen
               </CardTitle>
               <CardDescription>
-                Wähle zwischen OpenAI TTS (~10x günstiger) oder ElevenLabs (mit Emotion-Tags)
+                Wähle zwischen OpenAI TTS (~10x günstiger) oder ElevenLabs (mit Auto-Mapping)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -1716,7 +1706,7 @@ function AudioPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="openai">OpenAI TTS (~10x günstiger)</SelectItem>
-                          <SelectItem value="elevenlabs">ElevenLabs (Emotion-Tags)</SelectItem>
+                          <SelectItem value="elevenlabs">ElevenLabs (Auto-Mapping)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1724,7 +1714,7 @@ function AudioPage() {
                       <Alert className="bg-yellow-500/10 border-yellow-500/30">
                         <AlertTriangle className="h-4 w-4 text-yellow-600" />
                         <AlertDescription className="text-sm">
-                          OpenAI TTS unterstützt keine Emotion-Tags. Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code> werden automatisch entfernt.
+                          Alle Sprechanweisungen wie <code className="bg-muted px-1 rounded">[warm and curious]</code> werden automatisch entfernt.
                         </AlertDescription>
                       </Alert>
                     )}
@@ -1732,7 +1722,7 @@ function AudioPage() {
                       <Alert className="bg-green-500/10 border-green-500/30">
                         <Sparkles className="h-4 w-4 text-green-600" />
                         <AlertDescription className="text-sm">
-                          <strong>Emotion-Tags aktiv!</strong> Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code> werden in natürliche Sprechanweisungen umgewandelt.
+                          <strong>Sprechanweisungen aktiv!</strong> Beschreibungen wie <code className="bg-muted px-1 rounded">[warm and curious]</code> werden direkt als Stimmanweisung verwendet.
                         </AlertDescription>
                       </Alert>
                     )}
@@ -1750,7 +1740,7 @@ function AudioPage() {
                           <SelectContent>
                             <SelectItem value="tts-1">tts-1 (schnell, günstiger)</SelectItem>
                             <SelectItem value="tts-1-hd">tts-1-hd (HD Qualität)</SelectItem>
-                            <SelectItem value="gpt-4o-mini-tts">gpt-4o-mini-tts (Emotion-Tags)</SelectItem>
+                            <SelectItem value="gpt-4o-mini-tts">gpt-4o-mini-tts (Sprechanweisungen)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
