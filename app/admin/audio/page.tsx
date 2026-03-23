@@ -27,8 +27,8 @@ import { legacyIntroToEnvelopes, legacyOutroToEnvelopes } from '@/lib/audio/enve
 // Types
 // ---------------------------------------------------------------------------
 
-type TTSVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer'
-type TTSModel = 'tts-1' | 'tts-1-hd'
+type TTSVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer' | 'coral' | 'ash' | 'sage' | 'ballad' | 'verse'
+type TTSModel = 'tts-1' | 'tts-1-hd' | 'gpt-4o-mini-tts'
 type TTSProvider = 'openai' | 'elevenlabs'
 type ElevenLabsModel = 'eleven_multilingual_v2' | 'eleven_turbo_v2_5' | 'eleven_turbo_v2'
 type PodcastProvider = 'openai' | 'elevenlabs'
@@ -182,6 +182,11 @@ const OPENAI_PODCAST_VOICES: Array<{ id: TTSVoice; name: string; description: st
   { id: 'echo', name: 'Echo', description: 'Warm male' },
   { id: 'fable', name: 'Fable', description: 'British accent' },
   { id: 'onyx', name: 'Onyx', description: 'Deep, authoritative male' },
+  { id: 'coral', name: 'Coral', description: 'Warm, expressive' },
+  { id: 'ash', name: 'Ash', description: 'Clear, direct' },
+  { id: 'sage', name: 'Sage', description: 'Calm, composed' },
+  { id: 'ballad', name: 'Ballad', description: 'Melodic, storytelling' },
+  { id: 'verse', name: 'Verse', description: 'Versatile, dynamic' },
 ]
 
 const EXAMPLE_PODCAST_SCRIPT = `HOST: [cheerfully] Good morning and welcome to Synthszr Daily! I'm your host, and today we have some exciting market news to discuss.
@@ -1709,11 +1714,19 @@ function AudioPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    {podcastProvider === 'openai' && (
+                    {podcastProvider === 'openai' && openaiModel !== 'gpt-4o-mini-tts' && (
                       <Alert className="bg-yellow-500/10 border-yellow-500/30">
                         <AlertTriangle className="h-4 w-4 text-yellow-600" />
                         <AlertDescription className="text-sm">
                           OpenAI TTS unterstützt keine Emotion-Tags. Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code> werden automatisch entfernt.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    {podcastProvider === 'openai' && openaiModel === 'gpt-4o-mini-tts' && (
+                      <Alert className="bg-green-500/10 border-green-500/30">
+                        <Sparkles className="h-4 w-4 text-green-600" />
+                        <AlertDescription className="text-sm">
+                          <strong>Emotion-Tags aktiv!</strong> Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code> werden in natürliche Sprechanweisungen umgewandelt.
                         </AlertDescription>
                       </Alert>
                     )}
@@ -1731,6 +1744,7 @@ function AudioPage() {
                           <SelectContent>
                             <SelectItem value="tts-1">tts-1 (schnell, günstiger)</SelectItem>
                             <SelectItem value="tts-1-hd">tts-1-hd (HD Qualität)</SelectItem>
+                            <SelectItem value="gpt-4o-mini-tts">gpt-4o-mini-tts (Emotion-Tags)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

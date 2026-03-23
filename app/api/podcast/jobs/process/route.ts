@@ -14,6 +14,8 @@ import { put } from '@vercel/blob'
 import {
   parseScriptText,
   stripDirectiveTags,
+  extractEmotionTag,
+  emotionToInstruction,
   type OpenAIVoice,
   type SegmentMetadata,
 } from '@/lib/tts/elevenlabs-tts'
@@ -133,21 +135,42 @@ async function generateSegmentOpenAI(
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY not set')
 
-  const cleanText = prepareTTSText(stripEmotionTags(text))
+  // gpt-4o-mini-tts: extract emotion tag → instructions parameter
+  // tts-1/tts-1-hd: strip emotion tags (not supported)
+  const isGpt4oMiniTts = model === 'gpt-4o-mini-tts'
+  let cleanText: string
+  let instructions: string | undefined
+
+  if (isGpt4oMiniTts) {
+    const { emotion, cleanText: stripped } = extractEmotionTag(text)
+    cleanText = prepareTTSText(stripped)
+    instructions = emotionToInstruction(emotion)
+  } else {
+    cleanText = prepareTTSText(stripEmotionTags(text))
+  }
+
+  if (!cleanText.trim()) return Buffer.alloc(0)
+
+  console.log(`[TTS-OpenAI] Request: model=${model}, voice=${voice}, textLength=${cleanText.length}${instructions ? ', instructions=yes' : ''}`)
 
   return withRetry(async () => {
+    const body: Record<string, unknown> = {
+      model,
+      voice,
+      input: cleanText,
+      response_format: 'mp3',
+    }
+    if (instructions) {
+      body.instructions = instructions
+    }
+
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model,
-        voice,
-        input: cleanText,
-        response_format: 'mp3',
-      }),
+      body: JSON.stringify(body),
     })
 
     if (!response.ok) {

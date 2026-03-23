@@ -221,11 +221,55 @@ function prepareTTSText(text: string): string {
 }
 
 /**
- * Strip emotion tags from text (for providers that don't support them, like OpenAI)
+ * Strip emotion tags from text (for providers that don't support them, like OpenAI tts-1/tts-1-hd)
  * "[cheerfully] Hello world!" -> "Hello world!"
  */
 export function stripEmotionTags(text: string): string {
   return text.replace(/\[(?:cheerfully|thoughtfully|seriously|excitedly|skeptically|laughing|sighing|whispering|interrupting|curiously|dramatically|calmly|enthusiastically)\]\s*/gi, '').trim()
+}
+
+/**
+ * Extract emotion tag from text (for gpt-4o-mini-tts instructions parameter)
+ * "[cheerfully] Hello world!" -> { emotion: 'cheerfully', cleanText: 'Hello world!' }
+ * "Hello world!" -> { emotion: null, cleanText: 'Hello world!' }
+ */
+export function extractEmotionTag(text: string): { emotion: EmotionTag | null; cleanText: string } {
+  const match = text.match(/^\[(\w+)\]\s*/)
+  if (match) {
+    const tag = match[1].toLowerCase()
+    const validTags = new Set<string>(EMOTION_TAGS)
+    if (validTags.has(tag)) {
+      return { emotion: tag as EmotionTag, cleanText: text.slice(match[0].length) }
+    }
+  }
+  return { emotion: null, cleanText: text }
+}
+
+/**
+ * Map emotion tag to a natural language instruction for gpt-4o-mini-tts
+ */
+export function emotionToInstruction(emotion: EmotionTag | null): string {
+  const BASE = 'You are a podcast host or guest having a natural, engaging conversation.'
+
+  if (!emotion) return BASE
+
+  const map: Record<EmotionTag, string> = {
+    cheerfully: 'Speak in a cheerful, upbeat and positive tone. Sound genuinely happy and energetic.',
+    thoughtfully: 'Speak in a thoughtful, contemplative tone. Pause slightly as if considering your words carefully.',
+    seriously: 'Speak in a serious, measured tone. Convey gravity and importance.',
+    excitedly: 'Speak with excitement and enthusiasm. Let your energy come through in your voice.',
+    skeptically: 'Speak with a skeptical, questioning tone. Sound doubtful but curious.',
+    laughing: 'Speak with a light laugh in your voice. Sound amused and warm.',
+    sighing: 'Speak with a slight sigh. Sound reflective or mildly exasperated.',
+    whispering: 'Speak in a softer, more intimate tone. Lower your volume slightly for dramatic effect.',
+    interrupting: 'Speak with urgency, as if jumping into the conversation. Start quickly and assertively.',
+    curiously: 'Speak with genuine curiosity and interest. Sound inquisitive and engaged.',
+    dramatically: 'Speak with dramatic flair. Emphasize key words and use expressive intonation.',
+    calmly: 'Speak in a calm, steady and reassuring tone. Be measured and composed.',
+    enthusiastically: 'Speak with great enthusiasm and passion. Sound genuinely thrilled about the topic.',
+  }
+
+  return `${BASE} ${map[emotion]}`
 }
 
 /**
@@ -245,12 +289,12 @@ export type PodcastProvider = 'elevenlabs' | 'openai'
 /**
  * OpenAI TTS voice IDs
  */
-export type OpenAIVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer'
+export type OpenAIVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer' | 'coral' | 'ash' | 'sage' | 'ballad' | 'verse'
 
 /**
  * OpenAI TTS model
  */
-export type OpenAIModel = 'tts-1' | 'tts-1-hd'
+export type OpenAIModel = 'tts-1' | 'tts-1-hd' | 'gpt-4o-mini-tts'
 
 /**
  * Generate a single dialogue segment with ElevenLabs
