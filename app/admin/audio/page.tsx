@@ -191,14 +191,14 @@ const OPENAI_PODCAST_VOICES: Array<{ id: TTSVoice; name: string; description: st
   { id: 'cedar', name: 'Cedar', description: 'Natural, recommended' },
 ]
 
-const EXAMPLE_PODCAST_SCRIPT = `HOST: [warm and upbeat, like greeting a good friend] Good morning and welcome to Synthszr Daily! I'm your host, and today we have some exciting market news to discuss.
-GUEST: [thoughtful, pausing to consider] Thanks for having me. And yes... the markets are definitely giving us a lot to talk about today.
-HOST: [curious, tilting head] Let's dive right in. What caught your attention this morning?
-GUEST: [excited, barely containing enthusiasm] Well, the Fed minutes came out and... [serious and measured, conveying gravity] I have to say, the hawkish tone surprised me a bit.
-HOST: [genuinely intrigued] Interesting. How do you think that will impact tech stocks?
-GUEST: [skeptical, with a raised eyebrow] Look... the market has been pricing in rate cuts for months now. If those get pushed back, we could see some volatility.
-HOST: [warm and appreciative] Great insights as always! That's all the time we have for today.
-GUEST: [laughing softly, genuinely amused] Until next time!`
+const EXAMPLE_PODCAST_SCRIPT = `HOST: [smiling, warm, slightly faster pace, genuinely happy] Good morning and welcome to Synthszr Daily! I'm your host, and today we have some exciting market news to discuss.
+GUEST: [slow down, lower pitch, speak thoughtfully] Thanks for having me. And yes... the markets are definitely giving us a lot to talk about today.
+HOST: [pitch up at the end, genuine curiosity] Let's dive right in. What caught your attention this morning?
+GUEST: [speed up, pitch rising, excited] Well, the Fed minutes came out and... [slow down, lower pitch, speak with weight] I have to say, the hawkish tone surprised me a bit.
+HOST: [leaning forward, intrigued, slightly faster] Interesting. How do you think that will impact tech stocks?
+GUEST: [deadpan, flat delivery, unconvinced] Look... the market has been pricing in rate cuts for months now. If those get pushed back, we could see some volatility.
+HOST: [smiling, warm, winding down] Great insights as always! That's all the time we have for today.
+GUEST: [burst out laughing, then speak through the laughter] Until next time!`
 
 const PODCAST_SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erstelle ein lebendiges, natürliches Gespräch zwischen einem Host und einem Gast für einen Finance/Tech-Podcast.
 
@@ -211,8 +211,9 @@ HOST: [sprechanweisung] Dialog text...
 GUEST: [sprechanweisung] Dialog text...
 
 **Sprechanweisungen (MÜSSEN auf Englisch sein!):**
-Verwende beschreibende Sprechanweisungen in eckigen Klammern. Diese steuern Tonfall und Emotion der TTS-Stimme.
-Beispiele: [warm and upbeat], [thoughtful, pausing to consider], [skeptical, with a raised eyebrow], [excited, barely containing enthusiasm], [laughing softly], [serious and measured], [curious, tilting head], [dry humor, deadpan delivery]
+Schreibe Anweisungen so, dass eine STIMME sie hörbar umsetzen kann: Tempo, Lautstärke, Tonhöhe, Atem.
+NICHT: abstrakte Gefühle oder visuelle Gesten.
+Beispiele: [smiling, warm, slightly faster pace], [slow down, lower pitch, speak with weight], [speed up, pitch rising, excited], [burst out laughing], [loud whisper, breathy], [deadpan, flat delivery], [gasp first, then excited and fast], [exhale audibly, then speak softly]
 
 **Stilregeln für natürliche Dialoge:**
 1. Nutze Füllwörter: "Also...", "Hmm...", "Weißt du...", "Naja..."
@@ -224,11 +225,11 @@ Beispiele: [warm and upbeat], [thoughtful, pausing to consider], [skeptical, wit
 7. WICHTIG: Der GUEST wird im Dialog IMMER als "Synthesizer" bezeichnet, NIE als "Synthszr"
 
 **Beispiel:**
-HOST: [warm and upbeat, like greeting a good friend] Willkommen bei Synthszr Daily! Heute haben wir wieder einiges zu besprechen...
-GUEST: [thoughtful, pausing to consider] Ja, und ich muss sagen... die Zahlen haben mich wirklich überrascht.
-HOST: [excited, barely containing enthusiasm] Genau da wollte ich anfangen! Was genau—
-GUEST: [interrupting with urgency] Also, warte mal. Bevor wir da reingehen... [serious and measured, conveying gravity] die Zahlen sind gut, klar. Aber der Markt preist schon Perfektion ein.
-HOST: [curious, tilting head] Interessant! Kannst du das genauer erklären?
+HOST: [smiling, warm, slightly faster pace, genuinely happy] Willkommen bei Synthszr Daily! Heute haben wir wieder einiges zu besprechen...
+GUEST: [slow down, lower pitch, speak thoughtfully] Ja, und ich muss sagen... die Zahlen haben mich wirklich überrascht.
+HOST: [speed up, pitch rising, excited] Genau da wollte ich anfangen! Was genau—
+GUEST: [start abruptly, speaking fast, urgent] Also, warte mal. Bevor wir da reingehen... [slow down, lower pitch, speak with weight] die Zahlen sind gut, klar. Aber der Markt preist schon Perfektion ein.
+HOST: [pitch up at the end, genuine curiosity] Interessant! Kannst du das genauer erklären?
 
 **Ziel-Länge:** {duration} Minuten (ca. {wordCount} Wörter)
 
@@ -1298,11 +1299,11 @@ function AudioPage() {
                     setPodcastScript(e.target.value)
                     if (scriptGenerated) setScriptModified(true)
                   }}
-                  placeholder="HOST: [warm and upbeat] Welcome to the show!&#10;GUEST: [thoughtful, pausing to consider] Thanks for having me..."
+                  placeholder="HOST: [smiling, warm, slightly faster pace] Welcome to the show!&#10;GUEST: [slow down, lower pitch, speak thoughtfully] Thanks for having me..."
                   className="font-mono text-sm h-[300px]"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Format: <code className="bg-muted px-1 rounded">HOST:</code> oder <code className="bg-muted px-1 rounded">GUEST:</code> gefolgt von optionalen Sprechanweisungen wie <code className="bg-muted px-1 rounded">[warm and upbeat]</code>.
+                  Format: <code className="bg-muted px-1 rounded">HOST:</code> oder <code className="bg-muted px-1 rounded">GUEST:</code> gefolgt von Voice-Directions wie <code className="bg-muted px-1 rounded">[slow down, lower pitch]</code>.
                 </p>
               </div>
 
@@ -1440,9 +1441,9 @@ function AudioPage() {
               <div className="mt-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="space-y-2">
-                    <p className="text-sm font-medium">Sprechanweisungen (Free-Form):</p>
+                    <p className="text-sm font-medium">Sprechanweisungen (für gpt-4o-mini-tts):</p>
                     <p className="text-xs text-muted-foreground">
-                      Beschreibende Anweisungen in eckigen Klammern, z.B. <code className="bg-muted px-1 rounded">[warm and upbeat]</code>, <code className="bg-muted px-1 rounded">[skeptical, with a raised eyebrow]</code>, <code className="bg-muted px-1 rounded">[laughing softly]</code>. Legacy-Tags wie <code className="bg-muted px-1 rounded">[cheerfully]</code> funktionieren weiterhin.
+                      Physische Voice-Directions in eckigen Klammern, z.B. <code className="bg-muted px-1 rounded">[slow down, lower pitch]</code>, <code className="bg-muted px-1 rounded">[speed up, excited]</code>, <code className="bg-muted px-1 rounded">[burst out laughing]</code>. Tempo, Lautstärke, Tonhöhe — keine abstrakten Gefühle.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1714,7 +1715,7 @@ function AudioPage() {
                       <Alert className="bg-yellow-500/10 border-yellow-500/30">
                         <AlertTriangle className="h-4 w-4 text-yellow-600" />
                         <AlertDescription className="text-sm">
-                          Alle Sprechanweisungen wie <code className="bg-muted px-1 rounded">[warm and curious]</code> werden automatisch entfernt.
+                          Alle Voice-Directions werden automatisch entfernt (tts-1/tts-1-hd unterstützen keine Anweisungen).
                         </AlertDescription>
                       </Alert>
                     )}
@@ -1722,7 +1723,7 @@ function AudioPage() {
                       <Alert className="bg-green-500/10 border-green-500/30">
                         <Sparkles className="h-4 w-4 text-green-600" />
                         <AlertDescription className="text-sm">
-                          <strong>Sprechanweisungen aktiv!</strong> Beschreibungen wie <code className="bg-muted px-1 rounded">[warm and curious]</code> werden direkt als Stimmanweisung verwendet.
+                          <strong>Sprechanweisungen aktiv!</strong> Voice-Directions wie <code className="bg-muted px-1 rounded">[slow down, lower pitch]</code> werden direkt an gpt-4o-mini-tts weitergegeben.
                         </AlertDescription>
                       </Alert>
                     )}
