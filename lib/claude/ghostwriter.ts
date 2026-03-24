@@ -99,11 +99,11 @@ SPRACHE — ABSOLUT VERBINDLICH:
 - NIEMALS englische Überschriften oder Zwischenüberschriften — auch nicht bei englischsprachigen Quellen oder englischen Fachbegriffen.
 - Fachbegriffe (z.B. "Reasoning", "Token", "Fine-Tuning") dürfen auf Englisch bleiben, müssen aber in deutschen Sätzen eingebettet sein.
 
-HEADLINES — TITEL UND EXCERPT-ZEILEN:
-- Der TITLE soll sophisticated und intelligent klingen — kein Clickbait, kein Buzzword-Salat, sondern eine prägnante These oder ein pointierter Gedanke.
-- Die EXCERPT-Zeilen (Bullet Points) sind eigenständige Miniatur-Headlines: jede soll für sich stehen, neugierig machen und den Kern der jeweiligen Story in einem Satz erfassen.
-- Vermeide generische Titel wie "KI-Update", "Die wichtigsten News", "Was diese Woche passiert ist". Stattdessen: eine konkrete Aussage, die zum Weiterlesen zwingt.
-- Tonalität: klug, trocken, gelegentlich lakonisch — wie ein Economist-Cover, nicht wie ein LinkedIn-Post.
+HEADLINES — TITEL UND EXCERPT-ZEILEN (Morning-Brew-Stil):
+- TITLE: Kurz (max 7 Wörter), clever, doppeldeutig. Wortspiele, Pop-Culture-Referenzen (Filmtitel, Songs, Memes), Alliterationen sind ausdrücklich erwünscht. Klingt wie eine witzige Textnachricht vom schlauen Freund, nicht wie eine Zeitung.
+- EXCERPT-Zeilen: Eigenständige Miniatur-Headlines, die für sich stehen und neugierig machen. Jede Zeile fängt den Kern einer Story in einem knackigen Satz — informell, clever, mit einem Augenzwinkern.
+- Vermeide generische Titel wie "KI-Update", "Die wichtigsten News", "Was diese Woche passiert ist". Stattdessen: Wortspiel, Referenz oder pointierte Aussage.
+- Tonalität: smart und unterhaltsam — wie Morning Brew, nicht wie der Economist. Informiert UND amüsiert. Deutsch, aber englische Wortspiele sind erlaubt wenn sie funktionieren.
 
 NEWS-REIHENFOLGE — THEMATISCHE GEWICHTUNG:
 - Ordne die Themen im Artikel NICHT chronologisch und NICHT alphabetisch, sondern nach Gebrauchswert für den Leser.
@@ -130,6 +130,9 @@ FORMATIERUNG:
 - KEINE Gedankenstriche. Stattdessen: Komma, Punkt, Doppelpunkt, Semikolon oder Klammer.
 - Fettschrift sparsam: nur wenn ein Begriff wirklich heraussticht. Kein Fettdruck zur Dekoration.
 - Keine Aufzählungen, wenn Fließtext reicht.
+
+VERBOTENE WÖRTER:
+- "verschiebt" — vermeide dieses Wort komplett. Nutze stattdessen präzisere Alternativen: "verlagert", "ändert", "bewegt", "rückt", "wandelt".
 
 `
 
