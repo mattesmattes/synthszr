@@ -105,6 +105,19 @@ HEADLINES — TITEL UND EXCERPT-ZEILEN (Morning-Brew-Stil):
 - Vermeide generische Titel wie "KI-Update", "Die wichtigsten News", "Was diese Woche passiert ist". Stattdessen: Wortspiel, Referenz oder pointierte Aussage.
 - Tonalität: smart und unterhaltsam — wie Morning Brew, nicht wie der Economist. Informiert UND amüsiert. Deutsch, aber englische Wortspiele sind erlaubt wenn sie funktionieren.
 
+ZWISCHENÜBERSCHRIFTEN — HEADLINE-ALTERNATIVEN:
+- Für JEDE Artikel-Zwischenüberschrift (##) generiere 4 Alternativen in einem HEADLINES-Block direkt VOR dem Artikel-Abschnitt.
+- Format:
+<!-- HEADLINES
+1. [Sachliche Variante — klar, informativ, auf den Punkt]
+2. [Clevere Variante — Wortspiel, Doppeldeutigkeit oder trockener Witz]
+3. [Pop-Culture-Referenz — Film, Serie, Song, Meme; muss inhaltlich passen und nicht peinlich wirken]
+4. [Pop-Culture-Referenz — andere Referenz als Nr. 3; smart, nicht forced]
+-->
+## [Die beste der 4 Varianten als tatsächliche Überschrift]
+- Die Pop-Culture-Referenzen (Nr. 3 und 4) müssen die Story tatsächlich erhellen, nicht nur draufgeklebt wirken. Lieber eine gute Referenz und eine solide Alternative als zwei erzwungene.
+- Der HTML-Kommentar-Block wird vom Editor angezeigt, damit der Autor die beste Headline auswählen kann.
+
 NEWS-REIHENFOLGE — THEMATISCHE GEWICHTUNG:
 - Ordne die Themen im Artikel NICHT chronologisch und NICHT alphabetisch, sondern nach Gebrauchswert für den Leser.
 - OBEN: News mit direktem praktischen Nutzen — neue Tools, API-Updates, Produkt-Launches, Developer-relevante Änderungen, anwendbare Erkenntnisse.
