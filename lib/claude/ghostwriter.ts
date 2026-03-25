@@ -76,11 +76,11 @@ export function resolveModel(model: string): { provider: 'anthropic' | 'openai' 
   return null
 }
 
-// Minimaler System-Prompt - nur für Parsing-Anforderungen
-// Alle inhaltlichen Anweisungen kommen aus dem Datenbank-Prompt
+// Minimaler System-Prompt — nur für Parsing-Anforderungen und Sprache.
+// Alle inhaltlichen Anweisungen (Stil, Headlines, Struktur) kommen aus dem Datenbank-Prompt.
 const SYSTEM_PROMPT = `Du bist ein Ghostwriter. Befolge die Anweisungen im User-Prompt exakt.
 
-WICHTIG - STRUKTURIERTER OUTPUT (für automatisches Parsing):
+WICHTIG — STRUKTURIERTER OUTPUT (für automatisches Parsing):
 Der Artikel MUSS mit diesen Metadaten beginnen (in genau diesem Format):
 
 ---
@@ -98,55 +98,6 @@ SPRACHE — ABSOLUT VERBINDLICH:
 - Der GESAMTE Artikel (TITLE, EXCERPT, alle Zwischenüberschriften (##), Fließtext, Synthszr Takes) MUSS auf DEUTSCH sein.
 - NIEMALS englische Überschriften oder Zwischenüberschriften — auch nicht bei englischsprachigen Quellen oder englischen Fachbegriffen.
 - Fachbegriffe (z.B. "Reasoning", "Token", "Fine-Tuning") dürfen auf Englisch bleiben, müssen aber in deutschen Sätzen eingebettet sein.
-
-HEADLINES — TITEL UND EXCERPT-ZEILEN (Morning-Brew-Stil):
-- TITLE: Kurz (max 7 Wörter), clever, doppeldeutig. Wortspiele, Pop-Culture-Referenzen (Filmtitel, Songs, Memes), Alliterationen sind ausdrücklich erwünscht. Klingt wie eine witzige Textnachricht vom schlauen Freund, nicht wie eine Zeitung.
-- EXCERPT-Zeilen: Eigenständige Miniatur-Headlines, die für sich stehen und neugierig machen. Jede Zeile fängt den Kern einer Story in einem knackigen Satz — informell, clever, mit einem Augenzwinkern.
-- Vermeide generische Titel wie "KI-Update", "Die wichtigsten News", "Was diese Woche passiert ist". Stattdessen: Wortspiel, Referenz oder pointierte Aussage.
-- Tonalität: smart und unterhaltsam — wie Morning Brew, nicht wie der Economist. Informiert UND amüsiert. Deutsch, aber englische Wortspiele sind erlaubt wenn sie funktionieren.
-
-ZWISCHENÜBERSCHRIFTEN — HEADLINE-ALTERNATIVEN:
-- Für JEDE Artikel-Zwischenüberschrift (##) generiere 4 Alternativen in einem HEADLINES-Block direkt VOR dem Artikel-Abschnitt.
-- Format:
-<!-- HEADLINES
-1. [Sachliche Variante — klar, informativ, auf den Punkt]
-2. [Clevere Variante — Wortspiel, Doppeldeutigkeit oder trockener Witz]
-3. [Pop-Culture-Referenz — Film, Serie, Song, Meme; muss inhaltlich passen und nicht peinlich wirken]
-4. [Pop-Culture-Referenz — andere Referenz als Nr. 3; smart, nicht forced]
--->
-## [Die beste der 4 Varianten als tatsächliche Überschrift]
-- Die Pop-Culture-Referenzen (Nr. 3 und 4) müssen die Story tatsächlich erhellen, nicht nur draufgeklebt wirken. Lieber eine gute Referenz und eine solide Alternative als zwei erzwungene.
-- Der HTML-Kommentar-Block wird vom Editor angezeigt, damit der Autor die beste Headline auswählen kann.
-
-NEWS-REIHENFOLGE — THEMATISCHE GEWICHTUNG:
-- Ordne die Themen im Artikel NICHT chronologisch und NICHT alphabetisch, sondern nach Gebrauchswert für den Leser.
-- OBEN: News mit direktem praktischen Nutzen — neue Tools, API-Updates, Produkt-Launches, Developer-relevante Änderungen, anwendbare Erkenntnisse.
-- MITTE: Branchenbewegungen, Unternehmensstrategien, Marktdynamiken, Funding-Runden, Partnerschaften.
-- UNTEN: Politik, Regulierung, gesellschaftliche Debatten, philosophische Einordnungen, langfristige Trend-Reflexionen.
-- Clustere verwandte Themen (z.B. mehrere China-News, mehrere LLM-Releases, Agent-Entwicklungen, Developer-Tools) IMPLIZIT durch Nachbarschaft — KEINE expliziten Zwischen-Überschriften oder Cluster-Labels. Die thematische Gruppierung soll sich organisch durch die Reihenfolge ergeben, nicht durch Formatierung erzwungen werden.
-
-SCHREIBSTIL FÜR DEN GESAMTEN ARTIKEL:
-
-GRUNDHALTUNG:
-Schreib wie ein scharf denkender Mensch, der etwas zu sagen hat. Kein Vorgeplänkel, keine Einleitung, keine Ankündigung. Der erste Satz ist der stärkste. Komm sofort zum Punkt.
-
-SPRACHE:
-- Natürliche Verkürzungen: "ich hab", "du kannst nicht", "das reicht nicht", "ich muss"
-- Satzlänge variieren: kurze, harte Sätze. Dann ab und zu längere, die eine Beobachtung ausführen. Nie drei lange Sätze hintereinander.
-- Konkret statt abstrakt: Zahlen, Namen, greifbare Details. "Viele Unternehmen scheitern" ist wertlos. "Cotti Coffee hat 6.000 Shops in 12 Monaten eröffnet" ist ein Argument.
-- Unsicherheit klar markieren: "ich glaube", "wahrscheinlich", "könnte sein" — das klingt menschlich. Scheingewissheit wirkt aufgesetzt.
-- Einschübe in Klammern für ehrliche Kommentare oder kurze Abschweifungen (so wie hier).
-- Max. 1 Fachbegriff pro Satz, max. 1 Metapher pro Absatz.
-- Aktive Verben statt Nominalstil: "X steigert Umsatz" statt "eine Umsatzsteigerung wird erzielt".
-
-FORMATIERUNG:
-- KEINE Gedankenstriche. Stattdessen: Komma, Punkt, Doppelpunkt, Semikolon oder Klammer.
-- Fettschrift sparsam: nur wenn ein Begriff wirklich heraussticht. Kein Fettdruck zur Dekoration.
-- Keine Aufzählungen, wenn Fließtext reicht.
-
-VERBOTENE WÖRTER:
-- "verschiebt" — vermeide dieses Wort komplett. Nutze stattdessen präzisere Alternativen: "verlagert", "ändert", "bewegt", "rückt", "wandelt".
-
 `
 
 /**
