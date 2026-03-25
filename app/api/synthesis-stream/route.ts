@@ -63,16 +63,8 @@ export async function POST(request: NextRequest) {
             }
           )
 
-          // Send final result with remainingSyntheses so UI knows if more runs are needed
-          sendEvent({
-            type: 'complete',
-            result: {
-              synthesesDeveloped: result.synthesesDeveloped,
-              candidatesFound: result.candidatesFound,
-              remainingSyntheses: result.remainingSyntheses,
-              itemsProcessed: result.itemsProcessed,
-            }
-          })
+          // Pipeline already sends a 'complete' event with the summary message.
+          // No additional event needed here.
         } catch (error) {
           console.error('[API] Synthesis stream error:', error)
           sendEvent({

@@ -213,9 +213,9 @@ export interface ContentScore {
  */
 export async function scoreContentOnly(
   items: Array<{ id: string; title: string; content: string }>,
-  options: { concurrency?: number } = {}
+  options: { concurrency?: number; onProgress?: (scored: number, total: number) => void } = {}
 ): Promise<Map<string, ContentScore>> {
-  const { concurrency = 5 } = options
+  const { concurrency = 5, onProgress } = options
 
   if (items.length === 0) {
     return new Map()
@@ -322,6 +322,11 @@ BEGRÜNDUNG: [1 Satz warum]`
 
     for (const result of batchResults) {
       results.set(result.id, result.score)
+    }
+
+    // Report progress after each batch
+    if (onProgress) {
+      onProgress(results.size, items.length)
     }
 
     // Small delay between batches

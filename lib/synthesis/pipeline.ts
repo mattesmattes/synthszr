@@ -223,7 +223,14 @@ async function scoreAndQueueItems(
   console.log(`[Pipeline] Scoring ${validItems.length} items via Haiku...`)
   const scoreMap = await scoreContentOnly(
     validItems.map(item => ({ id: item.id, title: item.title, content: item.content || '' })),
-    { concurrency: 10 }
+    {
+      concurrency: 10,
+      onProgress: (scored, total) => {
+        if (onProgress) {
+          onProgress('scoring', scored, total)
+        }
+      },
+    }
   )
   console.log(`[Pipeline] Scored ${scoreMap.size} items`)
 
@@ -231,10 +238,6 @@ async function scoreAndQueueItems(
   const penaltiesApplied = applyNoveltyPenalty(validItems, scoreMap)
   if (penaltiesApplied > 0) {
     console.log(`[Pipeline] Applied ${penaltiesApplied} novelty penalties`)
-  }
-
-  if (onProgress) {
-    onProgress('scoring', scoreMap.size, validItems.length)
   }
 
   // Phase 2: Queue all items with their real scores
