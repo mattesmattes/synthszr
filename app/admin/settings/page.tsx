@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, RefreshCw, Settings2, AlertTriangle, ExternalLink, Cpu } from 'lucide-react'
+import { Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, RefreshCw, Settings2, AlertTriangle, ExternalLink, Cpu, Download } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -447,6 +447,10 @@ export default function SettingsPage() {
             <Settings2 className="h-4 w-4" />
             Verbindungen
           </TabsTrigger>
+          <TabsTrigger value="export" className="gap-1.5">
+            <Download className="h-4 w-4" />
+            Export
+          </TabsTrigger>
         </TabsList>
 
         {/* ========== KI-Modelle Tab ========== */}
@@ -853,8 +857,90 @@ export default function SettingsPage() {
             </Card>
           </div>
         </TabsContent>
+
+        {/* ========== Export Tab ========== */}
+        <TabsContent value="export">
+          <div className="space-y-6">
+            <ExportSubscribers />
+          </div>
+        </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+// --- Export Subscribers Sub-Component ---
+
+function ExportSubscribers() {
+  const [exporting, setExporting] = useState(false)
+  const [stats, setStats] = useState<{ active: number; total: number } | null>(null)
+  const [loadingStats, setLoadingStats] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/admin/subscribers?status=active&limit=1').then(r => r.json()),
+      fetch('/api/admin/subscribers?status=all&limit=1').then(r => r.json()),
+    ])
+      .then(([activeData, allData]) => {
+        setStats({
+          active: activeData.total ?? 0,
+          total: allData.total ?? 0,
+        })
+      })
+      .catch(() => {})
+      .finally(() => setLoadingStats(false))
+  }, [])
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      const res = await fetch('/api/admin/export/subscribers')
+      if (!res.ok) throw new Error('Export fehlgeschlagen')
+      const data = await res.json()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `subscribers-active-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      alert('Export fehlgeschlagen')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Newsletter-Abonnenten</CardTitle>
+        <CardDescription>
+          Aktive Abonnenten mit E-Mail-Adresse und Registrierungsdatum als JSON exportieren.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            {loadingStats ? (
+              <Loader2 className="h-4 w-4 animate-spin inline" />
+            ) : stats ? (
+              <span>{stats.active} aktive Abonnenten (von {stats.total} gesamt)</span>
+            ) : (
+              <span>Statistiken nicht verfügbar</span>
+            )}
+          </div>
+          <Button onClick={handleExport} disabled={exporting}>
+            {exporting ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            JSON exportieren
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
