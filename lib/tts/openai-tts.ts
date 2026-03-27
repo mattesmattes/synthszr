@@ -10,7 +10,7 @@ import { put } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
 import { createHash } from 'crypto'
 // OpenAI TTS voices
-export type TTSVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer'
+export type TTSVoice = 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer'
 export type TTSModel = 'tts-1' | 'tts-1-hd' | 'gpt-4o-mini-tts'
 
 export interface TTSSettings {
@@ -282,14 +282,14 @@ export async function getTTSSettings(): Promise<TTSSettings> {
     tts_model: (settingsMap.tts_model as TTSModel) || 'gpt-4o-mini-tts',
     tts_enabled: settingsMap.tts_enabled !== false, // Default to true
     // Podcast legacy (backwards compatible)
-    podcast_host_voice_id: (settingsMap.podcast_host_voice_id as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
-    podcast_guest_voice_id: (settingsMap.podcast_guest_voice_id as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
-    // Podcast German voices - Matilda as host, Ethan as guest
-    podcast_host_voice_de: (settingsMap.podcast_host_voice_de as string) || 'XrExE9yKIg1WjnnlVkGX', // Matilda
-    podcast_guest_voice_de: (settingsMap.podcast_guest_voice_de as string) || 'g5CIjZEefAph4nQFvHAz', // Ethan
-    // Podcast English voices - Lily as host, Daniel as guest
-    podcast_host_voice_en: (settingsMap.podcast_host_voice_en as string) || 'pFZP5JQG7iQjIQuC4Bku', // Lily
-    podcast_guest_voice_en: (settingsMap.podcast_guest_voice_en as string) || 'onwK4e9ZLuTAKqWW03F9', // Daniel
+    podcast_host_voice_id: (settingsMap.podcast_host_voice_id as string) || 'nova',
+    podcast_guest_voice_id: (settingsMap.podcast_guest_voice_id as string) || 'onyx',
+    // Podcast German voices
+    podcast_host_voice_de: (settingsMap.podcast_host_voice_de as string) || 'shimmer',
+    podcast_guest_voice_de: (settingsMap.podcast_guest_voice_de as string) || 'fable',
+    // Podcast English voices
+    podcast_host_voice_en: (settingsMap.podcast_host_voice_en as string) || 'shimmer',
+    podcast_guest_voice_en: (settingsMap.podcast_guest_voice_en as string) || 'fable',
     podcast_duration_minutes: (settingsMap.podcast_duration_minutes as number) || 30,
     // Podcast script prompt (null means use default)
     podcast_script_prompt: (settingsMap.podcast_script_prompt as string) || null,
