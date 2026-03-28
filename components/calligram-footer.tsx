@@ -4,10 +4,11 @@ import { useEffect, useRef, useCallback } from 'react'
 import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext'
 
 const FONT_FAMILY = '"Helvetica Neue", Helvetica, Arial, sans-serif'
-const WORD = 'oh-so'
-const CHAR_SIZE = 8
+const MASK_FONT = '900 italic 1px "Helvetica Neue", Helvetica, Arial, sans-serif'
+const WORD = 'OH-SO '
+const CHAR_SIZE = 9
 const CANVAS_WIDTH = 600
-const CANVAS_HEIGHT = 600
+const CANVAS_HEIGHT = 500
 
 interface CharPosition {
   ch: string
@@ -22,7 +23,6 @@ interface CharPosition {
   delay: number
   charIdx: number
   globalIdx: number
-  dist: number
 }
 
 const charWidthCache = new Map<string, number>()
@@ -39,8 +39,47 @@ function measureChar(ch: string, fontSize: number): number {
   return width
 }
 
-function circleSDF(nx: number, ny: number): number {
-  return Math.sqrt(nx * nx + ny * ny) - 0.75
+function createLogoMask(width: number, height: number): ImageData {
+  const offscreen = document.createElement('canvas')
+  offscreen.width = width
+  offscreen.height = height
+  const ctx = offscreen.getContext('2d')!
+
+  ctx.fillStyle = '#000000'
+  ctx.fillRect(0, 0, width, height)
+
+  ctx.fillStyle = '#ffffff'
+  ctx.textBaseline = 'top'
+
+  const padding = width * 0.02
+  const usableW = width - padding * 2
+  const blockH = height * 0.42
+  const barH = height * 0.08
+  const gap = (height - blockH * 2 - barH) / 2
+
+  // "OH" top block
+  const ohFontSize = blockH * 0.95
+  ctx.font = `900 ${ohFontSize}px ${FONT_FAMILY}`
+  const ohMetrics = ctx.measureText('OH')
+  const ohScale = usableW / ohMetrics.width
+  const ohFinal = ohFontSize * ohScale
+  ctx.font = `900 ${ohFinal}px ${FONT_FAMILY}`
+  ctx.fillText('OH', padding, gap - ohFinal * 0.08)
+
+  // Horizontal bar
+  const barY = gap + blockH
+  ctx.fillRect(padding, barY, usableW, barH)
+
+  // "SO" bottom block
+  const soFontSize = blockH * 0.95
+  ctx.font = `900 ${soFontSize}px ${FONT_FAMILY}`
+  const soMetrics = ctx.measureText('SO')
+  const soScale = usableW / soMetrics.width
+  const soFinal = soFontSize * soScale
+  ctx.font = `900 ${soFinal}px ${FONT_FAMILY}`
+  ctx.fillText('SO', padding, gap + blockH + barH - soFinal * 0.08)
+
+  return ctx.getImageData(0, 0, width, height)
 }
 
 function greyColor(charIdx: number, total: number): string {
@@ -68,48 +107,51 @@ export function CalligramFooter() {
 
     charWidthCache.clear()
 
-    const word = WORD.toLowerCase().replace(/[^a-z0-9-]/g, '') || 'text'
+    const mask = createLogoMask(CANVAS_WIDTH, CANVAS_HEIGHT)
+
+    const word = WORD || 'text'
     const fontSize = CHAR_SIZE
     const charWidths = word.split('').map(ch => measureChar(ch, fontSize))
 
     const positions: CharPosition[] = []
     const lineHeight = fontSize * 1.3
-    const padding = CANVAS_WIDTH * 0.08
-    const drawArea = CANVAS_WIDTH - padding * 2
     let charCounter = 0
 
-    for (let pixelY = padding; pixelY < CANVAS_HEIGHT - padding; pixelY += lineHeight) {
-      let pixelX = padding
-      while (pixelX < CANVAS_WIDTH - padding) {
-        const nx = (pixelX - CANVAS_WIDTH / 2) / (drawArea / 2)
-        const ny = (pixelY - CANVAS_HEIGHT / 2) / (drawArea / 2)
-        const dist = circleSDF(nx, ny)
+    for (let pixelY = 0; pixelY < CANVAS_HEIGHT; pixelY += lineHeight) {
+      let pixelX = 0
+      while (pixelX < CANVAS_WIDTH) {
+        const mx = Math.floor(pixelX)
+        const my = Math.floor(pixelY)
 
-        if (dist < -0.02) {
-          const charIdx = charCounter % word.length
-          const ch = word[charIdx]
-          const w = charWidths[charIdx]
-          positions.push({
-            ch,
-            targetX: pixelX,
-            targetY: pixelY,
-            currentX: CANVAS_WIDTH / 2 + (Math.random() - 0.5) * CANVAS_WIDTH * 0.3,
-            currentY: CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * CANVAS_HEIGHT * 0.3,
-            velX: 0,
-            velY: 0,
-            currentAlpha: 0,
-            targetAlpha: 1,
-            delay: charCounter * 0.015 + Math.random() * 0.1,
-            charIdx,
-            globalIdx: charCounter,
-            dist: Math.abs(dist),
-          })
-          pixelX += w + fontSize * 0.05
-          charCounter++
-        } else if (dist < 0.05) {
-          pixelX += fontSize * 0.3
+        if (mx >= 0 && mx < CANVAS_WIDTH && my >= 0 && my < CANVAS_HEIGHT) {
+          const idx = (my * CANVAS_WIDTH + mx) * 4
+          const r = mask.data[idx]
+
+          if (r > 128) {
+            const charIdx = charCounter % word.length
+            const ch = word[charIdx]
+            const w = charWidths[charIdx]
+            positions.push({
+              ch,
+              targetX: pixelX,
+              targetY: pixelY,
+              currentX: CANVAS_WIDTH / 2 + (Math.random() - 0.5) * CANVAS_WIDTH * 0.3,
+              currentY: CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * CANVAS_HEIGHT * 0.3,
+              velX: 0,
+              velY: 0,
+              currentAlpha: 0,
+              targetAlpha: 1,
+              delay: charCounter * 0.008 + Math.random() * 0.08,
+              charIdx,
+              globalIdx: charCounter,
+            })
+            pixelX += w + fontSize * 0.05
+            charCounter++
+          } else {
+            pixelX += fontSize * 0.4
+          }
         } else {
-          pixelX += fontSize * 0.5
+          pixelX += fontSize * 0.4
         }
       }
     }
@@ -142,14 +184,10 @@ export function CalligramFooter() {
 
       animTRef.current += 0.016
       const animT = animTRef.current
-      let allArrived = true
 
       for (const ch of animCharsRef.current) {
         const tVal = Math.max(0, animT - ch.delay)
-        if (tVal <= 0) {
-          allArrived = false
-          continue
-        }
+        if (tVal <= 0) continue
 
         const springK = 0.08
         const damping = 0.75
@@ -161,9 +199,6 @@ export function CalligramFooter() {
         ch.currentY += ch.velY
         ch.currentAlpha += (ch.targetAlpha - ch.currentAlpha) * 0.08
 
-        const distToTarget = Math.abs(ch.currentX - ch.targetX) + Math.abs(ch.currentY - ch.targetY)
-        if (distToTarget > 0.5) allArrived = false
-
         const color = greyColor(ch.charIdx, WORD.length)
         ctx!.fillStyle = color
         ctx!.globalAlpha = Math.min(1, ch.currentAlpha)
@@ -171,26 +206,6 @@ export function CalligramFooter() {
       }
 
       ctx!.globalAlpha = 1
-
-      if (allArrived && animCharsRef.current.length > 0) {
-        const pulse = (Math.sin(animT * 2) + 1) / 2
-        const glowAlpha = 0.02 + pulse * 0.02
-        const padding = CANVAS_WIDTH * 0.08
-        const drawArea = CANVAS_WIDTH - padding * 2
-
-        ctx!.fillStyle = `rgba(160, 160, 160, ${glowAlpha})`
-        for (let y = 0; y < h; y += 4 * dpr) {
-          for (let x = 0; x < w; x += 4 * dpr) {
-            const nx = (x / dpr - CANVAS_WIDTH / 2) / (drawArea / 2)
-            const ny = (y / dpr - CANVAS_HEIGHT / 2) / (drawArea / 2)
-            const dist = circleSDF(nx, ny)
-            if (dist > -0.05 && dist < 0.02) {
-              ctx!.fillRect(x, y, 3 * dpr, 3 * dpr)
-            }
-          }
-        }
-      }
-
       rafRef.current = requestAnimationFrame(renderFrame)
     }
 
@@ -202,7 +217,7 @@ export function CalligramFooter() {
   }, [generate])
 
   return (
-    <div className="flex justify-center py-8">
+    <div className="flex justify-center pt-0 pb-4">
       <canvas
         ref={canvasRef}
         style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
