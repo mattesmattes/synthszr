@@ -17,6 +17,9 @@ importers:
       '@breezystack/lamejs':
         specifier: ^1.2.7
         version: 1.2.7
+      '@chenglou/pretext':
+        specifier: ^0.0.2
+        version: 0.0.2(typescript@5.9.3)
       '@google/genai':
         specifier: ^1.38.0
         version: 1.38.0
@@ -439,6 +442,11 @@ packages:
 
   '@breezystack/lamejs@1.2.7':
     resolution: {integrity: sha512-6wc7ck65ctA75Hq7FYHTtTvGnYs6msgdxiSUICQ+A01nVOWg6rqouZB8IdyteRlfpYYiFovkf67dIeOgWIUzTA==}
+
+  '@chenglou/pretext@0.0.2':
+    resolution: {integrity: sha512-bMPySDxbU1h+qU3D7HzTsz2vhBFIeO19Yp8gsYTJ219tjuX7WFsKJzk2oPVpwxl2P1VEuQGo6whg6Kr8gztphA==}
+    peerDependencies:
+      typescript: ^5
 
   '@csstools/color-helpers@5.1.0':
     resolution: {integrity: sha512-S11EXWJyy0Mz5SYvRmY8nJYTFFd1LCNV+7cXyAgQtOOuzb4EsgfqDufL+9esx72/eLhsRdGZwaldu/h+E4t4BA==}
@@ -4273,6 +4281,10 @@ snapshots:
       '@babel/helper-validator-identifier': 7.28.5
 
   '@breezystack/lamejs@1.2.7': {}
+
+  '@chenglou/pretext@0.0.2(typescript@5.9.3)':
+    dependencies:
+      typescript: 5.9.3
 
   '@csstools/color-helpers@5.1.0': {}
 
