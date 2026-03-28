@@ -102,6 +102,99 @@ function extractQueueItemIds(node: Record<string, unknown>, ids: Set<string>) {
   }
 }
 
+// ── Recently Published Topic Penalty ─────────────────────────────
+
+/**
+ * Load titles of articles published in the last N days.
+ * Extracts heading text from TipTap JSON of recent published posts.
+ */
+async function getRecentlyPublishedTitles(days: number = 3): Promise<string[]> {
+  const supabase = createAdminClient()
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data: posts } = await supabase
+    .from('generated_posts')
+    .select('content')
+    .eq('status', 'published')
+    .gte('created_at', cutoff)
+
+  if (!posts || posts.length === 0) return []
+
+  const titles: string[] = []
+  for (const post of posts) {
+    if (!post.content) continue
+    try {
+      const doc = typeof post.content === 'string' ? JSON.parse(post.content) : post.content
+      extractHeadingTexts(doc, titles)
+    } catch {
+      // Skip unparseable content
+    }
+  }
+  return titles
+}
+
+/** Recursively extract heading text from TipTap JSON */
+function extractHeadingTexts(node: Record<string, unknown>, titles: string[]) {
+  if (node.type === 'heading' && Array.isArray(node.content)) {
+    const text = (node.content as Array<Record<string, unknown>>)
+      .filter(n => n.type === 'text' && typeof n.text === 'string')
+      .map(n => n.text as string)
+      .join('')
+    if (text.length > 5) titles.push(text)
+  }
+  if (Array.isArray(node.content)) {
+    for (const child of node.content) {
+      if (child && typeof child === 'object') {
+        extractHeadingTexts(child as Record<string, unknown>, titles)
+      }
+    }
+  }
+}
+
+/**
+ * Apply recency penalty: items whose topic was already published in recent days
+ * get their relevance and synthesis scores halved.
+ * Uses title bigram Jaccard similarity > 0.25 as threshold (looser than intra-day
+ * dedup at 0.5, because we want to catch thematic overlap, not just exact dupes).
+ */
+function applyRecencyPenalty(
+  items: Array<{ id: string; title: string }>,
+  recentTitles: string[],
+  scoreMap: Map<string, { synthesisScore: number; relevanceScore: number; uniquenessScore: number; reasoning: string }>
+): number {
+  if (recentTitles.length === 0) return 0
+
+  const recentBigrams = recentTitles.map(t => titleBigrams(t))
+  let penalized = 0
+
+  for (const item of items) {
+    const itemBigrams = titleBigrams(item.title)
+    let maxSim = 0
+    for (const recent of recentBigrams) {
+      const sim = jaccardSimilarity(itemBigrams, recent)
+      if (sim > maxSim) maxSim = sim
+    }
+
+    if (maxSim > 0.25) {
+      const scores = scoreMap.get(item.id)
+      if (scores) {
+        // Scale penalty by similarity: 0.25→mild, 0.5+→harsh
+        const penaltyFactor = Math.min(maxSim * 1.5, 0.9)
+        scores.relevanceScore = Math.max(0, scores.relevanceScore * (1 - penaltyFactor))
+        scores.synthesisScore = Math.max(0, scores.synthesisScore * (1 - penaltyFactor))
+        penalized++
+        console.log(
+          `[Pipeline] Recency penalty: "${item.title.slice(0, 50)}" ` +
+          `(sim=${maxSim.toFixed(2)}, factor=${penaltyFactor.toFixed(2)}) ` +
+          `→ rel=${scores.relevanceScore.toFixed(1)}, synth=${scores.synthesisScore.toFixed(1)}`
+        )
+      }
+    }
+  }
+
+  return penalized
+}
+
 // ── Topic Deduplication ──────────────────────────────────────────
 
 function titleBigrams(title: string): Set<string> {
@@ -326,7 +419,14 @@ async function scoreAndQueueItems(
   )
   console.log(`[Pipeline] Scored ${scoreMap.size} items`)
 
-  // Phase 1.5: Apply novelty penalty for topic deduplication
+  // Phase 1.5a: Penalize topics already published in recent days
+  const recentTitles = await getRecentlyPublishedTitles(3)
+  const recencyPenalties = applyRecencyPenalty(validItems, recentTitles, scoreMap)
+  if (recencyPenalties > 0) {
+    console.log(`[Pipeline] Applied ${recencyPenalties} recency penalties (${recentTitles.length} recent titles checked)`)
+  }
+
+  // Phase 1.5b: Apply novelty penalty for intra-day topic deduplication
   const penaltiesApplied = applyNoveltyPenalty(validItems, scoreMap)
   if (penaltiesApplied > 0) {
     console.log(`[Pipeline] Applied ${penaltiesApplied} novelty penalties`)
