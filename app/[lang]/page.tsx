@@ -4,6 +4,7 @@ import { Newsletter } from "@/components/newsletter"
 import { CodecrashPromo } from "@/components/codecrash-promo"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
+import { CalligramFooter } from "@/components/calligram-footer"
 import { createClient } from "@/lib/supabase/server"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
@@ -305,6 +306,7 @@ export default async function Page({ params }: PageProps) {
           </div>
         </div>
       </footer>
+      <CalligramFooter />
     </div>
   )
 }

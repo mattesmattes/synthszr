@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  transpilePackages: ['@chenglou/pretext'],
   images: {
     unoptimized: true,
   },
