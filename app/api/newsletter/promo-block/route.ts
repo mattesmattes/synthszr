@@ -7,21 +7,22 @@ export const runtime = 'nodejs'
 
 /**
  * GET /api/newsletter/promo-block
- * Returns a pre-composited PNG of the podcast badge row
+ * Returns a pre-composited PNG of podcast badges in a 2x2 grid
  * (white background baked in — dark-mode-safe for all email clients).
- * Headline text is now rendered as HTML in the email template.
  *
  * Layout (@2x retina, displayed at 600px wide in email):
- *   - 4 badge images → 72px tall each, inline with 16px gaps, centered
- *     (Apple, Spotify, YouTube, Audible)
+ *   - 4 badge images → 144px tall each, arranged 2x2 with gaps, centered
+ *     Row 1: Apple, Spotify
+ *     Row 2: YouTube, Audible
  */
 export async function GET() {
   try {
     const W = 1200
-    const BADGE_H = 72
-    const PAD_TOP = 12
-    const PAD_BOT = 32
-    const GAP_BADGES = 16
+    const BADGE_H = 144
+    const PAD_TOP = 24
+    const PAD_BOT = 24
+    const GAP_X = 24
+    const GAP_Y = 24
 
     // Load badge images from public folder
     const appleBuf   = readFileSync(join(process.cwd(), 'public', 'podcast-apple.png'))
@@ -47,25 +48,29 @@ export async function GET() {
       resizeBadge(Buffer.from(audibleBuf)),
     ])
 
-    // Total width of badge row
-    const badgesW = apple.w + GAP_BADGES + spotify.w + GAP_BADGES + youtube.w + GAP_BADGES + audible.w
-    const badgesLeft = Math.round((W - badgesW) / 2)
+    // 2x2 grid: center each row independently
+    const row1W = apple.w + GAP_X + spotify.w
+    const row2W = youtube.w + GAP_X + audible.w
+    const row1Left = Math.round((W - row1W) / 2)
+    const row2Left = Math.round((W - row2W) / 2)
+
+    const row1Top = PAD_TOP
+    const row2Top = PAD_TOP + BADGE_H + GAP_Y
 
     // Total canvas height
-    const H = PAD_TOP + BADGE_H + PAD_BOT
-    const badgesTop = PAD_TOP
-
-    let xOffset = badgesLeft
+    const H = PAD_TOP + BADGE_H + GAP_Y + BADGE_H + PAD_BOT
 
     // Composite badges onto a white background
     const result = await sharp({
       create: { width: W, height: H, channels: 3, background: { r: 255, g: 255, b: 255 } },
     })
       .composite([
-        { input: apple.buf,      top: badgesTop,  left: xOffset },
-        { input: spotify.buf,    top: badgesTop,  left: xOffset += apple.w + GAP_BADGES },
-        { input: youtube.buf,    top: badgesTop,  left: xOffset += spotify.w + GAP_BADGES },
-        { input: audible.buf,    top: badgesTop,  left: xOffset += youtube.w + GAP_BADGES },
+        // Row 1: Apple, Spotify
+        { input: apple.buf,   top: row1Top, left: row1Left },
+        { input: spotify.buf, top: row1Top, left: row1Left + apple.w + GAP_X },
+        // Row 2: YouTube, Audible
+        { input: youtube.buf, top: row2Top, left: row2Left },
+        { input: audible.buf, top: row2Top, left: row2Left + youtube.w + GAP_X },
       ])
       .png({ compressionLevel: 6 })
       .toBuffer()
