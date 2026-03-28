@@ -7,7 +7,7 @@ const FONT_FAMILY = '"Helvetica Neue", Helvetica, Arial, sans-serif'
 const WORD = 'OH-SO '
 const CHAR_SIZE = 7
 const CANVAS_WIDTH = 600
-const CANVAS_HEIGHT = 500
+const CANVAS_HEIGHT = 450
 
 interface CharPosition {
   ch: string
@@ -39,12 +39,13 @@ function measureChar(ch: string, fontSize: number): number {
 }
 
 function heartSDF(nx: number, ny: number): number {
-  const x = nx * 1.2
-  const y = -ny * 1.1 + 0.3
-  const d = Math.sqrt(x * x + y * y)
-  const angle = Math.atan2(y, x)
-  const heartR = 0.5 + 0.15 * Math.cos(angle * 2) + 0.1 * Math.cos(angle) + 0.02 * Math.sin(angle * 3)
-  return d - heartR
+  // Classic wide heart: (x²+y²-1)³ - x²y³ = 0
+  const x = nx * 0.85
+  const y = -ny * 0.95 + 0.2
+  const x2 = x * x
+  const y2 = y * y
+  const sum = x2 + y2 - 1
+  return sum * sum * sum - x2 * y2 * y
 }
 
 function greyColor(charIdx: number, total: number): string {
@@ -241,7 +242,7 @@ export function CalligramFooter() {
   }, [generate])
 
   return (
-    <div className="flex justify-center pt-0 pb-4">
+    <div className="flex justify-center -mt-6 pb-2">
       <canvas
         ref={canvasRef}
         style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
