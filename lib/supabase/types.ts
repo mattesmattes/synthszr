@@ -95,6 +95,8 @@ export interface NewsQueueItem {
   relevance_score: number
   uniqueness_score: number
   source_bonus: number
+  source_pub_rate: number
+  content_length: number
   total_score: number
   status: NewsQueueStatus
   selected_at: string | null
@@ -159,7 +161,7 @@ export type DailyRepoItemInsert = Omit<DailyRepoItem, 'id' | 'collected_at'>
 export type PaywallCredentialInsert = Omit<PaywallCredential, 'id' | 'created_at' | 'updated_at' | 'last_used_at'>
 export type AnalysisPromptInsert = Omit<AnalysisPrompt, 'id' | 'created_at' | 'updated_at'>
 export type DailyDigestInsert = Omit<DailyDigest, 'id' | 'created_at'>
-export type NewsQueueItemInsert = Omit<NewsQueueItem, 'id' | 'total_score' | 'queued_at' | 'expires_at' | 'status' | 'selected_at' | 'used_in_post_id' | 'skip_reason' | 'source_bonus'> & { source_bonus?: number }
+export type NewsQueueItemInsert = Omit<NewsQueueItem, 'id' | 'total_score' | 'queued_at' | 'expires_at' | 'status' | 'selected_at' | 'used_in_post_id' | 'skip_reason' | 'source_bonus' | 'source_pub_rate' | 'content_length'> & { source_bonus?: number; source_pub_rate?: number; content_length?: number }
 
 // Database schema type for Supabase client
 export interface Database {

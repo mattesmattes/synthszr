@@ -200,6 +200,8 @@ export async function addToQueue(
     synthesisScore?: number
     relevanceScore?: number
     uniquenessScore?: number
+    sourcePubRate?: number
+    contentLength?: number
     emailReceivedAt?: string | null
     metadata?: Record<string, unknown>
   }>
@@ -245,6 +247,8 @@ export async function addToQueue(
         relevance_score: item.relevanceScore || 0,
         uniqueness_score: item.uniquenessScore || 0,
         source_bonus: tierBonusMap.get(sourceIdentifier) || 0,
+        source_pub_rate: item.sourcePubRate ?? 0,
+        content_length: item.contentLength ?? (item.content?.length || 0),
         email_received_at: item.emailReceivedAt || null,
         metadata: item.metadata || {}
       }

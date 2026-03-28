@@ -6,9 +6,101 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { addToQueue } from '@/lib/news-queue'
-import { isJunkTitle } from '@/lib/news-queue/service'
+import { isJunkTitle, normalizeSourceIdentifier } from '@/lib/news-queue/service'
 import { scoreContentOnly } from './score'
 import type { DevelopedSynthesis } from './develop'
+
+/**
+ * Normalize source email/url to a source identifier (reuses queue service logic)
+ */
+function normalizeSource(email: string | null, url: string | null): string {
+  return normalizeSourceIdentifier(email, url)
+}
+
+/**
+ * Load historical source publication rates.
+ * Extracts queueItemIds from published generated_posts TipTap content,
+ * then calculates per-source: published_count / total_count.
+ */
+async function getSourcePubRates(): Promise<Map<string, number>> {
+  const supabase = createAdminClient()
+  const rates = new Map<string, number>()
+
+  // Get published post content to extract queueItemIds
+  const { data: posts } = await supabase
+    .from('generated_posts')
+    .select('content')
+    .eq('status', 'published')
+
+  if (!posts || posts.length === 0) return rates
+
+  // Extract all queueItemIds from TipTap heading nodes
+  const publishedIds = new Set<string>()
+  for (const post of posts) {
+    if (!post.content) continue
+    try {
+      const doc = typeof post.content === 'string' ? JSON.parse(post.content) : post.content
+      extractQueueItemIds(doc, publishedIds)
+    } catch {
+      // Skip unparseable content
+    }
+  }
+
+  if (publishedIds.size === 0) return rates
+
+  // Count per source: total items and published items
+  const sourceTotals = new Map<string, number>()
+  const sourcePublished = new Map<string, number>()
+
+  // Fetch all queue items (paginated)
+  let offset = 0
+  const batchSize = 1000
+  while (true) {
+    const { data } = await supabase
+      .from('news_queue')
+      .select('id, source_identifier')
+      .range(offset, offset + batchSize - 1)
+
+    if (!data || data.length === 0) break
+
+    for (const item of data) {
+      const src = item.source_identifier
+      sourceTotals.set(src, (sourceTotals.get(src) || 0) + 1)
+      if (publishedIds.has(item.id)) {
+        sourcePublished.set(src, (sourcePublished.get(src) || 0) + 1)
+      }
+    }
+
+    if (data.length < batchSize) break
+    offset += batchSize
+  }
+
+  // Calculate rates
+  for (const [src, total] of sourceTotals) {
+    const published = sourcePublished.get(src) || 0
+    rates.set(src, total > 0 ? published / total : 0)
+  }
+
+  console.log(`[Pipeline] Source pub rates: ${publishedIds.size} published items across ${rates.size} sources`)
+  return rates
+}
+
+/** Recursively extract queueItemIds from TipTap JSON */
+function extractQueueItemIds(node: Record<string, unknown>, ids: Set<string>) {
+  if (node.type === 'heading' && node.attrs) {
+    const attrs = node.attrs as Record<string, unknown>
+    if (attrs.queueItemId && typeof attrs.queueItemId === 'string') {
+      ids.add(attrs.queueItemId)
+    }
+  }
+  if (Array.isArray(node.content)) {
+    for (const child of node.content) {
+      if (child && typeof child === 'object') {
+        extractQueueItemIds(child as Record<string, unknown>, ids)
+      }
+    }
+  }
+}
 
 // ── Topic Deduplication ──────────────────────────────────────────
 
@@ -240,7 +332,11 @@ async function scoreAndQueueItems(
     console.log(`[Pipeline] Applied ${penaltiesApplied} novelty penalties`)
   }
 
-  // Phase 2: Queue all items with their real scores
+  // Phase 1.6: Load source publication rates from historical data
+  const sourcePubRates = await getSourcePubRates()
+  console.log(`[Pipeline] Loaded publication rates for ${sourcePubRates.size} sources`)
+
+  // Phase 2: Queue all items with their real scores + source_pub_rate + content_length
   let totalAdded = 0
   let totalSkipped = 0
   const QUEUE_BATCH_SIZE = 50
@@ -250,6 +346,7 @@ async function scoreAndQueueItems(
 
     const queueItems = batch.map(item => {
       const scores = scoreMap.get(item.id)
+      const sourceId = normalizeSource(item.source_email, item.source_url)
       return {
         dailyRepoId: item.id,
         title: item.title,
@@ -259,6 +356,8 @@ async function scoreAndQueueItems(
         synthesisScore: scores?.synthesisScore ?? 5,
         relevanceScore: scores?.relevanceScore ?? 5,
         uniquenessScore: scores?.uniquenessScore ?? 5,
+        sourcePubRate: sourcePubRates.get(sourceId) ?? 0,
+        contentLength: (item.content || '').length,
       }
     })
 
