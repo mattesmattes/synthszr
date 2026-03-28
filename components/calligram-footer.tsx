@@ -4,9 +4,8 @@ import { useEffect, useRef, useCallback } from 'react'
 import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext'
 
 const FONT_FAMILY = '"Helvetica Neue", Helvetica, Arial, sans-serif'
-const MASK_FONT = '900 italic 1px "Helvetica Neue", Helvetica, Arial, sans-serif'
 const WORD = 'OH-SO '
-const CHAR_SIZE = 9
+const CHAR_SIZE = 7
 const CANVAS_WIDTH = 600
 const CANVAS_HEIGHT = 500
 
@@ -39,47 +38,13 @@ function measureChar(ch: string, fontSize: number): number {
   return width
 }
 
-function createLogoMask(width: number, height: number): ImageData {
-  const offscreen = document.createElement('canvas')
-  offscreen.width = width
-  offscreen.height = height
-  const ctx = offscreen.getContext('2d')!
-
-  ctx.fillStyle = '#000000'
-  ctx.fillRect(0, 0, width, height)
-
-  ctx.fillStyle = '#ffffff'
-  ctx.textBaseline = 'top'
-
-  const padding = width * 0.02
-  const usableW = width - padding * 2
-  const blockH = height * 0.42
-  const barH = height * 0.08
-  const gap = (height - blockH * 2 - barH) / 2
-
-  // "OH" top block
-  const ohFontSize = blockH * 0.95
-  ctx.font = `900 ${ohFontSize}px ${FONT_FAMILY}`
-  const ohMetrics = ctx.measureText('OH')
-  const ohScale = usableW / ohMetrics.width
-  const ohFinal = ohFontSize * ohScale
-  ctx.font = `900 ${ohFinal}px ${FONT_FAMILY}`
-  ctx.fillText('OH', padding, gap - ohFinal * 0.08)
-
-  // Horizontal bar
-  const barY = gap + blockH
-  ctx.fillRect(padding, barY, usableW, barH)
-
-  // "SO" bottom block
-  const soFontSize = blockH * 0.95
-  ctx.font = `900 ${soFontSize}px ${FONT_FAMILY}`
-  const soMetrics = ctx.measureText('SO')
-  const soScale = usableW / soMetrics.width
-  const soFinal = soFontSize * soScale
-  ctx.font = `900 ${soFinal}px ${FONT_FAMILY}`
-  ctx.fillText('SO', padding, gap + blockH + barH - soFinal * 0.08)
-
-  return ctx.getImageData(0, 0, width, height)
+function heartSDF(nx: number, ny: number): number {
+  const x = nx * 1.2
+  const y = -ny * 1.1 + 0.3
+  const d = Math.sqrt(x * x + y * y)
+  const angle = Math.atan2(y, x)
+  const heartR = 0.5 + 0.15 * Math.cos(angle * 2) + 0.1 * Math.cos(angle) + 0.02 * Math.sin(angle * 3)
+  return d - heartR
 }
 
 function greyColor(charIdx: number, total: number): string {
@@ -94,8 +59,62 @@ export function CalligramFooter() {
   const animTRef = useRef(0)
   const rafRef = useRef<number>(0)
   const hasGeneratedRef = useRef(false)
+  const loopPhaseRef = useRef<'assemble' | 'hold' | 'scatter'>('assemble')
+  const phaseTimerRef = useRef(0)
 
   const generate = useCallback(() => {
+    const word = WORD || 'text'
+    const fontSize = CHAR_SIZE
+    const charWidths = word.split('').map(ch => measureChar(ch, fontSize))
+
+    const positions: CharPosition[] = []
+    const lineHeight = fontSize * 1.3
+    const padding = CANVAS_WIDTH * 0.08
+    const drawArea = CANVAS_WIDTH - padding * 2
+    let charCounter = 0
+
+    for (let pixelY = padding; pixelY < CANVAS_HEIGHT - padding; pixelY += lineHeight) {
+      let pixelX = padding
+      while (pixelX < CANVAS_WIDTH - padding) {
+        const nx = (pixelX - CANVAS_WIDTH / 2) / (drawArea / 2)
+        const ny = (pixelY - CANVAS_HEIGHT / 2) / (drawArea / 2)
+        const dist = heartSDF(nx, ny)
+
+        if (dist < -0.02) {
+          const charIdx = charCounter % word.length
+          const ch = word[charIdx]
+          const w = charWidths[charIdx]
+          positions.push({
+            ch,
+            targetX: pixelX,
+            targetY: pixelY,
+            currentX: CANVAS_WIDTH / 2 + (Math.random() - 0.5) * CANVAS_WIDTH * 0.6,
+            currentY: CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * CANVAS_HEIGHT * 0.6,
+            velX: 0,
+            velY: 0,
+            currentAlpha: 0,
+            targetAlpha: 1,
+            delay: charCounter * 0.006 + Math.random() * 0.06,
+            charIdx,
+            globalIdx: charCounter,
+          })
+          pixelX += w + fontSize * 0.05
+          charCounter++
+        } else if (dist < 0.05) {
+          pixelX += fontSize * 0.3
+        } else {
+          pixelX += fontSize * 0.5
+        }
+      }
+    }
+
+    return positions
+  }, [])
+
+  useEffect(() => {
+    if (hasGeneratedRef.current) return
+    hasGeneratedRef.current = true
+
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -107,71 +126,40 @@ export function CalligramFooter() {
 
     charWidthCache.clear()
 
-    const mask = createLogoMask(CANVAS_WIDTH, CANVAS_HEIGHT)
-
-    const word = WORD || 'text'
-    const fontSize = CHAR_SIZE
-    const charWidths = word.split('').map(ch => measureChar(ch, fontSize))
-
-    const positions: CharPosition[] = []
-    const lineHeight = fontSize * 1.3
-    let charCounter = 0
-
-    for (let pixelY = 0; pixelY < CANVAS_HEIGHT; pixelY += lineHeight) {
-      let pixelX = 0
-      while (pixelX < CANVAS_WIDTH) {
-        const mx = Math.floor(pixelX)
-        const my = Math.floor(pixelY)
-
-        if (mx >= 0 && mx < CANVAS_WIDTH && my >= 0 && my < CANVAS_HEIGHT) {
-          const idx = (my * CANVAS_WIDTH + mx) * 4
-          const r = mask.data[idx]
-
-          if (r > 128) {
-            const charIdx = charCounter % word.length
-            const ch = word[charIdx]
-            const w = charWidths[charIdx]
-            positions.push({
-              ch,
-              targetX: pixelX,
-              targetY: pixelY,
-              currentX: CANVAS_WIDTH / 2 + (Math.random() - 0.5) * CANVAS_WIDTH * 0.3,
-              currentY: CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * CANVAS_HEIGHT * 0.3,
-              velX: 0,
-              velY: 0,
-              currentAlpha: 0,
-              targetAlpha: 1,
-              delay: charCounter * 0.008 + Math.random() * 0.08,
-              charIdx,
-              globalIdx: charCounter,
-            })
-            pixelX += w + fontSize * 0.05
-            charCounter++
-          } else {
-            pixelX += fontSize * 0.4
-          }
-        } else {
-          pixelX += fontSize * 0.4
-        }
-      }
-    }
-
-    animCharsRef.current = positions
-    animTRef.current = 0
-  }, [])
-
-  useEffect(() => {
-    if (hasGeneratedRef.current) return
-    hasGeneratedRef.current = true
-
-    generate()
-
-    const canvas = canvasRef.current
-    if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const dpr = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1
+    animCharsRef.current = generate()
+    animTRef.current = 0
+    loopPhaseRef.current = 'assemble'
+    phaseTimerRef.current = 0
+
+    function resetForScatter() {
+      for (const ch of animCharsRef.current) {
+        ch.velX = (Math.random() - 0.5) * 8
+        ch.velY = (Math.random() - 0.5) * 8
+        ch.targetAlpha = 0
+      }
+    }
+
+    function resetForAssemble() {
+      const positions = generate()
+      for (let i = 0; i < animCharsRef.current.length; i++) {
+        const ch = animCharsRef.current[i]
+        const pos = positions[i]
+        if (!pos) continue
+        ch.targetX = pos.targetX
+        ch.targetY = pos.targetY
+        ch.currentX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * CANVAS_WIDTH * 0.6
+        ch.currentY = CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * CANVAS_HEIGHT * 0.6
+        ch.velX = 0
+        ch.velY = 0
+        ch.currentAlpha = 0
+        ch.targetAlpha = 1
+        ch.delay = pos.delay
+      }
+      animTRef.current = 0
+    }
 
     function renderFrame() {
       const w = canvas!.width
@@ -183,29 +171,65 @@ export function CalligramFooter() {
       ctx!.textBaseline = 'top'
 
       animTRef.current += 0.016
+      phaseTimerRef.current += 0.016
       const animT = animTRef.current
+      const phase = loopPhaseRef.current
+
+      let allArrived = true
+      let allGone = true
 
       for (const ch of animCharsRef.current) {
-        const tVal = Math.max(0, animT - ch.delay)
-        if (tVal <= 0) continue
+        if (phase === 'assemble') {
+          const tVal = Math.max(0, animT - ch.delay)
+          if (tVal <= 0) {
+            allArrived = false
+            continue
+          }
 
-        const springK = 0.08
-        const damping = 0.75
-        const forceX = (ch.targetX - ch.currentX) * springK
-        const forceY = (ch.targetY - ch.currentY) * springK
-        ch.velX = (ch.velX + forceX) * damping
-        ch.velY = (ch.velY + forceY) * damping
-        ch.currentX += ch.velX
-        ch.currentY += ch.velY
-        ch.currentAlpha += (ch.targetAlpha - ch.currentAlpha) * 0.08
+          const springK = 0.08
+          const damping = 0.75
+          const forceX = (ch.targetX - ch.currentX) * springK
+          const forceY = (ch.targetY - ch.currentY) * springK
+          ch.velX = (ch.velX + forceX) * damping
+          ch.velY = (ch.velY + forceY) * damping
+          ch.currentX += ch.velX
+          ch.currentY += ch.velY
+          ch.currentAlpha += (ch.targetAlpha - ch.currentAlpha) * 0.08
+
+          const distToTarget = Math.abs(ch.currentX - ch.targetX) + Math.abs(ch.currentY - ch.targetY)
+          if (distToTarget > 0.5) allArrived = false
+        } else if (phase === 'scatter') {
+          ch.currentX += ch.velX
+          ch.currentY += ch.velY
+          ch.velX *= 0.98
+          ch.velY *= 0.98
+          ch.currentAlpha += (ch.targetAlpha - ch.currentAlpha) * 0.04
+
+          if (ch.currentAlpha > 0.01) allGone = false
+        }
 
         const color = greyColor(ch.charIdx, WORD.length)
         ctx!.fillStyle = color
-        ctx!.globalAlpha = Math.min(1, ch.currentAlpha)
+        ctx!.globalAlpha = Math.min(1, Math.max(0, ch.currentAlpha))
         ctx!.fillText(ch.ch, ch.currentX * dpr, ch.currentY * dpr)
       }
 
       ctx!.globalAlpha = 1
+
+      // Phase transitions
+      if (phase === 'assemble' && allArrived && animCharsRef.current.length > 0) {
+        loopPhaseRef.current = 'hold'
+        phaseTimerRef.current = 0
+      } else if (phase === 'hold' && phaseTimerRef.current > 3) {
+        loopPhaseRef.current = 'scatter'
+        phaseTimerRef.current = 0
+        resetForScatter()
+      } else if (phase === 'scatter' && allGone) {
+        loopPhaseRef.current = 'assemble'
+        phaseTimerRef.current = 0
+        resetForAssemble()
+      }
+
       rafRef.current = requestAnimationFrame(renderFrame)
     }
 
