@@ -78,7 +78,7 @@ export async function GET() {
     return new NextResponse(new Uint8Array(result), {
       headers: {
         'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=604800', // 7 days (static content)
+        'Cache-Control': 'public, max-age=86400', // 1 day
       },
     })
   } catch (error) {

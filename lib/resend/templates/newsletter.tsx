@@ -242,7 +242,7 @@ export function NewsletterEmail({
           <Section style={{ padding: '0', backgroundColor: '#ffffff' }}>
 <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
               <Img
-                src={`${baseUrl}/api/newsletter/promo-block`}
+                src={`${baseUrl}/api/newsletter/promo-block?v=2`}
                 alt="Listen on Apple Podcasts, Spotify, YouTube and Audible"
                 width="600"
                 style={{ display: 'block', width: '100%', height: 'auto' }}

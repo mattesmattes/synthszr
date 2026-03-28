@@ -805,7 +805,7 @@ export default function NewsletterSendPage() {
                       Aktive Promotion
                     </label>
                     {[
-                      { key: 'podcast', label: 'Synthesizer Daily Podcast', img: '/api/newsletter/promo-block' },
+                      { key: 'podcast', label: 'Synthesizer Daily Podcast', img: '/api/newsletter/promo-block?v=2' },
                       { key: 'codecrash', label: 'CodeCrash Buch', img: '/codecrash-promo.gif' },
                     ].map((promo) => (
                       <label
