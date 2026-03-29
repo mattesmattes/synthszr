@@ -38,6 +38,18 @@ function measureChar(ch: string, fontSize: number): number {
   return width
 }
 
+// --- Dynamic word resolver ---
+
+function resolveWord(word: string): string {
+  if (word === '{{datetime}}') {
+    const now = new Date()
+    const d = now.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    const t = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+    return `${d} ${t} `
+  }
+  return word
+}
+
 // --- Colors ---
 
 export function greyColor(charIdx: number, total: number): string {
@@ -362,6 +374,7 @@ export function CalligramCanvas({
         const h = canvas!.height
         ctx!.clearRect(0, 0, w, h)
 
+        const resolvedWord = resolveWord(word ?? 'OH-SO ')
         const fs = (fontSize ?? 7) * dpr
         ctx!.font = `900 ${fs}px ${FONT_FAMILY}`
         ctx!.textBaseline = 'top'
@@ -399,7 +412,7 @@ export function CalligramCanvas({
           if (color) {
             ctx!.fillStyle = color
           } else {
-            ctx!.fillStyle = greyColor(ch.charIdx, (word ?? 'OH-SO ').length)
+            ctx!.fillStyle = greyColor(ch.charIdx, resolvedWord.length)
           }
           const alpha = Math.min(1, Math.max(0, ch.currentAlpha))
           ctx!.globalAlpha = alpha

@@ -24,7 +24,7 @@ export interface CoverAnimationConfig {
 export const DEFAULT_COVER_ANIMATION_CONFIG: CoverAnimationConfig = {
   mode: 'static_svg',
   calligram: {
-    word: 'OH-SO ',
+    word: '{{datetime}}',
     fontSize: 7,
     color: '#ffffff',
     width: 600,
