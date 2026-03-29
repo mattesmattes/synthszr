@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/admin/', '/api/', '/login', '/newsletter/'],
+        disallow: ['/admin/', '/api/', '/login', '/newsletter/', '/_next/static/', '/_next/image/'],
       },
     ],
     sitemap: 'https://www.synthszr.com/sitemap.xml',

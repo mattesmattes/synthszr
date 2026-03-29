@@ -5,6 +5,22 @@ const nextConfig = {
     unoptimized: true,
   },
 
+  // 301 redirects for deleted posts
+  async redirects() {
+    return [
+      {
+        source: '/de/posts/ai-powerhouses-at-a-dead-end-and-the-new-world-disorder',
+        destination: '/de/archive',
+        permanent: true,
+      },
+      {
+        source: '/de/posts/anthropic-openai-apple-a-matter-of-compromise',
+        destination: '/de/archive',
+        permanent: true,
+      },
+    ]
+  },
+
   // Security headers
   async headers() {
     return [
