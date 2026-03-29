@@ -14,6 +14,7 @@ export interface CalligramConfig {
   shapeText?: string
   shapeImageUrl?: string
   holdDuration: number
+  shadow: boolean
 }
 
 export interface CoverAnimationConfig {
@@ -32,5 +33,6 @@ export const DEFAULT_COVER_ANIMATION_CONFIG: CoverAnimationConfig = {
     shape: 'custom_text',
     shapeText: 'synthszr',
     holdDuration: 3,
+    shadow: true,
   },
 }

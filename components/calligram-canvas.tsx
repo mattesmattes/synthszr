@@ -304,13 +304,14 @@ interface CalligramCanvasProps {
   fontSize?: number
   color?: string
   holdDuration?: number
+  shadow?: boolean
   generateFn: () => CharPosition[] | Promise<CharPosition[]>
   className?: string
   style?: React.CSSProperties
 }
 
 export function CalligramCanvas({
-  width, height, word = 'OH-SO ', fontSize = 7, color = '', holdDuration = 3,
+  width, height, word = 'OH-SO ', fontSize = 7, color = '', holdDuration = 3, shadow = true,
   generateFn, className, style,
 }: CalligramCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -417,15 +418,18 @@ export function CalligramCanvas({
           }
           const alpha = Math.min(1, Math.max(0, ch.currentAlpha))
           ctx!.globalAlpha = alpha
-          // Shadow for contrast on busy backgrounds
-          ctx!.shadowColor = 'rgba(0, 0, 0, 0.9)'
-          ctx!.shadowBlur = 3 * dpr
           const cx = ch.currentX * dpr
           const cy = ch.currentY * dpr
+          if (shadow) {
+            ctx!.shadowColor = 'rgba(0, 0, 0, 0.9)'
+            ctx!.shadowBlur = 3 * dpr
+          }
           // Double-strike: draw twice to fill anti-aliased semi-transparent pixels
           ctx!.fillText(ch.ch, cx, cy)
-          ctx!.shadowColor = 'transparent'
-          ctx!.shadowBlur = 0
+          if (shadow) {
+            ctx!.shadowColor = 'transparent'
+            ctx!.shadowBlur = 0
+          }
           ctx!.fillText(ch.ch, cx, cy)
         }
 

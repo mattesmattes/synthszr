@@ -18,6 +18,7 @@ export function CoverCalligram(config: CalligramConfig) {
       fontSize={config.fontSize}
       color={config.color || undefined}
       holdDuration={config.holdDuration}
+      shadow={config.shadow ?? true}
       generateFn={generateFn}
       style={{ width: '100%', height: 'auto', aspectRatio: `${config.width}/${config.height}` }}
       className="max-w-full"

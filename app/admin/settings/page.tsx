@@ -1226,6 +1226,17 @@ function CoverAnimationSettings() {
                 </div>
               </div>
 
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Textschatten</Label>
+                  <p className="text-sm text-muted-foreground">Dunkler Schatten hinter jedem Buchstaben für bessere Lesbarkeit</p>
+                </div>
+                <Switch
+                  checked={cal.shadow ?? true}
+                  onCheckedChange={(checked) => updateCalligram({ shadow: checked })}
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label>Form</Label>
                 <Select
