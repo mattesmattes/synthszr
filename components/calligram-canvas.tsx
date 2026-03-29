@@ -157,11 +157,11 @@ function createTextMask(text: string, canvasW: number, canvasH: number): ImageDa
   const padding = canvasW * 0.03
   const usableW = canvasW - padding * 2
 
-  let testSize = canvasH * 0.9
+  let testSize = canvasH * 0.7
   ctx.font = `800 ${testSize}px ${FONT_FAMILY}`
   const metrics = ctx.measureText(text)
   const scale = usableW / metrics.width
-  const finalSize = testSize * scale
+  const finalSize = Math.min(testSize * scale, canvasH * 0.8)
   ctx.font = `800 ${finalSize}px ${FONT_FAMILY}`
   ctx.fillText(text, padding, canvasH / 2 + finalSize * 0.05)
 
@@ -174,9 +174,10 @@ function generateBitmapPositions(
   const charWidths = word.split('').map(ch => measureChar(ch, fontSize))
   const positions: CharPosition[] = []
   const lineHeight = fontSize * 1.3
+  const vPad = fontSize * 2
   let charCounter = 0
 
-  for (let pixelY = 0; pixelY < canvasH; pixelY += lineHeight) {
+  for (let pixelY = vPad; pixelY < canvasH - vPad; pixelY += lineHeight) {
     let pixelX = 0
     while (pixelX < canvasW) {
       const mx = Math.floor(pixelX)
