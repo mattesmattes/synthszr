@@ -42,7 +42,7 @@ function measureChar(ch: string, fontSize: number): number {
 
 export function greyColor(charIdx: number, total: number): string {
   const t = charIdx / Math.max(1, total - 1)
-  const lightness = 35 + Math.sin(t * Math.PI) * 25
+  const lightness = 80 + Math.sin(t * Math.PI) * 20
   return `hsl(0, 0%, ${lightness}%)`
 }
 
