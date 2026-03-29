@@ -383,14 +383,15 @@ export function CalligramCanvas({
             ch.velY = (ch.velY + (ch.targetY - ch.currentY) * springK) * damping
             ch.currentX += ch.velX
             ch.currentY += ch.velY
-            ch.currentAlpha += (ch.targetAlpha - ch.currentAlpha) * 0.15
+            ch.currentAlpha += (ch.targetAlpha - ch.currentAlpha) * 0.25
+            if (ch.currentAlpha > 0.95) ch.currentAlpha = 1
             const dist = Math.abs(ch.currentX - ch.targetX) + Math.abs(ch.currentY - ch.targetY)
             if (dist > 0.5) allArrived = false
           } else if (phase === 'scatter') {
             ch.currentX += ch.velX
             ch.currentY += ch.velY
             ch.velX *= 0.98; ch.velY *= 0.98
-            ch.currentAlpha += (ch.targetAlpha - ch.currentAlpha) * 0.04
+            ch.currentAlpha += (ch.targetAlpha - ch.currentAlpha) * 0.06
             if (ch.currentAlpha > 0.01) allGone = false
           }
 
@@ -400,7 +401,12 @@ export function CalligramCanvas({
             ctx!.fillStyle = greyColor(ch.charIdx, (word ?? 'OH-SO ').length)
           }
           ctx!.globalAlpha = Math.min(1, Math.max(0, ch.currentAlpha))
+          // Shadow for contrast on busy backgrounds
+          ctx!.shadowColor = 'rgba(0, 0, 0, 0.8)'
+          ctx!.shadowBlur = 2 * dpr
           ctx!.fillText(ch.ch, ch.currentX * dpr, ch.currentY * dpr)
+          ctx!.shadowColor = 'transparent'
+          ctx!.shadowBlur = 0
         }
 
         ctx!.globalAlpha = 1
