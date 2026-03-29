@@ -362,7 +362,7 @@ export function CalligramCanvas({
         ctx!.clearRect(0, 0, w, h)
 
         const fs = (fontSize ?? 7) * dpr
-        ctx!.font = `${fs}px ${FONT_FAMILY}`
+        ctx!.font = `900 ${fs}px ${FONT_FAMILY}`
         ctx!.textBaseline = 'top'
 
         animTRef.current += 0.016
@@ -400,13 +400,18 @@ export function CalligramCanvas({
           } else {
             ctx!.fillStyle = greyColor(ch.charIdx, (word ?? 'OH-SO ').length)
           }
-          ctx!.globalAlpha = Math.min(1, Math.max(0, ch.currentAlpha))
+          const alpha = Math.min(1, Math.max(0, ch.currentAlpha))
+          ctx!.globalAlpha = alpha
           // Shadow for contrast on busy backgrounds
-          ctx!.shadowColor = 'rgba(0, 0, 0, 0.8)'
-          ctx!.shadowBlur = 2 * dpr
-          ctx!.fillText(ch.ch, ch.currentX * dpr, ch.currentY * dpr)
+          ctx!.shadowColor = 'rgba(0, 0, 0, 0.9)'
+          ctx!.shadowBlur = 3 * dpr
+          const cx = ch.currentX * dpr
+          const cy = ch.currentY * dpr
+          // Double-strike: draw twice to fill anti-aliased semi-transparent pixels
+          ctx!.fillText(ch.ch, cx, cy)
           ctx!.shadowColor = 'transparent'
           ctx!.shadowBlur = 0
+          ctx!.fillText(ch.ch, cx, cy)
         }
 
         ctx!.globalAlpha = 1
