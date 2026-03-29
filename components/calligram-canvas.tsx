@@ -275,23 +275,24 @@ export async function generateImagePositions(
 // --- Factory ---
 
 export function createGenerateFn(config: CalligramConfig): () => CharPosition[] | Promise<CharPosition[]> {
-  const { shape, width, height, word, fontSize, shapeText, shapeImageUrl } = config
+  const { shape, width, height, fontSize, shapeText, shapeImageUrl } = config
+  const resolved = resolveWord(config.word)
 
   if (shape === 'custom_text' && shapeText) {
-    return () => generateTextPositions(shapeText, width, height, word, fontSize)
+    return () => generateTextPositions(shapeText, width, height, resolved, fontSize)
   }
 
   if (shape === 'custom_image' && shapeImageUrl) {
-    return () => generateImagePositions(shapeImageUrl, width, height, word, fontSize)
+    return () => generateImagePositions(shapeImageUrl, width, height, resolved, fontSize)
   }
 
   const sdfFn = SDF_MAP[shape]
   if (sdfFn) {
-    return () => generateSDFPositions(sdfFn, width, height, word, fontSize)
+    return () => generateSDFPositions(sdfFn, width, height, resolved, fontSize)
   }
 
   // Fallback to circle
-  return () => generateSDFPositions(circleSDF, width, height, word, fontSize)
+  return () => generateSDFPositions(circleSDF, width, height, resolved, fontSize)
 }
 
 // --- Reusable animated canvas component ---
