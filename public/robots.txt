@@ -1,0 +1,10 @@
+User-Agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /login
+Disallow: /newsletter/
+Disallow: /_next/static/
+Disallow: /_next/image/
+
+Sitemap: https://www.synthszr.com/sitemap.xml
