@@ -383,7 +383,7 @@ export function CalligramCanvas({
             ch.velY = (ch.velY + (ch.targetY - ch.currentY) * springK) * damping
             ch.currentX += ch.velX
             ch.currentY += ch.velY
-            ch.currentAlpha += (ch.targetAlpha - ch.currentAlpha) * 0.08
+            ch.currentAlpha += (ch.targetAlpha - ch.currentAlpha) * 0.15
             const dist = Math.abs(ch.currentX - ch.targetX) + Math.abs(ch.currentY - ch.targetY)
             if (dist > 0.5) allArrived = false
           } else if (phase === 'scatter') {

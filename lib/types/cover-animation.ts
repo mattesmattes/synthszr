@@ -26,7 +26,7 @@ export const DEFAULT_COVER_ANIMATION_CONFIG: CoverAnimationConfig = {
   calligram: {
     word: 'OH-SO ',
     fontSize: 7,
-    color: '',
+    color: '#ffffff',
     width: 600,
     height: 120,
     shape: 'custom_text',
