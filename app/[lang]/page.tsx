@@ -10,6 +10,7 @@ import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
 import { LOCALE_STRINGS } from "@/lib/i18n/config"
 import type { LanguageCode } from "@/lib/types"
+import type { CoverAnimationConfig } from "@/lib/types/cover-animation"
 import type { Metadata } from "next"
 
 // Disable caching to always show current cover images
@@ -51,6 +52,14 @@ export default async function Page({ params }: PageProps) {
   const locale = lang as LanguageCode
   const t = await getTranslations(locale)
   const supabase = await createClient()
+
+  // Fetch cover animation config
+  const { data: coverAnimSetting } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'cover_animation_config')
+    .single()
+  const coverAnimation = coverAnimSetting?.value as CoverAnimationConfig | undefined
 
   // Fetch manual posts
   const { data: manualPosts } = await supabase
@@ -229,6 +238,7 @@ export default async function Page({ params }: PageProps) {
               locale={locale}
               postId={featuredPost.id}
               queueItemIds={featuredPost.pending_queue_item_ids || undefined}
+              coverAnimation={coverAnimation}
             />
 
             <CodecrashPromo />

@@ -5,6 +5,7 @@ import { Newsletter } from "@/components/newsletter"
 import { CodecrashPromo } from "@/components/codecrash-promo"
 import { CalligramFooter } from "@/components/calligram-footer"
 import { createClient } from "@/lib/supabase/server"
+import type { CoverAnimationConfig } from "@/lib/types/cover-animation"
 
 // Disable caching to always show current cover images
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,14 @@ interface CombinedPost {
 
 export default async function Page() {
   const supabase = await createClient()
+
+  // Fetch cover animation config
+  const { data: coverAnimSetting } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'cover_animation_config')
+    .single()
+  const coverAnimation = coverAnimSetting?.value as CoverAnimationConfig | undefined
 
   // Fetch manual posts
   const { data: manualPosts } = await supabase
@@ -134,6 +143,7 @@ export default async function Page() {
               coverImageUrl={featuredPost.cover_image_url}
               postId={featuredPost.id}
               queueItemIds={featuredPost.pending_queue_item_ids || undefined}
+              coverAnimation={coverAnimation}
             />
 
             <CodecrashPromo />

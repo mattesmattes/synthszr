@@ -2,8 +2,10 @@ import { Suspense } from "react"
 import { PostContentView } from "./post-content-view"
 import { AudioPlayer } from "./audio-player"
 import { PodcastBadges } from "./podcast-badges"
+import { CoverCalligram } from "./cover-calligram"
 import { formatUpdateDate } from "@/lib/i18n/config"
 import type { LanguageCode } from "@/lib/types"
+import type { CoverAnimationConfig } from "@/lib/types/cover-animation"
 
 interface FeaturedArticleProps {
   slug: string
@@ -19,6 +21,7 @@ interface FeaturedArticleProps {
   locale?: LanguageCode
   postId?: string // For article thumbnails
   queueItemIds?: string[] // For stable thumbnail matching
+  coverAnimation?: CoverAnimationConfig
 }
 
 export function FeaturedArticle({
@@ -31,7 +34,8 @@ export function FeaturedArticle({
   desktopCoverUrl,
   locale = 'de',
   postId,
-  queueItemIds
+  queueItemIds,
+  coverAnimation,
 }: FeaturedArticleProps) {
   const postUrl = `/${locale}/posts/${slug}`
 
@@ -61,11 +65,15 @@ export function FeaturedArticle({
             </a>
             {/* Logo centered on top - w-full on mobile so percentage resolves against cover width */}
             <a href={postUrl} className="relative z-10 w-full flex justify-center md:w-auto">
-              <img
-                src="/synthszr-logo.svg"
-                alt="Synthszr"
-                className="h-auto w-[80%] md:h-24 md:w-auto md:max-w-[400px]"
-              />
+              {coverAnimation?.mode === 'calligram' ? (
+                <CoverCalligram {...coverAnimation.calligram} />
+              ) : (
+                <img
+                  src="/synthszr-logo.svg"
+                  alt="Synthszr"
+                  className="h-auto w-[80%] md:h-24 md:w-auto md:max-w-[400px]"
+                />
+              )}
             </a>
           </div>
           <PodcastBadges>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, RefreshCw, Settings2, AlertTriangle, ExternalLink, Cpu, Download } from 'lucide-react'
+import { Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, RefreshCw, Settings2, AlertTriangle, ExternalLink, Cpu, Download, Palette, Upload } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -451,6 +451,10 @@ export default function SettingsPage() {
             <Download className="h-4 w-4" />
             Export
           </TabsTrigger>
+          <TabsTrigger value="cover" className="gap-1.5">
+            <Palette className="h-4 w-4" />
+            Cover Animation
+          </TabsTrigger>
         </TabsList>
 
         {/* ========== KI-Modelle Tab ========== */}
@@ -864,6 +868,13 @@ export default function SettingsPage() {
             <ExportSubscribers />
           </div>
         </TabsContent>
+
+        {/* ========== Cover Animation Tab ========== */}
+        <TabsContent value="cover">
+          <div className="space-y-6">
+            <CoverAnimationSettings />
+          </div>
+        </TabsContent>
       </Tabs>
     </div>
   )
@@ -1006,5 +1017,307 @@ function ScheduleRow({
         </div>
       )}
     </div>
+  )
+}
+
+// --- Cover Animation Sub-Component ---
+
+import dynamic from 'next/dynamic'
+import { upload } from '@vercel/blob/client'
+import { Textarea } from '@/components/ui/textarea'
+import type { CoverAnimationConfig, CoverAnimationShape, CalligramConfig } from '@/lib/types/cover-animation'
+import { DEFAULT_COVER_ANIMATION_CONFIG } from '@/lib/types/cover-animation'
+
+const CalligramCanvas = dynamic(
+  () => import('@/components/calligram-canvas').then(m => ({ default: m.CalligramCanvas })),
+  { ssr: false }
+)
+const CoverCalligramPreview = dynamic(
+  () => import('@/components/cover-calligram').then(m => ({ default: m.CoverCalligram })),
+  { ssr: false }
+)
+
+const SHAPE_OPTIONS: { value: CoverAnimationShape; label: string }[] = [
+  { value: 'heart', label: 'Herz' },
+  { value: 'circle', label: 'Kreis' },
+  { value: 'star', label: 'Stern' },
+  { value: 'wave', label: 'Welle' },
+  { value: 'spiral', label: 'Spirale' },
+  { value: 'custom_text', label: 'Text-Form' },
+  { value: 'custom_image', label: 'Bild-Form (Upload)' },
+]
+
+function CoverAnimationSettings() {
+  const [config, setConfig] = useState<CoverAnimationConfig>(DEFAULT_COVER_ANIMATION_CONFIG)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [previewKey, setPreviewKey] = useState(0)
+
+  useEffect(() => {
+    fetch('/api/admin/cover-animation')
+      .then(r => r.json())
+      .then(data => setConfig(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  function updateCalligram(partial: Partial<CalligramConfig>) {
+    setConfig(prev => ({
+      ...prev,
+      calligram: { ...prev.calligram, ...partial },
+    }))
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/admin/cover-animation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      })
+      if (!res.ok) throw new Error('Save failed')
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch {
+      alert('Speichern fehlgeschlagen')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/admin/cover-animation/upload',
+      })
+      updateCalligram({ shapeImageUrl: blob.url })
+    } catch {
+      alert('Upload fehlgeschlagen')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-12 flex justify-center">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const cal = config.calligram
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Cover-Logo Modus</CardTitle>
+          <CardDescription>
+            Wähle zwischen dem statischen SVG-Logo und einer animierten Calligram-Version.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Calligram Animation aktivieren</Label>
+              <p className="text-sm text-muted-foreground">
+                {config.mode === 'calligram' ? 'Animiertes Calligram aktiv' : 'Statisches SVG-Logo aktiv'}
+              </p>
+            </div>
+            <Switch
+              checked={config.mode === 'calligram'}
+              onCheckedChange={(checked) => setConfig(prev => ({ ...prev, mode: checked ? 'calligram' : 'static_svg' }))}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {config.mode === 'calligram' && (
+        <>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Calligram-Parameter</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Wiederholungstext</Label>
+                  <Input
+                    value={cal.word}
+                    onChange={(e) => updateCalligram({ word: e.target.value })}
+                    placeholder="OH-SO "
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Schriftgröße (px)</Label>
+                  <Input
+                    type="number"
+                    min={2}
+                    max={20}
+                    value={cal.fontSize}
+                    onChange={(e) => updateCalligram({ fontSize: parseInt(e.target.value) || 7 })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Breite (px)</Label>
+                  <Input
+                    type="number"
+                    min={100}
+                    max={1200}
+                    value={cal.width}
+                    onChange={(e) => updateCalligram({ width: parseInt(e.target.value) || 600 })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Höhe (px)</Label>
+                  <Input
+                    type="number"
+                    min={50}
+                    max={800}
+                    value={cal.height}
+                    onChange={(e) => updateCalligram({ height: parseInt(e.target.value) || 120 })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Farbe</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="color"
+                      value={cal.color || '#808080'}
+                      onChange={(e) => updateCalligram({ color: e.target.value })}
+                      className="w-12 h-10 p-1"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateCalligram({ color: '' })}
+                      className={!cal.color ? 'border-accent' : ''}
+                    >
+                      Graustufen (Standard)
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Haltezeit (Sekunden)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={30}
+                    step={0.5}
+                    value={cal.holdDuration}
+                    onChange={(e) => updateCalligram({ holdDuration: parseFloat(e.target.value) || 3 })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Form</Label>
+                <Select
+                  value={cal.shape}
+                  onValueChange={(value) => updateCalligram({ shape: value as CoverAnimationShape })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SHAPE_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {cal.shape === 'custom_text' && (
+                <div className="space-y-2">
+                  <Label>Form-Text</Label>
+                  <Input
+                    value={cal.shapeText || ''}
+                    onChange={(e) => updateCalligram({ shapeText: e.target.value })}
+                    placeholder="synthszr"
+                  />
+                </div>
+              )}
+
+              {cal.shape === 'custom_image' && (
+                <div className="space-y-2">
+                  <Label>Form-Bild</Label>
+                  <div className="flex items-center gap-3">
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                      />
+                      <Button variant="outline" size="sm" asChild disabled={uploading}>
+                        <span>
+                          {uploading ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Upload className="h-4 w-4 mr-2" />
+                          )}
+                          Bild hochladen
+                        </span>
+                      </Button>
+                    </label>
+                    {cal.shapeImageUrl && (
+                      <img src={cal.shapeImageUrl} alt="Shape" className="h-10 rounded border" />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Dunkle Bereiche des Bildes werden mit Text gefüllt. PNG, JPG, SVG, WebP (max 5 MB).
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Vorschau</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => setPreviewKey(k => k + 1)}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Neu generieren
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="border rounded-lg p-4 bg-background flex justify-center overflow-hidden">
+                <CoverCalligramPreview key={previewKey} {...cal} />
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      <div className="flex items-center gap-3">
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+          Speichern
+        </Button>
+        {saved && (
+          <span className="text-sm text-green-500 flex items-center gap-1">
+            <CheckCircle className="h-4 w-4" /> Gespeichert
+          </span>
+        )}
+      </div>
+    </>
   )
 }
