@@ -4,6 +4,10 @@ import { DEFAULT_LOCALE } from '@/lib/i18n/config'
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
 
+// Languages with fully built-out static page content
+// Update this list when a new language is ready
+const FULL_CONTENT_LOCALES = ['de', 'en', 'nds', 'cs']
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = await createClient()
 
@@ -13,7 +17,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .select('code')
     .eq('is_active', true)
 
-  const activeLocales = languages?.map(l => l.code) || [DEFAULT_LOCALE]
+  const activeLocales = (languages?.map(l => l.code) || [DEFAULT_LOCALE])
+    .filter(code => FULL_CONTENT_LOCALES.includes(code))
 
   // Fetch all published posts
   const { data: posts } = await supabase
