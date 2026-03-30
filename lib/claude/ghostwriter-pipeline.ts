@@ -557,7 +557,7 @@ async function proofreadText(text: string, model: AIModel): Promise<string> {
     text,
     PROOFREADING_PROMPT,
     model,
-    { maxTokens: 16384 },
+    { maxTokens: 100000 },
   )
   return corrected.trim()
 }
