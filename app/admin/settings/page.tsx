@@ -87,6 +87,18 @@ const USE_CASE_DEFINITIONS: Record<string, UseCaseInfo> = {
     defaultModel: 'claude-sonnet-4-6-20260301',
     allowedProviders: ['anthropic', 'openai', 'google'],
   },
+  article_planning: {
+    label: 'Artikel-Planung',
+    description: 'Struktur, Reihenfolge und Überschriften planen',
+    defaultModel: 'gemini-2.0-flash',
+    allowedProviders: ['anthropic', 'openai', 'google'],
+  },
+  proofreading: {
+    label: 'Rechtschreibprüfung',
+    description: 'Deutsche Rechtschreib- und Grammatikkorrektur',
+    defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic', 'openai', 'google'],
+  },
   synthesis_scoring: {
     label: 'Bewertung (Scoring)',
     description: 'Artikel nach Originalität und Relevanz bewerten',
@@ -122,7 +134,7 @@ const USE_CASE_DEFINITIONS: Record<string, UseCaseInfo> = {
 const USE_CASE_GROUPS = [
   {
     title: 'Content-Erstellung',
-    useCases: ['ghostwriter', 'synthesis_development', 'podcast_script'],
+    useCases: ['ghostwriter', 'article_planning', 'proofreading', 'synthesis_development', 'podcast_script'],
   },
   {
     title: 'Analyse & Verarbeitung',

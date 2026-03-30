@@ -9,6 +9,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 export type UseCase =
   | 'ghostwriter'
+  | 'article_planning'
+  | 'proofreading'
   | 'synthesis_scoring'
   | 'synthesis_development'
   | 'podcast_script'
@@ -27,6 +29,18 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     label: 'Ghostwriter',
     description: 'Blog-Artikel aus dem Digest generieren',
     defaultModel: 'claude-sonnet-4-6-20260301',
+    allowedProviders: ['anthropic', 'openai', 'google'],
+  },
+  article_planning: {
+    label: 'Artikel-Planung',
+    description: 'Struktur, Reihenfolge und Überschriften planen',
+    defaultModel: 'gemini-2.0-flash',
+    allowedProviders: ['anthropic', 'openai', 'google'],
+  },
+  proofreading: {
+    label: 'Rechtschreibprüfung',
+    description: 'Deutsche Rechtschreib- und Grammatikkorrektur',
+    defaultModel: 'claude-haiku-4-5-20251001',
     allowedProviders: ['anthropic', 'openai', 'google'],
   },
   synthesis_scoring: {

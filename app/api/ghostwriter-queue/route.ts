@@ -8,11 +8,10 @@ import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
-import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, getDefaultGhostwriterPrompt, type AIModel } from '@/lib/claude/ghostwriter'
+import { findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
 import { runGhostwriterPipeline, type PipelineItem } from '@/lib/claude/ghostwriter-pipeline'
-import { getBalancedSelection, getSelectedItems, selectItemsForArticle, domainFromUrl, deriveSourceUrl } from '@/lib/news-queue/service'
+import { getBalancedSelection, getSelectedItems, selectItemsForArticle, deriveSourceUrl } from '@/lib/news-queue/service'
 import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
-import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 
 export async function POST(request: NextRequest) {
@@ -33,15 +32,13 @@ export async function POST(request: NextRequest) {
       queueItemIds,        // Specific items to use (optional)
       useSelected = true,  // Use manually selected items (status='selected')
       maxItems = 25,       // Max items if using balanced selection (fallback)
-      promptId,
       vocabularyIntensity = 50,
-      pipeline = true,     // Two-pass pipeline (default) vs single-pass
     } = body
 
     // Model comes from central settings (admin/settings → KI-Modelle tab)
     const configModel = await getModelForUseCase('ghostwriter')
     const model = configModel as AIModel
-    console.log(`[Ghostwriter-Queue] Model: ${model} (from settings), Items: ${queueItemIds?.length || 'auto-select'}, useSelected: ${useSelected}, pipeline: ${pipeline}`)
+    console.log(`[Ghostwriter-Queue] Model: ${model} (from settings), Items: ${queueItemIds?.length || 'auto-select'}, useSelected: ${useSelected}`)
 
     const supabase = await createClient()
 
@@ -239,200 +236,73 @@ export async function POST(request: NextRequest) {
     const usedItemIds = selectedItems.map(i => i.id)
     const encoder = new TextEncoder()
 
-    // ── TWO-PASS PIPELINE (default) ──────────────────────────────────────────
-    if (pipeline) {
-      const pipelineItems: PipelineItem[] = selectedItems.map(item => ({
-        id: item.id,
-        title: item.title,
-        content: item.content ? sanitizeContentUrls(item.content) : null,
-        source_display_name: item.source_display_name,
-        source_url: sanitizeUrl(item.source_url) || deriveSourceUrl(null, item.source_identifier),
-        source_identifier: item.source_identifier,
-      }))
+    const pipelineItems: PipelineItem[] = selectedItems.map(item => ({
+      id: item.id,
+      title: item.title,
+      content: item.content ? sanitizeContentUrls(item.content) : null,
+      source_display_name: item.source_display_name,
+      source_url: sanitizeUrl(item.source_url) || deriveSourceUrl(null, item.source_identifier),
+      source_identifier: item.source_identifier,
+    }))
 
-      console.log(`[Ghostwriter-Queue] Running TWO-PASS PIPELINE with ${pipelineItems.length} items, model: ${model}`)
-
-      const stream = new ReadableStream({
-        async start(controller) {
-          const send = (data: unknown) =>
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
-
-          try {
-            send({ model, started: true, itemCount: selectedItems.length, sourceDistribution: distribution, pipeline: true })
-
-            let fullText = ''
-
-            for await (const event of runGhostwriterPipeline(pipelineItems, model, { vocabularyContext })) {
-              if (event.type === 'planning') {
-                send({ phase: 'pipeline', message: event.message })
-              } else if (event.type === 'planned') {
-                send({ phase: 'pipeline', message: `Struktur fertig. Schreibe ${event.itemCount} Abschnitte...` })
-              } else if (event.type === 'writing') {
-                send({ phase: 'pipeline', message: `Abschnitt ${event.current} von ${event.total}: ${event.title.slice(0, 60)}...`, progress: { current: event.current, total: event.total } })
-              } else if (event.type === 'metadata' || event.type === 'section') {
-                fullText += event.text
-                send({ text: event.text })
-              } else if (event.type === 'assembling') {
-                send({ phase: 'pipeline', message: 'Artikel fertiggestellt.' })
-              }
-            }
-
-            // Check for duplicate metaphors in assembled text
-            const duplicates = findDuplicateMetaphors(fullText, vocabulary || undefined)
-            if (duplicates.size > 0) {
-              const duplicateList = Array.from(duplicates.entries())
-                .map(([m, p]) => `${m} (${p.length}x)`)
-                .join(', ')
-              send({ phase: 'deduplication', message: `Prüfe auf wiederholte Metaphern: ${duplicateList}...` })
-              send({ clear: true })
-              for await (const chunk of streamMetaphorDeduplication(fullText, duplicates, model)) {
-                send({ text: chunk })
-              }
-            }
-
-            send({ done: true, model, queueItemIds: usedItemIds, pipeline: true })
-          } catch (error) {
-            console.error('[Ghostwriter-Queue] Pipeline error:', error)
-            send({ error: error instanceof Error ? error.message : 'Pipeline fehlgeschlagen' })
-          }
-          controller.close()
-        },
-      })
-
-      return new Response(stream, {
-        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
-      })
-    }
-
-    // ── SINGLE-PASS FALLBACK (pipeline=false) ────────────────────────────────
-    // Build content only needed for single-pass mode (pipeline handles this internally)
-    let digestContent = '## Ausgewählte News für diesen Artikel\n\n'
-    for (const item of selectedItems) {
-      digestContent += `### ${item.title}\n`
-      const rawSourceName = item.source_display_name || item.source_identifier
-      const hasValidSource = rawSourceName && rawSourceName !== 'unknown'
-      const cleanUrl = sanitizeUrl(item.source_url)
-      const sourceName = hasValidSource ? rawSourceName : (cleanUrl ? domainFromUrl(cleanUrl) : null)
-      const effectiveUrl = cleanUrl || deriveSourceUrl(null, item.source_identifier)
-      if (sourceName || effectiveUrl) {
-        digestContent += `(Quelleninfo: ${sourceName || 'unbekannte Quelle'}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''})\n`
-      }
-      if (item.content) digestContent += `${sanitizeContentUrls(item.content)}\n`
-      digestContent += '\n---\n\n'
-    }
-
-    // Load prompt + stylistic rules (only needed for single-pass)
-    let promptText: string
-    if (promptId) {
-      const { data: prompt } = await supabase.from('ghostwriter_prompts').select('prompt_text').eq('id', promptId).single()
-      promptText = prompt?.prompt_text || getDefaultGhostwriterPrompt()
-    } else {
-      const { data: activePrompt } = await supabase.from('ghostwriter_prompts').select('prompt_text').eq('is_active', true).single()
-      promptText = activePrompt?.prompt_text || getDefaultGhostwriterPrompt()
-    }
-
-    const { data: stylisticRules } = await supabase
-      .from('stylistic_rules')
-      .select('rule_type, name, description, examples, priority')
-      .eq('is_active', true)
-      .order('priority', { ascending: false })
-
-    let stylisticContext = ''
-    if (stylisticRules && stylisticRules.length > 0) {
-      stylisticContext = '\n\n---\n\nSTILISTISCHE RICHTLINIEN (Matthias Schrader Stil):\n'
-      const rulesByType = stylisticRules.reduce((acc, r) => {
-        if (!acc[r.rule_type]) acc[r.rule_type] = []
-        acc[r.rule_type].push(r)
-        return acc
-      }, {} as Record<string, typeof stylisticRules>)
-      if (rulesByType['sprachregister']) stylisticContext += `\n**SPRACHREGISTER:** ${rulesByType['sprachregister'][0].description}\n`
-      if (rulesByType['personalpronomina']) stylisticContext += `\n**PERSPEKTIVE:** ${rulesByType['personalpronomina'][0].description}\n`
-      if (rulesByType['interpunktion']) stylisticContext += `\n**INTERPUNKTION:** ${rulesByType['interpunktion'][0].description}\n`
-      if (rulesByType['textlaenge']) stylisticContext += `\n**SATZSTRUKTUR:** ${rulesByType['textlaenge'][0].description}\n`
-      if (rulesByType['metapherntyp']?.length) {
-        stylisticContext += `\n**BEVORZUGTE METAPHERN-BEREICHE:**\n` + rulesByType['metapherntyp'].map(r => `- ${r.description}`).join('\n')
-      }
-      if (rulesByType['autorenzitat']?.length) {
-        stylisticContext += `\n\n**HÄUFIG ZITIERTE AUTOREN:** ${rulesByType['autorenzitat'].map(r => r.name).join(', ')}\n`
-      }
-      if (rulesByType['stilregel']) {
-        stylisticContext += `\n**WEITERE STILREGELN:**\n` + rulesByType['stilregel'].map(r => `- ${r.description}`).join('\n')
-      }
-    }
-
-    const fullPrompt = promptText + vocabularyContext + stylisticContext
-    const publicCompanyList = Object.keys(KNOWN_COMPANIES).join(', ')
-    const premarketCompanyList = Object.keys(KNOWN_PREMARKET_COMPANIES).join(', ')
-
-    const enforcementRules = `
-
----
-
-## QUALITÄTS-CHECKLISTE (MUSS EINGEHALTEN WERDEN):
-
-1. **ANZAHL NEWS:** Verarbeite ALLE ${selectedItems.length} News — keine weglassen!
-   - Jede News bekommt eine eigene Zwischenüberschrift (##)
-   - Jeder News-Artikel MUSS exakt 5-7 Sätze haben
-
-2. **SYNTHSZR TAKE:** Jeder "Synthszr Take:" MUSS MINDESTENS 6 Sätze haben (Ziel: 6-7 Sätze).
-   - Schreibe als erfahrener Tech-Stratege — keine Dramatik, kein Überzeugungsversuch
-   - Der LETZTE Satz MUSS knackig und zitierfähig sein: klar positiv ODER negativ.
-   - VERBOTEN: Kontrastpaare, Abwarte-Formeln, Potenzial-Phrasen, Reframing, rhetorische Fragen, "Doch"-Satzanfang, Gedankenstriche (—)
-   - FATAL: "Nicht X. Y.", "Vergiss X.", "Weniger X, mehr Y." → DIREKT POSITIV.
-
-3. **COMPANY TAGGING:** {Company1} {Company2} → [Quellenname](URL)
-   **VERFÜGBARE PUBLIC COMPANIES:** ${publicCompanyList}
-   **VERFÜGBARE PREMARKET COMPANIES:** ${premarketCompanyList}
-   Max 3 Company-Tags. Quelle NUR in dieser Zeile.
-
-4. **EXCERPT:** Exakt 3 Bullet Points (•), max 65 Zeichen pro Bullet.
-
-**WICHTIG:** ALLE ${selectedItems.length} News MÜSSEN im Artikel erscheinen.
-`
-
-    const fullContent = digestContent + enforcementRules
-    console.log(`[Ghostwriter-Queue] Single-pass, content: ${fullContent.length} chars`)
+    console.log(`[Ghostwriter-Queue] Running pipeline with ${pipelineItems.length} items, model: ${model}`)
 
     const stream = new ReadableStream({
       async start(controller) {
         const send = (data: unknown) =>
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
-        try {
-          send({ model, started: true, itemCount: selectedItems.length, sourceDistribution: distribution })
 
-          let generatedText = ''
-          for await (const chunk of streamGhostwriter(fullContent, fullPrompt, model)) {
-            generatedText += chunk
-            send({ text: chunk })
+        try {
+          send({ model, started: true, itemCount: selectedItems.length, sourceDistribution: distribution, pipeline: true })
+
+          let fullText = ''
+
+          for await (const event of runGhostwriterPipeline(pipelineItems, model, { vocabularyContext })) {
+            if (event.type === 'planning') {
+              send({ phase: 'pipeline', message: event.message })
+            } else if (event.type === 'planned') {
+              send({ phase: 'pipeline', message: `Struktur fertig. Schreibe ${event.itemCount} Abschnitte...` })
+            } else if (event.type === 'writing') {
+              send({ phase: 'pipeline', message: `Abschnitt ${event.current} von ${event.total}: ${event.title.slice(0, 60)}...`, progress: { current: event.current, total: event.total } })
+            } else if (event.type === 'metadata' || event.type === 'section') {
+              fullText += event.text
+              send({ text: event.text })
+            } else if (event.type === 'assembling') {
+              send({ phase: 'pipeline', message: 'Artikel fertiggestellt.' })
+            } else if (event.type === 'proofreading') {
+              send({ phase: 'proofreading', message: event.message })
+            } else if (event.type === 'proofread') {
+              // Replace entire text with proofread version
+              send({ clear: true })
+              send({ text: event.text })
+              fullText = event.text
+            }
           }
 
-          // Check for duplicate metaphors
-          const duplicates = findDuplicateMetaphors(generatedText, vocabulary || undefined)
+          // Check for duplicate metaphors in assembled text
+          const duplicates = findDuplicateMetaphors(fullText, vocabulary || undefined)
           if (duplicates.size > 0) {
             const duplicateList = Array.from(duplicates.entries())
               .map(([m, p]) => `${m} (${p.length}x)`)
               .join(', ')
             send({ phase: 'deduplication', message: `Prüfe auf wiederholte Metaphern: ${duplicateList}...` })
             send({ clear: true })
-            for await (const chunk of streamMetaphorDeduplication(generatedText, duplicates, model)) {
+            for await (const chunk of streamMetaphorDeduplication(fullText, duplicates, model)) {
               send({ text: chunk })
             }
           }
 
-          send({ done: true, model, queueItemIds: usedItemIds })
+          send({ done: true, model, queueItemIds: usedItemIds, pipeline: true })
         } catch (error) {
-          send({ error: error instanceof Error ? error.message : 'Ghostwriter fehlgeschlagen' })
+          console.error('[Ghostwriter-Queue] Pipeline error:', error)
+          send({ error: error instanceof Error ? error.message : 'Pipeline fehlgeschlagen' })
         }
         controller.close()
       },
     })
 
     return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
     })
   } catch (error) {
     console.error('[Ghostwriter-Queue] Error:', error)
@@ -442,5 +312,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
-// Default prompt is now imported from '@/lib/claude/ghostwriter' as getDefaultGhostwriterPrompt

@@ -12,6 +12,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
+import { getModelForUseCase } from '@/lib/ai/model-config'
 import {
   getActiveLearnedPatterns,
   findSimilarEditExamples,
@@ -54,6 +55,8 @@ export type PipelineEvent =
   | { type: 'writing'; current: number; total: number; title: string }
   | { type: 'written'; current: number; total: number }
   | { type: 'assembling' }
+  | { type: 'proofreading'; message: string }
+  | { type: 'proofread'; text: string }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Company extraction: find mentioned companies in item text (avoids sending all 492 names per call)
@@ -395,8 +398,9 @@ export async function* runGhostwriterPipeline(
 
   let plan: ArticlePlan
   try {
-    // Planning is structural (JSON output), doesn't need the expensive writing model
-    plan = await planArticle(items, 'gemini-2.0-flash')
+    const planningModel = await getModelForUseCase('article_planning') as AIModel
+    console.log(`[Pipeline] Planning model: ${planningModel}`)
+    plan = await planArticle(items, planningModel)
   } catch (err) {
     console.error('[Pipeline] planArticle failed:', err)
     // Fallback plan: sequential order, item titles as headings
@@ -515,4 +519,42 @@ export async function* runGhostwriterPipeline(
   }
 
   yield { type: 'assembling' }
+
+  // ── Post-Processing: German Proofreading ────────────────────────────────────
+  const fullText = results.filter(Boolean).join('\n\n')
+  yield { type: 'proofreading', message: 'Rechtschreib- und Grammatikprüfung...' }
+
+  try {
+    const proofreadingModel = await getModelForUseCase('proofreading') as AIModel
+    console.log(`[Pipeline] Proofreading model: ${proofreadingModel}`)
+    const corrected = await proofreadText(fullText, proofreadingModel)
+    yield { type: 'proofread', text: corrected }
+  } catch (err) {
+    console.error('[Pipeline] Proofreading failed:', err)
+    // Bei Fehler: Originaltext beibehalten (proofread event wird nicht gesendet)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// German proofreading
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PROOFREADING_PROMPT = `Du bist ein professioneller deutscher Lektor. Korrigiere den folgenden Text.
+
+REGELN:
+1. Korrigiere alle deutschen Rechtschreib- und Grammatikfehler.
+2. Korrigiere falsche Kommasetzung und Zeichensetzung.
+3. Englische Fachbegriffe (Token, Reasoning, API, Fine-Tuning, Open Source, Benchmark, Model, Inference, Training, Edge Computing, etc.) NICHT übersetzen oder eindeutschen, wenn es kein adäquates deutsches Wort gibt.
+4. Firmennamen, Produktnamen und Eigennamen NICHT verändern.
+5. Markdown-Formatierung (##, **, {Company}, →, Synthszr Take:) NICHT verändern.
+6. Stil, Ton und Inhalt NICHT verändern. Nur Fehler korrigieren.
+7. Gib NUR den korrigierten Text zurück, keine Erklärungen oder Kommentare.`
+
+async function proofreadText(text: string, model: AIModel): Promise<string> {
+  const corrected = await callModelNonStreaming(
+    text,
+    PROOFREADING_PROMPT,
+    model,
+  )
+  return corrected.trim()
 }
