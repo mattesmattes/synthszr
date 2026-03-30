@@ -318,8 +318,9 @@ async function callModelNonStreaming(
   prompt: string,
   systemPrompt: string,
   model: AIModel,
-  options?: { cacheableUserPrefix?: string }
+  options?: { cacheableUserPrefix?: string; maxTokens?: number }
 ): Promise<string> {
+  const tokenLimit = options?.maxTokens ?? 2048
   const resolved = resolveModel(model)
 
   if (resolved?.provider === 'google') {
@@ -349,7 +350,7 @@ async function callModelNonStreaming(
 
     const response = await anthropic.messages.create({
       model: resolved.modelId,
-      max_tokens: 2048,
+      max_tokens: tokenLimit,
       system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userContent }],
     })
@@ -363,6 +364,7 @@ async function callModelNonStreaming(
       : prompt
     const response = await openai.chat.completions.create({
       model: resolved.modelId,
+      max_tokens: tokenLimit,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: fullPrompt },
@@ -555,6 +557,7 @@ async function proofreadText(text: string, model: AIModel): Promise<string> {
     text,
     PROOFREADING_PROMPT,
     model,
+    { maxTokens: 16384 },
   )
   return corrected.trim()
 }
