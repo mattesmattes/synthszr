@@ -813,7 +813,7 @@ export default function CreateArticlePage() {
                 <Slider
                   value={[maxQueueItems]}
                   onValueChange={([v]) => setMaxQueueItems(v)}
-                  min={5}
+                  min={1}
                   max={30}
                   step={1}
                   className="w-full"

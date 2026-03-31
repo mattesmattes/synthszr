@@ -126,6 +126,7 @@ export default function NewsQueuePage() {
   const [loadingContent, setLoadingContent] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [showDeselectConfirm, setShowDeselectConfirm] = useState(false)
   const [showBalancedDialog, setShowBalancedDialog] = useState(false)
   const [showImportDialog, setShowImportDialog] = useState(false)
   const [importDate, setImportDate] = useState<string>(new Date().toISOString().split('T')[0])
@@ -368,6 +369,26 @@ export default function NewsQueuePage() {
       }
     } catch (error) {
       console.error('Manual add failed:', error)
+    }
+    setActionLoading(null)
+  }
+
+  const handleDeselectAll = async () => {
+    setShowDeselectConfirm(false)
+    setActionLoading('deselect-all')
+    try {
+      const res = await fetch('/api/admin/news-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset-selected' })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        alert(`${data.reset} Items zurück auf pending gesetzt`)
+        fetchData()
+      }
+    } catch (error) {
+      console.error('Deselect all failed:', error)
     }
     setActionLoading(null)
   }
@@ -625,6 +646,22 @@ export default function NewsQueuePage() {
             <Play className="h-3 w-3 mr-1" />
             Balancierte Auswahl anzeigen
           </Button>
+          {stats && stats.selected > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs text-blue-600 border-blue-300 hover:bg-blue-50"
+              onClick={() => setShowDeselectConfirm(true)}
+              disabled={actionLoading === 'deselect-all'}
+            >
+              {actionLoading === 'deselect-all' ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <X className="h-3 w-3 mr-1" />
+              )}
+              Alle deselectieren ({stats.selected})
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -1356,6 +1393,25 @@ export default function NewsQueuePage() {
                 <Plus className="h-3 w-3 mr-2" />
               )}
               {selectedCandidates.size} Items importieren
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDeselectConfirm} onOpenChange={setShowDeselectConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alle selektierten Items zurücksetzen?</DialogTitle>
+            <DialogDescription>
+              {stats?.selected ?? 0} Items werden von &quot;selected&quot; zurück auf &quot;pending&quot; gesetzt. Diese Aktion kann nicht rückgängig gemacht werden.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeselectConfirm(false)}>
+              Abbrechen
+            </Button>
+            <Button variant="destructive" onClick={handleDeselectAll}>
+              Ja, alle deselectieren
             </Button>
           </DialogFooter>
         </DialogContent>
