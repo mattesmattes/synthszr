@@ -184,7 +184,7 @@ export default function CreateArticlePage() {
   const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
   const [vocabOpen, setVocabOpen] = useState(false)
-  const [vocabularyIntensity, setVocabularyIntensity] = useState(10)
+  const [vocabularyIntensity, setVocabularyIntensity] = useState(50)
   const [usedModel, setUsedModel] = useState<string | null>(null)
 
   // Publish date: smart default (tomorrow if after 17:00 Berlin time, else today)
