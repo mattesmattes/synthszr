@@ -329,12 +329,27 @@ async function callModelNonStreaming(
           ]
         : [{ type: 'text', text: prompt }]
 
-    const response = await anthropic.messages.create({
+    const params = {
       model: resolved.modelId,
       max_tokens: tokenLimit,
-      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: userContent }],
-    })
+      system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
+      messages: [{ role: 'user' as const, content: userContent }],
+    }
+
+    // Use streaming for large requests — Anthropic SDK rejects non-streaming calls
+    // that it estimates could exceed 10 minutes (based on input size + max_tokens)
+    if (tokenLimit > 16384 || prompt.length > 30000) {
+      let result = ''
+      const stream = anthropic.messages.stream(params)
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          result += event.delta.text
+        }
+      }
+      return result
+    }
+
+    const response = await anthropic.messages.create(params)
     return (response.content[0] as { type: 'text'; text: string }).text
   }
 

@@ -4,6 +4,8 @@
  * Enforces 30% source diversity limit
  */
 
+export const maxDuration = 800 // 13 minutes — pipeline: planning + parallel section writing + proofreading + dedup
+
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
