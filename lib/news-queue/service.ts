@@ -527,12 +527,13 @@ export async function getSelectedItems(): Promise<NewsQueueItem[]> {
     console.log(`[NewsQueue] Reset ${staleItems.length} stale selected items (older than 2h) to pending`)
   }
 
-  // Now get remaining selected items (fresh selections, not expired)
+  // Now get remaining selected items (fresh selections)
+  // NOTE: No expires_at filter here — selected items have their own staleness
+  // check via selected_at (2h above). expires_at is only for pending items.
   const { data: selectedItems, error } = await supabase
     .from('news_queue')
     .select('*')
     .eq('status', 'selected')
-    .gt('expires_at', new Date().toISOString())
     .order('total_score', { ascending: false })
 
   if (error) {
