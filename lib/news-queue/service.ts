@@ -692,18 +692,28 @@ export async function getQueueStats(): Promise<{
     console.log(`[NewsQueue] getQueueStats: Reset ${resetItems.length} stale selected items to pending`)
   }
 
+  // Fetch recent items (7-day window) for pending/used/expired counts
   const { data, error } = await supabase
     .from('news_queue')
     .select('status, expires_at, selected_at')
     .gte('queued_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
 
+  // Fetch selected items separately — they must always be counted regardless
+  // of queued_at age (items may have been queued weeks ago but selected today)
+  const { data: selectedData } = await supabase
+    .from('news_queue')
+    .select('selected_at')
+    .eq('status', 'selected')
+
   if (error || !data) {
     return { pending: 0, selected: 0, used: 0, expired: 0, skipped: 0, total: 0, oldestSelectedAt: null }
   }
 
+  const selectedCount = selectedData?.length || 0
+
   const stats = {
     pending: 0,
-    selected: 0,
+    selected: selectedCount,
     used: 0,
     expired: 0,
     skipped: 0,
@@ -715,15 +725,18 @@ export async function getQueueStats(): Promise<{
     // Count pending items as expired if past expiration date
     if (item.status === 'pending' && item.expires_at && item.expires_at < now) {
       stats.expired++
-    } else {
+    } else if (item.status !== 'selected') {
+      // Skip selected — already counted above from separate query
       const status = item.status as keyof typeof stats
       if (status in stats && typeof stats[status] === 'number') {
         (stats[status] as number)++
       }
     }
+  }
 
-    // Track oldest selected_at for selected items
-    if (item.status === 'selected' && item.selected_at) {
+  // Track oldest selected_at
+  for (const item of selectedData || []) {
+    if (item.selected_at) {
       if (!stats.oldestSelectedAt || item.selected_at < stats.oldestSelectedAt) {
         stats.oldestSelectedAt = item.selected_at
       }
