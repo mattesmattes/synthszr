@@ -2,29 +2,47 @@ import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
 
 /**
- * Decode tracking redirect URLs to get the actual target URL
- * Supports: Substack JWT redirects, Customer.io tracking, email tracking URLs
+ * Decode tracking redirect URLs to get the actual target URL.
+ * Many newsletter services wrap article links in tracking redirects.
+ * Some encode the destination in the URL itself (TLDR, Customer.io),
+ * others use opaque tokens that only resolve via HTTP redirect (Beehiiv, Mailchimp).
  */
 function decodeTrackingUrl(url: string): string {
-  // Substack redirect URLs are JWT tokens with the target URL in the payload
-  // Format: https://substack.com/redirect/2/eyJ...
-  if (url.includes('substack.com/redirect/')) {
+  // TLDR tracking URLs encode the destination in the path:
+  // Format: https://tracking.tldrnewsletter.com/CL0/https:%2F%2Fwww.example.com%2Farticle/1/...
+  if (url.includes('tracking.tldrnewsletter.com/CL0/') || url.includes('tldrnewsletter.com/CL0/')) {
     try {
-      const parts = url.split('/')
-      const token = parts[parts.length - 1]
-      // JWT format: header.payload.signature - we need the payload
-      const payloadPart = token.split('.')[0]
-      // Base64 decode the payload
-      const decoded = Buffer.from(payloadPart, 'base64').toString('utf8')
-      const payload = JSON.parse(decoded)
-      if (payload.e && payload.e.startsWith('http')) {
-        console.log(`[ArticleExtractor] Decoded Substack redirect: ${url.slice(0, 40)}... → ${payload.e.slice(0, 50)}...`)
-        return payload.e
+      const match = url.match(/CL0\/([^/]+)/)
+      if (match) {
+        const decoded = decodeURIComponent(match[1])
+        if (decoded.startsWith('http')) {
+          console.log(`[ArticleExtractor] Decoded TLDR redirect: ${url.slice(0, 50)}... → ${decoded.slice(0, 60)}...`)
+          return decoded
+        }
       }
     } catch {
-      // Failed to decode, return original
+      // Failed to decode, fall through
     }
   }
+
+  // Sendgrid/generic tracking with URL in path:
+  // Format: https://u12345.ct.sendgrid.net/ls/click?upn=...&url=https%3A%2F%2F...
+  if (url.includes('sendgrid.net/') || url.includes('/track/click')) {
+    try {
+      const parsed = new URL(url)
+      const targetUrl = parsed.searchParams.get('url') || parsed.searchParams.get('u')
+      if (targetUrl?.startsWith('http')) {
+        console.log(`[ArticleExtractor] Decoded Sendgrid redirect: ${url.slice(0, 50)}... → ${targetUrl.slice(0, 60)}...`)
+        return targetUrl
+      }
+    } catch {
+      // Failed to decode, fall through
+    }
+  }
+
+  // Substack redirect URLs: destination resolved via HTTP redirect.
+  // The JWT `j` param only contains subscriber ID, not the target URL.
+  // Let fetch() handle the redirect chain automatically.
 
   // Customer.io tracking URLs (used by The Information, etc.)
   // Format: https://e.customeriomail.com/e/c/eyJ...base64...
@@ -39,15 +57,8 @@ function decodeTrackingUrl(url: string): string {
         return payload.href
       }
     } catch {
-      // Failed to decode, return original
+      // Failed to decode, fall through
     }
-  }
-
-  // Substack app-link URLs - extract from query params
-  // Format: https://substack.com/app-link/post?publication_id=X&post_id=Y
-  if (url.includes('substack.com/app-link/')) {
-    // These don't contain the actual URL, so we can't decode them
-    // They will be resolved via HTTP redirect when fetched
   }
 
   return url
@@ -140,20 +151,21 @@ export interface ExtractedArticle {
 /**
  * Extract article content from a URL using Mozilla Readability
  */
-export async function extractArticleContent(url: string): Promise<ExtractedArticle | null> {
+export async function extractArticleContent(url: string, attempt = 1): Promise<ExtractedArticle | null> {
   try {
-    // First, try to decode tracking URLs (like Substack JWT redirects)
+    // First, try to decode tracking URLs (like TLDR, Customer.io)
     const decodedUrl = decodeTrackingUrl(url)
     const urlToFetch = decodedUrl !== url ? decodedUrl : url
 
-    // Fetch the page with a reasonable timeout
+    // Fetch the page (25s timeout, extended from 15s for slow news sites)
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 25000)
 
     const response = await fetch(urlToFetch, {
       signal: controller.signal,
+      redirect: 'follow',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; SynthszrBot/1.0; +https://synthszr.vercel.app)',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'de-DE,de;q=0.9,en;q=0.8',
       },
@@ -161,7 +173,13 @@ export async function extractArticleContent(url: string): Promise<ExtractedArtic
 
     if (!response.ok) {
       clearTimeout(timeoutId)
-      console.error(`Failed to fetch ${url}: ${response.status}`)
+      // Retry once on transient errors (429, 500, 502, 503, 504)
+      if (attempt === 1 && [429, 500, 502, 503, 504].includes(response.status)) {
+        console.warn(`[ArticleExtractor] Retry after ${response.status}: ${url.slice(0, 80)}...`)
+        await new Promise(r => setTimeout(r, 2000))
+        return extractArticleContent(url, 2)
+      }
+      console.error(`[ArticleExtractor] Failed ${url.slice(0, 80)}...: ${response.status}`)
       return null
     }
 
@@ -231,9 +249,15 @@ export async function extractArticleContent(url: string): Promise<ExtractedArtic
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.error(`Timeout fetching ${url}`)
+      // Retry once on timeout
+      if (attempt === 1) {
+        console.warn(`[ArticleExtractor] Timeout, retrying: ${url.slice(0, 80)}...`)
+        await new Promise(r => setTimeout(r, 1000))
+        return extractArticleContent(url, 2)
+      }
+      console.error(`[ArticleExtractor] Timeout (final): ${url.slice(0, 80)}...`)
     } else {
-      console.error(`Error extracting article from ${url}:`, error)
+      console.error(`[ArticleExtractor] Error: ${url.slice(0, 80)}...`, error instanceof Error ? error.message : error)
     }
     return null
   }
