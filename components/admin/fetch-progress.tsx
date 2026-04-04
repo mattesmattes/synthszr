@@ -330,9 +330,10 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
 
       if (receivedUnfetchedEmails.length > 0) {
         setShowUnfetchedDialog(true)
-      } else {
+      } else if (scanSummary.errors === 0) {
         onComplete?.()
       }
+      // When there are errors, don't auto-close — let user review the error log first
 
     } catch (error) {
       console.error('Fetch error:', error)
@@ -587,6 +588,16 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
                   </span>
                 </div>
               ))}
+            </div>
+            <div className="flex justify-end pt-1">
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => onComplete?.()}
+                className="h-7 px-3 text-xs"
+              >
+                Schließen
+              </Button>
             </div>
           </div>
         )}
