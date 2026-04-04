@@ -270,7 +270,7 @@ export async function writeSection(
   const userPrompt = `ÜBERSCHRIFT: ## ${heading}
 
 NEWS-INHALT${sourceName ? ` (Quelle: ${sourceName}` : ''}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''}${sourceName ? ')' : ''}:
-${(item.content || 'Kein Inhalt verfügbar.').slice(0, 3000)}
+${(item.content || 'Kein Inhalt verfügbar.').slice(0, 6000)}
 
 COMPANY-TAGS:${tagSourcePart ? `
 QUELLFORMAT: → ${tagSourcePart}` : `
@@ -301,7 +301,7 @@ async function callModelNonStreaming(
   model: AIModel,
   options?: { cacheableUserPrefix?: string; maxTokens?: number }
 ): Promise<string> {
-  const tokenLimit = options?.maxTokens ?? 2048
+  const tokenLimit = options?.maxTokens ?? 4096
   const resolved = resolveModel(model)
 
   if (resolved?.provider === 'google') {
@@ -390,7 +390,7 @@ export async function* runGhostwriterPipeline(
   model: AIModel,
   options: { concurrency?: number; vocabularyContext?: string } = {},
 ): AsyncGenerator<PipelineEvent | { type: 'section'; text: string } | { type: 'metadata'; text: string }> {
-  const { concurrency = 3, vocabularyContext } = options
+  const { concurrency = 2, vocabularyContext } = options
   // ── Pass 1: Plan ────────────────────────────────────────────────────────────
   yield { type: 'planning', message: `Struktur für ${items.length} Items planen...` }
 
