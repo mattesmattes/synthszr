@@ -15,7 +15,9 @@ import {
   Loader2,
   Hash,
   RotateCcw,
-  StickyNote
+  StickyNote,
+  Download,
+  AlertTriangle
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -103,6 +105,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
   const [showUnfetchedDialog, setShowUnfetchedDialog] = useState(false)
 
   const [liveStats, setLiveStats] = useState({ newsletters: 0, articles: 0, emailNotes: 0, errors: 0, totalCharacters: 0 })
+  const [errorLog, setErrorLog] = useState<Array<{ title: string; from?: string; url?: string; error: string; phase: string; timestamp: string }>>([])
 
   // Helper: consume an SSE stream and call handler for each event
   async function consumeSSEStream(
@@ -143,6 +146,7 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
     setSummary(null)
     setUnfetchedEmails([])
     setLiveStats({ newsletters: 0, articles: 0, emailNotes: 0, errors: 0, totalCharacters: 0 })
+    setErrorLog([])
 
     let scanSummary = { newsletters: 0, articles: 0, emailNotes: 0, errors: 0, totalCharacters: 0 }
     let receivedUnfetchedEmails: UnfetchedEmail[] = []
@@ -201,6 +205,14 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
             }))
           } else if (event.item.status === 'error') {
             setLiveStats(prev => ({ ...prev, errors: prev.errors + 1 }))
+            setErrorLog(prev => [...prev, {
+              title: event.item!.title,
+              from: event.item!.from,
+              url: event.item!.url,
+              error: event.item!.error || 'Unbekannter Fehler',
+              phase: event.phase || 'scan',
+              timestamp: new Date().toISOString(),
+            }])
           }
         }
 
@@ -284,6 +296,14 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
               } else if (event.item.status === 'error') {
                 totalExtractErrors++
                 setLiveStats(prev => ({ ...prev, errors: prev.errors + 1 }))
+                setErrorLog(prev => [...prev, {
+                  title: event.item!.title,
+                  from: event.item!.from,
+                  url: event.item!.url,
+                  error: event.item!.error || 'Extraction fehlgeschlagen',
+                  phase: 'extract',
+                  timestamp: new Date().toISOString(),
+                }])
               }
             }
 
@@ -328,6 +348,54 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
   }, [onComplete, targetDate, forceRefresh, hoursBack])
 
   const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
+
+  function downloadErrorLog() {
+    if (errorLog.length === 0) return
+
+    const dateStr = targetDate || new Date().toISOString().split('T')[0]
+    let report = `# Newsletter Import — Error Log\n`
+    report += `Datum: ${dateStr}\n`
+    report += `Zeitpunkt: ${new Date().toLocaleString('de-DE')}\n`
+    report += `Fehler gesamt: ${errorLog.length}\n\n`
+    report += `---\n\n`
+
+    // Group by phase
+    const scanErrors = errorLog.filter(e => e.phase !== 'extract')
+    const extractErrors = errorLog.filter(e => e.phase === 'extract')
+
+    if (scanErrors.length > 0) {
+      report += `## Newsletter-Scan (${scanErrors.length} Fehler)\n\n`
+      for (const err of scanErrors) {
+        report += `### ${err.title}\n`
+        if (err.from) report += `- Absender: ${err.from}\n`
+        if (err.url) report += `- URL: ${err.url}\n`
+        report += `- Fehler: ${err.error}\n`
+        report += `- Phase: ${err.phase}\n`
+        report += `- Zeit: ${new Date(err.timestamp).toLocaleTimeString('de-DE')}\n\n`
+      }
+    }
+
+    if (extractErrors.length > 0) {
+      report += `## Artikel-Extraktion (${extractErrors.length} Fehler)\n\n`
+      for (const err of extractErrors) {
+        report += `### ${err.title}\n`
+        if (err.from) report += `- Newsletter: ${err.from}\n`
+        if (err.url) report += `- URL: ${err.url}\n`
+        report += `- Fehler: ${err.error}\n`
+        report += `- Zeit: ${new Date(err.timestamp).toLocaleTimeString('de-DE')}\n\n`
+      }
+    }
+
+    const blob = new Blob([report], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `import-errors-${dateStr}.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <Card className="w-full max-w-full overflow-hidden min-w-0">
@@ -482,6 +550,43 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
                 {summary.errors}
               </div>
               <div className="text-[10px] text-muted-foreground">Fehler</div>
+            </div>
+          </div>
+        )}
+
+        {/* Error Log with Download */}
+        {!isRunning && errorLog.length > 0 && (
+          <div className="space-y-2 border border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/20 rounded-lg p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium text-red-700 dark:text-red-400">
+                <AlertTriangle className="h-4 w-4" />
+                {errorLog.length} Fehler beim Import
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={downloadErrorLog}
+                className="h-7 px-2.5 text-xs gap-1.5 border-red-200 text-red-700 hover:bg-red-100 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+              >
+                <Download className="h-3 w-3" />
+                Error Log (.md)
+              </Button>
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-1">
+              {errorLog.map((err, i) => (
+                <div key={i} className="flex items-start gap-2 text-xs py-1.5 px-2 bg-white/60 dark:bg-black/20 rounded">
+                  <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-red-800 dark:text-red-300">{err.title}</div>
+                    {err.from && <div className="text-red-600/70 dark:text-red-400/70 truncate">Absender: {err.from}</div>}
+                    {err.url && <div className="text-red-600/70 dark:text-red-400/70 truncate">URL: {err.url}</div>}
+                    <div className="text-red-600 dark:text-red-400 mt-0.5">{err.error}</div>
+                  </div>
+                  <span className="text-[10px] text-red-400 dark:text-red-500 shrink-0 tabular-nums">
+                    {new Date(err.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         )}
