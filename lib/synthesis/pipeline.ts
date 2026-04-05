@@ -302,9 +302,6 @@ export interface SynthesisPrompt {
   core_thesis: string
 }
 
-// Max items per Supabase .in() query to avoid payload limits
-const SUPABASE_BATCH_SIZE = 200
-
 /**
  * Get daily_repo items associated with a digest (no item cap)
  */
@@ -321,7 +318,7 @@ async function getDigestItems(digestId: string): Promise<
 
   const { data: digest, error: digestError } = await supabase
     .from('daily_digests')
-    .select('digest_date, sources_used')
+    .select('digest_date')
     .eq('id', digestId)
     .single()
 
@@ -331,34 +328,25 @@ async function getDigestItems(digestId: string): Promise<
 
   let rawItems: Array<{ id: string; title: string; content: string; source_email: string | null; source_url: string | null }>
 
-  if (digest.sources_used && digest.sources_used.length > 0) {
-    console.log(`[Pipeline] Fetching ${digest.sources_used.length} sources from sources_used`)
-
-    // Batch fetch to avoid Supabase payload limits
-    const allItems: typeof rawItems = []
-    const ids: string[] = digest.sources_used
-    for (let i = 0; i < ids.length; i += SUPABASE_BATCH_SIZE) {
-      const batch = ids.slice(i, i + SUPABASE_BATCH_SIZE)
-      const { data, error } = await supabase
-        .from('daily_repo')
-        .select('id, title, content, source_email, source_url')
-        .in('id', batch)
-
-      if (error) throw error
-      if (data) allItems.push(...data)
-    }
-
-    rawItems = allItems
-  } else {
-    // Fallback: get ALL items from that date
+  // Always fetch ALL items for the digest date — not just sources_used
+  // sources_used only tracks items sent to Gemini analysis (capped by char budget),
+  // but scoring should evaluate every article in the daily_repo for the date
+  const allItems: typeof rawItems = []
+  let offset = 0
+  const PAGE = 1000
+  while (true) {
     const { data, error } = await supabase
       .from('daily_repo')
       .select('id, title, content, source_email, source_url')
       .eq('newsletter_date', digest.digest_date)
-
+      .range(offset, offset + PAGE - 1)
     if (error) throw error
-    rawItems = data || []
+    if (!data || data.length === 0) break
+    allItems.push(...data)
+    if (data.length < PAGE) break
+    offset += PAGE
   }
+  rawItems = allItems
 
   console.log(`[Pipeline] Fetched ${rawItems.length} raw items`)
 
