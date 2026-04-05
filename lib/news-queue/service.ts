@@ -28,17 +28,41 @@ const JUNK_TITLE_PATTERNS = [
 
   // Meta/utility pages
   /^help center$/i,
-  /^privacy policy/i,
+  /^privacy policy$/i,
   /^terms of (service|use)/i,
+  /^terms and conditions$/i,
+  /^cookies policy$/i,
   /^subscribe to/i,
+  /^subscribe$/i,
   /^introducing the .* app$/i,
   /^unsubscribe$/i,
+  /referral hub/i,
 
-  // Too short/generic
+  // Too short/generic (single words that are never article titles)
   /^x$/i,
   /^home$/i,
   /^about$/i,
   /^contact$/i,
+  /^help$/i,
+  /^here$/i,
+  /^sale$/i,
+  /^men$/i,
+  /^brands$/i,
+  /^beauty$/i,
+  /^design$/i,
+  /^reviews$/i,
+  /^every$/i,
+  /^LINK$/i,
+  /^CONNECT$/i,
+  /^read more$/i,
+  /^learn more$/i,
+  /^get up to speed$/i,
+  /^tune in now$/i,
+  /^view on medium$/i,
+  /^rewind$/i,
+  /^bootcamp$/i,
+  /^careers$/i,
+  /^observability$/i,
 
   // Spam indicators
   /missing something[✨★⭐]/i,
@@ -49,6 +73,58 @@ const JUNK_TITLE_PATTERNS = [
   // Forum/discussion pages (not articles)
   /^open thread \d+$/i,
   /^forum$/i,
+
+  // Newsletter footer/utility links
+  /^refer a friend/i,
+  /^register (here|today)/i,
+  /^become a (sponsor|tns sponsor)/i,
+  /^submit your ai tool$/i,
+  /^become a sponsor$/i,
+  /^advertise to/i,
+  /^list your software/i,
+  /^find top ai developers/i,
+  /^get the .* app/i,
+  /^(morning brew|tech brew|business insider).*subscribe/i,
+  /^\w+ subscriptions?:? (enjoy|subscribe)/i,
+  /^request a demo/i,
+  /^save the date$/i,
+  /^word of the day$/i,
+  /^what our readers are saying$/i,
+  /^forward it to/i,
+  /^jetzt unterstützen$/i,
+  /^(und|and) make us a preferred source$/i,
+  /^open in your browser$/i,
+  /^store locator$/i,
+  /^simple app$/i,
+  /^from our partner$/i,
+  /^catch the episode$/i,
+  /^watch the (full |)episode$/i,
+  /^featured story$/i,
+  /explore the latest obituaries/i,
+
+  // E-commerce products (Edgars etc.)
+  /^ladies .*(jacket|coat|boot|blazer|parfum|puffer)/i,
+  /^men .*(jacket|coat|boot)/i,
+  /edgars account/i,
+
+  // Discount/promo
+  /^\d+% off your/i,
+  /^get \d+% (back|off)/i,
+  /🐣.*special.*off/i,
+
+  // Newsletter author names (not articles)
+  /^(dan ni|stephen flanders|sam klebanov|holly van leuven|matty merritt|brendan cosgrove|whizy kim|alex gove|connie loizos|arjun iyer|kayla bondy|david cassel|adrian bridgwater)$/i,
+  // McKinsey author pages
+  /^(kweilin ellingrud|scott blackburn|shubham singhal|arvind govindarajan|olivia white|jacqueline brassey|erica coe|kana enomoto|lucy pérez|eric kutcher)$/i,
+
+  // Social media handles as titles
+  /^@\w+:$/,
+
+  // Raw tracking URLs as titles
+  /^https?:\/\/(email\.mckinsey|e\.customeriomail|links\.morningbrew|elink\d*\.|hep\d*\.r\.sp|email-st\.seekingalpha|info\.thenewstack|cm\.stackedmarketer|semafor\.com\/s\/|l\.businessinsider|dev\.to\/ahoy)/i,
+
+  // Solve puzzles / crosswords
+  /^(sat|sun|mon|tue|wed|thu|fri),.*solve this/i,
 ]
 
 /**
@@ -57,6 +133,10 @@ const JUNK_TITLE_PATTERNS = [
  */
 export function isJunkTitle(title: string): boolean {
   const normalizedTitle = title.trim()
+  // Title is just a URL (not an article)
+  if (normalizedTitle.startsWith('http://') || normalizedTitle.startsWith('https://')) return true
+  // Title is too short to be an article (single word under 15 chars)
+  if (normalizedTitle.length < 15 && !normalizedTitle.includes(' ')) return true
   return JUNK_TITLE_PATTERNS.some(pattern => pattern.test(normalizedTitle))
 }
 
