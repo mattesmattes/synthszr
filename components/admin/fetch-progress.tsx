@@ -86,8 +86,6 @@ const phaseLabels: Record<string, string> = {
   error: 'Fehler aufgetreten',
 }
 
-const EXTRACT_BATCH_SIZE = 100 // Articles per API request
-
 interface FetchProgressProps {
   onComplete?: () => void
   targetDate?: string
@@ -149,28 +147,27 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
     setLiveStats({ newsletters: 0, articles: 0, emailNotes: 0, errors: 0, totalCharacters: 0 })
     setErrorLog([])
 
-    let scanSummary = { newsletters: 0, articles: 0, emailNotes: 0, errors: 0, totalCharacters: 0 }
+    let pipelineSummary = { newsletters: 0, articles: 0, emailNotes: 0, errors: 0, totalCharacters: 0 }
     let receivedUnfetchedEmails: UnfetchedEmail[] = []
-    let articleUrls: ArticleToExtract[] = []
-    let fetchDate = targetDate || new Date().toISOString().split('T')[0]
 
     try {
       // ========================================
-      // PHASE 1: Scan — fetch emails, parse newsletters, collect article URLs
+      // Full pipeline: scan emails + extract articles in one request
+      // Same path as cron job (scanOnly: false)
       // ========================================
-      const scanResponse = await fetch('/api/fetch-newsletters-stream', {
+      const response = await fetch('/api/fetch-newsletters-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetDate, force: forceRefresh, hoursBack, mode: 'scan' }),
+        body: JSON.stringify({ targetDate, force: forceRefresh, hoursBack }),
         credentials: 'include',
       })
 
-      if (!scanResponse.ok) {
-        const errorText = await scanResponse.text().catch(() => 'Unknown error')
-        throw new Error(`Scan failed (${scanResponse.status}): ${errorText}`)
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error')
+        throw new Error(`Pipeline failed (${response.status}): ${errorText}`)
       }
 
-      await consumeSSEStream(scanResponse, (event) => {
+      await consumeSSEStream(response, (event) => {
         if (event.phase) setPhase(event.phase)
 
         if (event.current !== undefined && event.total !== undefined) {
@@ -193,6 +190,8 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
               updated[existing] = itemWithType
               return updated
             }
+            // Keep list manageable
+            if (prev.length > 50) return [...prev.slice(-49), itemWithType]
             return [...prev, itemWithType]
           })
 
@@ -211,16 +210,10 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
               from: event.item!.from,
               url: event.item!.url,
               error: event.item!.error || 'Unbekannter Fehler',
-              phase: event.phase || 'scan',
+              phase: event.phase || 'unknown',
               timestamp: new Date().toISOString(),
             }])
           }
-        }
-
-        // Collect article URLs from scan
-        if (event.type === 'article_urls' && event.articleUrls) {
-          articleUrls = event.articleUrls
-          console.log(`[FetchProgress] Received ${articleUrls.length} article URLs to extract`)
         }
 
         if (event.type === 'unfetched_emails' && event.unfetchedEmails) {
@@ -229,109 +222,19 @@ export function FetchProgress({ onComplete, targetDate }: FetchProgressProps) {
         }
 
         if (event.type === 'complete' && event.summary) {
-          scanSummary = event.summary
+          pipelineSummary = event.summary
         }
       })
-
-      // ========================================
-      // PHASE 2: Extract articles in batches
-      // ========================================
-      if (articleUrls.length > 0) {
-        const totalArticles = articleUrls.length
-        const totalBatches = Math.ceil(totalArticles / EXTRACT_BATCH_SIZE)
-
-        setPhase('extracting')
-        setProgress({ current: 0, total: totalArticles })
-
-        let totalExtracted = 0
-        let totalExtractErrors = 0
-        let totalExtractChars = 0
-
-        for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
-          const batchStart = batchIdx * EXTRACT_BATCH_SIZE
-          const batch = articleUrls.slice(batchStart, batchStart + EXTRACT_BATCH_SIZE)
-
-          console.log(`[FetchProgress] Extracting batch ${batchIdx + 1}/${totalBatches} (${batch.length} articles)`)
-
-          const extractResponse = await fetch('/api/fetch-newsletters-stream', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              mode: 'extract',
-              articles: batch,
-              fetchDate,
-              force: forceRefresh,
-              globalOffset: batchStart,
-              globalTotal: totalArticles,
-            }),
-            credentials: 'include',
-          })
-
-          if (!extractResponse.ok) {
-            console.error(`[FetchProgress] Extract batch ${batchIdx + 1} failed: ${extractResponse.status}`)
-            setLiveStats(prev => ({ ...prev, errors: prev.errors + batch.length }))
-            totalExtractErrors += batch.length
-            continue
-          }
-
-          await consumeSSEStream(extractResponse, (event) => {
-            if (event.current !== undefined && event.total !== undefined) {
-              setProgress({ current: event.current, total: event.total })
-            }
-
-            if (event.item && event.type === 'article') {
-              const itemWithType: ProgressItem = { ...event.item, type: 'article' }
-              setItems(prev => {
-                const updated = [...prev]
-                if (updated.length > 50) updated.splice(0, updated.length - 50)
-                return [...updated, itemWithType]
-              })
-
-              if (event.item.status === 'success') {
-                totalExtracted++
-                setLiveStats(prev => ({
-                  ...prev,
-                  articles: prev.articles + 1,
-                  totalCharacters: prev.totalCharacters + 3000
-                }))
-              } else if (event.item.status === 'error') {
-                totalExtractErrors++
-                setLiveStats(prev => ({ ...prev, errors: prev.errors + 1 }))
-                setErrorLog(prev => [...prev, {
-                  title: event.item!.title,
-                  from: event.item!.from,
-                  url: event.item!.url,
-                  error: event.item!.error || 'Extraction fehlgeschlagen',
-                  phase: 'extract',
-                  timestamp: new Date().toISOString(),
-                }])
-              }
-            }
-
-            if (event.type === 'complete' && event.summary) {
-              totalExtractChars += event.summary.totalCharacters
-            }
-          })
-        }
-
-        // Merge scan + extraction summaries
-        scanSummary = {
-          ...scanSummary,
-          articles: scanSummary.articles + totalExtracted,
-          errors: scanSummary.errors + totalExtractErrors,
-          totalCharacters: scanSummary.totalCharacters + totalExtractChars,
-        }
-      }
 
       // ========================================
       // DONE
       // ========================================
       setPhase('done')
-      setSummary(scanSummary)
+      setSummary(pipelineSummary)
 
       if (receivedUnfetchedEmails.length > 0) {
         setShowUnfetchedDialog(true)
-      } else if (scanSummary.errors === 0) {
+      } else if (pipelineSummary.errors === 0) {
         onComplete?.()
       }
       // When there are errors, don't auto-close — let user review the error log first
