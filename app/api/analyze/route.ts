@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
 
     // Build content string with token limit awareness
     // Gemini Flash supports 1M token input — 2M chars ≈ 500k tokens, well within limits
-    const MAX_CHARS_PER_ITEM = 5000
+    const MAX_CHARS_PER_ITEM = Infinity  // No per-item cap — total char budget handles overall size
     const MAX_TOTAL_CHARS = 2000000
 
     const contentParts: string[] = []

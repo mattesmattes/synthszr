@@ -56,6 +56,7 @@ function isFullContentNewsletter(
     /theatlantic/i,             // The Atlantic
     /beehiiv/i,                 // Beehiiv newsletters (often digests)
     /handelsblatt/i,            // Handelsblatt
+    /superhuman/i,              // Superhuman AI newsletter
   ]
 
   const isKnownDigest = knownDigestPatterns.some(p => p.test(senderEmail || ''))
