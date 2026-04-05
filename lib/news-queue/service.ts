@@ -230,63 +230,65 @@ export async function addToQueue(
     }
   }
 
-  for (const item of items) {
+  // Build all records first
+  const records: NewsQueueItemInsert[] = items.map(item => {
+    const sourceIdentifier = normalizeSourceIdentifier(item.sourceEmail ?? null, item.sourceUrl ?? null)
+    const sourceDisplayName = extractSourceDisplayName(item.sourceEmail ?? null, item.sourceUrl ?? null)
+    return {
+      daily_repo_id: item.dailyRepoId || null,
+      title: item.title,
+      excerpt: item.excerpt || null,
+      content: item.content || null,
+      source_identifier: sourceIdentifier,
+      source_display_name: sourceDisplayName,
+      source_url: item.sourceUrl || null,
+      synthesis_score: item.synthesisScore || 0,
+      relevance_score: item.relevanceScore || 0,
+      uniqueness_score: item.uniquenessScore || 0,
+      source_bonus: tierBonusMap.get(sourceIdentifier) || 0,
+      source_pub_rate: item.sourcePubRate ?? 0,
+      content_length: item.contentLength ?? (item.content?.length || 0),
+      email_received_at: item.emailReceivedAt || null,
+      metadata: item.metadata || {}
+    }
+  })
+
+  // Batch upsert: insert all at once, update scores on conflict
+  const UPSERT_BATCH = 100
+  for (let i = 0; i < records.length; i += UPSERT_BATCH) {
+    const batch = records.slice(i, i + UPSERT_BATCH)
     try {
-      const sourceIdentifier = normalizeSourceIdentifier(item.sourceEmail ?? null, item.sourceUrl ?? null)
-      const sourceDisplayName = extractSourceDisplayName(item.sourceEmail ?? null, item.sourceUrl ?? null)
+      const { data, error: upsertError } = await supabase
+        .from('news_queue')
+        .upsert(batch, {
+          onConflict: 'daily_repo_id',
+          ignoreDuplicates: false,
+        })
+        .select('id')
 
-      const record: NewsQueueItemInsert = {
-        daily_repo_id: item.dailyRepoId || null,
-        title: item.title,
-        excerpt: item.excerpt || null,
-        content: item.content || null,
-        source_identifier: sourceIdentifier,
-        source_display_name: sourceDisplayName,
-        source_url: item.sourceUrl || null,
-        synthesis_score: item.synthesisScore || 0,
-        relevance_score: item.relevanceScore || 0,
-        uniqueness_score: item.uniquenessScore || 0,
-        source_bonus: tierBonusMap.get(sourceIdentifier) || 0,
-        source_pub_rate: item.sourcePubRate ?? 0,
-        content_length: item.contentLength ?? (item.content?.length || 0),
-        email_received_at: item.emailReceivedAt || null,
-        metadata: item.metadata || {}
-      }
-
-      // First try to insert
-      const { error: insertError } = await supabase.from('news_queue').insert(record)
-
-      if (insertError) {
-        if (insertError.code === '23505' && item.dailyRepoId) {
-          // Duplicate - try to update scores for pending items only
-          // Don't touch selected/used items (they're in use)
-          const { data: updated, error: updateError } = await supabase
-            .from('news_queue')
-            .update({
-              synthesis_score: record.synthesis_score,
-              relevance_score: record.relevance_score,
-              uniqueness_score: record.uniqueness_score,
-              source_bonus: record.source_bonus,
-            })
-            .eq('daily_repo_id', item.dailyRepoId)
-            .eq('status', 'pending')  // Only update pending items
-            .select('id')
-
-          if (updateError) {
-            errors.push(`Failed to update "${item.title.slice(0, 30)}...": ${updateError.message}`)
-          } else if (updated && updated.length > 0) {
-            added++  // Count as added since we updated scores
-          } else {
-            skipped++  // Item exists but is selected/used, skip it
+      if (upsertError) {
+        // Fallback to individual inserts for this batch
+        for (const record of batch) {
+          try {
+            const { error: insertError } = await supabase.from('news_queue').insert(record)
+            if (insertError) {
+              if (insertError.code === '23505') {
+                skipped++
+              } else {
+                errors.push(`Failed: "${record.title.slice(0, 30)}...": ${insertError.message}`)
+              }
+            } else {
+              added++
+            }
+          } catch (err) {
+            errors.push(`Error: "${record.title.slice(0, 30)}...": ${err}`)
           }
-        } else {
-          errors.push(`Failed to add "${item.title.slice(0, 30)}...": ${insertError.message}`)
         }
       } else {
-        added++
+        added += data?.length || batch.length
       }
     } catch (err) {
-      errors.push(`Error processing "${item.title.slice(0, 30)}...": ${err}`)
+      errors.push(`Batch upsert error at offset ${i}: ${err}`)
     }
   }
 
