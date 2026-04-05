@@ -908,7 +908,7 @@ export default function NewsQueuePage() {
             value={[minContentLength]}
             onValueChange={([v]) => setMinContentLength(v)}
             min={250}
-            max={10000}
+            max={30000}
             step={250}
             className="flex-1 max-w-xs"
           />
