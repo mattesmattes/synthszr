@@ -28,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { Slider } from '@/components/ui/slider'
 import {
   Dialog,
   DialogContent,
@@ -133,6 +134,7 @@ export default function NewsQueuePage() {
   const [candidateItems, setCandidateItems] = useState<SynthesisCandidateItem[]>([])
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set())
   const [loadingCandidates, setLoadingCandidates] = useState(false)
+  const [minContentLength, setMinContentLength] = useState(2500)
 
   // Manual add dialog
   const [showManualAddDialog, setShowManualAddDialog] = useState(false)
@@ -580,13 +582,19 @@ export default function NewsQueuePage() {
     }
   }
 
+  // Filter items by minimum content length
+  const filteredItems = items.filter(item => {
+    if (!item.content) return true // show items without content (can't measure)
+    return item.content.length >= minContentLength
+  })
+
   // Extract all total scores for gradient calculation
-  const allTotalScores = items.map(item => item.total_score)
+  const allTotalScores = filteredItems.map(item => item.total_score)
 
   // Group items by calendar day (newest day first), sorted by score within each day
   const dayGroups = (() => {
     const groups = new Map<string, QueueItem[]>()
-    for (const item of items) {
+    for (const item of filteredItems) {
       const dayKey = new Date(item.queued_at).toLocaleDateString('de-DE', {
         weekday: 'short',
         day: '2-digit',
@@ -890,6 +898,31 @@ export default function NewsQueuePage() {
           </div>
         </CollapsibleContent>
 
+      {/* Min Content Length Filter */}
+      {!loading && items.length > 0 && (
+        <div className="flex items-center gap-4 mb-4">
+          <label className="text-xs text-muted-foreground whitespace-nowrap">
+            Min. Artikellänge
+          </label>
+          <Slider
+            value={[minContentLength]}
+            onValueChange={([v]) => setMinContentLength(v)}
+            min={250}
+            max={10000}
+            step={250}
+            className="flex-1 max-w-xs"
+          />
+          <span className="text-xs font-mono font-medium w-20 text-right">
+            {minContentLength.toLocaleString('de-DE')} Z.
+          </span>
+          {filteredItems.length !== items.length && (
+            <span className="text-[10px] text-muted-foreground">
+              {filteredItems.length}/{items.length} Items
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Queue Items - Full Width */}
       <div>
 
@@ -897,18 +930,22 @@ export default function NewsQueuePage() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : items.length === 0 ? (
+          ) : filteredItems.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
                 <ListTodo className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
-                <p className="text-sm text-muted-foreground">Keine Items mit Status "{statusFilter}"</p>
+                <p className="text-sm text-muted-foreground">
+                  {items.length > 0
+                    ? `Keine Items mit mindestens ${minContentLength.toLocaleString('de-DE')} Zeichen (${items.length} Items ausgeblendet)`
+                    : `Keine Items mit Status "${statusFilter}"`}
+                </p>
               </CardContent>
             </Card>
           ) : (
             <Card>
               <CardContent className="p-0">
                 <div className="max-h-[60vh] overflow-y-auto">
-                  {(statusFilter === 'pending' ? dayGroups : [['', items] as [string, QueueItem[]]]).map(([dayKey, dayItems], groupIdx) => {
+                  {(statusFilter === 'pending' ? dayGroups : [['', filteredItems] as [string, QueueItem[]]]).map(([dayKey, dayItems], groupIdx) => {
                     // Calculate rank offset: count items in previous day groups
                     const rankOffset = statusFilter === 'pending'
                       ? dayGroups.slice(0, groupIdx).reduce((sum, [, g]) => sum + g.length, 0)
@@ -1063,7 +1100,9 @@ export default function NewsQueuePage() {
           {/* Item count for pending (no pagination) */}
           {totalItems > 0 && statusFilter === 'pending' && (
             <div className="mt-3 text-xs text-muted-foreground">
-              {totalItems} Items (letzte 48h)
+              {filteredItems.length !== items.length
+                ? `${filteredItems.length} von ${totalItems} Items (letzte 48h, ≥${minContentLength.toLocaleString('de-DE')} Zeichen)`
+                : `${totalItems} Items (letzte 48h)`}
             </div>
           )}
         </div>
