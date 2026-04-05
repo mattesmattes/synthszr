@@ -995,7 +995,7 @@ export async function runArticleExtraction(options: {
   for (let batchStart = 0; batchStart < articles.length; batchStart += BATCH_SIZE) {
     // Small delay between batches to avoid rate-limiting from news sites
     if (batchStart > 0) {
-      await new Promise(r => setTimeout(r, 500))
+      await new Promise(r => setTimeout(r, 1500))
     }
 
     const batch = articles.slice(batchStart, batchStart + BATCH_SIZE)
