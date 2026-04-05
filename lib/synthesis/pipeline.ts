@@ -328,23 +328,29 @@ async function getDigestItems(digestId: string): Promise<
 
   let rawItems: Array<{ id: string; title: string; content: string; source_email: string | null; source_url: string | null }>
 
-  // Always fetch ALL items for the digest date — not just sources_used
-  // sources_used only tracks items sent to Gemini analysis (capped by char budget),
-  // but scoring should evaluate every article in the daily_repo for the date
+  // Fetch ALL items for the digest date AND previous day (matches analyze route behavior)
+  // The analyze route fetches from [targetDate, previousDate] to support day+1 workflows
+  const prevDate = new Date(digest.digest_date + 'T12:00:00Z')
+  prevDate.setDate(prevDate.getDate() - 1)
+  const previousDate = prevDate.toISOString().split('T')[0]
+  const dates = [digest.digest_date, previousDate]
+
   const allItems: typeof rawItems = []
-  let offset = 0
-  const PAGE = 1000
-  while (true) {
-    const { data, error } = await supabase
-      .from('daily_repo')
-      .select('id, title, content, source_email, source_url')
-      .eq('newsletter_date', digest.digest_date)
-      .range(offset, offset + PAGE - 1)
-    if (error) throw error
-    if (!data || data.length === 0) break
-    allItems.push(...data)
-    if (data.length < PAGE) break
-    offset += PAGE
+  for (const date of dates) {
+    let offset = 0
+    const PAGE = 1000
+    while (true) {
+      const { data, error } = await supabase
+        .from('daily_repo')
+        .select('id, title, content, source_email, source_url')
+        .eq('newsletter_date', date)
+        .range(offset, offset + PAGE - 1)
+      if (error) throw error
+      if (!data || data.length === 0) break
+      allItems.push(...data)
+      if (data.length < PAGE) break
+      offset += PAGE
+    }
   }
   rawItems = allItems
 
