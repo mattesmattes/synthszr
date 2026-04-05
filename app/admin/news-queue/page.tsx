@@ -508,7 +508,7 @@ export default function NewsQueuePage() {
         setItems(prev => prev.filter(item => item.id !== itemId))
         // Update stats locally
         if (stats) {
-          setStats({ ...stats, pending: stats.pending - 1, selected: stats.selected + 1 })
+          setStats({ ...stats, pending: Math.max(0, stats.pending - 1), selected: stats.selected + 1 })
         }
       } else {
         alert(`Fehler: ${data.error || 'Unbekannter Fehler'}`)

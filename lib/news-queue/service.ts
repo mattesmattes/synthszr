@@ -693,10 +693,22 @@ export async function getQueueStats(): Promise<{
   }
 
   // Fetch recent items (7-day window) for pending/used/expired counts
-  const { data, error } = await supabase
-    .from('news_queue')
-    .select('status, expires_at, selected_at')
-    .gte('queued_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+  // Paginate to bypass PostgREST 1000-row limit
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  let data: Array<{ status: string; expires_at: string | null; selected_at: string | null }> = []
+  let offset = 0
+  const PAGE = 1000
+  while (true) {
+    const { data: page, error: pageErr } = await supabase
+      .from('news_queue')
+      .select('status, expires_at, selected_at')
+      .gte('queued_at', sevenDaysAgo)
+      .range(offset, offset + PAGE - 1)
+    if (pageErr || !page || page.length === 0) break
+    data.push(...page)
+    if (page.length < PAGE) break
+    offset += PAGE
+  }
 
   // Fetch selected items separately — they must always be counted regardless
   // of queued_at age (items may have been queued weeks ago but selected today)
@@ -705,7 +717,7 @@ export async function getQueueStats(): Promise<{
     .select('selected_at')
     .eq('status', 'selected')
 
-  if (error || !data) {
+  if (data.length === 0 && !selectedData?.length) {
     return { pending: 0, selected: 0, used: 0, expired: 0, skipped: 0, total: 0, oldestSelectedAt: null }
   }
 
