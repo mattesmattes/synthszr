@@ -69,6 +69,31 @@ function generateBuckets(granularity: Granularity, startMs: number, endMs: numbe
   return result
 }
 
+/**
+ * Paginated fetch to bypass PostgREST max-rows (default 1000).
+ * Fetches in PAGE_SIZE batches using .range() until all rows are returned.
+ */
+const PAGE_SIZE = 1000
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchAllRows<T = any>(
+  queryBuilder: any
+): Promise<T[]> {
+  const allRows: T[] = []
+  let offset = 0
+
+  while (true) {
+    const { data, error } = await queryBuilder.range(offset, offset + PAGE_SIZE - 1)
+    if (error) throw new Error(error.message)
+    if (!data || data.length === 0) break
+    allRows.push(...(data as T[]))
+    if (data.length < PAGE_SIZE) break // last page
+    offset += PAGE_SIZE
+  }
+
+  return allRows
+}
+
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) {
@@ -89,37 +114,39 @@ export async function GET(request: NextRequest) {
     const currentStart = new Date(now - lookbackMs).toISOString()
     const previousStart = new Date(now - 2 * lookbackMs).toISOString()
 
-    // Fetch current + previous period in parallel
-    // NOTE: Supabase has a default 1000-row limit — use explicit limit to avoid losing recent events.
-    // At ~500 events/day, 100k covers ~200 days; well within Vercel memory limits (~5 MB payload).
-    const ROW_LIMIT = 100000
-    const [analyticsResult, podcastResult, prevAnalyticsResult, prevPodcastResult] = await Promise.all([
-      supabase
-        .from('analytics_events')
-        .select('event_type, created_at')
-        .gte('created_at', currentStart)
-        .order('created_at', { ascending: false })
-        .limit(ROW_LIMIT),
-      supabase
-        .from('podcast_plays')
-        .select('played_at')
-        .gte('played_at', currentStart)
-        .order('played_at', { ascending: false })
-        .limit(ROW_LIMIT),
-      supabase
-        .from('analytics_events')
-        .select('event_type, created_at')
-        .gte('created_at', previousStart)
-        .lt('created_at', currentStart)
-        .order('created_at', { ascending: false })
-        .limit(ROW_LIMIT),
-      supabase
-        .from('podcast_plays')
-        .select('played_at')
-        .gte('played_at', previousStart)
-        .lt('played_at', currentStart)
-        .order('played_at', { ascending: false })
-        .limit(ROW_LIMIT),
+    // Fetch current + previous period in parallel using pagination
+    // PostgREST caps at 1000 rows per request regardless of .limit() — must paginate with .range()
+    const [analyticsData, podcastData, prevAnalyticsData, prevPodcastData] = await Promise.all([
+      fetchAllRows<{ event_type: string; created_at: string }>(
+        supabase
+          .from('analytics_events')
+          .select('event_type, created_at')
+          .gte('created_at', currentStart)
+          .order('created_at', { ascending: false })
+      ),
+      fetchAllRows<{ played_at: string }>(
+        supabase
+          .from('podcast_plays')
+          .select('played_at')
+          .gte('played_at', currentStart)
+          .order('played_at', { ascending: false })
+      ),
+      fetchAllRows<{ event_type: string; created_at: string }>(
+        supabase
+          .from('analytics_events')
+          .select('event_type, created_at')
+          .gte('created_at', previousStart)
+          .lt('created_at', currentStart)
+          .order('created_at', { ascending: false })
+      ),
+      fetchAllRows<{ played_at: string }>(
+        supabase
+          .from('podcast_plays')
+          .select('played_at')
+          .gte('played_at', previousStart)
+          .lt('played_at', currentStart)
+          .order('played_at', { ascending: false })
+      ),
     ])
 
     // Generate all buckets and initialize to zero
@@ -137,7 +164,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Aggregate analytics_events
-    for (const event of analyticsResult.data || []) {
+    for (const event of analyticsData) {
       const key = truncateDateKey(event.created_at, granularity)
       const bucket = countsMap.get(key)
       if (!bucket) continue
@@ -148,7 +175,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Aggregate podcast_plays
-    for (const play of podcastResult.data || []) {
+    for (const play of podcastData) {
       const key = truncateDateKey(play.played_at, granularity)
       const bucket = countsMap.get(key)
       if (!bucket) continue
@@ -169,12 +196,11 @@ export async function GET(request: NextRequest) {
     )
 
     // Previous period totals (for % comparison)
-    const prevEvents = prevAnalyticsResult.data || []
     const previous_totals = {
-      page_views: prevEvents.filter(e => e.event_type === 'page_view').length,
-      stock_ticker_clicks: prevEvents.filter(e => e.event_type === 'stock_ticker_click').length,
-      synthszr_vote_clicks: prevEvents.filter(e => e.event_type === 'synthszr_vote_click').length,
-      podcast_plays: (prevPodcastResult.data || []).length,
+      page_views: prevAnalyticsData.filter(e => e.event_type === 'page_view').length,
+      stock_ticker_clicks: prevAnalyticsData.filter(e => e.event_type === 'stock_ticker_click').length,
+      synthszr_vote_clicks: prevAnalyticsData.filter(e => e.event_type === 'synthszr_vote_click').length,
+      podcast_plays: prevPodcastData.length,
     }
 
     // Subscriber data — same period window and granularity as events
