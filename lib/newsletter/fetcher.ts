@@ -1,6 +1,6 @@
 import { GmailClient } from '@/lib/gmail/client'
 import { parseNewsletterHtml } from '@/lib/email/parser'
-import { extractArticleContent, isArticleTooOld, isLikelyArticleUrl, isNonArticleLinkText } from '@/lib/scraper/article-extractor'
+import { extractArticleContent, isArticleTooOld, isLikelyArticleUrl, isNonArticleLinkText, extractViaMarkdownNew, decodeTrackingUrl } from '@/lib/scraper/article-extractor'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { backfillMissingEmbeddings } from '@/lib/embeddings/backfill'
 
@@ -143,6 +143,7 @@ export interface ArticleToExtract {
   title: string
   newsletterTitle: string
   newsletterEmail: string
+  snippetText?: string  // Context text from newsletter HTML, used as last-resort content
 }
 
 export interface FetchProgress {
@@ -357,7 +358,7 @@ export async function runNewsletterFetch(options?: {
     let skippedNewsletters = 0
     let errors = 0
     let totalCharacters = 0
-    const articleUrls: Array<{ url: string; title: string; newsletterTitle: string; newsletterEmail: string }> = []
+    const articleUrls: ArticleToExtract[] = []
 
     // BULLETPROOF DEDUP: Fetch all existing gmail_message_ids in ONE query
     // Gmail message IDs are globally unique - no need to check by date or composite keys
@@ -459,7 +460,8 @@ export async function runNewsletterFetch(options?: {
               url: link.url,
               title: link.text || 'Unbekannter Artikel',
               newsletterTitle: email.subject,
-              newsletterEmail: email.from  // Track source newsletter for article
+              newsletterEmail: email.from,  // Track source newsletter for article
+              snippetText: link.contextText,
             })
           }
         } else {
@@ -969,7 +971,7 @@ export async function runArticleExtraction(options: {
   globalOffset?: number
   globalTotal?: number
   onProgress?: (event: FetchProgress) => void
-}): Promise<{ articles: number; errors: number; totalCharacters: number }> {
+}): Promise<{ articles: number; errors: number; totalCharacters: number; errorLog: Array<{ url: string; title: string; newsletter: string; error: string }> }> {
   const { articles, fetchDate, force, globalOffset = 0, globalTotal, onProgress } = options
   const send = (event: FetchProgress) => onProgress?.(event)
   const supabase = createAdminClient()
@@ -978,6 +980,7 @@ export async function runArticleExtraction(options: {
   let processedArticles = 0
   let errors = 0
   let totalCharacters = 0
+  const errorLog: Array<{ url: string; title: string; newsletter: string; error: string }> = []
 
   const totalBatches = Math.ceil(articles.length / BATCH_SIZE)
 
@@ -1016,6 +1019,7 @@ export async function runArticleExtraction(options: {
           }
         }
 
+        // ── Attempt 1: Readability extraction ──
         const extracted = await extractArticleContent(article.url)
 
         if (extracted && extracted.content) {
@@ -1069,9 +1073,55 @@ export async function runArticleExtraction(options: {
             title: extracted.title || article.title, url: resolvedUrl,
             contentLength: extracted.content.length
           }
-        } else {
-          return { globalIndex, article, status: 'error' as const, title: article.title, url: article.url, error: 'Kein Inhalt extrahiert' }
         }
+
+        // ── Attempt 2: markdown.new fallback ──
+        const decodedUrl = decodeTrackingUrl(article.url)
+        const markdownResult = await extractViaMarkdownNew(decodedUrl !== article.url ? decodedUrl : article.url)
+
+        if (markdownResult && markdownResult.content) {
+          const insertUrl = decodedUrl !== article.url ? decodedUrl : article.url
+          await supabase
+            .from('daily_repo')
+            .insert({
+              source_type: 'article',
+              source_url: insertUrl,
+              source_email: article.newsletterEmail,
+              title: markdownResult.title || article.title,
+              content: markdownResult.content,
+              newsletter_date: fetchDate,
+              email_received_at: new Date().toISOString(),
+            })
+
+          return {
+            globalIndex, article, status: 'success' as const,
+            title: markdownResult.title || article.title, url: insertUrl,
+            contentLength: markdownResult.content.length
+          }
+        }
+
+        // ── Attempt 3: Newsletter snippet text fallback ──
+        if (article.snippetText && article.snippetText.length > 50) {
+          await supabase
+            .from('daily_repo')
+            .insert({
+              source_type: 'article',
+              source_url: article.url,
+              source_email: article.newsletterEmail,
+              title: article.title,
+              content: article.snippetText,
+              newsletter_date: fetchDate,
+              email_received_at: new Date().toISOString(),
+            })
+
+          return {
+            globalIndex, article, status: 'success' as const,
+            title: article.title, url: article.url,
+            contentLength: article.snippetText.length
+          }
+        }
+
+        return { globalIndex, article, status: 'error' as const, title: article.title, url: article.url, error: 'Alle 3 Extraktionsmethoden fehlgeschlagen' }
       } catch (err) {
         return {
           globalIndex, article, status: 'error' as const,
@@ -1087,6 +1137,12 @@ export async function runArticleExtraction(options: {
         totalCharacters += result.contentLength || 0
       } else if (result.status === 'error') {
         errors++
+        errorLog.push({
+          url: result.url,
+          title: result.title,
+          newsletter: result.article.newsletterTitle,
+          error: result.error || 'Unbekannter Fehler',
+        })
       }
       send({
         type: 'article',
@@ -1110,5 +1166,13 @@ export async function runArticleExtraction(options: {
     summary: { newsletters: 0, articles: processedArticles, emailNotes: 0, errors, totalCharacters }
   })
 
-  return { articles: processedArticles, errors, totalCharacters }
+  if (errorLog.length > 0) {
+    console.log(`[Article Extraction] ${errorLog.length} errors:`)
+    for (const err of errorLog.slice(0, 10)) {
+      console.log(`  - ${err.title.slice(0, 50)}: ${err.error}`)
+    }
+    if (errorLog.length > 10) console.log(`  ... and ${errorLog.length - 10} more`)
+  }
+
+  return { articles: processedArticles, errors, totalCharacters, errorLog }
 }

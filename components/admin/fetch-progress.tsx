@@ -47,6 +47,7 @@ interface ArticleToExtract {
   title: string
   newsletterTitle: string
   newsletterEmail: string
+  snippetText?: string
 }
 
 interface ProgressEvent {

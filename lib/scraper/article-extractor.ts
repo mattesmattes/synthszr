@@ -1,5 +1,6 @@
 import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
+import { isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
 
 /**
  * Decode tracking redirect URLs to get the actual target URL.
@@ -7,7 +8,7 @@ import { Readability } from '@mozilla/readability'
  * Some encode the destination in the URL itself (TLDR, Customer.io),
  * others use opaque tokens that only resolve via HTTP redirect (Beehiiv, Mailchimp).
  */
-function decodeTrackingUrl(url: string): string {
+export function decodeTrackingUrl(url: string): string {
   // TLDR tracking URLs encode the destination in the path:
   // Format: https://tracking.tldrnewsletter.com/CL0/https:%2F%2Fwww.example.com%2Farticle/1/...
   if (url.includes('tracking.tldrnewsletter.com/CL0/') || url.includes('tldrnewsletter.com/CL0/')) {
@@ -43,6 +44,34 @@ function decodeTrackingUrl(url: string): string {
   // Substack redirect URLs: destination resolved via HTTP redirect.
   // The JWT `j` param only contains subscriber ID, not the target URL.
   // Let fetch() handle the redirect chain automatically.
+
+  // Beehiiv tracking URLs: sometimes have destination in query param
+  if (url.includes('beehiiv.com/')) {
+    try {
+      const parsed = new URL(url)
+      const targetUrl = parsed.searchParams.get('url') || parsed.searchParams.get('redirect_url')
+      if (targetUrl?.startsWith('http')) {
+        console.log(`[ArticleExtractor] Decoded Beehiiv redirect: ${url.slice(0, 50)}... → ${targetUrl.slice(0, 60)}...`)
+        return targetUrl
+      }
+    } catch {
+      // Fall through to HTTP redirect
+    }
+  }
+
+  // Mailchimp/list-manage tracking URLs: destination in 'u' or 'url' param
+  if (url.includes('list-manage.com/') || url.includes('mailchimp.com/')) {
+    try {
+      const parsed = new URL(url)
+      const targetUrl = parsed.searchParams.get('url') || parsed.searchParams.get('u')
+      if (targetUrl?.startsWith('http')) {
+        console.log(`[ArticleExtractor] Decoded Mailchimp redirect: ${url.slice(0, 50)}... → ${targetUrl.slice(0, 60)}...`)
+        return targetUrl
+      }
+    } catch {
+      // Fall through
+    }
+  }
 
   // Customer.io tracking URLs (used by The Information, etc.)
   // Format: https://e.customeriomail.com/e/c/eyJ...base64...
@@ -155,7 +184,31 @@ export async function extractArticleContent(url: string, attempt = 1): Promise<E
   try {
     // First, try to decode tracking URLs (like TLDR, Customer.io)
     const decodedUrl = decodeTrackingUrl(url)
-    const urlToFetch = decodedUrl !== url ? decodedUrl : url
+    let urlToFetch = decodedUrl !== url ? decodedUrl : url
+
+    // Pre-resolve tracking redirects via HEAD request (Beehiiv, Mailchimp, ConvertKit, etc.)
+    // Many tracking services use opaque tokens that can only be resolved via HTTP redirect
+    if (urlToFetch === url && isTrackingRedirectUrl(url)) {
+      try {
+        const headController = new AbortController()
+        const headTimeout = setTimeout(() => headController.abort(), 8000)
+        const headResponse = await fetch(url, {
+          method: 'HEAD',
+          redirect: 'follow',
+          signal: headController.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          },
+        })
+        clearTimeout(headTimeout)
+        if (headResponse.url && headResponse.url !== url) {
+          urlToFetch = headResponse.url
+          console.log(`[ArticleExtractor] Resolved tracking redirect via HEAD: ${url.slice(0, 50)}... → ${urlToFetch.slice(0, 50)}...`)
+        }
+      } catch {
+        // HEAD failed, continue with original URL
+      }
+    }
 
     // Fetch the page (25s timeout, extended from 15s for slow news sites)
     const controller = new AbortController()
@@ -439,4 +492,49 @@ export function filterArticleUrls(
   }
 
   return articleUrls
+}
+
+/**
+ * Fallback: extract article content via markdown.new service
+ * Used when Readability extraction fails (paywalls, JS-heavy pages, anti-bot)
+ */
+export async function extractViaMarkdownNew(url: string): Promise<{ title: string | null; content: string } | null> {
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000)
+
+    console.log(`[ArticleExtractor] Trying markdown.new fallback for: ${url.slice(0, 80)}...`)
+    const response = await fetch(`https://markdown.new/${url}`, {
+      signal: controller.signal,
+      headers: {
+        'Accept': 'text/plain, text/markdown, */*',
+      },
+    })
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      console.log(`[ArticleExtractor] markdown.new returned ${response.status} for: ${url.slice(0, 60)}`)
+      return null
+    }
+
+    const markdown = await response.text()
+    if (!markdown || markdown.length < 100) {
+      console.log(`[ArticleExtractor] markdown.new returned too little content (${markdown.length} chars)`)
+      return null
+    }
+
+    // Extract title from first heading
+    const titleMatch = markdown.match(/^#\s+(.+)$/m)
+    const title = titleMatch ? titleMatch[1].trim() : null
+
+    console.log(`[ArticleExtractor] markdown.new success: ${markdown.length} chars, title: "${(title || 'none').slice(0, 50)}"`)
+    return { title, content: markdown }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.log(`[ArticleExtractor] markdown.new timeout for: ${url.slice(0, 60)}`)
+    } else {
+      console.log(`[ArticleExtractor] markdown.new error for: ${url.slice(0, 60)}:`, error instanceof Error ? error.message : error)
+    }
+    return null
+  }
 }

@@ -4,6 +4,7 @@ export interface ExtractedLink {
   url: string
   text: string
   type: 'article' | 'social' | 'unsubscribe' | 'other'
+  contextText?: string  // Surrounding paragraph text from newsletter HTML (fallback content)
 }
 
 export interface ParsedNewsletter {
@@ -194,10 +195,19 @@ function extractLinks($: cheerio.CheerioAPI): ExtractedLink[] {
     // Categorize the link
     const type = categorizeLink(cleanUrl, text)
 
+    // Extract surrounding paragraph/cell text as context for fallback content
+    const $parent = $el.closest('td, p, div, li, blockquote')
+    const parentText = $parent.length > 0
+      ? $parent.text().trim().replace(/\s+/g, ' ').slice(0, 500)
+      : undefined
+    // Only include context when it adds meaningful content beyond the link text
+    const contextText = parentText && parentText.length > text.length + 20 ? parentText : undefined
+
     links.push({
       url: cleanUrl,
       text: text || cleanUrl,
       type,
+      contextText,
     })
   })
 
