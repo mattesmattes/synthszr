@@ -6,7 +6,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
 
 // Languages with fully built-out static page content
 // Update this list when a new language is ready
-const FULL_CONTENT_LOCALES = ['de', 'en', 'nds', 'cs']
+const FULL_CONTENT_LOCALES = ['de', 'en']
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = await createClient()
