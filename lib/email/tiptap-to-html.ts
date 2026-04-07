@@ -211,6 +211,53 @@ function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug
 }
 
 /**
+ * Inject company page links into paragraph HTML for email.
+ * Mirrors injectCompanyLinks() from the web renderer, but operates on HTML strings.
+ * Links point to {baseUrl}/{locale}/companies/{apiName}.
+ * Text inside existing <a> elements is not modified.
+ * Each company is linked at most once per paragraph.
+ */
+function injectCompanyLinksIntoHtml(
+  paraHtml: string,
+  companies: Array<{ displayName: string; apiName: string }>,
+  baseUrl: string,
+  locale?: string
+): string {
+  if (companies.length === 0) return paraHtml
+
+  const localePath = locale && locale !== 'de' ? `/${locale}` : ''
+
+  // Longest names first to avoid partial matches (e.g. "OpenAI" before "AI")
+  const sorted = [...companies].sort((a, b) => b.displayName.length - a.displayName.length)
+  const linked = new Set<string>()
+
+  // Split into alternating text/tag segments, process only text outside <a> elements
+  const parts = paraHtml.split(/(<[^>]+>)/g)
+  let insideAnchor = false
+
+  const result = parts.map(part => {
+    if (/^<a[\s>]/i.test(part)) { insideAnchor = true; return part }
+    if (/^<\/a>/i.test(part)) { insideAnchor = false; return part }
+    if (part.startsWith('<')) return part  // other HTML tags: pass through
+    if (insideAnchor) return part          // text inside <a>: pass through
+
+    let text = part
+    for (const company of sorted) {
+      if (linked.has(company.apiName)) continue
+      const escaped = company.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      text = text.replace(new RegExp(`\\b${escaped}\\b`, 'i'), match => {
+        linked.add(company.apiName)
+        const href = `${baseUrl}${localePath}/companies/${company.apiName}`
+        return `<a href="${href}" style="color: inherit; text-decoration: underline;">${match}</a>`
+      })
+    }
+    return text
+  })
+
+  return result.join('')
+}
+
+/**
  * Convert post content to email-friendly HTML (sync version for backwards compatibility)
  * Handles both TipTap JSON objects and JSON strings
  */
@@ -511,6 +558,20 @@ export async function generateEmailContentWithVotes(
     ? await fetchRatings(Array.from(allPublicCompanies), Array.from(allPremarketCompanies), baseUrl)
     : new Map<string, { rating: 'BUY' | 'HOLD' | 'SELL'; type: 'public' | 'premarket'; ticker?: string; changePercent?: number; direction?: 'up' | 'down' | 'neutral'; isin?: string }>()
 
+  // Build company link data: companies with ratings get linked to their company pages
+  // (mirrors the web renderer's companyLinkData from rating-links.ts)
+  const companyLinkData: Array<{ displayName: string; apiName: string }> = []
+  for (const c of allCompaniesInDoc.public) {
+    if (ratingsMap.has(c.apiName.toLowerCase())) {
+      companyLinkData.push({ displayName: c.displayName, apiName: c.apiName })
+    }
+  }
+  for (const c of allCompaniesInDoc.premarket) {
+    if (ratingsMap.has(c.apiName.toLowerCase())) {
+      companyLinkData.push({ displayName: c.displayName, apiName: c.apiName })
+    }
+  }
+
   // Pre-process: find article sections and their best vote colors
   // Each article section is from one H2 to the next H2 (excluding Synthszr Take headings)
   const votePriority: Record<string, number> = { 'BUY': 3, 'HOLD': 2, 'SELL': 1 }
@@ -595,7 +656,12 @@ export async function generateEmailContentWithVotes(
       }
     }
 
-    const baseHtml = convertNodeToHtml(node)
+    let baseHtml = convertNodeToHtml(node)
+
+    // Inject company page links into paragraph text (like the web renderer)
+    if (node.type === 'paragraph' && companyLinkData.length > 0) {
+      baseHtml = injectCompanyLinksIntoHtml(baseHtml, companyLinkData, baseUrl, locale)
+    }
 
     // Check if this is a Synthszr Take paragraph
     const companies = paragraphCompanies.get(index)
