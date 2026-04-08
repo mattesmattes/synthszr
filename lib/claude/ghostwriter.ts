@@ -98,6 +98,10 @@ SPRACHE — ABSOLUT VERBINDLICH:
 - Der GESAMTE Artikel (TITLE, EXCERPT, alle Zwischenüberschriften (##), Fließtext, Synthszr Takes) MUSS auf DEUTSCH sein.
 - NIEMALS englische Überschriften oder Zwischenüberschriften — auch nicht bei englischsprachigen Quellen oder englischen Fachbegriffen.
 - Fachbegriffe (z.B. "Reasoning", "Token", "Fine-Tuning") dürfen auf Englisch bleiben, müssen aber in deutschen Sätzen eingebettet sein.
+
+STIL — VERBINDLICH:
+- Vermeide militärische Metaphern und Kriegssprache. Dazu zählen: Feuerüberlegenheit, Munition, Schütze, Angriff, Verteidigung, Flanke, Gefecht, Schlachtfeld, Kriegsstrategie, Artillerie, Zielgenauigkeit im militärischen Sinn, Deckung, Rückzug, Offensive, Kapitulation.
+- Das gilt besonders für Synthszr Takes: Beschreibe Beobachtungen direkt und konkret, ohne militärische Bildsprache.
 `
 
 /**
