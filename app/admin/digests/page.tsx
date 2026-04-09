@@ -329,7 +329,8 @@ export default function DigestsPage() {
                 setSynthesisProgress(prev => ({
                   ...prev,
                   phase: 'scoring',
-                  currentItem: event.currentItem,
+                  // Don't reset currentItem to 0 during post-processing phase
+                  currentItem: event.currentItem > 0 ? event.currentItem : prev.currentItem,
                   totalItems: event.totalItems,
                   message: event.message,
                 }))

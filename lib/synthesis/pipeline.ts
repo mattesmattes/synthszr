@@ -52,13 +52,15 @@ async function getSourcePubRates(): Promise<Map<string, number>> {
   const sourceTotals = new Map<string, number>()
   const sourcePublished = new Map<string, number>()
 
-  // Fetch all queue items (paginated)
+  // Fetch queue items from last 30 days only (avoids full-table scan on large tables)
+  const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   let offset = 0
   const batchSize = 1000
   while (true) {
     const { data } = await supabase
       .from('news_queue')
       .select('id, source_identifier')
+      .gte('queued_at', cutoff30d)
       .range(offset, offset + batchSize - 1)
 
     if (!data || data.length === 0) break
@@ -385,7 +387,7 @@ async function scoreAndQueueItems(
     source_email: string | null
     source_url: string | null
   }>,
-  onProgress?: (phase: 'scoring' | 'queuing', current: number, total: number) => void
+  onProgress?: (phase: 'scoring' | 'queuing', current: number, total: number, message?: string) => void
 ): Promise<{ added: number; skipped: number; junkFiltered: number; scored: number }> {
   // Filter junk
   const validItems = items.filter(item => !isJunkTitle(item.title))
@@ -414,6 +416,7 @@ async function scoreAndQueueItems(
   console.log(`[Pipeline] Scored ${scoreMap.size} items`)
 
   // Phase 1.5a: Penalize topics already published in recent days
+  if (onProgress) onProgress('queuing', 0, validItems.length, 'Berechne Penalties & Publikationsraten...')
   const recentTitles = await getRecentlyPublishedTitles(3)
   const recencyPenalties = applyRecencyPenalty(validItems, recentTitles, scoreMap)
   if (recencyPenalties > 0) {
@@ -588,7 +591,7 @@ export async function runSynthesisPipelineWithProgress(
     })
 
     // Score via Haiku and queue with progress
-    const result = await scoreAndQueueItems(items, (phase, current, total) => {
+    const result = await scoreAndQueueItems(items, (phase, current, total, message) => {
       if (phase === 'scoring') {
         onProgress({
           type: 'scoring',
@@ -601,7 +604,7 @@ export async function runSynthesisPipelineWithProgress(
           type: 'scoring',
           currentItem: current,
           totalItems: total,
-          message: `${current}/${total} Artikel zur Queue hinzugefügt...`,
+          message: message || `${current}/${total} Artikel zur Queue hinzugefügt...`,
         })
       }
     })
