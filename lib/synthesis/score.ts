@@ -211,127 +211,130 @@ export interface ContentScore {
  * Score items WITHOUT historical matches using content analysis
  * Uses Claude Haiku to evaluate article quality for the target audience
  */
+// Number of articles scored per single Claude call (batch scoring)
+const ARTICLES_PER_CALL = 10
+
+/**
+ * Score a group of articles in a single Claude call.
+ * Returns scores keyed by item id. Falls back to low scores on parse/API failure.
+ */
+async function scoreArticleGroup(
+  anthropic: Anthropic,
+  group: Array<{ id: string; title: string; content: string }>,
+  modelId: string
+): Promise<Array<{ id: string; score: ContentScore }>> {
+  const articleBlocks = group
+    .map((item, i) => {
+      const text = `${item.title}\n\n${item.content || ''}`.slice(0, 800)
+      return `ARTIKEL_${i + 1}:\n${text}`
+    })
+    .join('\n\n---\n\n')
+
+  const prompt = `Bewerte diese ${group.length} Newsletter-Artikel für ein professionelles Tech/Business-Publikum.
+
+Kriterien (Skala 0-10):
+- SUBSTANZ: Inhaltliche Tiefe (0-2=Spam/Werbung/Navigation, 3-4=Teaser, 5-6=normal, 7-8=gut, 9-10=exzellent)
+- RELEVANZ: Für Digital/Design/Tech/Business-Profis (0-2=irrelevant, 5-6=moderat, 7-8=hoch, 9-10=strategisch)
+- NEUHEIT: Originalität des Inhalts (0-2=trivial, 5-6=durchschnittlich, 7-8=interessant, 9-10=bahnbrechend)
+
+${articleBlocks}
+
+Antworte EXAKT in diesem Format (eine Zeile pro Artikel, keine anderen Zeilen):
+ARTIKEL_1: SUBSTANZ:X RELEVANZ:X NEUHEIT:X
+ARTIKEL_2: SUBSTANZ:X RELEVANZ:X NEUHEIT:X`
+
+  const timeoutMs = 60000
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Batch scoring timeout after ${timeoutMs}ms`)), timeoutMs)
+  )
+
+  const fallback = (reason: string) =>
+    group.map(item => ({
+      id: item.id,
+      score: { synthesisScore: 2, relevanceScore: 2, uniquenessScore: 2, reasoning: reason },
+    }))
+
+  try {
+    const response = await Promise.race([
+      anthropic.messages.create({
+        model: modelId,
+        max_tokens: group.length * 25 + 50,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      timeoutPromise,
+    ])
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : ''
+
+    return group.map((item, i) => {
+      const regex = new RegExp(
+        `ARTIKEL_${i + 1}:\\s*SUBSTANZ:(\\d+)\\s+RELEVANZ:(\\d+)\\s+NEUHEIT:(\\d+)`,
+        'i'
+      )
+      const match = text.match(regex)
+      if (match) {
+        return {
+          id: item.id,
+          score: {
+            synthesisScore: parseInt(match[1], 10),
+            relevanceScore: parseInt(match[2], 10),
+            uniquenessScore: parseInt(match[3], 10),
+            reasoning: '',
+          },
+        }
+      }
+      return { id: item.id, score: { synthesisScore: 3, relevanceScore: 3, uniquenessScore: 3, reasoning: 'Parse-Fehler' } }
+    })
+  } catch (error) {
+    console.error(`[ContentScoring] Batch failed:`, error)
+    return fallback('Batch-Scoring fehlgeschlagen')
+  }
+}
+
+/**
+ * Score items using batch Claude calls (10 articles per call).
+ * 926 items → ~93 Claude calls instead of 926 — fits easily within Vercel 300s limit.
+ */
 export async function scoreContentOnly(
   items: Array<{ id: string; title: string; content: string }>,
   options: { concurrency?: number; onProgress?: (scored: number, total: number) => void } = {}
 ): Promise<Map<string, ContentScore>> {
-  const { concurrency = 5, onProgress } = options
+  const { concurrency = 8, onProgress } = options
 
-  if (items.length === 0) {
-    return new Map()
-  }
+  if (items.length === 0) return new Map()
 
-  const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  })
-
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const modelId = await getModelForUseCase('synthesis_scoring')
   const results = new Map<string, ContentScore>()
 
-  // Scoring prompt for content-only items
-  const scoringPrompt = `Du bewertest Newsletter-Artikel für ein professionelles Tech/Business-Publikum (Digital, Design, Tech, Business).
+  // Split items into groups of ARTICLES_PER_CALL
+  const groups: Array<typeof items> = []
+  for (let i = 0; i < items.length; i += ARTICLES_PER_CALL) {
+    groups.push(items.slice(i, i + ARTICLES_PER_CALL))
+  }
 
-ARTIKEL:
-{article_content}
+  console.log(`[ContentScoring] ${items.length} items → ${groups.length} batch calls (${ARTICLES_PER_CALL}/call, concurrency=${concurrency})`)
 
-Bewerte diesen Artikel auf einer Skala von 0-10:
-
-1. SUBSTANZ (0-10): Ist dies ein echter Artikel mit inhaltlicher Tiefe?
-   - 0-2: Navigations-Element, Spam, oder reine Werbung (z.B. "Play Spelling Bee", "Privacy Policy", "Subscribe")
-   - 3-4: Sehr kurzer Teaser ohne echten Inhalt
-   - 5-6: Durchschnittlicher Artikel mit wenig Tiefe
-   - 7-8: Guter Artikel mit klarem Mehrwert
-   - 9-10: Ausgezeichneter Artikel mit einzigartigen Insights
-
-2. RELEVANZ (0-10): Wie relevant ist dies für Digital/Design/Tech/Business-Profis?
-   - 0-2: Keine Relevanz (Spiele, Rezepte, etc.)
-   - 3-4: Geringe Relevanz (allgemeine News)
-   - 5-6: Moderate Relevanz (indirekt nützlich)
-   - 7-8: Hohe Relevanz (direkt nützlich für die Arbeit)
-   - 9-10: Sehr hohe Relevanz (strategisch wichtig)
-
-3. NEUHEIT (0-10): Wie neuartig ist der Inhalt?
-   - 0-2: Allgemein bekannt oder trivial
-   - 3-4: Wenig originell
-   - 5-6: Durchschnittlich
-   - 7-8: Interessante neue Perspektive
-   - 9-10: Bahnbrechende Erkenntnis
-
-Antworte im Format:
-SUBSTANZ: [Zahl]
-RELEVANZ: [Zahl]
-NEUHEIT: [Zahl]
-BEGRÜNDUNG: [1 Satz warum]`
-
-  // Process in batches
-  for (let i = 0; i < items.length; i += concurrency) {
-    const batch = items.slice(i, i + concurrency)
+  // Process groups in parallel batches
+  for (let i = 0; i < groups.length; i += concurrency) {
+    const parallelGroups = groups.slice(i, i + concurrency)
 
     const batchResults = await Promise.all(
-      batch.map(async (item) => {
-        const articleContent = `${item.title}\n\n${item.content || ''}`
-        const prompt = scoringPrompt.replace('{article_content}', articleContent.slice(0, 2000))
-
-        // Timeout for each scoring request
-        const timeoutMs = 30000
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error(`Content scoring timeout after ${timeoutMs}ms`)), timeoutMs)
-        })
-
-        try {
-          const response = await Promise.race([
-            anthropic.messages.create({
-              model: modelId,
-              max_tokens: 256,
-              messages: [{ role: 'user', content: prompt }],
-            }),
-            timeoutPromise,
-          ])
-
-          const text = response.content[0].type === 'text' ? response.content[0].text : ''
-
-          // Parse response
-          const substanzMatch = text.match(/SUBSTANZ:\s*(\d+)/i)
-          const relevanzMatch = text.match(/RELEVANZ:\s*(\d+)/i)
-          const neuheitMatch = text.match(/NEUHEIT:\s*(\d+)/i)
-          const reasoningMatch = text.match(/BEGRÜNDUNG:\s*([\s\S]+?)(?:\n\n|$)/i)
-
-          const score: ContentScore = {
-            synthesisScore: substanzMatch ? parseInt(substanzMatch[1], 10) : 3,
-            relevanceScore: relevanzMatch ? parseInt(relevanzMatch[1], 10) : 3,
-            uniquenessScore: neuheitMatch ? parseInt(neuheitMatch[1], 10) : 3,
-            reasoning: reasoningMatch?.[1]?.trim() || 'Keine Begründung',
-          }
-
-          return { id: item.id, score }
-        } catch (error) {
-          console.error(`[ContentScoring] Failed for item ${item.id}:`, error)
-          // Return low scores on error (better than high defaults)
-          return {
-            id: item.id,
-            score: {
-              synthesisScore: 2,
-              relevanceScore: 2,
-              uniquenessScore: 2,
-              reasoning: 'Scoring fehlgeschlagen',
-            },
-          }
-        }
-      })
+      parallelGroups.map(group => scoreArticleGroup(anthropic, group, modelId))
     )
 
-    for (const result of batchResults) {
-      results.set(result.id, result.score)
+    for (const groupResult of batchResults) {
+      for (const { id, score } of groupResult) {
+        results.set(id, score)
+      }
     }
 
-    // Report progress after each batch
     if (onProgress) {
-      onProgress(results.size, items.length)
+      onProgress(Math.min(results.size, items.length), items.length)
     }
 
-    // Small delay between batches to avoid rate limits
-    if (i + concurrency < items.length) {
-      await new Promise((resolve) => setTimeout(resolve, 50))
+    if (i + concurrency < groups.length) {
+      await new Promise(resolve => setTimeout(resolve, 50))
     }
   }
 
