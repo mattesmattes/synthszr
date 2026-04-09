@@ -329,9 +329,9 @@ BEGRÜNDUNG: [1 Satz warum]`
       onProgress(results.size, items.length)
     }
 
-    // Small delay between batches
+    // Small delay between batches to avoid rate limits
     if (i + concurrency < items.length) {
-      await new Promise((resolve) => setTimeout(resolve, 200))
+      await new Promise((resolve) => setTimeout(resolve, 50))
     }
   }
 
