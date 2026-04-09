@@ -760,7 +760,7 @@ export default function SettingsPage() {
                   </div>
 
                   <p className="text-xs text-muted-foreground mt-4">
-                    Hinweis: Zeiten in MEZ (Mitteleuropäische Zeit). Der Scheduler prüft alle 10 Minuten, ob ein Job ausgeführt werden soll.
+                    Hinweis: Zeiten in MEZ/MESZ (automatische Umrechnung in UTC). Der Scheduler läuft alle 30 Minuten und startet Jobs innerhalb eines 10-Minuten-Fensters nach der geplanten Zeit.
                   </p>
                 </>
               )}
