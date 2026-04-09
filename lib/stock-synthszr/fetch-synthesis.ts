@@ -107,7 +107,10 @@ export async function fetchStockSynthszr({
             role: 'system',
             content:
               'Du bist ein Equity-Analyst. Nutze das Websuche-Tool autonom und antworte ausschließlich auf Deutsch. ' +
-              'Liefere AUSSCHLIESSLICH JSON gemäß Schema – ohne zusätzliche Prosa.',
+              'Liefere AUSSCHLIESSLICH JSON gemäß Schema – ohne zusätzliche Prosa. ' +
+              'Vermeide militärische Metaphern und Kriegssprache vollständig. ' +
+              'Dazu zählen: Waffe, Waffenarsenal, Munition, Angriff, Verteidigung, Flanke, Gefecht, Schlachtfeld, Kriegsstrategie, Artillerie, Rückzug, Offensive, Kapitulation, Feuerüberlegenheit, Schütze, Manhattan-Projekt, nukleare Nichtverbreitung, Uran, NATO (als Metapher), Verteidigungsbereitschaft (im militärischen Sinn), nuklear (als Metapher). ' +
+              'Beschreibe Beobachtungen direkt und konkret mit wirtschaftlicher oder technischer Sprache.',
           },
           {
             role: 'user',
