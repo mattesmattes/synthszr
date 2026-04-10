@@ -30,9 +30,10 @@ export async function POST(request: NextRequest) {
 
   const supabase = createAdminClient()
 
-  // Optional: process a specific job by ID
+  // Optional: process a specific job by ID, or only generate video for existing assets
   const body = await request.json().catch(() => ({}))
   const specificId = body?.videoId
+  const videoOnly = body?.videoOnly === true // Skip image+audio, only generate video
 
   // Find next job to process
   let query = supabase
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
     .select('*')
 
   if (specificId) {
+    // When targeting a specific ID, process regardless of status (allows re-processing review items)
     query = query.eq('id', specificId)
   } else {
     query = query.in('status', ['pending', 'generating_image', 'generating_audio', 'compositing'])
@@ -121,8 +123,8 @@ export async function POST(request: NextRequest) {
     }
 
     // === ANALOGY PIPELINE ===
-    // Step 1: Image Generation
-    if (!job.image_url) {
+    // Step 1: Image Generation (skip if videoOnly)
+    if (!job.image_url && !videoOnly) {
       await supabase
         .from('analogy_videos')
         .update({ status: 'generating_image', progress: 10, updated_at: new Date().toISOString() })
@@ -163,8 +165,8 @@ export async function POST(request: NextRequest) {
       console.log(`[AnalogyProcess] Image uploaded: ${imageUrl.slice(0, 80)}... (fallback: ${isFallback})`)
     }
 
-    // === Step 2: Audio Generation ===
-    if (!job.audio_url) {
+    // === Step 2: Audio Generation (skip if videoOnly) ===
+    if (!job.audio_url && !videoOnly) {
       await supabase
         .from('analogy_videos')
         .update({ status: 'generating_audio', progress: 50, updated_at: new Date().toISOString() })

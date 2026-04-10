@@ -53,27 +53,29 @@ export async function extractAnalogies(
     messages: [
       {
         role: 'user',
-        content: `Analysiere den folgenden Blog-Artikel und extrahiere die ${maxAnalogies} stärksten Aussagen, die sich als kurzes TikTok-Video eignen.
+        content: `Analyze the following German blog article and extract the ${maxAnalogies} strongest statements suitable for short TikTok videos.
 
-Gesucht sind:
-- Pointierte Vergleiche, Analogien oder Metaphern ("wie", "als ob", "wirkt wie")
-- Provokante Thesen oder scharfe Beobachtungen aus den "Synthszr Take"-Abschnitten
-- Sätze die eigenständig funktionieren — ohne den Kontext des restlichen Artikels
-- Falls keine expliziten Analogien vorhanden: Nimm die schärfsten, quotefähigsten Aussagen
+Look for:
+- Pointed comparisons, analogies, or metaphors
+- Provocative theses or sharp observations from "Synthszr Take" sections
+- Sentences that work standalone — without the rest of the article context
+- If no explicit analogies exist: take the sharpest, most quotable statements
 
-Für jede gefundene Stelle liefere:
-1. **analogy_text**: Der vollständige Satz aus dem Artikel. Nicht kürzen, nicht umschreiben.
-2. **context_text**: Der Tech-Kontext in max 10 Wörtern. Beispiel: "OpenAI plant Werbung in ChatGPT"
-3. **image_prompt**: Ein englischer Bildprompt für eine Szene mit 3D-Marmorskulpturen griechischer Mythologie-Figuren, die die Aussage visuell darstellen. Ordne Tech-Akteure griechischen Göttern zu (Zeus=mächtiger CEO, Ikarus=überambitioniertes Startup, Prometheus=Wissensbringer, Athene=strategische Führung). Beschreibe konkret die Pose und Szene der Statuen. Suffix: "${styleSuffix}"
-4. **source_section**: Der Absatz, aus dem der Satz stammt.
+IMPORTANT: ALL output text must be in ENGLISH. Translate the German source material.
 
-WICHTIG: Liefere IMMER mindestens ${maxAnalogies} Ergebnisse, auch wenn du die Qualitätsanforderungen etwas lockern musst. Ein brauchbares Ergebnis ist besser als keins.
+For each found statement provide:
+1. **analogy_text**: The statement translated to English. Crisp, punchy, quotable. One sentence.
+2. **context_text**: The tech context in max 10 English words. Example: "OpenAI plans ads in ChatGPT"
+3. **image_prompt**: An English image prompt for a scene with 3D marble sculptures of Greek mythology figures visualizing the statement. Map tech actors to Greek gods (Zeus=powerful CEO, Icarus=overambitious startup, Prometheus=knowledge bringer, Athena=strategic leadership). Describe the pose and scene concretely. Suffix: "${styleSuffix}"
+4. **source_section**: The original German paragraph (for reference).
 
-Antworte NUR als JSON-Array. Kein Markdown, keine Erklärung, keine Code-Fences.
+IMPORTANT: ALWAYS deliver at least ${maxAnalogies} results, even if you need to relax quality requirements. A usable result is better than none.
 
-Artikel-Titel: ${postTitle}
+Reply ONLY as a JSON array. No markdown, no explanation, no code fences.
 
-Artikel-Inhalt:
+Article title: ${postTitle}
+
+Article content:
 ${postContent}`
       }
     ],

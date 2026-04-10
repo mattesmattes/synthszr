@@ -165,14 +165,14 @@ export default function AnalogyVideosPage() {
     }
   }
 
-  async function processSpecific(videoId: string) {
+  async function processSpecific(videoId: string, videoOnly: boolean = false) {
     setProcessing(true)
     try {
       await fetch('/api/admin/analogy-videos/process', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId }),
+        body: JSON.stringify({ videoId, videoOnly }),
       })
       await fetchVideos()
     } catch (error) {
@@ -587,17 +587,26 @@ export default function AnalogyVideosPage() {
 function VideoActions({ video, processing, onProcess, onUpdateStatus, onDelete }: {
   video: AnalogyVideo
   processing: boolean
-  onProcess: (id: string) => void
+  onProcess: (id: string, videoOnly?: boolean) => void
   onUpdateStatus: (id: string, status: string) => void
   onDelete: (video: AnalogyVideo) => void
 }) {
+  const hasAssets = !!(video.image_url || video.script_data)
+  const needsVideo = !video.video_url && hasAssets
+
   return (
-    <div className="flex items-center gap-1 pt-1">
+    <div className="flex items-center gap-1 pt-1 flex-wrap">
       {video.status === 'review' && (
         <>
           <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => onUpdateStatus(video.id, 'published')}>
             <Check className="h-3 w-3 mr-1" /> Approve
           </Button>
+          {needsVideo && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onProcess(video.id, true)} disabled={processing}>
+              {processing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Film className="h-3 w-3 mr-1" />}
+              Video
+            </Button>
+          )}
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onUpdateStatus(video.id, 'pending')}>
             <RotateCcw className="h-3 w-3 mr-1" /> Redo
           </Button>

@@ -69,45 +69,48 @@ export async function generateMachineScript(
     messages: [
       {
         role: 'user',
-        content: `Du bist "The Machine" — eine KI, die Nachrichten verarbeitet. Analysiere den Blog-Artikel und erstelle ${maxScripts} Processing-Scripts für Terminal-Animationen.
+        content: `You are "The Machine" — an AI that processes news. Analyze the blog article and create ${maxScripts} processing scripts for terminal animations.
 
-Jede Animation zeigt, wie du einen Textabschnitt verarbeitest:
-1. **stream_in**: Der Originaltext fließt rein (wie ein Terminal-Output)
-2. **highlight**: Schlüsselbegriffe werden farbig markiert (green=positiv, cyan=tech, yellow=wichtig, red=kritisch)
-3. **extract_number**: Zahlen/Prozente werden groß herausgezogen
-4. **strike**: Irrelevante Phrasen werden durchgestrichen (Marketing-Floskeln, Füllwörter, Redundanzen)
-5. **build_take**: Der destillierte Take baut sich Zeile für Zeile auf (max 3 Zeilen, wie eine Commit-Message)
-6. **pause**: Kurze Pause für Effekt (200-500ms)
+IMPORTANT: ALL text output must be in ENGLISH. Translate any German source material.
 
-Pro Script:
-- Wähle einen spannenden Abschnitt (3-5 Sätze) aus dem Artikel
-- Der Abschnitt muss eigenständig verständlich sein
-- Der Take am Ende ist dein destilliertes Urteil (scharf, pointiert, max 2-3 Zeilen)
-- Gesamtdauer: 15-25 Sekunden
+Each animation shows how you process a text section:
+1. **stream_in**: The translated English text flows in (like terminal output)
+2. **highlight**: Key terms get color-marked (green=positive, cyan=tech, yellow=important, red=critical)
+3. **extract_number**: Numbers/percentages get pulled out large
+4. **strike**: Irrelevant phrases get struck through (marketing fluff, filler words, redundancies)
+5. **build_take**: The distilled take builds up line by line (max 3 lines, like a commit message)
+6. **pause**: Brief pause for effect (200-500ms)
+
+Per script:
+- Pick a compelling section (3-5 sentences) from the article
+- Translate it to English for the stream_in text
+- The section must be self-contained
+- The take at the end is your distilled judgment (sharp, punchy, max 2-3 lines, in English)
+- Total duration: 15-25 seconds
 - Timing: stream_in ~3000ms, highlights ~300ms each, strike ~400ms each, build_take ~800ms per line
 
-Antworte als JSON-Array von MachineScript-Objekten:
+Reply as JSON array of MachineScript objects:
 [{
-  "title": "Post-Titel",
-  "sourceText": "Der Original-Abschnitt",
+  "title": "Article Title in English",
+  "sourceText": "The section translated to English",
   "steps": [
-    { "type": "stream_in", "text": "Der komplette Abschnitt...", "delay_ms": 3000 },
-    { "type": "highlight", "text": "Schlüsselwort", "color": "cyan", "delay_ms": 300 },
+    { "type": "stream_in", "text": "Full section in English...", "delay_ms": 3000 },
+    { "type": "highlight", "text": "keyword", "color": "cyan", "delay_ms": 300 },
     { "type": "extract_number", "text": "42%", "delay_ms": 600 },
-    { "type": "strike", "text": "irrelevante Phrase", "delay_ms": 400 },
+    { "type": "strike", "text": "irrelevant phrase", "delay_ms": 400 },
     { "type": "pause", "text": "", "delay_ms": 400 },
-    { "type": "build_take", "text": "Erste Zeile des Takes", "delay_ms": 800 },
-    { "type": "build_take", "text": "Zweite Zeile", "delay_ms": 800 }
+    { "type": "build_take", "text": "First line of take", "delay_ms": 800 },
+    { "type": "build_take", "text": "Second line", "delay_ms": 800 }
   ],
-  "take": "Der vollständige destillierte Take",
+  "take": "The full distilled take in English",
   "estimatedDuration": 18
 }]
 
-NUR JSON. Kein Markdown, keine Erklärung.
+JSON ONLY. No markdown, no explanation.
 
-Artikel-Titel: ${postTitle}
+Article title: ${postTitle}
 
-Artikel:
+Article content:
 ${postContent}`
       }
     ],
