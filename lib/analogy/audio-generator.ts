@@ -18,17 +18,21 @@ interface AnalogyAudioSettings {
 
 const DEFAULT_SETTINGS: AnalogyAudioSettings = {
   provider: 'openai',
-  voice: 'onyx',
+  voice: 'fable',
   model: 'gpt-4o-mini-tts',
   instructions: 'Speak slowly and deliberately, with gravitas. No filler words. Measured pace, confident tone.',
 }
 
 /**
- * Get TTS settings for analogy audio from DB
+ * Get TTS settings for analogy audio.
+ * Uses the podcast guest voice/model from TTS settings (= Synthszr voice),
+ * falling back to analogy-specific settings or defaults.
  */
 async function getAudioSettings(): Promise<AnalogyAudioSettings> {
+  const supabase = createAdminClient()
+
+  // First check for analogy-specific override
   try {
-    const supabase = createAdminClient()
     const { data } = await supabase
       .from('settings')
       .select('value')
@@ -39,8 +43,29 @@ async function getAudioSettings(): Promise<AnalogyAudioSettings> {
       return { ...DEFAULT_SETTINGS, ...data.value }
     }
   } catch {
+    // No override, fall through
+  }
+
+  // Use podcast guest voice settings (= Synthszr voice)
+  try {
+    const { data } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'tts_settings')
+      .single()
+
+    if (data?.value) {
+      const tts = data.value
+      return {
+        ...DEFAULT_SETTINGS,
+        voice: (tts.podcast_guest_voice_de || tts.podcast_guest_voice_id || DEFAULT_SETTINGS.voice) as TTSVoice,
+        model: (tts.tts_model || DEFAULT_SETTINGS.model) as TTSModel,
+      }
+    }
+  } catch {
     // Use defaults
   }
+
   return DEFAULT_SETTINGS
 }
 

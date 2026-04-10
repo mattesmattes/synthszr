@@ -69,13 +69,13 @@ interface MachineScript {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  pending: { label: 'Ausstehend', variant: 'secondary' },
-  generating_image: { label: 'Bild...', variant: 'outline' },
+  pending: { label: 'Pending', variant: 'secondary' },
+  generating_image: { label: 'Image...', variant: 'outline' },
   generating_audio: { label: 'Audio...', variant: 'outline' },
-  compositing: { label: 'Video...', variant: 'outline' },
+  compositing: { label: 'Compositing...', variant: 'outline' },
   review: { label: 'Review', variant: 'default' },
-  published: { label: 'Publiziert', variant: 'default' },
-  failed: { label: 'Fehler', variant: 'destructive' },
+  published: { label: 'Published', variant: 'default' },
+  failed: { label: 'Failed', variant: 'destructive' },
 }
 
 const STEP_COLORS: Record<string, string> = {
@@ -135,11 +135,11 @@ export default function AnalogyVideosPage() {
         setVideos(await res.json())
       } else {
         const data = await res.json().catch(() => ({}))
-        setErrorMessage(`Laden fehlgeschlagen: ${data.error || res.statusText}`)
+        setErrorMessage(`Loading failed: ${data.error || res.statusText}`)
       }
     } catch (error) {
       console.error('Error fetching videos:', error)
-      setErrorMessage(`Netzwerk-Fehler: ${error instanceof Error ? error.message : 'Unbekannt'}`)
+      setErrorMessage(`Network error: ${error instanceof Error ? error.message : 'Unknown'}`)
     } finally {
       setLoading(false)
     }
@@ -223,15 +223,15 @@ export default function AnalogyVideosPage() {
       })
       const data = await res.json()
       if (data.error) {
-        setErrorMessage(`Extraktion fehlgeschlagen: ${data.error}`)
+        setErrorMessage(`Extraction failed: ${data.error}`)
       } else if (data.extracted === 0) {
-        setErrorMessage(data.message || 'Keine Analogien/Scripts gefunden')
+        setErrorMessage(data.message || 'No analogies/scripts found')
       } else {
         await fetchVideos()
       }
     } catch (error) {
       console.error('Error extracting:', error)
-      setErrorMessage(`Fehler: ${error instanceof Error ? error.message : 'Unbekannt'}`)
+      setErrorMessage(`Error: ${error instanceof Error ? error.message : 'Unknown'}`)
     } finally {
       setExtracting(false)
     }
@@ -249,7 +249,7 @@ export default function AnalogyVideosPage() {
             Video Factory
           </h1>
           <p className="text-muted-foreground mt-1">
-            Short-Form-Videos aus Synthszr-Content
+            Short-form videos from Synthszr content
           </p>
         </div>
         {activeTab === 'analogy' && (
@@ -260,7 +260,7 @@ export default function AnalogyVideosPage() {
             disabled={processing || pendingCount === 0}
           >
             {processing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />}
-            Generieren ({pendingCount})
+            Generate ({pendingCount})
           </Button>
         )}
       </div>
@@ -281,19 +281,19 @@ export default function AnalogyVideosPage() {
         <Card className="mt-4">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">
-              {activeTab === 'analogy' ? 'Analogien extrahieren' : 'Processing-Script generieren'}
+              {activeTab === 'analogy' ? 'Extract Analogies' : 'Generate Processing Script'}
             </CardTitle>
             <CardDescription>
               {activeTab === 'analogy'
-                ? 'Post auswählen um Analogien mit griechischen Göttern per Claude zu extrahieren'
-                : 'Post auswählen um Terminal-Processing-Scripts per Claude zu generieren'}
+                ? 'Select a post to extract analogies with Greek mythology visuals via Claude'
+                : 'Select a post to generate terminal processing scripts via Claude'}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex gap-2">
               <Select value={selectedPostId} onValueChange={setSelectedPostId}>
                 <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Post auswählen..." />
+                  <SelectValue placeholder="Select post..." />
                 </SelectTrigger>
                 <SelectContent>
                   {recentPosts.map((post) => (
@@ -305,7 +305,7 @@ export default function AnalogyVideosPage() {
               </Select>
               <Button size="sm" onClick={extractFromPost} disabled={extracting || !selectedPostId}>
                 {extracting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />}
-                {activeTab === 'analogy' ? 'Extrahieren' : 'Generieren'}
+                {activeTab === 'analogy' ? 'Extract' : 'Generate'}
               </Button>
             </div>
           </CardContent>
@@ -326,11 +326,11 @@ export default function AnalogyVideosPage() {
               <SelectValue placeholder="Status Filter" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Alle</SelectItem>
-              <SelectItem value="pending">Ausstehend</SelectItem>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="review">Review ({reviewCount})</SelectItem>
-              <SelectItem value="published">Publiziert</SelectItem>
-              <SelectItem value="failed">Fehler</SelectItem>
+              <SelectItem value="published">Published</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
             </SelectContent>
           </Select>
           <span className="text-sm text-muted-foreground">
@@ -346,7 +346,7 @@ export default function AnalogyVideosPage() {
             </div>
           ) : videos.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              Keine Analogie-Videos gefunden. Extrahiere Analogien aus einem Post.
+              No analogy videos found. Extract analogies from a post to get started.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -384,9 +384,16 @@ export default function AnalogyVideosPage() {
                     </div>
                     <p className="text-sm font-medium line-clamp-3">&ldquo;{video.analogy_text}&rdquo;</p>
                     {video.context_text && <p className="text-xs text-muted-foreground">{video.context_text}</p>}
+                    {/* Audio Player */}
+                    {video.audio_url && (
+                      <div className="flex items-center gap-2">
+                        <Volume2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <audio controls src={video.audio_url} className="w-full h-7" />
+                      </div>
+                    )}
                     {video.error_message && <p className="text-xs text-destructive line-clamp-2">{video.error_message}</p>}
                     {video.generated_posts && (
-                      <p className="text-xs text-muted-foreground truncate">aus: {video.generated_posts.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">from: {video.generated_posts.title}</p>
                     )}
                     <VideoActions video={video} processing={processing} onProcess={processSpecific} onUpdateStatus={updateStatus} onDelete={setDeleteVideo} />
                   </CardContent>
@@ -404,7 +411,7 @@ export default function AnalogyVideosPage() {
             </div>
           ) : videos.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              Keine Machine-Scripts gefunden. Generiere Scripts aus einem Post.
+              No machine scripts found. Generate scripts from a post to get started.
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -437,7 +444,7 @@ export default function AnalogyVideosPage() {
                     </div>
                     <p className="text-sm font-medium line-clamp-2">{video.analogy_text}</p>
                     {video.generated_posts && (
-                      <p className="text-xs text-muted-foreground truncate">aus: {video.generated_posts.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">from: {video.generated_posts.title}</p>
                     )}
                     <VideoActions video={video} processing={processing} onProcess={processSpecific} onUpdateStatus={updateStatus} onDelete={setDeleteVideo} />
                   </CardContent>
@@ -546,15 +553,15 @@ export default function AnalogyVideosPage() {
       <AlertDialog open={!!deleteVideo} onOpenChange={() => setDeleteVideo(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Video löschen?</AlertDialogTitle>
+            <AlertDialogTitle>Delete video?</AlertDialogTitle>
             <AlertDialogDescription>
               &ldquo;{deleteVideo?.analogy_text.slice(0, 80)}...&rdquo;
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => deleteVideo && handleDelete(deleteVideo.id)}>
-              Löschen
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -580,14 +587,14 @@ function VideoActions({ video, processing, onProcess, onUpdateStatus, onDelete }
             <Check className="h-3 w-3 mr-1" /> Approve
           </Button>
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onUpdateStatus(video.id, 'pending')}>
-            <RotateCcw className="h-3 w-3 mr-1" /> Neu
+            <RotateCcw className="h-3 w-3 mr-1" /> Redo
           </Button>
         </>
       )}
       {video.status === 'pending' && (
         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onProcess(video.id)} disabled={processing}>
           {processing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}
-          Generieren
+          Generate
         </Button>
       )}
       {video.status === 'failed' && (
