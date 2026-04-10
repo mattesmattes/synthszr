@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
   const postId = searchParams.get('postId')
+  const videoType = searchParams.get('videoType')
   const limit = parseInt(searchParams.get('limit') || '50')
 
   const supabase = createAdminClient()
@@ -29,6 +30,9 @@ export async function GET(request: NextRequest) {
   }
   if (postId) {
     query = query.eq('post_id', postId)
+  }
+  if (videoType) {
+    query = query.eq('video_type', videoType)
   }
 
   const { data, error } = await query

@@ -127,33 +127,35 @@ export async function generateFallbackImage(
   try {
     // Use @vercel/og-style ImageResponse for SVG-to-PNG
     // Fallback: generate a simple SVG and convert
-    const width = 1920
-    const height = 1080
+    // 9:16 portrait for TikTok/Reels
+    const width = 1080
+    const height = 1920
 
     // Truncate text for layout
     const displayText = analogyText.length > 200
       ? analogyText.slice(0, 197) + '...'
       : analogyText
 
+    // 9:16 portrait layout — text centered vertically
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="${width}" height="${height}" fill="#111111"/>
-  <text x="120" y="400" fill="#ffffff" font-family="Inter, system-ui, sans-serif" font-size="56" font-weight="700" text-anchor="start">
+  <text x="80" y="700" fill="#ffffff" font-family="Inter, system-ui, sans-serif" font-size="44" font-weight="700" text-anchor="start">
     ${escapeXml(displayText).split(/(?<=\S)\s+/).reduce((lines: string[], word: string) => {
       const lastLine = lines[lines.length - 1] || ''
-      if ((lastLine + ' ' + word).length > 45) {
+      if ((lastLine + ' ' + word).length > 28) {
         lines.push(word)
       } else {
         lines[lines.length - 1] = (lastLine + ' ' + word).trim()
       }
       return lines
     }, ['']).map((line: string, i: number) =>
-      `<tspan x="120" dy="${i === 0 ? 0 : 72}">${line}</tspan>`
+      `<tspan x="80" dy="${i === 0 ? 0 : 58}">${line}</tspan>`
     ).join('')}
   </text>
-  <text x="120" y="${height - 120}" fill="#888888" font-family="Inter, system-ui, sans-serif" font-size="32">
+  <text x="80" y="${height - 200}" fill="#888888" font-family="Inter, system-ui, sans-serif" font-size="28">
     ${escapeXml(contextText)}
   </text>
-  <text x="${width - 120}" y="${height - 60}" fill="#CCFF00" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="700" text-anchor="end">
+  <text x="${width - 80}" y="${height - 100}" fill="#CCFF00" font-family="Inter, system-ui, sans-serif" font-size="24" font-weight="700" text-anchor="end">
     synthszr
   </text>
 </svg>`

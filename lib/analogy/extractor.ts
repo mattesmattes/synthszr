@@ -15,7 +15,7 @@ export interface ExtractedAnalogy {
   sourceSection: string
 }
 
-const DEFAULT_STYLE_SUFFIX = `editorial illustration, muted earth tones with one accent color, slight surrealism, clean composition, 16:9 aspect ratio, no text, no watermarks, soft lighting, editorial magazine quality`
+const DEFAULT_STYLE_SUFFIX = `black and white satirical illustration in the style of Mort Drucker, featuring ancient Greek mythology figures and gods as the characters acting out the scene, clear black and white contrast with cross-hatching and line drawing, satirical and slightly exaggerated portrayal, dynamic composition, 9:16 portrait aspect ratio optimized for smartphone/TikTok, no text, no words, no letters, no watermarks`
 
 /**
  * Get the configured style suffix from settings, or use default
@@ -63,7 +63,7 @@ Eine gute Analogie ist:
 Für jede Analogie liefere:
 1. **analogy_text**: Der vollständige Analogie-Satz, wie er im Artikel steht. Kein Kürzen.
 2. **context_text**: Ein kurzer Halbsatz (max 10 Wörter), der den Tech-Kontext erklärt. Beispiel: "OpenAI plant Werbung in ChatGPT"
-3. **image_prompt**: Ein englischer Bildprompt, der die Analogie als surreales Standbild visualisiert. Beschreibe die Szene konkret und visuell. Keine abstrakten Konzepte. KEIN Text im Bild. Der Prompt endet mit diesem Style-Suffix: "${styleSuffix}"
+3. **image_prompt**: Ein englischer Bildprompt, der die Analogie als satirische Szene mit Figuren aus der griechischen Mythologie visualisiert. Die Tech-Akteure werden durch griechische Götter/Helden dargestellt (z.B. Zeus für einen mächtigen CEO, Ikarus für ein überambitioniertes Startup, Prometheus für jemanden der Feuer/Wissen bringt). Beschreibe die Szene konkret und visuell. Keine abstrakten Konzepte. KEIN Text im Bild. Der Prompt endet mit diesem Style-Suffix: "${styleSuffix}"
 4. **source_section**: Der Absatz aus dem Artikel, in dem die Analogie vorkommt.
 
 Antworte ausschließlich als JSON-Array. Keine Erklärung, kein Markdown.
