@@ -101,7 +101,14 @@ export async function POST(request: NextRequest) {
   }
 
   // === Analogy Machine: Extract analogies ===
-  const analogies = await extractAnalogies(plainText, post.title)
+  let analogies
+  try {
+    analogies = await extractAnalogies(plainText, post.title)
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('[AnalogyExtract] Extraction error:', msg)
+    return NextResponse.json({ error: msg, extracted: 0 }, { status: 500 })
+  }
 
   if (analogies.length === 0) {
     return NextResponse.json({ message: 'No analogies found', extracted: 0 })

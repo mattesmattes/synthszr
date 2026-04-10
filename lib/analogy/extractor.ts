@@ -15,7 +15,7 @@ export interface ExtractedAnalogy {
   sourceSection: string
 }
 
-const DEFAULT_STYLE_SUFFIX = `black and white satirical illustration in the style of Mort Drucker, featuring ancient Greek mythology figures and gods as the characters acting out the scene, clear black and white contrast with cross-hatching and line drawing, satirical and slightly exaggerated portrayal, dynamic composition, 9:16 portrait aspect ratio optimized for smartphone/TikTok, no text, no words, no letters, no watermarks`
+const DEFAULT_STYLE_SUFFIX = `Hyper-photorealistic 3D marble statues depicting male and female figures from Greek mythology acting out the scene. Photorealistic rendering with extreme detail. Realistic marble texture with veins, imperfections, subtle translucency. Cinematic lighting with dramatic shadows. Museum-quality sculpture appearance. High contrast black and white. No naked female characters. Statues must be in the center of the composition. 9:16 portrait aspect ratio for smartphone/TikTok. Do NOT include ANY text or written language. Logos from companies and known figures like CEOs are okay.`
 
 /**
  * Get the configured style suffix from settings, or use default
@@ -52,21 +52,23 @@ export async function extractAnalogies(
     messages: [
       {
         role: 'user',
-        content: `Analysiere den folgenden Blog-Artikel und extrahiere die ${maxAnalogies} besten Analogien oder Metaphern.
+        content: `Analysiere den folgenden Blog-Artikel und extrahiere die ${maxAnalogies} stärksten Aussagen, die sich als kurzes TikTok-Video eignen.
 
-Eine gute Analogie ist:
-- Ein Vergleich mit "wie", "als ob", "wirkt wie", "erinnert an" oder eine lebhafte Metapher
-- Visuell vorstellbar (kann als Bild dargestellt werden)
-- Eigenständig verständlich ohne den restlichen Artikel
-- Pointiert, überraschend oder witzig
+Gesucht sind:
+- Pointierte Vergleiche, Analogien oder Metaphern ("wie", "als ob", "wirkt wie")
+- Provokante Thesen oder scharfe Beobachtungen aus den "Synthszr Take"-Abschnitten
+- Sätze die eigenständig funktionieren — ohne den Kontext des restlichen Artikels
+- Falls keine expliziten Analogien vorhanden: Nimm die schärfsten, quotefähigsten Aussagen
 
-Für jede Analogie liefere:
-1. **analogy_text**: Der vollständige Analogie-Satz, wie er im Artikel steht. Kein Kürzen.
-2. **context_text**: Ein kurzer Halbsatz (max 10 Wörter), der den Tech-Kontext erklärt. Beispiel: "OpenAI plant Werbung in ChatGPT"
-3. **image_prompt**: Ein englischer Bildprompt, der die Analogie als satirische Szene mit Figuren aus der griechischen Mythologie visualisiert. Die Tech-Akteure werden durch griechische Götter/Helden dargestellt (z.B. Zeus für einen mächtigen CEO, Ikarus für ein überambitioniertes Startup, Prometheus für jemanden der Feuer/Wissen bringt). Beschreibe die Szene konkret und visuell. Keine abstrakten Konzepte. KEIN Text im Bild. Der Prompt endet mit diesem Style-Suffix: "${styleSuffix}"
-4. **source_section**: Der Absatz aus dem Artikel, in dem die Analogie vorkommt.
+Für jede gefundene Stelle liefere:
+1. **analogy_text**: Der vollständige Satz aus dem Artikel. Nicht kürzen, nicht umschreiben.
+2. **context_text**: Der Tech-Kontext in max 10 Wörtern. Beispiel: "OpenAI plant Werbung in ChatGPT"
+3. **image_prompt**: Ein englischer Bildprompt für eine Szene mit 3D-Marmorskulpturen griechischer Mythologie-Figuren, die die Aussage visuell darstellen. Ordne Tech-Akteure griechischen Göttern zu (Zeus=mächtiger CEO, Ikarus=überambitioniertes Startup, Prometheus=Wissensbringer, Athene=strategische Führung). Beschreibe konkret die Pose und Szene der Statuen. Suffix: "${styleSuffix}"
+4. **source_section**: Der Absatz, aus dem der Satz stammt.
 
-Antworte ausschließlich als JSON-Array. Keine Erklärung, kein Markdown.
+WICHTIG: Liefere IMMER mindestens ${maxAnalogies} Ergebnisse, auch wenn du die Qualitätsanforderungen etwas lockern musst. Ein brauchbares Ergebnis ist besser als keins.
+
+Antworte NUR als JSON-Array. Kein Markdown, keine Erklärung, keine Code-Fences.
 
 Artikel-Titel: ${postTitle}
 
@@ -81,30 +83,56 @@ ${postContent}`
     .map(block => block.text)
     .join('')
 
+  console.log('[AnalogyExtractor] Response length:', text.length, 'preview:', text.slice(0, 200))
+
   try {
-    // Parse JSON, handle potential markdown code fences
-    const cleaned = text.replace(/^```json?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim()
+    // Robust JSON extraction
+    let cleaned = text.trim()
+    const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
+    if (fenceMatch) {
+      cleaned = fenceMatch[1].trim()
+    }
+    const arrayStart = cleaned.indexOf('[')
+    const arrayEnd = cleaned.lastIndexOf(']')
+    if (arrayStart >= 0 && arrayEnd > arrayStart) {
+      cleaned = cleaned.slice(arrayStart, arrayEnd + 1)
+    }
+
     const parsed = JSON.parse(cleaned)
 
     if (!Array.isArray(parsed)) {
-      console.error('[AnalogyExtractor] Response is not an array:', text.slice(0, 200))
+      // Single object → wrap in array
+      if (parsed && typeof parsed === 'object' && parsed.analogy_text) {
+        return [{
+          analogyText: String(parsed.analogy_text),
+          contextText: String(parsed.context_text || ''),
+          imagePrompt: String(parsed.image_prompt || ''),
+          sourceSection: String(parsed.source_section || ''),
+        }]
+      }
+      console.error('[AnalogyExtractor] Response is not an array:', typeof parsed)
       return []
     }
 
+    console.log(`[AnalogyExtractor] Parsed ${parsed.length} items`)
+
     return parsed
-      .filter((item: Record<string, unknown>) =>
-        item.analogy_text && item.context_text && item.image_prompt
-      )
+      .filter((item: Record<string, unknown>) => {
+        const valid = item.analogy_text
+        if (!valid) console.log('[AnalogyExtractor] Skipping item without analogy_text')
+        return valid
+      })
       .slice(0, maxAnalogies)
       .map((item: Record<string, unknown>) => ({
         analogyText: String(item.analogy_text),
-        contextText: String(item.context_text),
-        imagePrompt: String(item.image_prompt),
+        contextText: String(item.context_text || ''),
+        imagePrompt: String(item.image_prompt || ''),
         sourceSection: String(item.source_section || ''),
       }))
   } catch (error) {
-    console.error('[AnalogyExtractor] Failed to parse response:', error, text.slice(0, 500))
-    return []
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('[AnalogyExtractor] Parse failed:', msg, 'Response:', text.slice(0, 500))
+    throw new Error(`Analogy extraction parse error: ${msg}`)
   }
 }
 
