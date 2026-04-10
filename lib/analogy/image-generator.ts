@@ -19,6 +19,44 @@ interface ImageResult {
 
 const DEFAULT_MODEL = 'google/gemini-3-pro-image'
 
+// Synthszr brand color — neon green #CCFF00
+const BRAND_NEON_GREEN = { r: 0xCC, g: 0xFF, b: 0x00 }
+
+/**
+ * Apply a multiply blend with neon green (#CCFF00) over the image.
+ * Multiply: output = (source × tint) / 255
+ * On B&W images this tints whites → neon green, blacks stay black.
+ */
+async function applyNeonGreenMultiply(inputBuffer: Buffer): Promise<Buffer> {
+  const sharp = (await import('sharp')).default
+
+  const { width, height } = await sharp(inputBuffer).metadata()
+  if (!width || !height) return inputBuffer
+
+  // Create a solid #CCFF00 overlay the same size
+  const overlay = await sharp({
+    create: {
+      width,
+      height,
+      channels: 3,
+      background: BRAND_NEON_GREEN,
+    }
+  }).png().toBuffer()
+
+  // Composite with multiply blend mode
+  const result = await sharp(inputBuffer)
+    .ensureAlpha()
+    .composite([{
+      input: overlay,
+      blend: 'multiply' as const,
+    }])
+    .png()
+    .toBuffer()
+
+  console.log(`[AnalogyImage] Applied neon green multiply tint`)
+  return result
+}
+
 /**
  * Get the configured image model from settings
  */
@@ -104,10 +142,13 @@ export async function generateAnalogyImage(prompt: string): Promise<ImageResult>
 
     console.log(`[AnalogyImage] Generated successfully (${mimeType}, ${imageBuffer.length} bytes)`)
 
+    // Apply neon green (#CCFF00) multiply tint — brand color
+    const tintedBuffer = await applyNeonGreenMultiply(imageBuffer)
+
     return {
       success: true,
-      imageBuffer,
-      mimeType,
+      imageBuffer: tintedBuffer,
+      mimeType: 'image/png', // sharp outputs PNG
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
