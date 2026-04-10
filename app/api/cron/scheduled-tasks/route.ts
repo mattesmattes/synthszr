@@ -313,62 +313,14 @@ export async function GET(request: NextRequest) {
     results.queueMaintenance = 'error'
   }
 
-  // Translation Queue Processing: Process pending translations (runs every time cron is called)
+  // Translation Queue Processing: Process pending translations directly (no HTTP subrequest)
   try {
+    const { processTranslationQueue } = await import('@/lib/i18n/translation-queue')
+    const translationResult = await processTranslationQueue(supabase, { maxBatches: 3, batchSize: 1 })
 
-    // Process up to 3 batches (15 translations total) per cron run
-    let totalProcessed = 0
-    let totalSuccess = 0
-    let totalFailed = 0
-
-    for (let batch = 0; batch < 3; batch++) {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
-      try {
-        const translationUrl = `${baseUrl}/api/admin/translations/process-queue`
-        console.log(`[Scheduler] Translation subrequest → ${translationUrl} (CRON_SECRET ${process.env.CRON_SECRET ? 'set' : 'MISSING'})`)
-        const response = await fetch(translationUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-          },
-          redirect: 'manual', // Prevent redirect from stripping auth headers
-          signal: controller.signal,
-        })
-        clearTimeout(timeoutId)
-
-        if (response.status >= 300 && response.status < 400) {
-          console.error(`[Scheduler] Translation queue redirected to ${response.headers.get('location')} — auth headers stripped`)
-          break
-        }
-
-        if (response.ok) {
-          const data = await response.json()
-          totalProcessed += data.processed || 0
-          totalSuccess += data.success || 0
-          totalFailed += data.failed || 0
-
-          // Stop if no more pending items
-          if (!data.processed || data.processed === 0) break
-        } else {
-          console.error('[Scheduler] Translation queue processing failed:', response.status)
-          break
-        }
-      } catch (error) {
-        clearTimeout(timeoutId)
-        if (error instanceof Error && error.name === 'AbortError') {
-          console.error('[Scheduler] Translation queue processing timeout after 30s')
-        } else {
-          console.error('[Scheduler] Translation queue processing error:', error)
-        }
-        break
-      }
-    }
-
-    if (totalProcessed > 0) {
-      console.log(`[Scheduler] Processed ${totalProcessed} translations (${totalSuccess} success, ${totalFailed} failed)`)
-      results.translationQueue = `processed_${totalProcessed}_success_${totalSuccess}`
+    if (translationResult.totalProcessed > 0) {
+      console.log(`[Scheduler] Processed ${translationResult.totalProcessed} translations (${translationResult.totalSuccess} success, ${translationResult.totalFailed} failed)`)
+      results.translationQueue = `processed_${translationResult.totalProcessed}_success_${translationResult.totalSuccess}`
     } else {
       results.translationQueue = 'empty'
     }
