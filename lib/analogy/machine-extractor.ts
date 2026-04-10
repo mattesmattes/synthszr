@@ -35,6 +35,21 @@ export interface MachineScript {
   estimatedDuration: number // Total estimated duration in seconds
 }
 
+function mapScript(item: Record<string, unknown>, fallbackTitle: string): MachineScript {
+  return {
+    title: String(item.title || fallbackTitle),
+    sourceText: String(item.sourceText || item.source_text || ''),
+    steps: (item.steps as MachineStep[]).map(s => ({
+      type: s.type,
+      text: String(s.text || ''),
+      color: s.color,
+      delay_ms: s.delay_ms || 400,
+    })),
+    take: String(item.take),
+    estimatedDuration: Number(item.estimatedDuration || item.estimated_duration) || 20,
+  }
+}
+
 /**
  * Generate a Machine processing script from a blog post section.
  * Claude acts as the "processing engine" that decides what to highlight,
@@ -102,34 +117,51 @@ ${postContent}`
     .map(block => block.text)
     .join('')
 
+  console.log('[MachineExtractor] Raw response length:', text.length, 'chars')
+  console.log('[MachineExtractor] Response preview:', text.slice(0, 300))
+
   try {
-    const cleaned = text.replace(/^```json?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim()
+    // Strip markdown code fences and any leading/trailing whitespace
+    let cleaned = text.trim()
+    // Handle ```json ... ``` wrapping
+    const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
+    if (fenceMatch) {
+      cleaned = fenceMatch[1].trim()
+    }
+    // Handle case where response starts with [ directly
+    const arrayStart = cleaned.indexOf('[')
+    const arrayEnd = cleaned.lastIndexOf(']')
+    if (arrayStart >= 0 && arrayEnd > arrayStart) {
+      cleaned = cleaned.slice(arrayStart, arrayEnd + 1)
+    }
+
+    console.log('[MachineExtractor] Cleaned JSON preview:', cleaned.slice(0, 200))
+
     const parsed = JSON.parse(cleaned)
 
     if (!Array.isArray(parsed)) {
-      console.error('[MachineExtractor] Response is not an array:', text.slice(0, 200))
+      console.error('[MachineExtractor] Response is not an array, wrapping:', typeof parsed)
+      // If it's a single object, wrap in array
+      if (parsed && typeof parsed === 'object' && parsed.steps) {
+        return [mapScript(parsed, postTitle)]
+      }
       return []
     }
 
+    console.log(`[MachineExtractor] Parsed ${parsed.length} scripts`)
+
     return parsed
-      .filter((item: Record<string, unknown>) =>
-        item.steps && Array.isArray(item.steps) && item.take
-      )
+      .filter((item: Record<string, unknown>) => {
+        const valid = item.steps && Array.isArray(item.steps) && item.take
+        if (!valid) console.log('[MachineExtractor] Skipping invalid item:', Object.keys(item))
+        return valid
+      })
       .slice(0, maxScripts)
-      .map((item: Record<string, unknown>) => ({
-        title: String(item.title || postTitle),
-        sourceText: String(item.sourceText || ''),
-        steps: (item.steps as MachineStep[]).map(s => ({
-          type: s.type,
-          text: String(s.text || ''),
-          color: s.color,
-          delay_ms: s.delay_ms || 400,
-        })),
-        take: String(item.take),
-        estimatedDuration: Number(item.estimatedDuration) || 20,
-      }))
+      .map((item: Record<string, unknown>) => mapScript(item, postTitle))
   } catch (error) {
-    console.error('[MachineExtractor] Failed to parse response:', error, text.slice(0, 500))
-    return []
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('[MachineExtractor] JSON parse failed:', msg)
+    console.error('[MachineExtractor] Full response:', text.slice(0, 1000))
+    throw new Error(`Machine script parse error: ${msg}. Response: ${text.slice(0, 200)}`)
   }
 }

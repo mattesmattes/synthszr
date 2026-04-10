@@ -43,7 +43,14 @@ export async function POST(request: NextRequest) {
 
   if (videoType === 'machine') {
     // === The Machine: Generate terminal processing scripts ===
-    const scripts = await generateMachineScript(plainText, post.title)
+    let scripts
+    try {
+      scripts = await generateMachineScript(plainText, post.title)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('[MachineExtract] Script generation error:', msg)
+      return NextResponse.json({ error: msg, extracted: 0 }, { status: 500 })
+    }
 
     if (scripts.length === 0) {
       return NextResponse.json({ message: 'No machine scripts generated', extracted: 0 })
