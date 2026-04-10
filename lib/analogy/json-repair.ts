@@ -44,13 +44,13 @@ export function repairAndParseJSON(raw: string): unknown[] {
 
 /**
  * Walk through JSON text character by character.
- * When inside a string (between unescaped " chars), replace:
- *   \n → \\n
- *   \r → \\r
- *   \t → \\t
+ * When inside a string (between unescaped " chars):
+ *   - \n → \\n, \r → \\r, \t → \\t
+ *   - Unescaped " that don't close the string → \\"
  *
- * Only ASCII " (U+0022) toggles string state.
- * Unicode quotes like „ " " are left alone.
+ * To detect whether a " closes the string or is embedded:
+ * A closing " is followed (after optional whitespace) by , } ] or :
+ * An embedded " is followed by a letter, digit, or other content.
  */
 function escapeNewlinesInStrings(input: string): string {
   const out: string[] = []
@@ -73,29 +73,28 @@ function escapeNewlinesInStrings(input: string): string {
     }
 
     if (ch === '"') {
-      inString = !inString
-      out.push(ch)
+      if (!inString) {
+        // Opening a string
+        inString = true
+        out.push(ch)
+      } else {
+        // Could be closing the string or an embedded unescaped quote
+        if (isClosingQuote(input, i)) {
+          inString = false
+          out.push(ch)
+        } else {
+          // Embedded quote — escape it
+          out.push('\\"')
+        }
+      }
       i++
       continue
     }
 
     if (inString) {
-      // Replace literal control characters inside strings
-      if (ch === '\n') {
-        out.push('\\n')
-        i++
-        continue
-      }
-      if (ch === '\r') {
-        out.push('\\r')
-        i++
-        continue
-      }
-      if (ch === '\t') {
-        out.push('\\t')
-        i++
-        continue
-      }
+      if (ch === '\n') { out.push('\\n'); i++; continue }
+      if (ch === '\r') { out.push('\\r'); i++; continue }
+      if (ch === '\t') { out.push('\\t'); i++; continue }
     }
 
     out.push(ch)
@@ -103,4 +102,20 @@ function escapeNewlinesInStrings(input: string): string {
   }
 
   return out.join('')
+}
+
+/**
+ * Check if the " at position i is a real closing quote.
+ * A closing quote is followed (after optional whitespace) by
+ * a JSON structural character: , } ] : or end of input.
+ */
+function isClosingQuote(input: string, i: number): boolean {
+  let j = i + 1
+  // Skip whitespace
+  while (j < input.length && (input[j] === ' ' || input[j] === '\n' || input[j] === '\r' || input[j] === '\t')) {
+    j++
+  }
+  if (j >= input.length) return true
+  const next = input[j]
+  return next === ',' || next === '}' || next === ']' || next === ':'
 }
