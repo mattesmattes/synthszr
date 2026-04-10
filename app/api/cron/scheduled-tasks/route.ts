@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
     if (shouldRun && !recentlyRan) {
       console.log('[Scheduler] Triggering daily analysis and synthesis...')
       try {
-        const digestResult = await runDailyAnalysisAndSynthesis(supabase)
+        const digestResult = await runDailyAnalysisAndSynthesis(supabase, baseUrl)
         if (digestResult.success) await markTaskRun(supabase, 'daily_analysis')
         results.dailyAnalysis = digestResult.success ? 'completed' : 'error'
         if (digestResult.digestId) results.digestId = digestResult.digestId
@@ -222,7 +222,7 @@ export async function GET(request: NextRequest) {
       } else {
         console.log('[Scheduler] Triggering post generation...')
         try {
-          await generateDailyPost(supabase)
+          await generateDailyPost(supabase, baseUrl)
           await markTaskRun(supabase, 'post_generation')
           results.postGeneration = 'completed'
         } catch (error) {
@@ -339,7 +339,7 @@ export async function GET(request: NextRequest) {
 }
 
 // Generate a blog post from the latest digest
-async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>) {
+async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>, baseUrl: string) {
   // Get the latest digest that doesn't have a generated post yet
   const { data: digest } = await supabase
     .from('daily_digests')
@@ -537,7 +537,7 @@ async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>)
 }
 
 // Run daily analysis, save digest, and trigger synthesis
-async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAdminClient>): Promise<{
+async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAdminClient>, baseUrl: string): Promise<{
   success: boolean
   digestId?: string
   synthesesCreated?: number

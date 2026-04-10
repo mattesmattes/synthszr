@@ -87,7 +87,7 @@ export async function generateAnalogyVideo(input: VideoInput): Promise<VideoResu
       },
       config: {
         aspectRatio: '9:16',
-        durationSeconds: '8',
+        durationSeconds: 8,
       },
     })
 
@@ -312,15 +312,10 @@ async function generateStaticVideo(input: VideoInput): Promise<VideoResult> {
 }
 
 /**
- * Find ffmpeg binary
+ * Find ffmpeg binary on system PATH
  */
-async function getFfmpegPath(): Promise<string> {
-  try {
-    const installer = await import('@ffmpeg-installer/ffmpeg')
-    return installer.path
-  } catch {
-    return 'ffmpeg'
-  }
+function getFfmpegPath(): string {
+  return 'ffmpeg'
 }
 
 function wrapText(text: string, maxChars: number = 30): string {
