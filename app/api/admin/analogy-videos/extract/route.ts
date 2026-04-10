@@ -51,19 +51,35 @@ export async function POST(request: NextRequest) {
 
     const rows = scripts.map(s => ({
       post_id: postId,
-      video_type: 'machine' as const,
+      video_type: 'machine',
       analogy_text: s.take,
       context_text: s.title,
       source_section: s.sourceText,
       script_data: s,
-      status: 'review' as const, // Machine scripts go directly to review (no image/audio needed)
+      status: 'review' as const,
       progress: 100,
     }))
 
-    const { data: inserted, error: insertError } = await supabase
+    let { data: inserted, error: insertError } = await supabase
       .from('analogy_videos')
       .insert(rows)
       .select('id, analogy_text, status')
+
+    // Fallback: if video_type/script_data columns don't exist yet, insert without them
+    if (insertError?.message?.includes('video_type') || insertError?.message?.includes('script_data')) {
+      console.warn('[MachineExtract] v2 migration missing, inserting without video_type/script_data')
+      const fallbackRows = scripts.map(s => ({
+        post_id: postId,
+        analogy_text: s.take,
+        context_text: s.title,
+        source_section: s.sourceText,
+        status: 'review' as const,
+        progress: 100,
+      }))
+      const result = await supabase.from('analogy_videos').insert(fallbackRows).select('id, analogy_text, status')
+      inserted = result.data
+      insertError = result.error
+    }
 
     if (insertError) {
       console.error('[MachineExtract] Insert error:', insertError)
@@ -86,7 +102,7 @@ export async function POST(request: NextRequest) {
 
   const rows = analogies.map(a => ({
     post_id: postId,
-    video_type: 'analogy' as const,
+    video_type: 'analogy',
     analogy_text: a.analogyText,
     context_text: a.contextText,
     image_prompt: a.imagePrompt,
@@ -94,10 +110,26 @@ export async function POST(request: NextRequest) {
     status: 'pending' as const,
   }))
 
-  const { data: inserted, error: insertError } = await supabase
+  let { data: inserted, error: insertError } = await supabase
     .from('analogy_videos')
     .insert(rows)
     .select('id, analogy_text, status')
+
+  // Fallback: if video_type column doesn't exist yet, insert without it
+  if (insertError?.message?.includes('video_type')) {
+    console.warn('[AnalogyExtract] v2 migration missing, inserting without video_type')
+    const fallbackRows = analogies.map(a => ({
+      post_id: postId,
+      analogy_text: a.analogyText,
+      context_text: a.contextText,
+      image_prompt: a.imagePrompt,
+      source_section: a.sourceSection,
+      status: 'pending' as const,
+    }))
+    const result = await supabase.from('analogy_videos').insert(fallbackRows).select('id, analogy_text, status')
+    inserted = result.data
+    insertError = result.error
+  }
 
   if (insertError) {
     console.error('[AnalogyExtract] Insert error:', insertError)

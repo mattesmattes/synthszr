@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Film, Loader2, Play, Trash2, RotateCcw, Check, X, ImageIcon, Volume2, Sparkles, Terminal } from 'lucide-react'
+import { Film, Loader2, Play, Trash2, RotateCcw, Check, X, ImageIcon, Volume2, Sparkles, Terminal, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -97,6 +98,7 @@ export default function AnalogyVideosPage() {
   const [recentPosts, setRecentPosts] = useState<Array<{ id: string; title: string; created_at: string }>>([])
   const [selectedPostId, setSelectedPostId] = useState('')
   const [extracting, setExtracting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
     fetchVideos()
@@ -131,9 +133,13 @@ export default function AnalogyVideosPage() {
       const res = await fetch(`/api/admin/analogy-videos?${params}`, { credentials: 'include' })
       if (res.ok) {
         setVideos(await res.json())
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setErrorMessage(`Laden fehlgeschlagen: ${data.error || res.statusText}`)
       }
     } catch (error) {
       console.error('Error fetching videos:', error)
+      setErrorMessage(`Netzwerk-Fehler: ${error instanceof Error ? error.message : 'Unbekannt'}`)
     } finally {
       setLoading(false)
     }
@@ -207,6 +213,7 @@ export default function AnalogyVideosPage() {
   async function extractFromPost() {
     if (!selectedPostId) return
     setExtracting(true)
+    setErrorMessage(null)
     try {
       const res = await fetch('/api/admin/analogy-videos/extract', {
         method: 'POST',
@@ -215,11 +222,16 @@ export default function AnalogyVideosPage() {
         body: JSON.stringify({ postId: selectedPostId, videoType: activeTab }),
       })
       const data = await res.json()
-      if (data.success || data.extracted > 0) {
+      if (data.error) {
+        setErrorMessage(`Extraktion fehlgeschlagen: ${data.error}`)
+      } else if (data.extracted === 0) {
+        setErrorMessage(data.message || 'Keine Analogien/Scripts gefunden')
+      } else {
         await fetchVideos()
       }
     } catch (error) {
       console.error('Error extracting:', error)
+      setErrorMessage(`Fehler: ${error instanceof Error ? error.message : 'Unbekannt'}`)
     } finally {
       setExtracting(false)
     }
@@ -298,6 +310,14 @@ export default function AnalogyVideosPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Error Message */}
+        {errorMessage && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
 
         {/* Filter */}
         <div className="flex items-center gap-4 mt-4">

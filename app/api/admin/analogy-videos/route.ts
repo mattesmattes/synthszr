@@ -38,6 +38,18 @@ export async function GET(request: NextRequest) {
   const { data, error } = await query
 
   if (error) {
+    // If video_type column doesn't exist yet, retry without it
+    if (error.message?.includes('video_type')) {
+      const fallbackQuery = supabase
+        .from('analogy_videos')
+        .select('*, generated_posts!inner(title, slug)')
+        .order('created_at', { ascending: false })
+        .limit(limit)
+      if (status) fallbackQuery.eq('status', status)
+      if (postId) fallbackQuery.eq('post_id', postId)
+      const { data: fallbackData } = await fallbackQuery
+      return NextResponse.json(fallbackData || [])
+    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
