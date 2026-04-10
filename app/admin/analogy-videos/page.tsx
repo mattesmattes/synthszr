@@ -252,17 +252,15 @@ export default function AnalogyVideosPage() {
             Short-form videos from Synthszr content
           </p>
         </div>
-        {activeTab === 'analogy' && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={processNext}
-            disabled={processing || pendingCount === 0}
-          >
-            {processing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />}
-            Generate ({pendingCount})
-          </Button>
-        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={processNext}
+          disabled={processing || pendingCount === 0}
+        >
+          {processing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />}
+          Generate ({pendingCount})
+        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -419,22 +417,26 @@ export default function AnalogyVideosPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {videos.map((video) => (
                 <Card key={video.id} className="overflow-hidden">
-                  {/* Terminal Preview */}
-                  <div
-                    className="bg-black p-4 cursor-pointer min-h-[200px] font-mono text-xs"
-                    onClick={() => setPreviewVideo(video)}
-                  >
-                    <div className="flex items-center gap-2 mb-3 text-green-500 text-[10px]">
-                      <span className="opacity-60">$</span>
-                      <span>synthszr --process</span>
-                      <span className="animate-pulse">_</span>
+                  {/* Video or Terminal Preview */}
+                  {video.video_url ? (
+                    <video controls src={video.video_url} className="w-full" />
+                  ) : (
+                    <div
+                      className="bg-black p-4 cursor-pointer min-h-[200px] font-mono text-xs"
+                      onClick={() => setPreviewVideo(video)}
+                    >
+                      <div className="flex items-center gap-2 mb-3 text-green-500 text-[10px]">
+                        <span className="opacity-60">$</span>
+                        <span>synthszr --process</span>
+                        <span className="animate-pulse">_</span>
+                      </div>
+                      {video.script_data ? (
+                        <MachineScriptPreview script={video.script_data} />
+                      ) : (
+                        <p className="text-gray-500 text-xs">{video.analogy_text}</p>
+                      )}
                     </div>
-                    {video.script_data ? (
-                      <MachineScriptPreview script={video.script_data} />
-                    ) : (
-                      <p className="text-gray-500 text-xs">{video.analogy_text}</p>
-                    )}
-                  </div>
+                  )}
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <Badge variant={STATUS_CONFIG[video.status]?.variant || 'secondary'}>
@@ -445,6 +447,7 @@ export default function AnalogyVideosPage() {
                       )}
                     </div>
                     <p className="text-sm font-medium line-clamp-2">{video.analogy_text}</p>
+                    {video.error_message && <p className="text-xs text-destructive line-clamp-2">{video.error_message}</p>}
                     {video.generated_posts && (
                       <p className="text-xs text-muted-foreground truncate">from: {video.generated_posts.title}</p>
                     )}
@@ -498,7 +501,10 @@ export default function AnalogyVideosPage() {
                 </>
               )}
 
-              {/* Machine: Full terminal preview */}
+              {/* Machine: Video + terminal preview */}
+              {previewVideo.video_type === 'machine' && previewVideo.video_url && (
+                <video controls src={previewVideo.video_url} className="w-full rounded-lg max-h-[400px] mx-auto" />
+              )}
               {previewVideo.video_type === 'machine' && previewVideo.script_data && (
                 <div className="bg-black rounded-lg p-6 font-mono text-sm space-y-4 max-h-[500px] overflow-y-auto">
                   <div className="text-green-500 text-xs flex items-center gap-2">

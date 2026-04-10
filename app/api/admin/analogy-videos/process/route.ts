@@ -5,6 +5,8 @@ import { getSession } from '@/lib/auth/session'
 import { generateAnalogyImage, generateFallbackImage, uploadAnalogyImage } from '@/lib/analogy/image-generator'
 import { generateAnalogyAudio, uploadAnalogyAudio } from '@/lib/analogy/audio-generator'
 import { generateAnalogyVideo, uploadAnalogyVideo } from '@/lib/analogy/video-generator'
+import { generateMachineVideo, uploadMachineVideo } from '@/lib/analogy/machine-video-generator'
+import type { MachineScript } from '@/lib/analogy/machine-extractor'
 
 export const maxDuration = 300
 
@@ -40,7 +42,7 @@ export async function POST(request: NextRequest) {
   if (specificId) {
     query = query.eq('id', specificId)
   } else {
-    query = query.in('status', ['pending', 'generating_image', 'generating_audio'])
+    query = query.in('status', ['pending', 'generating_image', 'generating_audio', 'compositing'])
   }
 
   const { data: job, error: fetchError } = await query
@@ -70,7 +72,56 @@ export async function POST(request: NextRequest) {
     .eq('id', job.id)
 
   try {
-    // === Step 1: Image Generation ===
+    // === MACHINE PIPELINE ===
+    if (job.video_type === 'machine') {
+      if (!job.video_url && job.script_data) {
+        await supabase
+          .from('analogy_videos')
+          .update({ status: 'compositing', progress: 20, updated_at: new Date().toISOString() })
+          .eq('id', job.id)
+
+        console.log('[MachineProcess] Generating terminal video via Veo...')
+        const videoResult = await generateMachineVideo(job.script_data as MachineScript)
+
+        if (videoResult.success && videoResult.videoBuffer) {
+          const videoUrl = await uploadMachineVideo(job.id, videoResult.videoBuffer)
+          await supabase
+            .from('analogy_videos')
+            .update({
+              video_url: videoUrl,
+              video_duration_seconds: videoResult.durationSeconds,
+              status: 'review',
+              progress: 100,
+              error_message: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', job.id)
+          console.log(`[MachineProcess] Video uploaded: ${videoUrl.slice(0, 80)}...`)
+        } else {
+          console.error('[MachineProcess] Video generation failed:', videoResult.error)
+          await supabase
+            .from('analogy_videos')
+            .update({
+              status: 'review', // Still go to review — script_data is the deliverable
+              progress: 100,
+              error_message: `Video gen failed: ${videoResult.error}`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', job.id)
+        }
+      } else {
+        // No script_data or already has video
+        await supabase
+          .from('analogy_videos')
+          .update({ status: 'review', progress: 100, updated_at: new Date().toISOString() })
+          .eq('id', job.id)
+      }
+
+      return NextResponse.json({ success: true, jobId: job.id, status: 'review', type: 'machine' })
+    }
+
+    // === ANALOGY PIPELINE ===
+    // Step 1: Image Generation
     if (!job.image_url) {
       await supabase
         .from('analogy_videos')
