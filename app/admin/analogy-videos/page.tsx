@@ -384,13 +384,15 @@ export default function AnalogyVideosPage() {
                     </div>
                     <p className="text-sm font-medium line-clamp-3">&ldquo;{video.analogy_text}&rdquo;</p>
                     {video.context_text && <p className="text-xs text-muted-foreground">{video.context_text}</p>}
-                    {/* Audio Player */}
-                    {video.audio_url && (
+                    {/* Video Player */}
+                    {video.video_url ? (
+                      <video controls src={video.video_url} className="w-full rounded" />
+                    ) : video.audio_url ? (
                       <div className="flex items-center gap-2">
                         <Volume2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                         <audio controls src={video.audio_url} className="w-full h-7" />
                       </div>
-                    )}
+                    ) : null}
                     {video.error_message && <p className="text-xs text-destructive line-clamp-2">{video.error_message}</p>}
                     {video.generated_posts && (
                       <p className="text-xs text-muted-foreground truncate">from: {video.generated_posts.title}</p>
@@ -469,15 +471,19 @@ export default function AnalogyVideosPage() {
               {/* Analogy: Image + Audio */}
               {previewVideo.video_type !== 'machine' && (
                 <>
-                  {previewVideo.image_url && (
+                  {/* Video player (if composited) */}
+                  {previewVideo.video_url ? (
+                    <video controls src={previewVideo.video_url} className="w-full rounded-lg max-h-[500px] mx-auto" />
+                  ) : previewVideo.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={previewVideo.image_url} alt="Analogy" className="w-full rounded-lg" />
-                  )}
+                  ) : null}
                   <div className="space-y-2">
                     <p className="text-lg font-semibold">&ldquo;{previewVideo.analogy_text}&rdquo;</p>
                     {previewVideo.context_text && <p className="text-sm text-muted-foreground">{previewVideo.context_text}</p>}
                   </div>
-                  {previewVideo.audio_url && (
+                  {/* Audio player (only if no video yet) */}
+                  {!previewVideo.video_url && previewVideo.audio_url && (
                     <div className="flex items-center gap-2">
                       <Volume2 className="h-4 w-4 text-muted-foreground" />
                       <audio controls src={previewVideo.audio_url} className="w-full h-8" />

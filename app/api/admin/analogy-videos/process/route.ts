@@ -4,6 +4,7 @@ import { verifyCronAuth } from '@/lib/security/cron-auth'
 import { getSession } from '@/lib/auth/session'
 import { generateAnalogyImage, generateFallbackImage, uploadAnalogyImage } from '@/lib/analogy/image-generator'
 import { generateAnalogyAudio, uploadAnalogyAudio } from '@/lib/analogy/audio-generator'
+import { generateAnalogyVideo, uploadAnalogyVideo } from '@/lib/analogy/video-generator'
 
 export const maxDuration = 300
 
@@ -140,9 +141,52 @@ export async function POST(request: NextRequest) {
       console.log(`[AnalogyProcess] Audio uploaded: ${audioUrl.slice(0, 80)}...`)
     }
 
-    // === Step 3: Mark as review ===
-    // Video compositing (Remotion) will be added in Phase 4.
-    // For now, image + audio are the deliverables for review.
+    // === Step 3: Video Compositing ===
+    // Re-read job to get latest URLs (in case of crash recovery)
+    const { data: updatedJob } = await supabase
+      .from('analogy_videos')
+      .select('image_url, audio_url, audio_duration_seconds')
+      .eq('id', job.id)
+      .single()
+
+    const currentImageUrl = updatedJob?.image_url || job.image_url
+    const currentAudioUrl = updatedJob?.audio_url || job.audio_url
+
+    if (!job.video_url && currentImageUrl && currentAudioUrl) {
+      await supabase
+        .from('analogy_videos')
+        .update({ status: 'compositing', progress: 85, updated_at: new Date().toISOString() })
+        .eq('id', job.id)
+
+      console.log('[AnalogyProcess] Compositing video...')
+      const videoResult = await generateAnalogyVideo({
+        imageUrl: currentImageUrl,
+        audioUrl: currentAudioUrl,
+        analogyText: job.analogy_text,
+        contextText: job.context_text || '',
+      })
+
+      if (!videoResult.success || !videoResult.videoBuffer) {
+        // Video compositing is non-fatal — still go to review with image+audio
+        console.error('[AnalogyProcess] Video compositing failed (non-fatal):', videoResult.error)
+      } else {
+        const videoUrl = await uploadAnalogyVideo(job.id, videoResult.videoBuffer)
+
+        await supabase
+          .from('analogy_videos')
+          .update({
+            video_url: videoUrl,
+            video_duration_seconds: videoResult.durationSeconds,
+            progress: 95,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', job.id)
+
+        console.log(`[AnalogyProcess] Video uploaded: ${videoUrl.slice(0, 80)}...`)
+      }
+    }
+
+    // === Step 4: Mark as review ===
     await supabase
       .from('analogy_videos')
       .update({
