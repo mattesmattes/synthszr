@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runSynthesisPipelineWithProgress } from '@/lib/synthesis/pipeline'
-import { processNewsletters } from '@/lib/newsletter/processor'
 import { processWebcrawl } from '@/lib/webcrawl/processor'
 import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPublishedPostsQueueItems } from '@/lib/news-queue/service'
 import { MAX_DIGEST_SECTIONS, MAX_CONTENT_PREVIEW_CHARS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresholds'
@@ -40,10 +39,11 @@ interface ScheduleConfig {
   }
 }
 
+// Zeiten in Berlin/MEZ (nicht UTC) — Vergleich gegen berlinHour/berlinMinute
 const DEFAULT_SCHEDULE: ScheduleConfig = {
-  newsletterFetch: { enabled: true, hour: 20, minute: 0 },   // 21:00 MEZ
-  webcrawlFetch:   { enabled: true, hour: 20, minute: 30 },  // 21:30 MEZ
-  dailyAnalysis:   { enabled: true, hour: 21, minute: 0 },   // 22:00 MEZ
+  newsletterFetch: { enabled: true, hour: 4, minute: 0 },    // 04:00 MEZ
+  webcrawlFetch:   { enabled: true, hour: 4, minute: 30 },   // 04:30 MEZ
+  dailyAnalysis:   { enabled: true, hour: 5, minute: 0 },    // 05:00 MEZ
   postGeneration:  { enabled: false, hour: 9, minute: 0 },
   newsletterSend:  { enabled: false, hour: 9, minute: 30 },
 }
@@ -75,12 +75,15 @@ async function hasRunRecently(supabase: ReturnType<typeof createAdminClient>, ta
 }
 
 async function markTaskRun(supabase: ReturnType<typeof createAdminClient>, taskKey: string) {
-  await supabase
+  const { error } = await supabase
     .from('settings')
     .upsert({
       key: `last_run_${taskKey}`,
       value: { timestamp: new Date().toISOString() },
     }, { onConflict: 'key' })
+  if (error) {
+    console.error(`[Scheduler] markTaskRun failed for ${taskKey}:`, error)
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -99,14 +102,12 @@ export async function GET(request: NextRequest) {
   const runAll = searchParams.get('runAll') === 'true'
   const forceRun = searchParams.get('force') === 'true' // Bypass hasRunRecently checks
 
-  // DB stores times in UTC (admin UI converts MEZ→UTC on save), compare with UTC
-  const currentHour = now.getUTCHours()
-  const currentMinute = now.getUTCMinutes()
+  // DB speichert Zeiten in Berlin/MEZ (DST-sicher), Vergleich gegen Berlin-Zeit
   const berlinTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }))
-  const berlinHour = berlinTime.getHours()
-  const berlinMinute = berlinTime.getMinutes()
+  const currentHour = berlinTime.getHours()
+  const currentMinute = berlinTime.getMinutes()
 
-  console.log(`[Scheduler] Running at ${berlinHour}:${String(berlinMinute).padStart(2, '0')} MEZ (${currentHour}:${String(currentMinute).padStart(2, '0')} UTC)${runAll ? ' [runAll]' : ''}${forceRun ? ' [force]' : ''}`)
+  console.log(`[Scheduler] Running at ${currentHour}:${String(currentMinute).padStart(2, '0')} MEZ (${now.getUTCHours()}:${String(now.getUTCMinutes()).padStart(2, '0')} UTC)${runAll ? ' [runAll]' : ''}${forceRun ? ' [force]' : ''}`)
 
   // Get schedule config
   const { data: configData } = await supabase
@@ -127,21 +128,36 @@ export async function GET(request: NextRequest) {
 
   // Newsletter Fetch
   if (config.newsletterFetch.enabled) {
-    const fetchHour = config.newsletterFetch.hour ?? config.newsletterFetch.hours?.[0] ?? 3
+    const fetchHour = config.newsletterFetch.hour ?? config.newsletterFetch.hours?.[0] ?? 4
     const fetchMinute = config.newsletterFetch.minute ?? 0
     const shouldRun = runAll || isTimeMatch(fetchHour, fetchMinute, currentHour, currentMinute)
     const recentlyRan = !forceRun && await hasRunRecently(supabase, 'newsletter_fetch', 60)
     if (shouldRun && !recentlyRan) {
       console.log('[Scheduler] Running newsletter fetch...')
       try {
-        const fetchResult = await processNewsletters()
+        // Call fetch-newsletters as HTTP subrequest (separate V8 isolate → avoids jsdom/googleapis
+        // module conflicts that cause silent failures when called in-process)
+        const fetchBaseUrl = process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : 'http://localhost:3000'
+        const fetchController = new AbortController()
+        const fetchTimeoutId = setTimeout(() => fetchController.abort(), 300000) // 5 min
+        const resp = await fetch(`${fetchBaseUrl}/api/cron/fetch-newsletters`, {
+          headers: { 'Authorization': `Bearer ${process.env.CRON_SECRET}` },
+          signal: fetchController.signal,
+        }).finally(() => clearTimeout(fetchTimeoutId))
+        const fetchResult = await resp.json() as { success: boolean; message?: string; processed?: number; articles?: number }
         console.log('[Scheduler] Newsletter fetch completed:', fetchResult.message)
         if (fetchResult.success) await markTaskRun(supabase, 'newsletter_fetch')
         results.newsletterFetch = fetchResult.success ? 'completed' : 'error'
         if (fetchResult.processed !== undefined) results.newslettersFetched = fetchResult.processed.toString()
         if (fetchResult.articles !== undefined) results.articlesExtracted = fetchResult.articles.toString()
       } catch (error) {
-        console.error('[Scheduler] Newsletter fetch error:', error)
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.error('[Scheduler] Newsletter fetch timeout after 5 min')
+        } else {
+          console.error('[Scheduler] Newsletter fetch error:', error)
+        }
         results.newsletterFetch = 'error'
       }
     } else {
@@ -360,7 +376,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     success: true,
     timestamp: now.toISOString(),
-    currentTime: `${currentHour}:${String(currentMinute).padStart(2, '0')} MEZ`,
+    currentTimeMEZ: `${currentHour}:${String(currentMinute).padStart(2, '0')}`,
+    currentTimeUTC: `${now.getUTCHours()}:${String(now.getUTCMinutes()).padStart(2, '0')}`,
     results,
   })
 }
@@ -588,13 +605,14 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
 
   if (existingDigest) {
     console.log(`[DailyAnalysis] Digest already exists for ${dateStr}, skipping analysis`)
-    // Still run synthesis if no syntheses exist
-    const { count } = await supabase
-      .from('developed_syntheses')
+    // Check if synthesis already ran today via news_queue (pipeline no longer writes to developed_syntheses)
+    const todayStart = dateStr + 'T00:00:00.000Z'
+    const { count: queueCount } = await supabase
+      .from('news_queue')
       .select('id', { count: 'exact', head: true })
-      .eq('digest_id', existingDigest.id)
+      .gte('queued_at', todayStart)
 
-    if (!count || count === 0) {
+    if (!queueCount || queueCount === 0) {
       console.log(`[DailyAnalysis] Running synthesis for existing digest ${existingDigest.id}`)
       const synthResult = await runSynthesisPipelineWithProgress(
         existingDigest.id, {}, (event) => {
@@ -609,6 +627,7 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
         synthesesCreated: synthResult.synthesesDeveloped,
       }
     }
+    console.log(`[DailyAnalysis] Synthesis already ran today (${queueCount} items in queue)`)
     return { success: true, digestId: existingDigest.id }
   }
 
@@ -619,9 +638,8 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
   // Step 1: Stream analysis and collect content
   console.log('[DailyAnalysis] Calling analyze API...')
   const analyzeController = new AbortController()
-  // Timeout covers entire operation including body/stream reading (not just headers)
-  // gemini-2.5-flash with 600k input needs up to 8 min; cron total budget is 800s
-  const analyzeTimeoutId = setTimeout(() => analyzeController.abort(), 480000) // 8 min timeout
+  // 12 min timeout — gemini-2.5-flash with large repos can take >8 min
+  const ANALYZE_TIMEOUT_MS = 720000
   let response: Response
   try {
     response = await fetch(`${baseUrl}/api/analyze`, {
@@ -634,25 +652,26 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
       signal: analyzeController.signal,
     })
   } catch (err) {
-    clearTimeout(analyzeTimeoutId)
+    analyzeController.abort()
     if (err instanceof Error && err.name === 'AbortError') {
-      console.error('[DailyAnalysis] Analyze API timeout after 8 minutes')
+      console.error('[DailyAnalysis] Analyze API connection timeout')
       return { success: false, error: 'Analyze API timeout' }
     }
     throw err
   }
 
   if (!response.ok) {
-    clearTimeout(analyzeTimeoutId)
+    analyzeController.abort()
     const errorText = await response.text()
     console.error('[DailyAnalysis] Analyze API failed:', errorText)
     return { success: false, error: `Analyze API failed: ${response.status}` }
   }
 
   // Read the SSE stream and collect content
+  // Use Promise.race to enforce timeout — AbortController alone may not interrupt reader.read()
   const reader = response.body?.getReader()
   if (!reader) {
-    clearTimeout(analyzeTimeoutId)
+    analyzeController.abort()
     return { success: false, error: 'No response reader' }
   }
 
@@ -660,34 +679,52 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
   let analysisContent = ''
   let analyzedItemIds: string[] = []
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
+  const readAnalyzeStream = async () => {
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
 
-      const chunk = decoder.decode(value, { stream: true })
-      const lines = chunk.split('\n\n')
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n\n')
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6))
-            if (data.type === 'sources' && data.itemIds) {
-              analyzedItemIds = data.itemIds
-            } else if (data.text) {
-              analysisContent += data.text
-            } else if (data.done) {
-              console.log('[DailyAnalysis] Analysis stream complete')
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              if (data.type === 'sources' && data.itemIds) {
+                analyzedItemIds = data.itemIds
+              } else if (data.text) {
+                analysisContent += data.text
+              } else if (data.done) {
+                console.log('[DailyAnalysis] Analysis stream complete')
+              }
+            } catch {
+              // Ignore parse errors
             }
-          } catch {
-            // Ignore parse errors
           }
         }
       }
+    } finally {
+      reader.releaseLock()
     }
-  } finally {
-    clearTimeout(analyzeTimeoutId) // Cancel timeout only after full stream is read
-    reader.releaseLock()
+  }
+
+  const analyzeTimeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => {
+      analyzeController.abort()
+      reject(new Error('AnalyzeStreamTimeout'))
+    }, ANALYZE_TIMEOUT_MS)
+  )
+
+  try {
+    await Promise.race([readAnalyzeStream(), analyzeTimeoutPromise])
+  } catch (err) {
+    if (err instanceof Error && err.message === 'AnalyzeStreamTimeout') {
+      console.error(`[DailyAnalysis] Analyze API stream timeout after ${ANALYZE_TIMEOUT_MS / 60000} min`)
+      return { success: false, error: 'Analyze stream timeout' }
+    }
+    throw err
   }
 
   if (!analysisContent || analysisContent.length < MIN_ANALYSIS_LENGTH) {

@@ -155,22 +155,6 @@ const MINUTES = [0, 30]
 
 // --- Helpers ---
 
-function getBerlinOffset(): number {
-  const now = new Date()
-  const jan = new Date(now.getFullYear(), 0, 1)
-  const jul = new Date(now.getFullYear(), 6, 1)
-  const stdOffset = Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset())
-  const isDST = now.getTimezoneOffset() < stdOffset
-  return isDST ? 2 : 1
-}
-
-function utcToBerlin(hour: number): number {
-  return (hour + getBerlinOffset() + 24) % 24
-}
-
-function berlinToUtc(hour: number): number {
-  return (hour - getBerlinOffset() + 24) % 24
-}
 
 function formatPricing(model: ModelInfo): string {
   if (model.pricing.input === 0 && model.pricing.output === 0) return ''
@@ -300,24 +284,20 @@ export default function SettingsPage() {
         setSchedule({
           newsletterFetch: {
             enabled: data.newsletterFetch.enabled,
-            hour: utcToBerlin(newsletterFetchHour),
+            hour: newsletterFetchHour,
             minute: newsletterFetchMinute,
           },
           webcrawlFetch: data.webcrawlFetch ? {
             ...data.webcrawlFetch,
-            hour: utcToBerlin(data.webcrawlFetch.hour),
           } : DEFAULT_SCHEDULE.webcrawlFetch,
           dailyAnalysis: {
             ...data.dailyAnalysis,
-            hour: utcToBerlin(data.dailyAnalysis.hour),
           },
           postGeneration: {
             ...data.postGeneration,
-            hour: utcToBerlin(data.postGeneration.hour),
           },
           newsletterSend: data.newsletterSend ? {
             ...data.newsletterSend,
-            hour: utcToBerlin(data.newsletterSend.hour),
           } : DEFAULT_SCHEDULE.newsletterSend,
         })
       }
@@ -332,17 +312,11 @@ export default function SettingsPage() {
     setSavingSchedule(true)
     setScheduleSuccess(false)
     try {
-      const utcSchedule: ScheduleConfig = {
-        newsletterFetch: { ...schedule.newsletterFetch, hour: berlinToUtc(schedule.newsletterFetch.hour) },
-        webcrawlFetch: { ...schedule.webcrawlFetch, hour: berlinToUtc(schedule.webcrawlFetch.hour) },
-        dailyAnalysis: { ...schedule.dailyAnalysis, hour: berlinToUtc(schedule.dailyAnalysis.hour) },
-        postGeneration: { ...schedule.postGeneration, hour: berlinToUtc(schedule.postGeneration.hour) },
-        newsletterSend: { ...schedule.newsletterSend, hour: berlinToUtc(schedule.newsletterSend.hour) },
-      }
+      // Zeiten werden direkt als Berlin/MEZ gespeichert (DST-sicher)
       const response = await fetch('/api/admin/schedule', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(utcSchedule),
+        body: JSON.stringify(schedule),
       })
       if (response.ok) {
         setScheduleSuccess(true)

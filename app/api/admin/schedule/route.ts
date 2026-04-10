@@ -30,10 +30,11 @@ export interface ScheduleConfig {
   }
 }
 
+// Zeiten in Berlin/MEZ (nicht UTC) — der Scheduler rechnet zur Laufzeit um
 const DEFAULT_SCHEDULE: ScheduleConfig = {
-  newsletterFetch: { enabled: true,  hour: 3, minute: 0  },  // 04:00 MEZ
-  webcrawlFetch:   { enabled: true,  hour: 3, minute: 30 },  // 04:30 MEZ
-  dailyAnalysis:   { enabled: true,  hour: 4, minute: 0  },  // 05:00 MEZ
+  newsletterFetch: { enabled: true,  hour: 4, minute: 0  },   // 04:00 MEZ
+  webcrawlFetch:   { enabled: true,  hour: 4, minute: 30 },   // 04:30 MEZ
+  dailyAnalysis:   { enabled: true,  hour: 5, minute: 0  },   // 05:00 MEZ
   postGeneration: {
     enabled: false,
     hour: 9,
