@@ -7,6 +7,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { repairAndParseJSON } from './json-repair'
 
 export interface ExtractedAnalogy {
   analogyText: string
@@ -86,44 +87,17 @@ ${postContent}`
   console.log('[AnalogyExtractor] Response length:', text.length, 'preview:', text.slice(0, 200))
 
   try {
-    // Robust JSON extraction
-    let cleaned = text.trim()
-    const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
-    if (fenceMatch) {
-      cleaned = fenceMatch[1].trim()
-    }
-    const arrayStart = cleaned.indexOf('[')
-    const arrayEnd = cleaned.lastIndexOf(']')
-    if (arrayStart >= 0 && arrayEnd > arrayStart) {
-      cleaned = cleaned.slice(arrayStart, arrayEnd + 1)
-    }
-
-    const parsed = JSON.parse(cleaned)
-
-    if (!Array.isArray(parsed)) {
-      // Single object → wrap in array
-      if (parsed && typeof parsed === 'object' && parsed.analogy_text) {
-        return [{
-          analogyText: String(parsed.analogy_text),
-          contextText: String(parsed.context_text || ''),
-          imagePrompt: String(parsed.image_prompt || ''),
-          sourceSection: String(parsed.source_section || ''),
-        }]
-      }
-      console.error('[AnalogyExtractor] Response is not an array:', typeof parsed)
-      return []
-    }
-
+    const parsed = repairAndParseJSON(text) as Record<string, unknown>[]
     console.log(`[AnalogyExtractor] Parsed ${parsed.length} items`)
 
     return parsed
-      .filter((item: Record<string, unknown>) => {
+      .filter((item) => {
         const valid = item.analogy_text
         if (!valid) console.log('[AnalogyExtractor] Skipping item without analogy_text')
         return valid
       })
       .slice(0, maxAnalogies)
-      .map((item: Record<string, unknown>) => ({
+      .map((item) => ({
         analogyText: String(item.analogy_text),
         contextText: String(item.context_text || ''),
         imagePrompt: String(item.image_prompt || ''),

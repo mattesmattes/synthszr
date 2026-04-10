@@ -11,6 +11,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
+import { repairAndParseJSON } from './json-repair'
 
 /**
  * A single processing step in the terminal animation
@@ -121,43 +122,17 @@ ${postContent}`
   console.log('[MachineExtractor] Response preview:', text.slice(0, 300))
 
   try {
-    // Strip markdown code fences and any leading/trailing whitespace
-    let cleaned = text.trim()
-    // Handle ```json ... ``` wrapping
-    const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
-    if (fenceMatch) {
-      cleaned = fenceMatch[1].trim()
-    }
-    // Handle case where response starts with [ directly
-    const arrayStart = cleaned.indexOf('[')
-    const arrayEnd = cleaned.lastIndexOf(']')
-    if (arrayStart >= 0 && arrayEnd > arrayStart) {
-      cleaned = cleaned.slice(arrayStart, arrayEnd + 1)
-    }
-
-    console.log('[MachineExtractor] Cleaned JSON preview:', cleaned.slice(0, 200))
-
-    const parsed = JSON.parse(cleaned)
-
-    if (!Array.isArray(parsed)) {
-      console.error('[MachineExtractor] Response is not an array, wrapping:', typeof parsed)
-      // If it's a single object, wrap in array
-      if (parsed && typeof parsed === 'object' && parsed.steps) {
-        return [mapScript(parsed, postTitle)]
-      }
-      return []
-    }
-
+    const parsed = repairAndParseJSON(text)
     console.log(`[MachineExtractor] Parsed ${parsed.length} scripts`)
 
-    return parsed
-      .filter((item: Record<string, unknown>) => {
+    return (parsed as Record<string, unknown>[])
+      .filter((item) => {
         const valid = item.steps && Array.isArray(item.steps) && item.take
         if (!valid) console.log('[MachineExtractor] Skipping invalid item:', Object.keys(item))
         return valid
       })
       .slice(0, maxScripts)
-      .map((item: Record<string, unknown>) => mapScript(item, postTitle))
+      .map((item) => mapScript(item, postTitle))
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
     console.error('[MachineExtractor] JSON parse failed:', msg)
