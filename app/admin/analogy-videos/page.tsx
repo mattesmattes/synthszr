@@ -64,12 +64,30 @@ export default function AnalogyVideosPage() {
   const [processing, setProcessing] = useState(false)
   const [previewVideo, setPreviewVideo] = useState<AnalogyVideo | null>(null)
   const [deleteVideo, setDeleteVideo] = useState<AnalogyVideo | null>(null)
-  const [extractPostId, setExtractPostId] = useState('')
+  const [recentPosts, setRecentPosts] = useState<Array<{ id: string; title: string; created_at: string }>>([])
+  const [selectedPostId, setSelectedPostId] = useState('')
   const [extracting, setExtracting] = useState(false)
 
   useEffect(() => {
     fetchVideos()
+    fetchRecentPosts()
   }, [statusFilter])
+
+  async function fetchRecentPosts() {
+    try {
+      const res = await fetch('/api/admin/posts?limit=5&published=false', { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        const posts = data.posts || []
+        setRecentPosts(posts)
+        if (posts.length > 0 && !selectedPostId) {
+          setSelectedPostId(posts[0].id)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching posts:', error)
+    }
+  }
 
   async function fetchVideos() {
     setLoading(true)
@@ -153,18 +171,17 @@ export default function AnalogyVideosPage() {
   }
 
   async function extractFromPost() {
-    if (!extractPostId.trim()) return
+    if (!selectedPostId) return
     setExtracting(true)
     try {
       const res = await fetch('/api/admin/analogy-videos/extract', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId: extractPostId.trim() }),
+        body: JSON.stringify({ postId: selectedPostId }),
       })
       const data = await res.json()
       if (data.success) {
-        setExtractPostId('')
         await fetchVideos()
       }
     } catch (error) {
@@ -206,18 +223,23 @@ export default function AnalogyVideosPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Analogien extrahieren</CardTitle>
-          <CardDescription>Post-ID eingeben um Analogien per Claude zu extrahieren</CardDescription>
+          <CardDescription>Post auswählen um Analogien per Claude zu extrahieren</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex gap-2">
-            <input
-              type="text"
-              value={extractPostId}
-              onChange={(e) => setExtractPostId(e.target.value)}
-              placeholder="Post-ID (UUID)"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-            <Button size="sm" onClick={extractFromPost} disabled={extracting || !extractPostId.trim()}>
+            <Select value={selectedPostId} onValueChange={setSelectedPostId}>
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="Post auswählen..." />
+              </SelectTrigger>
+              <SelectContent>
+                {recentPosts.map((post) => (
+                  <SelectItem key={post.id} value={post.id}>
+                    {post.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" onClick={extractFromPost} disabled={extracting || !selectedPostId}>
               {extracting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />}
               Extrahieren
             </Button>
