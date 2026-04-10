@@ -325,15 +325,23 @@ export async function GET(request: NextRequest) {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
       try {
-        const response = await fetch(`${baseUrl}/api/admin/translations/process-queue`, {
+        const translationUrl = `${baseUrl}/api/admin/translations/process-queue`
+        console.log(`[Scheduler] Translation subrequest → ${translationUrl} (CRON_SECRET ${process.env.CRON_SECRET ? 'set' : 'MISSING'})`)
+        const response = await fetch(translationUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${process.env.CRON_SECRET}`,
           },
+          redirect: 'manual', // Prevent redirect from stripping auth headers
           signal: controller.signal,
         })
         clearTimeout(timeoutId)
+
+        if (response.status >= 300 && response.status < 400) {
+          console.error(`[Scheduler] Translation queue redirected to ${response.headers.get('location')} — auth headers stripped`)
+          break
+        }
 
         if (response.ok) {
           const data = await response.json()
