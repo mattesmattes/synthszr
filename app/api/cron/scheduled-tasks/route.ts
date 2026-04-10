@@ -96,12 +96,12 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
   const now = new Date()
 
-  // Use production URL for internal subrequests (VERCEL_URL can redirect and strip auth headers)
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-    || process.env.NEXT_PUBLIC_BASE_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+  // Extract base URL from the incoming request itself — avoids cross-origin redirects
+  // that strip Authorization headers when using VERCEL_URL or NEXT_PUBLIC_APP_URL
+  const requestUrl = new URL(request.url)
+  const baseUrl = `${requestUrl.protocol}//${requestUrl.host}`
 
-  const { searchParams } = new URL(request.url)
+  const { searchParams } = requestUrl
   // mode=newsletter: only newsletter fetch (04:00 MEZ cron)
   // runAll=true: all tasks sequentially (manual trigger via admin UI, bypasses time checks)
   const runAll = searchParams.get('runAll') === 'true'
