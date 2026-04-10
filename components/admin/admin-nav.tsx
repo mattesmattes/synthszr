@@ -23,7 +23,8 @@ import {
   TrendingUp,
   ListTodo,
   Globe,
-  Headphones
+  Headphones,
+  Film
 } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
@@ -94,6 +95,11 @@ const navGroups: NavGroup[] = [
         label: 'Podcast Studio',
         href: '/admin/audio',
         icon: Headphones
+      },
+      {
+        label: 'Analogy Machine',
+        href: '/admin/analogy-videos',
+        icon: Film
       }
     ]
   },
