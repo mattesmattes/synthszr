@@ -96,6 +96,11 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
   const now = new Date()
 
+  // Use production URL for internal subrequests (VERCEL_URL can redirect and strip auth headers)
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+    || process.env.NEXT_PUBLIC_BASE_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+
   const { searchParams } = new URL(request.url)
   // mode=newsletter: only newsletter fetch (04:00 MEZ cron)
   // runAll=true: all tasks sequentially (manual trigger via admin UI, bypasses time checks)
@@ -137,9 +142,7 @@ export async function GET(request: NextRequest) {
       try {
         // Call fetch-newsletters as HTTP subrequest (separate V8 isolate → avoids jsdom/googleapis
         // module conflicts that cause silent failures when called in-process)
-        const fetchBaseUrl = process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : 'http://localhost:3000'
+        const fetchBaseUrl = baseUrl
         const fetchController = new AbortController()
         const fetchTimeoutId = setTimeout(() => fetchController.abort(), 300000) // 5 min
         const resp = await fetch(`${fetchBaseUrl}/api/cron/fetch-newsletters`, {
@@ -240,10 +243,6 @@ export async function GET(request: NextRequest) {
     if (shouldRunSend && !sendRecentlyRan) {
       console.log('[Scheduler] Triggering newsletter send...')
       try {
-        const baseUrl = process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : 'http://localhost:3000'
-
         // Get latest published post
         const { data: latestPost } = await supabase
           .from('generated_posts')
@@ -316,9 +315,6 @@ export async function GET(request: NextRequest) {
 
   // Translation Queue Processing: Process pending translations (runs every time cron is called)
   try {
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000'
 
     // Process up to 3 batches (15 translations total) per cron run
     let totalProcessed = 0
@@ -427,9 +423,6 @@ async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>)
   const vocabMap = new Map(vocabulary?.map(v => [v.word.toLowerCase(), v.replacement]) || [])
 
   // Call ghostwriter API
-  const baseUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000'
 
   const ghostwriterController = new AbortController()
   const ghostwriterTimeoutId = setTimeout(() => ghostwriterController.abort(), 120000) // 120s timeout
@@ -630,10 +623,6 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
     console.log(`[DailyAnalysis] Synthesis already ran today (${queueCount} items in queue)`)
     return { success: true, digestId: existingDigest.id }
   }
-
-  const baseUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000'
 
   // Step 1: Stream analysis and collect content
   console.log('[DailyAnalysis] Calling analyze API...')
