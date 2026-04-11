@@ -70,6 +70,7 @@ export async function generateAnalogyVideo(input: VideoInput): Promise<VideoResu
         vertex: {
           resizeMode: 'crop',
           generateAudio: true,
+          negativePrompt: 'text, words, letters, writing, subtitles, captions, titles, labels, signs, watermarks, logos, numbers on screen',
           pollIntervalMs: 10000,
           pollTimeoutMs: 600000,
         },
@@ -176,7 +177,8 @@ fingers tightening around an object, eyes shifting. Dramatic lighting with deep 
 High contrast black and white with a slight greenish tint.
 Museum atmosphere, dust particles floating in light beams.
 The scene conveys: ${analogyText.slice(0, 200)}
-Style: hyper-photorealistic, cinematic, 9:16 portrait, no text or words in the video.`
+Style: hyper-photorealistic, cinematic, 9:16 portrait.
+CRITICAL: The video must contain ZERO text, ZERO words, ZERO letters, ZERO writing of any kind. Pure visual imagery only.`
 }
 
 /**

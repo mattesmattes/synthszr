@@ -53,6 +53,7 @@ export async function generateMachineVideo(script: MachineScript): Promise<Machi
       providerOptions: {
         vertex: {
           generateAudio: true,
+          negativePrompt: 'readable text, real words, actual letters, human faces, people',
           pollIntervalMs: 10000,
           pollTimeoutMs: 600000,
         },
@@ -91,24 +92,23 @@ function buildMachinePrompt(script: MachineScript): string {
     .filter((s: MachineStep) => s.type === 'build_take')
     .map((s: MachineStep) => s.text)
 
-  return `A dark terminal screen, black background, monospace green text like a hacker terminal.
-Text rapidly streams in from the top, scrolling down like code terminal output.
-Key phrases suddenly glow bright cyan and green as they are detected by the AI.
-${highlights.length > 0 ? `Words that light up: "${highlights.join('", "')}"` : ''}
-Some text lines get struck through with a red flash and fade out — the AI discarding noise.
-${strikes.length > 0 ? `Discarded phrases dissolve: "${strikes.join('", "')}"` : ''}
-Then the screen clears. A blinking cursor appears. The distilled output types itself slowly,
-character by character, in bright green monospace text:
-${takeLines.length > 0 ? `"${takeLines.join(' / ')}"` : `"${script.take}"`}
+  return `A dark computer terminal in a dimly lit room. The screen glows with green and cyan light,
+reflecting off the walls. Abstract digital data streams flow across the screen as blurred,
+unreadable patterns — NOT actual text, just light and motion suggesting data processing.
+Bright flashes of cyan and green pulse rhythmically as the AI processes information.
+${highlights.length > 0 ? `The processing intensifies, with ${highlights.length} key moments of bright illumination.` : ''}
+${strikes.length > 0 ? `Red flashes appear as data is discarded, then the screen dims briefly.` : ''}
+Finally, a single bright green glow fills the center of the screen — the result is ready.
 
-Visual style: Pure terminal aesthetic. Black screen, green and cyan monospace text,
-occasional white flashes. No faces, no humans. Just text and light.
-CRT monitor glow effect. Slight screen flicker. Scanlines.
+Visual style: Dark, moody, cinematic. Black room with a glowing monitor as the only light source.
+Abstract data visualization — flowing particles, light trails, pulsing grids.
+NO readable text, NO actual words or letters on screen. Only light patterns and abstract shapes.
+CRT monitor glow effect. Slight screen flicker. Dust particles in the monitor light.
 Portrait 9:16 format. Cinematic quality.
 
 Audio: Mechanical keyboard typing sounds. Soft ambient electronic hum.
-Subtle processing beeps when text highlights. A satisfying click when
-irrelevant text is struck through. Quiet, ASMR-like sound design.
+Subtle processing beeps synced to the visual pulses. A satisfying click sound
+during the red flashes. Quiet, ASMR-like sound design.
 No music, no voice, no narration.`
 }
 
