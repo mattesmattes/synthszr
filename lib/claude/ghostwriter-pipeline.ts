@@ -25,6 +25,7 @@ import { type AIModel, resolveModel } from './ghostwriter'
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
 import { domainFromUrl, deriveSourceUrl } from '@/lib/news-queue/service'
+import { isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -259,7 +260,10 @@ export async function writeSection(
   const sourceName = hasValidSource
     ? rawSourceName
     : (item.source_url ? domainFromUrl(item.source_url) : null)
-  const articleUrl = item.source_url || deriveSourceUrl(null, item.source_identifier)
+  const rawUrl = item.source_url
+  const articleUrl = (rawUrl && !isTrackingRedirectUrl(rawUrl))
+    ? rawUrl
+    : deriveSourceUrl(null, item.source_identifier)
   const effectiveUrl = articleUrl
   const tagSourcePart = effectiveUrl && sourceName
     ? `[${sourceName}](${effectiveUrl})`

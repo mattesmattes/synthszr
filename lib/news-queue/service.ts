@@ -186,7 +186,9 @@ export function deriveSourceUrl(sourceUrl: string | null, sourceIdentifier: stri
     // Email address: extract domain
     const atIdx = sourceIdentifier.indexOf('@')
     if (atIdx !== -1) {
-      const domain = sourceIdentifier.slice(atIdx + 1)
+      let domain = sourceIdentifier.slice(atIdx + 1)
+      // Strip mail-related subdomains (e.g. mail.theresanaiforthat.com → theresanaiforthat.com)
+      domain = domain.replace(/^(link\.mail\.|mail\.|newsletter\.|email\.|e\.)/, '')
       if (domain && domain.includes('.')) return `https://${domain}`
     }
     // Plain text source name: try to find a domain-like word (e.g. "dev.to", "techcrunch.com")
