@@ -107,44 +107,33 @@ export async function generateAnalogyVideo(input: VideoInput): Promise<VideoResu
 }
 
 /**
- * Merge video + audio using ffmpeg-static (pre-compiled binary, works on Vercel).
+ * Merge video + audio using FFmpeg WASM (no native binary needed, runs on Vercel).
  */
 async function mergeVideoWithAudio(
   videoBuffer: Buffer,
   audioBuffer: Buffer
 ): Promise<{ success: boolean; buffer?: Buffer; durationSeconds?: number; error?: string }> {
-  const { execFile } = await import('child_process')
-  const { promisify } = await import('util')
-  const { writeFile, readFile, unlink, mkdtemp } = await import('fs/promises')
-  const { tmpdir } = await import('os')
-  const { join } = await import('path')
-  const execFileAsync = promisify(execFile)
-
-  let ffmpegPath: string
   try {
-    const mod = await import('ffmpeg-static')
-    ffmpegPath = (mod.default || mod) as string
-    if (!ffmpegPath) throw new Error('no path')
-  } catch {
-    // Fallback to system ffmpeg
-    ffmpegPath = 'ffmpeg'
-  }
+    const { FFmpeg } = await import('@ffmpeg/ffmpeg')
+    const { toBlobURL } = await import('@ffmpeg/util')
 
-  const dir = await mkdtemp(join(tmpdir(), 'veo-merge-'))
-  const videoPath = join(dir, 'video.mp4')
-  const audioPath = join(dir, 'audio.mp3')
-  const outputPath = join(dir, 'output.mp4')
+    const ffmpeg = new FFmpeg()
 
-  try {
-    await Promise.all([
-      writeFile(videoPath, videoBuffer),
-      writeFile(audioPath, audioBuffer),
-    ])
+    // Load FFmpeg WASM core from CDN
+    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd'
+    await ffmpeg.load({
+      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+    })
 
-    await execFileAsync(ffmpegPath, [
-      '-y',
-      '-i', videoPath,
-      '-i', audioPath,
+    // Write input files to virtual filesystem
+    await ffmpeg.writeFile('video.mp4', new Uint8Array(videoBuffer))
+    await ffmpeg.writeFile('audio.mp3', new Uint8Array(audioBuffer))
+
+    // Merge: keep Veo video, replace audio with TTS, use shortest stream
+    await ffmpeg.exec([
+      '-i', 'video.mp4',
+      '-i', 'audio.mp3',
       '-c:v', 'copy',
       '-c:a', 'aac',
       '-b:a', '128k',
@@ -152,21 +141,20 @@ async function mergeVideoWithAudio(
       '-map', '1:a:0',
       '-shortest',
       '-movflags', '+faststart',
-      outputPath,
-    ], { timeout: 60000 })
+      '-y',
+      'output.mp4',
+    ])
 
-    const buffer = await readFile(outputPath)
-    return { success: true, buffer, durationSeconds: 8 }
+    // Read merged output
+    const outputData = await ffmpeg.readFile('output.mp4')
+    const outputBuffer = Buffer.from(outputData as Uint8Array)
+
+    console.log(`[VideoGen] FFmpeg WASM merge done: ${outputBuffer.length} bytes`)
+    return { success: true, buffer: outputBuffer, durationSeconds: 8 }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    console.error('[VideoGen] ffmpeg merge failed:', message)
+    console.error('[VideoGen] FFmpeg WASM merge failed:', message)
     return { success: false, error: message }
-  } finally {
-    await Promise.all([
-      unlink(videoPath).catch(() => {}),
-      unlink(audioPath).catch(() => {}),
-      unlink(outputPath).catch(() => {}),
-    ])
   }
 }
 
