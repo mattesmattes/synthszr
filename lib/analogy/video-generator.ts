@@ -1,23 +1,16 @@
 /**
  * Video Generator for Analogy Machine
  *
- * Uses Google Veo 3.1 to generate animated videos from still images.
- * The generated marble statue image becomes a starting frame,
- * and Veo animates it with cinematic camera movement.
- *
- * Fallback: FFmpeg compositing (image + audio → static MP4)
+ * Uses Veo 3.1 via Vercel AI SDK (experimental_generateVideo) to animate
+ * the marble statue image into a cinematic 8-second video.
+ * Audio merge via ffmpeg-static (pre-compiled binary, works on Vercel).
  */
 
 import { put } from '@vercel/blob'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-const DEFAULT_VEO_MODEL = 'veo-3.1-generate-preview'
-const POLL_INTERVAL_MS = 10000
-const MAX_POLL_ATTEMPTS = 120 // ~20 minutes
+const DEFAULT_VEO_MODEL = 'google/veo-3.1-generate-001'
 
-/**
- * Get Veo model from settings
- */
 async function getVeoModel(): Promise<string> {
   try {
     const supabase = createAdminClient()
@@ -46,9 +39,6 @@ interface VideoResult {
   error?: string
 }
 
-/**
- * Download a URL to a Buffer
- */
 async function downloadToBuffer(url: string): Promise<Buffer> {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Download failed: ${res.status} ${url}`)
@@ -56,102 +46,130 @@ async function downloadToBuffer(url: string): Promise<Buffer> {
 }
 
 /**
- * Generate a video using Veo 3.1 (Image-to-Video).
- * Takes the generated marble statue image as starting frame
- * and creates a cinematic 8-second animation.
+ * Generate a video using Veo 3.1 via Vercel AI SDK.
+ * Image-to-video: marble statue becomes starting frame.
+ * Then merges TTS audio via ffmpeg-static.
  */
 export async function generateAnalogyVideo(input: VideoInput): Promise<VideoResult> {
   try {
     const model = await getVeoModel()
-    const { GoogleGenAI } = await import('@google/genai')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { experimental_generateVideo: generateVideo } = await import('ai') as any
 
-    const ai = new GoogleGenAI({})
-
-    // Download the source image
-    console.log('[VideoGen] Downloading source image...')
-    const imageBuffer = await downloadToBuffer(input.imageUrl)
-    const imageBase64 = imageBuffer.toString('base64')
-
-    // Build a cinematic prompt for the animation
     const videoPrompt = buildVideoPrompt(input.analogyText, input.contextText)
 
-    console.log(`[VideoGen] Starting Veo generation (${model})...`)
+    console.log(`[VideoGen] Starting Veo (${model}) via AI SDK...`)
 
-    // Start video generation with image as starting frame
-    let operation = await ai.models.generateVideos({
+    const result = await generateVideo({
       model,
-      prompt: videoPrompt,
-      image: {
-        imageBytes: imageBase64,
-        mimeType: 'image/png',
+      prompt: {
+        image: input.imageUrl,
+        text: videoPrompt,
       },
-      config: {
-        aspectRatio: '9:16',
-        durationSeconds: 8,
+      resolution: '720p',
+      providerOptions: {
+        vertex: {
+          resizeMode: 'crop',
+          generateAudio: true,
+          pollIntervalMs: 10000,
+          pollTimeoutMs: 600000,
+        },
       },
     })
 
-    // Poll until complete
-    let attempts = 0
-    while (!operation.done && attempts < MAX_POLL_ATTEMPTS) {
-      console.log(`[VideoGen] Polling... (attempt ${attempts + 1})`)
-      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
-      operation = await ai.operations.getVideosOperation({ operation })
-      attempts++
-    }
-
-    if (!operation.done) {
-      return { success: false, error: `Veo generation timeout after ${attempts} polls` }
-    }
-
-    // Get the generated video
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response = operation.response as any
-    const generatedVideo = response?.generatedVideos?.[0]?.video
-
-    if (!generatedVideo) {
+    const video = (result as any).videos?.[0]
+    if (!video?.uint8Array) {
       return { success: false, error: 'No video in Veo response' }
     }
 
-    // Download the video file
-    console.log('[VideoGen] Downloading generated video...')
-    let videoBuffer: Buffer
+    const veoBuffer = Buffer.from(video.uint8Array)
+    console.log(`[VideoGen] Veo video: ${veoBuffer.length} bytes`)
 
-    if (generatedVideo.uri) {
-      // Download from URI
-      videoBuffer = await downloadToBuffer(generatedVideo.uri)
-    } else if (generatedVideo.videoBytes) {
-      // Direct bytes
-      videoBuffer = Buffer.from(generatedVideo.videoBytes, 'base64')
-    } else {
-      // Try file download API
-      const tempPath = `/tmp/veo-${Date.now()}.mp4`
-      await ai.files.download({
-        file: generatedVideo,
-        downloadPath: tempPath,
-      })
-      const { readFile, unlink } = await import('fs/promises')
-      videoBuffer = await readFile(tempPath)
-      await unlink(tempPath).catch(() => {})
+    // Merge Veo video with TTS audio
+    console.log('[VideoGen] Merging TTS audio...')
+    const audioBuffer = await downloadToBuffer(input.audioUrl)
+    const merged = await mergeVideoWithAudio(veoBuffer, audioBuffer)
+
+    if (merged.success && merged.buffer) {
+      console.log(`[VideoGen] Final video: ${merged.buffer.length} bytes`)
+      return { success: true, videoBuffer: merged.buffer, durationSeconds: merged.durationSeconds }
     }
 
-    console.log(`[VideoGen] Veo video generated: ${videoBuffer.length} bytes`)
-
-    return {
-      success: true,
-      videoBuffer,
-      durationSeconds: 8,
-    }
+    // If merge fails, return Veo video as-is (has ambient audio from Veo)
+    console.warn(`[VideoGen] Audio merge failed (${merged.error}), using Veo audio`)
+    return { success: true, videoBuffer: veoBuffer, durationSeconds: 8 }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    console.error('[VideoGen] Veo generation failed:', message)
+    console.error('[VideoGen] Veo failed:', message)
     return { success: false, error: message }
   }
 }
 
 /**
- * Build a cinematic prompt for Veo animation
+ * Merge video + audio using ffmpeg-static (pre-compiled binary, works on Vercel).
  */
+async function mergeVideoWithAudio(
+  videoBuffer: Buffer,
+  audioBuffer: Buffer
+): Promise<{ success: boolean; buffer?: Buffer; durationSeconds?: number; error?: string }> {
+  const { execFile } = await import('child_process')
+  const { promisify } = await import('util')
+  const { writeFile, readFile, unlink, mkdtemp } = await import('fs/promises')
+  const { tmpdir } = await import('os')
+  const { join } = await import('path')
+  const execFileAsync = promisify(execFile)
+
+  let ffmpegPath: string
+  try {
+    const mod = await import('ffmpeg-static')
+    ffmpegPath = (mod.default || mod) as string
+    if (!ffmpegPath) throw new Error('no path')
+  } catch {
+    // Fallback to system ffmpeg
+    ffmpegPath = 'ffmpeg'
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'veo-merge-'))
+  const videoPath = join(dir, 'video.mp4')
+  const audioPath = join(dir, 'audio.mp3')
+  const outputPath = join(dir, 'output.mp4')
+
+  try {
+    await Promise.all([
+      writeFile(videoPath, videoBuffer),
+      writeFile(audioPath, audioBuffer),
+    ])
+
+    await execFileAsync(ffmpegPath, [
+      '-y',
+      '-i', videoPath,
+      '-i', audioPath,
+      '-c:v', 'copy',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-map', '0:v:0',
+      '-map', '1:a:0',
+      '-shortest',
+      '-movflags', '+faststart',
+      outputPath,
+    ], { timeout: 60000 })
+
+    const buffer = await readFile(outputPath)
+    return { success: true, buffer, durationSeconds: 8 }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[VideoGen] ffmpeg merge failed:', message)
+    return { success: false, error: message }
+  } finally {
+    await Promise.all([
+      unlink(videoPath).catch(() => {}),
+      unlink(audioPath).catch(() => {}),
+      unlink(outputPath).catch(() => {}),
+    ])
+  }
+}
+
 function buildVideoPrompt(analogyText: string, contextText: string): string {
   return `Slow cinematic camera movement around 3D marble statues from Greek mythology.
 The statues subtly come alive with minimal, deliberate motion — a slight head turn,
@@ -161,7 +179,6 @@ Museum atmosphere, dust particles floating in light beams.
 The scene conveys: ${analogyText.slice(0, 200)}
 Style: hyper-photorealistic, cinematic, 9:16 portrait, no text or words in the video.`
 }
-
 
 /**
  * Upload video to Vercel Blob
