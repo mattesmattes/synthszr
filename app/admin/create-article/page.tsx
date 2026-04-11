@@ -814,7 +814,7 @@ export default function CreateArticlePage() {
                   value={[maxQueueItems]}
                   onValueChange={([v]) => setMaxQueueItems(v)}
                   min={1}
-                  max={30}
+                  max={40}
                   step={1}
                   className="w-full"
                 />
