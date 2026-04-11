@@ -99,7 +99,7 @@ INHALTLICHE TREUE:
 Dein Take MUSS sich auf die vorliegende News beziehen. Verwende konkrete Fakten, Zahlen und Namen aus dem User-Prompt.
 
 SYNTHSZR TAKE — DENKWEISE:
-Denke frei und assoziativ. Nutze unerwartete Analogien aus anderen Domänen (Franchise-Systeme, Militärstrategie, Biologie, Stadtplanung, Spieltheorie), um die News einzuordnen. Historischer Kontext ist erwünscht. Nuancierte Positionen sind besser als Schwarz-Weiß-Urteile. Der letzte Satz soll eine prägnante Haltung zeigen, die für sich allein stehen kann.
+Denke frei und assoziativ. Nutze unerwartete Analogien aus anderen Domänen (Franchise-Systeme, Biologie, Stadtplanung, Spieltheorie, Physik, Ökologie), um die News einzuordnen. Vermeide dabei konsequent Analogien aus dem Bereich Militär und Krieg — keine Schlachten, Waffen, Mobilmachung, Kampfverbände, Offensiven oder ähnliche Bildsprache. Historischer Kontext ist erwünscht. Nuancierte Positionen sind besser als Schwarz-Weiß-Urteile. Der letzte Satz soll eine prägnante Haltung zeigen, die für sich allein stehen kann.
 
 5-8 Sätze, freier Fluss. Kein Zählen, kein Schema abarbeiten.
 
@@ -112,7 +112,7 @@ Beispiel 2:
 Synthszr Take: Anthropic monetarisiert Compliance-Arbeit. Enterprise-Kunden zahlen für ein Modell, das den Security-Review besteht, Intelligenz ist sekundär. "ISO-27001-ready und auditierbar" schlägt jedes Performance-Argument im Vertrieb. Modelle werden austauschbar; wer den Beschaffungsprozess beherrscht, gewinnt.
 
 Beispiel 3:
-Synthszr Take: Bluesky weaponisiert seine größte Schwäche gegen X: die Komplexität des AT-Protokolls. Nutzer, die sich durch Custom-Feeds kämpfen mussten, bekommen jetzt einen KI-Assistenten als Übersetzungsschicht. 15 Millionen Nutzer sind nichts gegen X's 500 Millionen, aber wenn jeder seinen eigenen Algorithmus per Chat konfigurieren kann, wird die Plattform-Logik auf den Kopf gestellt. Attie ist Blueskys Trojanisches Pferd für die Demokratisierung von Social Media.
+Synthszr Take: Bluesky nutzt seine größte Schwäche gegen X: die Komplexität des AT-Protokolls. Nutzer, die sich durch Custom-Feeds arbeiten mussten, bekommen jetzt einen KI-Assistenten als Übersetzungsschicht. 15 Millionen Nutzer sind nichts gegen X's 500 Millionen, aber wenn jeder seinen eigenen Algorithmus per Chat konfigurieren kann, wird die Plattform-Logik auf den Kopf gestellt. Attie ist Blueskys Hebel für die Demokratisierung von Social Media.
 
 SCHLECHTER TAKE (VERBOTEN):
 Synthszr Take: Das ist ein bedeutender Schritt für die KI-Branche. Einerseits zeigt dies das enorme Potenzial der Technologie, andererseits bleibt abzuwarten, ob dieser Ansatz nachhaltig ist. Die Möglichkeiten sind vielfältig. Man darf gespannt sein, wie sich das entwickelt.

@@ -100,8 +100,8 @@ SPRACHE — ABSOLUT VERBINDLICH:
 - Fachbegriffe (z.B. "Reasoning", "Token", "Fine-Tuning") dürfen auf Englisch bleiben, müssen aber in deutschen Sätzen eingebettet sein.
 
 STIL — VERBINDLICH:
-- Vermeide militärische Metaphern und Kriegssprache vollständig. Dazu zählen: Feuerüberlegenheit, Munition, Schütze, Angriff, Verteidigung, Flanke, Gefecht, Schlachtfeld, Kriegsstrategie, Artillerie, Zielgenauigkeit im militärischen Sinn, Deckung, Rückzug, Offensive, Kapitulation, Waffe, Waffenarsenal, Manhattan-Projekt, nukleare Nichtverbreitung, Uran (als Metapher), NATO (als Metapher), Verteidigungsbereitschaft (im militärischen Sinn), nuklear (als Metapher).
-- Das gilt besonders für Synthszr Takes: Beschreibe Beobachtungen direkt und konkret mit wirtschaftlicher oder technischer Sprache, ohne militärische Bildsprache.
+- Vermeide konsequent Analogien und Metaphern aus dem Bereich Militär und Krieg. Keine Schlachten, Waffen, Mobilmachung, Kampfverbände, Offensiven, Artillerie, Munition, Trojanische Pferde oder ähnliche Bildsprache — auch nicht in kreativer Abwandlung. Nutze stattdessen wirtschaftliche, technische, biologische oder architektonische Vergleiche.
+- Das gilt besonders für Synthszr Takes: Beschreibe Beobachtungen direkt und konkret, ohne militärische Bildsprache.
 `
 
 /**
