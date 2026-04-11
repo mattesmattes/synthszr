@@ -205,13 +205,16 @@ export async function POST(request: NextRequest) {
     const currentImageUrl = updatedJob?.image_url || job.image_url
     const currentAudioUrl = updatedJob?.audio_url || job.audio_url
 
-    if (!job.video_url && currentImageUrl && currentAudioUrl) {
+    // For videoOnly mode, always attempt video gen (even if job.video_url exists from stale read)
+    const shouldGenVideo = videoOnly || (!job.video_url && currentImageUrl && currentAudioUrl)
+
+    if (shouldGenVideo && currentImageUrl && currentAudioUrl) {
       await supabase
         .from('analogy_videos')
-        .update({ status: 'compositing', progress: 85, updated_at: new Date().toISOString() })
+        .update({ status: 'compositing', progress: 85, error_message: null, updated_at: new Date().toISOString() })
         .eq('id', job.id)
 
-      console.log('[AnalogyProcess] Compositing video...')
+      console.log('[AnalogyProcess] Compositing video via Veo...')
       const videoResult = await generateAnalogyVideo({
         imageUrl: currentImageUrl,
         audioUrl: currentAudioUrl,
@@ -220,8 +223,13 @@ export async function POST(request: NextRequest) {
       })
 
       if (!videoResult.success || !videoResult.videoBuffer) {
-        // Video compositing is non-fatal — still go to review with image+audio
-        console.error('[AnalogyProcess] Video compositing failed (non-fatal):', videoResult.error)
+        // Save error to DB so user can see why video failed
+        const errorMsg = `Video generation failed: ${videoResult.error}`
+        console.error('[AnalogyProcess]', errorMsg)
+        await supabase
+          .from('analogy_videos')
+          .update({ error_message: errorMsg, updated_at: new Date().toISOString() })
+          .eq('id', job.id)
       } else {
         const videoUrl = await uploadAnalogyVideo(job.id, videoResult.videoBuffer)
 
@@ -240,17 +248,25 @@ export async function POST(request: NextRequest) {
     }
 
     // === Step 4: Mark as review ===
+    // Re-read to check if video was successfully generated
+    const { data: finalJob } = await supabase
+      .from('analogy_videos')
+      .select('video_url, error_message')
+      .eq('id', job.id)
+      .single()
+
     await supabase
       .from('analogy_videos')
       .update({
         status: 'review',
         progress: 100,
-        error_message: null,
+        // Keep error_message if video failed, clear if video exists
+        error_message: finalJob?.video_url ? null : (finalJob?.error_message || null),
         updated_at: new Date().toISOString(),
       })
       .eq('id', job.id)
 
-    console.log(`[AnalogyProcess] Job ${job.id} complete → review`)
+    console.log(`[AnalogyProcess] Job ${job.id} complete → review (video: ${finalJob?.video_url ? 'yes' : 'no'})`)
 
     return NextResponse.json({
       success: true,
