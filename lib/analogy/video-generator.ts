@@ -66,7 +66,6 @@ export async function generateAnalogyVideo(input: VideoInput): Promise<VideoResu
         image: input.imageUrl,
         text: videoPrompt,
       },
-      resolution: '720p',
       providerOptions: {
         vertex: {
           resizeMode: 'crop',
