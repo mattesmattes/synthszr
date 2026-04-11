@@ -137,21 +137,15 @@ export async function generateAnalogyVideo(input: VideoInput): Promise<VideoResu
 
     console.log(`[VideoGen] Veo video generated: ${videoBuffer.length} bytes`)
 
-    // Now merge Veo video with TTS audio using ffmpeg
-    const finalVideo = await mergeVideoWithAudio(videoBuffer, input.audioUrl)
-
     return {
       success: true,
-      videoBuffer: finalVideo.buffer,
-      durationSeconds: finalVideo.durationSeconds,
+      videoBuffer,
+      durationSeconds: 8,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[VideoGen] Veo generation failed:', message)
-
-    // Fallback: try ffmpeg static composition
-    console.log('[VideoGen] Falling back to ffmpeg static composition...')
-    return generateStaticVideo(input)
+    return { success: false, error: message }
   }
 }
 
@@ -168,179 +162,6 @@ The scene conveys: ${analogyText.slice(0, 200)}
 Style: hyper-photorealistic, cinematic, 9:16 portrait, no text or words in the video.`
 }
 
-/**
- * Merge Veo-generated video with TTS audio using ffmpeg
- */
-async function mergeVideoWithAudio(
-  videoBuffer: Buffer,
-  audioUrl: string
-): Promise<{ buffer: Buffer; durationSeconds: number }> {
-  const { execFile } = await import('child_process')
-  const { promisify } = await import('util')
-  const { writeFile, readFile, unlink } = await import('fs/promises')
-  const execFileAsync = promisify(execFile)
-
-  const ffmpeg = await getFfmpegPath()
-  const tmpDir = `/tmp/veo-merge-${Date.now()}`
-  const { mkdtemp } = await import('fs/promises')
-  const { tmpdir } = await import('os')
-  const { join } = await import('path')
-  const dir = await mkdtemp(join(tmpdir(), 'veo-merge-'))
-
-  const videoPath = join(dir, 'video.mp4')
-  const audioPath = join(dir, 'audio.mp3')
-  const outputPath = join(dir, 'output.mp4')
-
-  try {
-    const audioBuffer = await downloadToBuffer(audioUrl)
-    await Promise.all([
-      writeFile(videoPath, videoBuffer),
-      writeFile(audioPath, audioBuffer),
-    ])
-
-    // Merge: use Veo video, replace audio with TTS
-    const { stderr } = await execFileAsync(ffmpeg, [
-      '-y',
-      '-i', videoPath,
-      '-i', audioPath,
-      '-c:v', 'copy',         // Keep Veo video as-is
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-map', '0:v:0',        // Video from Veo
-      '-map', '1:a:0',        // Audio from TTS
-      '-shortest',
-      '-movflags', '+faststart',
-      outputPath,
-    ], { timeout: 60000 })
-
-    const durationMatch = stderr.match(/time=(\d+):(\d+):(\d+\.\d+)/)
-    let durationSeconds = 8
-    if (durationMatch) {
-      durationSeconds = parseInt(durationMatch[1]) * 3600 +
-        parseInt(durationMatch[2]) * 60 +
-        parseFloat(durationMatch[3])
-    }
-
-    const buffer = await readFile(outputPath)
-    return { buffer, durationSeconds }
-  } finally {
-    await Promise.all([
-      unlink(videoPath).catch(() => {}),
-      unlink(audioPath).catch(() => {}),
-      unlink(outputPath).catch(() => {}),
-    ])
-  }
-}
-
-/**
- * Fallback: generate a static video using ffmpeg (image + audio + text overlay)
- */
-async function generateStaticVideo(input: VideoInput): Promise<VideoResult> {
-  const { execFile } = await import('child_process')
-  const { promisify } = await import('util')
-  const { writeFile, readFile, unlink, mkdtemp } = await import('fs/promises')
-  const { tmpdir } = await import('os')
-  const { join } = await import('path')
-  const execFileAsync = promisify(execFile)
-
-  const ffmpeg = await getFfmpegPath()
-  const dir = await mkdtemp(join(tmpdir(), 'analogy-video-'))
-
-  const imagePath = join(dir, 'image.png')
-  const audioPath = join(dir, 'audio.mp3')
-  const outputPath = join(dir, 'output.mp4')
-
-  try {
-    const [imageBuffer, audioBuffer] = await Promise.all([
-      downloadToBuffer(input.imageUrl),
-      downloadToBuffer(input.audioUrl),
-    ])
-
-    await Promise.all([
-      writeFile(imagePath, imageBuffer),
-      writeFile(audioPath, audioBuffer),
-    ])
-
-    const escapedAnalogy = escapeDrawtext(wrapText(input.analogyText, 30))
-    const escapedContext = escapeDrawtext(input.contextText || '')
-
-    const filters = [
-      `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,`,
-      `zoompan=z='1+0.0005*in':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30,`,
-      `drawbox=x=0:y=ih*0.55:w=iw:h=ih*0.45:color=black@0.6:t=fill,`,
-      `drawtext=text='${escapedAnalogy}':fontsize=38:fontcolor=white:x=(w-text_w)/2:y=h*0.62:line_spacing=12:font=Arial,`,
-      ...(escapedContext ? [
-        `drawtext=text='${escapedContext}':fontsize=24:fontcolor=0x888888:x=(w-text_w)/2:y=h*0.88:font=Arial,`,
-      ] : []),
-      `drawtext=text='synthszr':fontsize=20:fontcolor=0xCCFF00:x=w-text_w-40:y=h-60:font=Arial`,
-      `[v]`,
-    ].join('')
-
-    const { stderr } = await execFileAsync(ffmpeg, [
-      '-y', '-loop', '1', '-i', imagePath, '-i', audioPath,
-      '-filter_complex', filters,
-      '-map', '[v]', '-map', '1:a',
-      '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-      '-c:a', 'aac', '-b:a', '128k',
-      '-shortest', '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
-      outputPath,
-    ], { timeout: 120000 })
-
-    const durationMatch = stderr.match(/time=(\d+):(\d+):(\d+\.\d+)/)
-    let durationSeconds = 0
-    if (durationMatch) {
-      durationSeconds = parseInt(durationMatch[1]) * 3600 +
-        parseInt(durationMatch[2]) * 60 +
-        parseFloat(durationMatch[3])
-    }
-
-    const videoBuffer = await readFile(outputPath)
-    console.log(`[VideoGen] FFmpeg fallback video: ${videoBuffer.length} bytes, ${durationSeconds.toFixed(1)}s`)
-
-    return { success: true, videoBuffer, durationSeconds }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error('[VideoGen] FFmpeg fallback failed:', message)
-    return { success: false, error: message }
-  } finally {
-    await Promise.all([
-      unlink(imagePath).catch(() => {}),
-      unlink(audioPath).catch(() => {}),
-      unlink(outputPath).catch(() => {}),
-    ])
-  }
-}
-
-/**
- * Find ffmpeg binary on system PATH
- */
-function getFfmpegPath(): string {
-  return 'ffmpeg'
-}
-
-function wrapText(text: string, maxChars: number = 30): string {
-  const words = text.split(/\s+/)
-  const lines: string[] = []
-  let current = ''
-  for (const word of words) {
-    if ((current + ' ' + word).trim().length > maxChars && current) {
-      lines.push(current.trim())
-      current = word
-    } else {
-      current = (current + ' ' + word).trim()
-    }
-  }
-  if (current) lines.push(current.trim())
-  return lines.join('\n')
-}
-
-function escapeDrawtext(text: string): string {
-  return text
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "'\\\\\\''")
-    .replace(/:/g, '\\:')
-    .replace(/%/g, '%%')
-}
 
 /**
  * Upload video to Vercel Blob
