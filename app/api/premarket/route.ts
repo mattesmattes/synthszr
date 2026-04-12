@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search') ?? undefined
   const isin = searchParams.get('isin') ?? undefined
   const withSynthesis = searchParams.get('withSynthesis') === 'true'
+  const noCache = searchParams.get('fresh') === 'true'
 
   // Parse and validate limit/offset using shared validation helper
   const limit = parseIntParam(searchParams.get('limit'), 50, 1, 500)
@@ -43,6 +44,7 @@ export async function GET(request: NextRequest) {
       limit,
       offset,
       withSynthesis,
+      noCache,
     })
 
     return NextResponse.json(result)

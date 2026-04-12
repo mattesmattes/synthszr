@@ -23,7 +23,7 @@ const STOCKS_API_BASE =
  * const result = await fetchPremarketSyntheses({ search: 'OpenAI' })
  */
 export async function fetchPremarketSyntheses(
-  options?: FetchPremarketOptions
+  options?: FetchPremarketOptions & { noCache?: boolean }
 ): Promise<PremarketApiResponse> {
   const apiKey = process.env.STOCKS_PREMARKET_API_KEY
 
@@ -70,8 +70,9 @@ export async function fetchPremarketSyntheses(
         'X-API-Key': apiKey,
       },
       signal: controller.signal,
-      // Cache for 1 hour in Next.js
-      next: { revalidate: 3600 },
+      ...(options?.noCache
+        ? { cache: 'no-store' as const }
+        : { next: { revalidate: 3600 } }),
     })
 
     clearTimeout(timeoutId)

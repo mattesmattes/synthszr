@@ -79,6 +79,32 @@ export default function PremarketPage() {
   const [selectedItem, setSelectedItem] = useState<PremarketItem | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshResult, setRefreshResult] = useState<string | null>(null)
+  const [updatingItemId, setUpdatingItemId] = useState<string | null>(null)
+
+  const updateSingleItem = useCallback(async (item: PremarketItem) => {
+    setUpdatingItemId(item.id)
+    try {
+      const params = new URLSearchParams()
+      params.set('fresh', 'true')
+      params.set('limit', '5')
+      if (item.instrument.isin) {
+        params.set('isin', item.instrument.isin)
+      } else {
+        params.set('search', item.instrument.name || item.premarket.name)
+      }
+      const res = await fetch(`/api/premarket?${params}`, { credentials: 'include' })
+      const data: PremarketApiResponse = await res.json()
+      if (!data.ok || !data.data || data.data.length === 0) return
+      const fresh = data.data.find(d => d.id === item.id)
+        ?? data.data.find(d => d.instrument.isin && d.instrument.isin === item.instrument.isin)
+        ?? data.data[0]
+      setItems(prev => prev.map(p => p.id === item.id ? fresh : p))
+    } catch (err) {
+      console.error('[premarket] Single update error:', err)
+    } finally {
+      setUpdatingItemId(null)
+    }
+  }, [])
   const [cacheStatus, setCacheStatus] = useState<{
     total: number
     expired: number
@@ -347,6 +373,19 @@ export default function PremarketPage() {
                         {item.synthesis.rating}
                       </Badge>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      title="Rating jetzt aktualisieren"
+                      disabled={updatingItemId === item.id}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        updateSingleItem(item)
+                      }}
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${updatingItemId === item.id ? 'animate-spin' : ''}`} />
+                    </Button>
                   </div>
 
                   {item.latestPrice !== null && (
