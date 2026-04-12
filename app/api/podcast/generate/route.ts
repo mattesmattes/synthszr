@@ -33,6 +33,7 @@ import {
   validateScriptEmotions,
   type PodcastLine,
   type OpenAIModel,
+  type PodcastProgressEvent,
 } from '@/lib/tts/elevenlabs-tts'
 
 interface GeneratePodcastRequest {
@@ -47,6 +48,8 @@ export async function POST(request: NextRequest) {
   // Auth check - only admin can generate podcasts
   const authError = await requireAdmin(request)
   if (authError) return authError
+
+  const stream = new URL(request.url).searchParams.get('stream') === 'true'
 
   try {
     const body: GeneratePodcastRequest = await request.json()
@@ -92,62 +95,95 @@ export async function POST(request: NextRequest) {
     console.log(`[Podcast] Model: ${openaiModel}`)
     console.log(`[Podcast] Voices - host: ${hostVoiceId}, guest: ${guestVoiceId}`)
 
-    // Generate the podcast audio
-    const result = await generatePodcastDialogue({
-      lines,
-      hostVoiceId,
-      guestVoiceId,
-      openaiModel,
-    })
-
-    if (!result.success || !result.audioBuffer) {
-      return NextResponse.json(
-        { error: result.error || 'Failed to generate podcast audio' },
-        { status: 500 }
-      )
-    }
-
-    // Generate unique filename
-    const timestamp = Date.now()
     const safeTitle = (body.title || 'podcast')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .slice(0, 50)
 
-    // Upload individual segments for client-side concatenation (avoids mono/stereo issues)
-    const segmentUrls: string[] = []
-    if (result.segmentBuffers && result.segmentBuffers.length > 0) {
-      console.log(`[Podcast] Uploading ${result.segmentBuffers.length} individual segments...`)
-      for (let i = 0; i < result.segmentBuffers.length; i++) {
-        const segmentFileName = `podcasts/${safeTitle}-${timestamp}-seg${i.toString().padStart(3, '0')}.mp3`
-        const segmentBlob = await put(segmentFileName, result.segmentBuffers[i], {
-          access: 'public',
-          contentType: 'audio/mpeg',
-        })
-        segmentUrls.push(segmentBlob.url)
+    const finalize = async (progress?: (e: PodcastProgressEvent) => void) => {
+      const result = await generatePodcastDialogue(
+        { lines, hostVoiceId, guestVoiceId, openaiModel },
+        progress,
+      )
+
+      if (!result.success || !result.audioBuffer) {
+        return { error: result.error || 'Failed to generate podcast audio' }
       }
-      console.log(`[Podcast] Uploaded ${segmentUrls.length} segments`)
+
+      const timestamp = Date.now()
+      const segmentUrls: string[] = []
+      if (result.segmentBuffers && result.segmentBuffers.length > 0) {
+        console.log(`[Podcast] Uploading ${result.segmentBuffers.length} individual segments...`)
+        for (let i = 0; i < result.segmentBuffers.length; i++) {
+          const segmentFileName = `podcasts/${safeTitle}-${timestamp}-seg${i.toString().padStart(3, '0')}.mp3`
+          const segmentBlob = await put(segmentFileName, result.segmentBuffers[i], {
+            access: 'public',
+            contentType: 'audio/mpeg',
+          })
+          segmentUrls.push(segmentBlob.url)
+        }
+      }
+
+      const fileName = `podcasts/${safeTitle}-${timestamp}.mp3`
+      const blob = await put(fileName, result.audioBuffer, {
+        access: 'public',
+        contentType: 'audio/mpeg',
+      })
+
+      return {
+        success: true,
+        audioUrl: blob.url,
+        segmentUrls: segmentUrls.length > 0 ? segmentUrls : undefined,
+        segmentMetadata: result.segmentMetadata,
+        durationSeconds: result.durationSeconds,
+        lineCount: lines.length,
+        warnings: warnings.length > 0 ? warnings : undefined,
+        debug: result.debug,
+      }
     }
 
-    // Also upload combined audio (may have mono/stereo issues but works in some players)
-    const fileName = `podcasts/${safeTitle}-${timestamp}.mp3`
-    const blob = await put(fileName, result.audioBuffer, {
-      access: 'public',
-      contentType: 'audio/mpeg',
-    })
+    if (stream) {
+      const encoder = new TextEncoder()
+      const sseStream = new ReadableStream({
+        async start(controller) {
+          const send = (event: string, data: unknown) => {
+            try {
+              controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+            } catch { /* stream closed */ }
+          }
+          const heartbeat = setInterval(() => {
+            try { controller.enqueue(encoder.encode(': keepalive\n\n')) } catch { /* closed */ }
+          }, 15000)
+          try {
+            const outcome = await finalize((event) => send('progress', event))
+            if ('error' in outcome) {
+              send('error', outcome)
+            } else {
+              send('done', outcome)
+            }
+          } catch (err) {
+            send('error', { error: err instanceof Error ? err.message : 'Unknown error' })
+          } finally {
+            clearInterval(heartbeat)
+            controller.close()
+          }
+        },
+      })
+      return new Response(sseStream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'X-Accel-Buffering': 'no',
+          'Connection': 'keep-alive',
+        },
+      })
+    }
 
-    console.log(`[Podcast] Uploaded combined to ${blob.url} (${result.durationSeconds}s)`)
-
-    return NextResponse.json({
-      success: true,
-      audioUrl: blob.url,
-      segmentUrls: segmentUrls.length > 0 ? segmentUrls : undefined,
-      segmentMetadata: result.segmentMetadata, // For stereo mixing (HOST=left, GUEST=right)
-      durationSeconds: result.durationSeconds,
-      lineCount: lines.length,
-      warnings: warnings.length > 0 ? warnings : undefined,
-      debug: result.debug,
-    })
+    const outcome = await finalize()
+    if ('error' in outcome) {
+      return NextResponse.json({ error: outcome.error }, { status: 500 })
+    }
+    return NextResponse.json(outcome)
   } catch (error) {
     console.error('[Podcast] Generation error:', error)
     return NextResponse.json(

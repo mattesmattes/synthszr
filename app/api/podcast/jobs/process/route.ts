@@ -133,21 +133,33 @@ async function generateSegmentOpenAI(
       body.instructions = instructions
     }
 
-    const response = await fetch('https://api.openai.com/v1/audio/speech', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30_000)
+    try {
+      const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`OpenAI TTS API error: ${response.status} - ${errorText}`)
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`OpenAI TTS API error: ${response.status} - ${errorText}`)
+      }
+
+      return Buffer.from(await response.arrayBuffer())
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`OpenAI TTS timeout after 30000ms`)
+      }
+      throw err
+    } finally {
+      clearTimeout(timeoutId)
     }
-
-    return Buffer.from(await response.arrayBuffer())
   }, `OpenAI TTS (${voice})`)
 }
 
@@ -224,6 +236,7 @@ export async function POST(request: NextRequest) {
     // Generate TTS + upload each segment immediately (don't accumulate in memory)
     const segmentUrls: string[] = new Array(lines.length).fill('')
     const segmentBuffers: Array<{ buffer: Buffer; speaker: 'HOST' | 'GUEST'; text: string }> = []
+    let completedLines = 0
 
     for (let batchStart = 0; batchStart < lines.length; batchStart += TTS_BATCH_SIZE) {
       const batchEnd = Math.min(batchStart + TTS_BATCH_SIZE, lines.length)
@@ -253,6 +266,15 @@ export async function POST(request: NextRequest) {
           access: 'public',
           contentType: 'audio/mpeg',
         })
+
+        completedLines++
+        void supabase
+          .from('podcast_jobs')
+          .update({
+            progress: Math.round((completedLines / lines.length) * 90),
+            current_line: completedLines,
+          })
+          .eq('id', job.id)
 
         return {
           buffer,

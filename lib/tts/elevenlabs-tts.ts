@@ -231,22 +231,49 @@ async function generateDialogueSegmentOpenAI(
     body.instructions = instructions
   }
 
-  const response = await fetch('https://api.openai.com/v1/audio/speech', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
+  const PER_CALL_TIMEOUT_MS = 30_000
+  const MAX_ATTEMPTS = 3
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`OpenAI TTS API error: ${response.status} - ${errorText}`)
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), PER_CALL_TIMEOUT_MS)
+    try {
+      const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        const retriable = response.status === 429 || response.status >= 500
+        const err = new Error(`OpenAI TTS API error: ${response.status} - ${errorText}`)
+        if (!retriable || attempt === MAX_ATTEMPTS) throw err
+        lastErr = err
+      } else {
+        const arrayBuffer = await response.arrayBuffer()
+        return Buffer.from(arrayBuffer)
+      }
+    } catch (err) {
+      lastErr = err
+      const isAbort = err instanceof Error && err.name === 'AbortError'
+      if (attempt === MAX_ATTEMPTS) {
+        if (isAbort) throw new Error(`OpenAI TTS timeout after ${PER_CALL_TIMEOUT_MS}ms (attempt ${attempt})`)
+        throw err
+      }
+    } finally {
+      clearTimeout(timeoutId)
+    }
+    const backoffMs = 500 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 250)
+    console.log(`[TTS-OpenAI] Retrying attempt ${attempt + 1}/${MAX_ATTEMPTS} in ${backoffMs}ms`)
+    await new Promise(r => setTimeout(r, backoffMs))
   }
-
-  const arrayBuffer = await response.arrayBuffer()
-  return Buffer.from(arrayBuffer)
+  throw lastErr instanceof Error ? lastErr : new Error('OpenAI TTS failed')
 }
 
 // ============================================================================
@@ -386,8 +413,19 @@ function concatenateMp3Buffers(buffers: Buffer[]): Buffer {
 /**
  * Generate complete podcast audio from a script
  */
+export interface PodcastProgressEvent {
+  type: 'start' | 'line' | 'error' | 'done'
+  index?: number
+  total?: number
+  speaker?: 'HOST' | 'GUEST'
+  elapsedMs?: number
+  bytes?: number
+  message?: string
+}
+
 export async function generatePodcastDialogue(
-  script: PodcastScript
+  script: PodcastScript,
+  onProgress?: (event: PodcastProgressEvent) => void
 ): Promise<PodcastGenerationResult> {
   try {
     if (!script.lines || script.lines.length === 0) {
@@ -409,44 +447,54 @@ export async function generatePodcastDialogue(
     console.log(`[Podcast] OpenAI API key present`)
     console.log(`[Podcast] Generating ${validLines.length} lines with OpenAI (model=${model})`)
 
-    const audioSegments: Buffer[] = []
+    const audioSegments: Buffer[] = new Array(validLines.length).fill(Buffer.alloc(0))
     const errors: string[] = []
+    const CONCURRENCY = 4
+    onProgress?.({ type: 'start', total: validLines.length })
 
-    for (let i = 0; i < validLines.length; i++) {
-      const line = validLines[i]
-      const voiceId = line.speaker === 'HOST'
-        ? script.hostVoiceId
-        : script.guestVoiceId
+    let cursor = 0
+    let completed = 0
+    const workers = Array.from({ length: Math.min(CONCURRENCY, validLines.length) }, async () => {
+      while (cursor < validLines.length) {
+        const i = cursor++
+        const line = validLines[i]
+        const voiceId = line.speaker === 'HOST'
+          ? script.hostVoiceId
+          : script.guestVoiceId
 
-      try {
-        const startTime = Date.now()
-        const ttsText = stripDirectiveTags(line.text)
+        try {
+          const startTime = Date.now()
+          const ttsText = stripDirectiveTags(line.text)
 
-        if (!ttsText) {
-          console.log(`[Podcast] Skipping empty line ${i + 1}/${validLines.length} after directive strip`)
-          continue
+          if (!ttsText) {
+            console.log(`[Podcast] Skipping empty line ${i + 1}/${validLines.length} after directive strip`)
+            completed++
+            onProgress?.({ type: 'line', index: i + 1, total: validLines.length, speaker: line.speaker, bytes: 0, elapsedMs: 0, message: 'skipped' })
+            continue
+          }
+
+          const buffer = await generateDialogueSegmentOpenAI(
+            ttsText,
+            voiceId as OpenAIVoice,
+            model
+          )
+
+          const elapsed = Date.now() - startTime
+          console.log(`[Podcast] Line ${i + 1}/${validLines.length}: ${buffer.length} bytes in ${elapsed}ms (${line.speaker})`)
+          audioSegments[i] = buffer
+          completed++
+          onProgress?.({ type: 'line', index: i + 1, total: validLines.length, speaker: line.speaker, bytes: buffer.length, elapsedMs: elapsed })
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error)
+          console.error(`[Podcast] Line ${i + 1} FAILED:`, errorMsg)
+          errors.push(`Line ${i + 1}: ${errorMsg}`)
+          completed++
+          onProgress?.({ type: 'error', index: i + 1, total: validLines.length, message: errorMsg })
         }
-
-        const buffer = await generateDialogueSegmentOpenAI(
-          ttsText,
-          voiceId as OpenAIVoice,
-          model
-        )
-
-        const elapsed = Date.now() - startTime
-        console.log(`[Podcast] Line ${i + 1}/${validLines.length}: ${buffer.length} bytes in ${elapsed}ms (${line.speaker})`)
-        audioSegments.push(buffer)
-
-        if (i < validLines.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 100))
-        }
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error)
-        console.error(`[Podcast] Line ${i + 1} FAILED:`, errorMsg)
-        errors.push(`Line ${i + 1}: ${errorMsg}`)
-        audioSegments.push(Buffer.alloc(0))
       }
-    }
+    })
+    await Promise.all(workers)
+    void completed
 
     const successfulSegments = audioSegments.filter(b => b && b.length > 0).length
     const failedSegments = validLines.length - successfulSegments
