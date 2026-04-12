@@ -229,6 +229,11 @@ function extractRedirectDomain(url: string): string | null {
 export function sanitizeUrl(url: string | null | undefined): string | null {
   if (!url) return null
 
+  // Skip relative URLs and fragments silently — not absolute URLs, nothing to sanitize
+  if (url.startsWith('#') || url.startsWith('/') || !/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+    return null
+  }
+
   try {
     const parsed = new URL(url)
 

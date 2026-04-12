@@ -21,6 +21,14 @@ import {
   type LearnedPattern,
 } from '@/lib/edit-learning/retrieval'
 import { type AIModel, resolveModel } from './ghostwriter'
+import { isCreditBalanceError, recordCreditAlertIfApplicable } from '@/lib/alerts/system-alert'
+
+export class CreditBalanceExhaustedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'CreditBalanceExhaustedError'
+  }
+}
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
@@ -405,6 +413,10 @@ export async function* runGhostwriterPipeline(
     plan = await planArticle(items, planningModel)
   } catch (err) {
     console.error('[Pipeline] planArticle failed:', err)
+    if (isCreditBalanceError(err)) {
+      await recordCreditAlertIfApplicable(err)
+      throw new CreditBalanceExhaustedError(err instanceof Error ? err.message : String(err))
+    }
     // Fallback plan: sequential order, item titles as headings
     plan = {
       thesis: 'Aktuelle Tech-News und Marktanalyse',
@@ -480,12 +492,20 @@ export async function* runGhostwriterPipeline(
 
   // Start bounded-parallel tasks
   let cursor = 0
+  let creditExhausted = false
   const workers = Array.from({ length: Math.min(concurrency, orderedItems.length) }, async () => {
     while (cursor < orderedItems.length) {
       const i = cursor++
       const item = orderedItems[i]
       const itemIdx = plan.ordering[i]
       const heading = plan.headings[String(itemIdx)] || item.title
+
+      if (creditExhausted) {
+        results[i] = `## ${heading}\n\n*Abgebrochen: AI-Credit-Guthaben aufgebraucht.*\n`
+        writtenCount++
+        resolvers[i]?.()
+        continue
+      }
 
       try {
         const itemCompanies = companiesPerItem.get(item.id) || { public: [], premarket: [] }
@@ -496,6 +516,11 @@ export async function* runGhostwriterPipeline(
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
         console.error(`[Pipeline] writeSection ${i + 1} failed:`, errMsg)
+        if (isCreditBalanceError(err) && !creditExhausted) {
+          creditExhausted = true
+          cursor = orderedItems.length // stop scheduling
+          await recordCreditAlertIfApplicable(err)
+        }
         results[i] = `## ${heading}\n\n*Fehler: ${errMsg}*\n`
       }
       writtenCount++
