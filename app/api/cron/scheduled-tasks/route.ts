@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runSynthesisPipelineWithProgress } from '@/lib/synthesis/pipeline'
 import { processWebcrawl } from '@/lib/webcrawl/processor'
+import { processNewsletters } from '@/lib/newsletter/processor'
 import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPublishedPostsQueueItems } from '@/lib/news-queue/service'
 import { MAX_DIGEST_SECTIONS, MAX_CONTENT_PREVIEW_CHARS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresholds'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
@@ -140,27 +141,16 @@ export async function GET(request: NextRequest) {
     if (shouldRun && !recentlyRan) {
       console.log('[Scheduler] Running newsletter fetch...')
       try {
-        // Call fetch-newsletters as HTTP subrequest (separate V8 isolate → avoids jsdom/googleapis
-        // module conflicts that cause silent failures when called in-process)
-        const fetchBaseUrl = baseUrl
-        const fetchController = new AbortController()
-        const fetchTimeoutId = setTimeout(() => fetchController.abort(), 300000) // 5 min
-        const resp = await fetch(`${fetchBaseUrl}/api/cron/fetch-newsletters`, {
-          headers: { 'Authorization': `Bearer ${process.env.CRON_SECRET}` },
-          signal: fetchController.signal,
-        }).finally(() => clearTimeout(fetchTimeoutId))
-        const fetchResult = await resp.json() as { success: boolean; message?: string; processed?: number; articles?: number }
-        console.log('[Scheduler] Newsletter fetch completed:', fetchResult.message)
+        // Run in-process like webcrawl — avoids cross-origin redirect auth-stripping
+        // and 401 deployment-protection issues that silently killed HTTP subrequests.
+        const fetchResult = await processNewsletters()
+        console.log('[Scheduler] Newsletter fetch completed:', fetchResult.message ?? `${fetchResult.processed ?? 0} newsletters, ${fetchResult.articles ?? 0} articles`)
         if (fetchResult.success) await markTaskRun(supabase, 'newsletter_fetch')
         results.newsletterFetch = fetchResult.success ? 'completed' : 'error'
         if (fetchResult.processed !== undefined) results.newslettersFetched = fetchResult.processed.toString()
         if (fetchResult.articles !== undefined) results.articlesExtracted = fetchResult.articles.toString()
       } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          console.error('[Scheduler] Newsletter fetch timeout after 5 min')
-        } else {
-          console.error('[Scheduler] Newsletter fetch error:', error)
-        }
+        console.error('[Scheduler] Newsletter fetch error:', error)
         results.newsletterFetch = 'error'
       }
     } else {
