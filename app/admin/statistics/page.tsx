@@ -16,6 +16,8 @@ import {
   ComposedChart,
   Bar,
   BarChart,
+  Cell,
+  LabelList,
 } from 'recharts'
 
 type Period = '7d' | '30d' | '90d' | '1y'
@@ -135,7 +137,7 @@ export default function StatisticsPage() {
   const [podigeeLoading, setPodigeeLoading] = useState(true)
   const [youtube, setYoutube] = useState<YouTubeStats | null>(null)
   const [youtubeLoading, setYoutubeLoading] = useState(true)
-  const [domains, setDomains] = useState<{ domain: string; count: number }[]>([])
+  const [domains, setDomains] = useState<{ domain: string; count: number; favicon: string; color: string }[]>([])
   const [domainsTotal, setDomainsTotal] = useState(0)
   const [domainsLoading, setDomainsLoading] = useState(true)
 
@@ -490,11 +492,11 @@ export default function StatisticsPage() {
                   Keine Daten vorhanden
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={Math.max(300, domains.length * 24)}>
+                <ResponsiveContainer width="100%" height={Math.max(300, domains.length * 28)}>
                   <BarChart
                     data={domains}
                     layout="vertical"
-                    margin={{ top: 5, right: 40, left: 10, bottom: 5 }}
+                    margin={{ top: 5, right: 56, left: 10, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" opacity={0.3} horizontal={false} />
                     <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
@@ -508,7 +510,58 @@ export default function StatisticsPage() {
                     <Tooltip
                       formatter={(value: number) => [value.toLocaleString('de-DE'), 'Abonnenten']}
                     />
-                    <Bar dataKey="count" fill="#CCFF00" stroke="#000" strokeWidth={0.5} />
+                    <Bar dataKey="count" stroke="#000" strokeWidth={0.5}>
+                      {domains.map((d, i) => (
+                        <Cell key={i} fill={d.color} />
+                      ))}
+                      <LabelList
+                        dataKey="count"
+                        position="right"
+                        content={(props: {
+                          x?: string | number
+                          y?: string | number
+                          width?: string | number
+                          height?: string | number
+                          value?: string | number
+                          index?: number
+                        }) => {
+                          const { x, y, width, height, value, index } = props
+                          if (
+                            x === undefined || y === undefined ||
+                            width === undefined || height === undefined ||
+                            index === undefined
+                          ) return null
+                          const nx = Number(x), ny = Number(y), nw = Number(width), nh = Number(height)
+                          const favicon = domains[index]?.favicon
+                          const iconSize = Math.min(20, nh - 2)
+                          const iconX = nx + nw + 6
+                          const iconY = ny + (nh - iconSize) / 2
+                          return (
+                            <g>
+                              {favicon && (
+                                <image
+                                  href={favicon}
+                                  x={iconX}
+                                  y={iconY}
+                                  width={iconSize}
+                                  height={iconSize}
+                                  preserveAspectRatio="xMidYMid meet"
+                                />
+                              )}
+                              <text
+                                x={iconX + iconSize + 6}
+                                y={ny + nh / 2}
+                                dominantBaseline="middle"
+                                fontSize={11}
+                                fill="currentColor"
+                              >
+                                {typeof value === 'number' ? value.toLocaleString('de-DE') : value}
+                              </text>
+                            </g>
+                          )
+                        }}
+                      />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
