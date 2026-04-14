@@ -44,6 +44,14 @@ export async function GET(request: NextRequest) {
   if (!imageUrl) return NextResponse.json({ error: 'No image' }, { status: 404 })
 
   try {
+    // Skip compositing for animated formats — multiply-flattening would strip
+    // the animation. Redirect to the original so the email shows the live GIF
+    // (without baked-in BG, but with movement preserved).
+    const isAnimated = /\.gif(\?|$)/i.test(imageUrl)
+    if (isAnimated) {
+      return NextResponse.redirect(imageUrl, 302)
+    }
+
     const res = await fetch(imageUrl)
     if (!res.ok) throw new Error(`Source fetch failed: ${res.status}`)
     const srcBuffer = Buffer.from(await res.arrayBuffer())
