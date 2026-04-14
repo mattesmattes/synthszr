@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Loader2, Plus, Trash2, Upload, Save } from 'lucide-react'
 import { AdPromoView } from '@/components/ad-promo'
-import type { AdPromo, AdPromoConfig, AdPromoLayout, BlendMode } from '@/lib/ad-promos/types'
+import type { AdPromo, AdPromoConfig, AdPromoLayout } from '@/lib/ad-promos/types'
 
 export default function AdPromosAdminPage() {
   const [promos, setPromos] = useState<AdPromo[]>([])
@@ -220,11 +220,9 @@ function PromoEditor({
           label={draft.layout === 'single' ? 'Bild (880px breit)' : 'Bild Links'}
           url={draft.image_left_url}
           bg={draft.image_left_bg}
-          blend={draft.image_left_blend}
           uploading={uploading === 'left'}
           onUpload={(file) => handleImageUpload('left', file)}
           onBgChange={(c) => update({ image_left_bg: c })}
-          onBlendChange={(b) => update({ image_left_blend: b })}
           onClear={() => { update({ image_left_url: null }); onChange({ image_left_url: null }) }}
         />
         {draft.layout === 'grid' && (
@@ -232,11 +230,9 @@ function PromoEditor({
             label="Bild Rechts"
             url={draft.image_right_url}
             bg={draft.image_right_bg}
-            blend={draft.image_right_blend}
             uploading={uploading === 'right'}
             onUpload={(file) => handleImageUpload('right', file)}
             onBgChange={(c) => update({ image_right_bg: c })}
-            onBlendChange={(b) => update({ image_right_blend: b })}
             onClear={() => { update({ image_right_url: null }); onChange({ image_right_url: null }) }}
           />
         )}
@@ -293,16 +289,14 @@ function PromoEditor({
 }
 
 function ImageSlot({
-  label, url, bg, blend, uploading, onUpload, onBgChange, onBlendChange, onClear,
+  label, url, bg, uploading, onUpload, onBgChange, onClear,
 }: {
   label: string
   url: string | null
   bg: string
-  blend: BlendMode
   uploading: boolean
   onUpload: (file: File) => void
   onBgChange: (c: string) => void
-  onBlendChange: (b: BlendMode) => void
   onClear: () => void
 }) {
   return (
@@ -310,7 +304,7 @@ function ImageSlot({
       <Label className="text-xs">{label}</Label>
       <div className="flex aspect-square items-center justify-center overflow-hidden rounded" style={{ backgroundColor: bg }}>
         {url ? (
-          <img src={url} alt="" className="max-h-full max-w-full object-contain" style={{ mixBlendMode: blend }} />
+          <img src={url} alt="" className="max-h-full max-w-full object-contain" style={{ mixBlendMode: 'multiply' }} />
         ) : (
           <span className="text-xs text-muted-foreground">Kein Bild</span>
         )}
@@ -332,15 +326,7 @@ function ImageSlot({
         )}
       </div>
       <div className="flex items-center gap-2">
-        <ColorField label="BG" value={bg} onChange={onBgChange} />
-        <select
-          value={blend}
-          onChange={e => onBlendChange(e.target.value as BlendMode)}
-          className="rounded-md border border-border bg-background px-2 py-1 text-xs"
-        >
-          <option value="normal">Normal</option>
-          <option value="multiply">Multiply</option>
-        </select>
+        <ColorField label="BG (Multiply)" value={bg} onChange={onBgChange} />
       </div>
     </div>
   )
