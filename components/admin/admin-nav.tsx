@@ -35,6 +35,7 @@ interface NavItem {
   icon: LucideIcon
   exact?: boolean
   external?: boolean
+  highlight?: boolean
 }
 
 interface NavGroup {
@@ -60,7 +61,8 @@ const navGroups: NavGroup[] = [
       {
         label: 'AI Artikel erstellen',
         href: '/admin/create-article',
-        icon: Wand2
+        icon: Wand2,
+        highlight: true
       },
       {
         label: 'Ghostwriter-Prompts',
@@ -90,12 +92,14 @@ const navGroups: NavGroup[] = [
       {
         label: 'Übersetzungen',
         href: '/admin/translations',
-        icon: Globe
+        icon: Globe,
+        highlight: true
       },
       {
         label: 'Podcast Studio',
         href: '/admin/audio',
-        icon: Headphones
+        icon: Headphones,
+        highlight: true
       },
       {
         label: 'Analogy Machine',
@@ -115,12 +119,14 @@ const navGroups: NavGroup[] = [
       {
         label: 'News',
         href: '/admin/digests',
-        icon: Sparkles
+        icon: Sparkles,
+        highlight: true
       },
       {
         label: 'News Queue',
         href: '/admin/news-queue',
-        icon: ListTodo
+        icon: ListTodo,
+        highlight: true
       },
       {
         label: 'Analyse-Prompts',
@@ -150,7 +156,8 @@ const navGroups: NavGroup[] = [
       {
         label: 'Daily Repo',
         href: '/admin/daily-repo',
-        icon: Database
+        icon: Database,
+        highlight: true
       },
       {
         label: 'Newsletter-Quellen',
@@ -175,7 +182,8 @@ const navGroups: NavGroup[] = [
       {
         label: 'Versenden',
         href: '/admin/newsletter-send',
-        icon: Send
+        icon: Send,
+        highlight: true
       }
     ]
   },
@@ -244,7 +252,14 @@ export function AdminNav({ onNavigate }: AdminNavProps) {
                         : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                     )}
                   >
-                    <item.icon className="h-4 w-4" />
+                    <span
+                      className={cn(
+                        'flex h-6 w-6 shrink-0 items-center justify-center rounded',
+                        item.highlight && 'bg-[#CCFF00] text-black'
+                      )}
+                    >
+                      <item.icon className="h-4 w-4" />
+                    </span>
                     {item.label}
                     {isExternal && (
                       <span className="ml-auto text-xs text-muted-foreground">↗</span>
