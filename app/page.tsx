@@ -2,7 +2,7 @@ import Link from "next/link"
 import { BlogHeader } from "@/components/blog-header"
 import { FeaturedArticle } from "@/components/featured-article"
 import { Newsletter } from "@/components/newsletter"
-import { CodecrashPromo } from "@/components/codecrash-promo"
+import { AdPromo } from "@/components/ad-promo"
 // import { CalligramFooter } from "@/components/calligram-footer"
 import { createClient } from "@/lib/supabase/server"
 import type { CoverAnimationConfig } from "@/lib/types/cover-animation"
@@ -146,7 +146,7 @@ export default async function Page() {
               coverAnimation={coverAnimation}
             />
 
-            <CodecrashPromo />
+            <AdPromo />
 
             {/* Last 7 Days Headlines */}
             {recentPosts.length > 0 && (

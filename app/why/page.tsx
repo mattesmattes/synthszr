@@ -2,7 +2,7 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
 import { Newsletter } from "@/components/newsletter"
-import { CodecrashPromo } from "@/components/codecrash-promo"
+import { AdPromo } from "@/components/ad-promo"
 import { ArrowLeft } from "lucide-react"
 
 export const dynamic = 'force-dynamic'
@@ -50,7 +50,7 @@ export default async function WhyPage() {
           </div>
         </article>
 
-        <CodecrashPromo />
+        <AdPromo />
         <Newsletter />
       </main>
 

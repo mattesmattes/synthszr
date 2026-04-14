@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { FeaturedArticle } from "@/components/featured-article"
 import { Newsletter } from "@/components/newsletter"
-import { CodecrashPromo } from "@/components/codecrash-promo"
+import { AdPromo } from "@/components/ad-promo"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 // import { CalligramFooter } from "@/components/calligram-footer"
@@ -241,7 +241,7 @@ export default async function Page({ params }: PageProps) {
               coverAnimation={coverAnimation}
             />
 
-            <CodecrashPromo />
+            <AdPromo />
 
             {/* Last 7 Days Headlines */}
             {recentPosts.length > 0 && (

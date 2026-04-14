@@ -24,7 +24,8 @@ import {
   ListTodo,
   Globe,
   Headphones,
-  Film
+  Film,
+  Megaphone
 } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
@@ -100,6 +101,11 @@ const navGroups: NavGroup[] = [
         label: 'Analogy Machine',
         href: '/admin/analogy-videos',
         icon: Film
+      },
+      {
+        label: 'Ad Promos',
+        href: '/admin/ad-promos',
+        icon: Megaphone
       }
     ]
   },

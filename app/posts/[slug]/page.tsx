@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 import { BlogHeader } from "@/components/blog-header"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
 import { Newsletter } from "@/components/newsletter"
-import { CodecrashPromo } from "@/components/codecrash-promo"
+import { AdPromo } from "@/components/ad-promo"
 import { SwipeNavigation } from "@/components/swipe-navigation"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 import { AudioPlayer } from "@/components/audio-player"
@@ -240,7 +240,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           </div>
         </nav>
 
-        <CodecrashPromo />
+        <AdPromo />
         <Newsletter />
       </main>
 

@@ -4,7 +4,7 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { PostContentView } from "@/components/post-content-view"
 import { Newsletter } from "@/components/newsletter"
-import { CodecrashPromo } from "@/components/codecrash-promo"
+import { AdPromo } from "@/components/ad-promo"
 import { SwipeNavigation } from "@/components/swipe-navigation"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
@@ -446,7 +446,7 @@ export default async function PostPage({ params }: PageProps) {
           </div>
         </nav>
 
-        <CodecrashPromo />
+        <AdPromo />
         <Newsletter locale={locale} />
       </main>
 
