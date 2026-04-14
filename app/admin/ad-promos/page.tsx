@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Loader2, Plus, Trash2, Upload, Save } from 'lucide-react'
 import { AdPromoView } from '@/components/ad-promo'
 import type { AdPromo, AdPromoConfig, AdPromoLayout } from '@/lib/ad-promos/types'
@@ -121,21 +122,34 @@ export default function AdPromosAdminPage() {
 
       <Button onClick={createPromo}><Plus className="mr-2 h-4 w-4" />Neue Promo</Button>
 
-      <div className="space-y-6">
-        {promos.length === 0 && (
-          <div className="rounded-lg border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
-            Noch keine Promos angelegt.
-          </div>
-        )}
-        {promos.map(promo => (
-          <PromoEditor
-            key={promo.id}
-            promo={promo}
-            onChange={(patch) => updatePromo(promo.id, patch)}
-            onDelete={() => deletePromo(promo.id)}
-          />
-        ))}
-      </div>
+      {promos.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
+          Noch keine Promos angelegt.
+        </div>
+      ) : (
+        <Tabs defaultValue={promos[0].id} className="w-full">
+          <TabsList className="flex h-auto flex-wrap justify-start">
+            {promos.map(promo => (
+              <TabsTrigger key={promo.id} value={promo.id} className="gap-2">
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${promo.active ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`}
+                  aria-label={promo.active ? 'aktiv' : 'deaktiviert'}
+                />
+                {promo.name}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {promos.map(promo => (
+            <TabsContent key={promo.id} value={promo.id} className="mt-4">
+              <PromoEditor
+                promo={promo}
+                onChange={(patch) => updatePromo(promo.id, patch)}
+                onDelete={() => deletePromo(promo.id)}
+              />
+            </TabsContent>
+          ))}
+        </Tabs>
+      )}
     </div>
   )
 }
