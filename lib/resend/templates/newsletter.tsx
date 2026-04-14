@@ -293,16 +293,27 @@ export function NewsletterEmail({
           </Section>
 
           {/* Ad Promo Box (admin-managed via /admin/ad-promos) */}
-          {promo && (
+          {promo && (() => {
+            // Pre-rendered composite URLs: BG + image flattened with multiply blend.
+            // Email clients ignore CSS mix-blend-mode, so we bake it server-side.
+            // `?v=` busts the CDN cache when admins edit the promo.
+            const v = encodeURIComponent(promo.updated_at || '')
+            const leftCompositeUrl = promo.image_left_url
+              ? `${baseUrl}/api/ad-promos/composite?id=${promo.id}&slot=left&v=${v}`
+              : null
+            const rightCompositeUrl = promo.image_right_url
+              ? `${baseUrl}/api/ad-promos/composite?id=${promo.id}&slot=right&v=${v}`
+              : null
+            return (
             <Section style={{ padding: '0' }}>
               <table width="100%" cellPadding={0} cellSpacing={0} style={{ borderCollapse: 'collapse' as const }}>
                 {promo.layout === 'single' ? (
-                  promo.image_left_url && (
+                  leftCompositeUrl && (
                     <tr>
                       <td valign="top" style={{ padding: 0, backgroundColor: promo.image_left_bg }}>
                         <Link href={promo.link_url} style={{ textDecoration: 'none' }}>
                           <Img
-                            src={promo.image_left_url}
+                            src={leftCompositeUrl}
                             alt={promo.title}
                             width="600"
                             style={{ display: 'block', width: '100%', height: 'auto', maxWidth: 880, margin: '0 auto' }}
@@ -313,11 +324,11 @@ export function NewsletterEmail({
                   )
                 ) : (
                   <tr>
-                    {promo.image_left_url && (
+                    {leftCompositeUrl && (
                       <td width="50%" valign="top" style={{ padding: 0, backgroundColor: promo.image_left_bg }}>
                         <Link href={promo.link_url} style={{ textDecoration: 'none' }}>
                           <Img
-                            src={promo.image_left_url}
+                            src={leftCompositeUrl}
                             alt={promo.title}
                             width="300"
                             style={{ display: 'block', width: '100%', height: 'auto' }}
@@ -325,11 +336,11 @@ export function NewsletterEmail({
                         </Link>
                       </td>
                     )}
-                    {promo.image_right_url && (
+                    {rightCompositeUrl && (
                       <td width="50%" valign="top" style={{ padding: 0, backgroundColor: promo.image_right_bg }}>
                         <Link href={promo.link_url} style={{ textDecoration: 'none' }}>
                           <Img
-                            src={promo.image_right_url}
+                            src={rightCompositeUrl}
                             alt={promo.title}
                             width="300"
                             style={{ display: 'block', width: '100%', height: 'auto' }}
@@ -356,7 +367,8 @@ export function NewsletterEmail({
                 </tr>
               </table>
             </Section>
-          )}
+            )
+          })()}
 
           {/* Footer */}
           <Section style={footerSection}>
