@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TrendingUp, Eye, Headphones, MousePointerClick, Loader2, Users } from 'lucide-react'
@@ -130,6 +131,7 @@ const SUMMARY_CARDS = [
 ]
 
 export default function StatisticsPage() {
+  const router = useRouter()
   const [period, setPeriod] = useState<Period>('7d')
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -510,7 +512,17 @@ export default function StatisticsPage() {
                     <Tooltip
                       formatter={(value: number) => [value.toLocaleString('de-DE'), 'Abonnenten']}
                     />
-                    <Bar dataKey="count" stroke="#000" strokeWidth={0.5}>
+                    <Bar
+                      dataKey="count"
+                      stroke="#000"
+                      strokeWidth={0.5}
+                      cursor="pointer"
+                      onClick={(data: { domain?: string }) => {
+                        if (data?.domain) {
+                          router.push(`/admin/subscribers?search=${encodeURIComponent('@' + data.domain)}`)
+                        }
+                      }}
+                    >
                       {domains.map((d, i) => (
                         <Cell key={i} fill={d.color} />
                       ))}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download, Search, UserCheck, Pencil, Check, X, TrendingUp, TrendingDown } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -54,7 +55,14 @@ export default function SubscribersPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editEmail, setEditEmail] = useState('')
   const [savingEmail, setSavingEmail] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const searchParams = useSearchParams()
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') ?? '')
+
+  // Sync state when URL search param changes (e.g. from another tab's chart click)
+  useEffect(() => {
+    const urlSearch = searchParams.get('search') ?? ''
+    setSearchQuery(prev => prev === urlSearch ? prev : urlSearch)
+  }, [searchParams])
 
   useEffect(() => {
     fetchSubscribers()
