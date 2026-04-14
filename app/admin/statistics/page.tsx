@@ -15,6 +15,7 @@ import {
   Legend,
   ComposedChart,
   Bar,
+  BarChart,
 } from 'recharts'
 
 type Period = '7d' | '30d' | '90d' | '1y'
@@ -134,6 +135,9 @@ export default function StatisticsPage() {
   const [podigeeLoading, setPodigeeLoading] = useState(true)
   const [youtube, setYoutube] = useState<YouTubeStats | null>(null)
   const [youtubeLoading, setYoutubeLoading] = useState(true)
+  const [domains, setDomains] = useState<{ domain: string; count: number }[]>([])
+  const [domainsTotal, setDomainsTotal] = useState(0)
+  const [domainsLoading, setDomainsLoading] = useState(true)
 
   useEffect(() => {
     setLoading(true)
@@ -158,6 +162,18 @@ export default function StatisticsPage() {
       })
       .catch(() => setPodigeeLoading(false))
   }, [period])
+
+  useEffect(() => {
+    setDomainsLoading(true)
+    fetch('/api/admin/stats/subscriber-domains')
+      .then(res => res.json())
+      .then(data => {
+        setDomains(data.domains || [])
+        setDomainsTotal(data.total || 0)
+        setDomainsLoading(false)
+      })
+      .catch(() => setDomainsLoading(false))
+  }, [])
 
   useEffect(() => {
     setYoutubeLoading(true)
@@ -446,6 +462,54 @@ export default function StatisticsPage() {
                       strokeWidth={2}
                     />
                   </ComposedChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Top 20 Subscriber Domains */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">
+                Top 20 E-Mail-Domains
+                {!domainsLoading && domainsTotal > 0 && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    ({domainsTotal.toLocaleString('de-DE')} aktive Abonnenten)
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {domainsLoading ? (
+                <div className="flex items-center justify-center h-48 text-sm text-muted-foreground">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Lade Domains…
+                </div>
+              ) : domains.length === 0 ? (
+                <div className="flex items-center justify-center h-48 text-sm text-muted-foreground">
+                  Keine Daten vorhanden
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={Math.max(300, domains.length * 24)}>
+                  <BarChart
+                    data={domains}
+                    layout="vertical"
+                    margin={{ top: 5, right: 40, left: 10, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <YAxis
+                      type="category"
+                      dataKey="domain"
+                      tick={{ fontSize: 11 }}
+                      width={160}
+                      interval={0}
+                    />
+                    <Tooltip
+                      formatter={(value: number) => [value.toLocaleString('de-DE'), 'Abonnenten']}
+                    />
+                    <Bar dataKey="count" fill="#CCFF00" stroke="#000" strokeWidth={0.5} />
+                  </BarChart>
                 </ResponsiveContainer>
               )}
             </CardContent>
