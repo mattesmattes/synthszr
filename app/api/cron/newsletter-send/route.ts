@@ -6,6 +6,7 @@ import { render } from '@react-email/components'
 import { generateEmailContentWithVotes, ArticleThumbnail } from '@/lib/email/tiptap-to-html'
 import type { LanguageCode } from '@/lib/types'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
+import { getActiveAdPromo } from '@/lib/ad-promos/get-active'
 
 // Allow up to 2 minutes for large subscriber lists
 export const maxDuration = 120
@@ -244,6 +245,9 @@ export async function GET(request: NextRequest) {
     const BATCH_DELAY_MS = 1500 // 1.5s between batches (only matters if >50 subscribers per locale)
     const MAX_RETRIES = 3
 
+    // Fetch active ad promo (admin-managed via /admin/ad-promos)
+    const activePromo = await getActiveAdPromo()
+
     for (const [locale, localeSubscribers] of subscribersByLocale) {
       const emailContent = contentByLocale.get(locale)!
       const localizedSubject = subjectByLocale.get(locale) || subject
@@ -268,6 +272,7 @@ export async function GET(request: NextRequest) {
           postDate: post.created_at,
           baseUrl: BASE_URL,
           locale: locale as LanguageCode,
+          promo: activePromo,
         })
       )
 

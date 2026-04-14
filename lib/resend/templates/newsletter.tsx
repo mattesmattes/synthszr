@@ -15,6 +15,7 @@ import {
 } from '@react-email/components'
 import { formatUpdateDate } from '@/lib/i18n/config'
 import type { LanguageCode } from '@/lib/types'
+import type { AdPromo } from '@/lib/ad-promos/types'
 
 interface NewsletterEmailProps {
   subject: string
@@ -29,6 +30,7 @@ interface NewsletterEmailProps {
   postDate?: string
   baseUrl?: string
   locale?: LanguageCode
+  promo?: AdPromo | null
 }
 
 // Localized UI strings
@@ -146,6 +148,7 @@ export function NewsletterEmail({
   postDate,
   baseUrl = 'https://synthszr.vercel.app',
   locale = 'de',
+  promo = null,
 }: NewsletterEmailProps) {
   const formattedDate = postDate ? formatUpdateDate(postDate, locale) : null
   const strings = UI_STRINGS[locale] || UI_STRINGS.de
@@ -289,47 +292,71 @@ export function NewsletterEmail({
 
           </Section>
 
-          {/* CodeCrash Promo Box */}
-          <Section style={{ padding: '0' }}>
-            <table width="100%" cellPadding={0} cellSpacing={0} style={{ borderCollapse: 'collapse' as const }}>
-              <tr>
-                <td width="50%" valign="top" style={{ padding: 0, backgroundColor: '#003333' }}>
-                  <Link href="https://codecrash.ai" style={{ textDecoration: 'none' }}>
-                    <Img
-                      src={`${baseUrl}/cc-box-cover-cyan.png`}
-                      alt="Code Crash — Matthias Schrader"
-                      width="300"
-                      style={{ display: 'block', width: '100%', height: 'auto' }}
+          {/* Ad Promo Box (admin-managed via /admin/ad-promos) */}
+          {promo && (
+            <Section style={{ padding: '0' }}>
+              <table width="100%" cellPadding={0} cellSpacing={0} style={{ borderCollapse: 'collapse' as const }}>
+                {promo.layout === 'single' ? (
+                  promo.image_left_url && (
+                    <tr>
+                      <td valign="top" style={{ padding: 0, backgroundColor: promo.image_left_bg }}>
+                        <Link href={promo.link_url} style={{ textDecoration: 'none' }}>
+                          <Img
+                            src={promo.image_left_url}
+                            alt={promo.title}
+                            width="600"
+                            style={{ display: 'block', width: '100%', height: 'auto', maxWidth: 880, margin: '0 auto' }}
+                          />
+                        </Link>
+                      </td>
+                    </tr>
+                  )
+                ) : (
+                  <tr>
+                    {promo.image_left_url && (
+                      <td width="50%" valign="top" style={{ padding: 0, backgroundColor: promo.image_left_bg }}>
+                        <Link href={promo.link_url} style={{ textDecoration: 'none' }}>
+                          <Img
+                            src={promo.image_left_url}
+                            alt={promo.title}
+                            width="300"
+                            style={{ display: 'block', width: '100%', height: 'auto' }}
+                          />
+                        </Link>
+                      </td>
+                    )}
+                    {promo.image_right_url && (
+                      <td width="50%" valign="top" style={{ padding: 0, backgroundColor: promo.image_right_bg }}>
+                        <Link href={promo.link_url} style={{ textDecoration: 'none' }}>
+                          <Img
+                            src={promo.image_right_url}
+                            alt={promo.title}
+                            width="300"
+                            style={{ display: 'block', width: '100%', height: 'auto' }}
+                          />
+                        </Link>
+                      </td>
+                    )}
+                  </tr>
+                )}
+                <tr>
+                  <td colSpan={promo.layout === 'grid' ? 2 : 1} style={{ ...ccPromoTextCell, backgroundColor: promo.text_bg }}>
+                    {promo.eyebrow && (
+                      <Text style={{ ...ccPromoLabel, color: promo.text_color, opacity: 0.45 }}>{promo.eyebrow}</Text>
+                    )}
+                    <Text style={{ ...ccPromoHeading, color: promo.text_color }}>{promo.title}</Text>
+                    <Text
+                      style={{ ...ccPromoCopy, color: promo.text_color, opacity: 0.65 }}
+                      dangerouslySetInnerHTML={{ __html: promo.body }}
                     />
-                  </Link>
-                </td>
-                <td width="50%" valign="top" style={{ padding: 0, backgroundColor: '#D4D4D4' }}>
-                  <Link href="https://codecrash.ai" style={{ textDecoration: 'none' }}>
-                    <Img
-                      src={`${baseUrl}/cc-box-mattes.png`}
-                      alt="Matthias Schrader"
-                      width="300"
-                      style={{ display: 'block', width: '100%', height: 'auto' }}
-                    />
-                  </Link>
-                </td>
-              </tr>
-              <tr>
-                <td colSpan={2} style={ccPromoTextCell}>
-                  <Text style={ccPromoLabel}>CODE CRASH</Text>
-                  <Text style={ccPromoHeading}>Now available in German and English</Text>
-                  <Text style={ccPromoCopy}>
-                    Most companies treat AI as an optimization layer. That's a mistake. The real opportunity is building
-                    entirely new categories of value — and the window to act is closing fast. In <em>CODE CRASH</em>, Matthias Schrader
-                    lays out a practical framework for leaders who want to move beyond pilots and into production.
-                  </Text>
-                  <Link href="https://codecrash.ai" style={ccPromoLink}>
-                    codecrash.ai →
-                  </Link>
-                </td>
-              </tr>
-            </table>
-          </Section>
+                    <Link href={promo.link_url} style={{ ...ccPromoLink, color: promo.text_color }}>
+                      {promo.cta_label}
+                    </Link>
+                  </td>
+                </tr>
+              </table>
+            </Section>
+          )}
 
           {/* Footer */}
           <Section style={footerSection}>

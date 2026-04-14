@@ -6,6 +6,7 @@ import { NewsletterEmail } from '@/lib/resend/templates/newsletter'
 import { render } from '@react-email/components'
 import { generateEmailContentWithVotes, ArticleThumbnail } from '@/lib/email/tiptap-to-html'
 import type { LanguageCode } from '@/lib/types'
+import { getActiveAdPromo } from '@/lib/ad-promos/get-active'
 
 // Allow up to 2 minutes for large subscriber lists
 export const maxDuration = 120
@@ -125,6 +126,9 @@ export async function POST(request: NextRequest) {
     const previewText = post.excerpt || ''
     const postDate = post.created_at
 
+    // Fetch active ad promo (admin-managed via /admin/ad-promos)
+    const activePromo = await getActiveAdPromo()
+
     // If testEmail, send only to that address (default German locale for test)
     if (testEmail) {
       const testLocale = 'de'
@@ -151,6 +155,7 @@ export async function POST(request: NextRequest) {
           emailCoverImageUrl,
           postDate,
           baseUrl: BASE_URL,
+          promo: activePromo,
           locale: testLocale,
         })
       )
@@ -287,6 +292,7 @@ export async function POST(request: NextRequest) {
           emailCoverImageUrl,
           postDate,
           baseUrl: BASE_URL,
+          promo: activePromo,
           locale: locale as LanguageCode,
         })
       )
