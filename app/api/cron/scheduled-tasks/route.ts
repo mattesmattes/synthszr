@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { runSynthesisPipelineWithProgress } from '@/lib/synthesis/pipeline'
 import { processWebcrawl } from '@/lib/webcrawl/processor'
 import { processNewsletters } from '@/lib/newsletter/processor'
+import { processAnalysis } from '@/lib/analysis/processor'
 import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPublishedPostsQueueItems } from '@/lib/news-queue/service'
 import { MAX_DIGEST_SECTIONS, MAX_CONTENT_PREVIEW_CHARS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresholds'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
@@ -574,101 +575,23 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
     return { success: true, digestId: existingDigest.id }
   }
 
-  // Step 1: Stream analysis and collect content
-  console.log('[DailyAnalysis] Calling analyze API...')
-  const analyzeController = new AbortController()
-  // 12 min timeout — gemini-2.5-flash with large repos can take >8 min
-  const ANALYZE_TIMEOUT_MS = 720000
-  let response: Response
-  try {
-    response = await fetch(`${baseUrl}/api/analyze`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-      },
-      body: JSON.stringify({ date: dateStr }),
-      signal: analyzeController.signal,
-    })
-  } catch (err) {
-    analyzeController.abort()
-    if (err instanceof Error && err.name === 'AbortError') {
-      console.error('[DailyAnalysis] Analyze API connection timeout')
-      return { success: false, error: 'Analyze API timeout' }
-    }
-    throw err
+  // Step 1: Run analysis in-process (no HTTP subrequest).
+  // Previous HTTP fetch hit Vercel's deployment→production redirect which strips
+  // the Authorization header, causing silent 401s and missing digests.
+  console.log('[DailyAnalysis] Running analysis in-process...')
+  const analysisResult = await processAnalysis(dateStr)
+
+  if (!analysisResult.success || !analysisResult.content) {
+    console.error('[DailyAnalysis] Analysis failed:', analysisResult.error)
+    return { success: false, error: analysisResult.error || 'Analysis failed' }
   }
 
-  if (!response.ok) {
-    analyzeController.abort()
-    const errorText = await response.text()
-    console.error('[DailyAnalysis] Analyze API failed:', errorText)
-    return { success: false, error: `Analyze API failed: ${response.status}` }
-  }
+  const analysisContent = analysisResult.content
+  const analyzedItemIds = analysisResult.itemIds ?? []
 
-  // Read the SSE stream and collect content
-  // Use Promise.race to enforce timeout — AbortController alone may not interrupt reader.read()
-  const reader = response.body?.getReader()
-  if (!reader) {
-    analyzeController.abort()
-    return { success: false, error: 'No response reader' }
-  }
-
-  const decoder = new TextDecoder()
-  let analysisContent = ''
-  let analyzedItemIds: string[] = []
-
-  const readAnalyzeStream = async () => {
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n\n')
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6))
-              if (data.type === 'sources' && data.itemIds) {
-                analyzedItemIds = data.itemIds
-              } else if (data.text) {
-                analysisContent += data.text
-              } else if (data.done) {
-                console.log('[DailyAnalysis] Analysis stream complete')
-              }
-            } catch {
-              // Ignore parse errors
-            }
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock()
-    }
-  }
-
-  const analyzeTimeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => {
-      analyzeController.abort()
-      reject(new Error('AnalyzeStreamTimeout'))
-    }, ANALYZE_TIMEOUT_MS)
-  )
-
-  try {
-    await Promise.race([readAnalyzeStream(), analyzeTimeoutPromise])
-  } catch (err) {
-    if (err instanceof Error && err.message === 'AnalyzeStreamTimeout') {
-      console.error(`[DailyAnalysis] Analyze API stream timeout after ${ANALYZE_TIMEOUT_MS / 60000} min`)
-      return { success: false, error: 'Analyze stream timeout' }
-    }
-    throw err
-  }
-
-  if (!analysisContent || analysisContent.length < MIN_ANALYSIS_LENGTH) {
-    console.error('[DailyAnalysis] Analysis content too short or empty')
-    return { success: false, error: 'Analysis content empty or too short' }
+  if (analysisContent.length < MIN_ANALYSIS_LENGTH) {
+    console.error('[DailyAnalysis] Analysis content too short')
+    return { success: false, error: 'Analysis content too short' }
   }
 
   console.log(`[DailyAnalysis] Collected ${analysisContent.length} chars, ${analyzedItemIds.length} source items`)
