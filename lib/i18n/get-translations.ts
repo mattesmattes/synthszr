@@ -95,6 +95,7 @@ export const defaultTranslations: Record<string, string> = {
   'companies.articles': 'Artikel',
   'companies.analyse': 'Analyse',
   'companies.premarket': 'Premarket',
+  'companies.detailed_analysis': 'Ausführliche Analyse hier →',
 
   // Common
   'common.loading': 'Laden...',
