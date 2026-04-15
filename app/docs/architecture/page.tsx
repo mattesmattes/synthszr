@@ -1124,34 +1124,11 @@ export default function ArchitecturePage() {
           </p>
         </div>
 
-        <Subsection title="Audit Log — 2026-02-10">
-          <div className="space-y-2">
-            <FixEntry severity="critical" date="2026-02-10" title="Missing auth on /api/cron/extract-patterns" description="POST + GET without auth. Service-role key access." fix="requireCronOrAdmin() added" file="app/api/cron/extract-patterns/route.ts" />
-            <FixEntry severity="critical" date="2026-02-10" title="Rate-limit fallback allowed all requests" description="Without Redis → success: true, even in production." fix="Fail-closed in production (later reverted)" file="lib/rate-limit.ts" />
-            <FixEntry severity="high" date="2026-02-10" title="Service-role key prefix in response" description="First 10 chars of key in debug-pipeline." fix="Replaced with boolean flags" file="app/api/admin/debug-pipeline/route.ts" />
-            <FixEntry severity="high" date="2026-02-10" title="API key logging in TTS" description="Key fragments in Vercel logs." fix="Logs reduced to presence check" file="lib/tts/elevenlabs-tts.ts" />
-            <FixEntry severity="high" date="2026-02-10" title="SSRF via cover-image" description="Unvalidated URL passed to fetch()." fix="HTTPS + host allowlist" file="app/api/newsletter/cover-image/route.ts" />
-            <FixEntry severity="medium" date="2026-02-10" title="No rate-limit on stock-quote" description="External API without protection." fix="Standard limiter (30/min)" file="app/api/stock-quote/route.ts" />
-          </div>
+        <Subsection title="Earlier audits">
+          <p className="text-xs text-muted-foreground">
+            <strong className="text-foreground">2026-02-10:</strong> 6 findings — 2 critical (missing auth on <Code>/api/cron/extract-patterns</Code>, rate-limit fail-open), 3 high (service-role key leak in debug-pipeline, API key fragments in TTS logs, SSRF via cover-image), 1 medium (missing rate-limit on stock-quote). All fixed.
+          </p>
         </Subsection>
-
-        <div className="mt-4 rounded-lg border border-border p-4 bg-card">
-          <h3 className="font-semibold mb-3 text-sm">Audit Summary 2026-02-10</h3>
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-red-500">2</div>
-              <div className="text-muted-foreground text-xs">Critical (fixed)</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-500">3</div>
-              <div className="text-muted-foreground text-xs">High (fixed)</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-500">1</div>
-              <div className="text-muted-foreground text-xs">Medium (fixed)</div>
-            </div>
-          </div>
-        </div>
       </Section>
 
       {/* ============================================ */}
