@@ -37,7 +37,7 @@ export function TipPromoBox({ promo, inline = false }: TipPromoBoxProps) {
           className="mt-2 inline-block text-sm font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity"
           style={{ color: promo.text_color }}
         >
-          {promo.cta_label} →
+          {promo.cta_label}
         </a>
       )}
     </div>

@@ -728,7 +728,7 @@ export async function generateEmailContentWithVotes(
     const gradient = `linear-gradient(${tipPromo.gradient_direction}, ${tipPromo.gradient_from}, ${tipPromo.gradient_to})`
     const bodyHtml = sanitizeHtmlForEmail(tipPromo.body)
     const ctaHtml = tipPromo.link_url && tipPromo.cta_label
-      ? `<div style="margin-top:8px;"><a href="${escapeAttr(tipPromo.link_url)}" style="color:${escapeAttr(tipPromo.text_color)};font-weight:600;text-decoration:underline;">${escapeHtml(tipPromo.cta_label)} →</a></div>`
+      ? `<div style="margin-top:8px;"><a href="${escapeAttr(tipPromo.link_url)}" style="color:${escapeAttr(tipPromo.text_color)};font-weight:600;text-decoration:underline;">${escapeHtml(tipPromo.cta_label)}</a></div>`
       : ''
     const box = `
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;">
