@@ -56,8 +56,24 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleLanguageSelect = (langCode: string) => {
+  const handleLanguageSelect = async (langCode: string) => {
     setIsOpen(false)
+
+    // If the user arrived from the newsletter "Sprache ändern" link,
+    // persist the choice to their subscriber profile before redirecting.
+    const sid = searchParams.get('sid')
+    if (sid) {
+      try {
+        await fetch('/api/newsletter/set-language', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sid, language: langCode }),
+        })
+      } catch (error) {
+        console.error('Failed to save subscriber language preference:', error)
+      }
+    }
+
     const newPath = addLocaleToPathname(pathname, langCode as LanguageCode)
     window.location.href = newPath
   }
