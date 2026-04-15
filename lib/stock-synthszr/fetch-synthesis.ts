@@ -8,7 +8,7 @@ const STOCK_SYNTHSZR_SCHEMA = {
     properties: {
       executive_summary: {
         type: 'string',
-        description: 'Ausführliche Executive Summary (300-500 Wörter) mit Geschäftsmodell, Marktposition, aktuellen Entwicklungen, Finanzkennzahlen und Ausblick.',
+        description: 'Comprehensive executive summary (300-500 words) covering business model, market position, recent developments, financial metrics and outlook.',
       },
       key_takeaways: {
         type: 'array',
@@ -90,8 +90,8 @@ export async function fetchStockSynthszr({
 
   const priceSnippet =
     typeof price === 'number' && Number.isFinite(price)
-      ? `Aktueller Kurs: ${price.toFixed(2)} ${currency}.`
-      : 'Aktueller Kurs unbekannt.'
+      ? `Current price: ${price.toFixed(2)} ${currency}.`
+      : 'Current price unknown.'
 
   const client = getOpenAiClient()
   let lastError: Error | null = null
@@ -106,31 +106,31 @@ export async function fetchStockSynthszr({
           {
             role: 'system',
             content:
-              'Du bist ein Equity-Analyst. Nutze das Websuche-Tool autonom und antworte ausschließlich auf Deutsch. ' +
-              'Liefere AUSSCHLIESSLICH JSON gemäß Schema – ohne zusätzliche Prosa. ' +
-              'Vermeide konsequent Analogien und Metaphern aus dem Bereich Militär und Krieg — keine Schlachten, Waffen, Mobilmachung, Offensiven, Artillerie oder ähnliche Bildsprache, auch nicht in kreativer Abwandlung. ' +
-              'Beschreibe Beobachtungen direkt und konkret mit wirtschaftlicher oder technischer Sprache.',
+              'You are an equity analyst. Use the web search tool autonomously and respond exclusively in English. ' +
+              'Return JSON ONLY per schema — no additional prose. ' +
+              'Consistently avoid military and war analogies and metaphors — no battles, weapons, mobilization, offensives, artillery or similar imagery, not even in creative variations. ' +
+              'Describe observations directly and concretely using economic or technical language.',
           },
           {
             role: 'user',
             content:
-              `Erzeuge eine umfassende Stock-Synthszr Analyse zu "${trimmedCompany}" in ${currency}:\n\n` +
-              '1. **Executive Summary** (300-500 Wörter): Ausführliche Zusammenfassung mit:\n' +
-              '   - Geschäftsmodell und Kernkompetenzen\n' +
-              '   - Aktuelle Marktposition und Wettbewerbsvorteile\n' +
-              '   - Wichtigste Entwicklungen der letzten Monate (Earnings, News, Guidance)\n' +
-              '   - Relevante Finanzkennzahlen (KGV, Umsatzwachstum, Margen)\n' +
-              '   - Kurz- und mittelfristiger Ausblick\n\n' +
-              '2. **5 Key Takeaways**: Die wichtigsten Punkte für Investoren\n\n' +
-              '3. **3 Action-Ideen**: Konkrete Handlungsoptionen (BUY/HOLD/SELL) mit:\n' +
-              '   - Detaillierter Begründung (These)\n' +
-              '   - Zeithorizont in Monaten\n' +
-              '   - Spezifische Risikofaktoren\n\n' +
-              '4. **2 Contrarian Insights**: Perspektiven die vom Marktkonsens abweichen\n\n' +
-              '5. **Gesamtempfehlung**: BUY/HOLD/SELL mit fundierter Begründung\n\n' +
+              `Generate a comprehensive Stock-Synthszr analysis for "${trimmedCompany}" in ${currency}:\n\n` +
+              '1. **Executive Summary** (300-500 words): Comprehensive summary covering:\n' +
+              '   - Business model and core competencies\n' +
+              '   - Current market position and competitive advantages\n' +
+              '   - Key developments of recent months (earnings, news, guidance)\n' +
+              '   - Relevant financial metrics (P/E, revenue growth, margins)\n' +
+              '   - Short- and medium-term outlook\n\n' +
+              '2. **5 Key Takeaways**: The most important points for investors\n\n' +
+              '3. **3 Action Ideas**: Concrete action options (BUY/HOLD/SELL) with:\n' +
+              '   - Detailed rationale (thesis)\n' +
+              '   - Time horizon in months\n' +
+              '   - Specific risk factors\n\n' +
+              '4. **2 Contrarian Insights**: Perspectives that deviate from market consensus\n\n' +
+              '5. **Overall recommendation**: BUY/HOLD/SELL with solid rationale\n\n' +
               `${priceSnippet}\n` +
-              `Nutze verlässliche Quellen der letzten ${recencyDays} Tage und füge 5–8 Links in 'sources' an. ` +
-              'Arbeite streng datenbasiert (Bewertungen, Guidance, Newsflow, Analystenmeinungen), keine Spekulationen. Antworte auf Deutsch.',
+              `Use reliable sources from the last ${recencyDays} days and include 5–8 links in 'sources'. ` +
+              'Work strictly data-driven (valuations, guidance, newsflow, analyst opinions), no speculation. Respond in English.',
           },
         ],
         text: {
