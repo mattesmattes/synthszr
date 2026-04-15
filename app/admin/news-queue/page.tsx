@@ -142,6 +142,15 @@ export default function NewsQueuePage() {
   const [manualTitle, setManualTitle] = useState('')
   const [manualText, setManualText] = useState('')
 
+  // Filter tags
+  interface FilterTag { id: string; label: string; color: string; sort_order: number }
+  const [filterTags, setFilterTags] = useState<FilterTag[]>([])
+  const [activeTagId, setActiveTagId] = useState<string | null>(null)
+  const [tagDeleteMode, setTagDeleteMode] = useState(false)
+  const [showAddTagDialog, setShowAddTagDialog] = useState(false)
+  const [newTagLabel, setNewTagLabel] = useState('')
+  const [tagSaving, setTagSaving] = useState(false)
+
   // Embedding status
   const [embeddingStatus, setEmbeddingStatus] = useState<{
     total: number
@@ -188,7 +197,55 @@ export default function NewsQueuePage() {
   useEffect(() => {
     fetchData()
     fetchEmbeddingStatus()
+    fetchFilterTags()
   }, [fetchData])
+
+  async function fetchFilterTags() {
+    try {
+      const res = await fetch('/api/admin/news-queue/filter-tags')
+      if (res.ok) {
+        const data = await res.json()
+        setFilterTags(data.tags || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch filter tags:', error)
+    }
+  }
+
+  async function handleAddTag() {
+    const label = newTagLabel.trim()
+    if (!label) return
+    setTagSaving(true)
+    try {
+      const res = await fetch('/api/admin/news-queue/filter-tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.tag) setFilterTags(prev => [...prev, data.tag])
+        setNewTagLabel('')
+        setShowAddTagDialog(false)
+      }
+    } catch (error) {
+      console.error('Failed to add tag:', error)
+    } finally {
+      setTagSaving(false)
+    }
+  }
+
+  async function handleDeleteTag(id: string) {
+    try {
+      const res = await fetch(`/api/admin/news-queue/filter-tags?id=${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        setFilterTags(prev => prev.filter(t => t.id !== id))
+        if (activeTagId === id) setActiveTagId(null)
+      }
+    } catch (error) {
+      console.error('Failed to delete tag:', error)
+    }
+  }
 
   // Reset page when filter changes
   useEffect(() => {
@@ -582,10 +639,16 @@ export default function NewsQueuePage() {
     }
   }
 
-  // Filter items by minimum content length
+  // Filter items by minimum content length and active tag (substring match on title/excerpt)
+  const activeTag = activeTagId ? filterTags.find(t => t.id === activeTagId) : null
+  const tagNeedle = activeTag?.label.toLowerCase().trim() ?? null
   const filteredItems = items.filter(item => {
-    if (!item.content) return true // show items without content (can't measure)
-    return item.content.length >= minContentLength
+    if (item.content && item.content.length < minContentLength) return false
+    if (tagNeedle) {
+      const haystack = `${item.title ?? ''} ${item.excerpt ?? ''}`.toLowerCase()
+      if (!haystack.includes(tagNeedle)) return false
+    }
+    return true
   })
 
   // Extract all total scores for gradient calculation
@@ -897,6 +960,70 @@ export default function NewsQueuePage() {
             </Card>
           </div>
         </CollapsibleContent>
+
+      {/* Filter Tags */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        {filterTags.map(tag => {
+          const isActive = activeTagId === tag.id
+          return (
+            <button
+              key={tag.id}
+              type="button"
+              onClick={() => {
+                if (tagDeleteMode) {
+                  handleDeleteTag(tag.id)
+                } else {
+                  setActiveTagId(isActive ? null : tag.id)
+                }
+              }}
+              className={`group inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
+                tagDeleteMode
+                  ? 'border-red-500 hover:bg-red-500/10 cursor-pointer ring-1 ring-red-500/40'
+                  : isActive
+                  ? 'ring-2 ring-offset-1 ring-zinc-900'
+                  : 'border-transparent hover:opacity-80'
+              }`}
+              style={{
+                backgroundColor: tagDeleteMode ? 'transparent' : tag.color,
+                color: tagDeleteMode ? '#dc2626' : '#0a0a0a',
+              }}
+              title={tagDeleteMode ? `Tag "${tag.label}" löschen` : `Filtern nach "${tag.label}"`}
+            >
+              {tagDeleteMode && <X className="h-3 w-3" />}
+              <span>{tag.label}</span>
+            </button>
+          )
+        })}
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-xs"
+          onClick={() => setShowAddTagDialog(true)}
+          title="Tag hinzufügen"
+        >
+          <Plus className="h-3 w-3" />
+        </Button>
+        {filterTags.length > 0 && (
+          <Button
+            size="sm"
+            variant={tagDeleteMode ? 'destructive' : 'outline'}
+            className="h-7 px-2 text-xs"
+            onClick={() => setTagDeleteMode(prev => !prev)}
+            title={tagDeleteMode ? 'Lösch-Modus beenden' : 'Lösch-Modus für Tags'}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        )}
+        {activeTag && !tagDeleteMode && (
+          <button
+            type="button"
+            onClick={() => setActiveTagId(null)}
+            className="text-[10px] text-muted-foreground hover:text-foreground underline"
+          >
+            Filter zurücksetzen
+          </button>
+        )}
+      </div>
 
       {/* Min Content Length Filter */}
       {!loading && items.length > 0 && (
@@ -1432,6 +1559,35 @@ export default function NewsQueuePage() {
                 <Plus className="h-3 w-3 mr-2" />
               )}
               {selectedCandidates.size} Items importieren
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showAddTagDialog} onOpenChange={(open) => { setShowAddTagDialog(open); if (!open) setNewTagLabel('') }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Filter-Tag hinzufügen</DialogTitle>
+            <DialogDescription>
+              Suchbegriff eingeben — filtert Artikel, deren Titel oder Excerpt diesen Begriff enthält.
+            </DialogDescription>
+          </DialogHeader>
+          <input
+            type="text"
+            value={newTagLabel}
+            onChange={(e) => setNewTagLabel(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && newTagLabel.trim()) handleAddTag() }}
+            placeholder="z.B. KI, OpenAI, Anthropic ..."
+            className="w-full px-3 py-2 text-sm border rounded-md bg-background"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddTagDialog(false)}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleAddTag} disabled={tagSaving || !newTagLabel.trim()}>
+              {tagSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
+              Hinzufügen
             </Button>
           </DialogFooter>
         </DialogContent>
