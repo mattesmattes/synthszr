@@ -213,7 +213,7 @@ export function CompanyDetailClient({ company, articles, locale, translations }:
             onClick={handleAnalysisClick}
             className="inline-flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-black/80 cursor-pointer"
           >
-            {t['companies.detailed_analysis'] || 'Ausführliche Analyse hier →'}
+            Detailed analysis here →
           </button>
         </div>
       ) : null}

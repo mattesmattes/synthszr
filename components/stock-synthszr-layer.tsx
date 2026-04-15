@@ -1,37 +1,10 @@
 'use client'
 
-import { useContext, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X, RefreshCcw, TrendingUp, TrendingDown, Minus, Calendar } from 'lucide-react'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
-import { I18nContext } from '@/lib/i18n/context'
-
-const CREATED_ON_LABELS: Record<string, string> = {
-  de: 'Erstellt am',
-  en: 'Created on',
-  fr: 'Créé le',
-  es: 'Creado el',
-  it: 'Creato il',
-  pt: 'Criado em',
-  nl: 'Aangemaakt op',
-  pl: 'Utworzono',
-  cs: 'Vytvořeno',
-  nds: 'Maakt op',
-}
-
-const DATE_LOCALES: Record<string, string> = {
-  de: 'de-DE',
-  en: 'en-US',
-  fr: 'fr-FR',
-  es: 'es-ES',
-  it: 'it-IT',
-  pt: 'pt-PT',
-  nl: 'nl-NL',
-  pl: 'pl-PL',
-  cs: 'cs-CZ',
-  nds: 'de-DE',
-}
 
 /**
  * Parse inline citations like "([domain] (url))" or "(domain (url))" and render as links
@@ -109,10 +82,8 @@ export function StockSynthszrLayer({
   onClose,
 }: StockSynthszrLayerProps) {
   const [state, setState] = useState<FetchState>({ status: 'loading' })
-  const i18n = useContext(I18nContext)
-  const locale = i18n?.locale || 'de'
-  const createdOnLabel = CREATED_ON_LABELS[locale] || CREATED_ON_LABELS.de
-  const dateLocale = DATE_LOCALES[locale] || DATE_LOCALES.de
+  const createdOnLabel = 'Created on'
+  const dateLocale = 'en-US'
 
   useEffect(() => {
     if (!company) return
@@ -161,7 +132,7 @@ export function StockSynthszrLayer({
           variant="ghost"
           size="icon"
           onClick={onClose}
-          aria-label="Modal schließen"
+          aria-label="Close modal"
           className="absolute right-2 top-2 z-10"
         >
           <X className="h-5 w-5" />
@@ -222,14 +193,14 @@ export function StockSynthszrLayer({
           {state.status === 'loading' && (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               <RefreshCcw className="h-5 w-5 animate-spin mr-2" />
-              AI erstellt Stock-Synthszr …
+              AI generating Stock-Synthszr …
             </div>
           )}
           {state.status === 'error' && (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-destructive">
               <p>{state.message}</p>
               <Button variant="ghost" size="sm" onClick={onClose}>
-                Schließen
+                Close
               </Button>
             </div>
           )}
@@ -274,8 +245,8 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
       {/* Action Ideas */}
       <section>
         <header className="mb-3">
-          <h3 className="text-base font-semibold">Action-Ideen</h3>
-          <p className="text-xs text-muted-foreground">Bewertung + Zeitfenster + Risiken</p>
+          <h3 className="text-base font-semibold">Action Ideas</h3>
+          <p className="text-xs text-muted-foreground">Rating + Timeframe + Risks</p>
         </header>
         <div className="grid gap-4 md:grid-cols-3">
           {data.action_ideas.map((idea, index) => (
@@ -284,7 +255,7 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
               className="rounded-lg border border-border bg-background p-4 shadow-sm"
             >
               <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
-                <span>Idee {index + 1}</span>
+                <span>Idea {index + 1}</span>
                 <span
                   className={cn(
                     'rounded-full px-2 py-0.5 text-[11px] font-bold',
@@ -299,7 +270,7 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
               <p className="text-sm leading-relaxed">{parseInlineCitations(idea.thesis)}</p>
               {typeof idea.time_horizon_months === 'number' && (
                 <p className="mt-3 text-xs text-muted-foreground">
-                  Zeithorizont: {idea.time_horizon_months} {idea.time_horizon_months === 1 ? 'Monat' : 'Monate'}
+                  Time horizon: {idea.time_horizon_months} {idea.time_horizon_months === 1 ? 'month' : 'months'}
                 </p>
               )}
               {Array.isArray(idea.risk_flags) && idea.risk_flags.length > 0 && (
@@ -338,7 +309,7 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
             >
               {data.final_recommendation.rating}
             </span>
-            <span>Empfehlung</span>
+            <span>Recommendation</span>
           </div>
           <p className="text-sm leading-relaxed">{parseInlineCitations(data.final_recommendation.rationale)}</p>
         </div>
@@ -348,7 +319,7 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
       <section>
         <header className="mb-3">
           <h3 className="text-base font-semibold">Contrarian Insights</h3>
-          <p className="text-xs text-muted-foreground">2 Perspektiven, die vom Konsens abweichen</p>
+          <p className="text-xs text-muted-foreground">2 perspectives that deviate from consensus</p>
         </header>
         <ul className="space-y-2 rounded-lg border border-[#CCFF00]/30 bg-[#CCFF00]/10 p-4 text-sm leading-relaxed">
           {data.contrarian_insights.map((insight, index) => (
@@ -361,8 +332,8 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
       {data.sources && data.sources.length > 0 && (
         <section>
           <header className="mb-3">
-            <h3 className="text-base font-semibold">Quellen</h3>
-            <p className="text-xs text-muted-foreground">{data.sources.length} verwendete Quellen</p>
+            <h3 className="text-base font-semibold">Sources</h3>
+            <p className="text-xs text-muted-foreground">{data.sources.length} sources used</p>
           </header>
           <ul className="space-y-1 text-xs text-muted-foreground">
             {data.sources.map((source, index) => (
@@ -384,18 +355,18 @@ function SynthesisContent({ data }: { data: StockSynthszrResult }) {
       {/* Legal Disclaimer */}
       <section className="mt-6 pt-4 border-t border-border">
         <p className="text-[10px] leading-relaxed text-muted-foreground">
-          <strong>Rechtlicher Hinweis:</strong> Diese Analyse wurde vollständig durch künstliche Intelligenz (KI) erstellt
-          und stellt <strong>keine Anlageberatung</strong> dar. Die dargestellten Informationen, Bewertungen und
-          Empfehlungen dienen ausschließlich zu Informationszwecken und ersetzen keine professionelle Finanzberatung.
-          Der Betreiber übernimmt <strong>keine Haftung</strong> für Entscheidungen, die auf Grundlage dieser
-          KI-generierten Inhalte getroffen werden. Anlageentscheidungen sollten stets unter Berücksichtigung der
-          persönlichen finanziellen Situation und nach Rücksprache mit einem qualifizierten Finanzberater getroffen werden.
+          <strong>Legal notice:</strong> This analysis has been generated entirely by artificial intelligence (AI)
+          and does <strong>not constitute investment advice</strong>. The information, assessments and recommendations
+          shown are provided for informational purposes only and do not replace professional financial advice.
+          The operator assumes <strong>no liability</strong> for decisions made on the basis of this AI-generated
+          content. Investment decisions should always be made considering your personal financial situation and
+          after consultation with a qualified financial advisor.
           {' '}
           <a
             href="/impressum"
             className="underline hover:text-foreground"
           >
-            Impressum & Betreiberangaben
+            Imprint & operator information
           </a>
         </p>
       </section>
