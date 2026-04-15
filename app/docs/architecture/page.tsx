@@ -7,24 +7,30 @@ import {
 
 export default function ArchitecturePage() {
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="dark bg-background text-foreground min-h-screen -m-8 md:-m-12">
+    <div className="p-8 md:p-12 max-w-5xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Layers className="h-6 w-6" />
-          Architecture & Systems
+        <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-[color:var(--neon-cyan)] mb-2">
+          /// synthszr.architecture
+        </div>
+        <h1 className="text-3xl font-bold flex items-center gap-3 font-mono">
+          <Layers className="h-7 w-7 text-[color:var(--neon-yellow)]" />
+          <span>
+            Architecture <span className="text-[color:var(--neon-orange)]">&amp;</span> Systems
+          </span>
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-2 text-sm">
           Technical documentation of all systems, pipelines, and the security architecture.
         </p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Last update: 2026-04-15
+        <p className="text-[11px] font-mono mt-1 text-[color:var(--neon-green)]">
+          last_update=2026-04-15
         </p>
       </div>
 
       {/* Table of Contents */}
-      <nav className="mb-8 rounded-lg border border-border p-4 bg-card">
-        <h2 className="text-sm font-semibold mb-2">Contents</h2>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+      <nav className="mb-10 rounded-lg border p-5 bg-card relative" style={{ borderColor: 'var(--neon-cyan)', boxShadow: '0 0 0 1px color-mix(in oklab, var(--neon-cyan) 20%, transparent), inset 0 0 30px color-mix(in oklab, var(--neon-cyan) 5%, transparent)' }}>
+        <h2 className="text-xs font-mono uppercase tracking-[0.25em] mb-3 text-[color:var(--neon-cyan)]">// contents</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-sm font-mono">
           <TocLink href="#newsletter-pipeline">Newsletter Generation Pipeline</TocLink>
           <TocLink href="#ingestion">1. Daily Repo Ingestion</TocLink>
           <TocLink href="#synthesis">2. Synthesis & Scoring</TocLink>
@@ -1160,6 +1166,7 @@ export default function ArchitecturePage() {
         </Subsection>
       </Section>
     </div>
+    </div>
   )
 }
 
@@ -1169,20 +1176,36 @@ export default function ArchitecturePage() {
 
 function TocLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <a href={href} className="text-muted-foreground hover:text-foreground transition-colors">
+    <a
+      href={href}
+      className="text-muted-foreground hover:text-[color:var(--neon-yellow)] transition-colors before:content-['›_'] before:text-[color:var(--neon-orange)]/60"
+    >
       {children}
     </a>
   )
 }
 
+// Neon palette — each section gets a deterministic accent derived from its id,
+// so order-independent (no module-level counter that would drift across RSC renders).
+const NEON_ACCENTS = ['#FFFF00', '#00FFFF', '#00FF00', '#FF4D00'] as const
+function accentFor(id: string | undefined, title: string): string {
+  const key = id || title
+  let hash = 0
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0
+  return NEON_ACCENTS[hash % NEON_ACCENTS.length]
+}
+
 function Section({ id, icon, title, children }: { id?: string; icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  const accent = accentFor(id, title)
   return (
-    <div id={id} className="mb-10 scroll-mt-8">
-      <h2 className="text-lg font-semibold flex items-center gap-2 mb-4 border-b border-border pb-2">
-        {icon}
-        {title}
+    <div id={id} className="mb-12 scroll-mt-8">
+      <h2 className="text-xl font-bold flex items-center gap-3 mb-5 pb-3 font-mono border-b" style={{ borderColor: `${accent}33` }}>
+        <span className="inline-flex items-center justify-center h-8 w-8 rounded" style={{ color: accent, background: `${accent}12`, boxShadow: `0 0 0 1px ${accent}30` }}>
+          {icon}
+        </span>
+        <span style={{ color: accent }}>{title}</span>
       </h2>
-      <div className="space-y-4">
+      <div className="space-y-5">
         {children}
       </div>
     </div>
@@ -1192,7 +1215,9 @@ function Section({ id, icon, title, children }: { id?: string; icon: React.React
 function Subsection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="text-sm font-medium text-muted-foreground mb-1">{title}</h3>
+      <h3 className="text-xs font-mono uppercase tracking-[0.15em] mb-2 text-[color:var(--neon-green)]">
+        {title}
+      </h3>
       {children}
     </div>
   )
@@ -1200,7 +1225,14 @@ function Subsection({ title, children }: { title: string; children: React.ReactN
 
 function Code({ children }: { children: React.ReactNode }) {
   return (
-    <code className="rounded bg-muted px-1 py-0.5 text-xs font-mono">
+    <code
+      className="rounded px-1.5 py-0.5 text-xs font-mono"
+      style={{
+        background: 'color-mix(in oklab, var(--neon-yellow) 10%, transparent)',
+        color: 'var(--neon-yellow)',
+        border: '1px solid color-mix(in oklab, var(--neon-yellow) 25%, transparent)',
+      }}
+    >
       {children}
     </code>
   )
@@ -1208,18 +1240,18 @@ function Code({ children }: { children: React.ReactNode }) {
 
 function FileTable({ files }: { files: [string, string][] }) {
   return (
-    <div className="mt-2 rounded border border-border overflow-hidden">
+    <div className="mt-2 rounded border overflow-hidden" style={{ borderColor: 'color-mix(in oklab, var(--neon-orange) 30%, transparent)' }}>
       <table className="text-xs w-full">
         <thead>
-          <tr className="bg-muted/50">
-            <th className="text-left py-1.5 px-2 font-medium">File</th>
-            <th className="text-left py-1.5 px-2 font-medium">Description</th>
+          <tr style={{ background: 'color-mix(in oklab, var(--neon-orange) 8%, transparent)' }}>
+            <th className="text-left py-1.5 px-2 font-mono uppercase tracking-wider text-[10px] text-[color:var(--neon-orange)]">File</th>
+            <th className="text-left py-1.5 px-2 font-mono uppercase tracking-wider text-[10px] text-[color:var(--neon-orange)]">Description</th>
           </tr>
         </thead>
         <tbody>
           {files.map(([file, desc]) => (
-            <tr key={file} className="border-t border-border/50">
-              <td className="py-1 px-2 font-mono text-muted-foreground">{file}</td>
+            <tr key={file} className="border-t border-border/30">
+              <td className="py-1 px-2 font-mono text-foreground/90">{file}</td>
               <td className="py-1 px-2 text-muted-foreground">{desc}</td>
             </tr>
           ))}
