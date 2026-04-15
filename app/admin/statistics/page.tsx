@@ -142,6 +142,9 @@ export default function StatisticsPage() {
   const [domains, setDomains] = useState<{ domain: string; count: number; favicon: string; color: string }[]>([])
   const [domainsTotal, setDomainsTotal] = useState(0)
   const [domainsLoading, setDomainsLoading] = useState(true)
+  const [languages, setLanguages] = useState<{ code: string; name: string; native_name: string | null; count: number }[]>([])
+  const [languagesTotal, setLanguagesTotal] = useState(0)
+  const [languagesLoading, setLanguagesLoading] = useState(true)
 
   useEffect(() => {
     setLoading(true)
@@ -177,6 +180,18 @@ export default function StatisticsPage() {
         setDomainsLoading(false)
       })
       .catch(() => setDomainsLoading(false))
+  }, [])
+
+  useEffect(() => {
+    setLanguagesLoading(true)
+    fetch('/api/admin/stats/subscriber-languages')
+      .then(res => res.json())
+      .then(data => {
+        setLanguages(data.languages || [])
+        setLanguagesTotal(data.total || 0)
+        setLanguagesLoading(false)
+      })
+      .catch(() => setLanguagesLoading(false))
   }, [])
 
   useEffect(() => {
@@ -443,6 +458,58 @@ export default function StatisticsPage() {
               <CardTitle className="text-sm font-medium">Newsletter-Abonnenten</CardTitle>
             </CardHeader>
             <CardContent>
+              {/* Language breakdown */}
+              {!languagesLoading && languagesTotal > 0 && (() => {
+                const palette = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316']
+                const withColor = languages.map((l, i) => ({ ...l, color: palette[i % palette.length] }))
+                const flagFor = (code: string) => {
+                  const map: Record<string, string> = {
+                    de: '🇩🇪', en: '🇬🇧', fr: '🇫🇷', es: '🇪🇸', it: '🇮🇹',
+                    pt: '🇵🇹', nl: '🇳🇱', pl: '🇵🇱', cs: '🇨🇿', nds: '🏴',
+                  }
+                  return map[code] ?? '🌐'
+                }
+                return (
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-muted-foreground">Sprachvarianten</span>
+                      <span className="text-xs font-mono text-muted-foreground">
+                        {languagesTotal.toLocaleString('de-DE')} aktiv
+                      </span>
+                    </div>
+                    <div className="flex w-full h-6 rounded-md overflow-hidden border">
+                      {withColor.filter(l => l.count > 0).map(l => (
+                        <div
+                          key={l.code}
+                          style={{
+                            width: `${(l.count / languagesTotal) * 100}%`,
+                            backgroundColor: l.color,
+                          }}
+                          title={`${l.native_name ?? l.name}: ${l.count.toLocaleString('de-DE')}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+                      {withColor.map(l => (
+                        <div key={l.code} className="flex items-center gap-1.5 text-xs">
+                          <span
+                            className="inline-block w-2.5 h-2.5 rounded-sm"
+                            style={{ backgroundColor: l.color }}
+                          />
+                          <span className="text-muted-foreground">{flagFor(l.code)}</span>
+                          <span className="font-medium">{l.native_name ?? l.name}</span>
+                          <span className="font-mono text-muted-foreground">
+                            {l.count.toLocaleString('de-DE')}
+                            {' '}
+                            ({languagesTotal > 0 ? ((l.count / languagesTotal) * 100).toFixed(1) : '0'}%)
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+
               {subscriberData.length === 0 ? (
                 <div className="flex items-center justify-center h-48 text-sm text-muted-foreground">
                   Keine Daten vorhanden
