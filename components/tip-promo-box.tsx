@@ -14,8 +14,10 @@ interface TipPromoBoxProps {
  */
 export function TipPromoBox({ promo, inline = false }: TipPromoBoxProps) {
   const gradient = `linear-gradient(${promo.gradient_direction}, ${promo.gradient_from}, ${promo.gradient_to})`
+  const hasCta = promo.link_url && promo.cta_label
+  const isExternal = promo.link_url?.startsWith('http')
 
-  const Content = (
+  return (
     <div
       className={`rounded-xl px-4 py-3 ${inline ? 'my-4' : 'my-6'} text-center`}
       style={{ background: gradient, color: promo.text_color }}
@@ -27,26 +29,17 @@ export function TipPromoBox({ promo, inline = false }: TipPromoBoxProps) {
         className="leading-snug"
         dangerouslySetInnerHTML={{ __html: sanitizeAdminHtml(promo.body) }}
       />
-      {promo.link_url && promo.cta_label && (
-        <div
-          className="mt-2 inline-block text-sm font-semibold underline underline-offset-2"
+      {hasCta && (
+        <a
+          href={promo.link_url}
+          target={isExternal ? '_blank' : undefined}
+          rel={isExternal ? 'noopener noreferrer' : undefined}
+          className="mt-2 inline-block text-sm font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity"
           style={{ color: promo.text_color }}
         >
           {promo.cta_label} →
-        </div>
+        </a>
       )}
     </div>
-  )
-
-  if (!promo.link_url) return Content
-  return (
-    <a
-      href={promo.link_url}
-      className="block no-underline hover:opacity-95 transition-opacity"
-      target={promo.link_url.startsWith('http') ? '_blank' : undefined}
-      rel={promo.link_url.startsWith('http') ? 'noopener noreferrer' : undefined}
-    >
-      {Content}
-    </a>
   )
 }

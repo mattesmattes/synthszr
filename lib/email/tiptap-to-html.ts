@@ -727,22 +727,18 @@ export async function generateEmailContentWithVotes(
   if (tipPromo) {
     const gradient = `linear-gradient(${tipPromo.gradient_direction}, ${tipPromo.gradient_from}, ${tipPromo.gradient_to})`
     const bodyHtml = sanitizeHtmlForEmail(tipPromo.body)
-    const linkOpen = tipPromo.link_url
-      ? `<a href="${escapeAttr(tipPromo.link_url)}" style="text-decoration:none;color:inherit;display:block;">`
-      : ''
-    const linkClose = tipPromo.link_url ? '</a>' : ''
     const ctaHtml = tipPromo.link_url && tipPromo.cta_label
-      ? `<div style="margin-top:8px;font-weight:600;text-decoration:underline;">${escapeHtml(tipPromo.cta_label)} →</div>`
+      ? `<div style="margin-top:8px;"><a href="${escapeAttr(tipPromo.link_url)}" style="color:${escapeAttr(tipPromo.text_color)};font-weight:600;text-decoration:underline;">${escapeHtml(tipPromo.cta_label)} →</a></div>`
       : ''
     const box = `
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;">
-  <tr><td>${linkOpen}
+  <tr><td>
     <div style="background:${gradient};color:${tipPromo.text_color};border-radius:12px;padding:14px 18px;text-align:center;font-family:inherit;">
       <div style="font-weight:700;letter-spacing:0.15em;text-transform:uppercase;font-size:12px;margin-bottom:6px;">${escapeHtml(tipPromo.headline)}</div>
       <div style="line-height:1.45;">${bodyHtml}</div>
       ${ctaHtml}
     </div>
-  ${linkClose}</td></tr>
+  </td></tr>
 </table>`.trim()
     // Match <p …> whose visible text starts with "Synthszr Take" (allowing any
     // prior inline tags like <strong>, <span>, whitespace, nbsp).
