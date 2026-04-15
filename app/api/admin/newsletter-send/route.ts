@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
           content: emailContent,
           postUrl: testPostUrl,
           unsubscribeUrl: `${BASE_URL}/newsletter/unsubscribe?id=test`,
-          preferencesUrl: `${BASE_URL}/newsletter/preferences?token=test`,
+          preferencesUrl: `${BASE_URL}/?openLangSwitch=1`,
           footerText,
           coverImageUrl,
           emailCoverImageUrl,
@@ -304,7 +304,7 @@ export async function POST(request: NextRequest) {
         // Build batch email requests
         const batchEmails = batch.map(subscriber => {
           const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
-          const preferencesUrl = `${BASE_URL}/newsletter/preferences?token=${subscriber.id}`
+          const preferencesUrl = `${BASE_URL}/?openLangSwitch=1`
 
           // Replace placeholders with subscriber-specific URLs
           const html = baseHtml

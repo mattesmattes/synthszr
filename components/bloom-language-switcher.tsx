@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import type { LanguageCode, Language } from '@/lib/types'
@@ -13,10 +13,20 @@ interface BloomLanguageSwitcherProps {
 
 export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherProps) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [activeLanguages, setActiveLanguages] = useState<Language[]>([])
   const [loading, setLoading] = useState(true)
   const [isOpen, setIsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Auto-open + scroll into view when arriving from newsletter "Sprache ändern" link
+  useEffect(() => {
+    if (loading || activeLanguages.length <= 1) return
+    if (searchParams.get('openLangSwitch') !== '1') return
+    setIsOpen(true)
+    containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [searchParams, loading, activeLanguages.length])
 
   useEffect(() => {
     async function fetchLanguages() {
@@ -70,7 +80,7 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
   }
 
   return (
-    <div className="flex justify-center items-baseline gap-4 mb-6">
+    <div ref={containerRef} className="flex justify-center items-baseline gap-4 mb-6">
       {/* Switch Language dropdown */}
       <div className="relative" ref={menuRef}>
         <button

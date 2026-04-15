@@ -86,8 +86,9 @@ interface StatsResponse {
   totals: Totals
   previous_totals: Totals
   subscribers: {
-    period_data: SubscriberEntry[]
+    period_data: (SubscriberEntry & { byLanguage?: Record<string, number> })[]
     current_active: number
+    active_languages?: { code: string; name: string; native_name: string | null }[]
   }
 }
 
@@ -213,10 +214,18 @@ export default function StatisticsPage() {
     label: formatDateLabel(e.date, granularity),
   }))
 
-  const subscriberData = (stats?.subscribers.period_data || []).map(s => ({
-    ...s,
-    label: formatDateLabel(s.date, granularity),
-  }))
+  const subscriberData = (stats?.subscribers.period_data || []).map(s => {
+    const byLang = s.byLanguage ?? {}
+    const flat: Record<string, number> = {}
+    for (const [code, count] of Object.entries(byLang)) flat[`new_${code}`] = count
+    return {
+      ...s,
+      ...flat,
+      label: formatDateLabel(s.date, granularity),
+    }
+  })
+  const activeSubLanguages = stats?.subscribers.active_languages ?? []
+  const langPalette = ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#EF4444']
 
   // Map bucket date → web podcast plays for merging into Podigee chart
   const podcastPlaysMap = new Map<string, number>()
@@ -490,7 +499,7 @@ export default function StatisticsPage() {
                       ))}
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-                      {withColor.map(l => (
+                      {withColor.filter(l => l.count > 0).map(l => (
                         <div key={l.code} className="flex items-center gap-1.5 text-xs">
                           <span
                             className="inline-block w-2.5 h-2.5 rounded-sm"
@@ -522,7 +531,20 @@ export default function StatisticsPage() {
                     <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="new" name="Zugänge" fill="#10B981" opacity={0.8} />
+                    {activeSubLanguages.length > 0 ? (
+                      activeSubLanguages.map((lang, i) => (
+                        <Bar
+                          key={lang.code}
+                          dataKey={`new_${lang.code}`}
+                          name={`Zugänge ${(lang.native_name ?? lang.name)}`}
+                          stackId="new"
+                          fill={langPalette[i % langPalette.length]}
+                          opacity={0.85}
+                        />
+                      ))
+                    ) : (
+                      <Bar dataKey="new" name="Zugänge" fill="#10B981" opacity={0.8} />
+                    )}
                     <Bar dataKey="churned" name="Abgänge" fill="#EF4444" opacity={0.8} />
                     <Line
                       type="monotone"

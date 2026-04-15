@@ -204,10 +204,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Subscriber data — same period window and granularity as events
-    const [subNewResult, subChurnedResult, activeCountResult] = await Promise.all([
+    const [subNewResult, subChurnedResult, activeCountResult, activeLanguagesResult] = await Promise.all([
       supabase
         .from('subscribers')
-        .select('confirmed_at')
+        .select('confirmed_at, preferences')
         .not('confirmed_at', 'is', null)
         .gte('confirmed_at', currentStart),
       supabase
@@ -219,12 +219,29 @@ export async function GET(request: NextRequest) {
         .from('subscribers')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'active'),
+      supabase
+        .from('languages')
+        .select('code, native_name, name, is_default')
+        .eq('is_active', true),
     ])
 
+    const activeLanguages = activeLanguagesResult.data ?? []
+    const defaultLang = activeLanguages.find(l => l.is_default)?.code ?? 'de'
+    const activeCodes = new Set(activeLanguages.map(l => l.code))
+
     const subNewMap = new Map<string, number>()
+    // bucket -> langCode -> count
+    const subNewByLangMap = new Map<string, Map<string, number>>()
     for (const s of subNewResult.data || []) {
       const key = truncateDateKey(s.confirmed_at, granularity)
       subNewMap.set(key, (subNewMap.get(key) || 0) + 1)
+
+      const prefs = s.preferences as { language?: string } | null
+      const rawLang = prefs?.language || defaultLang
+      const lang = activeCodes.has(rawLang) ? rawLang : defaultLang
+      const langCounts = subNewByLangMap.get(key) ?? new Map<string, number>()
+      langCounts.set(lang, (langCounts.get(lang) ?? 0) + 1)
+      subNewByLangMap.set(key, langCounts)
     }
     const subChurnedMap = new Map<string, number>()
     for (const s of subChurnedResult.data || []) {
@@ -236,7 +253,10 @@ export async function GET(request: NextRequest) {
     const subRaw = buckets.map(date => {
       const newCount = subNewMap.get(date) || 0
       const churned = subChurnedMap.get(date) || 0
-      return { date, new: newCount, churned, net: newCount - churned }
+      const langCounts = subNewByLangMap.get(date) ?? new Map<string, number>()
+      const byLanguage: Record<string, number> = {}
+      for (const code of activeCodes) byLanguage[code] = langCounts.get(code) ?? 0
+      return { date, new: newCount, churned, net: newCount - churned, byLanguage }
     })
 
     // Compute cumulative total working backwards from current_active
@@ -257,6 +277,7 @@ export async function GET(request: NextRequest) {
       subscribers: {
         period_data,
         current_active: currentActive,
+        active_languages: activeLanguages.map(l => ({ code: l.code, name: l.name, native_name: l.native_name })),
       },
     })
   } catch (error) {
