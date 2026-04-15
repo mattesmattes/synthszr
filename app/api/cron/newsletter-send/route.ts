@@ -7,6 +7,7 @@ import { generateEmailContentWithVotes, ArticleThumbnail } from '@/lib/email/tip
 import type { LanguageCode } from '@/lib/types'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
 import { getActiveAdPromo } from '@/lib/ad-promos/get-active'
+import { getActiveTipPromo } from '@/lib/tip-promos/get-active'
 
 // Allow up to 2 minutes for large subscriber lists
 export const maxDuration = 120
@@ -179,6 +180,9 @@ export async function GET(request: NextRequest) {
     const subjectByLocale = new Map<string, string>()
     const previewTextByLocale = new Map<string, string>()
 
+    // Fetch active tip-promo once; same box for every locale of this send
+    const activeTipPromo = await getActiveTipPromo()
+
     for (const locale of subscribersByLocale.keys()) {
       let contentToUse = post.content
       let excerptToUse = post.excerpt
@@ -211,7 +215,8 @@ export async function GET(request: NextRequest) {
         BASE_URL,
         articleThumbnails,
         locale,
-        locale !== 'de' ? post.content : undefined // Pass original content for non-German locales
+        locale !== 'de' ? post.content : undefined, // Pass original content for non-German locales
+        activeTipPromo,
       )
       contentByLocale.set(locale, emailContent)
 

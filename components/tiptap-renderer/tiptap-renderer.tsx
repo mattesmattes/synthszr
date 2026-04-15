@@ -20,6 +20,9 @@ import { processSynthszrRatingLinks, injectCompanyLinks } from "@/lib/tiptap/dom
 import { processNewsHeadings } from "@/lib/tiptap/dom-processors/news-headings"
 import { hideExplicitCompanyTags } from "@/lib/tiptap/dom-processors/company-tags"
 import { sanitizeAllLinks } from "@/lib/tiptap/dom-processors/link-sanitizer"
+import { insertTipPromoSlot } from "@/lib/tiptap/dom-processors/tip-promo-slot"
+import { TipPromoBox } from "../tip-promo-box"
+import type { TipPromo } from "@/lib/tip-promos/types"
 
 // Sub-components
 import { SynthszrRatingLink } from "./synthszr-rating-link"
@@ -37,6 +40,8 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
   const [premarketRatingPortals, setPremarketRatingPortals] = useState<PremarketPortal[]>([])
   const [articleThumbnails, setArticleThumbnails] = useState<ArticleThumbnail[]>([])
   const [thumbnailPortals, setThumbnailPortals] = useState<ThumbnailPortal[]>([])
+  const [tipPromo, setTipPromo] = useState<TipPromo | null>(null)
+  const [tipPromoSlot, setTipPromoSlot] = useState<HTMLElement | null>(null)
 
   // Auto-open dialog state from URL params (for newsletter links)
   const [autoOpenStock, setAutoOpenStock] = useState<string | null>(null)
@@ -54,6 +59,15 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
   useEffect(() => {
     setIsMounted(true)
     setDevicePixelRatio(window.devicePixelRatio || 1)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/tip-promos/active')
+      .then(r => r.ok ? r.json() : { promo: null })
+      .then(data => { if (!cancelled && data?.promo) setTipPromo(data.promo) })
+      .catch(() => { /* silent — tip-promo is non-essential */ })
+    return () => { cancelled = true }
   }, [])
 
   // Fetch article thumbnails when postId is provided
@@ -214,6 +228,10 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       // 6. Inject company links AFTER tag hiding to avoid matching {Company} patterns
       injectCompanyLinks(container, result.companyLinkData)
 
+      // 7. Insert placeholder slot before the first Synthszr Take for the tip-promo box
+      const slot = insertTipPromoSlot(container)
+      setTipPromoSlot(slot)
+
       // 6. Scroll to anchor if URL has hash
       const hash = window.location.hash
       if (hash) {
@@ -265,6 +283,14 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
           portal.element,
           `premarket-rating-${index}`
         )
+      )}
+
+      {/* Tip-of-the-day promo box, mounted via portal into the slot
+          inserted before the first Synthszr Take. */}
+      {tipPromo && tipPromoSlot && createPortal(
+        <TipPromoBox promo={tipPromo as TipPromo} inline />,
+        tipPromoSlot,
+        `tip-promo-${tipPromo.id}`
       )}
 
       {/* Article thumbnails (circular with vote-colored backgrounds) */}

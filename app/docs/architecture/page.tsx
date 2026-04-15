@@ -25,7 +25,6 @@ export default function ArchitecturePage() {
       <nav className="mb-8 rounded-lg border border-border p-4 bg-card">
         <h2 className="text-sm font-semibold mb-2">Contents</h2>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-          <TocLink href="#recent-changes">Recent Changes (Feb–Apr 2026)</TocLink>
           <TocLink href="#newsletter-pipeline">Newsletter Generation Pipeline</TocLink>
           <TocLink href="#ingestion">1. Daily Repo Ingestion</TocLink>
           <TocLink href="#synthesis">2. Synthesis & Scoring</TocLink>
@@ -40,6 +39,7 @@ export default function ArchitecturePage() {
           <TocLink href="#audio-mixing">Audio Mixing & Crossfade</TocLink>
           <TocLink href="#podigee">Podigee Publishing</TocLink>
           <TocLink href="#ad-promos">Ad Promos</TocLink>
+          <TocLink href="#tip-promos">Tip Promos</TocLink>
           <TocLink href="#edit-learning">Edit Learning</TocLink>
           <TocLink href="#analogy-machine">Analogy Machine</TocLink>
           <TocLink href="#statistics">Statistics & Analytics</TocLink>
@@ -51,29 +51,6 @@ export default function ArchitecturePage() {
           <TocLink href="#database">Database Overview</TocLink>
         </div>
       </nav>
-
-      {/* ============================================ */}
-      {/* RECENT CHANGES */}
-      {/* ============================================ */}
-      <Section id="recent-changes" icon={<Clock className="h-5 w-5" />} title="Recent Changes (Feb–Apr 2026)">
-        <p className="text-sm text-muted-foreground mb-3">
-          Major changes since the 2026-02-10 security audit. Details in the respective sections.
-        </p>
-        <ul className="list-disc pl-5 space-y-1 text-sm">
-          <li><strong>Analytics & Statistics</strong> — Event tracking, admin dashboard, Podigee integration, subscriber breakdown by language/domain</li>
-          <li><strong>Cron Scheduler</strong> — Configurable task scheduling (Berlin/MEZ) via <Code>/api/cron/scheduled-tasks</Code>, runs every 30 minutes</li>
-          <li><strong>Analogy Machine</strong> — TikTok-video pipeline from blog analogies (Veo 3.1, 9:16, Greek Mythology style)</li>
-          <li><strong>Ad Promos</strong> — Admin-managed promo blocks for web + newsletter</li>
-          <li><strong>Synthesis Pipeline v2</strong> — Batch scoring (10 articles/call), day-first ranking, premium source bonus, recency boost</li>
-          <li><strong>Ghostwriter Two-Pass</strong> — Plan → Section-by-Section → Proofread, Anthropic prompt caching, model selection centralized in settings</li>
-          <li><strong>Podcast TTS Migration</strong> — OpenAI-only (<Code>gpt-4o-mini-tts</Code> with emotion instructions), ElevenLabs removed</li>
-          <li><strong>Podigee Publishing</strong> — One-click podcast publishing including cover image and AI description</li>
-          <li><strong>Geo-based locale routing</strong> — NDS for Ostfriesland, DE default, EN only for US/UK</li>
-          <li><strong>Cover image pipeline</strong> — Desktop/email variants, native 1408/604px dithering, scale-to-cover</li>
-          <li><strong>SEO overhaul</strong> — robots.txt, OG/Twitter cards, JSON-LD, breadcrumbs, 301 redirects, locale-specific sitemaps</li>
-          <li><strong>News Queue filter tags</strong> — Colored tag filters above article list, junk-filter expanded</li>
-        </ul>
-      </Section>
 
       {/* ============================================ */}
       {/* NEWSLETTER PIPELINE OVERVIEW */}
@@ -823,6 +800,41 @@ export default function ArchitecturePage() {
       </Section>
 
       {/* ============================================ */}
+      {/* TIP PROMOS */}
+      {/* ============================================ */}
+      <Section id="tip-promos" icon={<Megaphone className="h-5 w-5" />} title="Tip Promos">
+        <Subsection title='"Tipp des Tages" Box'>
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Admin-managed text boxes (no images) shown inside the first article of a post, just before the first Synthszr Take</li>
+            <li>Configurable headline, body HTML (basic allowlist: <Code>b</Code> <Code>i</Code> <Code>a</Code> <Code>span</Code>), and optional link URL</li>
+            <li>Per-tip gradient (from color, to color, direction) + text color — default is green-to-yellow diagonal</li>
+            <li>Typography inherits the article body text size and font</li>
+            <li>Same active/rotate/constant logic as Ad Promos — rotation deterministic by UTC day-of-year</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Rendering">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Web:</strong> client-side fetch of <Code>/api/tip-promos/active</Code> in the TipTap renderer. A DOM processor inserts a placeholder slot before the first Synthszr Take paragraph; React mounts <Code>TipPromoBox</Code> into it via a portal.</li>
+            <li><strong>Newsletter:</strong> <Code>generateEmailContentWithVotes()</Code> accepts a <Code>tipPromo</Code> argument and inserts an inline-styled HTML table with the gradient background immediately before the first Synthszr Take paragraph.</li>
+            <li>Body HTML sanitized via <Code>sanitizeAdminHtml()</Code> (web) / inline tag allowlist (email) before injection.</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['supabase/migrations/20260415_tip_promos.sql', 'Table + settings default'],
+          ['app/admin/tip-promos/page.tsx', 'Admin UI with tabs + live preview'],
+          ['app/api/admin/tip-promos/route.ts', 'Tip CRUD (list + create)'],
+          ['app/api/admin/tip-promos/[id]/route.ts', 'Tip update + delete'],
+          ['app/api/admin/tip-promos/config/route.ts', 'Display-mode config'],
+          ['app/api/tip-promos/active/route.ts', 'Public endpoint for active tip'],
+          ['lib/tip-promos/get-active.ts', 'Active-tip selection (constant | rotate)'],
+          ['components/tip-promo-box.tsx', 'Shared web render component'],
+          ['lib/tiptap/dom-processors/tip-promo-slot.ts', 'DOM processor that inserts the slot'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
       {/* EDIT LEARNING */}
       {/* ============================================ */}
       <Section id="edit-learning" icon={<PenTool className="h-5 w-5" />} title="Edit Learning System">
@@ -1138,6 +1150,7 @@ export default function ArchitecturePage() {
                 <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">analytics_events</td><td className="py-1">Event tracking (page_view, podcast_play, analysis_click)</td></tr>
                 <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">discovered_companies</td><td className="py-1">Auto-discovered companies from articles</td></tr>
                 <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">ad_promos</td><td className="py-1">Admin-managed promo blocks for web + newsletter</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">tip_promos</td><td className="py-1">Admin-managed &quot;Tipp des Tages&quot; boxes injected before Synthszr Take</td></tr>
                 <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">analogy_videos</td><td className="py-1">Analogy Machine pipeline items (image, audio, video URLs)</td></tr>
                 <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">schedule_config</td><td className="py-1">Cron task configuration (Berlin/MEZ times)</td></tr>
                 <tr><td className="py-1 pr-4 font-mono text-foreground">settings</td><td className="py-1">Central AI model selection, voices, feature flags</td></tr>

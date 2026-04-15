@@ -110,6 +110,11 @@ const navGroups: NavGroup[] = [
         label: 'Ad Promos',
         href: '/admin/ad-promos',
         icon: Megaphone
+      },
+      {
+        label: 'Tip Promos',
+        href: '/admin/tip-promos',
+        icon: Lightbulb
       }
     ]
   },

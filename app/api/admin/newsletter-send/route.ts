@@ -8,6 +8,7 @@ import { render } from '@react-email/components'
 import { generateEmailContentWithVotes, ArticleThumbnail } from '@/lib/email/tiptap-to-html'
 import type { LanguageCode } from '@/lib/types'
 import { getActiveAdPromo } from '@/lib/ad-promos/get-active'
+import { getActiveTipPromo } from '@/lib/tip-promos/get-active'
 
 // Allow up to 2 minutes for large subscriber lists
 export const maxDuration = 120
@@ -127,8 +128,9 @@ export async function POST(request: NextRequest) {
     const previewText = post.excerpt || ''
     const postDate = post.created_at
 
-    // Fetch active ad promo (admin-managed via /admin/ad-promos)
+    // Fetch active ad promo + tip promo (admin-managed)
     const activePromo = await getActiveAdPromo()
+    const activeTipPromo = await getActiveTipPromo()
 
     // If testEmail, send only to that address (default German locale for test)
     if (testEmail) {
@@ -140,7 +142,9 @@ export async function POST(request: NextRequest) {
         { content: post.content, excerpt: post.excerpt, slug: post.slug },
         BASE_URL,
         articleThumbnails,
-        testLocale
+        testLocale,
+        undefined,
+        activeTipPromo,
       )
 
       const html = await render(
@@ -235,7 +239,8 @@ export async function POST(request: NextRequest) {
         BASE_URL,
         articleThumbnails,
         locale,
-        locale !== 'de' ? post.content : undefined // Pass original content for non-German locales
+        locale !== 'de' ? post.content : undefined, // Pass original content for non-German locales
+        activeTipPromo,
       )
       contentByLocale.set(locale, emailContent)
 
