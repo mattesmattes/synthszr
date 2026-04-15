@@ -54,7 +54,13 @@ export async function GET(request: NextRequest) {
       'vercel.app',
       'vercel-storage.com',
     ]
-    const isAllowedHost = allowedHosts.some(host => parsedUrl.hostname.endsWith(host))
+    // Strict hostname match: exact domain OR subdomain (must be preceded by a dot).
+    // Prevents "evilsupabase.co" matching "supabase.co" via naive endsWith().
+    const hostname = parsedUrl.hostname.toLowerCase()
+    const isAllowedHost = allowedHosts.some(host => {
+      const h = host.toLowerCase()
+      return hostname === h || hostname.endsWith('.' + h)
+    })
     if (!isAllowedHost) {
       return NextResponse.json({ error: 'Image host not allowed' }, { status: 403 })
     }

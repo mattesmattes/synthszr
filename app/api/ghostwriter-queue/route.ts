@@ -1,3 +1,4 @@
+import { verifyBearerToken } from '@/lib/security/cron-auth'
 /**
  * Queue-based Ghostwriter API
  * Generates articles from news queue items instead of digests
@@ -19,7 +20,7 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 export async function POST(request: NextRequest) {
   const session = await getSession()
   const authHeader = request.headers.get('authorization')
-  const cronSecretValid = authHeader === `Bearer ${process.env.CRON_SECRET}`
+  const cronSecretValid = verifyBearerToken(authHeader, process.env.CRON_SECRET)
 
   if (!session && !cronSecretValid) {
     return new Response(JSON.stringify({ error: 'Nicht autorisiert' }), {

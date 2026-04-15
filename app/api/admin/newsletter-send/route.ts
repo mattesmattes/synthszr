@@ -1,3 +1,4 @@
+import { verifyBearerToken } from '@/lib/security/cron-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
@@ -16,7 +17,7 @@ async function isAuthenticated(request?: NextRequest): Promise<boolean> {
   // Check for cron secret in header (for scheduled tasks on Vercel)
   if (request) {
     const authHeader = request.headers.get('authorization')
-    if (authHeader === `Bearer ${process.env.CRON_SECRET}`) {
+    if (verifyBearerToken(authHeader, process.env.CRON_SECRET)) {
       return true
     }
   }

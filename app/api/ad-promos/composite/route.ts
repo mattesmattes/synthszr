@@ -47,9 +47,29 @@ export async function GET(request: NextRequest) {
     // Skip compositing for animated formats — multiply-flattening would strip
     // the animation. Redirect to the original so the email shows the live GIF
     // (without baked-in BG, but with movement preserved).
+    //
+    // Redirect target is DB-authored (admin-controlled), so we still clamp to
+    // an allowlist of known image hosts to prevent this endpoint from being
+    // abused as a phishing relay via a compromised admin account.
     const isAnimated = /\.gif(\?|$)/i.test(imageUrl)
     if (isAnimated) {
-      return NextResponse.redirect(imageUrl, 302)
+      try {
+        const parsed = new URL(imageUrl)
+        if (parsed.protocol !== 'https:') {
+          return NextResponse.json({ error: 'Invalid image URL' }, { status: 400 })
+        }
+        const host = parsed.hostname.toLowerCase()
+        const allowed = ['supabase.co', 'supabase.com', 'vercel-storage.com', 'synthszr.com']
+        const isAllowed =
+          allowed.some(a => host === a || host.endsWith('.' + a)) ||
+          (host.startsWith('pub-') && host.endsWith('.vercel-storage.com'))
+        if (!isAllowed) {
+          return NextResponse.json({ error: 'Image host not allowed' }, { status: 403 })
+        }
+        return NextResponse.redirect(parsed.toString(), 302)
+      } catch {
+        return NextResponse.json({ error: 'Invalid image URL' }, { status: 400 })
+      }
     }
 
     const res = await fetch(imageUrl)

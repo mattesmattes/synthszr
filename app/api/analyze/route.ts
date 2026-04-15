@@ -1,3 +1,4 @@
+import { verifyBearerToken } from '@/lib/security/cron-auth'
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -10,7 +11,7 @@ export const maxDuration = 800
 export async function POST(request: NextRequest) {
   const session = await getSession()
   const authHeader = request.headers.get('authorization')
-  const cronSecretValid = authHeader === `Bearer ${process.env.CRON_SECRET}`
+  const cronSecretValid = verifyBearerToken(authHeader, process.env.CRON_SECRET)
 
   if (!session && !cronSecretValid) {
     return new Response(JSON.stringify({ error: 'Nicht autorisiert' }), {

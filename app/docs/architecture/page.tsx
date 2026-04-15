@@ -1099,7 +1099,12 @@ export default function ArchitecturePage() {
           <div className="space-y-2">
             <FixEntry severity="critical" date="2026-04-15" title="CSRF on /api/newsletter/set-language" description="POST without Origin check; attacker-controlled site could flip any subscriber's language given subscriber.id." fix="requireValidOrigin() added" file="app/api/newsletter/set-language/route.ts" />
             <FixEntry severity="critical" date="2026-04-15" title="GET unsubscribe auto-triggered by mail scanners" description="Outlook Safe Links / ATP prefetched unsubscribe URLs during inbox scanning, causing accidental unsubscribes." fix="GET now redirects to confirmation page; actual unsubscribe moved to POST with Origin check" file="app/api/newsletter/unsubscribe/route.ts" />
-            <FixEntry severity="high" date="2026-04-15" title="Stored XSS via admin-authored ad-promo body" description="promo.body passed unsanitized to dangerouslySetInnerHTML in web + email renderers. Compromised admin could exfiltrate subscribers." fix="sanitizeAdminHtml() wraps isomorphic-dompurify with strict allowlist" file="lib/security/sanitize-html.ts" />
+            <FixEntry severity="high" date="2026-04-15" title="Stored XSS via admin-authored ad-promo body" description="promo.body passed unsanitized to dangerouslySetInnerHTML in web + email renderers. Compromised admin could exfiltrate subscribers." fix="sanitizeAdminHtml() using sanitize-html with strict allowlist" file="lib/security/sanitize-html.ts" />
+            <FixEntry severity="high" date="2026-04-15" title="cover-image SSRF allowlist bypass via endsWith()" description="hostname.endsWith('supabase.co') matched 'evilsupabase.co'." fix="Exact-or-subdomain match (hostname === h || hostname.endsWith('.' + h))" file="app/api/newsletter/cover-image/route.ts" />
+            <FixEntry severity="high" date="2026-04-15" title="thumbnail-image allowlist bypass via pub- prefix" description="startsWith('pub-') matched 'pub-evil.com'; endsWith('supabase.co') suffix bug." fix="Strict hostname parse + require '.vercel-storage.com' suffix for pub- hosts" file="app/api/newsletter/thumbnail-image/route.ts" />
+            <FixEntry severity="medium" date="2026-04-15" title="CRON_SECRET compared with non-constant-time ===" description="String equality early-exits on first mismatch, enabling timing side-channels." fix="verifyBearerToken() helper using crypto.timingSafeEqual across 9 cron routes" file="lib/security/cron-auth.ts" />
+            <FixEntry severity="medium" date="2026-04-15" title="ad-promo composite open-redirect" description="Endpoint redirected to DB-authored image_left/right_url without host validation; compromised admin could turn /api/ad-promos/composite into a phishing relay." fix="HTTPS + hostname allowlist before redirect" file="app/api/ad-promos/composite/route.ts" />
+            <FixEntry severity="medium" date="2026-04-15" title="Rate-limit fail-open in production when unconfigured" description="Without UPSTASH_REDIS_REST_URL all requests passed. Revealed by the Feb audit, reverted at the time, now fixed properly." fix="Fail-CLOSED in production, fail-OPEN only in dev; Upstash runtime errors still fail-open to survive transient outages" file="lib/rate-limit.ts" />
           </div>
         </Subsection>
 
@@ -1111,16 +1116,16 @@ export default function ArchitecturePage() {
               <div className="text-muted-foreground text-xs">Critical (fixed)</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-orange-500">1</div>
+              <div className="text-2xl font-bold text-orange-500">3</div>
               <div className="text-muted-foreground text-xs">High (fixed)</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-500">8</div>
-              <div className="text-muted-foreground text-xs">Med/Low (open)</div>
+              <div className="text-2xl font-bold text-yellow-500">3/2</div>
+              <div className="text-muted-foreground text-xs">Med fixed / open</div>
             </div>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Remaining open findings: CRON_SECRET timing-safe compare, <Code>x-vercel-cron</Code> header trust escape-hatch, ad-promo composite open-redirect (DB-content), hostname allowlist uses <Code>endsWith()</Code> (matches <Code>evilsupabase.co</Code>), thumbnail-image <Code>pub-</Code> prefix match, Upstash fail-open when unconfigured, <Code>ADMIN_PASSWORD</Code> JWT fallback, subscriber-preference-tokens 30-day TTL.
+            Remaining open: <Code>x-vercel-cron</Code> header as auth escape-hatch (Vercel-internal only, env-flag TODO), <Code>ADMIN_PASSWORD</Code> JWT fallback in middleware, subscriber-preference-tokens 30-day TTL.
           </p>
         </div>
 

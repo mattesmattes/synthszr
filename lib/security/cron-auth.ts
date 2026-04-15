@@ -9,10 +9,38 @@
  */
 
 import { NextRequest } from 'next/server'
+import { timingSafeEqual } from 'crypto'
 
 export interface CronAuthResult {
   authorized: boolean
   method: 'bearer' | 'vercel-cron' | 'none'
+}
+
+/**
+ * Constant-time compare of an incoming "Authorization: Bearer <token>"
+ * header against the expected secret. Prevents timing side-channels on
+ * early-exit string comparison.
+ *
+ * Exported so all CRON_SECRET checks across the codebase can use the
+ * same helper instead of `===`.
+ */
+export function verifyBearerToken(authHeader: string | null, expected: string | undefined): boolean {
+  if (!authHeader || !expected) return false
+  const prefix = 'Bearer '
+  if (!authHeader.startsWith(prefix)) return false
+  const provided = authHeader.slice(prefix.length)
+  const providedBuf = Buffer.from(provided, 'utf8')
+  const expectedBuf = Buffer.from(expected, 'utf8')
+  if (providedBuf.length !== expectedBuf.length) {
+    // Still do a constant-time dummy compare to equalize timing
+    try { timingSafeEqual(providedBuf, providedBuf) } catch { /* noop */ }
+    return false
+  }
+  try {
+    return timingSafeEqual(providedBuf, expectedBuf)
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -28,8 +56,8 @@ export function verifyCronAuth(request: NextRequest): CronAuthResult {
   const cronSecret = process.env.CRON_SECRET
   const isProduction = process.env.NODE_ENV === 'production'
 
-  // Method 1: Bearer token with CRON_SECRET
-  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+  // Method 1: Bearer token with CRON_SECRET (constant-time compare)
+  if (verifyBearerToken(authHeader, cronSecret)) {
     return { authorized: true, method: 'bearer' }
   }
 

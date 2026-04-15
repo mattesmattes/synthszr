@@ -5,7 +5,7 @@
  */
 
 // Cron authentication
-export { verifyCronAuth, isCronAuthConfigured } from './cron-auth'
+export { verifyCronAuth, isCronAuthConfigured, verifyBearerToken } from './cron-auth'
 export type { CronAuthResult } from './cron-auth'
 
 // Startup validation

@@ -1,3 +1,4 @@
+import { verifyBearerToken } from '@/lib/security/cron-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
   // Allow authentication via session OR cron secret (for scheduled tasks)
   const session = await getSession()
   const authHeader = request.headers.get('authorization')
-  const cronSecretValid = authHeader === `Bearer ${process.env.CRON_SECRET}`
+  const cronSecretValid = verifyBearerToken(authHeader, process.env.CRON_SECRET)
 
   if (!session && !cronSecretValid) {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })

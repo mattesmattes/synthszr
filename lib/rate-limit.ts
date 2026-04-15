@@ -54,18 +54,30 @@ export async function checkRateLimit(
   const limiter = customLimiter || getRateLimiter()
 
   if (!limiter) {
-    // No Redis configured — allow through but warning was logged on startup
-    // To enable rate limiting, set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN
+    // No Redis configured.
+    // - Production: fail-CLOSED. Running without rate limits in production is
+    //   a misconfiguration; forcing a 429 pushes ops to configure Upstash
+    //   instead of silently allowing unlimited requests.
+    // - Development: fail-OPEN so local dev doesn't require Redis.
+    if (process.env.NODE_ENV === 'production') {
+      return { success: false, remaining: 0, reset: Date.now() + 60000, limit: 0 }
+    }
     return { success: true, remaining: 0, reset: Date.now() + 60000, limit: 0 }
   }
 
-  const result = await limiter.limit(identifier)
-
-  return {
-    success: result.success,
-    remaining: result.remaining,
-    reset: result.reset,
-    limit: result.limit,
+  try {
+    const result = await limiter.limit(identifier)
+    return {
+      success: result.success,
+      remaining: result.remaining,
+      reset: result.reset,
+      limit: result.limit,
+    }
+  } catch (error) {
+    // Upstash transient error (network, 5xx). Fail-open so a Redis outage
+    // doesn't take the site down — logged for alerting.
+    console.error('[rate-limit] Upstash error, failing open:', error)
+    return { success: true, remaining: 0, reset: Date.now() + 60000, limit: 0 }
   }
 }
 

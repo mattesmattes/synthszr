@@ -23,18 +23,25 @@ export async function GET(request: NextRequest) {
       return new NextResponse('url param required', { status: 400 })
     }
 
-    // Only allow known safe hosts
-    const allowedHosts = [
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      'https://pub-',        // Vercel Blob URLs start with pub-
-      'blob.vercel-storage', // Vercel Blob domain
-    ].filter(Boolean)
-
+    // Only allow known safe hosts (strict hostname match, exact or subdomain)
     const urlObj = new URL(imageUrl)
+    if (urlObj.protocol !== 'https:') {
+      return new NextResponse('HTTPS required', { status: 400 })
+    }
+    const hostname = urlObj.hostname.toLowerCase()
+
+    const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
+      ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.toLowerCase()
+      : null
+
+    const exactOrSub = (h: string) => hostname === h || hostname.endsWith('.' + h)
+
     const isAllowed =
-      allowedHosts.some(h => imageUrl.startsWith(h!)) ||
-      urlObj.hostname.endsWith('vercel-storage.com') ||
-      urlObj.hostname.endsWith('supabase.co')
+      (supabaseHost && hostname === supabaseHost) ||
+      exactOrSub('vercel-storage.com') ||
+      exactOrSub('supabase.co') ||
+      // Vercel Blob public URLs: hostname shape "pub-<hash>.vercel-storage.com"
+      (hostname.startsWith('pub-') && hostname.endsWith('.vercel-storage.com'))
 
     if (!isAllowed) {
       return new NextResponse('URL not allowed', { status: 403 })
