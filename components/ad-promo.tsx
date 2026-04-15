@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getActiveAdPromo } from '@/lib/ad-promos/get-active'
 import type { AdPromo } from '@/lib/ad-promos/types'
+import { sanitizeAdminHtml } from '@/lib/security/sanitize-html'
 
 export async function AdPromo() {
   const promo = await getActiveAdPromo()
@@ -85,7 +86,7 @@ function TextBlock({ promo }: { promo: AdPromo }) {
       <p
         className="mt-3 text-sm leading-relaxed"
         style={{ fontFamily: 'var(--font-serif), serif', color: text, opacity: 0.7 }}
-        dangerouslySetInnerHTML={{ __html: promo.body }}
+        dangerouslySetInnerHTML={{ __html: sanitizeAdminHtml(promo.body) }}
       />
       <span
         className="mt-4 inline-block font-mono text-xs font-semibold"

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+import { requireValidOrigin } from '@/lib/security/origin-check'
 
 export const runtime = 'nodejs'
 
@@ -19,6 +20,10 @@ const limiter = rateLimiters.standard()
  * surface area as one-click unsubscribe.
  */
 export async function POST(request: NextRequest) {
+  // Block cross-origin POSTs (CSRF defense)
+  const originError = requireValidOrigin(request)
+  if (originError) return originError
+
   const clientIP = getClientIP(request)
   const rateLimitResult = await checkRateLimit(`set-language:${clientIP}`, limiter ?? undefined)
   if (!rateLimitResult.success) return rateLimitResponse(rateLimitResult)

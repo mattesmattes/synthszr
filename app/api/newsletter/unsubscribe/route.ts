@@ -1,46 +1,67 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { BASE_URL } from '@/lib/resend/client'
-import { checkRateLimit, getClientIP, rateLimiters } from '@/lib/rate-limit'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+import { requireValidOrigin } from '@/lib/security/origin-check'
 
-// Standard rate limiter: 30 requests per minute per IP
 const standardLimiter = rateLimiters.standard()
 
+/**
+ * GET /api/newsletter/unsubscribe?id=<uuid>
+ *
+ * Previously GET performed the actual unsubscribe, which caused automatic
+ * unsubscribes whenever Outlook Safe Links, Microsoft ATP, or other mail
+ * security gateways prefetched the link during inbox scanning.
+ *
+ * GET now just redirects to the confirmation landing page — no side-effect.
+ * The landing page shows a single "Yes, unsubscribe me" button that POSTs
+ * back to this route.
+ */
 export async function GET(request: NextRequest) {
-  // Rate limit check
-  const clientIP = getClientIP(request)
-  const rateLimitResult = await checkRateLimit(`unsubscribe:${clientIP}`, standardLimiter ?? undefined)
-
-  if (!rateLimitResult.success) {
-    return NextResponse.redirect(`${BASE_URL}/newsletter/unsubscribe?error=rate_limited`)
-  }
-
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
+  const target = id
+    ? `${BASE_URL}/newsletter/unsubscribe?confirm=1&id=${encodeURIComponent(id)}`
+    : `${BASE_URL}/newsletter/unsubscribe?error=missing_id`
+  return NextResponse.redirect(target, 302)
+}
 
-  if (!id) {
-    return NextResponse.redirect(`${BASE_URL}/newsletter/unsubscribe?error=missing_id`)
-  }
+/**
+ * POST /api/newsletter/unsubscribe
+ * Body: { id: string }
+ *
+ * Performs the actual unsubscribe. Protected by Origin check to block
+ * cross-site POSTs. Rate-limited per IP.
+ */
+export async function POST(request: NextRequest) {
+  const originError = requireValidOrigin(request)
+  if (originError) return originError
+
+  const clientIP = getClientIP(request)
+  const rateLimitResult = await checkRateLimit(`unsubscribe:${clientIP}`, standardLimiter ?? undefined)
+  if (!rateLimitResult.success) return rateLimitResponse(rateLimitResult)
 
   try {
+    const body = await request.json().catch(() => ({}))
+    const id = (body.id ?? '').toString().trim()
+    if (!id) return NextResponse.json({ error: 'id erforderlich' }, { status: 400 })
+
     const supabase = createAdminClient()
 
-    // Find subscriber by ID
     const { data: subscriber, error: findError } = await supabase
       .from('subscribers')
       .select('id, status')
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
     if (findError || !subscriber) {
-      return NextResponse.redirect(`${BASE_URL}/newsletter/unsubscribe?error=not_found`)
+      return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
 
     if (subscriber.status === 'unsubscribed') {
-      return NextResponse.redirect(`${BASE_URL}/newsletter/unsubscribe?status=already_unsubscribed`)
+      return NextResponse.json({ status: 'already_unsubscribed' })
     }
 
-    // Unsubscribe
     const { error: updateError } = await supabase
       .from('subscribers')
       .update({
@@ -52,12 +73,12 @@ export async function GET(request: NextRequest) {
 
     if (updateError) {
       console.error('Unsubscribe update error:', updateError)
-      return NextResponse.redirect(`${BASE_URL}/newsletter/unsubscribe?error=update_failed`)
+      return NextResponse.json({ error: 'update_failed' }, { status: 500 })
     }
 
-    return NextResponse.redirect(`${BASE_URL}/newsletter/unsubscribe?status=success`)
+    return NextResponse.json({ status: 'success' })
   } catch (error) {
     console.error('Unsubscribe error:', error)
-    return NextResponse.redirect(`${BASE_URL}/newsletter/unsubscribe?error=server_error`)
+    return NextResponse.json({ error: 'server_error' }, { status: 500 })
   }
 }

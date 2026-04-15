@@ -16,6 +16,7 @@ import {
 import { formatUpdateDate } from '@/lib/i18n/config'
 import type { LanguageCode } from '@/lib/types'
 import type { AdPromo } from '@/lib/ad-promos/types'
+import { sanitizeAdminHtml } from '@/lib/security/sanitize-html'
 
 interface NewsletterEmailProps {
   subject: string
@@ -366,7 +367,7 @@ export function NewsletterEmail({
                     <Text style={{ ...ccPromoHeading, color: promo.text_color }}>{promo.title}</Text>
                     <Text
                       style={{ ...ccPromoCopy, color: promo.text_color, opacity: 0.65 }}
-                      dangerouslySetInnerHTML={{ __html: promo.body }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeAdminHtml(promo.body) }}
                     />
                     <Link href={promo.link_url} style={{ ...ccPromoLink, color: promo.text_color }}>
                       {promo.cta_label}
