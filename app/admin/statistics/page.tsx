@@ -86,7 +86,10 @@ interface StatsResponse {
   totals: Totals
   previous_totals: Totals
   subscribers: {
-    period_data: (SubscriberEntry & { byLanguage?: Record<string, number> })[]
+    period_data: (SubscriberEntry & {
+      byLanguage?: Record<string, number>
+      totalByLanguage?: Record<string, number>
+    })[]
     current_active: number
     active_languages?: { code: string; name: string; native_name: string | null }[]
   }
@@ -216,8 +219,10 @@ export default function StatisticsPage() {
 
   const subscriberData = (stats?.subscribers.period_data || []).map(s => {
     const byLang = s.byLanguage ?? {}
+    const totalByLang = s.totalByLanguage ?? {}
     const flat: Record<string, number> = {}
     for (const [code, count] of Object.entries(byLang)) flat[`new_${code}`] = count
+    for (const [code, count] of Object.entries(totalByLang)) flat[`total_${code}`] = count
     return {
       ...s,
       ...flat,
@@ -549,11 +554,23 @@ export default function StatisticsPage() {
                     <Line
                       type="monotone"
                       dataKey="total"
-                      name="Aktive Subscriber"
+                      name="Aktive Subscriber (gesamt)"
                       stroke="#3B82F6"
                       dot={false}
                       strokeWidth={2}
                     />
+                    {activeSubLanguages.map((lang, i) => (
+                      <Line
+                        key={`total_${lang.code}`}
+                        type="monotone"
+                        dataKey={`total_${lang.code}`}
+                        name={`Aktive ${(lang.native_name ?? lang.name)}`}
+                        stroke={langPalette[i % langPalette.length]}
+                        dot={false}
+                        strokeWidth={1.5}
+                        strokeDasharray="4 3"
+                      />
+                    ))}
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
