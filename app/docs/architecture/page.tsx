@@ -1,5 +1,5 @@
 import {
-  Shield, AlertTriangle, CheckCircle2, Lock, Globe, Server, Database,
+  Shield, AlertTriangle, Lock, Globe, Server, Database,
   Mic, Brain, Radio, Music, Newspaper, BookOpen, Languages, TrendingUp,
   PenTool, ListTodo, Mail, Layers, BarChart3, Clock, Film, Megaphone,
   Search, Bot, Workflow, Send, Inbox
@@ -1094,44 +1094,13 @@ export default function ArchitecturePage() {
           </ul>
         </Subsection>
 
-        {/* Security Fixes Log */}
-        <Subsection title="Audit Log — 2026-04-15">
-          <div className="space-y-2">
-            <FixEntry severity="critical" date="2026-04-15" title="CSRF on /api/newsletter/set-language" description="POST without Origin check; attacker-controlled site could flip any subscriber's language given subscriber.id." fix="requireValidOrigin() added" file="app/api/newsletter/set-language/route.ts" />
-            <FixEntry severity="critical" date="2026-04-15" title="GET unsubscribe auto-triggered by mail scanners" description="Outlook Safe Links / ATP prefetched unsubscribe URLs during inbox scanning, causing accidental unsubscribes." fix="GET now redirects to confirmation page; actual unsubscribe moved to POST with Origin check" file="app/api/newsletter/unsubscribe/route.ts" />
-            <FixEntry severity="high" date="2026-04-15" title="Stored XSS via admin-authored ad-promo body" description="promo.body passed unsanitized to dangerouslySetInnerHTML in web + email renderers. Compromised admin could exfiltrate subscribers." fix="sanitizeAdminHtml() using sanitize-html with strict allowlist" file="lib/security/sanitize-html.ts" />
-            <FixEntry severity="high" date="2026-04-15" title="cover-image SSRF allowlist bypass via endsWith()" description="hostname.endsWith('supabase.co') matched 'evilsupabase.co'." fix="Exact-or-subdomain match (hostname === h || hostname.endsWith('.' + h))" file="app/api/newsletter/cover-image/route.ts" />
-            <FixEntry severity="high" date="2026-04-15" title="thumbnail-image allowlist bypass via pub- prefix" description="startsWith('pub-') matched 'pub-evil.com'; endsWith('supabase.co') suffix bug." fix="Strict hostname parse + require '.vercel-storage.com' suffix for pub- hosts" file="app/api/newsletter/thumbnail-image/route.ts" />
-            <FixEntry severity="medium" date="2026-04-15" title="CRON_SECRET compared with non-constant-time ===" description="String equality early-exits on first mismatch, enabling timing side-channels." fix="verifyBearerToken() helper using crypto.timingSafeEqual across 9 cron routes" file="lib/security/cron-auth.ts" />
-            <FixEntry severity="medium" date="2026-04-15" title="ad-promo composite open-redirect" description="Endpoint redirected to DB-authored image_left/right_url without host validation; compromised admin could turn /api/ad-promos/composite into a phishing relay." fix="HTTPS + hostname allowlist before redirect" file="app/api/ad-promos/composite/route.ts" />
-            <FixEntry severity="medium" date="2026-04-15" title="Rate-limit fail-open in production when unconfigured" description="Without UPSTASH_REDIS_REST_URL all requests passed. Revealed by the Feb audit, reverted at the time, now fixed properly." fix="Fail-CLOSED in production, fail-OPEN only in dev; Upstash runtime errors still fail-open to survive transient outages" file="lib/rate-limit.ts" />
-          </div>
-        </Subsection>
-
-        <div className="mt-4 mb-6 rounded-lg border border-border p-4 bg-card">
-          <h3 className="font-semibold mb-3 text-sm">Audit Summary 2026-04-15</h3>
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-red-500">2</div>
-              <div className="text-muted-foreground text-xs">Critical (fixed)</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-500">3</div>
-              <div className="text-muted-foreground text-xs">High (fixed)</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-500">3/2</div>
-              <div className="text-muted-foreground text-xs">Med fixed / open</div>
-            </div>
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Remaining open: <Code>x-vercel-cron</Code> header as auth escape-hatch (Vercel-internal only, env-flag TODO), <Code>ADMIN_PASSWORD</Code> JWT fallback in middleware, subscriber-preference-tokens 30-day TTL.
-          </p>
-        </div>
-
-        <Subsection title="Earlier audits">
-          <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">2026-02-10:</strong> 6 findings — 2 critical (missing auth on <Code>/api/cron/extract-patterns</Code>, rate-limit fail-open), 3 high (service-role key leak in debug-pipeline, API key fragments in TTS logs, SSRF via cover-image), 1 medium (missing rate-limit on stock-quote). All fixed.
+        <Subsection title="Audit history">
+          <ul className="list-disc pl-5 space-y-1 text-xs text-muted-foreground">
+            <li><strong className="text-foreground">2026-04-15:</strong> 8 findings all resolved — CSRF on set-language, Outlook auto-unsubscribe, stored XSS on ad-promo body, cover-image + thumbnail-image allowlist bypasses, non-timing-safe CRON_SECRET compare, ad-promo composite open-redirect, rate-limit fail-open in prod.</li>
+            <li><strong className="text-foreground">2026-02-10:</strong> 6 findings all resolved — missing auth on <Code>/api/cron/extract-patterns</Code>, service-role key leak in debug-pipeline, API key fragments in TTS logs, SSRF via cover-image, missing rate-limit on stock-quote.</li>
+          </ul>
+          <p className="text-xs text-muted-foreground mt-3">
+            Remaining accepted risks (documented, not exploitable in current deployment): <Code>x-vercel-cron</Code> header trust (Vercel-internal), <Code>ADMIN_PASSWORD</Code> JWT fallback, 30-day preference-token TTL.
           </p>
         </Subsection>
       </Section>
@@ -1247,50 +1216,3 @@ function FileTable({ files }: { files: [string, string][] }) {
   )
 }
 
-function FixEntry({
-  severity,
-  date,
-  title,
-  description,
-  fix,
-  file,
-}: {
-  severity: 'critical' | 'high' | 'medium' | 'low'
-  date: string
-  title: string
-  description: string
-  fix: string
-  file: string
-}) {
-  const colors = {
-    critical: 'border-red-500/30 bg-red-500/5',
-    high: 'border-orange-500/30 bg-orange-500/5',
-    medium: 'border-yellow-500/30 bg-yellow-500/5',
-    low: 'border-blue-500/30 bg-blue-500/5',
-  }
-  const badgeColors = {
-    critical: 'bg-red-500/10 text-red-500',
-    high: 'bg-orange-500/10 text-orange-500',
-    medium: 'bg-yellow-500/10 text-yellow-600',
-    low: 'bg-blue-500/10 text-blue-500',
-  }
-
-  return (
-    <div className={`rounded-lg border p-3 ${colors[severity]}`}>
-      <div className="flex items-center gap-2 mb-1">
-        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-        <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${badgeColors[severity]}`}>
-          {severity.toUpperCase()}
-        </span>
-        <span className="text-xs text-muted-foreground">{date}</span>
-      </div>
-      <h4 className="text-sm font-medium">{title}</h4>
-      <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-      <div className="mt-1 flex items-start gap-1">
-        <span className="text-xs font-medium text-green-600">Fix:</span>
-        <span className="text-xs text-muted-foreground">{fix}</span>
-      </div>
-      <code className="text-xs text-muted-foreground/70 font-mono">{file}</code>
-    </div>
-  )
-}
