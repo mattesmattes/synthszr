@@ -6,17 +6,26 @@ import { NextRequest, NextResponse } from 'next/server'
 let ratelimit: Ratelimit | null = null
 let rateLimitWarningLogged = false
 
+// Vercel's Upstash Marketplace integration provisions credentials under
+// KV_REST_API_URL / KV_REST_API_TOKEN. Accept both the Vercel-provisioned names
+// and the raw UPSTASH_* names so either setup works without config changes.
+function getUpstashCreds(): { url: string; token: string } | null {
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) return null
+  return { url, token }
+}
+
 function getRateLimiter(): Ratelimit | null {
   if (ratelimit) return ratelimit
 
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  const creds = getUpstashCreds()
 
-  if (!url || !token) {
+  if (!creds) {
     if (!rateLimitWarningLogged) {
       rateLimitWarningLogged = true
       if (process.env.NODE_ENV === 'production') {
-        console.warn('[RateLimit] Upstash Redis not configured — rate limiting disabled. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to enable.')
+        console.warn('[RateLimit] Upstash Redis not configured — rate limiting disabled. Set KV_REST_API_URL + KV_REST_API_TOKEN (Vercel integration) or UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN to enable.')
       } else {
         console.warn('[RateLimit] Rate limiting disabled in development')
       }
@@ -25,7 +34,7 @@ function getRateLimiter(): Ratelimit | null {
   }
 
   ratelimit = new Ratelimit({
-    redis: new Redis({ url, token }),
+    redis: new Redis(creds),
     limiter: Ratelimit.slidingWindow(10, '1 m'), // 10 requests per minute
     analytics: true,
     prefix: 'synthszr',
@@ -126,12 +135,11 @@ export function rateLimitResponse(result: RateLimitResult): NextResponse {
 export const rateLimiters = {
   // Newsletter: 10 requests per hour (anti-spam for subscription endpoints)
   newsletter: () => {
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
+    const creds = getUpstashCreds()
+    if (!creds) return null
 
     return new Ratelimit({
-      redis: new Redis({ url, token }),
+      redis: new Redis(creds),
       limiter: Ratelimit.slidingWindow(10, '1 h'),
       prefix: 'synthszr:newsletter',
     })
@@ -139,12 +147,11 @@ export const rateLimiters = {
 
   // Strict: 5 requests per minute (for expensive operations like image generation)
   strict: () => {
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
+    const creds = getUpstashCreds()
+    if (!creds) return null
 
     return new Ratelimit({
-      redis: new Redis({ url, token }),
+      redis: new Redis(creds),
       limiter: Ratelimit.slidingWindow(5, '1 m'),
       prefix: 'synthszr:strict',
     })
@@ -152,12 +159,11 @@ export const rateLimiters = {
 
   // Standard: 30 requests per minute
   standard: () => {
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
+    const creds = getUpstashCreds()
+    if (!creds) return null
 
     return new Ratelimit({
-      redis: new Redis({ url, token }),
+      redis: new Redis(creds),
       limiter: Ratelimit.slidingWindow(30, '1 m'),
       prefix: 'synthszr:standard',
     })
@@ -165,12 +171,11 @@ export const rateLimiters = {
 
   // Relaxed: 100 requests per minute (for public read endpoints)
   relaxed: () => {
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
+    const creds = getUpstashCreds()
+    if (!creds) return null
 
     return new Ratelimit({
-      redis: new Redis({ url, token }),
+      redis: new Redis(creds),
       limiter: Ratelimit.slidingWindow(100, '1 m'),
       prefix: 'synthszr:relaxed',
     })
@@ -179,12 +184,11 @@ export const rateLimiters = {
   // Admin: 60 requests per minute (for authenticated admin endpoints)
   // Prevents abuse even with valid session (e.g., compromised credentials)
   admin: () => {
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
+    const creds = getUpstashCreds()
+    if (!creds) return null
 
     return new Ratelimit({
-      redis: new Redis({ url, token }),
+      redis: new Redis(creds),
       limiter: Ratelimit.slidingWindow(60, '1 m'),
       prefix: 'synthszr:admin',
     })
@@ -193,12 +197,11 @@ export const rateLimiters = {
   // Admin write: 20 requests per minute (for admin write operations)
   // More restrictive for state-changing operations
   adminWrite: () => {
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
+    const creds = getUpstashCreds()
+    if (!creds) return null
 
     return new Ratelimit({
-      redis: new Redis({ url, token }),
+      redis: new Redis(creds),
       limiter: Ratelimit.slidingWindow(20, '1 m'),
       prefix: 'synthszr:admin-write',
     })
