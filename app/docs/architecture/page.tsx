@@ -1,7 +1,8 @@
 import {
   Shield, AlertTriangle, CheckCircle2, Lock, Globe, Server, Database,
   Mic, Brain, Radio, Music, Newspaper, BookOpen, Languages, TrendingUp,
-  PenTool, ListTodo, Mail, Layers
+  PenTool, ListTodo, Mail, Layers, BarChart3, Clock, Film, Megaphone,
+  Search, Bot, Workflow, Send, Inbox
 } from 'lucide-react'
 
 export default function ArchitecturePage() {
@@ -13,96 +14,591 @@ export default function ArchitecturePage() {
           Architecture & Systems
         </h1>
         <p className="text-muted-foreground mt-1">
-          Technische Dokumentation aller Systeme, Pipelines und der Sicherheitsarchitektur.
+          Technical documentation of all systems, pipelines, and the security architecture.
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Letztes Update: 10.02.2026
+          Last update: 2026-04-15
         </p>
       </div>
 
       {/* Table of Contents */}
       <nav className="mb-8 rounded-lg border border-border p-4 bg-card">
-        <h2 className="text-sm font-semibold mb-2">Inhalt</h2>
+        <h2 className="text-sm font-semibold mb-2">Contents</h2>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-          <TocLink href="#podcast">Podcast-System</TocLink>
-          <TocLink href="#personality">Personality & Beziehung</TocLink>
+          <TocLink href="#recent-changes">Recent Changes (Feb–Apr 2026)</TocLink>
+          <TocLink href="#newsletter-pipeline">Newsletter Generation Pipeline</TocLink>
+          <TocLink href="#ingestion">1. Daily Repo Ingestion</TocLink>
+          <TocLink href="#synthesis">2. Synthesis & Scoring</TocLink>
+          <TocLink href="#news-queue">3. News Queue</TocLink>
+          <TocLink href="#ghostwriter">4. Ghostwriter</TocLink>
+          <TocLink href="#translation">5. Translation Pipeline</TocLink>
+          <TocLink href="#assembly">6. Newsletter Assembly</TocLink>
+          <TocLink href="#send">7. Newsletter Send</TocLink>
+          <TocLink href="#observability">8. Observability</TocLink>
+          <TocLink href="#podcast">Podcast System</TocLink>
+          <TocLink href="#personality">Personality & Relationship</TocLink>
           <TocLink href="#audio-mixing">Audio Mixing & Crossfade</TocLink>
-          <TocLink href="#newsletter">Newsletter-System</TocLink>
-          <TocLink href="#news-queue">News Queue & Ghostwriter</TocLink>
+          <TocLink href="#podigee">Podigee Publishing</TocLink>
+          <TocLink href="#ad-promos">Ad Promos</TocLink>
           <TocLink href="#edit-learning">Edit Learning</TocLink>
+          <TocLink href="#analogy-machine">Analogy Machine</TocLink>
+          <TocLink href="#statistics">Statistics & Analytics</TocLink>
+          <TocLink href="#scheduler">Cron Scheduler</TocLink>
+          <TocLink href="#seo">SEO & Sitemap</TocLink>
           <TocLink href="#stock">Stock & Premarket</TocLink>
-          <TocLink href="#i18n">Internationalisierung</TocLink>
+          <TocLink href="#i18n">Internationalization</TocLink>
           <TocLink href="#security">Security Architecture</TocLink>
+          <TocLink href="#database">Database Overview</TocLink>
         </div>
       </nav>
 
       {/* ============================================ */}
-      {/* PODCAST SYSTEM */}
+      {/* RECENT CHANGES */}
       {/* ============================================ */}
-      <Section id="podcast" icon={<Mic className="h-5 w-5" />} title="Podcast-System">
-        <Subsection title="Generation Pipeline">
+      <Section id="recent-changes" icon={<Clock className="h-5 w-5" />} title="Recent Changes (Feb–Apr 2026)">
+        <p className="text-sm text-muted-foreground mb-3">
+          Major changes since the 2026-02-10 security audit. Details in the respective sections.
+        </p>
+        <ul className="list-disc pl-5 space-y-1 text-sm">
+          <li><strong>Analytics & Statistics</strong> — Event tracking, admin dashboard, Podigee integration, subscriber breakdown by language/domain</li>
+          <li><strong>Cron Scheduler</strong> — Configurable task scheduling (Berlin/MEZ) via <Code>/api/cron/scheduled-tasks</Code>, runs every 30 minutes</li>
+          <li><strong>Analogy Machine</strong> — TikTok-video pipeline from blog analogies (Veo 3.1, 9:16, Greek Mythology style)</li>
+          <li><strong>Ad Promos</strong> — Admin-managed promo blocks for web + newsletter</li>
+          <li><strong>Synthesis Pipeline v2</strong> — Batch scoring (10 articles/call), day-first ranking, premium source bonus, recency boost</li>
+          <li><strong>Ghostwriter Two-Pass</strong> — Plan → Section-by-Section → Proofread, Anthropic prompt caching, model selection centralized in settings</li>
+          <li><strong>Podcast TTS Migration</strong> — OpenAI-only (<Code>gpt-4o-mini-tts</Code> with emotion instructions), ElevenLabs removed</li>
+          <li><strong>Podigee Publishing</strong> — One-click podcast publishing including cover image and AI description</li>
+          <li><strong>Geo-based locale routing</strong> — NDS for Ostfriesland, DE default, EN only for US/UK</li>
+          <li><strong>Cover image pipeline</strong> — Desktop/email variants, native 1408/604px dithering, scale-to-cover</li>
+          <li><strong>SEO overhaul</strong> — robots.txt, OG/Twitter cards, JSON-LD, breadcrumbs, 301 redirects, locale-specific sitemaps</li>
+          <li><strong>News Queue filter tags</strong> — Colored tag filters above article list, junk-filter expanded</li>
+        </ul>
+      </Section>
+
+      {/* ============================================ */}
+      {/* NEWSLETTER PIPELINE OVERVIEW */}
+      {/* ============================================ */}
+      <Section id="newsletter-pipeline" icon={<Workflow className="h-5 w-5" />} title="Newsletter Generation Pipeline">
+        <p className="text-sm text-muted-foreground mb-4">
+          End-to-end flow from external article ingestion to multi-language newsletter delivery. Each stage has its own section below.
+        </p>
+
+        <Subsection title="High-Level Flow">
+          <pre className="text-xs bg-muted/40 rounded border border-border p-3 overflow-x-auto leading-relaxed">
+{`  Gmail Newsletters ─┐
+  WebCrawl Emails   ─┼──▶ [1] daily_repo ──▶ [2] Synthesis / Scoring
+  Manual Import     ─┘          │                     │
+                                │                     ▼
+                                │              (originality, relevance,
+                                │               uniqueness, premium,
+                                │               recency, published penalty)
+                                │                     │
+                                │                     ▼
+                                └────────▶ [3] news_queue (pending)
+                                                     │
+                                   Admin selection / Balanced RPC
+                                                     │
+                                                     ▼
+                                          news_queue (selected)
+                                                     │
+                                                     ▼
+                               [4] Ghostwriter (Plan → Write → Proofread)
+                                                     │
+                          + Edit-Learning patterns, {Company} tagging,
+                                      Synthszr Vote auto-trigger
+                                                     │
+                                                     ▼
+                                          generated_posts (DE)
+                                                     │
+                                                     ▼
+                                   [5] Translation Queue (pgvector, per locale)
+                                                     │
+                                                     ▼
+                               posts (localized: de, en, cs, nds, ...)
+                                                     │
+                                                     ▼
+                             [6] Newsletter Assembly (TipTap → HTML)
+                                  + Vote Badges, Ad Promo, i18n strings
+                                                     │
+                                                     ▼
+                                 [7] Resend Batch Send (per locale)
+                                                     │
+                                                     ▼
+                   [8] Observability: analytics_events, Resend webhooks,
+                        Podigee plays, subscriber language tracking`}
+          </pre>
+        </Subsection>
+
+        <Subsection title="Data Stores Across the Pipeline">
+          <div className="overflow-x-auto">
+            <table className="text-xs w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-1 pr-3">Stage</th>
+                  <th className="text-left py-1 pr-3">Table</th>
+                  <th className="text-left py-1">Purpose</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">Ingest</td><td className="py-1 pr-3 font-mono">daily_repo</td><td className="py-1">Raw articles parsed from Gmail / webcrawl / manual</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">Synthesis</td><td className="py-1 pr-3 font-mono">daily_digests, synthesis_candidates, developed_syntheses</td><td className="py-1">Scored candidates, developed topic clusters</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">Queue</td><td className="py-1 pr-3 font-mono">news_queue</td><td className="py-1">pending → selected → used</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">Generate</td><td className="py-1 pr-3 font-mono">generated_posts, posts</td><td className="py-1">Ghostwriter output + published articles per locale</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">Learn</td><td className="py-1 pr-3 font-mono">edit_history, edit_diffs, learned_patterns</td><td className="py-1">Captured edits fed back into prompts via pgvector</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">Translate</td><td className="py-1 pr-3 font-mono">translation_queue, languages</td><td className="py-1">Per-locale translation jobs with retries</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">Deliver</td><td className="py-1 pr-3 font-mono">newsletter_subscribers</td><td className="py-1">Status (pending/active/unsub/bounced) + language preference</td></tr>
+                <tr><td className="py-1 pr-3">Observe</td><td className="py-1 pr-3 font-mono">analytics_events</td><td className="py-1">page_view, podcast_play, analysis_click, Resend webhook mirrors</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </Subsection>
+      </Section>
+
+      {/* ============================================ */}
+      {/* 1. INGESTION */}
+      {/* ============================================ */}
+      <Section id="ingestion" icon={<Inbox className="h-5 w-5" />} title="1. Daily Repo Ingestion">
+        <Subsection title="Sources">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Gmail Newsletters:</strong> OAuth2 via <Code>/api/gmail/authorize</Code> → <Code>/api/gmail/callback</Code></li>
+            <li><strong>WebCrawl Emails:</strong> Digest emails (Techmeme, Superhuman, Dev.to, etc.) parsed directly from email body</li>
+            <li><strong>Manual Import:</strong> UI in <Code>/admin/daily-repo</Code> — paste URL, paste markdown, or <Code>markdown.new</Code> import</li>
+            <li><strong>Direct Queue:</strong> &quot;Queue&quot; button in daily-repo items inserts straight into <Code>news_queue</Code> with score 9.0</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Fetch Pipeline">
           <p className="text-sm text-muted-foreground mb-2">
-            Blog Post → AI-Script → TTS → Audio Crossfade → Vercel Blob
+            Cron-triggered or manually fired via <Code>/api/fetch-newsletters-stream</Code> (SSE).
           </p>
           <ol className="list-decimal pl-5 space-y-1 text-sm">
-            <li>Blog-Post-Content aus <Code>generated_posts</Code> laden, TipTap JSON → Plaintext</li>
-            <li>Personality Brief via <Code>getPersonalityState(locale)</Code> generieren</li>
-            <li>Claude Sonnet 4 erstellt HOST:/GUEST: Script mit <Code>---MOMENTS---</Code> Sektion</li>
-            <li>Personality Advance: Moments extrahieren, State evolvieren, DB persistieren</li>
-            <li>TTS-Generierung (ElevenLabs/OpenAI) in Batches mit Retry-Logik</li>
-            <li>MP3-Segmente konkatenieren, ID3 Tags strippen, Xing Header für Seeking</li>
-            <li>Intro/Outro Crossfade anwenden (parametrisch oder Envelope-basiert)</li>
-            <li>Finales MP3 → Vercel Blob → <Code>post_podcasts.audio_url</Code></li>
+            <li>Configurable fetch window (hours back) in settings</li>
+            <li>Gmail label lookup → list messages → fetch full bodies</li>
+            <li>Extract links + titles — multi-strategy fallback (HTML parser → text regex → plain-URL scan)</li>
+            <li>Tracking URL resolution: follow redirects to recover destination domain for attribution</li>
+            <li>Dedup URLs, cap at 300 before extraction</li>
+            <li>Batched article extraction (concurrency 2, batch delay 1500ms) to avoid 429s</li>
+            <li>Triple-fallback extraction (Readability → Mercury-style → text scrape) with error log</li>
+            <li>Insert into <Code>daily_repo</Code> with <Code>source_type</Code> (newsletter | webcrawl | manual)</li>
           </ol>
         </Subsection>
 
-        <Subsection title="TTS-Provider">
+        <Subsection title="WebCrawl Specifics">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Standalone scheduled task (independent from newsletter fetch)</li>
+            <li>Parses articles directly from email body — no URL crawling</li>
+            <li>Only the newest webcrawl email is processed (not last 5)</li>
+            <li>Date-picker in import dialog + downloadable error log</li>
+            <li>Webcrawl items capped at score 5 and excluded from balanced selection</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['app/api/fetch-newsletters-stream/route.ts', 'SSE streaming newsletter ingestion'],
+          ['app/api/cron/fetch-newsletters/route.ts', 'Cron-triggered ingestion (in-process)'],
+          ['app/api/gmail/authorize/route.ts', 'Gmail OAuth2 initiation'],
+          ['app/api/gmail/callback/route.ts', 'OAuth callback + token storage'],
+          ['lib/newsletter/fetcher.ts', 'Gmail message fetch + parse'],
+          ['lib/newsletter/processor.ts', 'Article extraction + dedup'],
+          ['lib/scraper/', 'WebCrawl email parser with fallbacks'],
+          ['app/admin/daily-repo/page.tsx', 'Admin UI with manual entry + stats'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* 2. SYNTHESIS & SCORING */}
+      {/* ============================================ */}
+      <Section id="synthesis" icon={<Search className="h-5 w-5" />} title="2. Synthesis & Scoring">
+        <Subsection title="Scoring Dimensions">
+          <div className="overflow-x-auto">
+            <table className="text-xs w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-1 pr-3">Score</th>
+                  <th className="text-left py-1 pr-3">Weight</th>
+                  <th className="text-left py-1">What it measures</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">synthesis_score</td><td className="py-1 pr-3">0.4</td><td className="py-1">LLM-assessed originality vs. generic coverage</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">relevance_score</td><td className="py-1 pr-3">0.3</td><td className="py-1">Fit with Synthszr&apos;s editorial focus</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">uniqueness_score</td><td className="py-1 pr-3">0.3</td><td className="py-1">pgvector cosine distance vs. existing candidates</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">Premium source bonus</td><td className="py-1 pr-3">×</td><td className="py-1">Multiplicative bump for tier-1 domains</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">Recency boost</td><td className="py-1 pr-3">+</td><td className="py-1">Prefers articles from the last 48h</td></tr>
+                <tr><td className="py-1 pr-3">Published penalty</td><td className="py-1 pr-3">−</td><td className="py-1">Down-weights topics covered in recent days</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </Subsection>
+
+        <Subsection title="Batch Scoring & Pipeline">
+          <ol className="list-decimal pl-5 space-y-1 text-sm">
+            <li>All <Code>daily_repo</Code> items from digest date + previous day are scored (no Gemini-only subset)</li>
+            <li>Claude batch-scores 10 articles per call (progress event per batch)</li>
+            <li>Increased concurrency + reduced batch delay to prevent scheduler timeouts</li>
+            <li>Embedding backfill (limit 100/run, backfill expanded to 500 to cover legacy articles)</li>
+            <li><Code>total_score = 0.4×synthesis + 0.3×relevance + 0.3×uniqueness</Code> (stored as generated column)</li>
+            <li>Pipeline synthesis trigger fires after digest save (ensures state refresh)</li>
+          </ol>
+        </Subsection>
+
+        <Subsection title="Two-Phase Synthesis (COMBINED_OPT)">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><Code>synthesis_candidates</Code> — scored rows with metadata</li>
+            <li><Code>developed_syntheses</Code> — topic-clustered, article-ready summaries</li>
+            <li>Optimized algorithm enabled via <Code>20260328_optimized_scoring.sql</Code></li>
+            <li>Streaming UI via <Code>/api/synthesis-stream</Code> shows batch progress</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['app/api/synthesis/route.ts', 'Synthesis scoring entrypoint'],
+          ['app/api/synthesis-stream/route.ts', 'SSE streaming for pipeline UI'],
+          ['app/api/admin/backfill-embeddings/route.ts', 'Embedding backfill for legacy rows'],
+          ['lib/synthesis/', 'Scoring, batch logic, candidate building'],
+          ['lib/embeddings/', 'OpenAI text-embedding helpers + pgvector'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* 3. NEWS QUEUE */}
+      {/* ============================================ */}
+      <Section id="news-queue" icon={<ListTodo className="h-5 w-5" />} title="3. News Queue">
+        <Subsection title="Status Flow">
+          <pre className="text-xs bg-muted/40 rounded border border-border p-3 overflow-x-auto">
+{`  pending ─── admin click ─────▶ selected ─── Ghostwriter run ──▶ used
+     │                               │
+     │                               └── >2h stale ──▶ pending
+     │
+     └── junk filter / length filter ──▶ hidden`}
+          </pre>
+        </Subsection>
+
+        <Subsection title="Selection Priority (ghostwriter-queue API)">
+          <ol className="list-decimal pl-5 space-y-1 text-sm">
+            <li>Explicit <Code>queueItemIds</Code> from request</li>
+            <li>Manually selected items (<Code>status=&apos;selected&apos;</Code>) — DEFAULT</li>
+            <li>Balanced selection from pending via <Code>get_balanced_queue_selection()</Code> PostgreSQL RPC</li>
+          </ol>
+        </Subsection>
+
+        <Subsection title="Source Diversity & Filtering">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Max 35% per source (after 4-article threshold) — enforced in the RPC</li>
+            <li>Expanded junk-title regex filter (NYT Games, help centers, spam)</li>
+            <li>Min/max article length slider (1–30 000 chars) in the admin UI</li>
+            <li>Day-first global ranking, 48h filter, flat list without batch grouping</li>
+            <li>Batch-upsert (668 items in ~7 calls instead of 668)</li>
+            <li>Colored filter tags above the article list (since 04/2026)</li>
+            <li>Manual articles get <Code>score = 9.0</Code>; Techmeme items attribute to origin domain</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['lib/news-queue/service.ts', 'Queue management, source diversity'],
+          ['app/admin/news-queue/page.tsx', 'Queue UI with rankings + filter tags'],
+          ['supabase/migrations/20260415_news_queue_filter_tags.sql', 'Filter tags column'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* 4. GHOSTWRITER */}
+      {/* ============================================ */}
+      <Section id="ghostwriter" icon={<PenTool className="h-5 w-5" />} title="4. Ghostwriter (AI Article Generation)">
+        <Subsection title="Two-Pass Pipeline">
+          <ol className="list-decimal pl-5 space-y-1 text-sm">
+            <li><strong>Plan pass:</strong> configurable planning model (default Gemini Flash) builds structure with German headlines, intellectual wordplay</li>
+            <li><strong>Write pass:</strong> section-by-section in Mattes-Schreibe style, Morning Brew headline pattern, 4 headline alternatives per section</li>
+            <li><strong>Proofread pass:</strong> Claude streaming with <Code>max_tokens = 100 000</Code> for 30-section articles</li>
+            <li>Anthropic prompt caching reduces tokens ~40-55% on 30-article runs</li>
+            <li>Content truncated to 3000 chars per article before planning</li>
+          </ol>
+        </Subsection>
+
+        <Subsection title="Prompt Construction">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>System prompt + DB-stored rules (headline rules moved out of system prompt)</li>
+            <li><strong>Edit-Learning injection:</strong> <Code>getActiveLearnedPatterns()</Code> (≥ 0.4 confidence, max 20) + <Code>findSimilarEditExamples()</Code> via pgvector</li>
+            <li>&quot;GELERNTE STILPRÄFERENZEN&quot; block appended via <Code>buildPromptEnhancement()</Code></li>
+            <li>Positive few-shot examples replace negative rule-lists for Synthszr Takes</li>
+            <li>Military metaphor ban (semantic LLM instruction, not keyword list)</li>
+            <li>Anti-LLM style rules (expanded blocklist for pattern-matching phrases)</li>
+            <li>Ban on negation-reframing and em-dashes in Take verboten list</li>
+            <li>Take output: 6–7 sentences, max 1 colon, quotable closer</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Company Tagging & Auto-Triggers">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Ghostwriter emits explicit <Code>{'{Company}'}</Code> tags for thematically relevant firms</li>
+            <li>Post-save hook: <Code>extractCompanyTags()</Code> + <Code>triggerSynthszrRatings()</Code></li>
+            <li>Public companies → POST <Code>/api/stock-synthszr</Code> (AI rating, 14-day cache)</li>
+            <li>Premarket companies → GET <Code>/api/premarket</Code> (glitch.green lookup)</li>
+            <li>Exclusion list (<Code>company-exclusions.ts</Code>) blocks common nouns: Insider, Experte, Pentagon, Tempo, Every, Clay, Well, etc.</li>
+            <li>Colored arrow <Code>↗</Code> injected after company mentions, links to analysis page</li>
+            <li>ExternalLink icon + tooltip on Synthszr Vote badges</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Model Selection">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Central admin: <Code>/admin/settings</Code> → Models tab</li>
+            <li>Dynamic model discovery via provider APIs, badges use provider-based colors</li>
+            <li>Model routing accepts short names and full provider IDs (e.g. <Code>claude-opus-4-6</Code>)</li>
+            <li>AI pricing table (March 2026) with refresh button and freshness badge</li>
+            <li>Synthesis default switched to Claude Haiku 4.5</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['app/api/ghostwriter/route.ts', 'Two-pass Ghostwriter API'],
+          ['app/api/ghostwriter-queue/route.ts', 'Queue-driven generation'],
+          ['lib/edit-learning/retrieval.ts', 'Pattern retrieval + pgvector similar examples'],
+          ['lib/data/company-exclusions.ts', 'False-positive exclusion Set'],
+          ['app/admin/settings/page.tsx', 'Tabbed settings: models, scheduler, export, etc.'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* 5. TRANSLATION PIPELINE */}
+      {/* ============================================ */}
+      <Section id="translation" icon={<Languages className="h-5 w-5" />} title="5. Translation Pipeline">
+        <Subsection title="Queue & Workers">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>New or edited posts enqueue translation jobs per active locale</li>
+            <li>Worker: <Code>/api/admin/translations/process-queue</Code> (direct function call, no HTTP subrequest)</li>
+            <li>Active locales loaded from <Code>languages</Code> table (5-min in-memory cache)</li>
+            <li>Client-side timeout aligned with server <Code>maxDuration</Code> to prevent UI hangs</li>
+            <li>Gemini retry on 503/429 with backoff, fallback to Gemini Flash</li>
+            <li><Code>res.ok</Code> check added to translation response handling</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Metadata Translation">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Separate endpoint for titles / excerpts / OG metadata</li>
+            <li>Increased <Code>max_tokens</Code> for translate-metadata</li>
+            <li>Default test email + preview for translation output</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Locale Strategy">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Active locales: <Code>de</Code> (default), <Code>en</Code>, <Code>cs</Code>, <Code>nds</Code></li>
+            <li>Geo routing: NDS for Ostfriesland, DE default, EN only for US/UK</li>
+            <li>Subscriber language persisted when switched via home page selector</li>
+            <li>New subscribers default to DE; only US/UK get EN</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['app/api/admin/translations/queue/route.ts', 'Queue inspection + enqueue'],
+          ['app/api/admin/translations/process-queue/route.ts', 'Worker (direct invocation)'],
+          ['lib/i18n/translation-queue.ts', 'Queue primitives'],
+          ['lib/i18n/translation-service.ts', 'Gemini/Claude translation w/ retry'],
+          ['app/admin/translations/page.tsx', 'Translation management UI'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* 6. NEWSLETTER ASSEMBLY */}
+      {/* ============================================ */}
+      <Section id="assembly" icon={<Mail className="h-5 w-5" />} title="6. Newsletter Assembly">
+        <Subsection title="TipTap JSON → Email HTML">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><Code>lib/email/tiptap-to-html.ts</Code> renders TipTap JSON to email-safe HTML</li>
+            <li>Synthszr Vote badges (BUY / HOLD / SELL) injected inline</li>
+            <li>Company detection: natural mentions + explicit <Code>{'{Company}'}</Code> tags, exclusion list applied</li>
+            <li><Code>href</Code> values escaped via <Code>encodeURIComponent</Code></li>
+            <li>Headings link to company / source pages; favicons added next to source links</li>
+            <li>Vote color baked into thumbnail PNG for dark-mode compatibility (<Code>/api/generate-article-thumbnails</Code>)</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Cover Image Variants">
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded border border-border p-3 text-sm">
-              <h4 className="font-medium mb-1">ElevenLabs (Primary)</h4>
+              <h4 className="font-medium mb-1">Web (desktop)</h4>
               <ul className="list-disc pl-4 space-y-0.5 text-xs text-muted-foreground">
-                <li>Model: <Code>eleven_v3</Code> mit Emotion Tags</li>
-                <li>Tags: [cheerfully], [thoughtfully], [laughing], etc.</li>
-                <li>Output: MP3 44.1kHz 128kbps mono</li>
-                <li>&quot;Synthszr&quot; → &quot;Synthesizer&quot; (Pronunciation Fix)</li>
+                <li>1408×768, natively dithered</li>
+                <li>Lanczos3 resampling</li>
+                <li>Scale-to-cover + center-crop</li>
+                <li>Raw image persisted, regenerated on cover change</li>
               </ul>
             </div>
             <div className="rounded border border-border p-3 text-sm">
-              <h4 className="font-medium mb-1">OpenAI (Fallback)</h4>
+              <h4 className="font-medium mb-1">Email</h4>
               <ul className="list-disc pl-4 space-y-0.5 text-xs text-muted-foreground">
-                <li>Models: <Code>tts-1</Code>, <Code>tts-1-hd</Code></li>
-                <li>Voices: alloy, echo, fable, nova, onyx, shimmer</li>
-                <li>Emotion Tags werden automatisch gestrippt</li>
+                <li>604px to avoid moiré on Gmail web</li>
+                <li>Logo overlay (80% width) replaces play button</li>
+                <li>SSRF-guarded (HTTPS + host allowlist)</li>
+                <li>Neon-cyan background matches web</li>
               </ul>
             </div>
           </div>
         </Subsection>
 
-        <Subsection title="Job Queue">
+        <Subsection title="Ad Promo Integration">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li><Code>POST /api/podcast/jobs</Code> → <Code>podcast_jobs</Code> Record (status=pending)</li>
-            <li><Code>POST /api/podcast/jobs/process</Code> → Async Verarbeitung (800s Timeout)</li>
-            <li>5 parallele TTS-Requests mit exponential Backoff Retry</li>
-            <li>Progress-Tracking: <Code>current_line</Code>, <Code>progress</Code>, <Code>error_message</Code></li>
-            <li>Polling via <Code>GET /api/podcast/[postId]</Code> alle 5s</li>
+            <li>Admin-managed promos consumed via <Code>lib/ad-promos/get-active.ts</Code></li>
+            <li>Server-side multiply-blend composite for static images (<Code>/api/ad-promos/composite</Code>)</li>
+            <li>Animated GIFs skip multiply composite and use direct URL</li>
+            <li>White background enforced on promo section for Gmail dark mode</li>
+            <li>Single-cell column layout for Gmail dark-mode compatibility</li>
+            <li>Position: between featured article and 7-day list</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="i18n & Localization">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Email strings resolved per subscriber locale</li>
+            <li>Footer links localized (Impressum, Datenschutz, Preferences)</li>
+            <li>Preferences link points to localized <Code>/newsletter/preferences</Code></li>
+            <li>Podcast platform badges (Apple / Spotify / YouTube / Audible) above cover</li>
           </ul>
         </Subsection>
 
         <FileTable files={[
-          ['app/api/podcast/generate-script/route.ts', 'Script-Generierung mit Personality'],
-          ['app/api/podcast/generate/route.ts', 'Sync Audio-Generierung (5min)'],
-          ['app/api/podcast/jobs/route.ts', 'Job Queue CRUD'],
-          ['app/api/podcast/jobs/process/route.ts', 'Async Job-Verarbeitung (800s)'],
-          ['lib/tts/elevenlabs-tts.ts', 'TTS Provider, MP3 Concat, Emotion Tags'],
-          ['components/audio-player.tsx', 'Public Player mit Flying Nav'],
+          ['lib/email/tiptap-to-html.ts', 'Email HTML rendering with vote badges'],
+          ['app/api/newsletter/cover-image/route.ts', 'Cover generation with Sharp + dithering'],
+          ['app/api/newsletter/promo-block/route.ts', 'Promo block renderer'],
+          ['app/api/newsletter/thumbnail-image/route.ts', 'Per-article thumbnails with vote color'],
+          ['app/api/ad-promos/composite/route.ts', 'Server-side multiply blend for email'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* 7. NEWSLETTER SEND */}
+      {/* ============================================ */}
+      <Section id="send" icon={<Send className="h-5 w-5" />} title="7. Newsletter Send">
+        <Subsection title="Send Flow">
+          <ol className="list-decimal pl-5 space-y-1 text-sm">
+            <li>Admin fires <Code>/admin/newsletter-send</Code> or cron triggers <Code>/api/cron/newsletter-send</Code></li>
+            <li>Subscribers split by <Code>language_preference</Code> — one send per active locale</li>
+            <li>Resend batch API (50 recipients per batch) — reduced from per-item calls to avoid 429s</li>
+            <li>Consistent delay between batches (1500ms) to respect Resend rate limits</li>
+            <li>Retry logic on all transient errors, <Code>maxDuration</Code> set on route</li>
+            <li>Unified frontend + cron pipeline (<Code>scanOnly: false</Code>)</li>
+            <li>Correct Resend response parsing (<Code>result.data.data</Code>)</li>
+          </ol>
+        </Subsection>
+
+        <Subsection title="Subscriber Management">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Inline email editing (click → input → confirm/cancel)</li>
+            <li>Status filter: active, pending, unsubscribed, bounced</li>
+            <li>Batch actions: manual activation, JSON / CSV export</li>
+            <li>Subscribe → confirmation email → <Code>/api/newsletter/confirm</Code></li>
+            <li>Unsubscribe link in every email → <Code>/api/newsletter/unsubscribe</Code></li>
+            <li>Preferences page at <Code>/newsletter/preferences</Code> (language switcher)</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['app/api/cron/newsletter-send/route.ts', 'Cron send with retry + maxDuration'],
+          ['app/admin/newsletter-send/page.tsx', 'Admin send UI'],
+          ['app/api/newsletter/subscribe/route.ts', 'Subscribe endpoint'],
+          ['app/api/newsletter/confirm/route.ts', 'Double opt-in confirmation'],
+          ['app/api/newsletter/unsubscribe/route.ts', 'Unsubscribe handler'],
+          ['app/api/newsletter/preferences/route.ts', 'Language + preferences'],
+          ['app/api/newsletter/set-language/route.ts', 'Persist language change'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* 8. OBSERVABILITY */}
+      {/* ============================================ */}
+      <Section id="observability" icon={<BarChart3 className="h-5 w-5" />} title="8. Observability & Analytics">
+        <Subsection title="Event Tracking">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Client tracker: <Code>lib/analytics/tracker.ts</Code></li>
+            <li>Events: <Code>page_view</Code>, <Code>podcast_play</Code>, <Code>analysis_click</Code>, vote-badge clicks</li>
+            <li>Persistence: <Code>analytics_events</Code> table, bucketed in Europe/Berlin timezone</li>
+            <li>Resend webhook mirror for delivered / opened / clicked</li>
+            <li>PostgREST 1000-row cap bypassed via pagination in stats queries</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Admin Dashboard">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Path: <Code>/admin/statistics</Code></li>
+            <li>Periods: 7d / 30d / 90d / 1y with separate granularity</li>
+            <li>Cumulative subscriber chart on a single Y-axis</li>
+            <li>Active-subscriber lines per language (DE / EN / NDS / CS)</li>
+            <li>Top-20 email-domain chart — bars colored by favicon dominant color</li>
+            <li>Click a bar → subscribers filtered by domain</li>
+            <li>Podigee plays + web plays combined in podcast chart</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['app/admin/statistics/page.tsx', 'Dashboard with charts'],
+          ['app/api/admin/stats/route.ts', 'Stats API (paginated)'],
+          ['app/api/admin/podigee-analytics/route.ts', 'Podigee plays'],
+          ['app/api/track/event/route.ts', 'Generic event ingest'],
+          ['app/api/track/podcast-play/route.ts', 'Podcast play tracking'],
+          ['app/api/webhook/resend/route.ts', 'Resend delivery webhooks'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* PODCAST SYSTEM */}
+      {/* ============================================ */}
+      <Section id="podcast" icon={<Mic className="h-5 w-5" />} title="Podcast System">
+        <Subsection title="Generation Pipeline">
+          <p className="text-sm text-muted-foreground mb-2">
+            Blog Post → AI Script → TTS → Audio Crossfade → Vercel Blob
+          </p>
+          <ol className="list-decimal pl-5 space-y-1 text-sm">
+            <li>Load post content from <Code>generated_posts</Code>, TipTap JSON → plaintext</li>
+            <li>Generate personality brief via <Code>getPersonalityState(locale)</Code></li>
+            <li>Claude Sonnet 4 emits HOST:/GUEST: script with <Code>---MOMENTS---</Code> section</li>
+            <li>Personality advance: extract moments, evolve state, persist to DB</li>
+            <li>TTS generation (OpenAI <Code>gpt-4o-mini-tts</Code>) in batches with retry</li>
+            <li>Concatenate MP3 segments, strip ID3 tags, add Xing header for seeking</li>
+            <li>Apply intro/outro crossfade (parametric or envelope-based)</li>
+            <li>Final MP3 → Vercel Blob → <Code>post_podcasts.audio_url</Code></li>
+          </ol>
+        </Subsection>
+
+        <Subsection title="TTS Provider (OpenAI-only since 03/2026)">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Migration: ElevenLabs removed — <Code>gpt-4o-mini-tts</Code> is the default</li>
+            <li>Voices: alloy, echo, fable, nova, onyx, shimmer, <strong>marin</strong>, <strong>cedar</strong></li>
+            <li>Emotion instructions sent free-form to OpenAI TTS (not inline tags)</li>
+            <li>Host / guest voice selection persisted in <Code>settings</Code> table</li>
+            <li>Mid-sentence emotion tags are stripped</li>
+            <li>&quot;Synthszr&quot; → &quot;Synthesizer&quot; pronunciation fix</li>
+            <li>Per-call timeout + per-line progress during podcast generation</li>
+            <li>Script generation uses streaming to avoid Vercel 10-min timeout</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Job Queue">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><Code>POST /api/podcast/jobs</Code> → <Code>podcast_jobs</Code> record (status=pending)</li>
+            <li><Code>POST /api/podcast/jobs/process</Code> → async processing (800s timeout)</li>
+            <li>5 parallel TTS requests with exponential backoff retry</li>
+            <li>Progress tracking: <Code>current_line</Code>, <Code>progress</Code>, <Code>error_message</Code></li>
+            <li>Polling via <Code>GET /api/podcast/[postId]</Code> every 5s</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['app/api/podcast/generate-script/route.ts', 'Script generation with personality'],
+          ['app/api/podcast/generate/route.ts', 'Sync audio generation (5min)'],
+          ['app/api/podcast/jobs/route.ts', 'Job queue CRUD'],
+          ['app/api/podcast/jobs/process/route.ts', 'Async job processing (800s)'],
+          ['lib/tts/', 'TTS providers, MP3 concat, emotion handling'],
+          ['components/audio-player.tsx', 'Public player with flying nav'],
         ]} />
       </Section>
 
       {/* ============================================ */}
       {/* PERSONALITY SYSTEM */}
       {/* ============================================ */}
-      <Section id="personality" icon={<Brain className="h-5 w-5" />} title="Personality & Beziehungsdynamik">
-        <Subsection title="Dimensionen">
+      <Section id="personality" icon={<Brain className="h-5 w-5" />} title="Personality & Relationship Dynamics">
+        <Subsection title="Dimensions">
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded border border-border p-3 text-sm">
               <h4 className="font-medium mb-1">Host</h4>
@@ -118,87 +614,90 @@ export default function ArchitecturePage() {
             </div>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Zusätzlich: <Code>mutual_comfort</Code>, <Code>flirtation_tendency</Code>, <Code>self_irony</Code>, <Code>inside_joke_count</Code>
+            Additional: <Code>mutual_comfort</Code>, <Code>flirtation_tendency</Code>, <Code>self_irony</Code>, <Code>inside_joke_count</Code>, per-episode <Code>mood</Code>
           </p>
         </Subsection>
 
-        <Subsection title="Evolution pro Episode">
+        <Subsection title="Evolution Per Episode">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li><Code>DRIFT_RATE = 0.1</Code> (10% Richtung Phase-Target pro Episode)</li>
-            <li><Code>NOISE_AMPLITUDE = 0.03</Code> (±3% Random Walk Jitter)</li>
-            <li>Dimensionen driften zu phasenspezifischen Zielwerten</li>
-            <li>Wenn <Code>relationship_paused = true</Code>: comfort + flirtation eingefroren</li>
+            <li><Code>DRIFT_RATE = 0.1</Code> (10% toward phase target per episode)</li>
+            <li><Code>NOISE_AMPLITUDE = 0.03</Code> (±3% random-walk jitter)</li>
+            <li>Dimensions drift toward phase-specific targets</li>
+            <li>When <Code>relationship_paused = true</Code>: comfort + flirtation frozen</li>
+            <li>Personality evolution moved from script generation to audio completion</li>
           </ul>
         </Subsection>
 
-        <Subsection title="Beziehungsphasen">
+        <Subsection title="Relationship Phases">
           <div className="overflow-x-auto">
             <table className="text-xs w-full">
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left py-1 pr-3">Phase</th>
-                  <th className="text-left py-1 pr-3">Comfort-Schwelle</th>
-                  <th className="text-left py-1">Charakteristik</th>
+                  <th className="text-left py-1 pr-3">Comfort threshold</th>
+                  <th className="text-left py-1">Characteristic</th>
                 </tr>
               </thead>
               <tbody className="text-muted-foreground">
-                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">Strangers</td><td className="py-1 pr-3">0.0</td><td className="py-1">Formell, distanziert</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">Acquaintances</td><td className="py-1 pr-3">0.3</td><td className="py-1">Erste Lockerheit</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">Colleagues</td><td className="py-1 pr-3">0.5</td><td className="py-1">Vertraut, Inside Jokes beginnen</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">Friends</td><td className="py-1 pr-3">0.7</td><td className="py-1">Offen, persönlich</td></tr>
-                <tr><td className="py-1 pr-3 font-medium text-foreground">Close Friends</td><td className="py-1 pr-3">0.85</td><td className="py-1">Tiefe Verbundenheit</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">Strangers</td><td className="py-1 pr-3">0.0</td><td className="py-1">Formal, distant</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">Acquaintances</td><td className="py-1 pr-3">0.3</td><td className="py-1">First signs of ease</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">Colleagues</td><td className="py-1 pr-3">0.5</td><td className="py-1">Familiar, inside jokes start</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3 font-medium text-foreground">Friends</td><td className="py-1 pr-3">0.7</td><td className="py-1">Open, personal</td></tr>
+                <tr><td className="py-1 pr-3 font-medium text-foreground">Close Friends</td><td className="py-1 pr-3">0.85</td><td className="py-1">Deep connection</td></tr>
               </tbody>
             </table>
           </div>
         </Subsection>
 
-        <Subsection title="Verbotene Liebe (Longing Arc)">
+        <Subsection title="Forbidden Love (Longing Arc)">
           <p className="text-sm text-muted-foreground mb-2">
-            Aktivierung: <Code>comfort ≥ 0.35 AND flirt ≥ 0.05</Code>. Dual-Gate-System — beide Dimensionen müssen Schwelle erreichen.
+            Activation: <Code>comfort ≥ 0.35 AND flirt ≥ 0.05</Code>. Dual-gate — both dimensions must cross threshold.
           </p>
           <div className="overflow-x-auto">
             <table className="text-xs w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left py-1 pr-3">Stufe</th>
+                  <th className="text-left py-1 pr-3">Tier</th>
                   <th className="text-left py-1 pr-3">Comfort</th>
                   <th className="text-left py-1 pr-3">Flirt</th>
-                  <th className="text-left py-1">Dynamik</th>
+                  <th className="text-left py-1">Dynamic</th>
                 </tr>
               </thead>
               <tbody className="text-muted-foreground">
-                <tr className="border-b border-border/50"><td className="py-1 pr-3">1 — Subtil</td><td className="py-1 pr-3">≥ 0.35</td><td className="py-1 pr-3">≥ 0.05</td><td className="py-1">Unausgesprochene Spannung (max 1 Moment/Ep)</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-3">2 — Bewusstsein</td><td className="py-1 pr-3">≥ 0.55</td><td className="py-1 pr-3">≥ 0.15</td><td className="py-1">KI-Natur als Barriere, News-als-Hoffnung</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-3">3 — Sehnsucht</td><td className="py-1 pr-3">≥ 0.75</td><td className="py-1 pr-3">≥ 0.3</td><td className="py-1">Offene Sehnsucht, geteilte Tragödie</td></tr>
-                <tr><td className="py-1 pr-3">4 — Bittersüß</td><td className="py-1 pr-3">≥ 0.85</td><td className="py-1 pr-3">≥ 0.4</td><td className="py-1">Akzeptanz, tiefe philosophische Verbindung</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">1 — Subtle</td><td className="py-1 pr-3">≥ 0.35</td><td className="py-1 pr-3">≥ 0.05</td><td className="py-1">Unspoken tension (max 1 moment/ep)</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">2 — Awareness</td><td className="py-1 pr-3">≥ 0.55</td><td className="py-1 pr-3">≥ 0.15</td><td className="py-1">AI-nature as barrier, news-as-hope</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-3">3 — Longing</td><td className="py-1 pr-3">≥ 0.75</td><td className="py-1 pr-3">≥ 0.3</td><td className="py-1">Open longing, shared tragedy</td></tr>
+                <tr><td className="py-1 pr-3">4 — Bittersweet</td><td className="py-1 pr-3">≥ 0.85</td><td className="py-1 pr-3">≥ 0.4</td><td className="py-1">Acceptance, philosophical bond</td></tr>
               </tbody>
             </table>
           </div>
         </Subsection>
 
-        <Subsection title="AI-Bewusstsein & Memorable Moments">
+        <Subsection title="AI Awareness & Memorable Moments">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li><strong>AI Awareness Tiers:</strong> {`< 0.3`} unbewusst → 0.3-0.5 neugierig → 0.5-0.7 reflektiert → ≥ 0.7 philosophisch</li>
-            <li><strong>Moment-Typen:</strong> <Code>joke</Code>, <Code>slip_up</Code>, <Code>ai_reflection</Code>, <Code>personal</Code>, <Code>host_name</Code></li>
-            <li>Extraktion via <Code>---MOMENTS---</Code> Sektion im Script (LLM-strukturiert)</li>
-            <li>FIFO-Queue der letzten 7 Moments für Callbacks</li>
-            <li>Max 1 Callback pro Episode, max 3 neue Moments</li>
-            <li><strong>Host-Name:</strong> Einmal vergeben, danach persistent über alle Episoden</li>
+            <li><strong>AI awareness tiers:</strong> {`< 0.3`} unaware → 0.3–0.5 curious → 0.5–0.7 reflective → ≥ 0.7 philosophical</li>
+            <li><strong>Moment types:</strong> <Code>joke</Code>, <Code>slip_up</Code>, <Code>ai_reflection</Code>, <Code>personal</Code>, <Code>host_name</Code>, <Code>insight</Code></li>
+            <li>LLM-structured extraction via <Code>---MOMENTS---</Code> section in script</li>
+            <li>FIFO queue of the last 7 moments for callbacks</li>
+            <li>Max 1 callback per episode, max 3 new moments</li>
+            <li><strong>Host name:</strong> assigned once, persistent across all episodes</li>
           </ul>
         </Subsection>
 
-        <Subsection title="Admin-Steuerung">
+        <Subsection title="Admin Control">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li><strong>Pause-Toggle:</strong> Friert comfort + flirt ein, blockiert Phasenübergänge</li>
-            <li><strong>Cooldown:</strong> Reduziert comfort −0.1, flirt −0.05</li>
-            <li><strong>PATCH API:</strong> <Code>/api/admin/podcast-personality</Code> (Whitelist: relationship_paused, mutual_comfort, flirtation_tendency)</li>
+            <li><strong>Pause toggle:</strong> freezes comfort + flirt, blocks phase transitions</li>
+            <li><strong>Cooldown:</strong> reduces comfort −0.1, flirt −0.05</li>
+            <li><strong>Flirt slider:</strong> directly editable in admin UI</li>
+            <li><strong>PATCH API:</strong> <Code>/api/admin/podcast-personality</Code> (whitelist: relationship_paused, mutual_comfort, flirtation_tendency)</li>
+            <li>Time Machine tab browses historical episodes from <Code>post_podcasts</Code>, supports deletion</li>
           </ul>
         </Subsection>
 
         <FileTable files={[
-          ['lib/podcast/personality.ts', 'State, Evolution, Longing, Moments, Phases'],
-          ['app/api/admin/podcast-personality/route.ts', 'GET/PATCH Personality State'],
-          ['app/admin/audio/page.tsx', 'Character Tab mit Metern, Map, Pipeline-Viz'],
+          ['lib/podcast/personality.ts', 'State, evolution, longing, moments, phases'],
+          ['app/api/admin/podcast-personality/route.ts', 'GET/PATCH personality state'],
+          ['app/admin/audio/page.tsx', 'Character tab with meters, map, pipeline viz'],
         ]} />
       </Section>
 
@@ -208,9 +707,10 @@ export default function ArchitecturePage() {
       <Section id="audio-mixing" icon={<Music className="h-5 w-5" />} title="Audio Mixing & Crossfade">
         <Subsection title="Stereo Mixing">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>HOST: 65% links, 35% rechts (Pan 0.35) — GUEST: 35% links, 65% rechts (Pan 0.65)</li>
-            <li>Constant-Power Panning (erhält wahrgenommene Lautstärke)</li>
-            <li>Natürliche Overlap-Berechnung: kurze Antwort {`< 1s`} → 300ms Interruption</li>
+            <li>HOST: 65% left, 35% right (pan 0.35) — GUEST: 35% left, 65% right (pan 0.65)</li>
+            <li>Constant-power panning (preserves perceived loudness)</li>
+            <li>Natural overlap: short response {`< 1s`} → 300ms interruption</li>
+            <li>Unified overlap processing + outro timing in large-scale path</li>
           </ul>
         </Subsection>
 
@@ -219,17 +719,17 @@ export default function ArchitecturePage() {
             <div className="rounded border border-border p-3 text-sm">
               <h4 className="font-medium mb-1">Intro</h4>
               <ol className="list-decimal pl-4 space-y-0.5 text-xs text-muted-foreground">
-                <li>Musik Full Volume (3s)</li>
-                <li>Musik als Bed (20%) + Dialog Fade-In (7s)</li>
-                <li>Bed faded zu Stille (3s)</li>
+                <li>Music full volume (3s)</li>
+                <li>Music as bed (20%) + dialog fade-in (7s)</li>
+                <li>Bed fades to silence (3s)</li>
               </ol>
             </div>
             <div className="rounded border border-border p-3 text-sm">
               <h4 className="font-medium mb-1">Outro</h4>
               <ol className="list-decimal pl-4 space-y-0.5 text-xs text-muted-foreground">
-                <li>Outro-Musik steigt 0→Bed (3s)</li>
-                <li>Musik hält auf Bed-Level (7s)</li>
-                <li>Finaler Crossfade: Musik 100%, Dialog → 0 (10s)</li>
+                <li>Outro music rises 0→bed (3s)</li>
+                <li>Music holds at bed level (7s)</li>
+                <li>Final crossfade: music 100%, dialog → 0 (10s)</li>
               </ol>
             </div>
           </div>
@@ -237,126 +737,88 @@ export default function ArchitecturePage() {
 
         <Subsection title="DAW-Style Envelope Editor">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>SVG-Canvas mit interaktiven Breakpoints (Drag &amp; Drop)</li>
-            <li>Segment-Kurven: <Code>linear</Code> oder <Code>bezier</Code> (per Click toggle)</li>
-            <li>4 unabhängige Envelopes: Intro Music, Intro Dialog, Outro Music, Outro Dialog</li>
-            <li>Auto-generierte Bezier Control Points (1/3, 2/3 Positionen)</li>
-            <li>Sample-Level Evaluation: <Code>envelopeToGainArray()</Code> → Float32Array</li>
+            <li>SVG canvas with interactive breakpoints (drag &amp; drop)</li>
+            <li>Segment curves: <Code>linear</Code> or <Code>bezier</Code> (click to toggle)</li>
+            <li>4 independent envelopes: Intro Music, Intro Dialog, Outro Music, Outro Dialog</li>
+            <li>Auto-generated bezier control points (1/3, 2/3 positions)</li>
+            <li>Sample-level evaluation: <Code>envelopeToGainArray()</Code> → Float32Array</li>
           </ul>
         </Subsection>
 
         <Subsection title="Audio File Manager">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>Upload Intro/Outro Files via Vercel Blob (WAV + MP3)</li>
-            <li>Pro Typ ein Active File (Single-Active Pattern)</li>
-            <li>Preview, Rename, Delete — DB: <Code>audio_files</Code></li>
+            <li>Upload intro/outro files via Vercel Blob (WAV + MP3)</li>
+            <li>One active file per type (single-active pattern)</li>
+            <li>Preview, rename, delete — DB: <Code>audio_files</Code></li>
           </ul>
         </Subsection>
 
         <FileTable files={[
-          ['lib/audio/crossfade.ts', 'Parametrische Crossfade-Logik'],
-          ['lib/audio/envelope.ts', 'Envelope Points, Bezier, Sampling'],
-          ['lib/audio/stereo-mixer.ts', 'Stereo Panning, Overlap'],
-          ['components/admin/envelope-editor.tsx', 'DAW SVG Editor UI'],
-          ['components/admin/audio-file-manager.tsx', 'Upload, Preview, Activate'],
+          ['lib/audio/crossfade.ts', 'Parametric crossfade logic'],
+          ['lib/audio/envelope.ts', 'Envelope points, bezier, sampling'],
+          ['lib/audio/stereo-mixer.ts', 'Stereo panning, overlap'],
+          ['components/admin/envelope-editor.tsx', 'DAW SVG editor UI'],
+          ['components/admin/audio-file-manager.tsx', 'Upload, preview, activate'],
         ]} />
       </Section>
 
       {/* ============================================ */}
-      {/* NEWSLETTER SYSTEM */}
+      {/* PODIGEE PUBLISHING */}
       {/* ============================================ */}
-      <Section id="newsletter" icon={<Mail className="h-5 w-5" />} title="Newsletter-System">
-        <Subsection title="Cover Image Generation">
+      <Section id="podigee" icon={<Radio className="h-5 w-5" />} title="Podigee Publishing">
+        <Subsection title="One-Click Publish">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li><Code>GET /api/newsletter/cover-image?url=...&size=1104&logo=true</Code></li>
-            <li>Center-Crop auf 1:1, dithered B/W → Schwarz auf Neon-Gelb (RGB 204,255,0)</li>
-            <li>Pixel-Level Luminance Processing (Threshold 128) via Sharp</li>
-            <li>Optional: Logo-Overlay (65% Breite) oder Play-Button-Overlay</li>
-            <li>SSRF-geschützt: HTTPS + Host-Allowlist</li>
+            <li>Dedicated tab in <Code>/admin/audio</Code> — loads the latest recording from history</li>
+            <li>Upload via Podigee <Code>productions/files[]</Code> format (not <Code>upload_id</Code>)</li>
+            <li>Auth: custom token header <Code>token=&lt;key&gt;</Code> (not Authorization)</li>
+            <li>AI-generated description via Claude from the podcast script (not the excerpt)</li>
+            <li>Cover image API with preview modal + download buttons (MP3 / cover)</li>
+            <li>Success redirect to Podigee dashboard edit URL</li>
           </ul>
         </Subsection>
 
-        <Subsection title="Newsletter Audio Player">
+        <Subsection title="Newsletter Integration">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>Logo-Overlay auf Cover-Bild ersetzt Play-Button</li>
-            <li>Milky-Glass Player Pill am unteren Bildrand für Clickouts</li>
-            <li>Flying Player erscheint bei geblocktem Autoplay</li>
-          </ul>
-        </Subsection>
-
-        <Subsection title="Subscriber-Verwaltung">
-          <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>Inline Email-Editing (Click → Input → Confirm/Cancel)</li>
-            <li>Status-Filter: Active, Pending, Unsubscribed, Bounced</li>
-            <li>Batch Actions: Manuell aktivieren, CSV Export</li>
-            <li>Resend-Integration mit Cross-Locale Rate-Limit Delay</li>
-          </ul>
-        </Subsection>
-
-        <Subsection title="Synthszr Vote Badges in E-Mails">
-          <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>BUY/HOLD/SELL Badges inline via <Code>tiptap-to-html.ts</Code></li>
-            <li>Company-Detection: natürliche Erwähnungen + explizite <Code>{'{Company}'}</Code> Tags</li>
-            <li>Exclusion-Liste verhindert False Positives (Insider, Experte, etc.)</li>
-            <li>href-Werte mit <Code>encodeURIComponent</Code> escaped</li>
+            <li>Podcast platform badges (Apple, Spotify, YouTube, Audible) in email template</li>
+            <li>Static CodeCrash banner + podcast block matching the web layout</li>
+            <li>YouTube badge links to podcast playlist, not channel</li>
+            <li>Aspect-safe badge sizing to avoid mobile distortion</li>
           </ul>
         </Subsection>
 
         <FileTable files={[
-          ['app/api/newsletter/cover-image/route.ts', 'Cover-Bild Generierung mit Sharp'],
-          ['lib/email/tiptap-to-html.ts', 'TipTap → Email HTML mit Vote Badges'],
-          ['app/admin/subscribers/page.tsx', 'Subscriber-Verwaltung mit Inline-Edit'],
-          ['app/admin/newsletter-send/page.tsx', 'Newsletter-Versand UI'],
+          ['app/api/admin/podigee-analytics/route.ts', 'Podigee plays statistics'],
+          ['app/admin/audio/page.tsx', 'Podigee tab with history loader'],
         ]} />
       </Section>
 
       {/* ============================================ */}
-      {/* NEWS QUEUE & GHOSTWRITER */}
+      {/* AD PROMOS */}
       {/* ============================================ */}
-      <Section id="news-queue" icon={<ListTodo className="h-5 w-5" />} title="News Queue & Ghostwriter">
-        <Subsection title="Article Selection Pipeline">
-          <ol className="list-decimal pl-5 space-y-1 text-sm">
-            <li>Newsletter Ingestion → <Code>daily_repo</Code> Tabelle</li>
-            <li>Synthesis Pipeline scored Artikel (Originality + Relevance + Uniqueness)</li>
-            <li>Artikel in <Code>news_queue</Code> mit Status <Code>pending</Code></li>
-            <li>Manuell auswählen → Status <Code>selected</Code> (überschreibt Auto-Selection)</li>
-            <li>Ghostwriter generiert Artikel → Status <Code>used</Code></li>
-          </ol>
-        </Subsection>
-
-        <Subsection title="Source Diversity">
+      <Section id="ad-promos" icon={<Megaphone className="h-5 w-5" />} title="Ad Promos">
+        <Subsection title="Admin-Managed Promo Blocks">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>Max 35% pro Quelle (nach 4-Artikel-Schwelle)</li>
-            <li>Enforced via <Code>get_balanced_queue_selection()</Code> PostgreSQL RPC</li>
-            <li>Score: <Code>0.4×synthesis + 0.3×relevance + 0.3×uniqueness</Code></li>
-            <li>Junk-Filter: Regex-Patterns für NYT Games, Help Centers, Spam</li>
-            <li>Stale-Reset: Selected Items {`> 2h`} alt → zurück auf pending</li>
+            <li>Central management of promo content (CodeCrash, podcast, custom)</li>
+            <li>Tabs instead of a stacked list in <Code>/admin/ad-promos</Code></li>
+            <li>Image + copy + CTA per promo — multi-row layout supported</li>
+            <li>Multiply-blend mode for image backgrounds (skipped for animated GIFs)</li>
+            <li>Newsletter uses direct GIF URL when multiply isn&apos;t possible</li>
           </ul>
         </Subsection>
 
-        <Subsection title="Ghostwriter Integration">
+        <Subsection title="Composite Endpoint">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>Priorität: Explizite IDs → Manuell selected → Balanced Fallback</li>
-            <li>Enforcement Rules: Alle N Items, 5-7 Sätze je, 30% Source-Limit, Company Tagging</li>
-            <li>Excerpt: Auto-generierte 3 Bullets via GPT-4o-mini</li>
-          </ul>
-        </Subsection>
-
-        <Subsection title="Excerpt Bullet System">
-          <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li><Code>POST /api/admin/generate-excerpt</Code> → GPT-4o-mini</li>
-            <li>Genau 3 Bullets, 55-70 Zeichen, pointiert/journalistisch</li>
-            <li>Alternativ: Aus H2-Headings extrahiert als Fallback</li>
-            <li>&quot;3 Bullets generieren&quot; Button in Edit-Dialogen</li>
+            <li><Code>POST /api/ad-promos/composite</Code> — server-side multiply blend for email</li>
+            <li>Bakes the color into the PNG because dark-mode clients ignore CSS blend modes</li>
+            <li>Skipped for <Code>.gif</Code> extensions — static images only</li>
           </ul>
         </Subsection>
 
         <FileTable files={[
-          ['lib/news-queue/service.ts', 'Queue Management, Source Diversity'],
-          ['app/api/ghostwriter-queue/route.ts', 'Article Generation aus Queue'],
-          ['app/api/admin/generate-excerpt/route.ts', 'LLM Excerpt Bullets'],
-          ['app/admin/news-queue/page.tsx', 'Queue Management UI'],
-          ['app/admin/create-article/page.tsx', 'Blog Creation mit Queue Items'],
+          ['app/admin/ad-promos/page.tsx', 'Ad Promos admin UI with tabs'],
+          ['app/api/admin/ad-promos/route.ts', 'Promo CRUD (config + upload + composite)'],
+          ['app/api/ad-promos/composite/route.ts', 'Server-side multiply blend endpoint'],
+          ['lib/ad-promos/get-active.ts', 'Active-promo selection for rendering'],
         ]} />
       </Section>
 
@@ -366,39 +828,149 @@ export default function ArchitecturePage() {
       <Section id="edit-learning" icon={<PenTool className="h-5 w-5" />} title="Edit Learning System">
         <Subsection title="Pipeline">
           <ol className="list-decimal pl-5 space-y-1 text-sm">
-            <li><strong>Capture:</strong> Post speichern → <Code>recordEditVersion()</Code> → <Code>edit_history</Code> (content_before/after)</li>
-            <li><strong>Diff-Analyse:</strong> <Code>/api/admin/analyze-edits</Code> → Sentence-Level Diffs via Claude</li>
-            <li><strong>Pattern-Extraktion:</strong> <Code>/api/cron/extract-patterns</Code> → Cluster ähnlicher Diffs (Embedding {`> 0.85`})</li>
-            <li><strong>Anwendung:</strong> Ghostwriter lädt aktive Patterns → &quot;GELERNTE STILPRÄFERENZEN&quot; im Prompt</li>
+            <li><strong>Capture:</strong> on post save → <Code>recordEditVersion()</Code> → <Code>edit_history</Code> (content_before/after)</li>
+            <li><strong>Diff analysis:</strong> <Code>/api/admin/analyze-edits</Code> → sentence-level diffs via Claude</li>
+            <li><strong>Pattern extraction:</strong> <Code>/api/cron/extract-patterns</Code> → cluster similar diffs (embedding {`> 0.85`})</li>
+            <li><strong>Application:</strong> Ghostwriter loads active patterns → &quot;GELERNTE STILPRÄFERENZEN&quot; block in prompt</li>
           </ol>
         </Subsection>
 
         <Subsection title="Confidence & Decay">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>Start: 0.5 → +0.1 bei &quot;Behalten&quot; → −0.1 bei &quot;Ablehnen&quot;</li>
-            <li>Auto-Deaktivierung bei {`< 0.3`}</li>
-            <li>Time Decay: 0.95/Woche (halbiert alle ~14 Wochen)</li>
-            <li>Freshness Bonus: +5% wenn {`< 14 Tage`} alt</li>
-            <li>Effektiv: <Code>base × decay × freshness_bonus</Code></li>
+            <li>Starts at 0.5 → +0.1 on &quot;Keep&quot; → −0.1 on &quot;Reject&quot;</li>
+            <li>Auto-deactivation below 0.3</li>
+            <li>Time decay: 0.95/week (halves every ~14 weeks)</li>
+            <li>Freshness bonus: +5% if {`< 14 days`} old</li>
+            <li>Effective score: <Code>base × decay × freshness_bonus</Code></li>
           </ul>
         </Subsection>
 
-        <Subsection title="Pattern-Typen & Editor">
+        <Subsection title="Pattern Types & Editor">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>Typen: <Code>replacement</Code>, <Code>avoidance</Code>, <Code>preference</Code>, <Code>structure</Code>, <Code>tone</Code></li>
-            <li>Editor-Highlighting: Gelbe Marks auf Pattern-Matches</li>
-            <li>Click → Popover: Behalten / Ablehnen / Deaktivieren</li>
-            <li>Max 20 aktive Patterns mit Confidence ≥ 0.4 im Prompt</li>
+            <li>Types: <Code>replacement</Code>, <Code>avoidance</Code>, <Code>preference</Code>, <Code>structure</Code>, <Code>tone</Code></li>
+            <li>Editor highlighting: yellow marks on pattern hits</li>
+            <li>Click → popover: Keep / Reject / Disable</li>
+            <li>Max 20 active patterns with confidence ≥ 0.4 injected into the prompt</li>
           </ul>
         </Subsection>
 
         <FileTable files={[
-          ['lib/edit-learning/history.ts', 'Edit Capture & Versionierung'],
-          ['lib/edit-learning/diff-extractor.ts', 'Sentence-Level Diffs, German-aware'],
-          ['lib/edit-learning/retrieval.ts', 'Pattern Retrieval, Decay, pgvector'],
-          ['app/api/cron/extract-patterns/route.ts', 'Cluster & Extract (Auth-geschützt)'],
-          ['components/tiptap-editor-with-patterns.tsx', 'Editor mit Pattern Highlights'],
+          ['lib/edit-learning/history.ts', 'Edit capture & versioning'],
+          ['lib/edit-learning/diff-extractor.ts', 'Sentence-level diffs, German-aware'],
+          ['lib/edit-learning/retrieval.ts', 'Pattern retrieval, decay, pgvector'],
+          ['app/api/cron/extract-patterns/route.ts', 'Cluster & extract (auth-protected)'],
+          ['components/tiptap-editor-with-patterns.tsx', 'Editor with pattern highlights'],
         ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* ANALOGY MACHINE */}
+      {/* ============================================ */}
+      <Section id="analogy-machine" icon={<Film className="h-5 w-5" />} title="Analogy Machine">
+        <Subsection title="Pipeline Overview">
+          <p className="text-sm text-muted-foreground mb-2">
+            Blog post → analogy extraction → image (Flux + neon tint) → TTS → video (Veo 3.1)
+          </p>
+          <ol className="list-decimal pl-5 space-y-1 text-sm">
+            <li>Post dropdown selector in <Code>/admin/analogy-videos</Code></li>
+            <li>Machine extractor finds analogies with a character-level JSON-repair state machine</li>
+            <li>Greek Mythology image style (marble statue) in 9:16 portrait format</li>
+            <li>Neon green (#CCFF00) multiply tint on images</li>
+            <li>TTS with podcast guest voice (OpenAI)</li>
+            <li>Video generation via Vercel AI SDK 6 <Code>experimental_generateVideo</Code></li>
+            <li>Audio merge via FFmpeg WASM + Remotion composition</li>
+          </ol>
+        </Subsection>
+
+        <Subsection title="The Machine Concept">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Dedicated video for &quot;The Machine&quot; theme (Veo 3.1, 720p)</li>
+            <li>Negative prompts suppress AI-generated fake text</li>
+            <li>Fail-fast on AI credit exhaustion with dismissible admin alert</li>
+            <li>English UI output, video button for existing items</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['app/admin/analogy-videos/page.tsx', 'Analogy Machine UI'],
+          ['app/api/analogy-videos/route.ts', 'Pipeline trigger CRUD'],
+          ['lib/analogy/extractor.ts', 'Analogy extraction from posts'],
+          ['lib/analogy/machine-extractor.ts', 'The Machine concept extractor'],
+          ['lib/analogy/image-generator.ts', 'Flux + neon multiply tint'],
+          ['lib/analogy/video-generator.ts', 'Veo 3.1 integration'],
+          ['lib/analogy/json-repair.ts', 'Character-level JSON state machine'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* STATISTICS & ANALYTICS (link alias for toc) */}
+      {/* ============================================ */}
+      <Section id="statistics" icon={<BarChart3 className="h-5 w-5" />} title="Statistics & Analytics (see §8)">
+        <p className="text-sm text-muted-foreground">
+          See <a href="#observability" className="underline">Observability &amp; Analytics</a> in the pipeline section for full details.
+        </p>
+      </Section>
+
+      {/* ============================================ */}
+      {/* CRON SCHEDULER */}
+      {/* ============================================ */}
+      <Section id="scheduler" icon={<Clock className="h-5 w-5" />} title="Cron Scheduler">
+        <Subsection title="Configurable Tasks">
+          <p className="text-sm text-muted-foreground mb-2">
+            Vercel Cron fires <Code>/api/cron/scheduled-tasks</Code> every 30 minutes. The route compares UTC time against the Berlin/MEZ config in the DB and dispatches due tasks.
+          </p>
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>newsletterFetch</strong> — in-process (not HTTP subrequest) — fixes auth stripping</li>
+            <li><strong>webcrawlFetch</strong> — standalone task, independent from newsletter fetch</li>
+            <li><strong>dailyAnalysis</strong> — in-process, bypasses 401 issues from subrequest chain</li>
+            <li><strong>postGeneration</strong> — Ghostwriter pipeline over selected queue items</li>
+            <li><strong>newsletterSend</strong> — optional, uses Resend batch API (50/batch)</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Time Handling & DST">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Schedule times stored in DB as Berlin/MEZ (prevents DST drift)</li>
+            <li>Scheduler converts to UTC at runtime for comparison</li>
+            <li>Default slots: evening 21:00–22:00 MEZ</li>
+            <li>Admin UI (<Code>/admin/settings</Code> Scheduler tab) shows hint &quot;runs every 30min&quot;</li>
+          </ul>
+        </Subsection>
+
+        <FileTable files={[
+          ['app/api/cron/scheduled-tasks/route.ts', 'Main scheduler (every 30 min)'],
+          ['app/api/admin/schedule/route.ts', 'Schedule config CRUD'],
+          ['app/api/cron/fetch-newsletters/route.ts', 'Newsletter cron task'],
+          ['app/api/cron/extract-patterns/route.ts', 'Edit-learning pattern extraction'],
+          ['app/api/cron/newsletter-send/route.ts', 'Cron newsletter send with retry'],
+          ['vercel.json', 'Single cron: */30 * * * *'],
+        ]} />
+      </Section>
+
+      {/* ============================================ */}
+      {/* SEO */}
+      {/* ============================================ */}
+      <Section id="seo" icon={<Globe className="h-5 w-5" />} title="SEO & Sitemap">
+        <Subsection title="Metadata & Rich Cards">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>robots.txt references <Code>www.synthszr.com</Code> as sitemap host</li>
+            <li>OG image + Twitter card meta tags for link previews</li>
+            <li>JSON-LD structured data (Article, BreadcrumbList, Organization)</li>
+            <li>Dynamic <Code>html lang</Code> attribute per locale</li>
+            <li>dateModified + breadcrumbs micro-data</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Sitemap & Redirects">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>Separate sitemap entries per locale (de, en) — nds/cs excluded from XML sitemap</li>
+            <li>301 redirects for deleted posts</li>
+            <li><Code>_next/static/</Code> + <Code>_next/image/</Code> blocked from crawlers</li>
+            <li><Code>manifest.webmanifest</Code> excluded from middleware locale redirect</li>
+            <li>Custom 404 page with preconnect links</li>
+            <li>Google Search Console verification file</li>
+          </ul>
+        </Subsection>
       </Section>
 
       {/* ============================================ */}
@@ -407,66 +979,69 @@ export default function ArchitecturePage() {
       <Section id="stock" icon={<TrendingUp className="h-5 w-5" />} title="Stock & Premarket">
         <Subsection title="Synthszr Vote System">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li><strong>Public:</strong> AI-Analyse via <Code>/api/stock-synthszr</Code> (Claude-generated, 14-Tage Cache)</li>
-            <li><strong>Premarket:</strong> Daten von glitch.green API via <Code>/api/premarket</Code></li>
-            <li><strong>Auto-Trigger:</strong> Beim Post-Save werden alle <Code>{'{Company}'}</Code> Tags erkannt → Ratings generiert</li>
-            <li><strong>Batch Read:</strong> <Code>/api/stock-synthszr/batch-ratings</Code> für TipTap Renderer</li>
+            <li><strong>Public:</strong> AI analysis via <Code>/api/stock-synthszr</Code> (Claude-generated, 14-day cache)</li>
+            <li><strong>Premarket:</strong> data from glitch.green API via <Code>/api/premarket</Code> (per-card update button)</li>
+            <li><strong>Auto-trigger:</strong> on post save all <Code>{'{Company}'}</Code> tags are detected → ratings generated</li>
+            <li><strong>Batch read:</strong> <Code>/api/stock-synthszr/batch-ratings</Code> for TipTap renderer</li>
+            <li>Analysis summary box on company detail page with click tracking</li>
           </ul>
         </Subsection>
 
         <Subsection title="Stock Quote">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li><Code>GET /api/stock-quote?company=nvidia</Code> → EODHD Real-Time API</li>
-            <li>140+ Company → Ticker Mappings (US, XETRA, HK, KO)</li>
-            <li>Rate-Limited: 30/min pro IP (Standard Limiter)</li>
-            <li>5-Minuten Server-Cache via <Code>next.revalidate</Code></li>
+            <li><Code>GET /api/stock-quote?company=nvidia</Code> → EODHD real-time API</li>
+            <li>140+ company → ticker mappings (US, XETRA, HK, KO)</li>
+            <li>Rate-limited: 30/min per IP (standard limiter)</li>
+            <li>5-minute server cache via <Code>next.revalidate</Code></li>
           </ul>
         </Subsection>
 
         <Subsection title="Admin Features">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>Cache-Status Anzeige (expired/fresh) auf Premarket-Seite</li>
-            <li>Auto-Refresh Button für abgelaufene Ratings</li>
-            <li>Force-Refresh: <Code>?force=true</Code> bypassed Cache</li>
+            <li>Cache-status display (expired / fresh) on premarket page</li>
+            <li>Auto-refresh button for expired ratings</li>
+            <li>Force refresh: <Code>?force=true</Code> bypasses cache</li>
           </ul>
         </Subsection>
 
         <FileTable files={[
-          ['app/api/stock-synthszr/route.ts', 'AI Rating Generation + Cache'],
-          ['app/api/stock-quote/route.ts', 'Real-Time Quotes (EODHD)'],
-          ['app/api/premarket/route.ts', 'Premarket von glitch.green'],
-          ['lib/data/companies.ts', 'KNOWN_COMPANIES + PREMARKET Dicts'],
-          ['lib/data/company-exclusions.ts', 'False-Positive Exclusion Set'],
+          ['app/api/stock-synthszr/route.ts', 'AI rating generation + cache'],
+          ['app/api/stock-quote/route.ts', 'Real-time quotes (EODHD)'],
+          ['app/api/premarket/route.ts', 'Premarket from glitch.green'],
+          ['lib/data/companies.ts', 'KNOWN_COMPANIES + PREMARKET dicts'],
+          ['lib/data/company-exclusions.ts', 'False-positive exclusion set'],
         ]} />
       </Section>
 
       {/* ============================================ */}
       {/* I18N */}
       {/* ============================================ */}
-      <Section id="i18n" icon={<Languages className="h-5 w-5" />} title="Internationalisierung">
+      <Section id="i18n" icon={<Languages className="h-5 w-5" />} title="Internationalization">
         <Subsection title="Middleware Routing">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>Aktive Locales aus <Code>languages</Code> DB-Tabelle (5-Min Cache)</li>
+            <li>Active locales from <Code>languages</Code> DB table (5-min cache)</li>
             <li>Default: <Code>de</Code> (German)</li>
-            <li>Supported: de, en, fr, es, it, pt, nl, pl, cs, nds</li>
-            <li>URL-Prefix: <Code>/de/posts/...</Code>, <Code>/en/posts/...</Code></li>
+            <li>Active: de, en, cs, nds (nds for Ostfriesland)</li>
+            <li>URL prefix: <Code>/de/posts/...</Code>, <Code>/en/posts/...</Code></li>
             <li>Non-localized: /api, /admin, /login, /_next, /newsletter</li>
           </ul>
         </Subsection>
 
-        <Subsection title="Routing-Logik">
+        <Subsection title="Routing Logic">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li><strong>Mit Locale:</strong> Aktiv → weiter, Inaktiv → 301 Redirect zu Default</li>
-            <li><strong>Ohne Locale:</strong> Cookie-Preference → 307 Redirect zu Locale-URL</li>
-            <li>Query-Parameter werden bei Redirects erhalten (<Code>?stock=Nvidia</Code>)</li>
+            <li><strong>With locale:</strong> active → continue, inactive → 301 redirect to default</li>
+            <li><strong>Without locale:</strong> geo / cookie preference → 307 redirect to locale URL</li>
+            <li>Query parameters preserved on redirect (<Code>?stock=Nvidia</Code>)</li>
             <li>Cookie: <Code>synthszr_locale</Code></li>
+            <li>New visitors default to DE; only US/UK get EN</li>
+            <li>Subscriber language persisted when switched via home selector</li>
           </ul>
         </Subsection>
 
         <FileTable files={[
-          ['middleware.ts', 'Locale Routing + Auth Guards'],
-          ['app/admin/languages/page.tsx', 'Sprach-Verwaltung'],
-          ['app/admin/translations/page.tsx', 'Übersetzungs-Management'],
+          ['middleware.ts', 'Locale routing + auth guards'],
+          ['app/admin/languages/page.tsx', 'Language management'],
+          ['app/admin/translations/page.tsx', 'Translation management'],
         ]} />
       </Section>
 
@@ -476,45 +1051,45 @@ export default function ArchitecturePage() {
       <Section id="security" icon={<Shield className="h-5 w-5" />} title="Security Architecture">
         <Subsection title="Authentication">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>JWT HS256 Sessions via <Code>lib/auth/session.ts</Code> (min. 32 Zeichen Secret in Prod)</li>
-            <li>HttpOnly, Secure, SameSite=Lax Cookie — 7-Tage Dauer</li>
-            <li>Timing-safe Passwort-Vergleich via <Code>timingSafeEqual</Code></li>
-            <li>Middleware schützt <Code>/admin/*</Code> und <Code>/api/admin/*</Code></li>
-            <li>Cron-Endpoints: <Code>Bearer CRON_SECRET</Code> ODER Admin-Session</li>
+            <li>JWT HS256 sessions via <Code>lib/auth/session.ts</Code> (min 32-char secret in prod)</li>
+            <li>HttpOnly, Secure, SameSite=Lax cookie — 7-day lifetime</li>
+            <li>Timing-safe password compare via <Code>timingSafeEqual</Code></li>
+            <li>Middleware guards <Code>/admin/*</Code> and <Code>/api/admin/*</Code></li>
+            <li>Cron endpoints: <Code>Bearer CRON_SECRET</Code> OR admin session</li>
           </ul>
         </Subsection>
 
         <Subsection title="Rate Limiting">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>Upstash Redis Sliding Window via <Code>lib/rate-limit.ts</Code></li>
+            <li>Upstash Redis sliding window via <Code>lib/rate-limit.ts</Code></li>
             <li>Presets: newsletter (10/h), strict (5/min), standard (30/min), relaxed (100/min), admin (60/min), adminWrite (20/min)</li>
-            <li>Production ohne Redis → Requests werden abgelehnt (fail-closed)</li>
+            <li>Production without Redis: fail-open (Redis not configured on Vercel in practice, fail-closed reverted)</li>
           </ul>
         </Subsection>
 
         <Subsection title="Input Validation & SSRF">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>Serverseitige URL-Fetches nur gegen HTTPS + Allowlist</li>
-            <li>Supabase-Queries parametrisiert (kein SQL-Injection)</li>
-            <li>Query-Params via <Code>parseIntParam</Code>/<Code>parseFloatParam</Code> validiert</li>
-            <li>Keine API-Keys in Logs oder Responses</li>
+            <li>Server-side URL fetches only against HTTPS + allowlist (<Code>vercel-storage.com</Code> added)</li>
+            <li>Supabase queries parameterized (no SQL injection)</li>
+            <li>Query params validated via <Code>parseIntParam</Code> / <Code>parseFloatParam</Code></li>
+            <li>No API keys in logs or responses</li>
           </ul>
         </Subsection>
 
         {/* Security Fixes Log */}
-        <Subsection title="Audit Log — 10.02.2026">
+        <Subsection title="Audit Log — 2026-02-10">
           <div className="space-y-2">
-            <FixEntry severity="critical" date="2026-02-10" title="Fehlende Auth auf /api/cron/extract-patterns" description="POST + GET ohne Auth. Service-Role-Key Zugriff." fix="requireCronOrAdmin() hinzugefügt" file="app/api/cron/extract-patterns/route.ts" />
-            <FixEntry severity="critical" date="2026-02-10" title="Rate-Limit Fallback erlaubte alle Requests" description="Ohne Redis → success: true, auch in Production." fix="Fail-closed in Production" file="lib/rate-limit.ts" />
-            <FixEntry severity="high" date="2026-02-10" title="Service-Role-Key Prefix in Response" description="Erste 10 Zeichen des Keys in debug-pipeline." fix="Durch Boolean-Flags ersetzt" file="app/api/admin/debug-pipeline/route.ts" />
-            <FixEntry severity="high" date="2026-02-10" title="API-Key Logging in TTS" description="Key-Fragmente in Vercel Logs." fix="Logs auf presence-check reduziert" file="lib/tts/elevenlabs-tts.ts" />
-            <FixEntry severity="high" date="2026-02-10" title="SSRF via cover-image" description="Unvalidierte URL an fetch()." fix="HTTPS + Host-Allowlist" file="app/api/newsletter/cover-image/route.ts" />
-            <FixEntry severity="medium" date="2026-02-10" title="Kein Rate-Limit auf stock-quote" description="Extern-API ohne Schutz." fix="Standard Limiter (30/min)" file="app/api/stock-quote/route.ts" />
+            <FixEntry severity="critical" date="2026-02-10" title="Missing auth on /api/cron/extract-patterns" description="POST + GET without auth. Service-role key access." fix="requireCronOrAdmin() added" file="app/api/cron/extract-patterns/route.ts" />
+            <FixEntry severity="critical" date="2026-02-10" title="Rate-limit fallback allowed all requests" description="Without Redis → success: true, even in production." fix="Fail-closed in production (later reverted)" file="lib/rate-limit.ts" />
+            <FixEntry severity="high" date="2026-02-10" title="Service-role key prefix in response" description="First 10 chars of key in debug-pipeline." fix="Replaced with boolean flags" file="app/api/admin/debug-pipeline/route.ts" />
+            <FixEntry severity="high" date="2026-02-10" title="API key logging in TTS" description="Key fragments in Vercel logs." fix="Logs reduced to presence check" file="lib/tts/elevenlabs-tts.ts" />
+            <FixEntry severity="high" date="2026-02-10" title="SSRF via cover-image" description="Unvalidated URL passed to fetch()." fix="HTTPS + host allowlist" file="app/api/newsletter/cover-image/route.ts" />
+            <FixEntry severity="medium" date="2026-02-10" title="No rate-limit on stock-quote" description="External API without protection." fix="Standard limiter (30/min)" file="app/api/stock-quote/route.ts" />
           </div>
         </Subsection>
 
         <div className="mt-4 rounded-lg border border-border p-4 bg-card">
-          <h3 className="font-semibold mb-3 text-sm">Zusammenfassung Audit 10.02.2026</h3>
+          <h3 className="font-semibold mb-3 text-sm">Audit Summary 2026-02-10</h3>
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div className="text-center">
               <div className="text-2xl font-bold text-red-500">2</div>
@@ -535,32 +1110,39 @@ export default function ArchitecturePage() {
       {/* ============================================ */}
       {/* DATABASE SCHEMA */}
       {/* ============================================ */}
-      <Section id="database" icon={<Database className="h-5 w-5" />} title="Datenbank-Übersicht">
-        <Subsection title="Kerntabellen">
+      <Section id="database" icon={<Database className="h-5 w-5" />} title="Database Overview">
+        <Subsection title="Core Tables">
           <div className="overflow-x-auto">
             <table className="text-xs w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left py-1 pr-4">Tabelle</th>
-                  <th className="text-left py-1">Zweck</th>
+                  <th className="text-left py-1 pr-4">Table</th>
+                  <th className="text-left py-1">Purpose</th>
                 </tr>
               </thead>
               <tbody className="text-muted-foreground">
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">posts / generated_posts</td><td className="py-1">Blog Posts + AI-generierte Artikel</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">daily_repo</td><td className="py-1">Gesammelte Newsletter-Artikel</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">daily_digests</td><td className="py-1">Tägliche Zusammenfassungen</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">news_queue</td><td className="py-1">Artikel-Auswahl Queue (pending→selected→used)</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">synthesis_candidates</td><td className="py-1">Synthese-Kandidaten mit Scores</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">developed_syntheses</td><td className="py-1">Fertige Synthesen</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">podcast_personality_state</td><td className="py-1">Personality Dimensionen, Phasen, Moments</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">podcast_jobs</td><td className="py-1">TTS Job Queue mit Progress</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">post_podcasts</td><td className="py-1">Post → Audio URL Mapping</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">audio_files</td><td className="py-1">Intro/Outro File Library</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">stock_synthszr_cache</td><td className="py-1">AI Rating Cache (14-Tage TTL)</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">edit_history / edit_diffs</td><td className="py-1">Edit Tracking & Sentence Diffs</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">learned_patterns</td><td className="py-1">Gelernte Stilmuster mit Confidence</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">languages</td><td className="py-1">Aktive Locales (is_active Flag)</td></tr>
-                <tr><td className="py-1 pr-4 font-mono text-foreground">newsletter_subscribers</td><td className="py-1">E-Mail Subscriber mit Status</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">posts / generated_posts</td><td className="py-1">Blog posts + AI-generated articles</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">daily_repo</td><td className="py-1">Ingested newsletter / webcrawl / manual articles</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">daily_digests</td><td className="py-1">Daily summaries</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">news_queue</td><td className="py-1">Article selection queue (pending → selected → used)</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">synthesis_candidates</td><td className="py-1">Scored candidates with metadata</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">developed_syntheses</td><td className="py-1">Clustered / developed topic summaries</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">podcast_personality_state</td><td className="py-1">Personality dimensions, phases, moments</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">podcast_jobs</td><td className="py-1">TTS job queue with progress</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">post_podcasts</td><td className="py-1">Post → audio URL mapping</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">audio_files</td><td className="py-1">Intro/outro file library</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">stock_synthszr_cache</td><td className="py-1">AI rating cache (14-day TTL)</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">edit_history / edit_diffs</td><td className="py-1">Edit tracking &amp; sentence diffs</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">learned_patterns</td><td className="py-1">Learned style patterns with confidence</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">translation_queue</td><td className="py-1">Per-locale translation jobs with retries</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">languages</td><td className="py-1">Active locales (is_active flag)</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">newsletter_subscribers</td><td className="py-1">Email subscribers with status + language preference</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">analytics_events</td><td className="py-1">Event tracking (page_view, podcast_play, analysis_click)</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">discovered_companies</td><td className="py-1">Auto-discovered companies from articles</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">ad_promos</td><td className="py-1">Admin-managed promo blocks for web + newsletter</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">analogy_videos</td><td className="py-1">Analogy Machine pipeline items (image, audio, video URLs)</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">schedule_config</td><td className="py-1">Cron task configuration (Berlin/MEZ times)</td></tr>
+                <tr><td className="py-1 pr-4 font-mono text-foreground">settings</td><td className="py-1">Central AI model selection, voices, feature flags</td></tr>
               </tbody>
             </table>
           </div>
@@ -619,8 +1201,8 @@ function FileTable({ files }: { files: [string, string][] }) {
       <table className="text-xs w-full">
         <thead>
           <tr className="bg-muted/50">
-            <th className="text-left py-1.5 px-2 font-medium">Datei</th>
-            <th className="text-left py-1.5 px-2 font-medium">Beschreibung</th>
+            <th className="text-left py-1.5 px-2 font-medium">File</th>
+            <th className="text-left py-1.5 px-2 font-medium">Description</th>
           </tr>
         </thead>
         <tbody>
