@@ -9,7 +9,7 @@ interface I18nContextType {
   translations: Record<string, string>
 }
 
-const I18nContext = createContext<I18nContextType | null>(null)
+export const I18nContext = createContext<I18nContextType | null>(null)
 
 interface I18nProviderProps {
   children: ReactNode

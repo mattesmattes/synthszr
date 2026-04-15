@@ -1,10 +1,37 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { X, RefreshCcw, TrendingUp, TrendingDown, Minus, Calendar } from 'lucide-react'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
+import { I18nContext } from '@/lib/i18n/context'
+
+const CREATED_ON_LABELS: Record<string, string> = {
+  de: 'Erstellt am',
+  en: 'Created on',
+  fr: 'Créé le',
+  es: 'Creado el',
+  it: 'Creato il',
+  pt: 'Criado em',
+  nl: 'Aangemaakt op',
+  pl: 'Utworzono',
+  cs: 'Vytvořeno',
+  nds: 'Maakt op',
+}
+
+const DATE_LOCALES: Record<string, string> = {
+  de: 'de-DE',
+  en: 'en-US',
+  fr: 'fr-FR',
+  es: 'es-ES',
+  it: 'it-IT',
+  pt: 'pt-PT',
+  nl: 'nl-NL',
+  pl: 'pl-PL',
+  cs: 'cs-CZ',
+  nds: 'de-DE',
+}
 
 /**
  * Parse inline citations like "([domain] (url))" or "(domain (url))" and render as links
@@ -82,6 +109,10 @@ export function StockSynthszrLayer({
   onClose,
 }: StockSynthszrLayerProps) {
   const [state, setState] = useState<FetchState>({ status: 'loading' })
+  const i18n = useContext(I18nContext)
+  const locale = i18n?.locale || 'de'
+  const createdOnLabel = CREATED_ON_LABELS[locale] || CREATED_ON_LABELS.de
+  const dateLocale = DATE_LOCALES[locale] || DATE_LOCALES.de
 
   useEffect(() => {
     if (!company) return
@@ -170,7 +201,7 @@ export function StockSynthszrLayer({
               <div className="flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-xs text-muted-foreground">
                 <Calendar className="h-3.5 w-3.5" />
                 <span>
-                  Erstellt am {new Date(state.data.created_at).toLocaleDateString('de-DE', {
+                  {createdOnLabel} {new Date(state.data.created_at).toLocaleDateString(dateLocale, {
                     day: '2-digit',
                     month: '2-digit',
                     year: 'numeric',
