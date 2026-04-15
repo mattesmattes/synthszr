@@ -682,9 +682,6 @@ export default function NewsQueuePage() {
           <ListTodo className="h-5 w-5" />
           News Queue
         </h1>
-        <p className="text-xs text-muted-foreground">
-          Quellen-diversifizierte News-Auswahl (max 30% pro Quelle) • Wird automatisch durch Synthese-Pipeline befüllt
-        </p>
         {/* Action Buttons - horizontal row */}
         <div className="flex flex-wrap items-center gap-2 mt-3">
           <Button
@@ -733,29 +730,6 @@ export default function NewsQueuePage() {
               Alle deselectieren ({stats.selected})
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-xs"
-            onClick={handleExpire}
-            disabled={actionLoading === 'expire'}
-          >
-            {actionLoading === 'expire' ? (
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-            ) : (
-              <Trash2 className="h-3 w-3 mr-1" />
-            )}
-            Abgelaufene Items entfernen
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-xs"
-            onClick={() => fetchData()}
-          >
-            <RefreshCw className="h-3 w-3 mr-1" />
-            Aktualisieren
-          </Button>
           <CollapsibleTrigger asChild>
             <Button variant="outline" size="sm" className="text-xs">
               <PieChart className="h-3 w-3 mr-1" />
@@ -776,60 +750,70 @@ export default function NewsQueuePage() {
             className={`cursor-pointer transition-all min-w-0 overflow-hidden ${statusFilter === 'pending' ? 'ring-2 ring-yellow-500 bg-yellow-500/5' : 'hover:bg-muted/50'}`}
             onClick={() => setStatusFilter('pending')}
           >
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
-                <div className={`text-xs ${statusFilter === 'pending' ? 'text-yellow-600 font-medium' : 'text-muted-foreground'}`}>Pending</div>
-                <Clock className="h-4 w-4 text-yellow-500" />
+            <CardContent className="p-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Clock className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
+                  <div className={`text-xs truncate ${statusFilter === 'pending' ? 'text-yellow-600 font-medium' : 'text-muted-foreground'}`}>Pending</div>
+                </div>
+                <div className="text-base font-bold">{stats.pending}</div>
               </div>
-              <div className="text-2xl font-bold">{stats.pending}</div>
             </CardContent>
           </Card>
           <Card
             className={`cursor-pointer transition-all min-w-0 overflow-hidden ${statusFilter === 'selected' ? 'ring-2 ring-blue-500 bg-blue-500/5' : 'hover:bg-muted/50'}`}
             onClick={() => setStatusFilter('selected')}
           >
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
-                <div className={`text-xs ${statusFilter === 'selected' ? 'text-blue-600 font-medium' : 'text-muted-foreground'}`}>Selected</div>
-                <Play className="h-4 w-4 text-blue-500" />
+            <CardContent className="p-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Play className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                  <div className={`text-xs truncate ${statusFilter === 'selected' ? 'text-blue-600 font-medium' : 'text-muted-foreground'}`}>Selected</div>
+                </div>
+                <div className="text-base font-bold">{stats.selected}</div>
               </div>
-              <div className="text-2xl font-bold">{stats.selected}</div>
             </CardContent>
           </Card>
           <Card
             className={`cursor-pointer transition-all min-w-0 overflow-hidden ${statusFilter === 'used' ? 'ring-2 ring-green-500 bg-green-500/5' : 'hover:bg-muted/50'}`}
             onClick={() => setStatusFilter('used')}
           >
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
-                <div className={`text-xs ${statusFilter === 'used' ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>Used</div>
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <CardContent className="p-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                  <div className={`text-xs truncate ${statusFilter === 'used' ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>Used</div>
+                </div>
+                <div className="text-base font-bold">{stats.used}</div>
               </div>
-              <div className="text-2xl font-bold">{stats.used}</div>
             </CardContent>
           </Card>
           <Card
             className={`cursor-pointer transition-all min-w-0 overflow-hidden ${statusFilter === 'expired' ? 'ring-2 ring-gray-500 bg-gray-500/5' : 'hover:bg-muted/50'}`}
             onClick={() => setStatusFilter('expired')}
           >
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
-                <div className={`text-xs ${statusFilter === 'expired' ? 'text-gray-600 font-medium' : 'text-muted-foreground'}`}>Expired</div>
-                <XCircle className="h-4 w-4 text-gray-500" />
+            <CardContent className="p-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <XCircle className="h-3.5 w-3.5 text-gray-500 shrink-0" />
+                  <div className={`text-xs truncate ${statusFilter === 'expired' ? 'text-gray-600 font-medium' : 'text-muted-foreground'}`}>Expired</div>
+                </div>
+                <div className="text-base font-bold">{stats.expired}</div>
               </div>
-              <div className="text-2xl font-bold">{stats.expired}</div>
             </CardContent>
           </Card>
           <Card
             className={`cursor-pointer transition-all min-w-0 overflow-hidden ${statusFilter === 'skipped' ? 'ring-2 ring-orange-500 bg-orange-500/5' : 'hover:bg-muted/50'}`}
             onClick={() => setStatusFilter('skipped')}
           >
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
-                <div className={`text-xs ${statusFilter === 'skipped' ? 'text-orange-600 font-medium' : 'text-muted-foreground'}`}>Skipped</div>
-                <SkipForward className="h-4 w-4 text-orange-500" />
+            <CardContent className="p-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <SkipForward className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                  <div className={`text-xs truncate ${statusFilter === 'skipped' ? 'text-orange-600 font-medium' : 'text-muted-foreground'}`}>Skipped</div>
+                </div>
+                <div className="text-base font-bold">{stats.skipped}</div>
               </div>
-              <div className="text-2xl font-bold">{stats.skipped}</div>
             </CardContent>
           </Card>
         </div>
