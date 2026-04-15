@@ -351,24 +351,55 @@ async function translateWithClaude(
 }
 
 /**
- * Translate using Gemini
+ * Translate using Gemini.
+ * Retries transient overload errors (503/429) with exponential backoff,
+ * then falls back to gemini-2.0-flash if gemini-2.5-pro stays overloaded.
  */
 async function translateWithGemini(
   systemPrompt: string,
   userPrompt: string,
   model: TranslationModel
 ): Promise<string> {
-  const modelId = model === 'gemini-2.5-pro' ? 'gemini-2.5-pro' : 'gemini-2.0-flash'
+  const primaryId = model === 'gemini-2.5-pro' ? 'gemini-2.5-pro' : 'gemini-2.0-flash'
 
-  const gemini = genAI.getGenerativeModel({
-    model: modelId,
-    systemInstruction: systemPrompt,
-  })
+  try {
+    return await callGeminiWithRetry(primaryId, systemPrompt, userPrompt, 3)
+  } catch (error) {
+    if (primaryId === 'gemini-2.5-pro' && isOverloadError(error)) {
+      console.warn('[Translation] gemini-2.5-pro overloaded after retries, falling back to gemini-2.0-flash')
+      return await callGeminiWithRetry('gemini-2.0-flash', systemPrompt, userPrompt, 2)
+    }
+    throw error
+  }
+}
 
-  const result = await gemini.generateContent(userPrompt)
-  const response = result.response
+async function callGeminiWithRetry(
+  modelId: string,
+  systemPrompt: string,
+  userPrompt: string,
+  maxAttempts: number
+): Promise<string> {
+  const gemini = genAI.getGenerativeModel({ model: modelId, systemInstruction: systemPrompt })
+  let lastError: unknown
 
-  return response.text()
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const result = await gemini.generateContent(userPrompt)
+      return result.response.text()
+    } catch (error) {
+      lastError = error
+      if (!isOverloadError(error) || attempt === maxAttempts) throw error
+      const delayMs = 1000 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 500)
+      console.warn(`[Translation] ${modelId} overloaded (attempt ${attempt}/${maxAttempts}), retrying in ${delayMs}ms`)
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+    }
+  }
+  throw lastError
+}
+
+function isOverloadError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error)
+  return /\b(503|429|overload|unavailable|high demand|rate limit|quota)\b/i.test(msg)
 }
 
 /**
