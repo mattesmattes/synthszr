@@ -31,6 +31,8 @@ export default function ArchitecturePage() {
       <nav className="mb-10 rounded-lg border p-5 bg-card relative" style={{ borderColor: 'var(--neon-cyan)', boxShadow: '0 0 0 1px color-mix(in oklab, var(--neon-cyan) 20%, transparent), inset 0 0 30px color-mix(in oklab, var(--neon-cyan) 5%, transparent)' }}>
         <h2 className="text-xs font-mono uppercase tracking-[0.25em] mb-3 text-[color:var(--neon-cyan)]">// contents</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-sm font-mono">
+          <TocLink href="#tech-stack">Technology Stack</TocLink>
+          <TocLink href="#llm-models">LLM &amp; AI Models</TocLink>
           <TocLink href="#newsletter-pipeline">Newsletter Generation Pipeline</TocLink>
           <TocLink href="#ingestion">1. Daily Repo Ingestion</TocLink>
           <TocLink href="#synthesis">2. Synthesis & Scoring</TocLink>
@@ -57,6 +59,164 @@ export default function ArchitecturePage() {
           <TocLink href="#database">Database Overview</TocLink>
         </div>
       </nav>
+
+      {/* ============================================ */}
+      {/* TECHNOLOGY STACK */}
+      {/* ============================================ */}
+      <Section id="tech-stack" icon={<Server className="h-5 w-5" />} title="Technology Stack">
+        <Subsection title="Runtime & Framework">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Next.js 16</strong> App Router — React 19, Server Components, Server Actions, streaming, <Code>Turbopack</Code> bundler.</li>
+            <li><strong>TypeScript 5</strong> strict mode across the entire codebase.</li>
+            <li><strong>Tailwind CSS 4</strong> (CSS-first config via <Code>@tailwindcss/postcss</Code>) + <Code>tw-animate-css</Code>.</li>
+            <li><strong>Radix UI</strong> primitives + <Code>shadcn/ui</Code>-style composition for all admin surfaces.</li>
+            <li><strong>Node.js runtime</strong> for API routes; no Edge functions (email rendering, Sharp, and Anthropic SDK require Node).</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Hosting & Deployment (Vercel)">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Vercel</strong> hosts the entire app — single project, production on <Code>synthszr.com</Code>, preview URLs per PR.</li>
+            <li><strong>Vercel Blob</strong> stores ad-promo images, article thumbnails, podcast mp3s, and analogy-machine video artifacts (public bucket).</li>
+            <li><strong>Vercel Cron</strong> schedules every route under <Code>/api/cron/*</Code>; auth via <Code>Bearer CRON_SECRET</Code> or <Code>x-vercel-cron</Code> header.</li>
+            <li><strong>Vercel Analytics</strong> (<Code>@vercel/analytics</Code>) for base web-vitals alongside our own <Code>analytics_events</Code> table.</li>
+            <li><strong>Remotion Lambda</strong> (via <Code>@remotion/lambda</Code>) renders the final Analogy-Machine compositions.</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Databases & Persistence">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Supabase Postgres</strong> — primary datastore. Extensions: <Code>pgvector</Code> (embeddings + similarity search), <Code>pg_cron</Code> (not used in favor of Vercel Cron), <Code>uuid-ossp</Code>.</li>
+            <li><strong>Supabase Auth</strong> is NOT used — the app has a single admin account gated by a JWT cookie minted from <Code>ADMIN_PASSWORD</Code> / <Code>JWT_SECRET</Code> (see <Code>lib/auth/session.ts</Code>).</li>
+            <li><strong>Supabase Storage</strong> for legacy article thumbnails; new uploads use Vercel Blob.</li>
+            <li><strong>Upstash Redis</strong> (serverless, REST) for rate-limiting via <Code>@upstash/ratelimit</Code> sliding windows.</li>
+            <li>Access pattern: <Code>createClient()</Code> in client code (RLS applies), <Code>createAdminClient()</Code> with <Code>service_role</Code> key in server routes after auth is verified.</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Email & Newsletter">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Resend</strong> for transactional + newsletter sends (batch API, webhook signatures verified via <Code>svix</Code>).</li>
+            <li><strong>React Email</strong> (<Code>@react-email/components</Code>) for the newsletter template; rendered to HTML at send time.</li>
+            <li><strong>Gmail API</strong> (via <Code>googleapis</Code>) for ingesting newsletters into <Code>daily_repo</Code>.</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Editor & Content">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>TipTap 3</strong> (ProseMirror) as the article editor — starter-kit + custom extensions for <Code>{'{Company}'}</Code> tags, Synthszr-Take marks, and company-aware heading IDs.</li>
+            <li><strong>Mozilla Readability</strong> for extracting article bodies from ingested HTML.</li>
+            <li><strong>Cheerio</strong> for server-side HTML post-processing (company-tag detection, link sanitization).</li>
+            <li><strong>Marked</strong> + <Code>react-markdown</Code> for admin-facing markdown preview.</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Media & Image Processing">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Sharp</strong> — all server-side image manipulation (cover-image dither, ad-promo multiply composite, favicon dominant-color extraction).</li>
+            <li><strong>FFmpeg WASM</strong> (<Code>@ffmpeg/ffmpeg</Code>) + <Code>ffmpeg-static</Code> for audio concatenation / video+audio muxing.</li>
+            <li><strong>mpg123-decoder</strong> + <Code>@breezystack/lamejs</Code> for MP3 decode/encode in the podcast crossfade pipeline.</li>
+            <li><strong>Remotion</strong> for programmatic video composition; <strong>Remotion Lambda</strong> for rendering at scale.</li>
+            <li><strong>pdf-parse</strong> for extracting text from PDF attachments.</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Security & Auth">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><Code>jose</Code> for HS256 JWT session tokens (7-day lifetime).</li>
+            <li><Code>sanitize-html</Code> for admin-authored HTML (ad-promo &amp; tip-promo bodies).</li>
+            <li><Code>crypto.timingSafeEqual</Code> for password + CRON_SECRET comparison.</li>
+            <li><strong>Svix</strong> for Resend webhook signature verification.</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Observability & Tooling">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Vitest</strong> test runner (unit + API integration).</li>
+            <li><strong>ESLint</strong> + <strong>TypeScript</strong> strict mode; prebuild runs <Code>scripts/sync-premarket-companies.ts</Code> to refresh company data before each deploy.</li>
+            <li>Recharts for admin statistics dashboards.</li>
+            <li>Sonner for toast notifications.</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="External APIs (non-AI)">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>glitch.green</strong> — premarket company data (<Code>STOCKS_PREMARKET_API_KEY</Code>, X-API-Key header).</li>
+            <li><strong>Google s2 favicons</strong> — email-domain branding in statistics dashboard.</li>
+            <li><strong>Podigee</strong> — podcast hosting &amp; publishing API.</li>
+            <li><strong>Google Calendar API</strong> (via <Code>googleapis</Code>) — optional briefing integration.</li>
+          </ul>
+        </Subsection>
+      </Section>
+
+      {/* ============================================ */}
+      {/* LLM & AI MODELS */}
+      {/* ============================================ */}
+      <Section id="llm-models" icon={<Brain className="h-5 w-5" />} title="LLM & AI Models">
+        <p className="text-sm text-muted-foreground">
+          The app uses three frontier providers. Model selection lives in the <Code>settings</Code> table so admins can flip models without a deploy.
+        </p>
+
+        <Subsection title="Anthropic Claude (text generation + reasoning)">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Claude Opus 4.6</strong> (<Code>claude-opus-4-6-20260301</Code>) — Ghostwriter plan + main generation when settings select Opus.</li>
+            <li><strong>Claude Sonnet 4.6</strong> (<Code>claude-sonnet-4-6-20260301</Code>) — default Ghostwriter model; also used for analogy extraction and edit-diff classification.</li>
+            <li><strong>Claude Haiku 4.5</strong> (<Code>claude-haiku-4-5-20251001</Code>) — fast paths: proofread pass, translation, edit clustering.</li>
+            <li>Integration via official <Code>@anthropic-ai/sdk</Code>; uses <strong>prompt caching</strong> on long system prompts (post-refactor pattern).</li>
+            <li>Older model IDs (<Code>opus-4</Code>, <Code>sonnet-4</Code>, <Code>haiku-3.5</Code>) are kept as fallback strings for admin settings migration; not part of the live path.</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="OpenAI (TTS + structured tasks)">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>gpt-5.4</strong> / <strong>gpt-5.4-mini</strong> / <strong>gpt-5.4-nano</strong> — available in the admin settings for any task that prefers OpenAI.</li>
+            <li><strong>gpt-4o</strong> / <strong>gpt-4o-mini</strong> — legacy supported for cache compatibility.</li>
+            <li><strong>gpt-4o-mini-tts</strong> — podcast + analogy-video voiceover. Supports emotion <em>instructions</em> prompt (voice + tone). Streams MP3 chunks.</li>
+            <li>Voices: <Code>marin</Code> (Synthszr guest) + <Code>cedar</Code> (host) — configured in <Code>settings</Code>.</li>
+            <li>Integration via <Code>openai</Code> npm package.</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Google Gemini (translation, embeddings, multimodal)">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><strong>Gemini 2.5 Pro</strong> — highest-quality translation locale (CS, NDS). With 503 retry + fallback to Flash.</li>
+            <li><strong>Gemini 2.5 Flash</strong> &amp; <strong>2.5 Flash Lite</strong> — bulk translations (EN), default fallback when 2.5 Pro is overloaded.</li>
+            <li><strong>Gemini 2.0 Flash</strong> — legacy fallback.</li>
+            <li><strong>gemini-embedding-001</strong> — 768-dim embeddings for <Code>daily_repo</Code>, <Code>news_queue</Code>, <Code>edit_diffs</Code>, powering pgvector similarity search.</li>
+            <li><strong>Gemini 3 Pro Image</strong> (<Code>google/gemini-3-pro-image</Code>, via Vercel AI SDK) — Analogy Machine image generation (default; admin-overridable).</li>
+            <li><strong>Veo 3.1</strong> (<Code>google/veo-3.1-generate-001</Code>, via Vercel AI SDK) — text-to-video for Analogy Machine (9:16 TikTok format).</li>
+            <li>Integrations via <Code>@google/genai</Code>, <Code>@google/generative-ai</Code> (legacy), and <Code>@ai-sdk/google</Code> for AI SDK-powered flows.</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Where each model is used">
+          <div className="overflow-x-auto">
+            <table className="text-xs w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-1 pr-4">Flow</th>
+                  <th className="text-left py-1">Default model</th>
+                  <th className="text-left py-1">Notes</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                <tr className="border-b border-border/50"><td className="py-1 pr-4">Synthesis scoring</td><td className="py-1">Claude Sonnet 4.6</td><td className="py-1">Batch of 10 articles per call</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4">Ghostwriter plan</td><td className="py-1">Claude Opus 4.6</td><td className="py-1">Prompt-cached system block</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4">Ghostwriter sections</td><td className="py-1">Claude Sonnet 4.6</td><td className="py-1">Per-section streaming</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4">Ghostwriter proofread</td><td className="py-1">Claude Haiku 4.5</td><td className="py-1">Final pass, cheap</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4">Edit-diff classify</td><td className="py-1">Claude Haiku 4.5</td><td className="py-1">Factual/stylistic/etc.</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4">Translation (EN)</td><td className="py-1">Gemini 2.5 Flash</td><td className="py-1">Per-locale model in <Code>languages</Code></td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4">Translation (CS, NDS)</td><td className="py-1">Gemini 2.5 Pro</td><td className="py-1">Retry + fallback to Flash</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4">Embeddings</td><td className="py-1">gemini-embedding-001</td><td className="py-1">768-dim, cosine similarity</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4">Podcast TTS</td><td className="py-1">gpt-4o-mini-tts</td><td className="py-1">marin + cedar voices, emotion instructions</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4">Analogy images</td><td className="py-1">Gemini 3 Pro Image</td><td className="py-1">Via Vercel AI SDK</td></tr>
+                <tr className="border-b border-border/50"><td className="py-1 pr-4">Analogy videos</td><td className="py-1">Veo 3.1</td><td className="py-1">9:16 vertical, negative prompts for text-suppression</td></tr>
+                <tr><td className="py-1 pr-4">Analogy extraction</td><td className="py-1">Claude Sonnet 4.6</td><td className="py-1">JSON-repair on output</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </Subsection>
+      </Section>
 
       {/* ============================================ */}
       {/* NEWSLETTER PIPELINE OVERVIEW */}
