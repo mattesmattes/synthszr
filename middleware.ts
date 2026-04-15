@@ -99,25 +99,35 @@ function getLocaleFromPathname(pathname: string): LocaleType | null {
   return null
 }
 
-// Ostfriesland cities for NDS locale detection
+// Plattdeutsch-speaking regions for NDS locale detection
+// Ostfriesland is in Niedersachsen (NI), Nordfriesland is in Schleswig-Holstein (SH)
 const OSTFRIESLAND_CITIES = new Set([
   'Aurich', 'Emden', 'Leer', 'Norden', 'Wittmund', 'Borkum', 'Norderney',
   'Juist', 'Baltrum', 'Langeoog', 'Spiekeroog', 'Wangerooge', 'Esens',
   'Weener', 'Rhauderfehn', 'Moormerland', 'Großefehn', 'Ihlow', 'Krummhörn',
   'Georgsheil', 'Upgant-Schott', 'Südbrookmerland', 'Wiesmoor',
 ])
+const NORDFRIESLAND_CITIES = new Set([
+  'Husum', 'Niebüll', 'Tönning', 'Wyk auf Föhr', 'List auf Sylt', 'Westerland',
+  'Sylt', 'Föhr', 'Amrum', 'Pellworm', 'Helgoland', 'Bredstedt', 'Garding',
+  'Friedrichstadt', 'St. Peter-Ording', 'Sankt Peter-Ording', 'Leck', 'Süderlügum',
+])
 
-// Country-to-locale mapping (DE is handled by geo-region logic below)
+// Explicit country → locale mapping. Anything not listed defaults to DE.
 // Only active locales: de, en, cs, nds
 const COUNTRY_LOCALE_MAP: Record<string, LocaleType> = {
-  AT: 'de',
-  CH: 'de',
+  // English-speaking
+  GB: 'en',
+  US: 'en',
+  // Czech Republic
   CZ: 'cs',
 }
 
 /**
- * Detect locale from Vercel geo headers
- * Returns null if no geo match can be determined
+ * Detect locale from Vercel geo headers.
+ * Default behavior: DE for any country not explicitly mapped.
+ * EN is only returned for US/UK visitors. CS only for CZ. NDS for
+ * Plattdeutsch-speaking regions (Ostfriesland + Nordfriesland).
  */
 function detectLocaleFromGeo(request: NextRequest, activeLanguages: Set<string>): LocaleType | null {
   const country = request.headers.get('x-vercel-ip-country') || ''
@@ -125,23 +135,25 @@ function detectLocaleFromGeo(request: NextRequest, activeLanguages: Set<string>)
   const rawCity = request.headers.get('x-vercel-ip-city') || ''
   const city = decodeURIComponent(rawCity)
 
-  let detected: LocaleType | null = null
+  let detected: LocaleType
 
   if (country === 'DE') {
-    // Niedersachsen (NI) + Ostfriesland city → NDS
+    // Plattdeutsch regions: Ostfriesland (NI) + Nordfriesland (SH)
     if (region === 'NI' && OSTFRIESLAND_CITIES.has(city)) {
+      detected = 'nds'
+    } else if (region === 'SH' && NORDFRIESLAND_CITIES.has(city)) {
       detected = 'nds'
     } else {
       detected = 'de'
     }
   } else {
-    // For all other countries: use mapped locale or fall back to 'en'
-    detected = COUNTRY_LOCALE_MAP[country] ?? 'en'
+    // Explicit map → fall back to DE for everything else
+    detected = COUNTRY_LOCALE_MAP[country] ?? 'de'
   }
 
   // Only return if the locale is active in the DB
-  if (detected && activeLanguages.has(detected)) return detected
-  return null
+  if (activeLanguages.has(detected)) return detected
+  return DEFAULT_LOCALE
 }
 
 /**
