@@ -43,6 +43,7 @@ export default function TipPromosAdminPage() {
         headline: 'TIPP DES TAGES',
         body: 'Hier steht der Tipp-Text. Unterstützt <b>Fett</b>, <i>Kursiv</i>, <a href="#">Links</a>.',
         link_url: '',
+        cta_label: '',
         gradient_from: DEFAULT_GRADIENT.from,
         gradient_to: DEFAULT_GRADIENT.to,
         gradient_direction: DEFAULT_GRADIENT.direction,
@@ -200,13 +201,24 @@ function TipEditor({ promo, onUpdate, onDelete }: {
               rows={5}
             />
           </div>
-          <div>
-            <Label className="text-xs">URL (optional)</Label>
-            <Input
-              value={promo.link_url}
-              onChange={e => onUpdate({ link_url: e.target.value })}
-              placeholder="https://…"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">URL (optional)</Label>
+              <Input
+                value={promo.link_url}
+                onChange={e => onUpdate({ link_url: e.target.value })}
+                placeholder="https://…"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Linktext (optional)</Label>
+              <Input
+                value={promo.cta_label}
+                onChange={e => onUpdate({ cta_label: e.target.value })}
+                placeholder="z.B. Mehr erfahren"
+                disabled={!promo.link_url}
+              />
+            </div>
           </div>
         </div>
 

@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
       headline: body.headline ?? 'TIPP DES TAGES',
       body: body.body ?? '',
       link_url: body.link_url ?? '',
+      cta_label: body.cta_label ?? '',
       gradient_from: body.gradient_from ?? '#B4E37A',
       gradient_to: body.gradient_to ?? '#F6E23E',
       gradient_direction: body.gradient_direction ?? 'to bottom',

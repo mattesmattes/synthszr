@@ -27,6 +27,14 @@ export function TipPromoBox({ promo, inline = false }: TipPromoBoxProps) {
         className="leading-snug"
         dangerouslySetInnerHTML={{ __html: sanitizeAdminHtml(promo.body) }}
       />
+      {promo.link_url && promo.cta_label && (
+        <div
+          className="mt-2 inline-block text-sm font-semibold underline underline-offset-2"
+          style={{ color: promo.text_color }}
+        >
+          {promo.cta_label} →
+        </div>
+      )}
     </div>
   )
 

@@ -4,6 +4,7 @@ export interface TipPromo {
   headline: string
   body: string
   link_url: string
+  cta_label: string
   gradient_from: string
   gradient_to: string
   gradient_direction: string

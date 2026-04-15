@@ -20,12 +20,22 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
   const menuRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Auto-open + scroll into view when arriving from newsletter "Sprache ändern" link
+  // Auto-open + scroll into view when arriving from newsletter "Sprache ändern" link.
+  // We read from window.location as a belt-and-braces fallback — useSearchParams()
+  // can lag behind the initial URL on some route transitions.
   useEffect(() => {
     if (loading || activeLanguages.length <= 1) return
-    if (searchParams.get('openLangSwitch') !== '1') return
-    setIsOpen(true)
-    containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const fromHook = searchParams.get('openLangSwitch') === '1'
+    const fromUrl = typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('openLangSwitch') === '1'
+    if (!fromHook && !fromUrl) return
+    // Defer one tick so the container ref is guaranteed attached after the
+    // language-fetch re-render.
+    const t = setTimeout(() => {
+      setIsOpen(true)
+      containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 50)
+    return () => clearTimeout(t)
   }, [searchParams, loading, activeLanguages.length])
 
   useEffect(() => {

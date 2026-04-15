@@ -5,7 +5,7 @@ import { getSession } from '@/lib/auth/session'
 export const runtime = 'nodejs'
 
 const ALLOWED_FIELDS = [
-  'name', 'headline', 'body', 'link_url',
+  'name', 'headline', 'body', 'link_url', 'cta_label',
   'gradient_from', 'gradient_to', 'gradient_direction', 'text_color',
   'active', 'sort_order',
 ] as const

@@ -14,6 +14,7 @@ export async function GET() {
       headline: promo.headline,
       body: promo.body,
       link_url: promo.link_url,
+      cta_label: promo.cta_label,
       gradient_from: promo.gradient_from,
       gradient_to: promo.gradient_to,
       gradient_direction: promo.gradient_direction,

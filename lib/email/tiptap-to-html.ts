@@ -401,6 +401,7 @@ export interface TipPromoEmailInput {
   headline: string
   body: string
   link_url: string
+  cta_label?: string
   gradient_from: string
   gradient_to: string
   gradient_direction: string
@@ -730,12 +731,16 @@ export async function generateEmailContentWithVotes(
       ? `<a href="${escapeAttr(tipPromo.link_url)}" style="text-decoration:none;color:inherit;display:block;">`
       : ''
     const linkClose = tipPromo.link_url ? '</a>' : ''
+    const ctaHtml = tipPromo.link_url && tipPromo.cta_label
+      ? `<div style="margin-top:8px;font-weight:600;text-decoration:underline;">${escapeHtml(tipPromo.cta_label)} →</div>`
+      : ''
     const box = `
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;">
   <tr><td>${linkOpen}
     <div style="background:${gradient};color:${tipPromo.text_color};border-radius:12px;padding:14px 18px;text-align:center;font-family:inherit;">
       <div style="font-weight:700;letter-spacing:0.15em;text-transform:uppercase;font-size:12px;margin-bottom:6px;">${escapeHtml(tipPromo.headline)}</div>
       <div style="line-height:1.45;">${bodyHtml}</div>
+      ${ctaHtml}
     </div>
   ${linkClose}</td></tr>
 </table>`.trim()
