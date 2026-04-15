@@ -1073,10 +1073,57 @@ export default function ArchitecturePage() {
             <li>Supabase queries parameterized (no SQL injection)</li>
             <li>Query params validated via <Code>parseIntParam</Code> / <Code>parseFloatParam</Code></li>
             <li>No API keys in logs or responses</li>
+            <li>Admin-authored HTML sanitized via <Code>lib/security/sanitize-html.ts</Code> (DOMPurify allowlist) before <Code>dangerouslySetInnerHTML</Code> in ad-promo renderers</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="CSRF Protection">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li><Code>requireValidOrigin()</Code> (<Code>lib/security/origin-check.ts</Code>) on state-changing public POSTs</li>
+            <li>Applied to: <Code>/api/newsletter/subscribe</Code>, <Code>/api/newsletter/unsubscribe</Code> (POST), <Code>/api/newsletter/set-language</Code></li>
+            <li>Blocks cross-origin POSTs by checking <Code>Origin</Code> / <Code>Referer</Code> against deployment host</li>
+          </ul>
+        </Subsection>
+
+        <Subsection title="Unsubscribe Flow (RFC 8058 compliant)">
+          <ul className="list-disc pl-5 space-y-1 text-sm">
+            <li>GET <Code>/api/newsletter/unsubscribe?id=…</Code> is side-effect free — redirects to confirmation page</li>
+            <li>Confirmation page at <Code>/newsletter/unsubscribe?confirm=1&amp;id=…</Code> renders a "Yes, unsubscribe me" button</li>
+            <li>Button POSTs to <Code>/api/newsletter/unsubscribe</Code> (Origin-checked, rate-limited) which performs the actual unsubscribe</li>
+            <li>Prevents Outlook Safe Links / Microsoft ATP auto-unsubscribes triggered by URL prefetching during inbox scanning</li>
           </ul>
         </Subsection>
 
         {/* Security Fixes Log */}
+        <Subsection title="Audit Log — 2026-04-15">
+          <div className="space-y-2">
+            <FixEntry severity="critical" date="2026-04-15" title="CSRF on /api/newsletter/set-language" description="POST without Origin check; attacker-controlled site could flip any subscriber's language given subscriber.id." fix="requireValidOrigin() added" file="app/api/newsletter/set-language/route.ts" />
+            <FixEntry severity="critical" date="2026-04-15" title="GET unsubscribe auto-triggered by mail scanners" description="Outlook Safe Links / ATP prefetched unsubscribe URLs during inbox scanning, causing accidental unsubscribes." fix="GET now redirects to confirmation page; actual unsubscribe moved to POST with Origin check" file="app/api/newsletter/unsubscribe/route.ts" />
+            <FixEntry severity="high" date="2026-04-15" title="Stored XSS via admin-authored ad-promo body" description="promo.body passed unsanitized to dangerouslySetInnerHTML in web + email renderers. Compromised admin could exfiltrate subscribers." fix="sanitizeAdminHtml() wraps isomorphic-dompurify with strict allowlist" file="lib/security/sanitize-html.ts" />
+          </div>
+        </Subsection>
+
+        <div className="mt-4 mb-6 rounded-lg border border-border p-4 bg-card">
+          <h3 className="font-semibold mb-3 text-sm">Audit Summary 2026-04-15</h3>
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-red-500">2</div>
+              <div className="text-muted-foreground text-xs">Critical (fixed)</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-500">1</div>
+              <div className="text-muted-foreground text-xs">High (fixed)</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-yellow-500">8</div>
+              <div className="text-muted-foreground text-xs">Med/Low (open)</div>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Remaining open findings: CRON_SECRET timing-safe compare, <Code>x-vercel-cron</Code> header trust escape-hatch, ad-promo composite open-redirect (DB-content), hostname allowlist uses <Code>endsWith()</Code> (matches <Code>evilsupabase.co</Code>), thumbnail-image <Code>pub-</Code> prefix match, Upstash fail-open when unconfigured, <Code>ADMIN_PASSWORD</Code> JWT fallback, subscriber-preference-tokens 30-day TTL.
+          </p>
+        </div>
+
         <Subsection title="Audit Log — 2026-02-10">
           <div className="space-y-2">
             <FixEntry severity="critical" date="2026-02-10" title="Missing auth on /api/cron/extract-patterns" description="POST + GET without auth. Service-role key access." fix="requireCronOrAdmin() added" file="app/api/cron/extract-patterns/route.ts" />
