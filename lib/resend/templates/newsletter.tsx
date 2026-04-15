@@ -296,13 +296,21 @@ export function NewsletterEmail({
           {promo && (() => {
             // Pre-rendered composite URLs: BG + image flattened with multiply blend.
             // Email clients ignore CSS mix-blend-mode, so we bake it server-side.
+            // For animated GIFs we link the original URL directly — the composite
+            // endpoint would 302-redirect (to preserve animation), but most email
+            // clients refuse to follow image redirects and render a broken image.
             // `?v=` busts the CDN cache when admins edit the promo.
             const v = encodeURIComponent(promo.updated_at || '')
+            const isGif = (url: string | null) => !!url && /\.gif(\?|$)/i.test(url)
             const leftCompositeUrl = promo.image_left_url
-              ? `${baseUrl}/api/ad-promos/composite?id=${promo.id}&slot=left&v=${v}`
+              ? (isGif(promo.image_left_url)
+                  ? promo.image_left_url
+                  : `${baseUrl}/api/ad-promos/composite?id=${promo.id}&slot=left&v=${v}`)
               : null
             const rightCompositeUrl = promo.image_right_url
-              ? `${baseUrl}/api/ad-promos/composite?id=${promo.id}&slot=right&v=${v}`
+              ? (isGif(promo.image_right_url)
+                  ? promo.image_right_url
+                  : `${baseUrl}/api/ad-promos/composite?id=${promo.id}&slot=right&v=${v}`)
               : null
             return (
             <Section style={{ padding: '0' }}>
