@@ -20,10 +20,14 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createAdminClient()
 
+    // For the unsubscribed filter, sort by unsubscribed_at (newest first) so
+    // recent opt-outs surface at the top. Other filters sort by created_at.
+    const orderColumn = status === 'unsubscribed' ? 'unsubscribed_at' : 'created_at'
+
     let query = supabase
       .from('subscribers')
       .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
+      .order(orderColumn, { ascending: false, nullsFirst: false })
       .range(offset, offset + limit - 1)
 
     if (status && status !== 'all') {

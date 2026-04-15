@@ -382,6 +382,9 @@ export default function SubscribersPage() {
                       {subscriber.confirmed_at && (
                         <> · Bestätigt: {new Date(subscriber.confirmed_at).toLocaleString('de-DE')}</>
                       )}
+                      {subscriber.status === 'unsubscribed' && subscriber.unsubscribed_at && (
+                        <> · Abgemeldet: {new Date(subscriber.unsubscribed_at).toLocaleString('de-DE')}</>
+                      )}
                     </div>
                   </div>
                   <Badge
