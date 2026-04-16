@@ -81,7 +81,8 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           success: true,
-          message: 'Confirmation email has been resent'
+          message: 'Confirmation email has been resent',
+          sid: existing.id,
         })
       }
 
@@ -102,7 +103,8 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           success: true,
-          message: 'Confirmation email has been resent'
+          message: 'Confirmation email has been resent',
+          sid: existing.id,
         })
       }
     }
@@ -110,7 +112,7 @@ export async function POST(request: NextRequest) {
     // Create new subscriber
     const confirmationToken = crypto.randomUUID()
 
-    const { error: insertError } = await supabase
+    const { data: newSubscriber, error: insertError } = await supabase
       .from('subscribers')
       .insert({
         email: email.toLowerCase(),
@@ -120,6 +122,8 @@ export async function POST(request: NextRequest) {
         confirmation_sent_at: new Date().toISOString(),
         preferences: { language },
       })
+      .select('id')
+      .single()
 
     if (insertError) {
       console.error('Subscribe insert error:', insertError)
@@ -134,7 +138,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Confirmation email sent'
+      message: 'Confirmation email sent',
+      sid: newSubscriber?.id,
     })
   } catch (error) {
     console.error('Subscribe error:', error)

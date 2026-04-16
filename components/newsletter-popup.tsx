@@ -145,6 +145,10 @@ export function NewsletterPopup() {
 
       if (res.ok) {
         setStatus('success')
+        // Persist subscriber ID for language-switch tracking
+        if (data.sid) {
+          try { localStorage.setItem('synthszr_sid', data.sid) } catch {}
+        }
         // Set cookie to not show popup again
         setCookie(COOKIE_NAME, 'true', COOKIE_DAYS)
         // Clear localStorage (email draft and visit counter)
