@@ -645,7 +645,7 @@ export default function NewsQueuePage() {
   const filteredItems = items.filter(item => {
     if (item.content && item.content.length < minContentLength) return false
     if (tagNeedle) {
-      const haystack = `${item.title ?? ''} ${item.excerpt ?? ''}`.toLowerCase()
+      const haystack = `${item.title ?? ''} ${item.excerpt ?? ''} ${item.source_identifier ?? ''} ${item.source_display_name ?? ''}`.toLowerCase()
       if (!haystack.includes(tagNeedle)) return false
     }
     return true
