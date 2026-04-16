@@ -157,6 +157,10 @@ export function NewsletterPopup() {
         // Auto-close after success
         setTimeout(() => setIsVisible(false), 3000)
       } else {
+        // Even on error (e.g. 409 already subscribed), persist sid if returned
+        if (data.sid) {
+          try { localStorage.setItem('synthszr_sid', data.sid) } catch {}
+        }
         setStatus('error')
         setErrorMessage(data.error || 'An error occurred')
       }

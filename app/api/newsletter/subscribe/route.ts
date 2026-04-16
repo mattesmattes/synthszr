@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     if (existing) {
       if (existing.status === 'active') {
         return NextResponse.json(
-          { error: 'This email is already subscribed' },
+          { error: 'This email is already subscribed', sid: existing.id },
           { status: 409 }
         )
       }

@@ -41,6 +41,9 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
         setMessage(data.message || 'Confirmation email sent!')
         setEmail("")
       } else {
+        if (data.sid) {
+          try { localStorage.setItem('synthszr_sid', data.sid) } catch {}
+        }
         setStatus('error')
         setMessage(data.error || 'An error occurred')
       }
