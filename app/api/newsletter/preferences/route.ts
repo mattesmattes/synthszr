@@ -114,6 +114,7 @@ export async function PUT(request: NextRequest) {
       .single()
 
     const currentPrefs = (subscriber?.preferences as Record<string, unknown>) || {}
+    const oldLanguage = (currentPrefs.language as string) || 'de'
 
     // Update preferences
     const { error: updateError } = await supabase
@@ -127,6 +128,22 @@ export async function PUT(request: NextRequest) {
     if (updateError) {
       console.error('Preferences update error:', updateError)
       return NextResponse.json({ error: 'Fehler beim Speichern' }, { status: 500 })
+    }
+
+    // Log language change if actually changed
+    if (language && oldLanguage !== language) {
+      const { data: sub } = await supabase
+        .from('subscribers')
+        .select('email')
+        .eq('id', tokenData.subscriber_id)
+        .maybeSingle()
+
+      await supabase.from('subscriber_language_changes').insert({
+        subscriber_id: tokenData.subscriber_id,
+        email: sub?.email ?? null,
+        old_language: oldLanguage,
+        new_language: language,
+      })
     }
 
     return NextResponse.json({ success: true })
