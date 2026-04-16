@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download, Search, UserCheck, Pencil, Check, X, TrendingUp, TrendingDown } from 'lucide-react'
+import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download, Search, UserCheck, Pencil, Check, X, TrendingUp, TrendingDown, Languages } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -44,7 +44,16 @@ interface SubscribersResponse {
   }
 }
 
-type StatusFilter = 'all' | 'pending' | 'active' | 'unsubscribed' | 'bounced'
+type StatusFilter = 'all' | 'pending' | 'active' | 'unsubscribed' | 'bounced' | 'lang-changes'
+
+interface LanguageChange {
+  id: string
+  subscriber_id: string
+  email: string | null
+  old_language: string
+  new_language: string
+  changed_at: string
+}
 
 export default function SubscribersPage() {
   const [data, setData] = useState<SubscribersResponse | null>(null)
@@ -57,6 +66,8 @@ export default function SubscribersPage() {
   const [savingEmail, setSavingEmail] = useState(false)
   const searchParams = useSearchParams()
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') ?? '')
+  const [langChanges, setLangChanges] = useState<LanguageChange[]>([])
+  const [langChangesLoading, setLangChangesLoading] = useState(false)
 
   // Sync state when URL search param changes (e.g. from another tab's chart click)
   useEffect(() => {
@@ -65,8 +76,27 @@ export default function SubscribersPage() {
   }, [searchParams])
 
   useEffect(() => {
-    fetchSubscribers()
+    if (statusFilter === 'lang-changes') {
+      fetchLangChanges()
+    } else {
+      fetchSubscribers()
+    }
   }, [statusFilter, searchQuery])
+
+  async function fetchLangChanges() {
+    setLangChangesLoading(true)
+    try {
+      const res = await fetch('/api/admin/subscribers/language-changes')
+      if (res.ok) {
+        const json = await res.json()
+        setLangChanges(json.changes || [])
+      }
+    } catch (error) {
+      console.error('Fetch language changes error:', error)
+    } finally {
+      setLangChangesLoading(false)
+    }
+  }
 
   async function fetchSubscribers() {
     setLoading(true)
@@ -197,6 +227,7 @@ export default function SubscribersPage() {
     { key: 'active', label: 'Aktiv' },
     { key: 'pending', label: 'Ausstehend' },
     { key: 'unsubscribed', label: 'Abgemeldet' },
+    { key: 'lang-changes', label: 'Sprachwechsel' },
   ]
 
   return (
@@ -301,15 +332,66 @@ export default function SubscribersPage() {
             className="text-xs h-7"
           >
             {label}
-            {data?.counts && key !== 'all' && (
-              <span className="ml-1 opacity-70">({data.counts[key]})</span>
+            {data?.counts && key !== 'all' && key !== 'lang-changes' && (
+              <span className="ml-1 opacity-70">({data.counts[key as keyof typeof data.counts]})</span>
             )}
           </Button>
         ))}
       </div>
 
+      {/* Language Changes Tab */}
+      {statusFilter === 'lang-changes' ? (
+        langChangesLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : langChanges.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground text-sm">
+              Noch keine Sprachwechsel protokolliert
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <div className="divide-y max-h-[60vh] overflow-y-auto">
+                {langChanges.map((change) => (
+                  <div
+                    key={change.id}
+                    className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 transition-colors"
+                  >
+                    <Languages className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm truncate">
+                        {change.email || <span className="text-muted-foreground italic">unbekannt</span>}
+                      </p>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 uppercase">{change.old_language}</Badge>
+                        <span>→</span>
+                        <Badge className="text-[10px] px-1.5 py-0 uppercase bg-primary text-primary-foreground">{change.new_language}</Badge>
+                      </div>
+                    </div>
+                    <time className="text-[11px] text-muted-foreground shrink-0">
+                      {new Date(change.changed_at).toLocaleDateString('de-DE', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                      })}{' '}
+                      {new Date(change.changed_at).toLocaleTimeString('de-DE', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </time>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )
+      ) : null}
+
       {/* List */}
-      {loading ? (
+      {statusFilter !== 'lang-changes' && (loading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
@@ -427,7 +509,7 @@ export default function SubscribersPage() {
             </div>
           </CardContent>
         </Card>
-      )}
+      ))}
     </div>
   )
 }

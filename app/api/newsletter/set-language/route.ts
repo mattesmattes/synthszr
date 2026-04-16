@@ -62,6 +62,13 @@ export async function POST(request: NextRequest) {
     }
 
     const currentPrefs = (subscriber.preferences as Record<string, unknown>) || {}
+    const oldLanguage = (currentPrefs.language as string) || 'de'
+
+    // Skip if language unchanged
+    if (oldLanguage === language) {
+      return NextResponse.json({ success: true, unchanged: true })
+    }
+
     const { error: updateError } = await supabase
       .from('subscribers')
       .update({
@@ -74,6 +81,20 @@ export async function POST(request: NextRequest) {
       console.error('[set-language] update error:', updateError)
       return NextResponse.json({ error: 'Speichern fehlgeschlagen' }, { status: 500 })
     }
+
+    // Log the language change
+    const { data: sub } = await supabase
+      .from('subscribers')
+      .select('email')
+      .eq('id', sid)
+      .maybeSingle()
+
+    await supabase.from('subscriber_language_changes').insert({
+      subscriber_id: sid,
+      email: sub?.email ?? null,
+      old_language: oldLanguage,
+      new_language: language,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {
