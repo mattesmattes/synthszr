@@ -83,12 +83,12 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
     })()
 
     if (sid) {
+      // Use sendBeacon so the request survives the page navigation
       try {
-        await fetch('/api/newsletter/set-language', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sid, language: langCode }),
-        })
+        navigator.sendBeacon(
+          '/api/newsletter/set-language',
+          new Blob([JSON.stringify({ sid, language: langCode })], { type: 'application/json' })
+        )
       } catch (error) {
         console.error('Failed to save subscriber language preference:', error)
       }
