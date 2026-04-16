@@ -174,7 +174,7 @@ function stripExplicitCompanyTags(text: string): string {
  * Format: "Synthszr Vote: Nvidia (NVDA) ↑5.2% Buy, Tesla (TSLA) ↓2.1% Hold"
  * Premarket: "Synthszr Vote: OpenAI Buy" (no ticker/percent)
  */
-function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug?: string, locale?: string): string {
+function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug?: string, locale?: string, sidPlaceholder?: string): string {
   if (ratings.length === 0) return ''
 
   const badges = ratings.map((r, idx) => {
@@ -184,8 +184,9 @@ function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug
 
     // Link to analysis dialog on the blog post (with locale prefix if not German)
     const localePath = locale && locale !== 'de' ? `/${locale}` : ''
+    const sidSuffix = sidPlaceholder ? `&sid=${sidPlaceholder}` : ''
     const href = postSlug
-      ? `${baseUrl}${localePath}/posts/${postSlug}?${r.type === 'premarket' ? 'premarket' : 'stock'}=${encodeURIComponent(r.displayName)}`
+      ? `${baseUrl}${localePath}/posts/${postSlug}?${r.type === 'premarket' ? 'premarket' : 'stock'}=${encodeURIComponent(r.displayName)}${sidSuffix}`
       : '#'
 
     // Build company info: "Nvidia (NVDA) ↑5.2%" for public, "OpenAI" for premarket
@@ -221,7 +222,8 @@ function injectCompanyLinksIntoHtml(
   paraHtml: string,
   companies: Array<{ displayName: string; apiName: string }>,
   baseUrl: string,
-  locale?: string
+  locale?: string,
+  sidPlaceholder?: string
 ): string {
   if (companies.length === 0) return paraHtml
 
@@ -247,7 +249,8 @@ function injectCompanyLinksIntoHtml(
       const escaped = company.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       text = text.replace(new RegExp(`\\b${escaped}\\b`, 'i'), match => {
         linked.add(company.apiName)
-        const href = `${baseUrl}${localePath}/companies/${company.apiName}`
+        const sidSuffix = sidPlaceholder ? `?sid=${sidPlaceholder}` : ''
+        const href = `${baseUrl}${localePath}/companies/${company.apiName}${sidSuffix}`
         return `<a href="${href}" style="color: inherit; text-decoration: underline;">${match}</a>`
       })
     }
@@ -415,6 +418,7 @@ export async function generateEmailContentWithVotes(
   locale?: string,
   originalContent?: unknown,
   tipPromo?: TipPromoEmailInput | null,
+  sidPlaceholder?: string,
 ): Promise<string> {
   const rawContent = post.content
   let doc: TiptapDoc | null = null
@@ -672,7 +676,7 @@ export async function generateEmailContentWithVotes(
 
     // Inject company page links into paragraph text (like the web renderer)
     if (node.type === 'paragraph' && companyLinkData.length > 0) {
-      baseHtml = injectCompanyLinksIntoHtml(baseHtml, companyLinkData, baseUrl, locale)
+      baseHtml = injectCompanyLinksIntoHtml(baseHtml, companyLinkData, baseUrl, locale, sidPlaceholder)
     }
 
     // Check if this is a Synthszr Take paragraph
@@ -710,7 +714,7 @@ export async function generateEmailContentWithVotes(
       }
 
       if (ratings.length > 0) {
-        const voteBadges = generateVoteBadgesHtml(ratings, baseUrl, post.slug, locale)
+        const voteBadges = generateVoteBadgesHtml(ratings, baseUrl, post.slug, locale, sidPlaceholder)
         // Insert badges before closing </p> tag
         return prefix + baseHtml.replace(/<\/p>$/, `${voteBadges}</p>`)
       }

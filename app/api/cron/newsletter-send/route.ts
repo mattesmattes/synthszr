@@ -217,6 +217,7 @@ export async function GET(request: NextRequest) {
         locale,
         locale !== 'de' ? post.content : undefined, // Pass original content for non-German locales
         activeTipPromo,
+        '{{SUBSCRIBER_ID}}',
       )
       contentByLocale.set(locale, emailContent)
 
@@ -271,6 +272,7 @@ export async function GET(request: NextRequest) {
           postUrl: localizedPostUrl,
           unsubscribeUrl: '{{UNSUBSCRIBE_URL}}',
           preferencesUrl: '{{PREFERENCES_URL}}',
+          subscriberId: '{{SUBSCRIBER_ID}}',
           footerText,
           coverImageUrl,
           emailCoverImageUrl,
@@ -294,6 +296,7 @@ export async function GET(request: NextRequest) {
           const html = baseHtml
             .replace('{{UNSUBSCRIBE_URL}}', unsubscribeUrl)
             .replace('{{PREFERENCES_URL}}', preferencesUrl)
+            .replaceAll('{{SUBSCRIBER_ID}}', subscriber.id)
 
           return {
             from: FROM_EMAIL,

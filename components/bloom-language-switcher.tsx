@@ -66,12 +66,22 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Persist sid from newsletter links to localStorage for future visits
+  useEffect(() => {
+    const urlSid = searchParams.get('sid')
+    if (urlSid) {
+      try { localStorage.setItem('synthszr_sid', urlSid) } catch {}
+    }
+  }, [searchParams])
+
   const handleLanguageSelect = async (langCode: string) => {
     setIsOpen(false)
 
-    // If the user arrived from the newsletter "Sprache ändern" link,
-    // persist the choice to their subscriber profile before redirecting.
-    const sid = searchParams.get('sid')
+    // Resolve subscriber ID from URL param or localStorage
+    const sid = searchParams.get('sid') || (() => {
+      try { return localStorage.getItem('synthszr_sid') } catch { return null }
+    })()
+
     if (sid) {
       try {
         await fetch('/api/newsletter/set-language', {
