@@ -42,9 +42,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (type !== 'intro' && type !== 'outro') {
+    if (type !== 'intro' && type !== 'outro' && type !== 'intermezzo') {
       return NextResponse.json(
-        { error: 'type must be "intro" or "outro"' },
+        { error: 'type must be "intro", "outro", or "intermezzo"' },
         { status: 400 }
       )
     }

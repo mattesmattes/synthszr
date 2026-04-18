@@ -181,6 +181,30 @@ export const DEFAULT_OUTRO_MUSIC: AudioEnvelope = {
   ],
 }
 
+export const DEFAULT_INTERMEZZO_MUSIC: AudioEnvelope = {
+  points: [
+    { sec: 0, vol: 0 },
+    { sec: 2, vol: 0.18 },
+    { sec: 8, vol: 0.18 },
+    { sec: 10, vol: 0 },
+  ],
+  segments: [
+    { curve: 'bezier', cp1: { sec: 0.6, vol: 0.04 }, cp2: { sec: 1.4, vol: 0.14 } },
+    { curve: 'linear' },
+    { curve: 'bezier', cp1: { sec: 8.6, vol: 0.13 }, cp2: { sec: 9.4, vol: 0.02 } },
+  ],
+}
+
+export const DEFAULT_INTERMEZZO_DIALOG: AudioEnvelope = {
+  points: [
+    { sec: 0, vol: 1.0 },
+    { sec: 10, vol: 1.0 },
+  ],
+  segments: [
+    { curve: 'linear' },
+  ],
+}
+
 export const DEFAULT_OUTRO_DIALOG: AudioEnvelope = {
   points: [
     { sec: 0, vol: 1.0 },
@@ -211,6 +235,12 @@ interface LegacyMixing {
   outro_final_start_sec?: number
   outro_rise_curve?: 'linear' | 'exponential'
   outro_final_curve?: 'linear' | 'exponential'
+  intermezzo_fadein_sec?: number
+  intermezzo_bed_sec?: number
+  intermezzo_bed_volume?: number  // 0-100 percentage
+  intermezzo_fadeout_sec?: number
+  intermezzo_fadein_curve?: 'linear' | 'exponential'
+  intermezzo_fadeout_curve?: 'linear' | 'exponential'
 }
 
 /** Convert legacy parametric intro settings to envelope pair */
@@ -263,6 +293,56 @@ export function legacyIntroToEnvelopes(mixing: LegacyMixing): { music: AudioEnve
             cp2: { sec: fullSec + dialogFadeInSec * 0.8, vol: 0.9 },
           }
         : { curve: 'linear' },
+      { curve: 'linear' },
+    ],
+  }
+
+  return { music, dialog }
+}
+
+/** Convert legacy parametric intermezzo settings to envelope pair */
+export function legacyIntermezzoToEnvelopes(mixing: LegacyMixing): { music: AudioEnvelope; dialog: AudioEnvelope } {
+  const fadeInSec = mixing.intermezzo_fadein_sec ?? 2
+  const bedSec = mixing.intermezzo_bed_sec ?? 6
+  const bedV = (mixing.intermezzo_bed_volume ?? 18) / 100
+  const fadeOutSec = mixing.intermezzo_fadeout_sec ?? 2
+  const fadeInCurve = mixing.intermezzo_fadein_curve ?? 'exponential'
+  const fadeOutCurve = mixing.intermezzo_fadeout_curve ?? 'exponential'
+
+  const total = fadeInSec + bedSec + fadeOutSec
+
+  const music: AudioEnvelope = {
+    points: [
+      { sec: 0, vol: 0 },
+      { sec: fadeInSec, vol: bedV },
+      { sec: fadeInSec + bedSec, vol: bedV },
+      { sec: total, vol: 0 },
+    ],
+    segments: [
+      fadeInCurve === 'exponential'
+        ? {
+            curve: 'bezier',
+            cp1: { sec: fadeInSec * 0.3, vol: bedV * 0.2 },
+            cp2: { sec: fadeInSec * 0.7, vol: bedV * 0.8 },
+          }
+        : { curve: 'linear' },
+      { curve: 'linear' },
+      fadeOutCurve === 'exponential'
+        ? {
+            curve: 'bezier',
+            cp1: { sec: fadeInSec + bedSec + fadeOutSec * 0.3, vol: bedV * 0.7 },
+            cp2: { sec: fadeInSec + bedSec + fadeOutSec * 0.7, vol: 0.02 },
+          }
+        : { curve: 'linear' },
+    ],
+  }
+
+  const dialog: AudioEnvelope = {
+    points: [
+      { sec: 0, vol: 1.0 },
+      { sec: total, vol: 1.0 },
+    ],
+    segments: [
       { curve: 'linear' },
     ],
   }

@@ -29,6 +29,7 @@ export interface AudioSegment {
   speaker: 'HOST' | 'GUEST'
   text: string
   overlapping?: boolean // True for (overlapping) lines — additive mix instead of crossfade
+  articleIndex?: number // 1-based news article — used for intermezzo placement
 }
 
 export interface CrossfadeOptions {
@@ -81,6 +82,25 @@ export interface CrossfadeOptions {
   introDialogEnvelope?: AudioEnvelope
   outroMusicEnvelope?: AudioEnvelope
   outroDialogEnvelope?: AudioEnvelope
+
+  // Intermezzo: background music mixed parallel to dialog at an article boundary
+  /** Enable intermezzo bg music between two news articles */
+  includeIntermezzo?: boolean
+  /** Article number (1-based) at whose start the intermezzo fades in */
+  intermezzoAfterArticle?: number
+  /** Audio URL for intermezzo music */
+  intermezzoUrl?: string
+  /** Music gain envelope (relative time from intermezzo start) */
+  intermezzoMusicEnvelope?: AudioEnvelope
+  /** Dialog gain envelope during the intermezzo region (defaults to constant 1.0) */
+  intermezzoDialogEnvelope?: AudioEnvelope
+  /** Legacy parametric fallback (sec, 0-1) when no envelope is provided */
+  intermezzoFadeInSec?: number
+  intermezzoBedSec?: number
+  intermezzoBedVolume?: number
+  intermezzoFadeOutSec?: number
+  intermezzoFadeInCurve?: 'linear' | 'exponential'
+  intermezzoFadeOutCurve?: 'linear' | 'exponential'
 
   // Stereo positioning (0 = full left, 1 = full right)
   /** HOST stereo position (default 0.35 = 65% left) */
@@ -1098,6 +1118,181 @@ function applyOutroWithCrossfade(
   return result
 }
 
+// ---------------------------------------------------------------------------
+// Intermezzo: background music mixed parallel to dialog at an article boundary
+// ---------------------------------------------------------------------------
+
+interface IntermezzoState {
+  pcm: Float32Array[]
+  envelope: AudioEnvelope
+  startTotalSec: number   // global timeline offset (after intro) where intermezzo begins
+  durationSec: number     // total envelope length
+}
+
+/** Load the intermezzo audio file from a Vercel Blob URL */
+async function loadIntermezzo(url: string): Promise<Float32Array[]> {
+  console.log(`[Crossfade] Fetching intermezzo from ${url}`)
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch intermezzo: ${response.status}`)
+  }
+  const arrayBuffer = await response.arrayBuffer()
+  const pcm = await decodeAudio(Buffer.from(arrayBuffer))
+  console.log(`[Crossfade] Loaded intermezzo: ${(pcm[0].length / SAMPLE_RATE).toFixed(1)}s`)
+  return pcm
+}
+
+/**
+ * Determine the intro offset in seconds — how much silence/jingle plays
+ * before segment[0]'s first sample reaches the dialog timeline.
+ */
+function computeIntroOffsetSec(options: CrossfadeOptions): number {
+  if (!options.includeIntro) return 0
+
+  if (options.introMusicEnvelope && options.introDialogEnvelope) {
+    // Envelope mode: dialog starts when dialog gain first goes above 0
+    const env = options.introDialogEnvelope
+    for (const p of env.points) {
+      if (p.vol > 0.001) return p.sec
+    }
+    return env.points[env.points.length - 1].sec
+  }
+
+  // Parametric mode: phase 1 = full intro before dialog enters
+  return options.introFullSec ?? 3
+}
+
+/**
+ * Compute the total duration of segments[0..articleStartIdx-1] from their MP3 buffers
+ * (approximate — uses the 128kbps assumption that's already used elsewhere).
+ */
+function computeSegmentsDurationSec(segments: AudioSegment[], untilIdx: number): number {
+  let total = 0
+  for (let i = 0; i < untilIdx; i++) {
+    total += segments[i].buffer.length / (128 * 1024 / 8)
+  }
+  return total
+}
+
+/**
+ * Find the first segment index where articleIndex matches.
+ * Returns -1 if not found.
+ */
+function findArticleStartIdx(segments: AudioSegment[], articleIndex: number): number {
+  for (let i = 0; i < segments.length; i++) {
+    if (segments[i].articleIndex === articleIndex) return i
+  }
+  return -1
+}
+
+/**
+ * Build IntermezzoState from options + segments. Returns null when intermezzo
+ * is disabled or the article boundary cannot be located.
+ */
+async function buildIntermezzoState(
+  segments: AudioSegment[],
+  options: CrossfadeOptions
+): Promise<IntermezzoState | null> {
+  if (!options.includeIntermezzo || !options.intermezzoUrl) return null
+  const articleN = options.intermezzoAfterArticle ?? 0
+  if (articleN < 2) {
+    console.log(`[Crossfade] Intermezzo skipped: invalid article index ${articleN}`)
+    return null
+  }
+
+  const startIdx = findArticleStartIdx(segments, articleN)
+  if (startIdx < 0) {
+    console.log(`[Crossfade] Intermezzo skipped: no segment found with articleIndex=${articleN}`)
+    return null
+  }
+
+  const envelope = options.intermezzoMusicEnvelope ?? buildLegacyIntermezzoMusicEnvelope(options)
+  const durationSec = envelope.points[envelope.points.length - 1].sec
+  const introOffset = computeIntroOffsetSec(options)
+  const segmentsBefore = computeSegmentsDurationSec(segments, startIdx)
+  const startTotalSec = introOffset + segmentsBefore
+
+  console.log(`[Crossfade] Intermezzo: article ${articleN} starts at segment ${startIdx} → ${startTotalSec.toFixed(1)}s (intro offset ${introOffset.toFixed(1)}s + ${segmentsBefore.toFixed(1)}s of dialog), duration ${durationSec.toFixed(1)}s`)
+
+  const pcm = await loadIntermezzo(options.intermezzoUrl)
+
+  return { pcm, envelope, startTotalSec, durationSec }
+}
+
+/** Construct a music envelope from the legacy parametric intermezzo settings. */
+function buildLegacyIntermezzoMusicEnvelope(options: CrossfadeOptions): AudioEnvelope {
+  const fadeIn = options.intermezzoFadeInSec ?? 2
+  const bed = options.intermezzoBedSec ?? 6
+  const bedV = options.intermezzoBedVolume ?? 0.18
+  const fadeOut = options.intermezzoFadeOutSec ?? 2
+  const fadeInCurve = options.intermezzoFadeInCurve ?? 'exponential'
+  const fadeOutCurve = options.intermezzoFadeOutCurve ?? 'exponential'
+  const total = fadeIn + bed + fadeOut
+
+  return {
+    points: [
+      { sec: 0, vol: 0 },
+      { sec: fadeIn, vol: bedV },
+      { sec: fadeIn + bed, vol: bedV },
+      { sec: total, vol: 0 },
+    ],
+    segments: [
+      fadeInCurve === 'exponential'
+        ? { curve: 'bezier', cp1: { sec: fadeIn * 0.3, vol: bedV * 0.2 }, cp2: { sec: fadeIn * 0.7, vol: bedV * 0.8 } }
+        : { curve: 'linear' },
+      { curve: 'linear' },
+      fadeOutCurve === 'exponential'
+        ? { curve: 'bezier', cp1: { sec: fadeIn + bed + fadeOut * 0.3, vol: bedV * 0.7 }, cp2: { sec: fadeIn + bed + fadeOut * 0.7, vol: 0.02 } }
+        : { curve: 'linear' },
+    ],
+  }
+}
+
+/**
+ * Mix intermezzo music additively into a PCM buffer.
+ *
+ * `pcmStartTimeSec` is the global timeline position at which `pcm[0][0]` plays.
+ * Samples that fall outside the intermezzo region are left untouched.
+ * Samples inside the region get the intermezzo audio (sampled at the relative
+ * position) added with the music envelope's gain, with a soft clipping guard.
+ */
+function mixIntermezzoIntoPcm(
+  pcm: Float32Array[],
+  pcmStartTimeSec: number,
+  state: IntermezzoState,
+): void {
+  const pcmLen = pcm[0].length
+  const pcmEndSec = pcmStartTimeSec + pcmLen / SAMPLE_RATE
+
+  // Quick reject if PCM doesn't intersect with intermezzo zone
+  const intermezzoEndSec = state.startTotalSec + state.durationSec
+  if (pcmEndSec <= state.startTotalSec || pcmStartTimeSec >= intermezzoEndSec) return
+
+  const pcmOffsetForStart = (state.startTotalSec - pcmStartTimeSec) * SAMPLE_RATE
+  const startSample = Math.max(0, Math.ceil(pcmOffsetForStart))
+  const endSample = Math.min(pcmLen, Math.ceil((intermezzoEndSec - pcmStartTimeSec) * SAMPLE_RATE))
+
+  const intermezzoLen = state.pcm[0].length
+
+  for (let i = startSample; i < endSample; i++) {
+    const globalT = pcmStartTimeSec + i / SAMPLE_RATE
+    const envT = globalT - state.startTotalSec
+    const gain = sampleEnvelope(state.envelope, envT)
+    if (gain < 0.001) continue
+
+    const intermezzoIdx = Math.floor(envT * SAMPLE_RATE)
+    if (intermezzoIdx < 0 || intermezzoIdx >= intermezzoLen) continue
+
+    for (let ch = 0; ch < 2; ch++) {
+      const mVal = state.pcm[ch][intermezzoIdx] * gain
+      const dVal = pcm[ch][i]
+      const sum = mVal + dVal
+      const combined = Math.abs(mVal) + Math.abs(dVal)
+      pcm[ch][i] = combined > 1.0 ? sum / combined : sum
+    }
+  }
+}
+
 /**
  * Fast-path concatenation for large podcasts (40+ segments).
  * Only decodes segments needed for intro/outro mixing.
@@ -1140,6 +1335,21 @@ async function concatenateLargeScale(
   let introSegments = 0
   let totalOverlapMs = 0
 
+  // Pre-load intermezzo state if active. Mixing happens lazily as PCMs flow
+  // through the encode step below — so each PCM gets the intermezzo overlay
+  // applied just-in-time, without buffering large windows of audio.
+  const intermezzoState = await buildIntermezzoState(segments, options)
+  let cumulativeEncodedSec = 0
+
+  const encodeWithIntermezzo = (pcm: Float32Array[]): Buffer => {
+    if (intermezzoState) {
+      mixIntermezzoIntoPcm(pcm, cumulativeEncodedSec, intermezzoState)
+    }
+    const buf = encodeMP3(pcm[0], pcm[1])
+    cumulativeEncodedSec += pcm[0].length / SAMPLE_RATE
+    return buf
+  }
+
   // 1. Handle intro: decode first segment + intro music → mix → encode to MP3
   if (includeIntro) {
     console.log(`[Crossfade] Loading and mixing intro with first segment...`)
@@ -1163,7 +1373,7 @@ async function concatenateLargeScale(
       })
     }
 
-    mp3Parts.push(encodeMP3(introResult[0], introResult[1]))
+    mp3Parts.push(encodeWithIntermezzo(introResult))
     introSegments = 1
     console.log(`[Crossfade] Intro mixed with first segment ✓`)
   }
@@ -1275,7 +1485,7 @@ async function concatenateLargeScale(
         if (pendingDurationSec - oldestDuration >= outroMinDurationSec) {
           const toEncode = pendingPcms.shift()!
           pendingDurationSec -= oldestDuration
-          mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
+          mp3Parts.push(encodeWithIntermezzo(toEncode))
         } else {
           break
         }
@@ -1305,7 +1515,7 @@ async function concatenateLargeScale(
         if (pendingDurationSec - oldestDuration >= outroMinDurationSec) {
           const toEncode = pendingPcms.shift()!
           pendingDurationSec -= oldestDuration
-          mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
+          mp3Parts.push(encodeWithIntermezzo(toEncode))
         } else {
           break
         }
@@ -1314,7 +1524,7 @@ async function concatenateLargeScale(
       // No outro — encode everything
       while (pendingPcms.length > 0) {
         const toEncode = pendingPcms.shift()!
-        mp3Parts.push(encodeMP3(toEncode[0], toEncode[1]))
+        mp3Parts.push(encodeWithIntermezzo(toEncode))
       }
     }
 
@@ -1353,12 +1563,12 @@ async function concatenateLargeScale(
         })
       }
 
-      mp3Parts.push(encodeMP3(outroResult[0], outroResult[1]))
+      mp3Parts.push(encodeWithIntermezzo(outroResult))
       console.log(`[Crossfade] Outro mixed ✓ (total overlap: ${totalOverlapMs.toFixed(0)}ms)`)
     } else {
       // No outro or no pending PCMs — encode any remaining
       for (const pcm of pendingPcms) {
-        mp3Parts.push(encodeMP3(pcm[0], pcm[1]))
+        mp3Parts.push(encodeWithIntermezzo(pcm))
       }
     }
   }
@@ -1575,6 +1785,15 @@ export async function concatenateWithCrossfade(
   let finalDurationS = resultChannels[0].length / SAMPLE_RATE
   console.log(`[Crossfade] Dialogue audio: ${finalDurationS.toFixed(1)}s | Total overlap: ${(totalOverlapMs / 1000).toFixed(1)}s saved`)
 
+  // Apply intermezzo bg music (between articles) before the outro is laid on top.
+  // The intermezzo region is wholly contained within the dialog audio — outro
+  // sits at the tail and is unaffected.
+  const intermezzoState = await buildIntermezzoState(segments, options)
+  if (intermezzoState) {
+    mixIntermezzoIntoPcm(resultChannels, 0, intermezzoState)
+    console.log(`[Crossfade] Intermezzo mixed into dialog at ${intermezzoState.startTotalSec.toFixed(1)}s for ${intermezzoState.durationSec.toFixed(1)}s`)
+  }
+
   // Apply outro if enabled
   if (includeOutro) {
     console.log(`[Crossfade] Loading outro music...`)
@@ -1643,6 +1862,17 @@ export function mixingSettingsToCrossfadeOptions(
     intro_dialog_envelope?: AudioEnvelope
     outro_music_envelope?: AudioEnvelope
     outro_dialog_envelope?: AudioEnvelope
+    intermezzo_enabled?: boolean
+    intermezzo_after_article?: number
+    intermezzo_fadein_sec?: number
+    intermezzo_bed_sec?: number
+    intermezzo_bed_volume?: number
+    intermezzo_fadeout_sec?: number
+    intermezzo_fadein_curve?: string
+    intermezzo_fadeout_curve?: string
+    intermezzo_url?: string
+    intermezzo_music_envelope?: AudioEnvelope
+    intermezzo_dialog_envelope?: AudioEnvelope
   } | null | undefined
 ): CrossfadeOptions {
   if (!mixing) {
@@ -1681,5 +1911,16 @@ export function mixingSettingsToCrossfadeOptions(
     introDialogEnvelope: mixing.intro_dialog_envelope,
     outroMusicEnvelope: mixing.outro_music_envelope,
     outroDialogEnvelope: mixing.outro_dialog_envelope,
+    includeIntermezzo: mixing.intermezzo_enabled ?? false,
+    intermezzoAfterArticle: mixing.intermezzo_after_article ?? 3,
+    intermezzoFadeInSec: mixing.intermezzo_fadein_sec ?? 2,
+    intermezzoBedSec: mixing.intermezzo_bed_sec ?? 6,
+    intermezzoBedVolume: (mixing.intermezzo_bed_volume ?? 18) / 100,
+    intermezzoFadeOutSec: mixing.intermezzo_fadeout_sec ?? 2,
+    intermezzoFadeInCurve: (mixing.intermezzo_fadein_curve as 'linear' | 'exponential') || 'exponential',
+    intermezzoFadeOutCurve: (mixing.intermezzo_fadeout_curve as 'linear' | 'exponential') || 'exponential',
+    intermezzoUrl: mixing.intermezzo_url,
+    intermezzoMusicEnvelope: mixing.intermezzo_music_envelope,
+    intermezzoDialogEnvelope: mixing.intermezzo_dialog_envelope,
   }
 }

@@ -330,6 +330,7 @@ export async function POST(request: NextRequest) {
         speaker: seg.speaker,
         text: seg.text,
         overlapping: lines[i]?.overlapping,
+        articleIndex: lines[i]?.articleIndex,
       })
 
       const segmentDuration = seg.buffer.length / (128 * 1024 / 8)
@@ -339,6 +340,7 @@ export async function POST(request: NextRequest) {
         text: seg.text,
         startTime: cumulativeTime,
         durationEstimate: segmentDuration,
+        articleIndex: lines[i]?.articleIndex,
       })
       cumulativeTime += segmentDuration
     }
@@ -362,11 +364,24 @@ export async function POST(request: NextRequest) {
       .eq('is_active', true)
       .single()
 
+    const { data: activeIntermezzo } = await supabase
+      .from('podcast_audio_files')
+      .select('url')
+      .eq('type', 'intermezzo')
+      .eq('is_active', true)
+      .single()
+
     if (activeIntro?.url) {
       crossfadeOptions.introUrl = activeIntro.url
     }
     if (activeOutro?.url) {
       crossfadeOptions.outroUrl = activeOutro.url
+    }
+    if (activeIntermezzo?.url) {
+      crossfadeOptions.intermezzoUrl = activeIntermezzo.url
+    } else if (crossfadeOptions.includeIntermezzo) {
+      console.log('[Podcast Jobs] Intermezzo enabled but no active intermezzo audio file found — disabling')
+      crossfadeOptions.includeIntermezzo = false
     }
 
     // Report concatenation progress (90-100% range)

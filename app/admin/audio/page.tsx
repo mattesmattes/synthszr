@@ -21,7 +21,7 @@ import { AudioFileManager, type AudioFile } from '@/components/admin/audio-file-
 import { PodcastTimeMachine } from '@/components/admin/podcast-time-machine'
 import { EnvelopeEditor } from '@/components/admin/envelope-editor'
 import type { AudioEnvelope } from '@/lib/audio/envelope'
-import { legacyIntroToEnvelopes, legacyOutroToEnvelopes } from '@/lib/audio/envelope'
+import { legacyIntroToEnvelopes, legacyOutroToEnvelopes, legacyIntermezzoToEnvelopes } from '@/lib/audio/envelope'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,6 +65,14 @@ interface MixingSettings {
   outro_final_start_sec: number
   outro_rise_curve: CurveType
   outro_final_curve: CurveType
+  intermezzo_enabled: boolean
+  intermezzo_after_article: number  // 2-6, "ab Artikel N als Bg-Musik"
+  intermezzo_fadein_sec: number
+  intermezzo_bed_sec: number
+  intermezzo_bed_volume: number
+  intermezzo_fadeout_sec: number
+  intermezzo_fadein_curve: CurveType
+  intermezzo_fadeout_curve: CurveType
   stereo_host: number
   stereo_guest: number
   overlap_reaction_ms: number
@@ -77,6 +85,8 @@ interface MixingSettings {
   intro_dialog_envelope?: AudioEnvelope
   outro_music_envelope?: AudioEnvelope
   outro_dialog_envelope?: AudioEnvelope
+  intermezzo_music_envelope?: AudioEnvelope
+  intermezzo_dialog_envelope?: AudioEnvelope
 }
 
 const DEFAULT_MIXING: MixingSettings = {
@@ -95,6 +105,14 @@ const DEFAULT_MIXING: MixingSettings = {
   outro_final_start_sec: 7,
   outro_rise_curve: 'exponential',
   outro_final_curve: 'exponential',
+  intermezzo_enabled: false,
+  intermezzo_after_article: 3,
+  intermezzo_fadein_sec: 2,
+  intermezzo_bed_sec: 6,
+  intermezzo_bed_volume: 18,
+  intermezzo_fadeout_sec: 2,
+  intermezzo_fadein_curve: 'exponential',
+  intermezzo_fadeout_curve: 'exponential',
   stereo_host: 35,
   stereo_guest: 65,
   overlap_reaction_ms: 250,
@@ -1558,6 +1576,89 @@ function AudioPage() {
                     description="(overlapping) — beide gleichzeitig"
                     onChange={(v) => updateMixing('overlap_overlapping_ms', v)} />
                 </div>
+              </div>
+
+              <div className="border-t" />
+
+              {/* Intermezzo Channel */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1 h-8 rounded-full bg-amber-500" />
+                    <div>
+                      <h3 className="font-semibold text-sm">INTERMEZZO</h3>
+                      <p className="text-xs text-muted-foreground">Hintergrundmusik parallel zum Dialog zwischen zwei Artikeln</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="intermezzo-enabled" className="text-xs text-muted-foreground">Aktiv</Label>
+                    <Switch id="intermezzo-enabled" checked={mixing.intermezzo_enabled} onCheckedChange={(v) => updateMixing('intermezzo_enabled', v)} />
+                  </div>
+                </div>
+
+                {mixing.intermezzo_enabled && (
+                  <>
+                    {/* Audio File Library */}
+                    <AudioFileManager
+                      type="intermezzo"
+                      files={audioFiles.filter(f => f.type === 'intermezzo')}
+                      onRefresh={fetchAudioFiles}
+                    />
+
+                    {/* Article Position Selector */}
+                    <div className="p-4 bg-muted/30 rounded-lg border space-y-2">
+                      <Label className="text-xs font-medium">Position im Podcast</Label>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground">Ab Artikel</span>
+                        <Select
+                          value={String(mixing.intermezzo_after_article)}
+                          onValueChange={(v) => updateMixing('intermezzo_after_article', Number(v))}
+                        >
+                          <SelectTrigger className="h-8 w-24 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[2, 3, 4, 5, 6].map(n => (
+                              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-xs text-muted-foreground">— Bg-Musik blendet beim Übergang in diesen Artikel ein und läuft unter den Voice-Takes weiter.</span>
+                      </div>
+                    </div>
+
+                    {/* Intermezzo Envelope Editor */}
+                    <div className="px-2 space-y-0">
+                      <EnvelopeEditor
+                        envelope={mixing.intermezzo_music_envelope ?? legacyIntermezzoToEnvelopes(mixing).music}
+                        onChange={(env) => updateMixing('intermezzo_music_envelope' as keyof MixingSettings, env as unknown as number)}
+                        timeRange={mixing.intermezzo_fadein_sec + mixing.intermezzo_bed_sec + mixing.intermezzo_fadeout_sec}
+                        color="#f59e0b"
+                        label="Intermezzo"
+                        height={40}
+                      />
+                      <EnvelopeEditor
+                        envelope={mixing.intermezzo_dialog_envelope ?? legacyIntermezzoToEnvelopes(mixing).dialog}
+                        onChange={(env) => updateMixing('intermezzo_dialog_envelope' as keyof MixingSettings, env as unknown as number)}
+                        timeRange={mixing.intermezzo_fadein_sec + mixing.intermezzo_bed_sec + mixing.intermezzo_fadeout_sec}
+                        color="#3b82f6"
+                        label="Dialog"
+                        height={40}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      <MixerSlider label="Fade-In" value={mixing.intermezzo_fadein_sec} min={0} max={10} step={0.5} unit="s"
+                        onChange={(v) => updateMixing('intermezzo_fadein_sec', v)} />
+                      <MixerSlider label="Bed-Dauer" value={mixing.intermezzo_bed_sec} min={0} max={30} step={0.5} unit="s"
+                        onChange={(v) => updateMixing('intermezzo_bed_sec', v)} />
+                      <MixerSlider label="Bed-Volume" value={mixing.intermezzo_bed_volume} min={0} max={50} step={1} unit="%"
+                        onChange={(v) => updateMixing('intermezzo_bed_volume', v)} />
+                      <MixerSlider label="Fade-Out" value={mixing.intermezzo_fadeout_sec} min={0} max={10} step={0.5} unit="s"
+                        onChange={(v) => updateMixing('intermezzo_fadeout_sec', v)} />
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="border-t" />

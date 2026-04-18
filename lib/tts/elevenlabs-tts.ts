@@ -15,6 +15,7 @@ export interface PodcastLine {
   speaker: 'HOST' | 'GUEST'
   text: string // Can include emotion tags like [cheerfully] or free-form [warm and upbeat, like greeting a friend]
   overlapping?: boolean // True when marked with (overlapping) — both speakers audible simultaneously
+  articleIndex?: number // 1-based news article this line belongs to (set by [ARTICLE N] markers in script)
 }
 
 /**
@@ -37,6 +38,7 @@ export interface SegmentMetadata {
   startTime: number // Calculated start time in seconds
   durationEstimate: number // Estimated duration in seconds
   overlapping?: boolean // True for (overlapping) lines
+  articleIndex?: number // 1-based news article this segment belongs to
 }
 
 /**
@@ -531,6 +533,7 @@ export async function generatePodcastDialogue(
         startTime: currentTime,
         durationEstimate: segmentDuration,
         overlapping: line.overlapping,
+        articleIndex: line.articleIndex,
       })
 
       finalBuffers.push(segment)
@@ -578,16 +581,28 @@ export function parseScriptText(rawScript: string): PodcastLine[] {
   const lines: PodcastLine[] = []
   const rawLines = rawScript.split('\n').filter(line => line.trim())
 
+  // [ARTICLE N] marker lines split the script into news-article sections.
+  // Lines before the first marker (or in scripts without markers) belong to article 1.
+  let currentArticle = 1
+
   for (const rawLine of rawLines) {
     const trimmed = rawLine.trim()
+
+    const articleMatch = trimmed.match(/^\[\s*ARTICLE\s+(\d+)\s*\]\s*$/i)
+    if (articleMatch) {
+      const n = parseInt(articleMatch[1], 10)
+      if (Number.isFinite(n) && n >= 1) currentArticle = n
+      continue
+    }
+
     const hostMatch = trimmed.match(/^HOST\s*(?:\(overlapping\))?\s*:\s*(.+)$/i)
     const guestMatch = trimmed.match(/^GUEST\s*(?:\(overlapping\))?\s*:\s*(.+)$/i)
     const isOverlapping = /\(overlapping\)/i.test(trimmed)
 
     if (hostMatch) {
-      lines.push({ speaker: 'HOST', text: hostMatch[1].trim(), ...(isOverlapping && { overlapping: true }) })
+      lines.push({ speaker: 'HOST', text: hostMatch[1].trim(), articleIndex: currentArticle, ...(isOverlapping && { overlapping: true }) })
     } else if (guestMatch) {
-      lines.push({ speaker: 'GUEST', text: guestMatch[1].trim(), ...(isOverlapping && { overlapping: true }) })
+      lines.push({ speaker: 'GUEST', text: guestMatch[1].trim(), articleIndex: currentArticle, ...(isOverlapping && { overlapping: true }) })
     }
   }
 

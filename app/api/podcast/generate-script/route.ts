@@ -155,6 +155,17 @@ Der GUEST (Synthesizer) bringt die "Synthesizer Take" Meinungen aus dem Artikel 
 - Wenn der Artikel 5+ Themen enthält, widme JEDEM Thema ca. {perTopicWords} Wörter Dialog.
 - Halte die Gesamtlänge im Zielbereich {wordCount}–{maxWordCount} Wörter.
 
+**ARTIKEL-MARKER (PFLICHT):**
+Markiere jeden Wechsel zum nächsten News-Artikel mit einer EIGENEN Zeile im Format \`[ARTICLE N]\` direkt VOR dem ersten HOST-/GUEST-Dialog zu diesem Artikel. N ist die fortlaufende Nummer (2, 3, 4, ...).
+Cold Open + Smalltalk + Begrüßung + erster Artikel = ARTICLE 1 (kein Marker nötig — implizit).
+Beispiel:
+HOST: [warm] ...erster Artikel zu Ende diskutiert.
+[ARTICLE 2]
+GUEST: [thoughtfully] Zweiter Artikel: das Thema XY beschäftigt mich seit Wochen...
+[ARTICLE 3]
+HOST: [curious] Und jetzt zu unserem dritten Punkt: ...
+Diese Marker sind die Kapitel-Anker für die Hintergrundmusik beim Übergang. Setze sie sauber zwischen den Artikel-Diskussionen, niemals MITTEN in einem Argument.
+
 **Blog-Artikel Content für diese Episode:**
 ---
 Titel: {title}
@@ -285,6 +296,17 @@ GUEST (Synthesizer) should bring in the "Synthesizer Take" opinions from the art
 - Per topic: explain context, exchange opinions, present counterarguments, use analogies.
 - If the article has 5+ topics, dedicate approximately {perTopicWords} words of dialogue to EACH topic.
 - Keep the total length within the target range {wordCount}–{maxWordCount} words.
+
+**ARTICLE MARKERS (MANDATORY):**
+Mark each transition to the next news article with a STANDALONE line in the format \`[ARTICLE N]\` directly BEFORE the first HOST/GUEST line discussing that article. N is the running number (2, 3, 4, ...).
+Cold Open + smalltalk + greeting + first article = ARTICLE 1 (no marker needed — implicit).
+Example:
+HOST: [warm] ...wrapping up the first article.
+[ARTICLE 2]
+GUEST: [thoughtfully] Second story: this XY topic has been on my mind for weeks...
+[ARTICLE 3]
+HOST: [curious] And now to our third point: ...
+These markers anchor chapter background music transitions. Place them cleanly between article discussions, never MID-argument.
 
 **Blog Article Content for this Episode (translate to English if not already in English):**
 ---

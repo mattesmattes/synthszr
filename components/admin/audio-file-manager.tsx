@@ -6,10 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Play, Pause, Star, Pencil, Trash2, Upload, Loader2 } from 'lucide-react'
 
+export type AudioFileType = 'intro' | 'outro' | 'intermezzo'
+
 export interface AudioFile {
   id: string
   name: string
-  type: 'intro' | 'outro'
+  type: AudioFileType
   url: string
   file_size: number | null
   duration_sec: number | null
@@ -18,9 +20,15 @@ export interface AudioFile {
 }
 
 interface AudioFileManagerProps {
-  type: 'intro' | 'outro'
+  type: AudioFileType
   files: AudioFile[]
   onRefresh: () => void
+}
+
+const TYPE_LABEL: Record<AudioFileType, string> = {
+  intro: 'Intro',
+  outro: 'Outro',
+  intermezzo: 'Intermezzo',
 }
 
 function formatFileSize(bytes: number | null): string {
@@ -265,7 +273,7 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
 
       {files.length === 0 && (
         <p className="text-sm text-muted-foreground px-2 py-1">
-          Keine {type === 'intro' ? 'Intro' : 'Outro'}-Dateien vorhanden.
+          Keine {TYPE_LABEL[type]}-Dateien vorhanden.
         </p>
       )}
 

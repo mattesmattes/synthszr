@@ -362,6 +362,7 @@ async function generatePodcastForPost(
           speaker: meta?.speaker || (i % 2 === 0 ? 'HOST' : 'GUEST'),
           text: meta?.text || '',
           overlapping: meta?.overlapping,
+          articleIndex: meta?.articleIndex,
         })
       }
     }
