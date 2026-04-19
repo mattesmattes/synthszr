@@ -461,7 +461,9 @@ export default async function PostPage({ params }: PageProps) {
               <a href="https://oh-so.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
                 <img src="/oh-so-logo.svg" alt="OH-SO" className="h-9" />
               </a>
-              <LanguageSwitcher currentLocale={locale} />
+              <Suspense fallback={null}>
+                <LanguageSwitcher currentLocale={locale} />
+              </Suspense>
             </div>
             <div className="flex gap-6 text-xs">
               <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
