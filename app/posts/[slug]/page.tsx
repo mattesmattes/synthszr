@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
+import { createAnonClient } from "@/lib/supabase/admin"
 import { BlogHeader } from "@/components/blog-header"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
 import { Newsletter } from "@/components/newsletter"
@@ -12,9 +12,9 @@ import { AudioPlayer } from "@/components/audio-player"
 import { PodcastBadges } from "@/components/podcast-badges"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 
-// The page reads cookies via the Supabase server client, so Next.js treats
-// this route as dynamic. Cache-Control headers come from middleware.ts.
-export const dynamic = 'force-dynamic'
+// ISR: revalidate every 60s. Uses the anon Supabase client so Next.js can
+// prerender and cache. Post edits push via revalidatePath().
+export const revalidate = 60
 
 interface PostData {
   id: string
@@ -36,7 +36,7 @@ interface AdjacentPost {
 
 export default async function PostPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const supabase = await createClient()
+  const supabase = createAnonClient()
 
   // Try to find in manual posts first
   let { data: post } = await supabase

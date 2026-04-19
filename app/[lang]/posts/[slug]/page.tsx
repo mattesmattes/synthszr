@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
+import { createAnonClient } from "@/lib/supabase/admin"
 import { PostContentView } from "@/components/post-content-view"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
@@ -17,9 +17,10 @@ import { formatUpdateDate, LOCALE_STRINGS } from "@/lib/i18n/config"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
 
-// The page reads cookies via the Supabase server client, so Next.js treats
-// this route as dynamic. Cache-Control headers come from middleware.ts.
-export const dynamic = 'force-dynamic'
+// ISR: revalidate every 60s. Post + translation reads use the anon client,
+// so Next.js prerenders and the Vercel edge caches. Invalidate via
+// revalidatePath() when a post is edited.
+export const revalidate = 60
 
 interface PostData {
   id: string
@@ -48,7 +49,7 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { lang, slug } = await params
   const locale = lang as LanguageCode
-  const supabase = await createClient()
+  const supabase = createAnonClient()
 
   // Try to find post
   let post: { title: string; excerpt: string | null; cover_image_url?: string | null; created_at?: string } | null = null
@@ -141,7 +142,7 @@ export default async function PostPage({ params }: PageProps) {
   const { lang, slug } = await params
   const locale = lang as LanguageCode
   const t = await getTranslations(locale)
-  const supabase = await createClient()
+  const supabase = createAnonClient()
 
   // Try to find in manual posts first
   let { data: post } = await supabase

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAnonClient } from '@/lib/supabase/admin'
 import type { LanguageCode } from '@/lib/types'
 import { DEFAULT_LOCALE } from './config'
 
@@ -116,7 +116,7 @@ export async function getTranslations(locale: LanguageCode): Promise<Record<stri
   }
 
   try {
-    const supabase = await createClient()
+    const supabase = createAnonClient()
 
     const { data, error } = await supabase
       .from('ui_translations')

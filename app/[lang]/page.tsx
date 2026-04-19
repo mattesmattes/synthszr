@@ -5,7 +5,7 @@ import { AdPromo } from "@/components/ad-promo"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 // import { CalligramFooter } from "@/components/calligram-footer"
-import { createClient } from "@/lib/supabase/server"
+import { createAnonClient } from "@/lib/supabase/admin"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
 import { LOCALE_STRINGS } from "@/lib/i18n/config"
@@ -13,11 +13,10 @@ import type { LanguageCode } from "@/lib/types"
 import type { CoverAnimationConfig } from "@/lib/types/cover-animation"
 import type { Metadata } from "next"
 
-// The page reads cookies via the Supabase server client, so Next.js treats
-// this route as dynamic. Cache-Control headers are set by middleware.ts for
-// public routes ("public, s-maxage=60, stale-while-revalidate=300") so the
-// Vercel edge + Google still see cacheable pages.
-export const dynamic = 'force-dynamic'
+// ISR: revalidate every 60s. The page uses the anon Supabase client (no
+// cookies()), so Next.js can prerender and cache at the edge. Post/cover
+// changes push immediately via revalidatePath() in the admin save handler.
+export const revalidate = 60
 
 interface CombinedPost {
   id: string
@@ -54,7 +53,7 @@ export default async function Page({ params }: PageProps) {
   const { lang } = await params
   const locale = lang as LanguageCode
   const t = await getTranslations(locale)
-  const supabase = await createClient()
+  const supabase = createAnonClient()
 
   // Fetch cover animation config
   const { data: coverAnimSetting } = await supabase
