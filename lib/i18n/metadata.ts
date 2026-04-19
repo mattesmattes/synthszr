@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import type { LanguageCode } from '@/lib/types'
-import { ALL_LOCALES, DEFAULT_LOCALE } from './config'
+import { PUBLIC_LOCALES, DEFAULT_LOCALE } from './config'
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
 
@@ -22,15 +22,17 @@ export function generateLocalizedMetadata({
   title,
   description,
   path,
-  availableLocales = ALL_LOCALES,
+  availableLocales = PUBLIC_LOCALES,
   noIndex = false,
   locale,
   ogImage,
   ogType = 'website',
 }: LocalizedMetadataOptions): Metadata {
   const cleanPath = path === '/' ? '' : path
+  const effectiveLocale = locale ?? DEFAULT_LOCALE
 
-  // Build language alternates
+  // Build language alternates — only include locales with real content so Google
+  // can build a valid reciprocal hreflang cluster.
   const languages: Record<string, string> = {}
 
   for (const loc of availableLocales) {
@@ -40,19 +42,22 @@ export function generateLocalizedMetadata({
   // x-default points to the default locale
   languages['x-default'] = `${BASE_URL}/${DEFAULT_LOCALE}${cleanPath}`
 
-  const url = locale
-    ? `${BASE_URL}/${locale}${cleanPath}`
-    : `${BASE_URL}/${DEFAULT_LOCALE}${cleanPath}`
+  const url = `${BASE_URL}/${effectiveLocale}${cleanPath}`
 
-  const ogLocale = locale
-    ? (locale === 'de' ? 'de_DE' : locale === 'en' ? 'en_US' : `${locale}_${locale.toUpperCase()}`)
-    : 'de_DE'
+  const ogLocale = effectiveLocale === 'de' ? 'de_DE'
+    : effectiveLocale === 'en' ? 'en_US'
+    : effectiveLocale === 'cs' ? 'cs_CZ'
+    : effectiveLocale === 'nds' ? 'nds_DE'
+    : `${effectiveLocale}_${effectiveLocale.toUpperCase()}`
 
   return {
     title,
     description,
     alternates: {
-      canonical: `${BASE_URL}/${DEFAULT_LOCALE}${cleanPath}`,
+      // Self-referential canonical: each locale page points to itself, not the
+      // default locale — otherwise Google treats non-default pages as duplicates
+      // of /de and never indexes them.
+      canonical: url,
       languages,
     },
     openGraph: {

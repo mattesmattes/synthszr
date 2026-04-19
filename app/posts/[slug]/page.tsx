@@ -12,7 +12,8 @@ import { AudioPlayer } from "@/components/audio-player"
 import { PodcastBadges } from "@/components/podcast-badges"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 
-// Disable caching for posts to always show current cover image
+// The page reads cookies via the Supabase server client, so Next.js treats
+// this route as dynamic. Cache-Control headers come from middleware.ts.
 export const dynamic = 'force-dynamic'
 
 interface PostData {

@@ -13,7 +13,10 @@ import type { LanguageCode } from "@/lib/types"
 import type { CoverAnimationConfig } from "@/lib/types/cover-animation"
 import type { Metadata } from "next"
 
-// Disable caching to always show current cover images
+// The page reads cookies via the Supabase server client, so Next.js treats
+// this route as dynamic. Cache-Control headers are set by middleware.ts for
+// public routes ("public, s-maxage=60, stale-while-revalidate=300") so the
+// Vercel edge + Google still see cacheable pages.
 export const dynamic = 'force-dynamic'
 
 interface CombinedPost {

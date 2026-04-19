@@ -17,7 +17,8 @@ import { formatUpdateDate, LOCALE_STRINGS } from "@/lib/i18n/config"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
 
-// Disable caching for posts to always show current cover image
+// The page reads cookies via the Supabase server client, so Next.js treats
+// this route as dynamic. Cache-Control headers come from middleware.ts.
 export const dynamic = 'force-dynamic'
 
 interface PostData {

@@ -3,6 +3,14 @@ import type { LanguageCode } from '@/lib/types'
 /** All potentially supported locales (must match database) */
 export const ALL_LOCALES: LanguageCode[] = ['de', 'en', 'fr', 'es', 'it', 'pt', 'nl', 'pl', 'cs', 'nds']
 
+/**
+ * Locales with real content — exposed in hreflang, sitemap, and language switcher.
+ * Everything in ALL_LOCALES but not in PUBLIC_LOCALES currently 301-redirects to /de,
+ * so advertising them in hreflang tells Google "reciprocal link missing" and gets
+ * the whole cluster ignored.
+ */
+export const PUBLIC_LOCALES: LanguageCode[] = ['de', 'en', 'cs', 'nds']
+
 /** Default locale (fallback) */
 export const DEFAULT_LOCALE: LanguageCode = 'de'
 

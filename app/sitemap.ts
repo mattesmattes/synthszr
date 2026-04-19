@@ -1,12 +1,13 @@
 import { MetadataRoute } from 'next'
 import { createClient } from '@/lib/supabase/server'
-import { DEFAULT_LOCALE } from '@/lib/i18n/config'
+import { DEFAULT_LOCALE, PUBLIC_LOCALES } from '@/lib/i18n/config'
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
 
-// Languages with fully built-out static page content
-// Update this list when a new language is ready
-const FULL_CONTENT_LOCALES = ['de', 'en']
+// Languages with fully built-out static page content.
+// Only these appear as <url> entries — the others redirect to /de and would
+// waste Google crawl budget.
+const FULL_CONTENT_LOCALES = PUBLIC_LOCALES
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = await createClient()
@@ -18,12 +19,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .eq('is_active', true)
 
   const activeLocales = (languages?.map(l => l.code) || [DEFAULT_LOCALE])
-    .filter(code => FULL_CONTENT_LOCALES.includes(code))
+    .filter(code => FULL_CONTENT_LOCALES.includes(code as typeof PUBLIC_LOCALES[number]))
 
-  // Fetch all published posts
+  // Fetch all published posts (id needed to match translations)
   const { data: posts } = await supabase
     .from('generated_posts')
-    .select('slug, created_at, updated_at')
+    .select('id, slug, created_at, updated_at')
     .eq('status', 'published')
     .order('created_at', { ascending: false })
 
@@ -33,7 +34,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .select('generated_post_id, language_code, slug')
     .eq('translation_status', 'completed')
 
-  // Create a map of post ID to available translations
+  // Map post ID → set of locales that have a completed translation.
+  // Previously keyed by slug, which never matched post rows — so no post got
+  // translation entries in the sitemap.
   const postTranslations = new Map<string, Set<string>>()
   translations?.forEach(t => {
     if (t.generated_post_id) {
@@ -71,7 +74,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Posts - each available locale gets its own <url> entry
   for (const post of posts || []) {
-    const availableTranslations = postTranslations.get(post.slug) || new Set()
+    const availableTranslations = postTranslations.get(post.id) || new Set()
 
     // Collect all available locales for this post
     const availableLocales = [DEFAULT_LOCALE]

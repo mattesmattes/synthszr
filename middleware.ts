@@ -225,9 +225,14 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(redirectUrl, 301)
     }
 
-    // Locale is active - continue with locale header
+    // Locale is active - continue with locale header.
+    // Set a cacheable public Cache-Control so Vercel's edge + Google can cache
+    // the rendered HTML for 60s (SWR 5min). Without this, the Supabase server
+    // client's cookie reads cause Next to emit `private, no-store` — which
+    // Google reads as "personalized, don't index".
     const response = NextResponse.next()
     response.headers.set('x-locale', urlLocale)
+    response.headers.set('cache-control', 'public, s-maxage=60, stale-while-revalidate=300')
     return response
   }
 
