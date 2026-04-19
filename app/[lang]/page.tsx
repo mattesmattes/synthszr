@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import Link from "next/link"
 import { FeaturedArticle } from "@/components/featured-article"
 import { Newsletter } from "@/components/newsletter"
@@ -207,8 +208,11 @@ export default async function Page({ params }: PageProps) {
       {/* 704px max-width to match cover image and post pages */}
       <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
 
-        {/* Bloom Language Switcher */}
-        <BloomLanguageSwitcher currentLocale={locale} />
+        {/* Bloom Language Switcher — wrapped in Suspense because it uses
+            useSearchParams(), which would bail ISR prerender otherwise. */}
+        <Suspense fallback={null}>
+          <BloomLanguageSwitcher currentLocale={locale} />
+        </Suspense>
 
         {featuredPost ? (
           <>

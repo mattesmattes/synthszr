@@ -133,7 +133,9 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
         <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
 
         {/* Header - same as homepage */}
-        <BloomLanguageSwitcher currentLocale="de" />
+        <Suspense fallback={null}>
+          <BloomLanguageSwitcher currentLocale="de" />
+        </Suspense>
 
         <Link
           href="/why"

@@ -330,7 +330,9 @@ export default async function PostPage({ params }: PageProps) {
         <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
 
         {/* Header - same as homepage */}
-        <BloomLanguageSwitcher currentLocale={locale} />
+        <Suspense fallback={null}>
+          <BloomLanguageSwitcher currentLocale={locale} />
+        </Suspense>
 
         <Link
           href={`/${locale}/why`}
