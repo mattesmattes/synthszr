@@ -25,6 +25,6 @@ export interface AdPromo {
 }
 
 export interface AdPromoConfig {
-  mode: 'constant' | 'rotate'
+  mode: 'constant' | 'rotate' | 'off'
   constantId: string | null
 }

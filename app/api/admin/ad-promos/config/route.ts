@@ -21,9 +21,11 @@ export async function PUT(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
   const body = await request.json()
+  const mode: AdPromoConfig['mode'] =
+    body.mode === 'constant' ? 'constant' : body.mode === 'off' ? 'off' : 'rotate'
   const config: AdPromoConfig = {
-    mode: body.mode === 'constant' ? 'constant' : 'rotate',
-    constantId: body.constantId ?? null,
+    mode,
+    constantId: mode === 'constant' ? (body.constantId ?? null) : null,
   }
 
   const supabase = createAdminClient()

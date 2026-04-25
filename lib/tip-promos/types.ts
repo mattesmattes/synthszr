@@ -16,6 +16,6 @@ export interface TipPromo {
 }
 
 export interface TipPromoConfig {
-  mode: 'constant' | 'rotate'
+  mode: 'constant' | 'rotate' | 'off'
   constantId: string | null
 }

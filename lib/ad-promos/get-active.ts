@@ -22,9 +22,11 @@ export async function getActiveAdPromo(): Promise<AdPromo | null> {
       .order('created_at', { ascending: true }),
   ])
 
-  if (!promos || promos.length === 0) return null
-
   const config: AdPromoConfig = (configRow?.value as AdPromoConfig) ?? DEFAULT_CONFIG
+
+  if (config.mode === 'off') return null
+
+  if (!promos || promos.length === 0) return null
 
   if (config.mode === 'constant' && config.constantId) {
     const pinned = promos.find(p => p.id === config.constantId)

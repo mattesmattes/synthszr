@@ -118,6 +118,14 @@ export default function TipPromosAdminPage() {
             />
             Fest
           </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              checked={config.mode === 'off'}
+              onChange={() => saveConfig({ mode: 'off', constantId: null })}
+            />
+            Keine Promo anzeigen
+          </label>
           {config.mode === 'constant' && (
             <select
               value={config.constantId ?? ''}

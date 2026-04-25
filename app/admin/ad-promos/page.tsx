@@ -104,6 +104,14 @@ export default function AdPromosAdminPage() {
             />
             <span className="text-sm">Konstant eine Promo zeigen</span>
           </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              checked={config.mode === 'off'}
+              onChange={() => saveConfig({ mode: 'off', constantId: null })}
+            />
+            <span className="text-sm">Keine Promo anzeigen</span>
+          </label>
           {config.mode === 'constant' && (
             <select
               className="ml-2 rounded-md border border-border bg-background px-2 py-1 text-sm"

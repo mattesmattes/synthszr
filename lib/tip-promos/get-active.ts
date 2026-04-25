@@ -20,9 +20,11 @@ export async function getActiveTipPromo(): Promise<TipPromo | null> {
       .order('created_at', { ascending: true }),
   ])
 
-  if (!promos || promos.length === 0) return null
-
   const config: TipPromoConfig = (configRow?.value as TipPromoConfig) ?? DEFAULT_CONFIG
+
+  if (config.mode === 'off') return null
+
+  if (!promos || promos.length === 0) return null
 
   if (config.mode === 'constant' && config.constantId) {
     const pinned = promos.find(p => p.id === config.constantId)
