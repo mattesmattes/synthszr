@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { TrendingUp, Eye, Headphones, MousePointerClick, Loader2, Users } from 'lucide-react'
+import { TrendingUp, Eye, Headphones, MousePointerClick, Loader2, Users, Database, Workflow, Clock, AlertTriangle } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import {
   ResponsiveContainer,
   LineChart,
@@ -685,8 +686,262 @@ export default function StatisticsPage() {
               )}
             </CardContent>
           </Card>
+
+          <NewsPipelineDiagnostics />
         </>
       )}
     </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// News Pipeline Diagnostics — visualizes /api/admin/diagnostics/queue-attribution
+// Helps distinguish cron-vs-manual triggers by UTC-hour distribution.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface QueueAttribution {
+  date: string
+  cron: Record<string, { lastRun: string | null; minutesAgo: number | null }>
+  daily_repo: {
+    totalForDate: number
+    byHourUTC: { hour: number; count: number }[]
+    bySource: { source: string; count: number }[]
+    bySourceType: { type: string; count: number }[]
+  }
+  daily_digests:
+    | { exists: false }
+    | { exists: true; id: string; createdAt: string; wordCount: number; sourcesUsed: number; analysisCharCount: number }
+  news_queue: {
+    totalForDate: number
+    withDailyRepoId: number
+    orphanWithoutDailyRepoId: number
+    byHourUTC: { hour: number; count: number }[]
+    byStatus: { status: string; count: number }[]
+    bySource: { source: string; count: number }[]
+  }
+}
+
+const CRON_TASKS: { key: string; label: string }[] = [
+  { key: 'newsletter_fetch', label: 'Newsletter Fetch' },
+  { key: 'webcrawl_fetch', label: 'Webcrawl Fetch' },
+  { key: 'daily_analysis', label: 'Daily Analysis' },
+  { key: 'post_generation', label: 'Post Generation' },
+]
+
+function formatMinutesAgo(min: number | null): string {
+  if (min === null) return 'nie gelaufen'
+  if (min < 60) return `vor ${min} Min`
+  if (min < 60 * 24) return `vor ${Math.floor(min / 60)} h`
+  return `vor ${Math.floor(min / (60 * 24))} d`
+}
+
+function NewsPipelineDiagnostics() {
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [data, setData] = useState<QueueAttribution | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    setData(null)
+    fetch(`/api/admin/diagnostics/queue-attribution?date=${date}`)
+      .then(r => r.json())
+      .then(d => setData(d))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }, [date])
+
+  // Merge daily_repo + news_queue hour buckets so 0–23 always show, both lines/bars aligned
+  const hourChart = Array.from({ length: 24 }, (_, h) => ({
+    hourLabel: `${String(h).padStart(2, '0')}:00`,
+    daily_repo: data?.daily_repo.byHourUTC.find(b => b.hour === h)?.count ?? 0,
+    news_queue: data?.news_queue.byHourUTC.find(b => b.hour === h)?.count ?? 0,
+  }))
+
+  const orphans = data?.news_queue.orphanWithoutDailyRepoId ?? 0
+  const conversionRatio =
+    data && data.daily_repo.totalForDate > 0
+      ? (data.news_queue.totalForDate / data.daily_repo.totalForDate).toFixed(2)
+      : '–'
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <CardTitle className="font-mono">News Pipeline Diagnostics</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Cron- vs. manuelle Trigger anhand der UTC-Stunden-Verteilung. Berlin = UTC+1 (Winter) / +2 (Sommer).
+            </p>
+          </div>
+          <Input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            className="w-[180px] font-mono"
+          />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {loading ? (
+          <div className="flex items-center justify-center h-32">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : !data ? (
+          <p className="text-sm text-muted-foreground">Keine Daten geladen.</p>
+        ) : (
+          <>
+            {/* Cron last-run cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {CRON_TASKS.map(task => {
+                const run = data.cron[task.key]
+                const stale = run?.minutesAgo !== null && run?.minutesAgo > 60 * 24
+                return (
+                  <Card key={task.key} className="border-muted-foreground/20">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                        <Clock className="h-3.5 w-3.5" />
+                        {task.label}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className={`text-sm font-mono ${stale ? 'text-amber-500' : ''}`}>
+                        {formatMinutesAgo(run?.minutesAgo ?? null)}
+                      </div>
+                      {run?.lastRun && (
+                        <p className="text-[10px] text-muted-foreground mt-1 truncate">
+                          {new Date(run.lastRun).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+
+            {/* Volume KPIs */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                    <Database className="h-3.5 w-3.5" />
+                    daily_repo
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold font-mono">{data.daily_repo.totalForDate}</div>
+                  <p className="text-[10px] text-muted-foreground mt-1">Items mit newsletter_date = {data.date}</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                    <Workflow className="h-3.5 w-3.5" />
+                    news_queue
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold font-mono">{data.news_queue.totalForDate}</div>
+                  <p className="text-[10px] text-muted-foreground mt-1">Items queued am {data.date} (UTC)</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    Konversion
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold font-mono">{conversionRatio}</div>
+                  <p className="text-[10px] text-muted-foreground mt-1">queue / repo Ratio</p>
+                </CardContent>
+              </Card>
+
+              <Card className={orphans > 0 ? 'border-amber-500/40' : ''}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                    <AlertTriangle className={`h-3.5 w-3.5 ${orphans > 0 ? 'text-amber-500' : ''}`} />
+                    Orphans
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold font-mono ${orphans > 0 ? 'text-amber-500' : ''}`}>
+                    {orphans}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">queue ohne daily_repo_id</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Hour distribution chart — the central diagnostic */}
+            <div>
+              <h3 className="text-sm font-medium mb-3">Stundenverteilung (UTC)</h3>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={hourChart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                  <XAxis dataKey="hourLabel" fontSize={10} interval={1} />
+                  <YAxis fontSize={10} />
+                  <Tooltip
+                    contentStyle={{ background: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: 12 }}
+                    labelFormatter={(label) => `UTC ${label}`}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="daily_repo" fill="#3B82F6" name="daily_repo (collected_at)" />
+                  <Bar dataKey="news_queue" fill="#8B5CF6" name="news_queue (queued_at)" />
+                </BarChart>
+              </ResponsiveContainer>
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Cron läuft Berlin 04:00 / 04:30 / 05:00 → in UTC erwartete Spitzen bei <strong>02:00–03:00</strong> (Sommer) bzw. <strong>03:00–04:00</strong> (Winter).
+                Spitzen außerhalb dieses Fensters = manuelle Trigger.
+              </p>
+            </div>
+
+            {/* Daily digest summary */}
+            {data.daily_digests.exists ? (
+              <div className="rounded-lg border border-border bg-card/50 p-3 text-xs space-y-1">
+                <div className="font-mono font-medium">Daily Digest für {data.date}</div>
+                <div className="text-muted-foreground">
+                  Created: {new Date(data.daily_digests.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })} ·
+                  Sources: {data.daily_digests.sourcesUsed} · Words: {data.daily_digests.wordCount} ·
+                  Chars: {data.daily_digests.analysisCharCount.toLocaleString('de-DE')}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                Kein Daily Digest für {data.date}.
+              </div>
+            )}
+
+            {/* Top sources */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div>
+                <h3 className="text-sm font-medium mb-2">Top Quellen — daily_repo</h3>
+                <div className="text-xs space-y-1 font-mono">
+                  {data.daily_repo.bySource.slice(0, 8).map(s => (
+                    <div key={s.source} className="flex justify-between border-b border-border/40 py-1">
+                      <span className="truncate max-w-[280px]">{s.source}</span>
+                      <span className="text-muted-foreground">{s.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium mb-2">Top Quellen — news_queue</h3>
+                <div className="text-xs space-y-1 font-mono">
+                  {data.news_queue.bySource.slice(0, 8).map(s => (
+                    <div key={s.source} className="flex justify-between border-b border-border/40 py-1">
+                      <span className="truncate max-w-[280px]">{s.source}</span>
+                      <span className="text-muted-foreground">{s.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   )
 }
