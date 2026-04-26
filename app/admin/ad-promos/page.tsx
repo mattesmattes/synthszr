@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Loader2, Plus, Trash2, Upload, Save } from 'lucide-react'
+import { Loader2, Plus, Trash2, Upload, Save, Copy } from 'lucide-react'
 import { AdPromoView } from '@/components/ad-promo'
 import type { AdPromo, AdPromoConfig, AdPromoLayout } from '@/lib/ad-promos/types'
 
@@ -60,6 +60,34 @@ export default function AdPromosAdminPage() {
     if (!confirm('Promo wirklich löschen?')) return
     await fetch(`/api/admin/ad-promos/${id}`, { method: 'DELETE' })
     setPromos(prev => prev.filter(p => p.id !== id))
+  }
+
+  const duplicatePromo = async (source: AdPromo) => {
+    const res = await fetch('/api/admin/ad-promos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `${source.name} (Kopie)`,
+        layout: source.layout,
+        title: source.title,
+        body: source.body,
+        cta_label: source.cta_label,
+        link_url: source.link_url,
+        eyebrow: source.eyebrow,
+        image_left_url: source.image_left_url,
+        image_left_bg: source.image_left_bg,
+        image_left_blend: source.image_left_blend,
+        image_right_url: source.image_right_url,
+        image_right_bg: source.image_right_bg,
+        image_right_blend: source.image_right_blend,
+        text_bg: source.text_bg,
+        text_color: source.text_color,
+        active: false,
+        sort_order: promos.length,
+      }),
+    })
+    const json = await res.json()
+    if (json.promo) setPromos(prev => [...prev, json.promo])
   }
 
   const saveConfig = async (next: AdPromoConfig) => {
@@ -153,6 +181,7 @@ export default function AdPromosAdminPage() {
                 promo={promo}
                 onChange={(patch) => updatePromo(promo.id, patch)}
                 onDelete={() => deletePromo(promo.id)}
+                onDuplicate={() => duplicatePromo(promo)}
               />
             </TabsContent>
           ))}
@@ -166,10 +195,12 @@ function PromoEditor({
   promo,
   onChange,
   onDelete,
+  onDuplicate,
 }: {
   promo: AdPromo
   onChange: (patch: Partial<AdPromo>) => void
   onDelete: () => void
+  onDuplicate: () => void
 }) {
   const [uploading, setUploading] = useState<'left' | 'right' | null>(null)
   const [draft, setDraft] = useState(promo)
@@ -219,6 +250,7 @@ function PromoEditor({
           {dirty && (
             <Button size="sm" onClick={save}><Save className="mr-1 h-4 w-4" />Speichern</Button>
           )}
+          <Button size="sm" variant="ghost" onClick={onDuplicate} title="Als Vorlage kopieren"><Copy className="h-4 w-4" /></Button>
           <Button size="sm" variant="ghost" onClick={onDelete}><Trash2 className="h-4 w-4" /></Button>
         </div>
       </div>

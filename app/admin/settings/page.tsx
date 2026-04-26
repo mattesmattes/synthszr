@@ -151,7 +151,7 @@ const DEFAULT_SCHEDULE: ScheduleConfig = {
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
-const MINUTES = [0, 30]
+const MINUTES = [0, 15, 30, 45]
 
 // --- Helpers ---
 
@@ -734,7 +734,7 @@ export default function SettingsPage() {
                   </div>
 
                   <p className="text-xs text-muted-foreground mt-4">
-                    Hinweis: Zeiten in MEZ/MESZ (automatische Umrechnung in UTC). Der Scheduler läuft alle 30 Minuten und startet Jobs innerhalb eines 10-Minuten-Fensters nach der geplanten Zeit.
+                    Hinweis: Zeiten in MEZ/MESZ (automatische Umrechnung in UTC). Der Scheduler läuft alle 15 Minuten und startet Jobs innerhalb eines 10-Minuten-Fensters nach der geplanten Zeit.
                   </p>
                 </>
               )}

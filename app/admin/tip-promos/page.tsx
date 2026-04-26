@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Trash2, Copy } from 'lucide-react'
 import { TipPromoBox } from '@/components/tip-promo-box'
 import type { TipPromo, TipPromoConfig } from '@/lib/tip-promos/types'
 
@@ -72,6 +72,31 @@ export default function TipPromosAdminPage() {
     if (!confirm('Tipp wirklich löschen?')) return
     await fetch(`/api/admin/tip-promos/${id}`, { method: 'DELETE' })
     setPromos(prev => prev.filter(p => p.id !== id))
+  }
+
+  const duplicatePromo = async (source: TipPromo) => {
+    const res = await fetch('/api/admin/tip-promos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `${source.name} (Kopie)`,
+        headline: source.headline,
+        body: source.body,
+        link_url: source.link_url,
+        cta_label: source.cta_label,
+        gradient_from: source.gradient_from,
+        gradient_to: source.gradient_to,
+        gradient_direction: source.gradient_direction,
+        text_color: source.text_color,
+        active: false,
+        sort_order: promos.length,
+      }),
+    })
+    const json = await res.json()
+    if (json.promo) {
+      setPromos(prev => [...prev, json.promo])
+      setActiveTab(json.promo.id)
+    }
   }
 
   const saveConfig = async (next: TipPromoConfig) => {
@@ -165,7 +190,7 @@ export default function TipPromosAdminPage() {
           </TabsList>
           {promos.map(p => (
             <TabsContent key={p.id} value={p.id} className="space-y-4 mt-4">
-              <TipEditor promo={p} onUpdate={patch => updatePromo(p.id, patch)} onDelete={() => deletePromo(p.id)} />
+              <TipEditor promo={p} onUpdate={patch => updatePromo(p.id, patch)} onDelete={() => deletePromo(p.id)} onDuplicate={() => duplicatePromo(p)} />
             </TabsContent>
           ))}
         </Tabs>
@@ -174,10 +199,11 @@ export default function TipPromosAdminPage() {
   )
 }
 
-function TipEditor({ promo, onUpdate, onDelete }: {
+function TipEditor({ promo, onUpdate, onDelete, onDuplicate }: {
   promo: TipPromo
   onUpdate: (patch: Partial<TipPromo>) => void
   onDelete: () => void
+  onDuplicate: () => void
 }) {
   return (
     <div className="grid gap-6 md:grid-cols-[1fr_320px]">
@@ -187,9 +213,14 @@ function TipEditor({ promo, onUpdate, onDelete }: {
             <Label className="text-xs">Aktiv</Label>
             <Switch checked={promo.active} onCheckedChange={v => onUpdate({ active: v })} />
           </div>
-          <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={onDelete}>
-            <Trash2 className="h-4 w-4 mr-1" /> Löschen
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={onDuplicate} title="Als Vorlage kopieren">
+              <Copy className="h-4 w-4 mr-1" /> Kopieren
+            </Button>
+            <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={onDelete}>
+              <Trash2 className="h-4 w-4 mr-1" /> Löschen
+            </Button>
+          </div>
         </div>
 
         <div className="grid gap-3">
