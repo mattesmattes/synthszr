@@ -60,6 +60,7 @@ export default function NewsletterSendPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [activeSubscriberCount, setActiveSubscriberCount] = useState(0)
   const [showProtokoll, setShowProtokoll] = useState(false)
+  const [testSentPostIds, setTestSentPostIds] = useState<Set<string>>(new Set())
 
   // Cron settings state
   const [cronSettings, setCronSettings] = useState<CronSettings>({ enabled: false, hour: 9, minute: 0 })
@@ -100,6 +101,15 @@ export default function NewsletterSendPage() {
 
   useEffect(() => {
     fetchData()
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('newsletter_test_sent_post_ids')
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (Array.isArray(parsed)) setTestSentPostIds(new Set(parsed))
+        }
+      } catch {}
+    }
   }, [])
 
   async function fetchData() {
@@ -425,6 +435,14 @@ export default function NewsletterSendPage() {
 
       if (res.ok) {
         setMessage({ type: 'success', text: data.message })
+        setTestSentPostIds(prev => {
+          const next = new Set(prev)
+          next.add(selectedPostId)
+          if (typeof window !== 'undefined') {
+            try { localStorage.setItem('newsletter_test_sent_post_ids', JSON.stringify([...next])) } catch {}
+          }
+          return next
+        })
       } else {
         setMessage({ type: 'error', text: data.error || 'Fehler beim Senden' })
       }
@@ -596,6 +614,26 @@ export default function NewsletterSendPage() {
                 <p className="text-xs text-muted-foreground mb-3">
                   Newsletter wird an {activeSubscriberCount} aktive Subscriber gesendet.
                 </p>
+
+                {/* Test Email Status Indicator */}
+                {selectedPostId && (
+                  <div className={`mb-3 p-2 rounded text-xs flex items-center gap-2 ${
+                    testSentPostIds.has(selectedPostId)
+                      ? 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200'
+                      : 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200'
+                  }`}>
+                    {testSentPostIds.has(selectedPostId) ? (
+                      <CheckCircle className="h-3 w-3" />
+                    ) : (
+                      <AlertCircle className="h-3 w-3" />
+                    )}
+                    <span>
+                      {testSentPostIds.has(selectedPostId)
+                        ? 'Test-E-Mail für diesen Post versendet'
+                        : 'Test-E-Mail noch nicht versendet'}
+                    </span>
+                  </div>
+                )}
 
                 {/* Translation Status Indicator */}
                 {translationStatus && (
