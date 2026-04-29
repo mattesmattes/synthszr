@@ -39,6 +39,10 @@ export function PodcastBadges({ children }: { children?: ReactNode }) {
             <img
               src={link.image}
               alt={link.name}
+              width={300}
+              height={75}
+              loading="lazy"
+              decoding="async"
               className="h-auto w-full max-h-9"
               style={{ aspectRatio: '4 / 1' }}
             />

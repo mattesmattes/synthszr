@@ -26,6 +26,10 @@ export function AdPromoView({ promo }: { promo: AdPromo }) {
                 <img
                   src={promo.image_left_url}
                   alt={promo.title}
+                  width={880}
+                  height={880}
+                  loading="lazy"
+                  decoding="async"
                   className="block w-full"
                   style={{ mixBlendMode: 'multiply', maxWidth: 880, margin: '0 auto' }}
                 />
@@ -40,6 +44,10 @@ export function AdPromoView({ promo }: { promo: AdPromo }) {
                 <img
                   src={promo.image_left_url}
                   alt={promo.title}
+                  width={440}
+                  height={440}
+                  loading="lazy"
+                  decoding="async"
                   className="block h-full w-full object-cover"
                   style={{ mixBlendMode: 'multiply' }}
                 />
@@ -50,6 +58,10 @@ export function AdPromoView({ promo }: { promo: AdPromo }) {
                 <img
                   src={promo.image_right_url}
                   alt={promo.title}
+                  width={440}
+                  height={440}
+                  loading="lazy"
+                  decoding="async"
                   className="block h-full w-full object-cover"
                   style={{ mixBlendMode: 'multiply' }}
                 />

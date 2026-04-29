@@ -1,4 +1,5 @@
 import { Suspense } from "react"
+import ReactDOM from "react-dom"
 import { PostContentView } from "./post-content-view"
 import { AudioPlayer } from "./audio-player"
 import { PodcastBadges } from "./podcast-badges"
@@ -39,6 +40,14 @@ export function FeaturedArticle({
 }: FeaturedArticleProps) {
   const postUrl = `/${locale}/posts/${slug}`
 
+  // Preload the LCP cover so the browser starts the image request before the
+  // HTML parser reaches the <img>. Closes the "LCP request discovery" gap that
+  // PageSpeed flagged. Mobile-first: mobile preload covers the most-tested
+  // form factor; desktop falls back to the picture-source fetch.
+  if (coverImageUrl) {
+    ReactDOM.preload(coverImageUrl, { as: "image", fetchPriority: "high" })
+  }
+
   return (
     <article className="mb-16 border-b border-border pb-16">
       {coverImageUrl && (
@@ -58,8 +67,11 @@ export function FeaturedArticle({
                 <img
                   src={coverImageUrl}
                   alt={title}
+                  width={1408}
+                  height={1408}
                   className="w-full h-full object-cover"
                   fetchPriority="high"
+                  decoding="async"
                 />
               </picture>
             </a>
@@ -71,7 +83,10 @@ export function FeaturedArticle({
                 <img
                   src="/synthszr-logo.svg"
                   alt="Synthszr"
+                  width={400}
+                  height={96}
                   className="h-auto w-[80%] md:h-24 md:w-auto md:max-w-[400px]"
+                  decoding="async"
                 />
               )}
             </a>

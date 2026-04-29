@@ -302,7 +302,15 @@ export default async function Page({ params }: PageProps) {
           <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-6">
               <a href="https://oh-so.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
-                <img src="/oh-so-logo.svg" alt="OH-SO" className="h-9" />
+                <img
+                  src="/oh-so-logo.svg"
+                  alt="OH-SO"
+                  width={86}
+                  height={36}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-9"
+                />
               </a>
               <Suspense fallback={null}>
                 <LanguageSwitcher currentLocale={locale} />

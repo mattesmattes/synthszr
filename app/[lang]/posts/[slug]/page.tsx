@@ -1,4 +1,5 @@
 import { Suspense } from "react"
+import ReactDOM from "react-dom"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { createAnonClient } from "@/lib/supabase/admin"
@@ -311,6 +312,12 @@ export default async function PostPage({ params }: PageProps) {
     ],
   }
 
+  // Preload the LCP cover so the browser begins the image fetch in parallel
+  // with HTML parsing — closes the "LCP request discovery" gap.
+  if (post.cover_image_url) {
+    ReactDOM.preload(post.cover_image_url, { as: "image", fetchPriority: "high" })
+  }
+
   return (
     <SwipeNavigation
       olderPostSlug={olderPost?.slug ? `/${locale}/posts/${olderPost.slug}` : undefined}
@@ -363,8 +370,11 @@ export default async function PostPage({ params }: PageProps) {
                     <img
                       src={post.cover_image_url}
                       alt={post.title}
+                      width={1408}
+                      height={1408}
                       className="w-full h-full object-cover"
                       fetchPriority="high"
+                      decoding="async"
                     />
                   </picture>
                 </Link>
@@ -373,6 +383,9 @@ export default async function PostPage({ params }: PageProps) {
                   <img
                     src="/synthszr-logo.svg"
                     alt="Synthszr"
+                    width={400}
+                    height={96}
+                    decoding="async"
                     className="h-auto w-[80%] md:h-24 md:w-auto md:max-w-[400px]"
                   />
                 </Link>
@@ -459,7 +472,15 @@ export default async function PostPage({ params }: PageProps) {
           <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-6">
               <a href="https://oh-so.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
-                <img src="/oh-so-logo.svg" alt="OH-SO" className="h-9" />
+                <img
+                  src="/oh-so-logo.svg"
+                  alt="OH-SO"
+                  width={86}
+                  height={36}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-9"
+                />
               </a>
               <Suspense fallback={null}>
                 <LanguageSwitcher currentLocale={locale} />

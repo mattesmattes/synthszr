@@ -15,6 +15,10 @@ export function CodecrashPromo() {
             <img
               src="/cc-box-cover.png"
               alt="Code Crash — Matthias Schrader"
+              width={440}
+              height={440}
+              loading="lazy"
+              decoding="async"
               className="block h-full w-full object-cover"
               style={{ mixBlendMode: 'multiply' }}
             />
@@ -25,6 +29,10 @@ export function CodecrashPromo() {
             <img
               src="/cc-box-mattes.png"
               alt="Matthias Schrader"
+              width={440}
+              height={440}
+              loading="lazy"
+              decoding="async"
               className="block h-full w-full object-cover"
             />
           </div>
