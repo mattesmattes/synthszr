@@ -66,6 +66,10 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://zadrjbyszvsusukajsbp.supabase.co" />
         <link rel="dns-prefetch" href="https://zadrjbyszvsusukajsbp.supabase.co" />
+        {/* Cover images live on Vercel Blob — preconnect saves the
+            DNS + TLS handshake (~200–500 ms) before the LCP fetch. */}
+        <link rel="preconnect" href="https://lbrzdn804nhy3kox.public.blob.vercel-storage.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://lbrzdn804nhy3kox.public.blob.vercel-storage.com" />
       </head>
       <body className={`${ibmPlexSerif.variable} ${spaceMono.variable} font-serif antialiased`}>
         {children}
