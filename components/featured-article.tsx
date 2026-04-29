@@ -5,6 +5,7 @@ import { AudioPlayer } from "./audio-player"
 import { PodcastBadges } from "./podcast-badges"
 import { CoverCalligram } from "./cover-calligram"
 import { formatUpdateDate } from "@/lib/i18n/config"
+import { optimizeImageUrl } from "@/lib/utils/optimize-image"
 import type { LanguageCode } from "@/lib/types"
 import type { CoverAnimationConfig } from "@/lib/types/cover-animation"
 
@@ -40,12 +41,18 @@ export function FeaturedArticle({
 }: FeaturedArticleProps) {
   const postUrl = `/${locale}/posts/${slug}`
 
+  // Route the LCP cover through Vercel's image optimizer (/_next/image)
+  // so the browser receives AVIF/WebP instead of the source PNG.
+  // Mobile cover PNGs are ~315 KB; AVIF is typically ~50 KB.
+  const optimizedMobileCover = coverImageUrl ? optimizeImageUrl(coverImageUrl, 1408) : ""
+  const optimizedDesktopCover = desktopCoverUrl ? optimizeImageUrl(desktopCoverUrl, 1408) : ""
+
   // Preload the LCP cover so the browser starts the image request before the
   // HTML parser reaches the <img>. Closes the "LCP request discovery" gap that
   // PageSpeed flagged. Mobile-first: mobile preload covers the most-tested
   // form factor; desktop falls back to the picture-source fetch.
-  if (coverImageUrl) {
-    ReactDOM.preload(coverImageUrl, { as: "image", fetchPriority: "high" })
+  if (optimizedMobileCover) {
+    ReactDOM.preload(optimizedMobileCover, { as: "image", fetchPriority: "high" })
   }
 
   return (
@@ -61,11 +68,11 @@ export function FeaturedArticle({
             {/* Clickable background */}
             <a href={postUrl} className="absolute inset-0 z-0">
               <picture className="block w-full h-full">
-                {desktopCoverUrl && (
-                  <source media="(min-width: 768px)" srcSet={desktopCoverUrl} />
+                {optimizedDesktopCover && (
+                  <source media="(min-width: 768px)" srcSet={optimizedDesktopCover} />
                 )}
                 <img
-                  src={coverImageUrl}
+                  src={optimizedMobileCover}
                   alt={title}
                   width={1408}
                   height={1408}
