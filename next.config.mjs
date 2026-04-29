@@ -2,23 +2,7 @@
 const nextConfig = {
   transpilePackages: ['@chenglou/pretext'],
   images: {
-    // Vercel image optimization is opt-in per <img> via the optimizeImageUrl
-    // helper. Only the LCP cover routes through /_next/image — the rest of
-    // the site keeps using plain <img> so we don't blow up Vercel image-
-    // transformation usage on every promo and badge.
-    formats: ['image/avif', 'image/webp'],
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '*.public.blob.vercel-storage.com',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: '*.supabase.co',
-        pathname: '/storage/v1/object/public/**',
-      },
-    ],
+    unoptimized: true,
   },
 
   // 301 redirects for deleted posts

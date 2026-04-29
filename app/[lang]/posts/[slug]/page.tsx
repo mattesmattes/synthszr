@@ -15,7 +15,6 @@ import { ArrowLeft, ArrowRight } from "lucide-react"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
 import { formatUpdateDate, LOCALE_STRINGS } from "@/lib/i18n/config"
-import { optimizeImageUrl } from "@/lib/utils/optimize-image"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
 
@@ -313,15 +312,10 @@ export default async function PostPage({ params }: PageProps) {
     ],
   }
 
-  // Route the LCP cover through Vercel's image optimizer for AVIF/WebP
-  // delivery. PNG covers (~315 KB) become ~50 KB AVIF.
-  const optimizedMobileCover = post.cover_image_url ? optimizeImageUrl(post.cover_image_url, 1408) : ""
-  const optimizedDesktopCover = post.desktop_cover_url ? optimizeImageUrl(post.desktop_cover_url, 1408) : ""
-
   // Preload the LCP cover so the browser begins the image fetch in parallel
   // with HTML parsing — closes the "LCP request discovery" gap.
-  if (optimizedMobileCover) {
-    ReactDOM.preload(optimizedMobileCover, { as: "image", fetchPriority: "high" })
+  if (post.cover_image_url) {
+    ReactDOM.preload(post.cover_image_url, { as: "image", fetchPriority: "high" })
   }
 
   return (
@@ -370,11 +364,11 @@ export default async function PostPage({ params }: PageProps) {
                 {/* Clickable background to home */}
                 <Link href={`/${locale}`} className="absolute inset-0 z-0">
                   <picture className="block w-full h-full">
-                    {optimizedDesktopCover && (
-                      <source media="(min-width: 768px)" srcSet={optimizedDesktopCover} />
+                    {post.desktop_cover_url && (
+                      <source media="(min-width: 768px)" srcSet={post.desktop_cover_url} />
                     )}
                     <img
-                      src={optimizedMobileCover}
+                      src={post.cover_image_url}
                       alt={post.title}
                       width={1408}
                       height={1408}
