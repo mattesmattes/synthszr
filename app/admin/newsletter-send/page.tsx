@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback, startTransition } from 'react'
-import { Send, FileText, Mail, Loader2, CheckCircle, AlertCircle, Clock, Users, History, Settings, FileEdit, Globe, AlertTriangle, Image, Megaphone } from 'lucide-react'
+import { useEffect, useState, useCallback, useMemo, startTransition } from 'react'
+import { Send, FileText, Mail, Loader2, CheckCircle, AlertCircle, Clock, Users, History, Settings, FileEdit, Globe, AlertTriangle, Image, Megaphone, Mic, Lock, Unlock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +18,7 @@ interface Post {
 
 interface NewsletterSend {
   id: string
+  post_id: string
   subject: string
   recipient_count: number
   status: string
@@ -26,6 +27,13 @@ interface NewsletterSend {
     title: string
     slug: string
   } | null
+}
+
+// Berlin-day comparison so the "already sent today" lock matches the editor's
+// timezone, not the server's UTC clock — same convention as podigee-status.
+function toBerlinDateStr(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value)
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(date)
 }
 
 interface CronSettings {
@@ -96,6 +104,20 @@ export default function NewsletterSendPage() {
     valid: boolean
   } | null>(null)
   const [checkingThumbnails, setCheckingThumbnails] = useState(false)
+
+  // Podigee status state
+  const [podigeeStatus, setPodigeeStatus] = useState<{
+    published: boolean
+    episodeUrl?: string
+    episodeTitle?: string | null
+  } | null>(null)
+  const [checkingPodigee, setCheckingPodigee] = useState(false)
+
+  // Send-lock state: holds the post ID that the user manually unlocked for
+  // resend. Cleared on post change (by useEffect below) and after successful
+  // send. Today's lock comes from sends list itself, no extra fetch needed.
+  const [unlockedPostId, setUnlockedPostId] = useState<string | null>(null)
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false)
 
   const supabase = createClient()
 
@@ -410,13 +432,56 @@ export default function NewsletterSendPage() {
     }
   }, [supabase])
 
+  // Check Podigee publication status for selected post
+  const checkPodigeeStatus = useCallback(async (postId: string) => {
+    setCheckingPodigee(true)
+    try {
+      const res = await fetch(`/api/podcast/podigee-status?postId=${encodeURIComponent(postId)}`)
+      if (!res.ok) {
+        setPodigeeStatus({ published: false })
+        return
+      }
+      const data = await res.json()
+      setPodigeeStatus({
+        published: !!data.published,
+        episodeUrl: data.episodeUrl,
+        episodeTitle: data.episodeTitle,
+      })
+    } catch (err) {
+      console.error('Error checking Podigee status:', err)
+      setPodigeeStatus({ published: false })
+    } finally {
+      setCheckingPodigee(false)
+    }
+  }, [])
+
   // Check translations and thumbnails when post selection changes
   useEffect(() => {
     if (selectedPostId) {
       checkTranslationStatus(selectedPostId)
       checkThumbnailStatus(selectedPostId)
+      checkPodigeeStatus(selectedPostId)
     }
-  }, [selectedPostId, checkTranslationStatus, checkThumbnailStatus])
+    // Clear the unlock when switching posts so the lock re-engages on each
+    // post; otherwise the user could unlock once and bypass every future post.
+    setUnlockedPostId(null)
+    setShowUnlockDialog(false)
+  }, [selectedPostId, checkTranslationStatus, checkThumbnailStatus, checkPodigeeStatus])
+
+  // Find the most recent successful send for the selected post that happened
+  // today (Berlin TZ). 'sending' counts too — a half-finished blast still
+  // means we shouldn't blindly fire another one.
+  const lastSendToday = useMemo<NewsletterSend | null>(() => {
+    if (!selectedPostId) return null
+    const todayBerlin = toBerlinDateStr(new Date())
+    return sends.find(s =>
+      s.post_id === selectedPostId &&
+      s.status !== 'failed' &&
+      toBerlinDateStr(s.sent_at) === todayBerlin
+    ) || null
+  }, [sends, selectedPostId])
+
+  const sendLocked = !!lastSendToday && unlockedPostId !== selectedPostId
 
   async function sendTestEmail() {
     if (!selectedPostId || !testEmail) return
@@ -483,7 +548,11 @@ export default function NewsletterSendPage() {
 
       if (res.ok) {
         setMessage({ type: 'success', text: data.message })
-        fetchData() // Refresh sends list
+        // Re-engage lock immediately after success: fetchData refreshes the
+        // sends list, and clearing unlockedPostId means the next click needs
+        // the user to confirm again.
+        setUnlockedPostId(null)
+        fetchData()
       } else {
         setMessage({ type: 'error', text: data.error || 'Fehler beim Senden' })
       }
@@ -689,15 +758,56 @@ export default function NewsletterSendPage() {
                   </div>
                 )}
 
+                {/* Podigee Status Indicator */}
+                {selectedPostId && (
+                  <div className={`mb-3 p-2 rounded text-xs flex items-center gap-2 ${
+                    checkingPodigee
+                      ? 'bg-muted text-muted-foreground'
+                      : podigeeStatus?.published
+                        ? 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200'
+                        : 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200'
+                  }`}>
+                    {checkingPodigee ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : podigeeStatus?.published ? (
+                      <Mic className="h-3 w-3" />
+                    ) : (
+                      <AlertCircle className="h-3 w-3" />
+                    )}
+                    <span className="flex-1">
+                      {checkingPodigee
+                        ? 'Prüfe Podigee-Status...'
+                        : podigeeStatus?.published
+                          ? 'Podcast bereits auf Podigee veröffentlicht'
+                          : 'Podcast noch nicht auf Podigee veröffentlicht'}
+                    </span>
+                    {podigeeStatus?.published && podigeeStatus.episodeUrl && (
+                      <a
+                        href={podigeeStatus.episodeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:no-underline"
+                      >
+                        Episode
+                      </a>
+                    )}
+                  </div>
+                )}
+
                 <Button
                   onClick={() => sendToAll(false)}
-                  disabled={!selectedPostId || sending || activeSubscriberCount === 0}
+                  disabled={!selectedPostId || sending || activeSubscriberCount === 0 || sendLocked}
                   className="w-full gap-2"
                 >
                   {sending ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Wird gesendet...
+                    </>
+                  ) : sendLocked ? (
+                    <>
+                      <Lock className="h-4 w-4" />
+                      Heute bereits versendet
                     </>
                   ) : (
                     <>
@@ -706,6 +816,18 @@ export default function NewsletterSendPage() {
                     </>
                   )}
                 </Button>
+
+                {sendLocked && (
+                  <div className="mt-1.5 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowUnlockDialog(true)}
+                      className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+                    >
+                      Unlock Send
+                    </button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -979,6 +1101,68 @@ export default function NewsletterSendPage() {
           saving={savingTemplate}
           selectedPostTitle={selectedPost?.title}
         />
+      )}
+
+      {/* Unlock Resend Dialog */}
+      {showUnlockDialog && lastSendToday && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-4 border-b flex items-center gap-3">
+              <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900">
+                <Lock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Newsletter heute schon versendet</h2>
+                <p className="text-sm text-muted-foreground">
+                  Bestätige den erneuten Versand
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <div className="bg-muted/50 p-3 rounded text-sm space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Versendet an</span>
+                  <span className="font-medium">{lastSendToday.recipient_count} Subscriber</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Datum</span>
+                  <span className="font-medium">{new Date(lastSendToday.sent_at).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Uhrzeit</span>
+                  <span className="font-medium">{new Date(lastSendToday.sent_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })} Uhr</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Nach Klick auf Unlock Resend wird der Send-Button wieder aktiv. Die Subscriber erhalten den Newsletter dann ein zweites Mal.
+              </p>
+            </div>
+
+            <div className="p-4 border-t flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowUnlockDialog(false)}
+              >
+                Abbrechen
+              </Button>
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => {
+                  setUnlockedPostId(selectedPostId)
+                  setShowUnlockDialog(false)
+                }}
+                className="gap-1.5"
+              >
+                <Unlock className="h-3 w-3" />
+                Unlock Resend
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Translation Warning Modal */}
