@@ -26,8 +26,8 @@ export default function ImpressumPage() {
             <h2 className="text-lg font-semibold mb-2">Angaben gemäß § 5 TMG</h2>
             <p className="text-sm">
               <strong>OH–SO Digital GmbH</strong><br />
-              Kaiser-Wilhelm-Straße 83<br />
-              20355 Hamburg<br />
+              Harkortstraße 95<br />
+              22765 Hamburg<br />
               Deutschland
             </p>
           </section>
@@ -72,8 +72,8 @@ export default function ImpressumPage() {
             <h2 className="text-lg font-semibold mb-2">Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV</h2>
             <p className="text-sm">
               <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Matthias &apos;Mattes&apos; Schrader</a><br />
-              Kaiser-Wilhelm-Straße 83<br />
-              20355 Hamburg
+              Harkortstraße 95<br />
+              22765 Hamburg
             </p>
           </section>
 

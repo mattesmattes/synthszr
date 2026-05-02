@@ -27,8 +27,8 @@ export default function DatenschutzPage() {
             <h2 className="text-lg font-semibold mb-2">1. Verantwortlicher</h2>
             <p className="text-sm">
               <strong>OH–SO Digital GmbH</strong><br />
-              Kaiser-Wilhelm-Straße 83<br />
-              20355 Hamburg<br />
+              Harkortstraße 95<br />
+              22765 Hamburg<br />
               E-Mail: <a href="mailto:hi@oh-so.com" className="text-primary hover:underline">hi@oh-so.com</a>
             </p>
           </section>
