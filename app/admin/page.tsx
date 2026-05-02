@@ -1186,10 +1186,22 @@ export default function AdminPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Bearbeitung fortsetzen</AlertDialogCancel>
-            <AlertDialogAction onClick={closeEditDialog} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            {/* Verwerfen left as the recoverable-by-mistake destructive
+                action; "Bearbeitung fortsetzen" right with autoFocus +
+                font-semibold so the safer choice is the default keyboard
+                target. text-white is set explicitly because the project's
+                --destructive-foreground token is the same oklch as
+                --destructive (red on red) — until that's fixed globally
+                we hardcode the contrast here. */}
+            <AlertDialogAction
+              onClick={closeEditDialog}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
               Verwerfen
             </AlertDialogAction>
+            <AlertDialogCancel autoFocus className="font-semibold">
+              Bearbeitung fortsetzen
+            </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

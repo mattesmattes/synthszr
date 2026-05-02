@@ -105,14 +105,12 @@ export default function NewsletterSendPage() {
   } | null>(null)
   const [checkingThumbnails, setCheckingThumbnails] = useState(false)
 
-  // Podigee status state
+  // Podigee status state — read straight from post_podcasts (source of
+  // truth set by /api/podcast/publish-podigee on success).
   const [podigeeStatus, setPodigeeStatus] = useState<{
     published: boolean
     episodeUrl?: string
-    episodeTitle?: string | null
-    matchReason?: 'same-day' | 'plus-minus-1' | 'title-fuzzy'
-    targetDate?: string
-    recentEpisodes?: Array<{ id: number; title: string | null; publishedDate: string | null }>
+    publishedAt?: string
     error?: string
   } | null>(null)
   const [checkingPodigee, setCheckingPodigee] = useState(false)
@@ -443,22 +441,13 @@ export default function NewsletterSendPage() {
       const res = await fetch(`/api/podcast/podigee-status?postId=${encodeURIComponent(postId)}`)
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        // Distinguish API/config failures from a real "no episode found"
-        // miss — without this, both cases render as "noch nicht veröffentlicht"
-        // and there's no way to tell from the UI.
-        setPodigeeStatus({
-          published: false,
-          error: data?.error || `HTTP ${res.status}`,
-        })
+        setPodigeeStatus({ published: false, error: data?.error || `HTTP ${res.status}` })
         return
       }
       setPodigeeStatus({
         published: !!data.published,
         episodeUrl: data.episodeUrl,
-        episodeTitle: data.episodeTitle,
-        matchReason: data.matchReason,
-        targetDate: data.targetDate,
-        recentEpisodes: data.recentEpisodes,
+        publishedAt: data.publishedAt,
       })
     } catch (err) {
       console.error('Error checking Podigee status:', err)
@@ -773,57 +762,38 @@ export default function NewsletterSendPage() {
 
                 {/* Podigee Status Indicator */}
                 {selectedPostId && (
-                  <div className={`mb-3 p-2 rounded text-xs ${
+                  <div className={`mb-3 p-2 rounded text-xs flex items-center gap-2 ${
                     checkingPodigee
                       ? 'bg-muted text-muted-foreground'
                       : podigeeStatus?.published
                         ? 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200'
                         : 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200'
                   }`}>
-                    <div className="flex items-center gap-2">
-                      {checkingPodigee ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : podigeeStatus?.published ? (
-                        <Mic className="h-3 w-3" />
-                      ) : (
-                        <AlertCircle className="h-3 w-3" />
-                      )}
-                      <span className="flex-1">
-                        {checkingPodigee
-                          ? 'Prüfe Podigee-Status...'
-                          : podigeeStatus?.published
-                            ? `Podcast auf Podigee veröffentlicht${podigeeStatus.matchReason && podigeeStatus.matchReason !== 'same-day' ? ` (${podigeeStatus.matchReason === 'plus-minus-1' ? '±1 Tag' : 'Titel-Match'})` : ''}`
-                            : podigeeStatus?.error
-                              ? `Podigee-Check fehlgeschlagen: ${podigeeStatus.error}`
-                              : 'Podcast noch nicht auf Podigee veröffentlicht'}
-                      </span>
-                      {podigeeStatus?.published && podigeeStatus.episodeUrl && (
-                        <a
-                          href={podigeeStatus.episodeUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline hover:no-underline"
-                        >
-                          Episode
-                        </a>
-                      )}
-                    </div>
-                    {/* Show the most recent Podigee episodes when no match was
-                        found — without this the admin has no way to tell why
-                        the matcher missed (date off by 2+ days, different
-                        title, etc.). */}
-                    {!checkingPodigee && podigeeStatus && !podigeeStatus.published && podigeeStatus.recentEpisodes && podigeeStatus.recentEpisodes.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-current/20 space-y-0.5 opacity-90">
-                        <div className="text-[10px] font-medium uppercase tracking-wider opacity-70">
-                          Erwartet: {podigeeStatus.targetDate} · Letzte Episoden auf Podigee:
-                        </div>
-                        {podigeeStatus.recentEpisodes.map(ep => (
-                          <div key={ep.id} className="text-[11px] flex gap-2">
-                            <span className="font-mono opacity-70 shrink-0">{ep.publishedDate || 'draft'}</span>
-                            <span className="truncate">{ep.title || `(ohne Titel)`}</span>
-                          </div>
-                        ))}
-                      </div>
+                    {checkingPodigee ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : podigeeStatus?.published ? (
+                      <Mic className="h-3 w-3" />
+                    ) : (
+                      <AlertCircle className="h-3 w-3" />
+                    )}
+                    <span className="flex-1">
+                      {checkingPodigee
+                        ? 'Prüfe Podigee-Status...'
+                        : podigeeStatus?.published
+                          ? 'Podcast auf Podigee veröffentlicht'
+                          : podigeeStatus?.error
+                            ? `Podigee-Check fehlgeschlagen: ${podigeeStatus.error}`
+                            : 'Podcast noch nicht auf Podigee veröffentlicht'}
+                    </span>
+                    {podigeeStatus?.published && podigeeStatus.episodeUrl && (
+                      <a
+                        href={podigeeStatus.episodeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:no-underline"
+                      >
+                        Episode
+                      </a>
                     )}
                   </div>
                 )}

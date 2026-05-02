@@ -279,6 +279,50 @@ export async function POST(request: NextRequest) {
       (episode.permalink as string | undefined) ||
       `https://app.podigee.com/dashboard/podcasts/${podcastId}/episodes/${episodeId}/edit`
 
+    // Persist the publication on the matching post_podcasts row so the
+    // newsletter-send page can show a definitive "published" status without
+    // hitting the Podigee API. Match by post_id + audio_url since the user
+    // selects a specific recording on the audio page; falling back to
+    // post_id alone if no exact audio match is found.
+    {
+      const nowIso = new Date().toISOString()
+      const update = {
+        podigee_episode_id: episodeId,
+        podigee_episode_url: episodeUrl,
+        podigee_published_at: nowIso,
+      }
+
+      const { data: byAudio } = await supabase
+        .from('post_podcasts')
+        .update(update)
+        .eq('post_id', postId)
+        .eq('audio_url', audioUrl)
+        .select('id')
+
+      if (!byAudio || byAudio.length === 0) {
+        // Audio URL drifted (e.g. re-uploaded between recording and publish).
+        // Fall back to most-recent completed podcast for the post so we still
+        // record the link somewhere useful.
+        const { data: latestForPost } = await supabase
+          .from('post_podcasts')
+          .select('id')
+          .eq('post_id', postId)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (latestForPost?.id) {
+          await supabase
+            .from('post_podcasts')
+            .update(update)
+            .eq('id', latestForPost.id)
+        } else {
+          console.warn('[Publish Podigee] No post_podcasts row found to record podigee state', { postId, audioUrl })
+        }
+      }
+    }
+
     console.log(`[Publish Podigee] Successfully published episode ${episodeId}: ${episodeUrl}`)
 
     return NextResponse.json({ episodeUrl, episodeId })

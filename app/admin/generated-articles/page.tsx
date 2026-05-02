@@ -931,10 +931,20 @@ export default function GeneratedArticlesPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Bearbeitung fortsetzen</AlertDialogCancel>
-            <AlertDialogAction onClick={closeEditDialog} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            {/* Verwerfen left as destructive; "Bearbeitung fortsetzen"
+                right + autoFocus + font-semibold so the safe choice is the
+                keyboard default. text-white hardcoded because the project's
+                --destructive-foreground token is broken (same oklch as
+                --destructive → red on red, invisible). */}
+            <AlertDialogAction
+              onClick={closeEditDialog}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
               Verwerfen
             </AlertDialogAction>
+            <AlertDialogCancel autoFocus className="font-semibold">
+              Bearbeitung fortsetzen
+            </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
