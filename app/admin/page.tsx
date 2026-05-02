@@ -167,6 +167,11 @@ export default function AdminPage() {
     status: 'draft' | 'published' | 'archived'
     content: Record<string, unknown>
   }>({ title: '', slug: '', excerpt: '', category: 'AI & Tech', status: 'draft', content: {} })
+  // Snapshot of editForm at the moment the dialog opened. Used to detect
+  // unsaved changes before allowing a backdrop / ESC / cancel-driven close —
+  // same pattern as in app/admin/generated-articles/page.tsx.
+  const [editFormSnapshot, setEditFormSnapshot] = useState<typeof editForm | null>(null)
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
 
   // Article thumbnails state
   const [articleThumbnails, setArticleThumbnails] = useState<Array<{ id: string; article_index: number; generation_status: string; image_url?: string; source_text?: string }>>([])
@@ -399,14 +404,16 @@ export default function AdminPage() {
 
   function openEditDialog(post: CombinedPost) {
     setEditingPost(post)
-    setEditForm({
+    const initialForm = {
       title: post.title,
       slug: post.slug || generateSlug(post.title),
       excerpt: post.excerpt || '',
       category: post.category || 'AI & Tech',
       status: post.status,
       content: post.content,
-    })
+    }
+    setEditForm(initialForm)
+    setEditFormSnapshot(initialForm)
     // Fetch article thumbnails and count for AI posts
     if (post.source === 'ai') {
       const count = countArticles(post.content)
@@ -416,6 +423,24 @@ export default function AdminPage() {
       setArticleCount(0)
       setArticleThumbnails([])
     }
+  }
+
+  // Cheap deep-compare via JSON.stringify — TipTap content is plain JSON
+  // without functions/dates, so no need for a fuzzy-equal lib.
+  const isEditFormDirty = !!editFormSnapshot && JSON.stringify(editForm) !== JSON.stringify(editFormSnapshot)
+
+  function tryCloseEditDialog() {
+    if (isEditFormDirty) {
+      setShowDiscardConfirm(true)
+      return
+    }
+    closeEditDialog()
+  }
+
+  function closeEditDialog() {
+    setEditingPost(null)
+    setEditFormSnapshot(null)
+    setShowDiscardConfirm(false)
   }
 
   async function handleStatusChange(post: CombinedPost, newStatus: 'draft' | 'published' | 'archived') {
@@ -491,7 +516,7 @@ export default function AdminPage() {
         // User must manually go to "Bilder" tab and click "Generieren"
         // This ensures intentional thumbnail creation after content is finalized
       }
-      setEditingPost(null)
+      closeEditDialog()
       fetchPosts()
     } catch (error) {
       console.error('Error saving post:', error)
@@ -788,7 +813,7 @@ export default function AdminPage() {
       </Dialog>
 
       {/* Edit Dialog */}
-      <Dialog open={!!editingPost} onOpenChange={() => setEditingPost(null)}>
+      <Dialog open={!!editingPost} onOpenChange={(open) => { if (!open) tryCloseEditDialog() }}>
         <DialogContent className="w-[90vw] max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] overflow-hidden flex flex-col">
           <div className="space-y-4 flex-1 overflow-y-auto py-4">
             {/* Header - scrolls with content */}
@@ -1135,7 +1160,7 @@ export default function AdminPage() {
             </Tabs>
           </div>
           <DialogFooter className="border-t pt-4">
-            <Button variant="outline" onClick={() => setEditingPost(null)}>
+            <Button variant="outline" onClick={tryCloseEditDialog}>
               Abbrechen
             </Button>
             <Button onClick={handleSaveEdit} disabled={saving || !editForm.title}>
@@ -1147,6 +1172,28 @@ export default function AdminPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
+      {/* Discard Changes Confirmation — fires when the user tries to close
+          the edit dialog (backdrop click, ESC, Cancel) while there are
+          unsaved changes. Mirrors the same pattern in
+          app/admin/generated-articles/page.tsx. */}
+      <AlertDialog open={showDiscardConfirm} onOpenChange={(open) => { if (!open) setShowDiscardConfirm(false) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Änderungen verwerfen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Du hast ungespeicherte Änderungen am Artikel. Beim Schließen
+              gehen diese Änderungen verloren.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Bearbeitung fortsetzen</AlertDialogCancel>
+            <AlertDialogAction onClick={closeEditDialog} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Verwerfen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={!!deletingPost} onOpenChange={() => setDeletingPost(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
