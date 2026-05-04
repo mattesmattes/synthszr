@@ -25,7 +25,8 @@ import {
   Globe,
   Headphones,
   Film,
-  Megaphone
+  Megaphone,
+  ClipboardEdit
 } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
@@ -68,6 +69,11 @@ const navGroups: NavGroup[] = [
         label: 'Ghostwriter-Prompts',
         href: '/admin/ghostwriter',
         icon: PenTool
+      },
+      {
+        label: 'Editor-in-Chief-Prompts',
+        href: '/admin/editor-in-chief',
+        icon: ClipboardEdit
       },
       {
         label: 'Bild-Prompts',
