@@ -176,11 +176,9 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
                 </Link>
               </div>
               <PodcastBadges>
-                <div className="flex justify-center pt-3">
-                  <Suspense fallback={null}>
-                    <AudioPlayer postId={post.id} locale="de" />
-                  </Suspense>
-                </div>
+                <Suspense fallback={null}>
+                  <AudioPlayer postId={post.id} locale="de" />
+                </Suspense>
               </PodcastBadges>
             </div>
           )}

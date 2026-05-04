@@ -93,11 +93,9 @@ export function FeaturedArticle({
           </div>
           <PodcastBadges>
             {postId && (
-              <div className="flex justify-center pt-3">
-                <Suspense fallback={null}>
-                  <AudioPlayer postId={postId} locale={locale === 'de' ? 'de' : 'en'} />
-                </Suspense>
-              </div>
+              <Suspense fallback={null}>
+                <AudioPlayer postId={postId} locale={locale === 'de' ? 'de' : 'en'} />
+              </Suspense>
             )}
           </PodcastBadges>
         </div>

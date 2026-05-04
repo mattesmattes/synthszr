@@ -391,11 +391,9 @@ export default async function PostPage({ params }: PageProps) {
                 </Link>
               </div>
               <PodcastBadges>
-                <div className="flex justify-center pt-3">
-                  <Suspense fallback={null}>
-                    <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
-                  </Suspense>
-                </div>
+                <Suspense fallback={null}>
+                  <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
+                </Suspense>
               </PodcastBadges>
             </div>
           )}
