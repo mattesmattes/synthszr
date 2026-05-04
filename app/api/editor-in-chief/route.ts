@@ -94,7 +94,30 @@ export async function POST(request: NextRequest) {
 
         // The model may wrap the markdown in a ```markdown … ``` codeblock —
         // strip that wrapper, but keep all internal fenced codeblocks intact.
-        const cleaned = stripMarkdownWrapper(buffer)
+        let cleaned = stripMarkdownWrapper(buffer)
+
+        // Compliance guard: the prompt mandates an "## Editor-Notizen"
+        // section at the end. If the model dropped it (Claude Opus has been
+        // observed to omit it on long articles), append a visible warning
+        // block so the editor can spot it in the draft and trigger a re-run.
+        if (!/##\s*Editor-Notizen/i.test(cleaned)) {
+          cleaned = ensureTrailingBlankLine(cleaned) + `---
+
+## Editor-Notizen
+
+> ⚠ Das Modell hat keine Editor-Notizen produziert, obwohl der Prompt sie verbindlich verlangt. Bitte den Editor-in-Chief manuell erneut ausführen, oder den Prompt verschärfen.
+
+- **Reihenfolge (vorher → nachher):** _nicht dokumentiert_
+- **Synthszr Takes — Analogien:** _nicht dokumentiert_
+- **Verständlichkeit:** _nicht dokumentiert_
+`
+          console.warn('[Editor-in-Chief] Model omitted Editor-Notizen section, appended warning block', {
+            model: modelStr,
+            promptName: promptRow.name,
+            outputLength: buffer.length,
+          })
+        }
+
         send({ done: true, content: cleaned, model: modelStr })
         controller.close()
       } catch (err) {
@@ -132,6 +155,10 @@ ANTWORT-FORMAT (verbindlich):
 - INKL. dem unveränderten \`---\` … \`---\` Metadaten-Block am Anfang (passe nur EXCERPT-Bullets an, falls die H2-Reihenfolge sich ändert).
 - KEIN Vorwort, KEINE Erklärung deiner Änderungen.
 - KEIN umschließender \`\`\`markdown … \`\`\` Codeblock — nur der rohe Markdown-Text.`
+}
+
+function ensureTrailingBlankLine(s: string): string {
+  return s.endsWith('\n\n') ? s : s.endsWith('\n') ? s + '\n' : s + '\n\n'
 }
 
 // Strip a leading ```markdown … ``` codeblock if the model wraps the whole
