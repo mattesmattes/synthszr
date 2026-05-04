@@ -22,7 +22,8 @@ import {
   ImageIcon,
   Bot,
   Sparkles,
-  Languages
+  Languages,
+  ClipboardEdit
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import Link from 'next/link'
@@ -59,6 +60,8 @@ import {
 } from '@/components/ui/select'
 import { TiptapEditor } from '@/components/tiptap-editor'
 import { TiptapRenderer } from '@/components/tiptap-renderer'
+import { convertTiptapToMarkdown, parseTiptapContent } from '@/lib/utils/tiptap-to-markdown'
+import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
 import { PostImageGallery } from '@/components/post-image-gallery'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -153,6 +156,11 @@ export default function GeneratedArticlesPage() {
   const [editFormSnapshot, setEditFormSnapshot] = useState<typeof editForm | null>(null)
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
   const [changingStatus, setChangingStatus] = useState<string | null>(null)
+
+  // Editor-in-Chief re-run state for the inline edit dialog.
+  const [editorRerunning, setEditorRerunning] = useState(false)
+  const [editorRerunStatus, setEditorRerunStatus] = useState<string | null>(null)
+  const [editorRerunError, setEditorRerunError] = useState<string | null>(null)
 
   // Article thumbnails state
   const [articleThumbnails, setArticleThumbnails] = useState<Array<{ id: string; article_index: number; generation_status: string }>>([])
@@ -363,6 +371,90 @@ export default function GeneratedArticlesPage() {
     setEditingPost(null)
     setEditFormSnapshot(null)
     setShowDiscardConfirm(false)
+    setEditorRerunStatus(null)
+    setEditorRerunError(null)
+  }
+
+  // Re-run Editor-in-Chief on the dialog's current TipTap content. Round-
+  // trips through markdown via convertTiptapToMarkdown / markdownToTiptap.
+  // Replaces editForm.content but does NOT auto-save — user reviews and
+  // hits Speichern manually.
+  async function rerunEditorInChiefInDialog() {
+    if (editorRerunning) return
+    setEditorRerunning(true)
+    setEditorRerunError(null)
+    setEditorRerunStatus('Konvertiere Artikel...')
+
+    try {
+      const doc = parseTiptapContent(editForm.content)
+      if (!doc) throw new Error('TipTap-Content ist nicht parsebar')
+      const markdown = convertTiptapToMarkdown(doc)
+      if (!markdown.trim()) throw new Error('Konvertierter Markdown ist leer')
+
+      setEditorRerunStatus('Editor-in-Chief redigiert...')
+
+      const res = await fetch('/api/editor-in-chief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          content: markdown,
+          ...(editingPost?.ai_model ? { model: editingPost.ai_model } : {}),
+        }),
+      })
+
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `HTTP ${res.status}`)
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      let revisedMarkdown: string | null = null
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const frames = buf.split('\n\n')
+        buf = frames.pop() || ''
+        for (const frame of frames) {
+          const line = frame.trim()
+          if (!line.startsWith('data:')) continue
+          const json = line.slice(5).trim()
+          if (!json) continue
+          try {
+            const evt = JSON.parse(json)
+            if (evt.started) {
+              setEditorRerunStatus(`Editor läuft (${evt.promptName || 'Default'}, ${evt.model})...`)
+            }
+            if (evt.error) throw new Error(evt.error)
+            if (evt.done && typeof evt.content === 'string') {
+              revisedMarkdown = evt.content
+            }
+          } catch (e) {
+            if (e instanceof SyntaxError) continue
+            throw e
+          }
+        }
+      }
+
+      if (!revisedMarkdown) throw new Error('Editor lieferte keinen finalen Inhalt')
+
+      setEditorRerunStatus('Konvertiere zurück zu TipTap...')
+      const newTiptap = markdownToTiptap(revisedMarkdown)
+      setEditForm({ ...editForm, content: newTiptap })
+
+      setEditorRerunStatus('Fertig — bitte Änderungen prüfen und speichern.')
+      setTimeout(() => setEditorRerunStatus(null), 5000)
+    } catch (err) {
+      console.error('[Editor-in-Chief Re-Run dialog] Error:', err)
+      setEditorRerunError(err instanceof Error ? err.message : 'Unbekannter Fehler')
+      setEditorRerunStatus(null)
+    } finally {
+      setEditorRerunning(false)
+    }
   }
 
   async function handleStatusChange(postId: string, newStatus: 'draft' | 'published' | 'archived') {
@@ -858,7 +950,44 @@ export default function GeneratedArticlesPage() {
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="content" className="flex-1 flex flex-col min-h-0 mt-4">
+              <TabsContent value="content" className="flex-1 flex flex-col min-h-0 mt-4 space-y-3">
+                {/* Editor-in-Chief re-run for the post currently in the
+                    dialog. Useful for posts generated before the editor
+                    pipeline shipped, or to re-apply a tightened prompt. */}
+                <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md border bg-muted/30 shrink-0">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium flex items-center gap-1.5">
+                      <ClipboardEdit className="h-3.5 w-3.5" />
+                      Editor-in-Chief erneut ausführen
+                    </div>
+                    {editorRerunStatus && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{editorRerunStatus}</p>
+                    )}
+                    {editorRerunError && (
+                      <p className="text-[11px] text-destructive mt-0.5">{editorRerunError}</p>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={rerunEditorInChiefInDialog}
+                    disabled={editorRerunning}
+                    className="gap-1.5 shrink-0"
+                  >
+                    {editorRerunning ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Läuft…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Re-Run
+                      </>
+                    )}
+                  </Button>
+                </div>
                 <div className="flex-1 min-h-[400px] border rounded-md">
                   <TiptapEditor
                     content={editForm.content}
