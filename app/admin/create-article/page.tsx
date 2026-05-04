@@ -506,6 +506,10 @@ export default function CreateArticlePage() {
     const decoder = new TextDecoder()
     let buffer = ''
     let revised: string | null = null
+    // Parallel accumulator over `text` chunks. If the stream ends without
+    // a `done` event (proxy timeout, edge disconnect), this is the
+    // fallback so the user keeps what the model already produced.
+    let accumulatedText = ''
 
     while (true) {
       const { done, value } = await reader.read()
@@ -524,6 +528,7 @@ export default function CreateArticlePage() {
           if (evt.started && onStatus) {
             onStatus(`Editor-in-Chief läuft (${evt.promptName || 'Default'}, ${evt.model})...`)
           }
+          if (typeof evt.text === 'string') accumulatedText += evt.text
           if (evt.error) throw new Error(evt.error)
           if (evt.done && typeof evt.content === 'string') {
             revised = evt.content
@@ -535,7 +540,13 @@ export default function CreateArticlePage() {
       }
     }
 
-    if (!revised) throw new Error('Editor-in-Chief lieferte keinen finalen Inhalt')
+    if (!revised && accumulatedText.trim().length > 0) {
+      console.warn('[Editor-in-Chief] Stream ended without done event — falling back to accumulated text', {
+        accumulatedLength: accumulatedText.length,
+      })
+      revised = accumulatedText
+    }
+    if (!revised) throw new Error('Editor-in-Chief lieferte keinen finalen Inhalt — der Stream hat nichts produziert')
     return revised
   }
 

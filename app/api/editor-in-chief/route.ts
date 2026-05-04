@@ -83,46 +83,41 @@ export async function POST(request: NextRequest) {
       const send = (obj: Record<string, unknown>) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`))
 
+      // buffer is declared OUTSIDE the try so the catch path can also
+      // emit a `done` event with partial content when the stream throws
+      // mid-flight. Without this, a mid-stream Anthropic/OpenAI failure
+      // would surface to the frontend only as an `error` event and the
+      // user loses everything the model already produced.
+      let buffer = ''
       try {
         send({ started: true, model: modelStr, promptName: promptRow.name })
 
-        let buffer = ''
         for await (const chunk of streamModel(userMessage, resolved)) {
           buffer += chunk
           send({ text: chunk })
         }
 
-        // The model may wrap the markdown in a ```markdown … ``` codeblock —
-        // strip that wrapper, but keep all internal fenced codeblocks intact.
-        let cleaned = stripMarkdownWrapper(buffer)
-
-        // Compliance guard: the prompt mandates an "## Editor-Notizen"
-        // section at the end. If the model dropped it (Claude Opus has been
-        // observed to omit it on long articles), append a visible warning
-        // block so the editor can spot it in the draft and trigger a re-run.
-        if (!/##\s*Editor-Notizen/i.test(cleaned)) {
-          cleaned = ensureTrailingBlankLine(cleaned) + `---
-
-## Editor-Notizen
-
-> ⚠ Das Modell hat keine Editor-Notizen produziert, obwohl der Prompt sie verbindlich verlangt. Bitte den Editor-in-Chief manuell erneut ausführen, oder den Prompt verschärfen.
-
-- **Reihenfolge (vorher → nachher):** _nicht dokumentiert_
-- **Synthszr Takes — Analogien:** _nicht dokumentiert_
-- **Verständlichkeit:** _nicht dokumentiert_
-`
-          console.warn('[Editor-in-Chief] Model omitted Editor-Notizen section, appended warning block', {
-            model: modelStr,
-            promptName: promptRow.name,
-            outputLength: buffer.length,
-          })
-        }
-
+        const cleaned = finalizeOutput(buffer, modelStr, promptRow.name)
         send({ done: true, content: cleaned, model: modelStr })
         controller.close()
       } catch (err) {
-        console.error('[Editor-in-Chief] Stream error:', err)
-        send({ error: err instanceof Error ? err.message : 'Unbekannter Fehler' })
+        console.error('[Editor-in-Chief] Stream error:', err, {
+          accumulatedLength: buffer.length,
+          model: modelStr,
+          promptName: promptRow.name,
+        })
+        // If we have ANY content, still send a done event with what we
+        // got — the frontend can salvage it. Only emit a pure error
+        // event when nothing was produced at all.
+        if (buffer.trim().length > 0) {
+          const cleaned = finalizeOutput(buffer, modelStr, promptRow.name, {
+            partial: true,
+            errorMessage: err instanceof Error ? err.message : String(err),
+          })
+          send({ done: true, content: cleaned, model: modelStr, partial: true })
+        } else {
+          send({ error: err instanceof Error ? err.message : 'Unbekannter Fehler' })
+        }
         controller.close()
       }
     },
@@ -132,9 +127,50 @@ export async function POST(request: NextRequest) {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
+      // Tells nginx-style proxies (Vercel edge included) not to buffer
+      // the response body — chunks reach the browser as they're produced.
+      'X-Accel-Buffering': 'no',
       Connection: 'keep-alive',
     },
   })
+}
+
+// Finalize the model's raw output into a publishable markdown string:
+// - peel ```markdown ... ``` wrapper
+// - guarantee an `## Editor-Notizen` section (compliance guard)
+// - if we're salvaging a partial output, include the upstream error
+//   message in the notes so the editor knows why the run was cut short.
+function finalizeOutput(
+  raw: string,
+  model: string,
+  promptName: string,
+  opts: { partial?: boolean; errorMessage?: string } = {}
+): string {
+  let cleaned = stripMarkdownWrapper(raw)
+
+  if (!/##\s*Editor-Notizen/i.test(cleaned)) {
+    const reason = opts.partial
+      ? `Stream wurde mit Fehler abgebrochen, bevor das Modell die Notizen schreiben konnte. Originalfehler: ${opts.errorMessage || 'unbekannt'}`
+      : 'Das Modell hat keine Editor-Notizen produziert, obwohl der Prompt sie verbindlich verlangt'
+    cleaned = ensureTrailingBlankLine(cleaned) + `---
+
+## Editor-Notizen
+
+> ⚠ ${reason}. Bitte den Editor-in-Chief manuell erneut ausführen, oder den Prompt verschärfen.
+
+- **Reihenfolge (vorher → nachher):** _nicht dokumentiert_
+- **Synthszr Takes — Analogien:** _nicht dokumentiert_
+- **Verständlichkeit:** _nicht dokumentiert_
+`
+    console.warn('[Editor-in-Chief] Appended fallback Editor-Notizen block', {
+      model,
+      promptName,
+      outputLength: raw.length,
+      partial: opts.partial,
+    })
+  }
+
+  return cleaned
 }
 
 function buildUserMessage(promptText: string, articleMarkdown: string): string {

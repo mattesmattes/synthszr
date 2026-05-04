@@ -490,6 +490,10 @@ export default function AdminPage() {
       const decoder = new TextDecoder()
       let buf = ''
       let revisedMarkdown: string | null = null
+      // Parallel accumulator over `text` chunks — used as a fallback if
+      // the stream ends without a `done` event (proxy timeout, edge
+      // disconnect). At least the user keeps what the model produced.
+      let accumulatedText = ''
 
       while (true) {
         const { done, value } = await reader.read()
@@ -507,6 +511,7 @@ export default function AdminPage() {
             if (evt.started) {
               setEditorRerunStatus(`Editor läuft (${evt.promptName || 'Default'}, ${evt.model})...`)
             }
+            if (typeof evt.text === 'string') accumulatedText += evt.text
             if (evt.error) throw new Error(evt.error)
             if (evt.done && typeof evt.content === 'string') {
               revisedMarkdown = evt.content
@@ -518,7 +523,13 @@ export default function AdminPage() {
         }
       }
 
-      if (!revisedMarkdown) throw new Error('Editor lieferte keinen finalen Inhalt')
+      if (!revisedMarkdown && accumulatedText.trim().length > 0) {
+        console.warn('[Editor-in-Chief Re-Run] Stream ended without done event — falling back to accumulated text', {
+          accumulatedLength: accumulatedText.length,
+        })
+        revisedMarkdown = accumulatedText
+      }
+      if (!revisedMarkdown) throw new Error('Editor lieferte keinen finalen Inhalt — der Stream hat nichts produziert')
 
       setEditorRerunStatus('Konvertiere zurück zu TipTap...')
       const newTiptap = markdownToTiptap(revisedMarkdown)
