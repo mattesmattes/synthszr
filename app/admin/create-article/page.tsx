@@ -381,6 +381,12 @@ export default function CreateArticlePage() {
 
       const decoder = new TextDecoder()
       let buffer = ''
+      // Local accumulator mirrors articleContent so we can hand the final
+      // markdown to the Editor-in-Chief without a render-cycle race.
+      // Also reset on `data.clear` so the deduplication-rewrite path
+      // doesn't double-feed the editor.
+      let accumulated = ''
+      let modelUsed: string | null = null
 
       while (true) {
         const { done, value } = await reader.read()
@@ -396,6 +402,7 @@ export default function CreateArticlePage() {
               const data = JSON.parse(line.slice(6))
               if (data.clear) {
                 // Clear content for new version (deduplication phase)
+                accumulated = ''
                 startTransition(() => setArticleContent(''))
               }
               if (data.phase === 'deduplication') {
@@ -415,9 +422,11 @@ export default function CreateArticlePage() {
                 }
               }
               if (data.text) {
+                accumulated += data.text
                 startTransition(() => setArticleContent(prev => prev + data.text))
               }
               if (data.model) {
+                modelUsed = data.model
                 setUsedModel(data.model)
               }
               if (data.done) {
@@ -437,6 +446,30 @@ export default function CreateArticlePage() {
           }
         }
       }
+
+      // Editor-in-Chief pipeline step: runs automatically after ghostwriter
+      // streaming completes, before the user sees the article as a draft.
+      // setGenerating stays true through this so the auto-save useEffect
+      // doesn't fire on the unredacted version.
+      if (accumulated.trim().length > 0) {
+        setPipelineStatus('Editor-in-Chief redigiert...')
+        setPipelineProgress(null)
+        try {
+          const revised = await runEditorInChiefStream(accumulated, modelUsed, (msg) => {
+            setPipelineStatus(msg)
+          })
+          startTransition(() => setArticleContent(revised))
+        } catch (eicErr) {
+          // Failure here must not throw away the ghostwriter output —
+          // surface it as an error banner and keep the original draft.
+          console.error('[Editor-in-Chief inline] Error:', eicErr)
+          setEditorError(
+            eicErr instanceof Error
+              ? `Editor-in-Chief fehlgeschlagen: ${eicErr.message} (Originaltext bleibt erhalten, manueller Re-Run möglich)`
+              : 'Editor-in-Chief fehlgeschlagen — Originaltext bleibt erhalten'
+          )
+        }
+      }
     } catch (error) {
       console.error('Generation error:', error)
       startTransition(() => {
@@ -449,11 +482,64 @@ export default function CreateArticlePage() {
     }
   }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity])
 
-  // Run the Editor-in-Chief routine on the just-generated article. Uses
-  // the same model the article was written with (so the editor "speaks
-  // the same language"), pulls the active editor_in_chief_prompts row,
-  // streams the revised markdown back, and replaces articleContent on
-  // completion so the metadata/excerpt re-derives from the new H2s.
+  // Drive a single Editor-in-Chief streaming call. Returns the revised
+  // markdown on success. Used by both the inline pipeline (after
+  // generation) and the manual re-run button.
+  async function runEditorInChiefStream(
+    markdown: string,
+    model: string | null,
+    onStatus?: (msg: string) => void
+  ): Promise<string> {
+    const res = await fetch('/api/editor-in-chief', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ content: markdown, ...(model ? { model } : {}) }),
+    })
+
+    if (!res.ok || !res.body) {
+      const errBody = await res.json().catch(() => ({}))
+      throw new Error(errBody.error || `HTTP ${res.status}`)
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let revised: string | null = null
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      const frames = buffer.split('\n\n')
+      buffer = frames.pop() || ''
+      for (const frame of frames) {
+        const line = frame.trim()
+        if (!line.startsWith('data:')) continue
+        const json = line.slice(5).trim()
+        if (!json) continue
+        try {
+          const evt = JSON.parse(json)
+          if (evt.started && onStatus) {
+            onStatus(`Editor-in-Chief läuft (${evt.promptName || 'Default'}, ${evt.model})...`)
+          }
+          if (evt.error) throw new Error(evt.error)
+          if (evt.done && typeof evt.content === 'string') {
+            revised = evt.content
+          }
+        } catch (e) {
+          if (e instanceof SyntaxError) continue
+          throw e
+        }
+      }
+    }
+
+    if (!revised) throw new Error('Editor-in-Chief lieferte keinen finalen Inhalt')
+    return revised
+  }
+
+  // Manual re-run from the button — articleContent is already set.
   async function runEditorInChief() {
     if (!articleContent || editorRunning) return
     setEditorRunning(true)
@@ -461,64 +547,8 @@ export default function CreateArticlePage() {
     setEditorStatus('Editor-in-Chief startet...')
 
     try {
-      const res = await fetch('/api/editor-in-chief', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          content: articleContent,
-          ...(usedModel ? { model: usedModel } : {}),
-        }),
-      })
-
-      if (!res.ok || !res.body) {
-        const errBody = await res.json().catch(() => ({}))
-        throw new Error(errBody.error || `HTTP ${res.status}`)
-      }
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      let revisedMarkdown: string | null = null
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-
-        // SSE-style "data: {...}\n\n" frames
-        const frames = buffer.split('\n\n')
-        buffer = frames.pop() || ''
-        for (const frame of frames) {
-          const line = frame.trim()
-          if (!line.startsWith('data:')) continue
-          const json = line.slice(5).trim()
-          if (!json) continue
-          try {
-            const evt = JSON.parse(json)
-            if (evt.started) {
-              setEditorStatus(`Editor-in-Chief läuft (${evt.promptName || 'Default'}, ${evt.model})...`)
-            }
-            if (evt.error) {
-              throw new Error(evt.error)
-            }
-            if (evt.done && typeof evt.content === 'string') {
-              revisedMarkdown = evt.content
-            }
-          } catch (e) {
-            if (e instanceof SyntaxError) continue
-            throw e
-          }
-        }
-      }
-
-      if (!revisedMarkdown) {
-        throw new Error('Editor-in-Chief lieferte keinen finalen Inhalt')
-      }
-
-      startTransition(() => {
-        setArticleContent(revisedMarkdown!)
-      })
+      const revised = await runEditorInChiefStream(articleContent, usedModel, setEditorStatus)
+      startTransition(() => setArticleContent(revised))
       setEditorStatus('Editor-in-Chief fertig.')
       setTimeout(() => setEditorStatus(null), 3000)
     } catch (err) {
@@ -1116,27 +1146,35 @@ export default function CreateArticlePage() {
             </div>
           )}
 
-          {/* Editor-in-Chief Routine — only available once an article exists. */}
+          {/* Editor-in-Chief manual re-run — the routine already runs
+              automatically inside generateArticle, this button is for
+              re-running after manual edits or if the user tweaked the
+              active editor prompt. */}
           {articleContent && !generating && (
-            <Button
-              onClick={runEditorInChief}
-              disabled={editorRunning}
-              variant="outline"
-              className="w-full gap-2"
-              size="lg"
-            >
-              {editorRunning ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  {editorStatus?.slice(0, 60) || 'Editor-in-Chief läuft...'}
-                </>
-              ) : (
-                <>
-                  <ClipboardEdit className="h-5 w-5" />
-                  Editor-in-Chief Routine starten
-                </>
-              )}
-            </Button>
+            <div className="space-y-1">
+              <Button
+                onClick={runEditorInChief}
+                disabled={editorRunning}
+                variant="outline"
+                className="w-full gap-2"
+                size="lg"
+              >
+                {editorRunning ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    {editorStatus?.slice(0, 60) || 'Editor-in-Chief läuft...'}
+                  </>
+                ) : (
+                  <>
+                    <ClipboardEdit className="h-5 w-5" />
+                    Editor-in-Chief erneut ausführen
+                  </>
+                )}
+              </Button>
+              <p className="text-[11px] text-muted-foreground text-center">
+                Läuft automatisch nach jeder Generierung. Nochmal triggern z.B. nach Prompt-Änderung.
+              </p>
+            </div>
           )}
 
           {editorError && (
