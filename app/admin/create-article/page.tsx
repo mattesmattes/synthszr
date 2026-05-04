@@ -18,6 +18,7 @@ import {
   Type,
   AlignLeft,
   ListPlus,
+  ClipboardEdit,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -186,6 +187,12 @@ export default function CreateArticlePage() {
   const [vocabOpen, setVocabOpen] = useState(false)
   const [vocabularyIntensity, setVocabularyIntensity] = useState(50)
   const [usedModel, setUsedModel] = useState<string | null>(null)
+
+  // Editor-in-Chief routine state — runs after generation, replaces
+  // articleContent with the redaction LLM's revised markdown.
+  const [editorRunning, setEditorRunning] = useState(false)
+  const [editorStatus, setEditorStatus] = useState<string | null>(null)
+  const [editorError, setEditorError] = useState<string | null>(null)
 
   // Publish date: smart default (tomorrow if after 17:00 Berlin time, else today)
   const [publishDate, setPublishDate] = useState<string>(() => {
@@ -441,6 +448,87 @@ export default function CreateArticlePage() {
       setPipelineProgress(null)
     }
   }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity])
+
+  // Run the Editor-in-Chief routine on the just-generated article. Uses
+  // the same model the article was written with (so the editor "speaks
+  // the same language"), pulls the active editor_in_chief_prompts row,
+  // streams the revised markdown back, and replaces articleContent on
+  // completion so the metadata/excerpt re-derives from the new H2s.
+  async function runEditorInChief() {
+    if (!articleContent || editorRunning) return
+    setEditorRunning(true)
+    setEditorError(null)
+    setEditorStatus('Editor-in-Chief startet...')
+
+    try {
+      const res = await fetch('/api/editor-in-chief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          content: articleContent,
+          ...(usedModel ? { model: usedModel } : {}),
+        }),
+      })
+
+      if (!res.ok || !res.body) {
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.error || `HTTP ${res.status}`)
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let revisedMarkdown: string | null = null
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        // SSE-style "data: {...}\n\n" frames
+        const frames = buffer.split('\n\n')
+        buffer = frames.pop() || ''
+        for (const frame of frames) {
+          const line = frame.trim()
+          if (!line.startsWith('data:')) continue
+          const json = line.slice(5).trim()
+          if (!json) continue
+          try {
+            const evt = JSON.parse(json)
+            if (evt.started) {
+              setEditorStatus(`Editor-in-Chief läuft (${evt.promptName || 'Default'}, ${evt.model})...`)
+            }
+            if (evt.error) {
+              throw new Error(evt.error)
+            }
+            if (evt.done && typeof evt.content === 'string') {
+              revisedMarkdown = evt.content
+            }
+          } catch (e) {
+            if (e instanceof SyntaxError) continue
+            throw e
+          }
+        }
+      }
+
+      if (!revisedMarkdown) {
+        throw new Error('Editor-in-Chief lieferte keinen finalen Inhalt')
+      }
+
+      startTransition(() => {
+        setArticleContent(revisedMarkdown!)
+      })
+      setEditorStatus('Editor-in-Chief fertig.')
+      setTimeout(() => setEditorStatus(null), 3000)
+    } catch (err) {
+      console.error('[Editor-in-Chief] Error:', err)
+      setEditorError(err instanceof Error ? err.message : 'Unbekannter Fehler')
+      setEditorStatus(null)
+    } finally {
+      setEditorRunning(false)
+    }
+  }
 
   function copyToClipboard() {
     navigator.clipboard.writeText(articleContent)
@@ -1026,6 +1114,33 @@ export default function CreateArticlePage() {
                 />
               </div>
             </div>
+          )}
+
+          {/* Editor-in-Chief Routine — only available once an article exists. */}
+          {articleContent && !generating && (
+            <Button
+              onClick={runEditorInChief}
+              disabled={editorRunning}
+              variant="outline"
+              className="w-full gap-2"
+              size="lg"
+            >
+              {editorRunning ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  {editorStatus?.slice(0, 60) || 'Editor-in-Chief läuft...'}
+                </>
+              ) : (
+                <>
+                  <ClipboardEdit className="h-5 w-5" />
+                  Editor-in-Chief Routine starten
+                </>
+              )}
+            </Button>
+          )}
+
+          {editorError && (
+            <p className="text-xs text-destructive">{editorError}</p>
           )}
         </div>
 
