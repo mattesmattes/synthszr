@@ -15,62 +15,68 @@ const SPOTIFY = {
 /**
  * Podcast badges + audio player layout.
  *
- * Renders a single horizontal row: Apple Podcasts on the left, the audio
- * player (passed as children) in the middle, Spotify on the right. YouTube
- * and Audible were intentionally removed — distribution to those is now
- * handled separately and the player area should stay focused on the two
- * main listening platforms plus the in-page playback.
+ * Stacked: Apple + Spotify logos centered in a row on top, the audio
+ * player (passed as children) directly underneath. The previous
+ * horizontal "logo · player · logo" layout broke on mobile because
+ * the player pill needed more horizontal room than the viewport
+ * could spare. Stacked works at every breakpoint.
+ *
+ * YouTube and Audible were intentionally removed earlier — distribution
+ * to those is now handled separately and the row stays focused on the
+ * two main listening platforms plus the in-page playback.
  */
 export function PodcastBadges({ children }: { children?: ReactNode }) {
   return (
     <div className="px-4 py-3" style={{ backgroundColor: '#ffffff' }}>
-      <div className="flex items-center justify-between gap-2 sm:gap-4 pt-2">
-        <a
-          href={APPLE.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:opacity-80 transition-opacity shrink-0"
-          aria-label={APPLE.name}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={APPLE.image}
-            alt={APPLE.name}
-            width={300}
-            height={75}
-            loading="lazy"
-            decoding="async"
-            className="h-auto max-h-9 w-auto"
-            style={{ aspectRatio: '4 / 1' }}
-          />
-        </a>
-
-        {/* Player slot — flex-1 so it absorbs the available middle space.
-            justify-center inside keeps the player visually centered even
-            on wide layouts. */}
-        <div className="flex flex-1 justify-center min-w-0">
-          {children}
+      <div className="flex flex-col items-center gap-3 pt-2">
+        {/* Logos row — centered above the player */}
+        <div className="flex items-center justify-center gap-4 sm:gap-6">
+          <a
+            href={APPLE.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:opacity-80 transition-opacity"
+            aria-label={APPLE.name}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={APPLE.image}
+              alt={APPLE.name}
+              width={300}
+              height={75}
+              loading="lazy"
+              decoding="async"
+              className="h-auto max-h-9 w-auto"
+              style={{ aspectRatio: '4 / 1' }}
+            />
+          </a>
+          <a
+            href={SPOTIFY.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:opacity-80 transition-opacity"
+            aria-label={SPOTIFY.name}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={SPOTIFY.image}
+              alt={SPOTIFY.name}
+              width={300}
+              height={75}
+              loading="lazy"
+              decoding="async"
+              className="h-auto max-h-9 w-auto"
+              style={{ aspectRatio: '4 / 1' }}
+            />
+          </a>
         </div>
 
-        <a
-          href={SPOTIFY.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:opacity-80 transition-opacity shrink-0"
-          aria-label={SPOTIFY.name}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={SPOTIFY.image}
-            alt={SPOTIFY.name}
-            width={300}
-            height={75}
-            loading="lazy"
-            decoding="async"
-            className="h-auto max-h-9 w-auto"
-            style={{ aspectRatio: '4 / 1' }}
-          />
-        </a>
+        {/* Player row — directly below logos */}
+        {children && (
+          <div className="flex justify-center w-full">
+            {children}
+          </div>
+        )}
       </div>
     </div>
   )
