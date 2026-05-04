@@ -969,7 +969,7 @@ export default function NewsletterSendPage() {
                       Aktive Promotion
                     </label>
                     {[
-                      { key: 'podcast', label: 'Synthesizer Daily Podcast', img: '/api/newsletter/promo-block?v=2' },
+                      { key: 'podcast', label: 'Synthesizer Daily Podcast', img: '/api/newsletter/promo-block?v=3' },
                       { key: 'codecrash', label: 'CodeCrash Buch', img: '/codecrash-promo.gif' },
                     ].map((promo) => (
                       <label

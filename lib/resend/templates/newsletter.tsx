@@ -256,8 +256,8 @@ export function NewsletterEmail({
           <Section style={{ padding: '0', backgroundColor: '#ffffff' }}>
 <Link href={withSid(`${postUrl}?autoplay=true`)} style={{ textDecoration: 'none' }}>
               <Img
-                src={`${baseUrl}/api/newsletter/promo-block?v=2`}
-                alt="Listen on Apple Podcasts, Spotify, YouTube and Audible"
+                src={`${baseUrl}/api/newsletter/promo-block?v=3`}
+                alt="Listen on Apple Podcasts and Spotify"
                 width="600"
                 style={{ display: 'block', width: '100%', height: 'auto' }}
               />
