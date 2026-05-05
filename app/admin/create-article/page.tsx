@@ -447,11 +447,18 @@ export default function CreateArticlePage() {
         }
       }
 
-      // Editor-in-Chief pipeline step: runs automatically after ghostwriter
-      // streaming completes, before the user sees the article as a draft.
-      // setGenerating stays true through this so the auto-save useEffect
-      // doesn't fire on the unredacted version.
-      if (accumulated.trim().length > 0) {
+      // ─────────────────────────────────────────────────────────────────
+      // Editor-in-Chief inline pipeline step — TEMPORARILY DISABLED.
+      // Cause: the pass appears to truncate generation (Mattes saw 7 of
+      // 40 articles before abort). Until we identify whether the editor
+      // call is consuming the budget or interfering with the ghostwriter
+      // stream, the inline step is off. Manual re-run via the button on
+      // the Generate page or in the post edit dialogs still works on
+      // demand.
+      // To re-enable: flip ENABLE_INLINE_EIC back to true.
+      // ─────────────────────────────────────────────────────────────────
+      const ENABLE_INLINE_EIC = false
+      if (ENABLE_INLINE_EIC && accumulated.trim().length > 0) {
         setPipelineStatus('Editor-in-Chief redigiert...')
         setPipelineProgress(null)
         try {
@@ -460,8 +467,6 @@ export default function CreateArticlePage() {
           })
           startTransition(() => setArticleContent(revised))
         } catch (eicErr) {
-          // Failure here must not throw away the ghostwriter output —
-          // surface it as an error banner and keep the original draft.
           console.error('[Editor-in-Chief inline] Error:', eicErr)
           setEditorError(
             eicErr instanceof Error
