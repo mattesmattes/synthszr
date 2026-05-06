@@ -37,41 +37,36 @@ function BadgeLink({ name, image, url }: { name: string; image: string; url: str
 }
 
 /**
- * Podcast badges + audio player layout — responsive.
+ * Podcast badges + audio player layout — responsive, single DOM tree.
  *
- * Mobile (<md): stacked. Apple + Spotify centered in a row, player
- * directly underneath. The player pill needs more horizontal room
- * than a phone viewport gives, so stacking is the only thing that
- * doesn't squeeze either element.
+ * Critical: `children` (the AudioPlayer) MUST appear exactly once in the
+ * tree. An earlier version rendered separate mobile and desktop wrappers
+ * with `md:hidden` / `hidden md:flex`, which mounted AudioPlayer twice.
+ * The hidden mobile instance had its IntersectionObserver target sitting
+ * inside `display:none`, so it always reported "cover not visible" and
+ * its Flying-Nav portal stayed pinned to the top of the page — the user
+ * saw the player twice (once at the top, once inline).
  *
- * Desktop (md+): horizontal. Apple on the left, player in the middle
- * (flex-1 to absorb available space and stay centered), Spotify on
- * the right. Matches the original mockup once there's room.
+ * Layout achieved with one flex container + flex-wrap + order:
  *
- * YouTube and Audible were intentionally removed earlier — distribution
- * to those is now handled separately and the row stays focused on the
- * two main listening platforms plus the in-page playback.
+ * Mobile (<md): wraps. Apple + Spotify on row 1 (centered), Player
+ * forced to row 2 via `w-full` (wraps because it can't fit alongside
+ * the badges) and `order-last` (sits after Spotify in DOM-order
+ * after wrap).
+ *
+ * Desktop (md+): nowrap. Apple on the left, Player in the middle
+ * (flex-1, order reset), Spotify on the right.
  */
 export function PodcastBadges({ children }: { children?: ReactNode }) {
   return (
     <div className="px-4 py-3" style={{ backgroundColor: '#ffffff' }}>
-      {/* Mobile: stacked logos-then-player */}
-      <div className="flex flex-col items-center gap-3 pt-2 md:hidden">
-        <div className="flex items-center justify-center gap-4">
-          <BadgeLink {...APPLE} />
-          <BadgeLink {...SPOTIFY} />
-        </div>
-        {children && (
-          <div className="flex justify-center w-full">{children}</div>
-        )}
-      </div>
-
-      {/* Desktop: horizontal Apple · Player · Spotify */}
-      <div className="hidden md:flex items-center justify-between gap-4 lg:gap-6 pt-2">
+      <div className="flex flex-wrap items-center justify-center gap-3 pt-2 md:flex-nowrap md:justify-between md:gap-4 lg:gap-6">
         <BadgeLink {...APPLE} />
-        <div className="flex flex-1 justify-center min-w-0">
-          {children}
-        </div>
+        {children && (
+          <div className="order-last w-full flex justify-center md:order-none md:w-auto md:flex-1 md:min-w-0">
+            {children}
+          </div>
+        )}
         <BadgeLink {...SPOTIFY} />
       </div>
     </div>
