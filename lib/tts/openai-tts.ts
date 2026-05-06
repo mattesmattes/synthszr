@@ -89,22 +89,51 @@ const openai = new OpenAI({
 })
 
 /**
- * Generate speech from text using OpenAI TTS API
+ * Generate speech from text using OpenAI TTS API.
+ *
+ * Mitigation for the 0.5–1 % of takes that came back as silent gaps in
+ * podcast episodes: validate the buffer length and retry on suspect-short
+ * results. OpenAI occasionally returns a near-empty MP3 (a few hundred
+ * bytes) instead of throwing — without this guard, those silent takes
+ * end up baked into the final podcast mix.
  */
 export async function generateSpeech(
   text: string,
   voice: TTSVoice,
   model: TTSModel = 'tts-1'
 ): Promise<Buffer> {
-  const response = await openai.audio.speech.create({
-    model,
-    voice,
-    input: text,
-    response_format: 'mp3',
-  })
+  // ~70 bytes/sec MP3 → ein 1-Sek-Take ist ≥4 KB.
+  // Alles unter 1 KB ist mit hoher Wahrscheinlichkeit ein leeres/abgebrochenes Result.
+  const MIN_BYTES = 1024
+  const MAX_ATTEMPTS = 3
 
-  const arrayBuffer = await response.arrayBuffer()
-  return Buffer.from(arrayBuffer)
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await openai.audio.speech.create({
+        model,
+        voice,
+        input: text,
+        response_format: 'mp3',
+      })
+      const buf = Buffer.from(await response.arrayBuffer())
+      if (buf.length >= MIN_BYTES) return buf
+
+      console.warn('[TTS] Suspect empty/short audio, retrying', {
+        attempt,
+        bytes: buf.length,
+        voice,
+        textPreview: text.slice(0, 60),
+      })
+    } catch (err) {
+      lastErr = err
+      console.warn('[TTS] Speech.create threw, retrying', { attempt, err })
+    }
+    // Linear backoff: 500ms, 1000ms — fast genug, weil das Problem fast
+    // immer transient ist (kein Rate-Limit-Pattern).
+    await new Promise(r => setTimeout(r, attempt * 500))
+  }
+  throw lastErr ?? new Error(`TTS lieferte nach ${MAX_ATTEMPTS} Versuchen kein valides Audio (text: "${text.slice(0, 60)}…")`)
 }
 
 /**
