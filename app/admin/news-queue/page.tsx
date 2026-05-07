@@ -1122,9 +1122,9 @@ export default function NewsQueuePage() {
                               className="min-w-0 flex-1 cursor-pointer"
                               onClick={() => setViewingItem(item)}
                             >
-                              <div className="text-xs font-medium truncate hover:text-primary flex items-center gap-1.5">
+                              <div className="text-sm font-medium truncate hover:text-primary flex items-center gap-1.5">
                                 {item.daily_repo?.source_type && (
-                                  <Badge className={`text-[8px] px-1 h-3.5 font-medium border-0 shrink-0 ${
+                                  <Badge className={`text-[9px] px-1 h-4 font-medium border-0 shrink-0 ${
                                     item.daily_repo.source_type === 'webcrawl'
                                       ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
                                       : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
@@ -1134,8 +1134,8 @@ export default function NewsQueuePage() {
                                 )}
                                 <span className="truncate">{truncateTitle(item.title)}</span>
                               </div>
-                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                                <span className="truncate max-w-[150px]">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span className="truncate max-w-[180px]">
                                   {item.source_display_name || item.source_identifier}
                                 </span>
                               </div>
@@ -1143,7 +1143,7 @@ export default function NewsQueuePage() {
                             <div className="flex items-center gap-1.5 shrink-0">
                               <Badge
                                 variant="outline"
-                                className="text-[9px] px-1.5 py-0 h-4 font-mono font-bold border-0"
+                                className="text-[10px] px-1.5 py-0 h-[18px] font-mono font-bold border-0"
                                 style={{
                                   backgroundColor: getSynthesisScoreColor(item.total_score, allTotalScores),
                                   color: '#000'
@@ -1323,15 +1323,15 @@ export default function NewsQueuePage() {
           </DialogHeader>
           <div className="space-y-2 max-h-[50vh] overflow-y-auto">
             {balancedSelection.map((item, idx) => (
-              <div key={item.id} className="flex items-center gap-2 p-2 bg-muted/50 rounded text-xs">
+              <div key={item.id} className="flex items-center gap-2 p-2 bg-muted/50 rounded text-sm">
                 <span className="font-mono text-muted-foreground w-5">{idx + 1}.</span>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium truncate">{truncateTitle(item.title)}</div>
-                  <div className="text-muted-foreground truncate">
+                  <div className="text-xs text-muted-foreground truncate">
                     {item.source_display_name || item.source_identifier}
                   </div>
                 </div>
-                <Badge variant="outline" className="text-[9px] font-mono shrink-0">
+                <Badge variant="outline" className="text-[10px] font-mono shrink-0">
                   {item.total_score.toFixed(1)}
                 </Badge>
               </div>
@@ -1499,21 +1499,21 @@ export default function NewsQueuePage() {
                         className="rounded shrink-0"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">{truncateTitle(item.title)}</div>
-                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                          <span className="truncate max-w-[150px]">
+                        <div className="text-sm font-medium truncate">{truncateTitle(item.title)}</div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="truncate max-w-[180px]">
                             {item.source_email || item.source_url || 'Unbekannte Quelle'}
                           </span>
-                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 h-[18px]">
                             {item.synthesis_type}
                           </Badge>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 font-mono" title="Originalität">
+                        <Badge variant="secondary" className="text-[10px] px-1 py-0 h-[18px] font-mono" title="Originalität">
                           O:{item.originality_score}
                         </Badge>
-                        <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 font-mono" title="Relevanz">
+                        <Badge variant="secondary" className="text-[10px] px-1 py-0 h-[18px] font-mono" title="Relevanz">
                           R:{item.relevance_score}
                         </Badge>
                       </div>
