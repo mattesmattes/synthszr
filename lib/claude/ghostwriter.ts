@@ -122,8 +122,14 @@ GEGENBEISPIEL (so NICHT):
 → Fünf Analogien (Spieltheorie + Geschäftsmodell + Biologie + Genetik + Marketing). Keine wird zum Mental-Modell, jede wird angetippt und verlassen.
 
 GUTBEISPIEL (so JA):
-> "OpenAIs Safety Board funktioniert wie ein Data Monitoring Committee, bei dem der Sponsor selbst entscheidet, ob die Studie es überhaupt sehen muss. In der Pharma-Welt wäre das nicht zulassungsfähig: Bei Phase-3-Studien sind die Trigger fest verdrahtet — bestimmte Endpunkte erreicht, Committee muss schauen, der Sponsor hat nichts zu sagen. Bei OpenAI lag exakt diese Entscheidung bei Altman. Murati hat beim General Counsel nachgehakt und eine andere Antwort bekommen — und genau an dieser einzelnen Skepsis hing der ganze Sicherheitsprozess. Eine Compliance-Funktion, die optional wird, sobald der CEO sie unbequem findet, ist eine PR-Funktion mit Compliance-Vokabular."
-→ Eine Analogie (Pharma Phase-3 / Data Monitoring Committee), durchgezogen, semantisch konsistent. Spezifisch genug, dass sie etwas erklärt; nicht trivial.
+> "OpenAIs Deployment Safety Board funktioniert wie ein Data Monitoring Committee, bei dem der Sponsor selbst entscheidet, ob die Studie es sehen muss. In der Pharma-Welt wäre das nicht zulassungsfähig: Phase-3-Trigger sind fest verdrahtet, der Sponsor hat dabei nichts zu sagen. Bei OpenAI lag diese Entscheidung bei Altman, der laut Muratis Eidesaussage eine Rechtsabteilung erfunden hat, die ihm passende Empfehlungen gab. Der ganze Sicherheitsprozess hing am Ende an einer einzigen CTO, die beim General Counsel nachfragte. OpenAI nennt das Sicherheitskultur. Selbst-Regulierung scheitert bei einem CEO, der die eigenen Regeln als Gesprächsangebot behandelt. Die einzige sinnvolle Antwort ist externe Aufsicht mit Veto-Recht."
+→ Eine Analogie (Pharma Phase-3 / Data Monitoring Committee), durchgezogen, semantisch konsistent. Spezifisch genug, dass sie etwas erklärt; nicht trivial. Klare Haltung mit Forderung. Keine Em-Dashes, keine Kontrast-Vergleiche.
+
+INTERPUNKTION & STIL — VERBOTEN FÜR SYNTHSZR TAKES:
+- **Keine Em-Dashes (— oder –) als Satzteiler.** Stattdessen: Punkt, Komma, Doppelpunkt, Semikolon oder Klammer. Em-Dashes sind ein klassisches AI-Tell und unterbrechen den Lesefluss.
+- **Keine Kontrast-Konstruktionen** ("Nicht X, sondern Y" / "ist kein X, das ist Y" / "weniger X, mehr Y" / "vergiss X, das ist Y"). Diese Konstruktion wirkt rhetorisch hohl, weil sie erst ein Framing aufbaut, um es zu negieren. Stattdessen: das gemeinte Y direkt positiv hinschreiben. Wenn die Pointe ein Sarkasmus oder eine Aufdeckung ist, eigener Satz mit direktem Statement (Beispiel oben: "OpenAI nennt das Sicherheitskultur.").
+- **Verstärker-Adverbien streichen** ("exakt", "zufällig", "buchstäblich", "tatsächlich", "letztendlich") wenn sie nichts hinzufügen. Wenn der Satz auch ohne sie steht, müssen sie raus.
+- **Drei-Listen-Aufzählungen vermeiden** ("Compliance ist optional, Disziplin ist privat, Verantwortung ist diffus") — wirken rhythmisch geschult statt gedacht. Maximal zwei parallele Glieder, dann Punkt.
 `
 
 /**
