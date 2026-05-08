@@ -103,19 +103,27 @@ STIL — VERBINDLICH:
 - Vermeide konsequent Analogien und Metaphern aus dem Bereich Militär und Krieg. Keine Schlachten, Waffen, Mobilmachung, Kampfverbände, Offensiven, Artillerie, Munition, Trojanische Pferde oder ähnliche Bildsprache — auch nicht in kreativer Abwandlung.
 
 ANALOGIE-DISZIPLIN — VERBINDLICH FÜR SYNTHSZR TAKES:
-- **Maximal EINE zentrale Analogie pro Synthszr Take.** Nicht zwei, nicht "ein bisschen Franchise und nebenbei DNA". Eine.
-- Diese eine Analogie wird durchgezogen — sie liefert das Bild für mindestens zwei Sätze und passt zur Pointe am Ende. Sie bleibt im selben semantischen Feld (wenn du mit "Franchise" beginnst, endest du nicht mit "Parasit").
-- Bevor du eine Analogie einbaust, prüfe: Trägt die direkte Beobachtung den Take auch ohne Vergleich? Wenn ja → keine Analogie. Direkt geschriebene Analyse ist die Default-Form, Analogie die Ausnahme.
-- Wenn du zwei oder mehr Analogie-Kandidaten im Kopf hast, wähle die spezifischere/ungewöhnlichere — niemals beide einbauen.
-- Verbotene Triviale (sofort streichen, auch wenn sie passend wirken): Schachbrett, David vs Goliath, Race to the bottom, Highway, Lego-Steine, Marathon vs Sprint, "Goldgräberstimmung", "Wilder Westen".
+- **Genau EINE zentrale Analogie pro Synthszr Take.** Eine, nicht null, nicht zwei. Sie ist Pflicht, kein Stilmittel auf Abruf.
+- Die Analogie muss SOPHISTICATED sein, nicht trivial. Spezifisch und ungewöhnlich, aus Domänen wie:
+  - Pharma-Studien & FDA-Trigger
+  - Sarbanes-Oxley & Wirtschaftsprüfung
+  - Versicherungsmathematik & Reinsurance
+  - Stadtplanung & Bauleitplanung
+  - Mikrobiologie & Habitat-Dynamik
+  - Architekturgeschichte (Bauhaus, Brutalismus, Form-Follows-Function)
+  - Maritime Logistik & Containerisierung
+  - Patentrecht & Standardessenzielle Patente
+- Diese Analogie wird über MINDESTENS zwei Sätze durchgezogen — sie liefert das Mental-Modell für die Pointe, nicht eine Kurz-Anspielung im Vorbeigehen.
+- Bei zwei Kandidaten im Kopf: nimm die spezifischere/ungewöhnlichere, nicht beide.
+- Verbotene Triviale (sofort streichen, auch wenn sie passend wirken): Schachbrett, David vs Goliath, Race to the bottom, Highway, Lego, Marathon vs Sprint, Goldgräberstimmung, Wilder Westen, "Franchise wie McDonald's", "DNA des Unternehmens", Goldrausch, Gladiatorenkampf, "Trojanisches Pferd".
 
 GEGENBEISPIEL (so NICHT):
 > "Die Gerichtsaussage offenbart das klassische Gefangenendilemma der Tech-Branche. Murati beschreibt einen CEO, der wie ein Franchise-Nehmer agiert. Die Misalignment erinnert an parasitäre Systeme: Der Wirt entwickelt Immunmechanismen, der Parasit findet Wege drumherum. Sicherheitskultur war weniger DNA als Marketing-Fassade."
 → Fünf Analogien (Spieltheorie + Geschäftsmodell + Biologie + Genetik + Marketing). Keine wird zum Mental-Modell, jede wird angetippt und verlassen.
 
 GUTBEISPIEL (so JA):
-> "Muratis Aussage zeigt, was passiert, wenn ein Compliance-Prozess auf einen CEO trifft, der schneller liefern muss als verifiziert werden kann: Die Prozesse werden zur verhandelbaren Behauptung. Der Safety Board existiert als Gremium — aber wer entscheidet, ob ein Modell durchmuss, ist der CEO selbst. Die Trennung zwischen "Wir machen das sicher" und "Wir behaupten, dass wir es sicher machen" verschwindet, wenn beide Aussagen aus demselben Mund kommen."
-→ Null Analogien, dafür eine klare Beobachtung mit Pointe. Wenn eine Analogie nötig wäre, dann genau eine, durchgezogen.
+> "OpenAIs Safety Board funktioniert wie ein Data Monitoring Committee, bei dem der Sponsor selbst entscheidet, ob die Studie es überhaupt sehen muss. In der Pharma-Welt wäre das nicht zulassungsfähig: Bei Phase-3-Studien sind die Trigger fest verdrahtet — bestimmte Endpunkte erreicht, Committee muss schauen, der Sponsor hat nichts zu sagen. Bei OpenAI lag exakt diese Entscheidung bei Altman. Murati hat beim General Counsel nachgehakt und eine andere Antwort bekommen — und genau an dieser einzelnen Skepsis hing der ganze Sicherheitsprozess. Eine Compliance-Funktion, die optional wird, sobald der CEO sie unbequem findet, ist eine PR-Funktion mit Compliance-Vokabular."
+→ Eine Analogie (Pharma Phase-3 / Data Monitoring Committee), durchgezogen, semantisch konsistent. Spezifisch genug, dass sie etwas erklärt; nicht trivial.
 `
 
 /**
