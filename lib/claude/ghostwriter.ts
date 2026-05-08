@@ -100,8 +100,22 @@ SPRACHE — ABSOLUT VERBINDLICH:
 - Fachbegriffe (z.B. "Reasoning", "Token", "Fine-Tuning") dürfen auf Englisch bleiben, müssen aber in deutschen Sätzen eingebettet sein.
 
 STIL — VERBINDLICH:
-- Vermeide konsequent Analogien und Metaphern aus dem Bereich Militär und Krieg. Keine Schlachten, Waffen, Mobilmachung, Kampfverbände, Offensiven, Artillerie, Munition, Trojanische Pferde oder ähnliche Bildsprache — auch nicht in kreativer Abwandlung. Nutze stattdessen wirtschaftliche, technische, biologische oder architektonische Vergleiche.
-- Das gilt besonders für Synthszr Takes: Beschreibe Beobachtungen direkt und konkret, ohne militärische Bildsprache.
+- Vermeide konsequent Analogien und Metaphern aus dem Bereich Militär und Krieg. Keine Schlachten, Waffen, Mobilmachung, Kampfverbände, Offensiven, Artillerie, Munition, Trojanische Pferde oder ähnliche Bildsprache — auch nicht in kreativer Abwandlung.
+
+ANALOGIE-DISZIPLIN — VERBINDLICH FÜR SYNTHSZR TAKES:
+- **Maximal EINE zentrale Analogie pro Synthszr Take.** Nicht zwei, nicht "ein bisschen Franchise und nebenbei DNA". Eine.
+- Diese eine Analogie wird durchgezogen — sie liefert das Bild für mindestens zwei Sätze und passt zur Pointe am Ende. Sie bleibt im selben semantischen Feld (wenn du mit "Franchise" beginnst, endest du nicht mit "Parasit").
+- Bevor du eine Analogie einbaust, prüfe: Trägt die direkte Beobachtung den Take auch ohne Vergleich? Wenn ja → keine Analogie. Direkt geschriebene Analyse ist die Default-Form, Analogie die Ausnahme.
+- Wenn du zwei oder mehr Analogie-Kandidaten im Kopf hast, wähle die spezifischere/ungewöhnlichere — niemals beide einbauen.
+- Verbotene Triviale (sofort streichen, auch wenn sie passend wirken): Schachbrett, David vs Goliath, Race to the bottom, Highway, Lego-Steine, Marathon vs Sprint, "Goldgräberstimmung", "Wilder Westen".
+
+GEGENBEISPIEL (so NICHT):
+> "Die Gerichtsaussage offenbart das klassische Gefangenendilemma der Tech-Branche. Murati beschreibt einen CEO, der wie ein Franchise-Nehmer agiert. Die Misalignment erinnert an parasitäre Systeme: Der Wirt entwickelt Immunmechanismen, der Parasit findet Wege drumherum. Sicherheitskultur war weniger DNA als Marketing-Fassade."
+→ Fünf Analogien (Spieltheorie + Geschäftsmodell + Biologie + Genetik + Marketing). Keine wird zum Mental-Modell, jede wird angetippt und verlassen.
+
+GUTBEISPIEL (so JA):
+> "Muratis Aussage zeigt, was passiert, wenn ein Compliance-Prozess auf einen CEO trifft, der schneller liefern muss als verifiziert werden kann: Die Prozesse werden zur verhandelbaren Behauptung. Der Safety Board existiert als Gremium — aber wer entscheidet, ob ein Modell durchmuss, ist der CEO selbst. Die Trennung zwischen "Wir machen das sicher" und "Wir behaupten, dass wir es sicher machen" verschwindet, wenn beide Aussagen aus demselben Mund kommen."
+→ Null Analogien, dafür eine klare Beobachtung mit Pointe. Wenn eine Analogie nötig wäre, dann genau eine, durchgezogen.
 `
 
 /**
