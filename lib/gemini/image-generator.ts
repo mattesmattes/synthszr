@@ -758,9 +758,12 @@ export async function generateDesktopCover(
   const { width, height } = metadata
   if (!width || !height) throw new Error('Invalid image dimensions')
 
-  // Step 1+2: Scale-to-cover at 1408×768, normalise contrast
+  // Step 1+2: Scale-to-cover at 1408×768, normalise contrast.
+  // position:'top' anchors at the top edge so the lower portion is
+  // cropped — keeps statue heads / focal subjects visible. Cropping
+  // from the centre would slice ~25% off the top.
   const resizedBuffer = await sharp(imageBuffer)
-    .resize(DESKTOP_WIDTH, DESKTOP_HEIGHT, { fit: 'cover', position: 'centre', kernel: sharp.kernel.lanczos3 })
+    .resize(DESKTOP_WIDTH, DESKTOP_HEIGHT, { fit: 'cover', position: 'top', kernel: sharp.kernel.lanczos3 })
     .normalise()
     .png()
     .toBuffer()
