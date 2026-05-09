@@ -94,80 +94,147 @@ async function getImageModel(): Promise<string> {
 }
 
 /**
- * Generate an image for an analogy using Nano Banana via Vercel AI SDK.
+ * Generate an image with Google models via Vercel AI SDK.
+ * Google uses generateText with responseModalities to enable image output.
+ */
+async function generateWithGoogle(
+  model: string,
+  prompt: string
+): Promise<{ buffer: Buffer; mimeType: string } | { error: string }> {
+  const { generateText } = await import('ai')
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await generateText({
+    model: model as any,
+    providerOptions: {
+      google: {
+        responseModalities: ['TEXT', 'IMAGE'],
+      },
+    },
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text' as const,
+            text: `Generate an image based on this description. Do not include any text, words, or letters in the image.\n\n${prompt}`,
+          },
+        ],
+      },
+    ],
+  })
+
+  const imageFile = result.files?.find(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (f: any) => f.mediaType?.startsWith('image/') || f.mimeType?.startsWith('image/')
+  )
+
+  if (!imageFile) {
+    return { error: `No image in Google response. Text: ${result.text?.slice(0, 200)}` }
+  }
+
+  let buffer: Buffer
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const file = imageFile as any
+  if (file.uint8Array) {
+    buffer = Buffer.from(file.uint8Array)
+  } else if (file.base64) {
+    buffer = Buffer.from(file.base64, 'base64')
+  } else {
+    return { error: 'Google image file has no data' }
+  }
+
+  let mimeType = file.mediaType || file.mimeType
+  if (!mimeType || mimeType === 'undefined') {
+    const b64Start = buffer.toString('base64').slice(0, 12)
+    if (b64Start.startsWith('iVBORw0KGgo')) mimeType = 'image/png'
+    else if (b64Start.startsWith('/9j/')) mimeType = 'image/jpeg'
+    else mimeType = 'image/png'
+  }
+
+  return { buffer, mimeType }
+}
+
+/**
+ * Generate an image with OpenAI image models (gpt-image-1, gpt-image-2,
+ * dall-e-*) via the dedicated images.generate endpoint.
+ */
+async function generateWithOpenAI(
+  modelId: string,
+  prompt: string
+): Promise<{ buffer: Buffer; mimeType: string } | { error: string }> {
+  if (!process.env.OPENAI_API_KEY) {
+    return { error: 'OPENAI_API_KEY not configured' }
+  }
+
+  const { default: OpenAI } = await import('openai')
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+  const fullPrompt = `${prompt}\n\nDo not include any text, words, or letters in the image.`
+
+  // gpt-image-* returns b64_json by default; dall-e-* needs response_format.
+  // Pass response_format only for dall-e to avoid "unknown parameter" errors
+  // on the gpt-image series.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const params: any = {
+    model: modelId,
+    prompt: fullPrompt,
+    n: 1,
+    size: '1024x1024',
+  }
+  if (modelId.startsWith('dall-e')) {
+    params.response_format = 'b64_json'
+  }
+
+  const response = await client.images.generate(params)
+  const b64 = response.data?.[0]?.b64_json
+
+  if (!b64) {
+    return { error: 'OpenAI response had no b64_json image data' }
+  }
+
+  return { buffer: Buffer.from(b64, 'base64'), mimeType: 'image/png' }
+}
+
+/**
+ * Generate an image for an analogy. Routes to the right provider based on
+ * the configured model's namespace prefix (google/... or openai/...).
  * The prompt should already include the style suffix.
  */
 export async function generateAnalogyImage(prompt: string): Promise<ImageResult> {
   const model = await getImageModel()
 
+  console.log(`[AnalogyImage] Generating with ${model}...`)
+
   try {
-    // Dynamic import to avoid module loading issues
-    const { generateText } = await import('ai')
+    const isOpenAI = model.startsWith('openai/')
+    const isGoogle = model.startsWith('google/') || !model.includes('/') // legacy unprefixed = Google
 
-    console.log(`[AnalogyImage] Generating with ${model}...`)
+    let raw: { buffer: Buffer; mimeType: string } | { error: string }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await generateText({
-      model: model as any,
-      providerOptions: {
-        google: {
-          responseModalities: ['TEXT', 'IMAGE'],
-        },
-      },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text' as const,
-              text: `Generate an image based on this description. Do not include any text, words, or letters in the image.\n\n${prompt}`,
-            },
-          ],
-        },
-      ],
-    })
-
-    // Extract image from response files
-    const imageFile = result.files?.find(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (f: any) => f.mediaType?.startsWith('image/') || f.mimeType?.startsWith('image/')
-    )
-
-    if (!imageFile) {
-      console.log('[AnalogyImage] No image in response. Text:', result.text?.slice(0, 200))
-      return { success: false, error: 'No image generated in response' }
-    }
-
-    // Get image data — handle both uint8Array and base64 formats
-    let imageBuffer: Buffer
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const file = imageFile as any
-    if (file.uint8Array) {
-      imageBuffer = Buffer.from(file.uint8Array)
-    } else if (file.base64) {
-      imageBuffer = Buffer.from(file.base64, 'base64')
+    if (isOpenAI) {
+      raw = await generateWithOpenAI(model.replace(/^openai\//, ''), prompt)
+    } else if (isGoogle) {
+      // The Vercel AI SDK accepts both "google/gemini-..." and bare
+      // "gemini-..." for Google models. Pass the full id as-is.
+      raw = await generateWithGoogle(model, prompt)
     } else {
-      return { success: false, error: 'Image file has no data' }
+      return { success: false, error: `Unsupported image model namespace: ${model}` }
     }
 
-    // Detect mime type
-    let mimeType = file.mediaType || file.mimeType
-    if (!mimeType || mimeType === 'undefined') {
-      const b64Start = imageBuffer.toString('base64').slice(0, 12)
-      if (b64Start.startsWith('iVBORw0KGgo')) mimeType = 'image/png'
-      else if (b64Start.startsWith('/9j/')) mimeType = 'image/jpeg'
-      else mimeType = 'image/png'
+    if ('error' in raw) {
+      console.log(`[AnalogyImage] Provider returned no image: ${raw.error}`)
+      return { success: false, error: raw.error }
     }
 
-    console.log(`[AnalogyImage] Generated successfully (${mimeType}, ${imageBuffer.length} bytes)`)
+    console.log(`[AnalogyImage] Generated successfully (${raw.mimeType}, ${raw.buffer.length} bytes)`)
 
-    // Apply neon green (#CCFF00) multiply tint — brand color
-    const tintedBuffer = await applyNeonGreenMultiply(imageBuffer)
+    const tintedBuffer = await applyNeonGreenMultiply(raw.buffer)
 
     return {
       success: true,
       imageBuffer: tintedBuffer,
-      mimeType: 'image/png', // sharp outputs PNG
+      mimeType: 'image/png',
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
