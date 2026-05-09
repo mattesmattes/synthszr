@@ -193,7 +193,10 @@ export default function AdminPage() {
   // The model currently configured in /admin/settings → KI-Modelle →
   // Bildgenerierung. Loaded once on mount so we can display it instantly
   // when a generation starts (without waiting for the server round-trip).
-  const [currentImageModel, setCurrentImageModel] = useState<string | null>(null)
+  // Initialized to the hardcoded default in lib/ai/model-config.ts so
+  // the banner is never empty even when the /api/admin/available-models
+  // request hasn't returned yet (or fails silently).
+  const [currentImageModel, setCurrentImageModel] = useState<string | null>('google/gemini-3-pro-image')
 
   const supabase = createClient()
 
