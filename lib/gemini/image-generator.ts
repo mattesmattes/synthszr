@@ -172,13 +172,21 @@ async function generateImageDirectGoogle(prompt: string): Promise<GenerateImageR
 /**
  * Generate image with OpenAI image models (gpt-image-2, dall-e-*) via the
  * official OpenAI SDK images.generate endpoint.
+ *
+ * @param fast — when true, uses quality:'low' on gpt-image-* models to
+ *   roughly cut generation time to a third. Safe for thumbnails because
+ *   they're heavily downscaled and dithered before display.
  */
-async function generateImageOpenAI(modelId: string, prompt: string): Promise<GenerateImageResult> {
+async function generateImageOpenAI(
+  modelId: string,
+  prompt: string,
+  fast: boolean = false
+): Promise<GenerateImageResult> {
   if (!process.env.OPENAI_API_KEY) {
     return { success: false, error: 'OPENAI_API_KEY not configured' }
   }
 
-  console.log(`[OpenAI Images] Generating with ${modelId}...`)
+  console.log(`[OpenAI Images] Generating with ${modelId} (fast=${fast})...`)
 
   const { default: OpenAI } = await import('openai')
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -194,6 +202,10 @@ async function generateImageOpenAI(modelId: string, prompt: string): Promise<Gen
   }
   if (modelId.startsWith('dall-e')) {
     params.response_format = 'b64_json'
+  } else if (fast) {
+    // gpt-image-* supports quality: 'low' | 'medium' | 'high' | 'auto'.
+    // 'low' is ~3× faster and looks identical after downscale + dithering.
+    params.quality = 'low'
   }
 
   try {
@@ -282,12 +294,15 @@ async function generateImageGoogleSDK(model: string, prompt: string): Promise<Ge
  *   "google/..."  → Vercel AI SDK + responseModalities
  *   "openai/..."  → OpenAI SDK images.generate
  *   bare "gemini-..." (legacy) → treated as Google
+ *
+ * @param fast — passed to provider helpers; OpenAI uses it to switch to
+ *   quality:'low' for ~3× speedup. Google ignores it (Gemini is already fast).
  */
-async function generateImageVercelSDK(prompt: string): Promise<GenerateImageResult> {
+async function generateImageVercelSDK(prompt: string, fast: boolean = false): Promise<GenerateImageResult> {
   const model = await getModelForUseCase('image_generation')
 
   if (model.startsWith('openai/')) {
-    return generateImageOpenAI(model.replace(/^openai\//, ''), prompt)
+    return generateImageOpenAI(model.replace(/^openai\//, ''), prompt, fast)
   }
 
   // Google path: pass id as-is (the AI SDK handles both "google/..." and
@@ -308,12 +323,18 @@ export interface CoverImageNews {
 /**
  * Generate a satirical image from news text
  * Supports single newsText string OR multiple news items for cover images
+ *
+ * @param options.fast — when true, OpenAI image models are called with
+ *   quality:'low' (~3× faster). Use for thumbnails. Cover images should
+ *   keep the default for visual quality.
  */
 export async function generateSatiricalImage(
-  newsTextOrItems: string | CoverImageNews
+  newsTextOrItems: string | CoverImageNews,
+  options: { fast?: boolean } = {}
 ): Promise<GenerateImageResult> {
   const maxRetries = 3
   let lastError: Error | null = null
+  const fast = options.fast === true
 
   const promptTemplate = await getActiveImagePrompt()
 
@@ -337,11 +358,11 @@ export async function generateSatiricalImage(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`[Gemini] Attempt ${attempt}/${maxRetries}, using ${USE_DIRECT_GOOGLE_API ? 'Direct Google API' : 'Vercel AI SDK'}`)
+      console.log(`[Gemini] Attempt ${attempt}/${maxRetries}, using ${USE_DIRECT_GOOGLE_API ? 'Direct Google API' : 'Vercel AI SDK'} (fast=${fast})`)
 
       const result = USE_DIRECT_GOOGLE_API
         ? await generateImageDirectGoogle(prompt)
-        : await generateImageVercelSDK(prompt)
+        : await generateImageVercelSDK(prompt, fast)
 
       if (result.success) {
         return result

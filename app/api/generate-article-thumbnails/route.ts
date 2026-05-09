@@ -164,8 +164,10 @@ export async function POST(request: NextRequest) {
 
         // Generate the image (use shorter text for thumbnails)
         const thumbnailText = article.text.slice(0, 500)
-        // Step 1: Generate raw image (no dithering yet)
-        const result = await generateSatiricalImage(thumbnailText)
+        // Step 1: Generate raw image (no dithering yet). fast=true switches
+        // OpenAI gpt-image-2 to quality:'low' — thumbnails are heavily
+        // downscaled + dithered, so no visible quality loss.
+        const result = await generateSatiricalImage(thumbnailText, { fast: true })
 
         if (!result.success || !result.imageBase64) {
           await supabase
