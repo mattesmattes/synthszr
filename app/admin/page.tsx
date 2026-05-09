@@ -1350,7 +1350,7 @@ export default function AdminPage() {
                       </div>
                       <PostImageGallery postId={editingPost.id} />
                       <div className="mt-3">
-                        <GenerateImagesButton postId={editingPost.id} />
+                        <GenerateImagesButton postId={editingPost.id} currentImageModel={currentImageModel} />
                       </div>
                     </div>
                   </div>
@@ -1441,7 +1441,7 @@ export default function AdminPage() {
 }
 
 // Component to manually trigger image generation for a post
-function GenerateImagesButton({ postId }: { postId: string }) {
+function GenerateImagesButton({ postId, currentImageModel }: { postId: string; currentImageModel: string | null }) {
   const [generating, setGenerating] = useState(false)
   const supabase = createClient()
 
@@ -1618,6 +1618,11 @@ function GenerateImagesButton({ postId }: { postId: string }) {
           </>
         )}
       </Button>
+      {currentImageModel && (
+        <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-mono mt-2 text-center">
+          {generating ? `Generiere mit: ${currentImageModel}…` : `Modell: ${currentImageModel}`}
+        </p>
+      )}
       <p className="text-xs text-muted-foreground mt-2 text-center">
         Visualisiert bis zu 5 News-Snippets aus dem Blogpost
       </p>
