@@ -182,7 +182,7 @@ export default function AdminPage() {
   const [editorRerunError, setEditorRerunError] = useState<string | null>(null)
 
   // Article thumbnails state
-  const [articleThumbnails, setArticleThumbnails] = useState<Array<{ id: string; article_index: number; generation_status: string; image_url?: string; source_text?: string }>>([])
+  const [articleThumbnails, setArticleThumbnails] = useState<Array<{ id: string; article_index: number; generation_status: string; image_url?: string; source_text?: string; generation_model?: string }>>([])
   const [articleCount, setArticleCount] = useState(0)
   const [generatingThumbnails, setGeneratingThumbnails] = useState(false)
   const [regeneratingThumbnailIndex, setRegeneratingThumbnailIndex] = useState<number | null>(null)
@@ -252,7 +252,17 @@ export default function AdminPage() {
         }),
       })
       if (res.ok) {
+        const data = await res.json().catch(() => null)
         await fetchArticleThumbnails(postId)
+        // Merge transient generation_model from the response into the
+        // freshly fetched thumbnails so the admin can see which provider
+        // produced this regeneration.
+        const usedModel = data?.results?.find((r: { index: number; model?: string }) => r.index === articleIndex)?.model
+        if (usedModel) {
+          setArticleThumbnails(prev =>
+            prev.map(t => t.article_index === articleIndex ? { ...t, generation_model: usedModel } : t)
+          )
+        }
       }
     } catch (err) {
       console.error('[Thumbnails] Regenerate single failed:', err)
@@ -316,8 +326,24 @@ export default function AdminPage() {
         credentials: 'include',
         body: JSON.stringify({ postId, articles }),
       })
-      await res.json()
+      const data = await res.json().catch(() => null)
       await fetchArticleThumbnails(postId)
+      // Build per-index map of used models from the response and merge
+      // it into the freshly fetched thumbnails (transient — not in DB).
+      if (data?.results && Array.isArray(data.results)) {
+        const modelByIndex = new Map<number, string>()
+        for (const r of data.results as Array<{ index: number; success: boolean; model?: string }>) {
+          if (r.success && r.model) modelByIndex.set(r.index, r.model)
+        }
+        if (modelByIndex.size > 0) {
+          setArticleThumbnails(prev =>
+            prev.map(t => modelByIndex.has(t.article_index)
+              ? { ...t, generation_model: modelByIndex.get(t.article_index) }
+              : t
+            )
+          )
+        }
+      }
     } catch (err) {
       console.error('[Thumbnails] Generation failed:', err)
     } finally {
@@ -1248,6 +1274,11 @@ export default function AdminPage() {
                                   <p className="text-xs text-center line-clamp-2 text-muted-foreground mb-2">
                                     {headline.slice(0, 80)}{headline.length > 80 ? '...' : ''}
                                   </p>
+                                  {thumbnail?.generation_model && (
+                                    <p className="text-[10px] text-center text-muted-foreground/70 font-mono mb-2 truncate" title={thumbnail.generation_model}>
+                                      {thumbnail.generation_model}
+                                    </p>
+                                  )}
                                   {/* Regenerate button - always visible */}
                                   <Button
                                     variant="outline"

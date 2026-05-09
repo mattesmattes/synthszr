@@ -83,6 +83,10 @@ interface GenerateImageResult {
   imageBase64?: string
   mimeType?: string
   error?: string
+  /** Namespaced model id used for this generation, e.g. "openai/gpt-image-2"
+   * or "google/gemini-3-pro-image". Surfaced to the admin UI to confirm
+   * which provider produced a freshly generated thumbnail. Not persisted. */
+  model?: string
 }
 
 // Lazy load generateText to avoid module loading issues (for Vercel AI SDK fallback)
@@ -147,7 +151,8 @@ async function generateImageDirectGoogle(prompt: string): Promise<GenerateImageR
           return {
             success: true,
             imageBase64: data,
-            mimeType: mimeType || 'image/png'
+            mimeType: mimeType || 'image/png',
+            model: 'google/gemini-2.0-flash-exp',
           }
         }
       }
@@ -205,7 +210,7 @@ async function generateImageOpenAI(modelId: string, prompt: string): Promise<Gen
       console.log('[OpenAI Images] Image generated (could not read dimensions)')
     }
 
-    return { success: true, imageBase64: b64, mimeType: 'image/png' }
+    return { success: true, imageBase64: b64, mimeType: 'image/png', model: `openai/${modelId}` }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[OpenAI Images] Error:', message)
@@ -262,7 +267,8 @@ async function generateImageGoogleSDK(model: string, prompt: string): Promise<Ge
     return {
       success: true,
       imageBase64: imageFile.base64,
-      mimeType: mimeType || 'image/png'
+      mimeType: mimeType || 'image/png',
+      model: model.startsWith('google/') ? model : `google/${model}`,
     }
   }
 

@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
       error?: string
       imageId?: string
       imageUrl?: string
+      model?: string
     }> = []
 
     // Process articles sequentially to avoid API rate limits
@@ -213,6 +214,7 @@ export async function POST(request: NextRequest) {
             success: true,
             imageId: imageRecord.id,
             imageUrl: blob.url,
+            model: result.model,
           })
 
           console.log(`[Thumbnail] Generated thumbnail ${article.index + 1}/${articles.length} successfully`)
