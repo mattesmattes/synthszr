@@ -36,7 +36,9 @@ const GOOGLE_TEXT_EXCLUDE = /embedding|aqa|vision-only|imagen|preview|audio|imag
 const OPENAI_IMAGE_INCLUDE = /^(gpt-image-|dall-e-)/i
 const OPENAI_IMAGE_EXCLUDE = /-mini$/i // exclude mini for now (lower quality)
 const GOOGLE_IMAGE_INCLUDE = /-image($|-)/i
-const GOOGLE_IMAGE_EXCLUDE = /preview|latest$/i
+// Image models often ship as "-preview" first (e.g. gemini-3-pro-image-preview).
+// Only filter out "-latest" alias and dated snapshots so the canonical ID wins.
+const GOOGLE_IMAGE_EXCLUDE = /latest$|-\d{8}$/i
 
 type ModelCategory = 'text' | 'image'
 type ProviderId = 'anthropic' | 'openai' | 'google'

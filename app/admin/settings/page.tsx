@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, RefreshCw, Settings2, AlertTriangle, ExternalLink, Cpu, Download, Palette, Upload } from 'lucide-react'
+import { Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, RefreshCw, Settings2, AlertTriangle, ExternalLink, Cpu, Download, Palette, Upload, ThumbsUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -140,6 +140,19 @@ const USE_CASE_DEFINITIONS: Record<string, UseCaseInfo> = {
 
 // Use-cases that pick from image-generation models instead of text models.
 const IMAGE_USE_CASES = new Set(['image_generation'])
+
+// Models marked with a thumbs-up icon as recommended favorites.
+// Prefix-based: matches "google/gemini-3-pro-image" AND
+// "google/gemini-3-pro-image-preview" so a "-preview" suffix from the
+// provider's API doesn't break the match.
+const FAVORITE_MODEL_PREFIXES = [
+  'google/gemini-3-pro-image',
+  'openai/gpt-image-2',
+]
+
+function isFavoriteModel(id: string): boolean {
+  return FAVORITE_MODEL_PREFIXES.some(prefix => id === prefix || id.startsWith(prefix + '-'))
+}
 
 const USE_CASE_GROUPS: Array<{ title: string; useCases: string[] }> = [
   {
@@ -561,11 +574,20 @@ export default function SettingsPage() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {models.map(model => {
+                                {[...models].sort((a, b) => {
+                                  const aFav = isFavoriteModel(a.id) ? 0 : 1
+                                  const bFav = isFavoriteModel(b.id) ? 0 : 1
+                                  if (aFav !== bFav) return aFav - bFav
+                                  return a.name.localeCompare(b.name)
+                                }).map(model => {
                                   const pricing = formatPricing(model)
+                                  const isFavorite = isFavoriteModel(model.id)
                                   return (
                                     <SelectItem key={model.id} value={model.id}>
                                       <span className="flex items-center gap-2">
+                                        {isFavorite && (
+                                          <ThumbsUp className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                        )}
                                         {model.name}
                                         {pricing && (
                                           <span className="text-xs text-muted-foreground">
