@@ -32,16 +32,28 @@ const ANTHROPIC_EXCLUDE = /haiku-3|claude-3-/i
 const OPENAI_TEXT_EXCLUDE = /embedding|moderation|tts|whisper|dall-e|davinci|babbage|realtime|image|audio|transcribe|search/i
 const GOOGLE_TEXT_EXCLUDE = /embedding|aqa|vision-only|imagen|preview|audio|image|tts|computer-use|latest$/i
 
-// Image-generation models — separate include patterns
-const OPENAI_IMAGE_INCLUDE = /^(gpt-image-|dall-e-)/i
-const OPENAI_IMAGE_EXCLUDE = /-mini$/i // exclude mini for now (lower quality)
-const GOOGLE_IMAGE_INCLUDE = /-image($|-)/i
-// Image models often ship as "-preview" first (e.g. gemini-3-pro-image-preview).
-// Only filter out "-latest" alias and dated snapshots so the canonical ID wins.
-const GOOGLE_IMAGE_EXCLUDE = /latest$|-\d{8}$/i
-
-type ModelCategory = 'text' | 'image'
 type ProviderId = 'anthropic' | 'openai' | 'google'
+
+// Image-generation dropdown is curated by hand. Provider model-list APIs
+// either over-include (every preview revision) or under-include (don't
+// list newest models like gemini-3-pro-image at all). Keeping this
+// explicit makes the dropdown predictable.
+const CURATED_IMAGE_MODELS: ModelInfo[] = [
+  {
+    id: 'google/gemini-3-pro-image',
+    name: 'Gemini 3 Pro Image',
+    provider: 'google',
+    pricing: { input: 0, output: 0 },
+    category: 'image',
+  },
+  {
+    id: 'openai/gpt-image-2',
+    name: 'GPT Image 2',
+    provider: 'openai',
+    pricing: { input: 0, output: 0 },
+    category: 'image',
+  },
+]
 
 async function fetchAnthropicModels(): Promise<string[]> {
   if (!process.env.ANTHROPIC_API_KEY) return []
@@ -57,44 +69,35 @@ async function fetchAnthropicModels(): Promise<string[]> {
   }
 }
 
-interface ProviderFetchResult {
-  text: string[]
-  image: string[]
-}
-
-async function fetchOpenAIModels(): Promise<ProviderFetchResult> {
-  if (!process.env.OPENAI_API_KEY) return { text: [], image: [] }
+async function fetchOpenAIModels(): Promise<string[]> {
+  if (!process.env.OPENAI_API_KEY) return []
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
     const response = await openai.models.list()
-    const all = response.data.map((m) => m.id)
-    return {
-      text: all.filter(id => OPENAI_TEXT_INCLUDE.test(id) && !OPENAI_TEXT_EXCLUDE.test(id)),
-      image: all.filter(id => OPENAI_IMAGE_INCLUDE.test(id) && !OPENAI_IMAGE_EXCLUDE.test(id)),
-    }
+    return response.data
+      .map((m) => m.id)
+      .filter(id => OPENAI_TEXT_INCLUDE.test(id) && !OPENAI_TEXT_EXCLUDE.test(id))
   } catch (error) {
     console.error('[AvailableModels] OpenAI fetch failed:', error)
-    return { text: [], image: [] }
+    return []
   }
 }
 
-async function fetchGoogleModels(): Promise<ProviderFetchResult> {
-  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) return { text: [], image: [] }
+async function fetchGoogleModels(): Promise<string[]> {
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) return []
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`,
       { signal: AbortSignal.timeout(5000) }
     )
-    if (!res.ok) return { text: [], image: [] }
+    if (!res.ok) return []
     const data = await res.json()
-    const all: string[] = (data.models || []).map((m: { name: string }) => m.name.replace('models/', ''))
-    return {
-      text: all.filter((id) => GOOGLE_TEXT_INCLUDE.test(id) && !GOOGLE_TEXT_EXCLUDE.test(id)),
-      image: all.filter((id) => GOOGLE_IMAGE_INCLUDE.test(id) && !GOOGLE_IMAGE_EXCLUDE.test(id)),
-    }
+    return (data.models || [])
+      .map((m: { name: string }) => m.name.replace('models/', ''))
+      .filter((id: string) => GOOGLE_TEXT_INCLUDE.test(id) && !GOOGLE_TEXT_EXCLUDE.test(id))
   } catch (error) {
     console.error('[AvailableModels] Google fetch failed:', error)
-    return { text: [], image: [] }
+    return []
   }
 }
 
@@ -148,50 +151,53 @@ export async function GET(request: Request) {
     return NextResponse.json({ models: cache.models, config, pricingLastUpdated: PRICING_LAST_UPDATED })
   }
 
-  // Fetch from all providers in parallel (with timeout)
-  const emptyResult: ProviderFetchResult = { text: [], image: [] }
-  const [anthropicIds, openaiResult, googleResult] = await Promise.all([
+  // Fetch text models from providers in parallel (with timeout). Image
+  // models come from CURATED_IMAGE_MODELS — see comment at the constant.
+  const [anthropicIds, openaiIds, googleIds] = await Promise.all([
     Promise.race([fetchAnthropicModels(), timeout(8000, [] as string[])]),
-    Promise.race([fetchOpenAIModels(), timeout(8000, emptyResult)]),
-    Promise.race([fetchGoogleModels(), timeout(8000, emptyResult)]),
+    Promise.race([fetchOpenAIModels(), timeout(8000, [] as string[])]),
+    Promise.race([fetchGoogleModels(), timeout(8000, [] as string[])]),
   ])
 
-  console.log(`[AvailableModels] Fetched: ${anthropicIds.length} Anthropic, ${openaiResult.text.length}+${openaiResult.image.length}img OpenAI, ${googleResult.text.length}+${googleResult.image.length}img Google`)
+  console.log(`[AvailableModels] Fetched text: ${anthropicIds.length} Anthropic, ${openaiIds.length} OpenAI, ${googleIds.length} Google + ${CURATED_IMAGE_MODELS.length} curated image`)
 
   // Build models from live API results, enriched with pricing where available
   const seenIds = new Set<string>()
   const availableModels: ModelInfo[] = []
 
-  function addModels(ids: string[], provider: ProviderId, category: ModelCategory) {
+  function addTextModels(ids: string[], provider: ProviderId) {
     for (const id of ids) {
-      // For image models the canonical id is namespaced (provider/model)
-      // so different providers can share short names without collision.
-      const canonical = category === 'image' ? `${provider}/${id}` : id
-      if (seenIds.has(canonical)) continue
-      seenIds.add(canonical)
+      if (seenIds.has(id)) continue
+      seenIds.add(id)
 
-      const known = findPricing(id) || findPricing(canonical)
+      const known = findPricing(id)
       if (known) {
-        availableModels.push({ ...known, id: canonical, provider, category })
+        availableModels.push({ ...known, id, provider, category: 'text' })
       } else {
         availableModels.push({
-          id: canonical,
+          id,
           name: humanizeName(id, provider),
           provider,
           pricing: { input: 0, output: 0 },
-          category,
+          category: 'text',
         })
       }
     }
   }
 
-  addModels(anthropicIds, 'anthropic', 'text')
-  addModels(openaiResult.text, 'openai', 'text')
-  addModels(googleResult.text, 'google', 'text')
-  addModels(openaiResult.image, 'openai', 'image')
-  addModels(googleResult.image, 'google', 'image')
+  addTextModels(anthropicIds, 'anthropic')
+  addTextModels(openaiIds, 'openai')
+  addTextModels(googleIds, 'google')
 
-  // Fallback: if a provider API returned nothing but the key exists,
+  // Add curated image models (always present — independent of API listings)
+  for (const m of CURATED_IMAGE_MODELS) {
+    if (!seenIds.has(m.id)) {
+      availableModels.push(m)
+      seenIds.add(m.id)
+    }
+  }
+
+  // Fallback: if a text provider API returned nothing but the key exists,
   // include the known models from our pricing map for that provider
   if (anthropicIds.length === 0 && process.env.ANTHROPIC_API_KEY) {
     for (const info of Object.values(MODEL_PRICING)) {
@@ -201,18 +207,18 @@ export async function GET(request: Request) {
       }
     }
   }
-  if (openaiResult.text.length === 0 && openaiResult.image.length === 0 && process.env.OPENAI_API_KEY) {
+  if (openaiIds.length === 0 && process.env.OPENAI_API_KEY) {
     for (const info of Object.values(MODEL_PRICING)) {
-      if (info.provider === 'openai' && !seenIds.has(info.id)) {
-        availableModels.push(info)
+      if (info.provider === 'openai' && (info.category ?? 'text') === 'text' && !seenIds.has(info.id)) {
+        availableModels.push({ ...info, category: 'text' })
         seenIds.add(info.id)
       }
     }
   }
-  if (googleResult.text.length === 0 && googleResult.image.length === 0 && process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+  if (googleIds.length === 0 && process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     for (const info of Object.values(MODEL_PRICING)) {
-      if (info.provider === 'google' && !seenIds.has(info.id)) {
-        availableModels.push(info)
+      if (info.provider === 'google' && (info.category ?? 'text') === 'text' && !seenIds.has(info.id)) {
+        availableModels.push({ ...info, category: 'text' })
         seenIds.add(info.id)
       }
     }
