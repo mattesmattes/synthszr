@@ -190,6 +190,10 @@ export default function AdminPage() {
   // as a banner under "Artikel-Thumbnails" so admins can verify which
   // provider produced the latest run).
   const [lastThumbnailModel, setLastThumbnailModel] = useState<string | null>(null)
+  // The model currently configured in /admin/settings → KI-Modelle →
+  // Bildgenerierung. Loaded once on mount so we can display it instantly
+  // when a generation starts (without waiting for the server round-trip).
+  const [currentImageModel, setCurrentImageModel] = useState<string | null>(null)
 
   const supabase = createClient()
 
@@ -235,6 +239,7 @@ export default function AdminPage() {
   // Regenerate a single article thumbnail
   async function regenerateSingleThumbnail(postId: string, articleIndex: number, headline: string) {
     setRegeneratingThumbnailIndex(articleIndex)
+    if (currentImageModel) setLastThumbnailModel(currentImageModel)
     try {
       // Delete existing thumbnail for this index
       const existing = articleThumbnails.find(t => t.article_index === articleIndex)
@@ -295,6 +300,7 @@ export default function AdminPage() {
   // Generate article thumbnails (deletes existing ones first for regeneration)
   async function generateArticleThumbnails(postId: string, content: Record<string, unknown>) {
     setGeneratingThumbnails(true)
+    if (currentImageModel) setLastThumbnailModel(currentImageModel)
 
     const articles: Array<{ index: number; text: string; vote: null }> = []
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -360,6 +366,15 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchPosts()
+    // Load the currently configured image-generation model so the
+    // Bilder section can show it instantly when generation starts.
+    fetch('/api/admin/available-models', { credentials: 'include' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { config?: Record<string, string> } | null) => {
+        const m = d?.config?.image_generation
+        if (m) setCurrentImageModel(m)
+      })
+      .catch(() => {})
   }, [])
 
   async function fetchPosts() {
@@ -1217,9 +1232,13 @@ export default function AdminPage() {
                               <p className="text-xs text-muted-foreground">
                                 Runde Icons für jede News • {articleThumbnails.filter(t => t.generation_status === 'completed').length} von {articleCount} generiert
                               </p>
-                              {lastThumbnailModel && (
+                              {(lastThumbnailModel || currentImageModel) && (
                                 <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-mono mt-0.5">
-                                  Letzte Generierung: {lastThumbnailModel}
+                                  {generatingThumbnails || regeneratingThumbnailIndex !== null
+                                    ? `Generiere mit: ${lastThumbnailModel || currentImageModel}…`
+                                    : lastThumbnailModel
+                                      ? `Letzte Generierung: ${lastThumbnailModel}`
+                                      : `Modell: ${currentImageModel}`}
                                 </p>
                               )}
                             </div>
