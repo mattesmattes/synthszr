@@ -365,6 +365,27 @@ export async function generateSatiricalImage(
         : await generateImageVercelSDK(prompt, fast)
 
       if (result.success) {
+        // Trim solid-black letterbox bands the image model may have baked
+        // into the output. Sharp's trim() walks in from the borders and
+        // stops where pixels exceed the threshold against #000 — so a
+        // letterbox-free image is returned unchanged.
+        if (result.imageBase64) {
+          try {
+            const buf = Buffer.from(result.imageBase64, 'base64')
+            const trimmed = await sharp(buf)
+              .trim({ background: { r: 0, g: 0, b: 0 }, threshold: 10 })
+              .png()
+              .toBuffer()
+            const trimmedMeta = await sharp(trimmed).metadata()
+            const origMeta = await sharp(buf).metadata()
+            if (trimmedMeta.width !== origMeta.width || trimmedMeta.height !== origMeta.height) {
+              console.log(`[Gemini] Trimmed letterbox: ${origMeta.width}x${origMeta.height} → ${trimmedMeta.width}x${trimmedMeta.height}`)
+            }
+            result.imageBase64 = trimmed.toString('base64')
+          } catch (trimErr) {
+            console.warn('[Gemini] Letterbox trim failed (using original):', trimErr)
+          }
+        }
         return result
       }
 
@@ -779,10 +800,9 @@ export async function generateEmailCover(
   rawImageBase64: string
 ): Promise<{ base64: string; mimeType: string }> {
   const EMAIL_COVER_SIZE = 604
-  // gpt-image-2 / Gemini frequently returns a 1:1 PNG with ~10–15% black
-  // bars at the top and bottom. Trim that vertical region BEFORE the
-  // square crop so the email cover doesn't inherit the letterbox.
-  const VERTICAL_LETTERBOX_TRIM_PCT = 0.15
+  // Letterbox trim is now done up-front in generateSatiricalImage via
+  // sharp.trim(). The raw image arriving here is already letterbox-free,
+  // so a plain center-crop to square is enough.
   const imageBuffer = Buffer.from(rawImageBase64, 'base64')
 
   // Get image metadata for center-crop
@@ -790,13 +810,10 @@ export async function generateEmailCover(
   const { width, height } = metadata
   if (!width || !height) throw new Error('Invalid image dimensions')
 
-  // Step 1: Trim ~15% from the top and bottom to drop the letterbox
-  // produced by image models, then center-crop the remainder to square.
-  const trimmedHeight = Math.max(1, Math.floor(height * (1 - 2 * VERTICAL_LETTERBOX_TRIM_PCT)))
-  const trimmedTop = Math.floor((height - trimmedHeight) / 2)
-  const cropSize = Math.min(width, trimmedHeight)
+  // Step 1+2+3: Center-crop to square, resize to 604px, normalise contrast
+  const cropSize = Math.min(width, height)
   const left = Math.floor((width - cropSize) / 2)
-  const top = trimmedTop + Math.floor((trimmedHeight - cropSize) / 2)
+  const top = Math.floor((height - cropSize) / 2)
 
   const resizedBuffer = await sharp(imageBuffer)
     .extract({ left, top, width: cropSize, height: cropSize })
