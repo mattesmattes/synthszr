@@ -309,7 +309,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const supabase = await createClient()
-    const results: Array<{ success: boolean; error?: string; imageId?: string }> = []
+    const results: Array<{ success: boolean; error?: string; imageId?: string; model?: string }> = []
 
     // Cover mode: Generate ONE combined image from up to 3 news items
     if (coverMode && newsItems.length > 0) {
@@ -699,8 +699,8 @@ export async function PUT(request: NextRequest) {
             }
           }
 
-          results.push({ success: true, imageId: imageRecord.id })
-          console.log(`[Gemini] Image generated successfully for postId=${postId}`)
+          results.push({ success: true, imageId: imageRecord.id, model: rawResult.model })
+          console.log(`[Gemini] Image generated successfully for postId=${postId} via ${rawResult.model}`)
         } catch (uploadError) {
           console.error('Failed to upload image:', uploadError)
           await supabase

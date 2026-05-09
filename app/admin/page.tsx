@@ -186,6 +186,10 @@ export default function AdminPage() {
   const [articleCount, setArticleCount] = useState(0)
   const [generatingThumbnails, setGeneratingThumbnails] = useState(false)
   const [regeneratingThumbnailIndex, setRegeneratingThumbnailIndex] = useState<number | null>(null)
+  // Last image-generation model used in this session (transient — shown
+  // as a banner under "Artikel-Thumbnails" so admins can verify which
+  // provider produced the latest run).
+  const [lastThumbnailModel, setLastThumbnailModel] = useState<string | null>(null)
 
   const supabase = createClient()
 
@@ -262,6 +266,7 @@ export default function AdminPage() {
           setArticleThumbnails(prev =>
             prev.map(t => t.article_index === articleIndex ? { ...t, generation_model: usedModel } : t)
           )
+          setLastThumbnailModel(usedModel)
         }
       }
     } catch (err) {
@@ -342,6 +347,8 @@ export default function AdminPage() {
               : t
             )
           )
+          // Pick any model returned (they will all be the same in practice)
+          setLastThumbnailModel(modelByIndex.values().next().value || null)
         }
       }
     } catch (err) {
@@ -1210,6 +1217,11 @@ export default function AdminPage() {
                               <p className="text-xs text-muted-foreground">
                                 Runde Icons für jede News • {articleThumbnails.filter(t => t.generation_status === 'completed').length} von {articleCount} generiert
                               </p>
+                              {lastThumbnailModel && (
+                                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-mono mt-0.5">
+                                  Letzte Generierung: {lastThumbnailModel}
+                                </p>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1518,6 +1530,9 @@ function GenerateImagesButton({ postId }: { postId: string }) {
       })
 
       if (response.ok) {
+        const respData = await response.json().catch(() => null) as { results?: Array<{ success: boolean; model?: string }> } | null
+        const usedModelCover = respData?.results?.find(r => r.success && r.model)?.model
+
         // Also trigger article thumbnail generation
         const content = typeof post.content === 'string' ? JSON.parse(post.content) : post.content
         const articles: Array<{ index: number; text: string; vote: null }> = []
@@ -1548,7 +1563,8 @@ function GenerateImagesButton({ postId }: { postId: string }) {
           }).catch(err => console.error('[Thumbnails] Error:', err))
         }
 
-        alert('Bildgenerierung gestartet! Die Seite wird aktualisiert.')
+        const modelLine = usedModelCover ? ` (Modell: ${usedModelCover})` : ''
+        alert(`Bildgenerierung gestartet${modelLine}! Die Seite wird aktualisiert.`)
         window.location.reload()
       } else {
         const error = await response.json()
