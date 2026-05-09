@@ -156,7 +156,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
           {post.cover_image_url && (
             <div className="relative mb-8 overflow-hidden -mx-6">
-              <div className="relative flex flex-col items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-[4/3] md:aspect-[11/6] bg-neon-cyan">
+              <div className="relative flex flex-col items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-[3/2] md:aspect-[11/6] bg-neon-cyan">
                 {/* Clickable background to home */}
                 <Link href="/" className="absolute inset-0 z-0">
                   {/* Dithered PNG - pixelated rendering for sharp dithering pattern */}
