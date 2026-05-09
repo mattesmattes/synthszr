@@ -300,7 +300,9 @@ export default function AdminPage() {
     }
   }
 
-  // Generate article thumbnails (deletes existing ones first for regeneration)
+  // Generate article thumbnails — one HTTP request per article so a
+  // single hanging connection never exceeds the Vercel edge-proxy idle
+  // timeout (~60-90s). Sequential to respect provider rate limits.
   async function generateArticleThumbnails(postId: string, content: Record<string, unknown>) {
     setGeneratingThumbnails(true)
     if (currentImageModel) setLastThumbnailModel(currentImageModel)
@@ -332,36 +334,46 @@ export default function AdminPage() {
       return
     }
 
+    // Up-front clear so the per-request server doesn't see stale 'completed'
+    // rows and skip them. (The single-batch path used to do this implicitly.)
     try {
-      // API handles deletion of existing thumbnails
-      const res = await fetch('/api/generate-article-thumbnails', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      await fetch(`/api/generate-article-thumbnails?postId=${postId}`, {
+        method: 'DELETE',
         credentials: 'include',
-        body: JSON.stringify({ postId, articles }),
       })
-      const data = await res.json().catch(() => null)
-      await fetchArticleThumbnails(postId)
-      // Build per-index map of used models from the response and merge
-      // it into the freshly fetched thumbnails (transient — not in DB).
-      if (data?.results && Array.isArray(data.results)) {
-        const modelByIndex = new Map<number, string>()
-        for (const r of data.results as Array<{ index: number; success: boolean; model?: string }>) {
-          if (r.success && r.model) modelByIndex.set(r.index, r.model)
-        }
-        if (modelByIndex.size > 0) {
-          setArticleThumbnails(prev =>
-            prev.map(t => modelByIndex.has(t.article_index)
-              ? { ...t, generation_model: modelByIndex.get(t.article_index) }
-              : t
+    } catch (err) {
+      console.error('[Thumbnails] Pre-clean failed (continuing):', err)
+    }
+
+    try {
+      for (const article of articles) {
+        try {
+          const res = await fetch('/api/generate-article-thumbnails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ postId, articles: [article] }),
+          })
+          const data = await res.json().catch(() => null)
+          // Refresh after each article so the grid fills in progressively
+          await fetchArticleThumbnails(postId)
+          // Carry over the transient model id from the response onto the
+          // freshly fetched thumbnail row.
+          const r = data?.results?.[0] as { success?: boolean; model?: string } | undefined
+          if (r?.success && r.model) {
+            setArticleThumbnails(prev =>
+              prev.map(t => t.article_index === article.index
+                ? { ...t, generation_model: r.model }
+                : t
+              )
             )
-          )
-          // Pick any model returned (they will all be the same in practice)
-          setLastThumbnailModel(modelByIndex.values().next().value || null)
+            setLastThumbnailModel(r.model)
+          }
+        } catch (err) {
+          console.error(`[Thumbnails] Article ${article.index} failed:`, err)
+          // Keep going — other thumbnails should still be attempted
         }
       }
-    } catch (err) {
-      console.error('[Thumbnails] Generation failed:', err)
     } finally {
       setGeneratingThumbnails(false)
     }
