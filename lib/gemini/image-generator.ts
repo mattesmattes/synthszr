@@ -193,12 +193,15 @@ async function generateImageOpenAI(
 
   // gpt-image-* returns b64_json by default; only dall-e-* needs the
   // response_format param (gpt-image rejects it as unknown parameter).
+  // Generate at 1536×1024 (3:2 landscape) — closest gpt-image-2 offers
+  // to 16:9. Downstream pipeline crops to web/email targets without
+  // having to upscale a square source.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const params: any = {
     model: modelId,
     prompt,
     n: 1,
-    size: '1024x1024',
+    size: modelId.startsWith('dall-e') ? '1024x1024' : '1536x1024',
   }
   if (modelId.startsWith('dall-e')) {
     params.response_format = 'b64_json'
@@ -627,7 +630,8 @@ export interface ImageProcessingOptions {
   ditheringGain?: number       // 0.5-2.0, default 1.0
   ditheringCoarseness?: number // 1-8, default 1 (higher = larger dots, prevents moiré)
   imageScale?: number          // 0.25-2.0, default 1.0
-  targetWidth?: number         // Fixed width before dithering (keeps aspect ratio). Prevents moiré from browser rescaling.
+  targetWidth?: number         // Fixed width before dithering (prevents browser rescale moiré).
+  targetHeight?: number        // Fixed height. If unset, defaults to targetWidth (square output).
 }
 
 /**
@@ -680,6 +684,7 @@ export async function generateAndProcessImage(
   }
 
   const targetWidth = options?.targetWidth
+  const targetHeight = options?.targetHeight ?? targetWidth // default to square if only width given
 
   try {
     let processedBase64 = rawBase64
@@ -691,16 +696,17 @@ export async function generateAndProcessImage(
       processedBase64 = scaled.base64
     }
 
-    // Scale-to-cover to square at target width before dithering.
-    // Center-crops the widescreen Gemini output to 1408×1408, then dithers at native resolution.
-    // Desktop uses a separate cover_desktop image (1408×768), so this square is mobile-only.
-    if (targetWidth) {
+    // Scale-to-cover at target dimensions before dithering.
+    // For mobile cover (1408×792 = 16:9) the source is generated at 3:2,
+    // so this crops a small slice off top+bottom. position:'top' anchors
+    // at the top edge to keep statue heads / focal subjects in frame.
+    if (targetWidth && targetHeight) {
       const buf = Buffer.from(processedBase64, 'base64')
       const meta = await sharp(buf).metadata()
       if (meta.width) {
-        console.log(`[Gemini] Scale-to-cover ${targetWidth}x${targetWidth} (was ${meta.width}x${meta.height})...`)
+        console.log(`[Gemini] Scale-to-cover ${targetWidth}x${targetHeight} (was ${meta.width}x${meta.height})...`)
         const resized = await sharp(buf)
-          .resize(targetWidth, targetWidth, { fit: 'cover', position: 'centre', kernel: sharp.kernel.lanczos3 })
+          .resize(targetWidth, targetHeight, { fit: 'cover', position: 'top', kernel: sharp.kernel.lanczos3 })
           .normalise()
           .png()
           .toBuffer()

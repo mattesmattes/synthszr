@@ -88,11 +88,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Step 2: Process web version (resize to 1408px → dither → pad to square → transparent)
+    // Step 2: Process web version → 1408×792 (16:9 landscape).
+    // Source from gpt-image-2 is 1536×1024 (3:2), so this crops a small
+    // slice off top/bottom; sharp.trim() upstream removes any letterbox.
     const processingOptions: ImageProcessingOptions = {
       ...(enableDithering !== undefined ? { enableDithering } : {}),
       ...(ditheringGain !== undefined ? { ditheringGain } : {}),
       targetWidth: 1408,
+      targetHeight: 792,
     }
     const result = await generateAndProcessImage(newsText, processingOptions, rawResult.imageBase64)
 
@@ -302,12 +305,14 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // If no explicit dithering settings provided, let generator use DB settings
-    // Always include targetWidth so covers are dithered at exact width, then padded to square
+    // If no explicit dithering settings provided, let generator use DB settings.
+    // Cover output is 1408×792 (16:9 landscape) — source is 3:2, so the
+    // top-anchored cover-fit only trims a small strip at the bottom.
     const processingOptions: ImageProcessingOptions = {
       ...(enableDithering !== undefined ? { enableDithering } : {}),
       ...(ditheringGain !== undefined ? { ditheringGain } : {}),
       targetWidth: 1408,
+      targetHeight: 792,
     }
 
     const supabase = await createClient()
@@ -369,8 +374,8 @@ export async function PUT(request: NextRequest) {
         })
       }
 
-      // Step 2: Process web version (scale → resize to 1408px → dither → transparent)
-      const webOptions: ImageProcessingOptions = { ...processingOptions, targetWidth: 1408 }
+      // Step 2: Process web version → 1408×792 (16:9 landscape mobile cover)
+      const webOptions: ImageProcessingOptions = { ...processingOptions, targetWidth: 1408, targetHeight: 792 }
       const result = await generateAndProcessImage(coverNews, webOptions, rawResult.imageBase64)
 
       if (!result.success || !result.imageBase64) {
