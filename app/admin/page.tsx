@@ -186,6 +186,8 @@ export default function AdminPage() {
   const [articleCount, setArticleCount] = useState(0)
   const [generatingThumbnails, setGeneratingThumbnails] = useState(false)
   const [regeneratingThumbnailIndex, setRegeneratingThumbnailIndex] = useState<number | null>(null)
+  // Live progress for the per-article batch loop. Null when idle.
+  const [thumbnailProgress, setThumbnailProgress] = useState<{ current: number; total: number } | null>(null)
   // Last image-generation model used in this session (transient — shown
   // as a banner under "Artikel-Thumbnails" so admins can verify which
   // provider produced the latest run).
@@ -346,8 +348,14 @@ export default function AdminPage() {
     }
 
     const MAX_ATTEMPTS = 3
+    setThumbnailProgress({ current: 0, total: articles.length })
     try {
+      let done = 0
       for (const article of articles) {
+        // Small breather between images so we don't hammer OpenAI's
+        // image endpoint and trigger 429s on retry.
+        if (done > 0) await new Promise(resolve => setTimeout(resolve, 800))
+        console.log(`[Thumbnails] Starting article ${done + 1}/${articles.length} (index ${article.index})`)
         let succeeded = false
         for (let attempt = 1; attempt <= MAX_ATTEMPTS && !succeeded; attempt++) {
           try {
@@ -398,9 +406,12 @@ export default function AdminPage() {
           // Refresh anyway so the failed-state row shows in the grid
           await fetchArticleThumbnails(postId).catch(() => {})
         }
+        done++
+        setThumbnailProgress({ current: done, total: articles.length })
       }
     } finally {
       setGeneratingThumbnails(false)
+      setThumbnailProgress(null)
     }
   }
 
@@ -1275,7 +1286,9 @@ export default function AdminPage() {
                               {(lastThumbnailModel || currentImageModel) && (
                                 <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-mono mt-0.5">
                                   {generatingThumbnails || regeneratingThumbnailIndex !== null
-                                    ? `Generiere mit: ${lastThumbnailModel || currentImageModel}…`
+                                    ? thumbnailProgress
+                                      ? `Generiere ${thumbnailProgress.current + 1}/${thumbnailProgress.total} mit: ${lastThumbnailModel || currentImageModel}…`
+                                      : `Generiere mit: ${lastThumbnailModel || currentImageModel}…`
                                     : lastThumbnailModel
                                       ? `Letzte Generierung: ${lastThumbnailModel}`
                                       : `Modell: ${currentImageModel}`}
