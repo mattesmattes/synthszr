@@ -21,6 +21,7 @@ interface ModelInfo {
   name: string
   provider: 'anthropic' | 'openai' | 'google'
   pricing: { input: number; output: number }
+  category?: 'text' | 'image'
 }
 
 interface UseCaseInfo {
@@ -129,9 +130,18 @@ const USE_CASE_DEFINITIONS: Record<string, UseCaseInfo> = {
     defaultModel: 'claude-sonnet-4-6-20260301',
     allowedProviders: ['anthropic'],
   },
+  image_generation: {
+    label: 'Bildgenerierung',
+    description: 'Bilder für Analogie-Videos und redaktionelle Visuals',
+    defaultModel: 'google/gemini-3-pro-image',
+    allowedProviders: ['openai', 'google'],
+  },
 }
 
-const USE_CASE_GROUPS = [
+// Use-cases that pick from image-generation models instead of text models.
+const IMAGE_USE_CASES = new Set(['image_generation'])
+
+const USE_CASE_GROUPS: Array<{ title: string; useCases: string[] }> = [
   {
     title: 'Content-Erstellung',
     useCases: ['ghostwriter', 'article_planning', 'proofreading', 'synthesis_development', 'podcast_script'],
@@ -139,6 +149,10 @@ const USE_CASE_GROUPS = [
   {
     title: 'Analyse & Verarbeitung',
     useCases: ['synthesis_scoring', 'edit_analysis', 'pattern_extraction'],
+  },
+  {
+    title: 'Bildgenerierung',
+    useCases: ['image_generation'],
   },
 ]
 
@@ -383,7 +397,12 @@ export default function SettingsPage() {
   function getModelsForUseCase(useCaseKey: string): ModelInfo[] {
     const info = USE_CASE_DEFINITIONS[useCaseKey]
     if (!info) return []
-    return availableModels.filter(m => info.allowedProviders.includes(m.provider))
+    const wantsImage = IMAGE_USE_CASES.has(useCaseKey)
+    return availableModels.filter(m => {
+      if (!info.allowedProviders.includes(m.provider)) return false
+      const cat = m.category ?? 'text'
+      return wantsImage ? cat === 'image' : cat === 'text'
+    })
   }
 
   // --- Render ---

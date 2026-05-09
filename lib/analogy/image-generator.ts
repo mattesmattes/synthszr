@@ -58,17 +58,36 @@ async function applyNeonGreenMultiply(inputBuffer: Buffer): Promise<Buffer> {
 }
 
 /**
- * Get the configured image model from settings
+ * Get the configured image model from settings.
+ *
+ * Priority:
+ *   1. llm_model_config.image_generation (unified model-config UI)
+ *   2. analogy_image_model               (legacy dedicated key)
+ *   3. DEFAULT_MODEL
  */
 async function getImageModel(): Promise<string> {
   try {
     const supabase = createAdminClient()
-    const { data } = await supabase
+
+    // 1. Unified config from /admin/settings KI-Modelle tab
+    const { data: unified } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'llm_model_config')
+      .maybeSingle()
+    const fromUnified = (unified?.value as Record<string, string> | null)?.image_generation
+    if (fromUnified) return fromUnified
+
+    // 2. Legacy dedicated key (kept for back-compat)
+    const { data: legacy } = await supabase
       .from('settings')
       .select('value')
       .eq('key', 'analogy_image_model')
-      .single()
-    return data?.value?.model || DEFAULT_MODEL
+      .maybeSingle()
+    const fromLegacy = (legacy?.value as { model?: string } | null)?.model
+    if (fromLegacy) return fromLegacy
+
+    return DEFAULT_MODEL
   } catch {
     return DEFAULT_MODEL
   }

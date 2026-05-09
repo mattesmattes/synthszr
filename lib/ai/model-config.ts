@@ -16,6 +16,7 @@ export type UseCase =
   | 'podcast_script'
   | 'edit_analysis'
   | 'pattern_extraction'
+  | 'image_generation'
 
 export interface UseCaseInfo {
   label: string
@@ -72,6 +73,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     description: 'Muster aus wiederkehrenden Edits extrahieren',
     defaultModel: 'claude-sonnet-4-6-20260301',
     allowedProviders: ['anthropic'],
+  },
+  image_generation: {
+    label: 'Bildgenerierung',
+    description: 'Bilder für Analogie-Videos und redaktionelle Visuals',
+    defaultModel: 'google/gemini-3-pro-image',
+    allowedProviders: ['openai', 'google'],
   },
 }
 

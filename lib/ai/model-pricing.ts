@@ -21,6 +21,8 @@ export interface ModelInfo {
   name: string
   provider: 'anthropic' | 'openai' | 'google'
   pricing: ModelPricing
+  /** 'text' = LLM completion / chat. 'image' = image generation. */
+  category?: 'text' | 'image'
 }
 
 // Last verified: 2026-03-18
