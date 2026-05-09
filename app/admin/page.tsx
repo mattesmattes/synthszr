@@ -345,33 +345,58 @@ export default function AdminPage() {
       console.error('[Thumbnails] Pre-clean failed (continuing):', err)
     }
 
+    const MAX_ATTEMPTS = 3
     try {
       for (const article of articles) {
-        try {
-          const res = await fetch('/api/generate-article-thumbnails', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ postId, articles: [article] }),
-          })
-          const data = await res.json().catch(() => null)
-          // Refresh after each article so the grid fills in progressively
-          await fetchArticleThumbnails(postId)
-          // Carry over the transient model id from the response onto the
-          // freshly fetched thumbnail row.
-          const r = data?.results?.[0] as { success?: boolean; model?: string } | undefined
-          if (r?.success && r.model) {
-            setArticleThumbnails(prev =>
-              prev.map(t => t.article_index === article.index
-                ? { ...t, generation_model: r.model }
-                : t
-              )
-            )
-            setLastThumbnailModel(r.model)
+        let succeeded = false
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS && !succeeded; attempt++) {
+          try {
+            // Retry needs a clean slate: previous attempt may have left
+            // a 'failed' row that the server would skip on next POST.
+            if (attempt > 1) {
+              await fetch(`/api/generate-article-thumbnails?postId=${postId}&articleIndex=${article.index}`, {
+                method: 'DELETE',
+                credentials: 'include',
+              }).catch(() => {})
+            }
+
+            const res = await fetch('/api/generate-article-thumbnails', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ postId, articles: [article] }),
+            })
+            const data = await res.json().catch(() => null)
+            const r = data?.results?.[0] as { success?: boolean; model?: string; imageUrl?: string } | undefined
+
+            if (res.ok && r?.success && r?.imageUrl) {
+              succeeded = true
+              await fetchArticleThumbnails(postId)
+              if (r.model) {
+                setArticleThumbnails(prev =>
+                  prev.map(t => t.article_index === article.index
+                    ? { ...t, generation_model: r.model }
+                    : t
+                  )
+                )
+                setLastThumbnailModel(r.model)
+              }
+            } else {
+              console.warn(`[Thumbnails] Article ${article.index} attempt ${attempt}/${MAX_ATTEMPTS} did not return an image, retrying…`)
+            }
+          } catch (err) {
+            console.error(`[Thumbnails] Article ${article.index} attempt ${attempt}/${MAX_ATTEMPTS} failed:`, err)
           }
-        } catch (err) {
-          console.error(`[Thumbnails] Article ${article.index} failed:`, err)
-          // Keep going — other thumbnails should still be attempted
+
+          // Backoff before next attempt (skip after the last)
+          if (!succeeded && attempt < MAX_ATTEMPTS) {
+            await new Promise(resolve => setTimeout(resolve, attempt * 1500))
+          }
+        }
+        if (!succeeded) {
+          console.error(`[Thumbnails] Article ${article.index} gave up after ${MAX_ATTEMPTS} attempts`)
+          // Refresh anyway so the failed-state row shows in the grid
+          await fetchArticleThumbnails(postId).catch(() => {})
         }
       }
     } finally {
