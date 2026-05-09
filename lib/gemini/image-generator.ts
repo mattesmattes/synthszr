@@ -3,6 +3,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { createClient } from '@/lib/supabase/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { getModelForUseCase } from '@/lib/ai/model-config'
 
 // Use direct Google API instead of Vercel AI Gateway
 // Note: Direct API is geographically restricted - disabled due to "Image generation not available in your country" error
@@ -164,20 +165,69 @@ async function generateImageDirectGoogle(prompt: string): Promise<GenerateImageR
 }
 
 /**
- * Generate image using Vercel AI SDK (goes through Vercel AI Gateway)
+ * Generate image with OpenAI image models (gpt-image-2, dall-e-*) via the
+ * official OpenAI SDK images.generate endpoint.
  */
-async function generateImageVercelSDK(prompt: string): Promise<GenerateImageResult> {
+async function generateImageOpenAI(modelId: string, prompt: string): Promise<GenerateImageResult> {
+  if (!process.env.OPENAI_API_KEY) {
+    return { success: false, error: 'OPENAI_API_KEY not configured' }
+  }
+
+  console.log(`[OpenAI Images] Generating with ${modelId}...`)
+
+  const { default: OpenAI } = await import('openai')
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+  // gpt-image-* returns b64_json by default; only dall-e-* needs the
+  // response_format param (gpt-image rejects it as unknown parameter).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const params: any = {
+    model: modelId,
+    prompt,
+    n: 1,
+    size: '1024x1024',
+  }
+  if (modelId.startsWith('dall-e')) {
+    params.response_format = 'b64_json'
+  }
+
+  try {
+    const response = await client.images.generate(params)
+    const b64 = response.data?.[0]?.b64_json
+    if (!b64) {
+      return { success: false, error: 'OpenAI response had no b64_json image data' }
+    }
+
+    try {
+      const metadata = await sharp(Buffer.from(b64, 'base64')).metadata()
+      console.log(`[OpenAI Images] Image generated: ${metadata.width}x${metadata.height} (${metadata.format})`)
+    } catch {
+      console.log('[OpenAI Images] Image generated (could not read dimensions)')
+    }
+
+    return { success: true, imageBase64: b64, mimeType: 'image/png' }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[OpenAI Images] Error:', message)
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Generate image with Google models via Vercel AI SDK / AI Gateway.
+ * Used for gemini-X-image variants.
+ */
+async function generateImageGoogleSDK(model: string, prompt: string): Promise<GenerateImageResult> {
   const generateText = await getGenerateText()
   if (!generateText) {
     return { success: false, error: 'AI SDK not loaded' }
   }
 
-  console.log('[Gemini Vercel] Generating image with Vercel AI SDK (Gemini 3)...')
+  console.log(`[Google Images] Generating with ${model}...`)
 
-  // Use Vercel AI SDK with Gemini 3 model
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = await generateText({
-    model: 'google/gemini-3-pro-image' as any,
+    model: model as any,
     providerOptions: {
       google: {
         responseModalities: ['TEXT', 'IMAGE'],
@@ -191,19 +241,16 @@ async function generateImageVercelSDK(prompt: string): Promise<GenerateImageResu
     ],
   })
 
-  // Check for image in response files
   const imageFile = result.files?.[0]
   if (imageFile && imageFile.base64) {
-    // Log image dimensions
     try {
       const imgBuffer = Buffer.from(imageFile.base64, 'base64')
       const metadata = await sharp(imgBuffer).metadata()
-      console.log(`[Gemini Vercel] Image generated: ${metadata.width}x${metadata.height} (${metadata.format})`)
+      console.log(`[Google Images] Image generated: ${metadata.width}x${metadata.height} (${metadata.format})`)
     } catch {
-      console.log('[Gemini Vercel] Image generated (could not read dimensions)')
+      console.log('[Google Images] Image generated (could not read dimensions)')
     }
 
-    // Get mimeType
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mimeType = (imageFile as any).mimeType || (imageFile as any).mediaType
     if (!mimeType || mimeType === 'undefined') {
@@ -219,8 +266,27 @@ async function generateImageVercelSDK(prompt: string): Promise<GenerateImageResu
     }
   }
 
-  console.log('[Gemini Vercel] No image in response. Text:', result.text?.slice(0, 200))
+  console.log('[Google Images] No image in response. Text:', result.text?.slice(0, 200))
   return { success: false, error: 'No image generated in response' }
+}
+
+/**
+ * Route to the right image-generation provider based on the configured
+ * model in /admin/settings → KI-Modelle → Bildgenerierung.
+ *   "google/..."  → Vercel AI SDK + responseModalities
+ *   "openai/..."  → OpenAI SDK images.generate
+ *   bare "gemini-..." (legacy) → treated as Google
+ */
+async function generateImageVercelSDK(prompt: string): Promise<GenerateImageResult> {
+  const model = await getModelForUseCase('image_generation')
+
+  if (model.startsWith('openai/')) {
+    return generateImageOpenAI(model.replace(/^openai\//, ''), prompt)
+  }
+
+  // Google path: pass id as-is (the AI SDK handles both "google/..." and
+  // bare "gemini-..." for Google models).
+  return generateImageGoogleSDK(model, prompt)
 }
 
 /**

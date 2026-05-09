@@ -132,7 +132,7 @@ const USE_CASE_DEFINITIONS: Record<string, UseCaseInfo> = {
   },
   image_generation: {
     label: 'Bildgenerierung',
-    description: 'Bilder für Analogie-Videos und redaktionelle Visuals',
+    description: 'Article-Thumbnails und Cover-Bilder',
     defaultModel: 'google/gemini-3-pro-image',
     allowedProviders: ['openai', 'google'],
   },

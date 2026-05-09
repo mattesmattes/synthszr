@@ -24,7 +24,6 @@ import {
   ListTodo,
   Globe,
   Headphones,
-  Film,
   Megaphone,
   ClipboardEdit
 } from 'lucide-react'
@@ -106,11 +105,6 @@ const navGroups: NavGroup[] = [
         href: '/admin/audio',
         icon: Headphones,
         highlight: true
-      },
-      {
-        label: 'Analogy Machine',
-        href: '/admin/analogy-videos',
-        icon: Film
       },
       {
         label: 'Ad Promos',

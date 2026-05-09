@@ -1,7 +1,7 @@
 import {
   Shield, AlertTriangle, Lock, Globe, Server, Database,
   Mic, Brain, Radio, Music, Newspaper, BookOpen, Languages, TrendingUp,
-  PenTool, ListTodo, Mail, Layers, BarChart3, Clock, Film, Megaphone,
+  PenTool, ListTodo, Mail, Layers, BarChart3, Clock, Megaphone,
   Search, Bot, Workflow, Send, Inbox
 } from 'lucide-react'
 
@@ -49,7 +49,6 @@ export default function ArchitecturePage() {
           <TocLink href="#ad-promos">Ad Promos</TocLink>
           <TocLink href="#tip-promos">Tip Promos</TocLink>
           <TocLink href="#edit-learning">Edit Learning</TocLink>
-          <TocLink href="#analogy-machine">Analogy Machine</TocLink>
           <TocLink href="#statistics">Statistics & Analytics</TocLink>
           <TocLink href="#scheduler">Cron Scheduler</TocLink>
           <TocLink href="#seo">SEO & Sitemap</TocLink>
@@ -77,10 +76,9 @@ export default function ArchitecturePage() {
         <Subsection title="Hosting & Deployment (Vercel)">
           <ul className="list-disc pl-5 space-y-1 text-sm">
             <li><strong>Vercel</strong> hosts the entire app — single project, production on <Code>synthszr.com</Code>, preview URLs per PR.</li>
-            <li><strong>Vercel Blob</strong> stores ad-promo images, article thumbnails, podcast mp3s, and analogy-machine video artifacts (public bucket).</li>
+            <li><strong>Vercel Blob</strong> stores ad-promo images, article thumbnails, and podcast mp3s (public bucket).</li>
             <li><strong>Vercel Cron</strong> schedules every route under <Code>/api/cron/*</Code>; auth via <Code>Bearer CRON_SECRET</Code> or <Code>x-vercel-cron</Code> header.</li>
             <li><strong>Vercel Analytics</strong> (<Code>@vercel/analytics</Code>) for base web-vitals alongside our own <Code>analytics_events</Code> table.</li>
-            <li><strong>Remotion Lambda</strong> (via <Code>@remotion/lambda</Code>) renders the final Analogy-Machine compositions.</li>
           </ul>
         </Subsection>
 
@@ -160,7 +158,7 @@ export default function ArchitecturePage() {
         <Subsection title="Anthropic Claude (text generation + reasoning)">
           <ul className="list-disc pl-5 space-y-1 text-sm">
             <li><strong>Claude Opus 4.6</strong> (<Code>claude-opus-4-6-20260301</Code>) — Ghostwriter plan + main generation when settings select Opus.</li>
-            <li><strong>Claude Sonnet 4.6</strong> (<Code>claude-sonnet-4-6-20260301</Code>) — default Ghostwriter model; also used for analogy extraction and edit-diff classification.</li>
+            <li><strong>Claude Sonnet 4.6</strong> (<Code>claude-sonnet-4-6-20260301</Code>) — default Ghostwriter model; also used for edit-diff classification.</li>
             <li><strong>Claude Haiku 4.5</strong> (<Code>claude-haiku-4-5-20251001</Code>) — fast paths: proofread pass, translation, edit clustering.</li>
             <li>Integration via official <Code>@anthropic-ai/sdk</Code>; uses <strong>prompt caching</strong> on long system prompts (post-refactor pattern).</li>
             <li>Older model IDs (<Code>opus-4</Code>, <Code>sonnet-4</Code>, <Code>haiku-3.5</Code>) are kept as fallback strings for admin settings migration; not part of the live path.</li>
@@ -171,7 +169,8 @@ export default function ArchitecturePage() {
           <ul className="list-disc pl-5 space-y-1 text-sm">
             <li><strong>gpt-5.4</strong> / <strong>gpt-5.4-mini</strong> / <strong>gpt-5.4-nano</strong> — available in the admin settings for any task that prefers OpenAI.</li>
             <li><strong>gpt-4o</strong> / <strong>gpt-4o-mini</strong> — legacy supported for cache compatibility.</li>
-            <li><strong>gpt-4o-mini-tts</strong> — podcast + analogy-video voiceover. Supports emotion <em>instructions</em> prompt (voice + tone). Streams MP3 chunks.</li>
+            <li><strong>gpt-4o-mini-tts</strong> — podcast voiceover. Supports emotion <em>instructions</em> prompt (voice + tone). Streams MP3 chunks.</li>
+            <li><strong>gpt-image-2</strong> — image generation, alternative to Gemini for article thumbnails (admin-selectable in <Code>/admin/settings</Code>).</li>
             <li>Voices: <Code>marin</Code> (Synthszr guest) + <Code>cedar</Code> (host) — configured in <Code>settings</Code>.</li>
             <li>Integration via <Code>openai</Code> npm package.</li>
           </ul>
@@ -183,8 +182,7 @@ export default function ArchitecturePage() {
             <li><strong>Gemini 2.5 Flash</strong> &amp; <strong>2.5 Flash Lite</strong> — bulk translations (EN), default fallback when 2.5 Pro is overloaded.</li>
             <li><strong>Gemini 2.0 Flash</strong> — legacy fallback.</li>
             <li><strong>gemini-embedding-001</strong> — 768-dim embeddings for <Code>daily_repo</Code>, <Code>news_queue</Code>, <Code>edit_diffs</Code>, powering pgvector similarity search.</li>
-            <li><strong>Gemini 3 Pro Image</strong> (<Code>google/gemini-3-pro-image</Code>, via Vercel AI SDK) — Analogy Machine image generation (default; admin-overridable).</li>
-            <li><strong>Veo 3.1</strong> (<Code>google/veo-3.1-generate-001</Code>, via Vercel AI SDK) — text-to-video for Analogy Machine (9:16 TikTok format).</li>
+            <li><strong>Gemini 3 Pro Image</strong> (<Code>google/gemini-3-pro-image</Code>, via Vercel AI SDK) — default image generator for article thumbnails (admin-overridable to OpenAI gpt-image-2).</li>
             <li>Integrations via <Code>@google/genai</Code>, <Code>@google/generative-ai</Code> (legacy), and <Code>@ai-sdk/google</Code> for AI SDK-powered flows.</li>
           </ul>
         </Subsection>
@@ -209,9 +207,7 @@ export default function ArchitecturePage() {
                 <tr className="border-b border-border/50"><td className="py-1 pr-4">Translation (CS, NDS)</td><td className="py-1">Gemini 2.5 Pro</td><td className="py-1">Retry + fallback to Flash</td></tr>
                 <tr className="border-b border-border/50"><td className="py-1 pr-4">Embeddings</td><td className="py-1">gemini-embedding-001</td><td className="py-1">768-dim, cosine similarity</td></tr>
                 <tr className="border-b border-border/50"><td className="py-1 pr-4">Podcast TTS</td><td className="py-1">gpt-4o-mini-tts</td><td className="py-1">marin + cedar voices, emotion instructions</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4">Analogy images</td><td className="py-1">Gemini 3 Pro Image</td><td className="py-1">Via Vercel AI SDK</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4">Analogy videos</td><td className="py-1">Veo 3.1</td><td className="py-1">9:16 vertical, negative prompts for text-suppression</td></tr>
-                <tr><td className="py-1 pr-4">Analogy extraction</td><td className="py-1">Claude Sonnet 4.6</td><td className="py-1">JSON-repair on output</td></tr>
+                <tr><td className="py-1 pr-4">Article thumbnails</td><td className="py-1">Gemini 3 Pro Image</td><td className="py-1">Admin-selectable (alt: OpenAI gpt-image-2)</td></tr>
               </tbody>
             </table>
           </div>
@@ -1042,45 +1038,6 @@ export default function ArchitecturePage() {
       </Section>
 
       {/* ============================================ */}
-      {/* ANALOGY MACHINE */}
-      {/* ============================================ */}
-      <Section id="analogy-machine" icon={<Film className="h-5 w-5" />} title="Analogy Machine">
-        <Subsection title="Pipeline Overview">
-          <p className="text-sm text-muted-foreground mb-2">
-            Blog post → analogy extraction → image (Flux + neon tint) → TTS → video (Veo 3.1)
-          </p>
-          <ol className="list-decimal pl-5 space-y-1 text-sm">
-            <li>Post dropdown selector in <Code>/admin/analogy-videos</Code></li>
-            <li>Machine extractor finds analogies with a character-level JSON-repair state machine</li>
-            <li>Greek Mythology image style (marble statue) in 9:16 portrait format</li>
-            <li>Neon green (#CCFF00) multiply tint on images</li>
-            <li>TTS with podcast guest voice (OpenAI)</li>
-            <li>Video generation via Vercel AI SDK 6 <Code>experimental_generateVideo</Code></li>
-            <li>Audio merge via FFmpeg WASM + Remotion composition</li>
-          </ol>
-        </Subsection>
-
-        <Subsection title="The Machine Concept">
-          <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li>Dedicated video for &quot;The Machine&quot; theme (Veo 3.1, 720p)</li>
-            <li>Negative prompts suppress AI-generated fake text</li>
-            <li>Fail-fast on AI credit exhaustion with dismissible admin alert</li>
-            <li>English UI output, video button for existing items</li>
-          </ul>
-        </Subsection>
-
-        <FileTable files={[
-          ['app/admin/analogy-videos/page.tsx', 'Analogy Machine UI'],
-          ['app/api/analogy-videos/route.ts', 'Pipeline trigger CRUD'],
-          ['lib/analogy/extractor.ts', 'Analogy extraction from posts'],
-          ['lib/analogy/machine-extractor.ts', 'The Machine concept extractor'],
-          ['lib/analogy/image-generator.ts', 'Flux + neon multiply tint'],
-          ['lib/analogy/video-generator.ts', 'Veo 3.1 integration'],
-          ['lib/analogy/json-repair.ts', 'Character-level JSON state machine'],
-        ]} />
-      </Section>
-
-      {/* ============================================ */}
       {/* STATISTICS & ANALYTICS (link alias for toc) */}
       {/* ============================================ */}
       <Section id="statistics" icon={<BarChart3 className="h-5 w-5" />} title="Statistics & Analytics (see §8)">
@@ -1317,7 +1274,6 @@ export default function ArchitecturePage() {
                 <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">discovered_companies</td><td className="py-1">Auto-discovered companies from articles</td></tr>
                 <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">ad_promos</td><td className="py-1">Admin-managed promo blocks for web + newsletter</td></tr>
                 <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">tip_promos</td><td className="py-1">Admin-managed &quot;Tipp des Tages&quot; boxes injected before Synthszr Take</td></tr>
-                <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">analogy_videos</td><td className="py-1">Analogy Machine pipeline items (image, audio, video URLs)</td></tr>
                 <tr className="border-b border-border/50"><td className="py-1 pr-4 font-mono text-foreground">schedule_config</td><td className="py-1">Cron task configuration (Berlin/MEZ times)</td></tr>
                 <tr><td className="py-1 pr-4 font-mono text-foreground">settings</td><td className="py-1">Central AI model selection, voices, feature flags</td></tr>
               </tbody>
