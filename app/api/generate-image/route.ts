@@ -69,8 +69,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Step 1: Generate raw image
-    const rawResult = await generateSatiricalImage(newsText)
+    // Step 1: Generate raw image. fast=true switches OpenAI gpt-image-2
+    // to quality:'low' — output is dithered + color-quantized in later
+    // steps, so quality difference is invisible and we save ~3× time.
+    const rawResult = await generateSatiricalImage(newsText, { fast: true })
     if (!rawResult.success || !rawResult.imageBase64) {
       await supabase
         .from('post_images')
@@ -347,8 +349,9 @@ export async function PUT(request: NextRequest) {
         )
       }
 
-      // Step 1: Generate raw image (once — used for both web + email versions)
-      const rawResult = await generateSatiricalImage(coverNews)
+      // Step 1: Generate raw image (once — used for web + email + desktop).
+      // fast=true → OpenAI quality:'low'; invisible after dithering.
+      const rawResult = await generateSatiricalImage(coverNews, { fast: true })
 
       if (!rawResult.success || !rawResult.imageBase64) {
         await supabase
@@ -556,8 +559,8 @@ export async function PUT(request: NextRequest) {
           continue
         }
 
-        // Step 1: Generate raw image
-        const rawResult = await generateSatiricalImage(item.text)
+        // Step 1: Generate raw image. fast=true → OpenAI quality:'low'.
+        const rawResult = await generateSatiricalImage(item.text, { fast: true })
         if (!rawResult.success || !rawResult.imageBase64) {
           await supabase
             .from('post_images')

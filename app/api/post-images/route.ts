@@ -279,9 +279,9 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Step 1: Generate raw image
+    // Step 1: Generate raw image. fast=true → OpenAI quality:'low'.
     console.log(`[Recreate] Regenerating image ${imageId}...`)
-    const rawResult = await generateSatiricalImage(image.source_text)
+    const rawResult = await generateSatiricalImage(image.source_text, { fast: true })
 
     if (!rawResult.success || !rawResult.imageBase64) {
       await supabase
