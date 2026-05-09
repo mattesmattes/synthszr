@@ -779,6 +779,10 @@ export async function generateEmailCover(
   rawImageBase64: string
 ): Promise<{ base64: string; mimeType: string }> {
   const EMAIL_COVER_SIZE = 604
+  // gpt-image-2 / Gemini frequently returns a 1:1 PNG with ~10–15% black
+  // bars at the top and bottom. Trim that vertical region BEFORE the
+  // square crop so the email cover doesn't inherit the letterbox.
+  const VERTICAL_LETTERBOX_TRIM_PCT = 0.15
   const imageBuffer = Buffer.from(rawImageBase64, 'base64')
 
   // Get image metadata for center-crop
@@ -786,10 +790,13 @@ export async function generateEmailCover(
   const { width, height } = metadata
   if (!width || !height) throw new Error('Invalid image dimensions')
 
-  // Step 1+2+3: Center-crop to square, resize to 604px, normalise contrast
-  const cropSize = Math.min(width, height)
+  // Step 1: Trim ~15% from the top and bottom to drop the letterbox
+  // produced by image models, then center-crop the remainder to square.
+  const trimmedHeight = Math.max(1, Math.floor(height * (1 - 2 * VERTICAL_LETTERBOX_TRIM_PCT)))
+  const trimmedTop = Math.floor((height - trimmedHeight) / 2)
+  const cropSize = Math.min(width, trimmedHeight)
   const left = Math.floor((width - cropSize) / 2)
-  const top = Math.floor((height - cropSize) / 2)
+  const top = trimmedTop + Math.floor((trimmedHeight - cropSize) / 2)
 
   const resizedBuffer = await sharp(imageBuffer)
     .extract({ left, top, width: cropSize, height: cropSize })
