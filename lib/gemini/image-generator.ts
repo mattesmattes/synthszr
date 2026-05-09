@@ -176,11 +176,15 @@ async function generateImageDirectGoogle(prompt: string): Promise<GenerateImageR
  * @param fast — when true, uses quality:'low' on gpt-image-* models to
  *   roughly cut generation time to a third. Safe for thumbnails because
  *   they're heavily downscaled and dithered before display.
+ * @param aspectRatio — 'square' (1024×1024, default) for thumbnails,
+ *   'landscape' (1536×1024, 3:2) for cover images. dall-e-* always
+ *   uses 1024×1024 regardless (it doesn't support 1536×1024).
  */
 async function generateImageOpenAI(
   modelId: string,
   prompt: string,
-  fast: boolean = false
+  fast: boolean = false,
+  aspectRatio: 'square' | 'landscape' = 'square'
 ): Promise<GenerateImageResult> {
   if (!process.env.OPENAI_API_KEY) {
     return { success: false, error: 'OPENAI_API_KEY not configured' }
@@ -193,15 +197,18 @@ async function generateImageOpenAI(
 
   // gpt-image-* returns b64_json by default; only dall-e-* needs the
   // response_format param (gpt-image rejects it as unknown parameter).
-  // Generate at 1536×1024 (3:2 landscape) — closest gpt-image-2 offers
-  // to 16:9. Downstream pipeline crops to web/email targets without
-  // having to upscale a square source.
+  // Cover images request landscape 1536×1024 (3:2). Thumbnails stay 1:1.
+  // dall-e-* doesn't support 1536×1024, always 1024×1024.
+  const isDalle = modelId.startsWith('dall-e')
+  const size = isDalle
+    ? '1024x1024'
+    : aspectRatio === 'landscape' ? '1536x1024' : '1024x1024'
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const params: any = {
     model: modelId,
     prompt,
     n: 1,
-    size: modelId.startsWith('dall-e') ? '1024x1024' : '1536x1024',
+    size,
   }
   if (modelId.startsWith('dall-e')) {
     params.response_format = 'b64_json'
@@ -300,16 +307,24 @@ async function generateImageGoogleSDK(model: string, prompt: string): Promise<Ge
  *
  * @param fast — passed to provider helpers; OpenAI uses it to switch to
  *   quality:'low' for ~3× speedup. Google ignores it (Gemini is already fast).
+ * @param aspectRatio — 'landscape' for covers, 'square' for thumbnails.
+ *   OpenAI honors this via the size param. Google ignores it (image
+ *   format comes from the prompt template).
  */
-async function generateImageVercelSDK(prompt: string, fast: boolean = false): Promise<GenerateImageResult> {
+async function generateImageVercelSDK(
+  prompt: string,
+  fast: boolean = false,
+  aspectRatio: 'square' | 'landscape' = 'square'
+): Promise<GenerateImageResult> {
   const model = await getModelForUseCase('image_generation')
 
   if (model.startsWith('openai/')) {
-    return generateImageOpenAI(model.replace(/^openai\//, ''), prompt, fast)
+    return generateImageOpenAI(model.replace(/^openai\//, ''), prompt, fast, aspectRatio)
   }
 
   // Google path: pass id as-is (the AI SDK handles both "google/..." and
-  // bare "gemini-..." for Google models).
+  // bare "gemini-..." for Google models). aspect ratio is controlled
+  // by the prompt template, not a request param.
   return generateImageGoogleSDK(model, prompt)
 }
 
@@ -328,16 +343,19 @@ export interface CoverImageNews {
  * Supports single newsText string OR multiple news items for cover images
  *
  * @param options.fast — when true, OpenAI image models are called with
- *   quality:'low' (~3× faster). Use for thumbnails. Cover images should
- *   keep the default for visual quality.
+ *   quality:'low' (~3× faster). Use for thumbnails.
+ * @param options.aspectRatio — 'landscape' (3:2) for cover images, 'square'
+ *   (1:1, default) for thumbnails. OpenAI honors this via gpt-image-2
+ *   size; Google steers it via the prompt template.
  */
 export async function generateSatiricalImage(
   newsTextOrItems: string | CoverImageNews,
-  options: { fast?: boolean } = {}
+  options: { fast?: boolean; aspectRatio?: 'square' | 'landscape' } = {}
 ): Promise<GenerateImageResult> {
   const maxRetries = 3
   let lastError: Error | null = null
   const fast = options.fast === true
+  const aspectRatio = options.aspectRatio ?? 'square'
 
   const promptTemplate = await getActiveImagePrompt()
 
@@ -365,7 +383,7 @@ export async function generateSatiricalImage(
 
       const result = USE_DIRECT_GOOGLE_API
         ? await generateImageDirectGoogle(prompt)
-        : await generateImageVercelSDK(prompt, fast)
+        : await generateImageVercelSDK(prompt, fast, aspectRatio)
 
       if (result.success) {
         // Trim solid-black letterbox bands the image model may have baked

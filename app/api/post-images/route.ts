@@ -280,8 +280,9 @@ export async function PUT(request: NextRequest) {
     }
 
     // Step 1: Generate raw image. fast=true → OpenAI quality:'low'.
+    // Recreate is for cover images — 3:2 landscape source.
     console.log(`[Recreate] Regenerating image ${imageId}...`)
-    const rawResult = await generateSatiricalImage(image.source_text, { fast: true })
+    const rawResult = await generateSatiricalImage(image.source_text, { fast: true, aspectRatio: 'landscape' })
 
     if (!rawResult.success || !rawResult.imageBase64) {
       await supabase
