@@ -9,6 +9,8 @@ import { AdPromo } from "@/components/ad-promo"
 import { SwipeNavigation } from "@/components/swipe-navigation"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
+import { HomeSearch } from "@/components/home-search"
+import { PostSearchHighlight } from "@/components/post-search-highlight"
 import { AudioPlayer } from "@/components/audio-player"
 import { PodcastBadges } from "@/components/podcast-badges"
 import { ArrowLeft, ArrowRight } from "lucide-react"
@@ -341,20 +343,12 @@ export default async function PostPage({ params }: PageProps) {
           <BloomLanguageSwitcher currentLocale={locale} />
         </Suspense>
 
-        <Link
-          href={`/${locale}/why`}
-          className="block mb-6 text-center hover:opacity-80 transition-opacity"
-        >
-          <span className="text-lg font-bold tracking-tight">
-            Feed the Soul. Run the System.
-          </span>
-          <br />
-          <span className="text-sm text-muted-foreground">
-            Your news and podcast synthesis to start the day.
-          </span>
-        </Link>
+        <HomeSearch locale={locale} />
+        <Suspense fallback={null}>
+          <PostSearchHighlight targetId="post-article" />
+        </Suspense>
 
-        <article>
+        <article id="post-article">
           {/* Cover Image with centered Logo overlay - links to home */}
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
           {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}

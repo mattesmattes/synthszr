@@ -31,6 +31,33 @@ interface HomeSearchProps {
   locale?: string
 }
 
+/**
+ * Wraps each match of `query` inside `text` with a <mark> element so
+ * the dropdown shows where the match is. Falls back to plain text if
+ * the query is empty or has no match.
+ */
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  const trimmed = query.trim()
+  if (!trimmed) return <>{text}</>
+  // Escape regex metacharacters in the query
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${escaped})`, 'gi')
+  const parts = text.split(regex)
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <mark key={i} className="bg-neon-cyan/60 text-foreground rounded-sm px-0.5">
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  )
+}
+
 export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResults | null>(null)
@@ -104,7 +131,11 @@ export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
                 </header>
                 <ul className="divide-y divide-border">
                   {results.posts.map((p) => {
-                    const href = locale === 'de' ? `/posts/${p.slug}` : `/${locale}/posts/${p.slug}`
+                    // Pass the query through to the post page so the
+                    // article body can highlight matches in place.
+                    const base = locale === 'de' ? `/posts/${p.slug}` : `/${locale}/posts/${p.slug}`
+                    const href = `${base}?q=${encodeURIComponent(query.trim())}`
+                    const previewText = p.snippet || p.excerpt || ''
                     return (
                       <li key={p.id}>
                         <Link
@@ -112,10 +143,12 @@ export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
                           className="block px-4 py-3 hover:bg-muted/30 transition-colors"
                           onClick={() => setQuery('')}
                         >
-                          <div className="font-medium text-sm leading-snug">{p.title}</div>
-                          {(p.snippet || p.excerpt) && (
+                          <div className="font-medium text-sm leading-snug">
+                            <HighlightedText text={p.title} query={query} />
+                          </div>
+                          {previewText && (
                             <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                              {p.snippet || p.excerpt}
+                              <HighlightedText text={previewText} query={query} />
                             </div>
                           )}
                         </Link>
