@@ -52,11 +52,14 @@ async function cropAndResizeToSquare(imageBase64: string): Promise<string> {
   const left = Math.floor((width - cropSize) / 2)
   const top = Math.floor((height - cropSize) / 2)
 
-  // Crop to square, resize, and normalize contrast before dithering
+  // Crop to square, resize, normalize, then add a midtone-anchored
+  // contrast bump (linear 1.4*in - 50) so the dithering pass produces
+  // crisper black/white separation.
   const resizedBuffer = await sharp(imageBuffer)
     .extract({ left, top, width: cropSize, height: cropSize })
     .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
-    .normalise() // Stretch histogram for full contrast range
+    .normalise()
+    .linear(1.4, -50)
     .png()
     .toBuffer()
 

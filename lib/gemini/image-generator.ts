@@ -726,6 +726,11 @@ export async function generateAndProcessImage(
         const resized = await sharp(buf)
           .resize(targetWidth, targetHeight, { fit: 'cover', position: 'top', kernel: sharp.kernel.lanczos3 })
           .normalise()
+          // Punchier black/white separation before dithering. Linear
+          // out = 1.4*in - 50 keeps midtone (128) anchored, pushes
+          // shadows darker and highlights brighter so the Floyd-Steinberg
+          // pass can quantize harder edges.
+          .linear(1.4, -50)
           .png()
           .toBuffer()
         processedBase64 = resized.toString('base64')
@@ -789,6 +794,7 @@ export async function generateDesktopCover(
   const resizedBuffer = await sharp(imageBuffer)
     .resize(DESKTOP_WIDTH, DESKTOP_HEIGHT, { fit: 'cover', position: 'top', kernel: sharp.kernel.lanczos3 })
     .normalise()
+    .linear(1.4, -50) // contrast bump (see generateAndProcessImage)
     .png()
     .toBuffer()
 
@@ -846,6 +852,7 @@ export async function generateEmailCover(
     .extract({ left, top, width: cropSize, height: cropSize })
     .resize(EMAIL_COVER_SIZE, EMAIL_COVER_SIZE, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
     .normalise()
+    .linear(1.4, -50) // contrast bump (see generateAndProcessImage)
     .png()
     .toBuffer()
 
