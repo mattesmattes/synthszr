@@ -102,6 +102,10 @@ export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
   const [loading, setLoading] = useState(false)
   const [openCompany, setOpenCompany] = useState<CompanyHit | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // In-memory LRU-ish cache keyed by `${locale}:${query}`. Avoids
+  // re-fetching when the user clears + retypes the same word, or
+  // pastes the same query twice within a session.
+  const cacheRef = useRef<Map<string, SearchResults>>(new Map())
   const strings = getStrings(locale)
 
   useEffect(() => {
@@ -112,18 +116,35 @@ export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
     }
 
     const handle = setTimeout(async () => {
+      const trimmed = query.trim()
+      const cacheKey = `${locale}:${trimmed.toLowerCase()}`
+
+      // Hit the cache first — instant for repeat queries.
+      const cached = cacheRef.current.get(cacheKey)
+      if (cached) {
+        setResults(cached)
+        setLoading(false)
+        return
+      }
+
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
 
       setLoading(true)
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}&locale=${encodeURIComponent(locale)}`, {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}&locale=${encodeURIComponent(locale)}`, {
           signal: controller.signal,
         })
         if (res.ok) {
           const data = (await res.json()) as SearchResults
           setResults(data)
+          // Cache up to 50 queries; drop the oldest (insertion order).
+          cacheRef.current.set(cacheKey, data)
+          if (cacheRef.current.size > 50) {
+            const firstKey = cacheRef.current.keys().next().value
+            if (firstKey !== undefined) cacheRef.current.delete(firstKey)
+          }
         }
       } catch (err) {
         // Aborted requests throw; ignore them

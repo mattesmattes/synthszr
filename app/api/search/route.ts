@@ -40,6 +40,11 @@ const FETCH_LIMIT = 500
 const EMBEDDING_TOP_K = 30
 // Minimum cosine similarity to keep an embedding hit.
 const EMBEDDING_THRESHOLD = 0.35
+// Skip LLM re-rank below these thresholds — short queries and small
+// candidate sets don't benefit much, and the round-trip dominates the
+// total response time.
+const RERANK_MIN_QUERY_LEN = 5
+const RERANK_MIN_CANDIDATES = 4
 
 function tiptapToPlain(content: unknown): string {
   if (!content) return ''
@@ -113,19 +118,21 @@ export async function GET(request: NextRequest) {
     }
   })()
 
-  // For non-default locales, swap the AI corpus for the translated
-  // version (content_translations) and skip manual posts (those aren't
-  // translated). For DE, keep the original behavior.
+  // For substring recall we only need title + excerpt. Skipping the
+  // jsonb content column shrinks payload by ~10× and lets PostgREST
+  // cache the metadata page. Embedding hits already come back from
+  // the RPC with full content, so content snippets still work for the
+  // semantic-only matches.
   const aiCorpusPromise = isDefaultLocale
     ? supabase
         .from('generated_posts')
-        .select('id, title, slug, excerpt, content, created_at')
+        .select('id, title, slug, excerpt, created_at')
         .eq('status', 'published')
         .order('created_at', { ascending: false })
         .limit(FETCH_LIMIT)
     : supabase
         .from('content_translations')
-        .select('generated_post_id, title, slug, excerpt, content, generated_posts!inner(id, status, created_at)')
+        .select('generated_post_id, title, slug, excerpt, generated_posts!inner(id, status, created_at)')
         .eq('language_code', locale)
         .eq('translation_status', 'completed')
         .eq('generated_posts.status', 'published')
@@ -137,7 +144,7 @@ export async function GET(request: NextRequest) {
     isDefaultLocale
       ? supabase
           .from('posts')
-          .select('id, title, slug, excerpt, content, created_at')
+          .select('id, title, slug, excerpt, created_at')
           .eq('published', true)
           .order('created_at', { ascending: false })
           .limit(FETCH_LIMIT)
@@ -147,12 +154,13 @@ export async function GET(request: NextRequest) {
   ])
 
   // Normalize translation rows to the same shape as generated_posts.
+  // No content field — substring search runs on title + excerpt only;
+  // semantic recall covers the body via the embedding RPC.
   type NormalizedPost = {
     id: string
     title: string
     slug: string
     excerpt: string | null
-    content: unknown
     created_at: string
     type: 'manual' | 'ai'
   }
@@ -168,7 +176,6 @@ export async function GET(request: NextRequest) {
       title: string | null
       slug: string | null
       excerpt: string | null
-      content: unknown
       generated_posts: { id: string; status: string; created_at: string } | { id: string; status: string; created_at: string }[] | null
     }
     for (const t of (aiResult.data || []) as unknown as TranslationJoin[]) {
@@ -182,7 +189,6 @@ export async function GET(request: NextRequest) {
         title: t.title,
         slug: t.slug,
         excerpt: t.excerpt ?? null,
-        content: t.content,
         created_at: parent.created_at,
         type: 'ai',
       })
@@ -194,8 +200,10 @@ export async function GET(request: NextRequest) {
     ...aiNormalized,
   ]
 
-  // Filter: hit if query appears in title, excerpt, OR plain-text content.
-  // Snippet preference: content snippet > excerpt-as-snippet > null.
+  // Substring filter: hit if query appears in title or excerpt.
+  // The full body is no longer fetched here for speed — the embedding
+  // RPC catches body matches semantically (and usually ranks them
+  // higher than literal substrings anyway).
   const hits: PostHit[] = []
   for (const p of allPosts) {
     const title = (p.title || '').toLowerCase()
@@ -203,22 +211,11 @@ export async function GET(request: NextRequest) {
     const inTitle = title.includes(lowerQuery)
     const inExcerpt = excerpt.includes(lowerQuery)
 
-    let plain = ''
-    let inContent = false
-    if (!inTitle && !inExcerpt) {
-      plain = tiptapToPlain(p.content)
-      inContent = plain.toLowerCase().includes(lowerQuery)
-    }
+    if (!inTitle && !inExcerpt) continue
 
-    if (!inTitle && !inExcerpt && !inContent) continue
-
-    // Build a snippet from whichever field actually matched
-    let snippet: string | null = null
-    if (inContent) {
-      snippet = buildSnippet(plain, rawQuery)
-    } else if (inExcerpt) {
-      snippet = buildSnippet(p.excerpt || '', rawQuery)
-    }
+    const snippet: string | null = inExcerpt
+      ? buildSnippet(p.excerpt || '', rawQuery)
+      : null
 
     hits.push({
       id: p.id,
@@ -297,8 +294,15 @@ export async function GET(request: NextRequest) {
       return true
     })
 
-  // LLM re-rank for semantic relevance, then trim to MAX_POSTS
-  const reranked = await rerankPostHits(rawQuery, dedupedPosts)
+  // LLM re-rank only when it's likely to add value: enough candidates
+  // and a query long enough to disambiguate. Short queries / small
+  // result sets don't benefit and the round-trip dominates latency.
+  const shouldRerank =
+    rawQuery.length >= RERANK_MIN_QUERY_LEN &&
+    dedupedPosts.length >= RERANK_MIN_CANDIDATES
+  const reranked = shouldRerank
+    ? await rerankPostHits(rawQuery, dedupedPosts)
+    : dedupedPosts
   const finalPosts = reranked.slice(0, MAX_POSTS)
 
   // 3. Company dictionary match — case-insensitive substring
