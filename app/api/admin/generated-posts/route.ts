@@ -6,6 +6,7 @@ import { syncPostCompanyMentions } from '@/lib/companies/sync'
 import { queueTranslations } from '@/lib/translations/queue'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
 import { generatePostAudio, getTTSSettings } from '@/lib/tts/openai-tts'
+import { embedPostContent, upsertPostEmbedding } from '@/lib/search/embeddings'
 
 export async function GET() {
   const session = await getSession()
@@ -112,6 +113,20 @@ export async function PUT(request: NextRequest) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Refresh search embedding whenever content changed on a published
+    // post. Async + non-blocking. Errors are logged, never thrown — the
+    // post update should succeed even if Gemini is rate-limited.
+    if (content && (status === 'published' || data?.status === 'published')) {
+      embedPostContent({
+        title: data?.title,
+        excerpt: data?.excerpt,
+        content,
+      })
+        .then((vec) => upsertPostEmbedding(id, vec))
+        .then(() => console.log(`[search] Embedding refreshed for post ${id}`))
+        .catch((err) => console.error(`[search] Embedding refresh failed for post ${id}:`, err))
     }
 
     // Pre-generate Stock-Synthszr when publishing (async, don't block response)

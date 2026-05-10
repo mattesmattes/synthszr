@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
+import { embedQuery } from '@/lib/search/embeddings'
+import { rerankPostHits } from '@/lib/search/rerank'
 
-// Search across post titles, excerpts, and full body content, plus a
-// dictionary match against the known-company list.
-//
-// We do the filtering in Node rather than via PostgREST .ilike on the
-// jsonb content column: TipTap content is stored as jsonb and ILIKE
-// against jsonb requires explicit ::text casting, which Supabase's
-// REST client doesn't expose cleanly. Fetching the recent corpus
-// (capped at FETCH_LIMIT) and filtering in memory is fast for the
-// current size and gives us precise snippet extraction in one pass.
+// Search pipeline:
+//   1. Embedding similarity over generated_posts (semantic recall)
+//   2. Substring match over title / excerpt / plain content of every
+//      post type (exact-keyword recall — catches recent posts that
+//      don't yet have an embedding, plus literal terms like product
+//      names that embeddings sometimes lose)
+//   3. Merge + de-dupe by slug (manual posts win)
+//   4. LLM re-rank top-N via Claude Haiku for "really relevant first"
+//   5. Return top MAX_POSTS, plus separate company dictionary hits
 
 interface PostHit {
   id: string
@@ -30,9 +33,13 @@ interface CompanyHit {
 
 const MAX_POSTS = 8
 const MAX_COMPANIES = 6
-// How many recent posts to scan in Node. 500 covers years of daily
-// newsletters; raise if/when we need to.
+// How many recent posts to scan in Node for substring recall. 500
+// covers years of daily newsletters; raise if/when needed.
 const FETCH_LIMIT = 500
+// How many semantic neighbors the embedding RPC returns before merge.
+const EMBEDDING_TOP_K = 30
+// Minimum cosine similarity to keep an embedding hit.
+const EMBEDDING_THRESHOLD = 0.35
 
 function tiptapToPlain(content: unknown): string {
   if (!content) return ''
@@ -74,9 +81,37 @@ export async function GET(request: NextRequest) {
   const lowerQuery = rawQuery.toLowerCase()
 
   const supabase = await createClient()
+  const admin = createAdminClient() // for the vector RPC (server-side only)
 
-  // Fetch a generous slice of recent published posts; filter in Node.
-  const [manualResult, aiResult] = await Promise.all([
+  // Fire all three lookups in parallel:
+  //   - manual posts (substring recall)
+  //   - AI posts (substring recall)
+  //   - AI posts via embedding similarity (semantic recall)
+  const embeddingPromise = (async () => {
+    try {
+      const queryVec = await embedQuery(rawQuery)
+      if (queryVec.length === 0) return []
+      const { data, error } = await admin.rpc('match_generated_posts', {
+        query_embedding: queryVec as unknown as string,
+        match_threshold: EMBEDDING_THRESHOLD,
+        match_count: EMBEDDING_TOP_K,
+      })
+      if (error) {
+        console.warn('[Search] match_generated_posts RPC failed:', error.message)
+        return []
+      }
+      return (data as Array<{
+        id: string; title: string; slug: string
+        excerpt: string | null; content: unknown
+        created_at: string; similarity: number
+      }>) || []
+    } catch (err) {
+      console.warn('[Search] embedding lookup failed:', err)
+      return []
+    }
+  })()
+
+  const [manualResult, aiResult, embeddingHits] = await Promise.all([
     supabase
       .from('posts')
       .select('id, title, slug, excerpt, content, created_at')
@@ -89,6 +124,7 @@ export async function GET(request: NextRequest) {
       .eq('published', true)
       .order('created_at', { ascending: false })
       .limit(FETCH_LIMIT),
+    embeddingPromise,
   ])
 
   const allPosts: Array<{
@@ -141,6 +177,23 @@ export async function GET(request: NextRequest) {
     })
   }
 
+  // Add semantic-recall hits from the embedding RPC. These may overlap
+  // with substring hits — the slug-dedupe below handles that. For
+  // non-overlapping hits, build a snippet from the first ~140 chars of
+  // the content as the keyword likely doesn't appear literally.
+  for (const p of embeddingHits) {
+    const fallbackPlain = tiptapToPlain(p.content)
+    hits.push({
+      id: p.id,
+      title: p.title,
+      slug: p.slug,
+      excerpt: p.excerpt ?? null,
+      snippet: fallbackPlain.slice(0, 200).trim() + (fallbackPlain.length > 200 ? ' …' : ''),
+      type: 'ai',
+      created_at: p.created_at,
+    })
+  }
+
   // De-dupe by slug, prefer manual, then by recency
   const seenSlugs = new Set<string>()
   const dedupedPosts = hits
@@ -154,7 +207,10 @@ export async function GET(request: NextRequest) {
       seenSlugs.add(p.slug)
       return true
     })
-    .slice(0, MAX_POSTS)
+
+  // LLM re-rank for semantic relevance, then trim to MAX_POSTS
+  const reranked = await rerankPostHits(rawQuery, dedupedPosts)
+  const finalPosts = reranked.slice(0, MAX_POSTS)
 
   // 3. Company dictionary match — case-insensitive substring
   const companies: CompanyHit[] = []
@@ -180,5 +236,5 @@ export async function GET(request: NextRequest) {
     return a.name.localeCompare(b.name)
   })
 
-  return NextResponse.json({ posts: dedupedPosts, companies })
+  return NextResponse.json({ posts: finalPosts, companies })
 }
