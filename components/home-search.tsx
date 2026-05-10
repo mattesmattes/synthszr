@@ -25,6 +25,21 @@ interface SearchResults {
   companies: CompanyHit[]
 }
 
+type Vote = 'BUY' | 'HOLD' | 'SELL' | null
+
+interface CompanyRating {
+  rating: Vote
+  ticker: string | null
+  changePercent: number | null
+  direction: 'up' | 'down' | 'neutral' | null
+}
+
+const VOTE_COLOR: Record<Exclude<Vote, null>, string> = {
+  BUY: 'bg-[#39FF14] text-black',
+  HOLD: 'bg-[#00FFFF] text-black',
+  SELL: 'bg-[#FF6600] text-black',
+}
+
 const DEBOUNCE_MS = 250
 
 interface HomeSearchProps {
@@ -106,6 +121,11 @@ export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
   // re-fetching when the user clears + retypes the same word, or
   // pastes the same query twice within a session.
   const cacheRef = useRef<Map<string, SearchResults>>(new Map())
+  // Lazy-loaded vote/quote per company. Keyed by lowercase company name.
+  // Hydrated after the search results land so the dropdown shows up
+  // immediately and the vote badges fade in afterwards.
+  const [ratings, setRatings] = useState<Map<string, CompanyRating>>(new Map())
+  const ratingsCacheRef = useRef<Map<string, CompanyRating>>(new Map())
   const strings = getStrings(locale)
 
   useEffect(() => {
@@ -157,6 +177,85 @@ export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
     return () => clearTimeout(handle)
   }, [query])
 
+  // Async hydration of company ratings/quotes. Runs whenever new
+  // search results contain companies. Cached per company name so
+  // repeat queries don't re-fetch.
+  useEffect(() => {
+    if (!results || results.companies.length === 0) return
+
+    // Apply any already-cached ratings synchronously
+    const initial = new Map<string, CompanyRating>()
+    for (const c of results.companies) {
+      const cached = ratingsCacheRef.current.get(c.name.toLowerCase())
+      if (cached) initial.set(c.name.toLowerCase(), cached)
+    }
+    if (initial.size > 0) setRatings((prev) => new Map([...prev, ...initial]))
+
+    const missing = results.companies.filter(
+      (c) => !ratingsCacheRef.current.has(c.name.toLowerCase())
+    )
+    if (missing.length === 0) return
+
+    const publics = missing.filter((c) => c.type === 'public').map((c) => c.name)
+    const premarkets = missing.filter((c) => c.type === 'premarket').map((c) => c.name)
+
+    const aborter = new AbortController()
+
+    ;(async () => {
+      try {
+        const [pubRes, preRes] = await Promise.all([
+          publics.length > 0
+            ? fetch('/api/stock-synthszr/batch-quotes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ companies: publics }),
+                signal: aborter.signal,
+              }).then((r) => (r.ok ? r.json() : null))
+              .catch(() => null)
+            : Promise.resolve(null),
+          premarkets.length > 0
+            ? fetch('/api/premarket/batch-ratings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ companies: premarkets }),
+                signal: aborter.signal,
+              }).then((r) => (r.ok ? r.json() : null))
+              .catch(() => null)
+            : Promise.resolve(null),
+        ])
+
+        const next = new Map<string, CompanyRating>()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const q of (pubRes?.quotes || []) as Array<any>) {
+          const r: CompanyRating = {
+            rating: q.rating ?? null,
+            ticker: q.ticker ?? null,
+            changePercent: typeof q.changePercent === 'number' ? q.changePercent : null,
+            direction: q.direction ?? null,
+          }
+          next.set(String(q.company || '').toLowerCase(), r)
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const r of (preRes?.ratings || []) as Array<any>) {
+          const item: CompanyRating = {
+            rating: r.rating ?? null,
+            ticker: null,
+            changePercent: null,
+            direction: null,
+          }
+          next.set(String(r.company || '').toLowerCase(), item)
+        }
+        // Persist + commit
+        for (const [k, v] of next) ratingsCacheRef.current.set(k, v)
+        setRatings((prev) => new Map([...prev, ...next]))
+      } catch {
+        // Aborted or network — silent fail, the dropdown still works
+      }
+    })()
+
+    return () => aborter.abort()
+  }, [results])
+
   const hasResults = results && (results.posts.length > 0 || results.companies.length > 0)
   const showEmpty = query.trim().length >= 2 && !loading && results && !hasResults
 
@@ -193,22 +292,53 @@ export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
                   </span>
                 </header>
                 <ul className="divide-y divide-border">
-                  {results.companies.map((c) => (
-                    <li key={`${c.type}:${c.slug}`}>
-                      <button
-                        type="button"
-                        onClick={() => setOpenCompany(c)}
-                        className="block w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="font-medium text-sm">{c.name}</div>
-                          <div className="text-[10px] font-mono uppercase text-muted-foreground tracking-wider">
-                            {c.type === 'public' ? 'Public' : 'Premarket'}
+                  {results.companies.map((c) => {
+                    const r = ratings.get(c.name.toLowerCase())
+                    const pctText = typeof r?.changePercent === 'number'
+                      ? `${r.changePercent >= 0 ? '+' : ''}${r.changePercent.toFixed(2)}%`
+                      : null
+                    const pctColor =
+                      r?.direction === 'up' ? 'text-emerald-600 dark:text-emerald-400'
+                        : r?.direction === 'down' ? 'text-red-600 dark:text-red-400'
+                        : 'text-muted-foreground'
+                    return (
+                      <li key={`${c.type}:${c.slug}`}>
+                        <button
+                          type="button"
+                          onClick={() => setOpenCompany(c)}
+                          className="block w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="font-medium text-sm truncate">{c.name}</div>
+                              {r?.ticker && (
+                                <span className="text-[10px] font-mono uppercase text-muted-foreground/70 tracking-wider shrink-0">
+                                  {r.ticker}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {pctText && (
+                                <span className={`text-[11px] font-mono ${pctColor}`}>
+                                  {pctText}
+                                </span>
+                              )}
+                              {r?.rating && (
+                                <span
+                                  className={`text-[10px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${VOTE_COLOR[r.rating]}`}
+                                >
+                                  {r.rating}
+                                </span>
+                              )}
+                              <span className="text-[10px] font-mono uppercase text-muted-foreground tracking-wider">
+                                {c.type === 'public' ? 'Public' : 'Premarket'}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      </button>
-                    </li>
-                  ))}
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ul>
               </section>
             )}
