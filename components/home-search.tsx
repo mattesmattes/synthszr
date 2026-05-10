@@ -181,9 +181,41 @@ export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
 
         {hasResults && (
           <div className="mt-3 rounded-lg border border-border bg-background shadow-sm overflow-hidden">
-            {results.posts.length > 0 && (
+            {/* Synthszr-Analyse always on top — these are the unique
+                value-add: AI investment ratings the user can't get
+                from Google. Posts come below as supporting context. */}
+            {results.companies.length > 0 && (
               <section>
                 <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
+                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                    {strings.companiesHeading(results.companies.length)}
+                  </span>
+                </header>
+                <ul className="divide-y divide-border">
+                  {results.companies.map((c) => (
+                    <li key={`${c.type}:${c.slug}`}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenCompany(c)}
+                        className="block w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="font-medium text-sm">{c.name}</div>
+                          <div className="text-[10px] font-mono uppercase text-muted-foreground tracking-wider">
+                            {c.type === 'public' ? 'Public' : 'Premarket'}
+                          </div>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {results.posts.length > 0 && (
+              <section>
+                <header className="px-4 py-2 bg-muted/40 border-b border-t border-border flex items-center gap-2">
                   <FileText className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
                     {strings.postsHeading(results.posts.length)}
@@ -215,35 +247,6 @@ export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
                       </li>
                     )
                   })}
-                </ul>
-              </section>
-            )}
-
-            {results.companies.length > 0 && (
-              <section>
-                <header className="px-4 py-2 bg-muted/40 border-b border-t border-border flex items-center gap-2">
-                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
-                    {strings.companiesHeading(results.companies.length)}
-                  </span>
-                </header>
-                <ul className="divide-y divide-border">
-                  {results.companies.map((c) => (
-                    <li key={`${c.type}:${c.slug}`}>
-                      <button
-                        type="button"
-                        onClick={() => setOpenCompany(c)}
-                        className="block w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="font-medium text-sm">{c.name}</div>
-                          <div className="text-[10px] font-mono uppercase text-muted-foreground tracking-wider">
-                            {c.type === 'public' ? 'Public' : 'Premarket'}
-                          </div>
-                        </div>
-                      </button>
-                    </li>
-                  ))}
                 </ul>
               </section>
             )}
