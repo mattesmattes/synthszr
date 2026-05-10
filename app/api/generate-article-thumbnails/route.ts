@@ -59,7 +59,7 @@ async function cropAndResizeToSquare(imageBase64: string): Promise<string> {
     .extract({ left, top, width: cropSize, height: cropSize })
     .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
     .normalise()
-    .linear(1.2, -25)
+    .linear(1.1, -13)
     .png()
     .toBuffer()
 
