@@ -121,7 +121,12 @@ export async function GET() {
 
   if (missingErr || totalErr) {
     return NextResponse.json(
-      { error: missingErr?.message || totalErr?.message || 'unknown' },
+      {
+        error: missingErr?.message || totalErr?.message || 'unknown',
+        missingErr: missingErr ? JSON.stringify(missingErr) : null,
+        totalErr: totalErr ? JSON.stringify(totalErr) : null,
+        hint: 'If this complains about content_embedding column, the migration in supabase/migrations/20260510_search_embeddings.sql has not been applied yet.',
+      },
       { status: 500 }
     )
   }
