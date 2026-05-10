@@ -3,6 +3,7 @@ import Link from "next/link"
 import { FeaturedArticle } from "@/components/featured-article"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
+import { HomeSearch } from "@/components/home-search"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 // import { CalligramFooter } from "@/components/calligram-footer"
@@ -217,19 +218,8 @@ export default async function Page({ params }: PageProps) {
 
         {featuredPost ? (
           <>
-            {/* Why Link - above cover image */}
-            <Link
-              href={`/${locale}/why`}
-              className="block mb-6 text-center hover:opacity-80 transition-opacity"
-            >
-              <span className="text-lg font-bold tracking-tight">
-                Feed the Soul. Run the System.
-              </span>
-              <br />
-              <span className="text-sm text-muted-foreground">
-                Your news and podcast synthesis to start the day.
-              </span>
-            </Link>
+            {/* Search bar replaces the legacy hero text */}
+            <HomeSearch />
 
             <FeaturedArticle
               slug={featuredPost.slug}

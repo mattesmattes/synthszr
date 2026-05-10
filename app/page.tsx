@@ -3,6 +3,7 @@ import { BlogHeader } from "@/components/blog-header"
 import { FeaturedArticle } from "@/components/featured-article"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
+import { HomeSearch } from "@/components/home-search"
 // import { CalligramFooter } from "@/components/calligram-footer"
 import { createClient } from "@/lib/supabase/server"
 import type { CoverAnimationConfig } from "@/lib/types/cover-animation"
@@ -117,19 +118,8 @@ export default async function Page() {
 
         {featuredPost ? (
           <>
-            {/* Why Link - above cover image */}
-            <Link
-              href="/why"
-              className="block mb-6 text-center hover:opacity-80 transition-opacity"
-            >
-              <span className="text-lg font-bold tracking-tight">
-                Feed the Soul. Run the System.
-              </span>
-              <br />
-              <span className="text-sm text-muted-foreground">
-                Die News Synthese zum Start in den Tag.
-              </span>
-            </Link>
+            {/* Search bar replaces the legacy hero text */}
+            <HomeSearch />
 
             <FeaturedArticle
               slug={featuredPost.slug}
