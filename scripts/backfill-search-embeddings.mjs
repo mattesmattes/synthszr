@@ -72,7 +72,7 @@ async function main() {
       .from('generated_posts')
       .select('id, title, excerpt, content')
       .is('content_embedding', null)
-      .eq('published', true)
+      .eq('status', 'published')
       .limit(20)
 
     if (error) {

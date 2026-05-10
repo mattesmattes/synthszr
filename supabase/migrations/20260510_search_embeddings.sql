@@ -30,7 +30,7 @@ AS $$
     p.id, p.title, p.slug, p.excerpt, p.content, p.created_at,
     1 - (p.content_embedding <=> query_embedding) AS similarity
   FROM generated_posts p
-  WHERE p.published = true
+  WHERE p.status = 'published'
     AND p.content_embedding IS NOT NULL
     AND 1 - (p.content_embedding <=> query_embedding) > match_threshold
   ORDER BY p.content_embedding <=> query_embedding

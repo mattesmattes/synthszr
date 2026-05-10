@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
     supabase
       .from('generated_posts')
       .select('id, title, slug, excerpt, content, created_at')
-      .eq('published', true)
+      .eq('status', 'published')
       .order('created_at', { ascending: false })
       .limit(FETCH_LIMIT),
     embeddingPromise,
