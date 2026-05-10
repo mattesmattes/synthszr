@@ -20,7 +20,7 @@ RETURNS TABLE (
   title text,
   slug text,
   excerpt text,
-  content jsonb,
+  content text,
   created_at timestamptz,
   similarity float
 )
