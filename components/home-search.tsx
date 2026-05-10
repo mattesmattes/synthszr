@@ -27,7 +27,11 @@ interface SearchResults {
 
 const DEBOUNCE_MS = 250
 
-export function HomeSearch() {
+interface HomeSearchProps {
+  locale?: string
+}
+
+export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResults | null>(null)
   const [loading, setLoading] = useState(false)
@@ -48,7 +52,7 @@ export function HomeSearch() {
 
       setLoading(true)
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`, {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}&locale=${encodeURIComponent(locale)}`, {
           signal: controller.signal,
         })
         if (res.ok) {
@@ -99,22 +103,25 @@ export function HomeSearch() {
                   </span>
                 </header>
                 <ul className="divide-y divide-border">
-                  {results.posts.map((p) => (
-                    <li key={p.id}>
-                      <Link
-                        href={`/posts/${p.slug}`}
-                        className="block px-4 py-3 hover:bg-muted/30 transition-colors"
-                        onClick={() => setQuery('')}
-                      >
-                        <div className="font-medium text-sm leading-snug">{p.title}</div>
-                        {(p.snippet || p.excerpt) && (
-                          <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                            {p.snippet || p.excerpt}
-                          </div>
-                        )}
-                      </Link>
-                    </li>
-                  ))}
+                  {results.posts.map((p) => {
+                    const href = locale === 'de' ? `/posts/${p.slug}` : `/${locale}/posts/${p.slug}`
+                    return (
+                      <li key={p.id}>
+                        <Link
+                          href={href}
+                          className="block px-4 py-3 hover:bg-muted/30 transition-colors"
+                          onClick={() => setQuery('')}
+                        >
+                          <div className="font-medium text-sm leading-snug">{p.title}</div>
+                          {(p.snippet || p.excerpt) && (
+                            <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                              {p.snippet || p.excerpt}
+                            </div>
+                          )}
+                        </Link>
+                      </li>
+                    )
+                  })}
                 </ul>
               </section>
             )}

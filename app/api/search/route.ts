@@ -73,6 +73,8 @@ function buildSnippet(plain: string, query: string): string | null {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const rawQuery = (searchParams.get('q') || '').trim()
+  const locale = (searchParams.get('locale') || 'de').trim().toLowerCase()
+  const isDefaultLocale = locale === 'de'
 
   if (rawQuery.length < 2) {
     return NextResponse.json({ posts: [], companies: [] })
@@ -111,23 +113,41 @@ export async function GET(request: NextRequest) {
     }
   })()
 
+  // For non-default locales, swap the AI corpus for the translated
+  // version (content_translations) and skip manual posts (those aren't
+  // translated). For DE, keep the original behavior.
+  const aiCorpusPromise = isDefaultLocale
+    ? supabase
+        .from('generated_posts')
+        .select('id, title, slug, excerpt, content, created_at')
+        .eq('status', 'published')
+        .order('created_at', { ascending: false })
+        .limit(FETCH_LIMIT)
+    : supabase
+        .from('content_translations')
+        .select('generated_post_id, title, slug, excerpt, content, generated_posts!inner(id, status, created_at)')
+        .eq('language_code', locale)
+        .eq('translation_status', 'completed')
+        .eq('generated_posts.status', 'published')
+        .not('generated_post_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(FETCH_LIMIT)
+
   const [manualResult, aiResult, embeddingHits] = await Promise.all([
-    supabase
-      .from('posts')
-      .select('id, title, slug, excerpt, content, created_at')
-      .eq('published', true)
-      .order('created_at', { ascending: false })
-      .limit(FETCH_LIMIT),
-    supabase
-      .from('generated_posts')
-      .select('id, title, slug, excerpt, content, created_at')
-      .eq('status', 'published')
-      .order('created_at', { ascending: false })
-      .limit(FETCH_LIMIT),
+    isDefaultLocale
+      ? supabase
+          .from('posts')
+          .select('id, title, slug, excerpt, content, created_at')
+          .eq('published', true)
+          .order('created_at', { ascending: false })
+          .limit(FETCH_LIMIT)
+      : Promise.resolve({ data: [] as never[] }),
+    aiCorpusPromise,
     embeddingPromise,
   ])
 
-  const allPosts: Array<{
+  // Normalize translation rows to the same shape as generated_posts.
+  type NormalizedPost = {
     id: string
     title: string
     slug: string
@@ -135,9 +155,43 @@ export async function GET(request: NextRequest) {
     content: unknown
     created_at: string
     type: 'manual' | 'ai'
-  }> = [
-    ...(manualResult.data || []).map((p) => ({ ...p, type: 'manual' as const })),
-    ...(aiResult.data || []).map((p) => ({ ...p, type: 'ai' as const })),
+  }
+
+  const aiNormalized: NormalizedPost[] = []
+  if (isDefaultLocale) {
+    for (const p of (aiResult.data || []) as Array<NormalizedPost>) {
+      aiNormalized.push({ ...p, type: 'ai' })
+    }
+  } else {
+    type TranslationJoin = {
+      generated_post_id: string
+      title: string | null
+      slug: string | null
+      excerpt: string | null
+      content: unknown
+      generated_posts: { id: string; status: string; created_at: string } | { id: string; status: string; created_at: string }[] | null
+    }
+    for (const t of (aiResult.data || []) as unknown as TranslationJoin[]) {
+      if (!t.generated_post_id || !t.title || !t.slug || !t.generated_posts) continue
+      // Supabase returns nested foreign-key joins as either an object
+      // or a single-element array depending on relationship cardinality.
+      const parent = Array.isArray(t.generated_posts) ? t.generated_posts[0] : t.generated_posts
+      if (!parent) continue
+      aiNormalized.push({
+        id: t.generated_post_id,
+        title: t.title,
+        slug: t.slug,
+        excerpt: t.excerpt ?? null,
+        content: t.content,
+        created_at: parent.created_at,
+        type: 'ai',
+      })
+    }
+  }
+
+  const allPosts: NormalizedPost[] = [
+    ...((manualResult.data || []) as Array<NormalizedPost>).map((p) => ({ ...p, type: 'manual' as const })),
+    ...aiNormalized,
   ]
 
   // Filter: hit if query appears in title, excerpt, OR plain-text content.
@@ -178,16 +232,51 @@ export async function GET(request: NextRequest) {
   }
 
   // Add semantic-recall hits from the embedding RPC. These may overlap
-  // with substring hits — the slug-dedupe below handles that. For
-  // non-overlapping hits, build a snippet from the first ~140 chars of
-  // the content as the keyword likely doesn't appear literally.
+  // with substring hits — the slug-dedupe below handles that.
+  // For non-default locales, look up the translated title/slug/excerpt
+  // so the dropdown stays in the user's language. Embedding lookup
+  // itself runs on the German source content, which is fine because
+  // gemini-embedding-001 is multilingual — semantic similarity holds
+  // across language pairs.
+  let translationMap: Map<string, {
+    title: string | null; slug: string | null; excerpt: string | null; content: unknown
+  }> | null = null
+  if (!isDefaultLocale && embeddingHits.length > 0) {
+    const ids = embeddingHits.map((h) => h.id)
+    const { data: translations } = await supabase
+      .from('content_translations')
+      .select('generated_post_id, title, slug, excerpt, content')
+      .in('generated_post_id', ids)
+      .eq('language_code', locale)
+      .eq('translation_status', 'completed')
+    translationMap = new Map(
+      (translations || []).map((t) => [t.generated_post_id, t])
+    )
+  }
+
   for (const p of embeddingHits) {
-    const fallbackPlain = tiptapToPlain(p.content)
+    let title = p.title
+    let slug = p.slug
+    let excerpt = p.excerpt ?? null
+    let content = p.content
+    if (translationMap) {
+      const t = translationMap.get(p.id)
+      if (!t || !t.slug || !t.title) {
+        // No translation yet — drop the hit rather than show DE in a
+        // non-DE locale dropdown.
+        continue
+      }
+      title = t.title
+      slug = t.slug
+      excerpt = t.excerpt ?? null
+      content = t.content
+    }
+    const fallbackPlain = tiptapToPlain(content)
     hits.push({
       id: p.id,
-      title: p.title,
-      slug: p.slug,
-      excerpt: p.excerpt ?? null,
+      title,
+      slug,
+      excerpt,
       snippet: fallbackPlain.slice(0, 200).trim() + (fallbackPlain.length > 200 ? ' …' : ''),
       type: 'ai',
       created_at: p.created_at,

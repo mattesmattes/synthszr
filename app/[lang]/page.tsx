@@ -219,7 +219,7 @@ export default async function Page({ params }: PageProps) {
         {featuredPost ? (
           <>
             {/* Search bar replaces the legacy hero text */}
-            <HomeSearch />
+            <HomeSearch locale={locale} />
 
             <FeaturedArticle
               slug={featuredPost.slug}
