@@ -12,7 +12,6 @@ export type UseCase =
   | 'article_planning'
   | 'proofreading'
   | 'synthesis_scoring'
-  | 'synthesis_development'
   | 'podcast_script'
   | 'edit_analysis'
   | 'pattern_extraction'
@@ -47,12 +46,6 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
   synthesis_scoring: {
     label: 'Bewertung (Scoring)',
     description: 'Artikel nach Originalität und Relevanz bewerten',
-    defaultModel: 'claude-haiku-4-5-20251001',
-    allowedProviders: ['anthropic'],
-  },
-  synthesis_development: {
-    label: 'Synthese (Development)',
-    description: 'Synthese-Texte aus Artikelpaaren entwickeln',
     defaultModel: 'claude-haiku-4-5-20251001',
     allowedProviders: ['anthropic'],
   },

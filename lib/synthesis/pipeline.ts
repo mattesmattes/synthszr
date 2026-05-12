@@ -8,7 +8,6 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { addToQueue } from '@/lib/news-queue'
 import { isJunkTitle, normalizeSourceIdentifier } from '@/lib/news-queue/service'
 import { scoreContentOnly } from './score'
-import type { DevelopedSynthesis } from './develop'
 
 /**
  * Normalize source email/url to a source identifier (reuses queue service logic)
@@ -295,14 +294,9 @@ export interface SynthesisProgressEvent {
   message?: string
 }
 
-export interface SynthesisPrompt {
-  id: string
-  name: string
-  scoring_prompt: string
-  development_prompt: string
-  content_prompt?: string
-  core_thesis: string
-}
+// SynthesisPrompt interface removed — the synthesis_prompts table was
+// dropped together with the develop pipeline. scoreContentOnly carries
+// its own inline prompt.
 
 /**
  * Get daily_repo items associated with a digest (no item cap)
@@ -524,40 +518,9 @@ export async function runSynthesisPipeline(
   }
 }
 
-/**
- * Get developed syntheses for a digest, including the source article title
- */
-export async function getSynthesesForDigest(
-  digestId: string
-): Promise<DevelopedSynthesis[]> {
-  const supabase = createAdminClient()
-
-  const { data, error } = await supabase
-    .from('developed_syntheses')
-    .select(`
-      *,
-      synthesis_candidates(
-        source_item_id,
-        daily_repo!synthesis_candidates_source_item_id_fkey(title)
-      )
-    `)
-    .eq('digest_id', digestId)
-    .order('core_thesis_alignment', { ascending: false })
-
-  if (error) {
-    console.error('[Pipeline] Failed to get syntheses:', error)
-    return []
-  }
-
-  return (data || []).map((s) => ({
-    candidateId: s.candidate_id,
-    headline: s.synthesis_headline,
-    content: s.synthesis_content,
-    historicalReference: s.historical_reference,
-    coreThesisAlignment: s.core_thesis_alignment,
-    sourceArticleTitle: s.synthesis_candidates?.daily_repo?.title || null,
-  }))
-}
+// getSynthesesForDigest removed — developed_syntheses table was dropped.
+// The per-section ghostwriter pipeline never read these rows; the
+// legacy single-pass route's MATTES SYNTHESE block was the only consumer.
 
 /**
  * Run the synthesis pipeline with progress callbacks for streaming UI

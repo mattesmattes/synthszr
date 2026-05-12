@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
-import { runSynthesisPipeline, getSynthesesForDigest } from '@/lib/synthesis/pipeline'
+import { runSynthesisPipeline } from '@/lib/synthesis/pipeline'
 
 export const maxDuration = 300 // Allow up to 5 minutes for synthesis
 
@@ -46,35 +46,4 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * GET /api/synthesis?digestId=...
- * Get developed syntheses for a digest
- */
-export async function GET(request: NextRequest) {
-  // Require admin authentication
-  const session = await getSession()
-  if (!session) {
-    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
-  }
-
-  const { searchParams } = new URL(request.url)
-  const digestId = searchParams.get('digestId')
-
-  if (!digestId) {
-    return NextResponse.json(
-      { error: 'digestId is required' },
-      { status: 400 }
-    )
-  }
-
-  try {
-    const syntheses = await getSynthesesForDigest(digestId)
-    return NextResponse.json({ syntheses })
-  } catch (error) {
-    console.error('[API] Get syntheses error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    )
-  }
-}
+// GET handler removed — developed_syntheses table is dropped.

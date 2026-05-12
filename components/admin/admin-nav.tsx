@@ -142,11 +142,6 @@ const navGroups: NavGroup[] = [
         label: 'Analyse-Prompts',
         href: '/admin/prompts',
         icon: MessageSquare
-      },
-      {
-        label: 'Synthese-Prompts',
-        href: '/admin/synthesis',
-        icon: Lightbulb
       }
     ]
   },

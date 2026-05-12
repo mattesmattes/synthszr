@@ -106,12 +106,6 @@ const USE_CASE_DEFINITIONS: Record<string, UseCaseInfo> = {
     defaultModel: 'claude-haiku-4-5-20251001',
     allowedProviders: ['anthropic'],
   },
-  synthesis_development: {
-    label: 'Synthese (Development)',
-    description: 'Synthese-Texte aus Artikelpaaren entwickeln',
-    defaultModel: 'claude-haiku-4-5-20251001',
-    allowedProviders: ['anthropic'],
-  },
   podcast_script: {
     label: 'Podcast-Skript',
     description: 'Podcast-Skripte aus Blog-Artikeln generieren',
@@ -157,7 +151,7 @@ function isFavoriteModel(id: string): boolean {
 const USE_CASE_GROUPS: Array<{ title: string; useCases: string[] }> = [
   {
     title: 'Content-Erstellung',
-    useCases: ['ghostwriter', 'article_planning', 'proofreading', 'synthesis_development', 'podcast_script'],
+    useCases: ['ghostwriter', 'article_planning', 'proofreading', 'podcast_script'],
   },
   {
     title: 'Analyse & Verarbeitung',

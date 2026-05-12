@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, getDefaultGhostwriterPrompt, type AIModel } from '@/lib/claude/ghostwriter'
-import { getSynthesesForDigest } from '@/lib/synthesis/pipeline'
+// getSynthesesForDigest removed — synthesis-development pipeline retired.
 import { sanitizeUrl, isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 
@@ -368,39 +368,11 @@ export async function POST(request: NextRequest) {
       .eq('is_active', true)
       .order('priority', { ascending: false })
 
-    // Get developed syntheses for this digest (if available)
-    let synthesisContext = ''
-    try {
-      const syntheses = await getSynthesesForDigest(digestId)
-      if (syntheses && syntheses.length > 0) {
-        synthesisContext = '\n\n---\n\n## HINTERGRUND-RECHERCHE FÜR "MATTES SYNTHESE"\n\n'
-        synthesisContext += 'Für jeden Artikel wurde eine historische Verbindung recherchiert. '
-        synthesisContext += 'Diese Recherche dient als HINTERGRUNDWISSEN für deinen "Mattes Synthese" Kommentar.\n\n'
-        synthesisContext += '**WICHTIG:** Übernimm die Recherche NICHT wörtlich! Nutze sie stattdessen als Basis:\n'
-        synthesisContext += '- Nimm die historische Verbindung zur Kenntnis\n'
-        synthesisContext += '- Reflektiere die aktuelle News vor diesem Hintergrund\n'
-        synthesisContext += '- Ordne die News in den größeren Kontext ein\n'
-        synthesisContext += '- Formuliere deinen EIGENEN Kommentar im Ghostwriter-Stil\n\n'
-
-        for (const synthesis of syntheses) {
-          // Show which article this synthesis belongs to
-          if (synthesis.sourceArticleTitle) {
-            synthesisContext += `**ARTIKEL:** "${synthesis.sourceArticleTitle.slice(0, 80)}..."\n`
-          }
-          synthesisContext += `**Recherchierte Verbindung:** ${synthesis.headline}\n`
-          synthesisContext += `**Kontext:** ${synthesis.content}\n`
-          if (synthesis.historicalReference) {
-            synthesisContext += `**Historischer Bezug:** ${synthesis.historicalReference}\n`
-          }
-          synthesisContext += '\n---\n\n'
-        }
-
-        synthesisContext += 'Schreibe zu jedem Artikel mit Recherche-Hintergrund einen "Synthszr Take:", '
-        synthesisContext += 'der die aktuelle News im Licht der historischen Verbindung reflektiert und einordnet.'
-      }
-    } catch (error) {
-      console.log('[Ghostwriter] No syntheses available (table may not exist yet)')
-    }
+    // Synthesis-development context block removed together with the
+    // developed_syntheses table. The Take grounding now comes from
+    // SECTION_SYSTEM_PROMPT's Mattes-voice rules, edit-learning
+    // patterns, and the mattes_corpus_chunks RAG layer.
+    const synthesisContext = ''
 
     // Build vocabulary context based on intensity (0-100)
     let vocabularyContext = ''
