@@ -115,6 +115,11 @@ const navGroups: NavGroup[] = [
         label: 'Tip Promos',
         href: '/admin/tip-promos',
         icon: Lightbulb
+      },
+      {
+        label: 'Mattes-Korpus',
+        href: '/admin/mattes',
+        icon: BookOpen
       }
     ]
   },
