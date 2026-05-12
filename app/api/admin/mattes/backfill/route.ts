@@ -70,38 +70,50 @@ export async function GET() {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('mattes_corpus_chunks')
-    .select('source_file, chunk_index, updated_at')
+    .select('source_file, chunk_index, updated_at, is_active')
     .order('updated_at', { ascending: false })
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const fileGroups = new Map<string, { chunks: number; lastUpdated: string }>()
-  for (const row of data || []) {
-    const existing = fileGroups.get(row.source_file)
-    if (!existing || row.updated_at > existing.lastUpdated) {
-      fileGroups.set(row.source_file, {
-        chunks: (existing?.chunks ?? 0) + 1,
-        lastUpdated: existing ? (row.updated_at > existing.lastUpdated ? row.updated_at : existing.lastUpdated) : row.updated_at,
+  type Row = { source_file: string; updated_at: string; is_active: boolean | null }
+  const rows = (data || []) as Row[]
+
+  // Aggregate per file: count chunks, find latest updated_at, and decide
+  // active flag. A file counts as "enabled" when any of its chunks is
+  // active — disabled requires every chunk to be off.
+  const perFile = new Map<string, { chunks: number; lastUpdated: string; activeChunks: number }>()
+  for (const row of rows) {
+    const existing = perFile.get(row.source_file)
+    if (!existing) {
+      perFile.set(row.source_file, {
+        chunks: 1,
+        lastUpdated: row.updated_at,
+        activeChunks: row.is_active === false ? 0 : 1,
       })
     } else {
       existing.chunks += 1
+      if (row.updated_at > existing.lastUpdated) existing.lastUpdated = row.updated_at
+      if (row.is_active !== false) existing.activeChunks += 1
     }
   }
 
-  // Re-count chunks properly
-  const counts = new Map<string, number>()
-  for (const row of data || []) {
-    counts.set(row.source_file, (counts.get(row.source_file) ?? 0) + 1)
-  }
-  const sourceFiles = Array.from(fileGroups.entries())
-    .map(([file, info]) => ({ file, chunks: counts.get(file) ?? 0, lastUpdated: info.lastUpdated }))
+  const sourceFiles = Array.from(perFile.entries())
+    .map(([file, info]) => ({
+      file,
+      chunks: info.chunks,
+      lastUpdated: info.lastUpdated,
+      active: info.activeChunks > 0,
+    }))
     .sort((a, b) => a.file.localeCompare(b.file))
+
+  const activeChunkCount = rows.filter((r) => r.is_active !== false).length
 
   return NextResponse.json({
     fileCount: sourceFiles.length,
-    chunkCount: data?.length ?? 0,
+    chunkCount: rows.length,
+    activeChunkCount,
     lastUpdated: sourceFiles[0]?.lastUpdated ?? null,
     sourceDir: SOURCE_DIR,
     sourceDirExists: fs.existsSync(SOURCE_DIR),
@@ -150,7 +162,7 @@ export async function POST(request: NextRequest) {
 
     const { data: existing } = await supabase
       .from('mattes_corpus_chunks')
-      .select('id, source_sha')
+      .select('id, source_sha, is_active')
       .eq('source_file', file)
       .limit(1)
     const sameHash = existing && existing.length > 0 && existing[0].source_sha === newHash
@@ -158,6 +170,8 @@ export async function POST(request: NextRequest) {
       summary.push({ file, status: 'skipped', reason: 'sha unchanged' })
       continue
     }
+
+    const preservedActive = existing && existing.length > 0 ? existing[0].is_active !== false : true
 
     if (existing && existing.length > 0) {
       await supabase.from('mattes_corpus_chunks').delete().eq('source_file', file)
@@ -180,6 +194,7 @@ export async function POST(request: NextRequest) {
           chunk_text: chunks[i],
           embedding: vec as unknown as string,
           source_sha: newHash,
+          is_active: preservedActive,
         })
         inserted++
       } catch (err) {

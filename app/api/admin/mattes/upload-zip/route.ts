@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
     const newHash = sha256(text)
     const { data: existing } = await supabase
       .from('mattes_corpus_chunks')
-      .select('id, source_sha')
+      .select('id, source_sha, is_active')
       .eq('source_file', filename)
       .limit(1)
     const sameHash = existing && existing.length > 0 && existing[0].source_sha === newHash
@@ -165,6 +165,10 @@ export async function POST(request: NextRequest) {
       results.push({ file: filename, status: 'skipped', reason: 'sha unchanged' })
       continue
     }
+
+    // Preserve the user's enable/disable choice across re-embeds: if
+    // any prior chunk for this file existed, carry its is_active over.
+    const preservedActive = existing && existing.length > 0 ? existing[0].is_active !== false : true
 
     if (existing && existing.length > 0) {
       await supabase.from('mattes_corpus_chunks').delete().eq('source_file', filename)
@@ -205,6 +209,7 @@ export async function POST(request: NextRequest) {
           chunk_text: chunks[i],
           embedding: vec as unknown as string,
           source_sha: newHash,
+          is_active: preservedActive,
         })
         if (insErr) {
           console.error(`[mattes-upload] insert failed ${filename}#${i}:`, insErr.message)

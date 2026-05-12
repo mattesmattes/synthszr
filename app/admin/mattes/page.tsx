@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Upload, Loader2, FileText, RefreshCw, Trash2 } from 'lucide-react'
+import { Upload, Loader2, FileText, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -12,11 +12,13 @@ interface SourceFileStatus {
   file: string
   chunks: number
   lastUpdated: string
+  active: boolean
 }
 
 interface CorpusStatus {
   fileCount: number
   chunkCount: number
+  activeChunkCount?: number
   lastUpdated: string | null
   sourceDir: string
   sourceDirExists: boolean
@@ -58,6 +60,7 @@ export default function MattesCorpusPage() {
   const [currentlyUploading, setCurrentlyUploading] = useState<string | null>(null)
   const [results, setResults] = useState<AggregatedResult[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [togglingFile, setTogglingFile] = useState<string | null>(null)
 
   async function loadStatus() {
     setStatusLoading(true)
@@ -77,6 +80,49 @@ export default function MattesCorpusPage() {
   useEffect(() => {
     loadStatus()
   }, [])
+
+  async function toggleFile(file: string, nextEnabled: boolean) {
+    // Optimistic update so the switch reacts immediately.
+    setStatus((prev) =>
+      prev
+        ? {
+            ...prev,
+            sourceFiles: prev.sourceFiles.map((f) =>
+              f.file === file ? { ...f, active: nextEnabled } : f,
+            ),
+          }
+        : prev,
+    )
+    setTogglingFile(file)
+    try {
+      const res = await fetch('/api/admin/mattes/toggle', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_file: file, enabled: nextEnabled }),
+      })
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        throw new Error(errJson.error || `HTTP ${res.status}`)
+      }
+    } catch (err) {
+      console.error('[MattesCorpus] toggle failed:', err)
+      // Roll back optimistic update on failure.
+      setStatus((prev) =>
+        prev
+          ? {
+              ...prev,
+              sourceFiles: prev.sourceFiles.map((f) =>
+                f.file === file ? { ...f, active: !nextEnabled } : f,
+              ),
+            }
+          : prev,
+      )
+      setError(err instanceof Error ? err.message : 'Toggle fehlgeschlagen')
+    } finally {
+      setTogglingFile(null)
+    }
+  }
 
   async function handleUpload() {
     if (files.length === 0 || uploading) return
@@ -163,14 +209,20 @@ export default function MattesCorpusPage() {
           )}
           {status && (
             <>
-              <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-4 gap-4 mb-4">
                 <div>
                   <div className="text-2xl font-bold">{status.fileCount}</div>
                   <div className="text-xs text-muted-foreground">Quelldateien</div>
                 </div>
                 <div>
                   <div className="text-2xl font-bold">{status.chunkCount}</div>
-                  <div className="text-xs text-muted-foreground">Chunks (eingebettet)</div>
+                  <div className="text-xs text-muted-foreground">Chunks gesamt</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">
+                    {status.activeChunkCount ?? status.chunkCount}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Aktiv im Retrieval</div>
                 </div>
                 <div>
                   <div className="text-sm font-medium">
@@ -193,15 +245,29 @@ export default function MattesCorpusPage() {
                         <th className="text-left px-3 py-2 font-mono uppercase tracking-wider">Datei</th>
                         <th className="text-right px-3 py-2 font-mono uppercase tracking-wider">Chunks</th>
                         <th className="text-right px-3 py-2 font-mono uppercase tracking-wider">Updated</th>
+                        <th className="text-right px-3 py-2 font-mono uppercase tracking-wider w-[120px]">Aktiv</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
                       {status.sourceFiles.map((f) => (
-                        <tr key={f.file}>
+                        <tr key={f.file} className={!f.active ? 'opacity-60' : ''}>
                           <td className="px-3 py-2 font-mono">{f.file}</td>
                           <td className="px-3 py-2 text-right">{f.chunks}</td>
                           <td className="px-3 py-2 text-right text-muted-foreground">
                             {new Date(f.lastUpdated).toLocaleDateString('de-DE')}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {togglingFile === f.file && (
+                                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                              )}
+                              <Switch
+                                checked={f.active}
+                                onCheckedChange={(next) => toggleFile(f.file, next)}
+                                disabled={togglingFile === f.file}
+                                aria-label={`Datei ${f.file} ${f.active ? 'deaktivieren' : 'aktivieren'}`}
+                              />
+                            </div>
                           </td>
                         </tr>
                       ))}
