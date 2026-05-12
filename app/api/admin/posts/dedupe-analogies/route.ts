@@ -9,8 +9,8 @@
  *   2. Single LLM call extracts the central analogy concept per take.
  *   3. Group by canonical concept (case-insensitive substring match).
  *   4. For every duplicate (skip the first occurrence), rewrite that
- *      take with a fresh analogy from a sophisticated domain pool,
- *      forbidding all analogies already used in the article.
+ *      take with a different framing, forbidding all analogies
+ *      already used in the article.
  *   5. Stitch the revised takes back into the markdown and return.
  *
  * Streams progress events (SSE-style data: lines) so the admin UI can
@@ -43,25 +43,6 @@ interface AnalogyExtraction {
   /** Source domain bucket, e.g. "Versicherung", "Pharma", "Stadtplanung". */
   domain: string
 }
-
-const SOPHISTICATED_DOMAINS = [
-  'Pharma-Studien & FDA-Trigger (Phase-3, DMC, Zulassungspfade)',
-  'Sarbanes-Oxley & Wirtschaftsprüfung',
-  'Versicherungsmathematik & Reinsurance',
-  'Stadtplanung & Bauleitplanung',
-  'Mikrobiologie & Habitat-Dynamik',
-  'Architekturgeschichte (Bauhaus, Brutalismus, Form-Follows-Function)',
-  'Maritime Logistik & Containerisierung',
-  'Patentrecht & Standardessenzielle Patente',
-  'Geldpolitik & Notenbank-Mechanik',
-  'Gerichtsverfahren & Beweislast',
-  'Akkordlohn & Fertigungslogik',
-  'Notariatswesen',
-  'Treuhand-Abwicklung',
-  'Pharma-Generika nach Patentablauf',
-  'Spritzguss & Werkzeugbau',
-  'Reedereiwesen & Charter-Verträge',
-]
 
 const FORBIDDEN_TRIVIAL_ANALOGIES = [
   'Schachbrett',
@@ -272,14 +253,12 @@ ${numberedTakes}`
 
           const rewritePrompt = `Du bist Editor-in-Chief des Synthszr Newsletters. Du schreibst einen Synthszr Take um.
 
-GRUND: Die aktuelle Analogie ("${dup.analogy}") wird bereits in einem anderen Take dieses Artikels verwendet. Jede Analogie darf im Artikel nur EINMAL vorkommen.
+GRUND: Die aktuelle Analogie ("${dup.analogy}") wird bereits in einem anderen Take dieses Artikels verwendet. Wiederholte Analogien innerhalb eines Artikels wirken redundant.
 
 REGELN:
 - Behalte den Inhalt, die Argumentation und die Tonalität des Takes vollständig bei.
-- Ersetze die alte Analogie durch eine NEUE, sophisticated Analogie aus einer dieser Domänen:
-${SOPHISTICATED_DOMAINS.map((d) => '  - ' + d).join('\n')}
+- Falls eine bildhafte Sprache nötig ist, verwende eine andere als "${dup.analogy}".
 - VERBOTEN (schon im Artikel verwendet oder trivial): ${forbiddenList}, ${FORBIDDEN_TRIVIAL_ANALOGIES.join(', ')}
-- Genau EINE zentrale Analogie, durchgezogen über mindestens zwei Sätze.
 - Keine Em-Dashes (— oder –) als Satzteiler.
 - Keine Kontrast-Konstruktionen ("Nicht X, sondern Y").
 - 5–8 Sätze, freier Fluss, klare Haltung im letzten Satz.

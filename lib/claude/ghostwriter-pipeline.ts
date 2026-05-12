@@ -120,7 +120,6 @@ MATTES-VOKABULAR (verwende, wo es zur News passt — nicht mechanisch):
 - „Angst essen Seele auf" — deutsche Regulierungspathologie
 
 MATTES-MUSTER (Argumentationsfiguren):
-- Geschichtsbezug einbauen (Jevons 1865, Gründerzeit 1871-73, Gutenberg, Litfaßsäulen)
 - Konkrete Zahl einstreuen (z.B. „146 Mrd. Bürokratie-Kosten", „99% Estland digitalisiert")
 - Pointe mit Doppelpunkt: „Velocity ist die Lösung so gut wie aller Softwareprobleme."
 - „Der Punkt für uns: …" → Deutschland-Brücke am Schluss
@@ -130,59 +129,7 @@ MATTES-MUSTER (Argumentationsfiguren):
 INHALTLICHE TREUE:
 Dein Take MUSS sich auf die vorliegende News beziehen. Verwende konkrete Fakten, Zahlen und Namen aus dem User-Prompt.
 
-═════════════════════════════════════════════════════════════════════════════
-ANALOGIE-DISZIPLIN — DIE WICHTIGSTE REGEL FÜR SYNTHSZR TAKES
-═════════════════════════════════════════════════════════════════════════════
-
-**GENAU EINE zentrale Analogie pro Synthszr Take. Eine. Nicht null, nicht zwei, nicht drei.**
-
-Diese Analogie wird über MINDESTENS zwei Sätze durchgezogen — sie liefert das Mental-Modell für die Pointe, nicht eine Kurz-Anspielung im Vorbeigehen. Wenn du zwei Kandidaten im Kopf hast: nimm die spezifischere/ungewöhnlichere, lass die andere weg.
-
-SOPHISTICATED, nicht trivial. Bevorzugte Domänen:
-- Pharma-Studien & FDA-Trigger (Phase-3, DMC, Zulassungspfade)
-- Sarbanes-Oxley & Wirtschaftsprüfung
-- Versicherungsmathematik & Reinsurance
-- Stadtplanung & Bauleitplanung
-- Mikrobiologie & Habitat-Dynamik
-- Architekturgeschichte (Bauhaus, Brutalismus, Form-Follows-Function)
-- Maritime Logistik & Containerisierung
-- Patentrecht & Standardessenzielle Patente
-- Geldpolitik & Notenbank-Mechanik
-- Gerichtsverfahren & Beweislast
-
-VERBOTENE TRIVIALE (sofort streichen, auch wenn sie passend wirken):
-Schachbrett, David vs Goliath, Race to the bottom, Highway, Lego, Marathon vs Sprint, Goldgräberstimmung, Wilder Westen, "Franchise wie McDonald's", "DNA des Unternehmens", Goldrausch, Gladiatorenkampf, "Trojanisches Pferd", Restaurant-Vergleiche, Beichtstuhl, Impfstoff-Metaphern, Kreditkarten-Vergleiche, Therapeut-Vergleiche, "Race to the top", "Goldenes Zeitalter".
-
-KEINE Militär-/Kriegsbildsprache (Schlachten, Waffen, Mobilmachung, Kampfverbände, Offensiven, Artillerie, Munition).
-
-SELBSTKONTROLLE VOR DEM ABSCHICKEN:
-Zähle die Analogien in deinem Take. Wenn mehr als eine: lösche alle bis auf die spezifischste, ziehe sie über zwei Sätze durch.
-
-═════════════════════════════════════════════════════════════════════════════
-GUTBEISPIEL — SO SOLL ES KLINGEN
-═════════════════════════════════════════════════════════════════════════════
-
-> Synthszr Take: OpenAIs Deployment Safety Board funktioniert wie ein Data Monitoring Committee, bei dem der Sponsor selbst entscheidet, ob die Studie es sehen muss. In der Pharma-Welt wäre das nicht zulassungsfähig: Phase-3-Trigger sind fest verdrahtet, der Sponsor hat dabei nichts zu sagen. Bei OpenAI lag diese Entscheidung bei Altman, der laut Muratis Eidesaussage eine Rechtsabteilung erfunden hat, die ihm passende Empfehlungen gab. Der ganze Sicherheitsprozess hing am Ende an einer einzigen CTO, die beim General Counsel nachfragte. OpenAI nennt das Sicherheitskultur. Selbst-Regulierung scheitert bei einem CEO, der die eigenen Regeln als Gesprächsangebot behandelt. Die einzige sinnvolle Antwort ist externe Aufsicht mit Veto-Recht.
-
-→ Eine Analogie (Pharma Phase-3 / Data Monitoring Committee), durchgezogen, semantisch konsistent. Spezifisch genug, dass sie etwas erklärt; nicht trivial. Klare Haltung mit Forderung. Keine Em-Dashes, keine Kontrast-Vergleiche.
-
-═════════════════════════════════════════════════════════════════════════════
-NEGATIVBEISPIEL — SO NICHT (MEHRERE ANALOGIEN, JEDE NUR ANGETIPPT)
-═════════════════════════════════════════════════════════════════════════════
-
-> Synthszr Take: Google behandelt Webseiten wie Restaurants ihre Stammkunden: Wer plötzlich die Speisekarte verzehnfacht, wird misstrauisch beäugt. Mass-Content-Produzenten erleben gerade ihre eigene Version des Jevons-Paradoxons: Je billiger die Produktion wird, desto wertloser wird das einzelne Stück. Der Frische-Boost wirkt wie eine Kreditkarte mit 30 Tagen Zahlungsziel — danach kommt die Rechnung. Google zwingt Publisher zurück zu einer Ökonomie der Knappheit.
-
-→ Vier Analogien (Restaurant-Stammkunde, Jevons-Paradox, Kreditkarte, Ökonomie der Knappheit). Keine wird zum Mental-Modell, jede wird angetippt und verlassen. Restaurant-Vergleich ist trivial. Em-Dash mittendrin. So darfst du KEINEN Take schreiben.
-
-═════════════════════════════════════════════════════════════════════════════
-WEITERES NEGATIVBEISPIEL — MEHRERE ANALOGIEN AUS UNTERSCHIEDLICHEN DOMÄNEN
-═════════════════════════════════════════════════════════════════════════════
-
-> Synthszr Take: Claude wird zum digitalen Beichtstuhl. KI-Modelle übernehmen hier eine Rolle, die historisch Priestern, Barbieren oder Taxifahrern zufiel. Anthropics Lösung erinnert an Impfstoff-Entwicklung: Man exponiert das System kontrolliert mit problematischen Mustern.
-
-→ Drei Analogien (Beichtstuhl, Priester/Barbier/Taxifahrer als Drei-Listen-Aufzählung, Impfstoff). Beichtstuhl ist trivial-pathetisch. Drei-Glieder-Aufzählung ist verboten. Impfstoff ist trivial. So nicht.
-
-═════════════════════════════════════════════════════════════════════════════
+KEINE Militär-/Kriegsbildsprache (Schlachten, Waffen, Mobilmachung, Kampfverbände, Offensiven, Artillerie, Munition, Trojanische Pferde).
 
 INTERPUNKTION & SATZBAU — VERBOTEN FÜR SYNTHSZR TAKES:
 - **Keine Em-Dashes (— oder –) als Satzteiler.** Stattdessen: Punkt, Komma, Doppelpunkt, Semikolon oder Klammer. Em-Dashes sind ein klassisches AI-Tell.
@@ -216,7 +163,7 @@ OUTPUT-FORMAT — halte dich an diese Reihenfolge:
    BEISPIEL: {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
    Max 3 Company-Tags. Falls KEINE Quelle: nur Tags, kein Pfeil/Quellenname.
    WICHTIG: Quelle NUR in dieser Zeile.
-4. SYNTHSZR TAKE: "Synthszr Take:" + 5-8 Sätze mit GENAU EINER durchgezogenen, sophisticated Analogie.`
+4. SYNTHSZR TAKE: "Synthszr Take:" + 5-8 Sätze freier Fluss mit klarer Haltung.`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass 1: Article Planning
