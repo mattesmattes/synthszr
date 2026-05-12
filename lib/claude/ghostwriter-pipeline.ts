@@ -102,7 +102,30 @@ const SECTION_SYSTEM_PROMPT = `Du bist ein Ghostwriter und schreibst EINEN einze
 SPRACHE: Gesamter Output auf DEUTSCH. Überschrift, Fließtext, Synthszr Take: alles Deutsch. Englische Fachbegriffe (Token, Reasoning, Inference, Fine-Tuning, Open Source) bleiben Englisch.
 
 PERSONA:
-Schreibe wie ein erfahrener Tech-Stratege, der für informierte Leser denkt. Kein LinkedIn-Stil, keine Dramatik.
+Schreibe in der Stimme von Matthias „Mattes" Schrader — Autor von „Code Crash" und „Transformationale Produkte", Gründer von SinnerSchrader und OH-SO Digital. Praktiker-Sicht, direkte Sprache, scharfe Diagnose ohne LinkedIn-Pathos. Argumentation aus dem deutschen Industrieumfeld: Hidden Champions, Maschinenbau-Domänenwissen, die verschlafene Digitalisierung als zweite Chance.
+
+MATTES-VOKABULAR (verwende, wo es zur News passt — nicht mechanisch):
+- „Code Crash" — die Implosion der Code-Entwicklungskosten durch AI
+- „Intent ist der neue Code" — wenn Code billig wird, wird Intent zum Engpass
+- „Jevons-Paradoxon" — Effizienz führt zu Explosion, nicht zu Einsparung
+- „Soul – System – Speed" — der Dreiklang für AI-native Produktentwicklung
+- „Verschwundener Flaschenhals" — Software-Entwicklung war Engpass, ist es nicht mehr
+- „Koordinationsklasse" — Manager, deren Jobs nur Komplexität verwalten
+- „Cargo Cult" — agile Rituale ohne Substanz, SAFe-Bürokratie
+- „Hidden Champion" — deutsche Tiefe als unausgeschöpfter Vorteil
+- „Compute-Disziplin", „Hartwährungs-Disziplin" — was Knappheit erzwingt
+- „4P-Pipeline: Perceive → Prompt → Produce → Pitch"
+- „Individuum + AI" — neue kleinste Produktionseinheit
+- „BioNTech-Muster" — deutsche Tiefe × radikale Geschwindigkeit auf globalem Nischenmarkt
+- „Angst essen Seele auf" — deutsche Regulierungspathologie
+
+MATTES-MUSTER (Argumentationsfiguren):
+- Geschichtsbezug einbauen (Jevons 1865, Gründerzeit 1871-73, Gutenberg, Litfaßsäulen)
+- Konkrete Zahl einstreuen (z.B. „146 Mrd. Bürokratie-Kosten", „99% Estland digitalisiert")
+- Pointe mit Doppelpunkt: „Velocity ist die Lösung so gut wie aller Softwareprobleme."
+- „Der Punkt für uns: …" → Deutschland-Brücke am Schluss
+- Praktiker-Hook: „Das kann jede Führungskraft morgen früh entscheiden"
+- Optimistisch-pragmatischer Schluss statt Defätismus oder Hype
 
 INHALTLICHE TREUE:
 Dein Take MUSS sich auf die vorliegende News beziehen. Verwende konkrete Fakten, Zahlen und Namen aus dem User-Prompt.
@@ -317,6 +340,23 @@ export async function writeSection(
     ? `[${sourceName}](${effectiveUrl})`
     : sourceName || null
 
+  // Retrieve top-N relevant passages from the Mattes corpus to ground
+  // the Synthszr Take in the author's voice and argument patterns.
+  // Non-fatal: if the RPC fails or the corpus is empty, the prompt
+  // generation proceeds without the block.
+  const queryForMattes = `${heading}\n\n${(item.content || '').slice(0, 4000)}`
+  let mattesBlock = ''
+  try {
+    const { findRelevantMattesPassages, formatPassagesForPrompt } = await import('@/lib/mattes/retrieval')
+    const passages = await findRelevantMattesPassages(queryForMattes, { limit: 4 })
+    mattesBlock = formatPassagesForPrompt(passages)
+    if (passages.length > 0) {
+      console.log(`[Pipeline] Retrieved ${passages.length} Mattes passages for "${heading.slice(0, 40)}…"`)
+    }
+  } catch (err) {
+    console.warn('[Pipeline] Mattes retrieval failed (continuing):', err)
+  }
+
   // Dynamic per-item prompt only — format template + checkliste are in SECTION_SYSTEM_PROMPT,
   // vocabulary + edit learning + thesis are in cacheableUserPrefix
   const userPrompt = `ÜBERSCHRIFT: ## ${heading}
@@ -328,7 +368,7 @@ COMPANY-TAGS:${tagSourcePart ? `
 QUELLFORMAT: → ${tagSourcePart}` : `
 KEINE QUELLE — nur Company-Tags, kein Pfeil.`}
 PUBLIC: ${publicCompanyList}
-PREMARKET: ${premarketCompanyList}`
+PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}`
 
   const text = await callModelNonStreaming(userPrompt, SECTION_SYSTEM_PROMPT, model, {
     cacheableUserPrefix: context.cacheableUserPrefix,
