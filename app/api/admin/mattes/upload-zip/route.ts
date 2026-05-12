@@ -108,12 +108,18 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Collect .md files — strip directory prefix so "repo.md/Code Crash Q2.md"
-  // and "Code Crash Q2.md" both end up with the same source_file value.
+  // Accept any plain-text source: .md, .markdown, .txt. Strip directory
+  // prefix so "repo.md/Code Crash Q2.md" and "Code Crash Q2.md" both end
+  // up with the same source_file value.
+  const TEXT_EXTENSIONS = ['.md', '.markdown', '.txt']
   const mdEntries: Array<{ filename: string; text: string }> = []
   await Promise.all(
     Object.values(zip.files)
-      .filter((entry) => !entry.dir && entry.name.toLowerCase().endsWith('.md'))
+      .filter((entry) => {
+        if (entry.dir) return false
+        const lower = entry.name.toLowerCase()
+        return TEXT_EXTENSIONS.some((ext) => lower.endsWith(ext))
+      })
       .map(async (entry) => {
         // Skip macOS metadata
         if (entry.name.includes('__MACOSX') || entry.name.split('/').pop()?.startsWith('._')) return
@@ -126,7 +132,7 @@ export async function POST(request: NextRequest) {
 
   if (mdEntries.length === 0) {
     return NextResponse.json(
-      { error: 'Keine .md Dateien im Archiv gefunden' },
+      { error: 'Keine Textdateien (.md/.markdown/.txt) im Archiv gefunden' },
       { status: 400 }
     )
   }

@@ -39,13 +39,24 @@ interface UploadResult {
   error?: string
 }
 
+interface AggregatedResult {
+  archiveName: string
+  status: 'success' | 'error'
+  totalFiles?: number
+  elapsedMs?: number
+  deadlineHit?: boolean
+  summary?: UploadResult['summary']
+  error?: string
+}
+
 export default function MattesCorpusPage() {
   const [status, setStatus] = useState<CorpusStatus | null>(null)
   const [statusLoading, setStatusLoading] = useState(true)
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [force, setForce] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [result, setResult] = useState<UploadResult | null>(null)
+  const [currentlyUploading, setCurrentlyUploading] = useState<string | null>(null)
+  const [results, setResults] = useState<AggregatedResult[]>([])
   const [error, setError] = useState<string | null>(null)
 
   async function loadStatus() {
@@ -68,31 +79,53 @@ export default function MattesCorpusPage() {
   }, [])
 
   async function handleUpload() {
-    if (!file || uploading) return
+    if (files.length === 0 || uploading) return
     setUploading(true)
     setError(null)
-    setResult(null)
-    try {
-      const formData = new FormData()
-      formData.append('archive', file)
-      formData.append('force', force ? 'true' : 'false')
-      const res = await fetch('/api/admin/mattes/upload-zip', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      })
-      const data = (await res.json()) as UploadResult
-      if (!res.ok || data.error) {
-        setError(data.error || `HTTP ${res.status}`)
-      } else {
-        setResult(data)
-        await loadStatus()
+    setResults([])
+    const aggregated: AggregatedResult[] = []
+
+    for (const file of files) {
+      setCurrentlyUploading(file.name)
+      try {
+        const formData = new FormData()
+        formData.append('archive', file)
+        formData.append('force', force ? 'true' : 'false')
+        const res = await fetch('/api/admin/mattes/upload-zip', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
+        })
+        const data = (await res.json()) as UploadResult
+        if (!res.ok || data.error) {
+          aggregated.push({
+            archiveName: file.name,
+            status: 'error',
+            error: data.error || `HTTP ${res.status}`,
+          })
+        } else {
+          aggregated.push({
+            archiveName: file.name,
+            status: 'success',
+            totalFiles: data.totalFiles,
+            elapsedMs: data.elapsedMs,
+            deadlineHit: data.deadlineHit,
+            summary: data.summary,
+          })
+        }
+      } catch (err) {
+        aggregated.push({
+          archiveName: file.name,
+          status: 'error',
+          error: err instanceof Error ? err.message : 'Unbekannter Fehler',
+        })
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unbekannter Fehler')
-    } finally {
-      setUploading(false)
+      setResults([...aggregated])
     }
+
+    setCurrentlyUploading(null)
+    setUploading(false)
+    await loadStatus()
   }
 
   return (
@@ -199,22 +232,35 @@ export default function MattesCorpusPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="zip-upload">Archiv (.zip)</Label>
+            <Label htmlFor="zip-upload">Archiv(e) (.zip)</Label>
             <input
               id="zip-upload"
               type="file"
               accept=".zip,application/zip,application/x-zip-compressed"
+              multiple
               onChange={(e) => {
-                setFile(e.target.files?.[0] || null)
-                setResult(null)
+                setFiles(Array.from(e.target.files || []))
+                setResults([])
                 setError(null)
               }}
               className="block w-full mt-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-muted file:text-foreground hover:file:bg-muted/70 file:cursor-pointer"
             />
-            {file && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
-              </p>
+            {files.length > 0 && (
+              <ul className="mt-2 text-xs text-muted-foreground space-y-0.5">
+                {files.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex justify-between gap-3">
+                    <span className="font-mono truncate">{f.name}</span>
+                    <span className="shrink-0">{(f.size / 1024 / 1024).toFixed(2)} MB</span>
+                  </li>
+                ))}
+                <li className="border-t pt-1 mt-1 flex justify-between font-medium">
+                  <span>Gesamt</span>
+                  <span>
+                    {files.length} Datei{files.length === 1 ? '' : 'en'} ·{' '}
+                    {(files.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024).toFixed(2)} MB
+                  </span>
+                </li>
+              </ul>
             )}
           </div>
 
@@ -232,8 +278,16 @@ export default function MattesCorpusPage() {
             <Switch id="force-toggle" checked={force} onCheckedChange={setForce} disabled={uploading} />
           </div>
 
-          <div className="flex items-center justify-end gap-3">
-            <Button onClick={handleUpload} disabled={!file || uploading} className="gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs text-muted-foreground">
+              {uploading && currentlyUploading && (
+                <>Verarbeite gerade: <span className="font-mono">{currentlyUploading}</span></>
+              )}
+              {uploading && results.length > 0 && (
+                <span className="ml-2">({results.length}/{files.length} fertig)</span>
+              )}
+            </div>
+            <Button onClick={handleUpload} disabled={files.length === 0 || uploading} className="gap-2">
               {uploading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -242,7 +296,7 @@ export default function MattesCorpusPage() {
               ) : (
                 <>
                   <Upload className="h-4 w-4" />
-                  Hochladen und Embedden
+                  {files.length > 1 ? `${files.length} Archive hochladen` : 'Hochladen und Embedden'}
                 </>
               )}
             </Button>
@@ -254,56 +308,65 @@ export default function MattesCorpusPage() {
             </Alert>
           )}
 
-          {result && (
-            <Alert>
+          {results.map((r, ri) => (
+            <Alert key={`${r.archiveName}-${ri}`} variant={r.status === 'error' ? 'destructive' : undefined}>
               <AlertDescription>
-                <div className="mb-2 font-medium">
-                  {result.archiveName} — {result.totalFiles} .md-Dateien
-                  {result.deadlineHit && ' (Soft-Deadline erreicht; bitte nochmal hochladen)'}
+                <div className="mb-2 font-medium flex items-center justify-between gap-2">
+                  <span className="font-mono truncate">{r.archiveName}</span>
+                  <span className="text-xs shrink-0">
+                    {r.status === 'success' && r.totalFiles !== undefined ? `${r.totalFiles} Datei${r.totalFiles === 1 ? '' : 'en'}` : ''}
+                    {r.status === 'success' && r.elapsedMs !== undefined && ` · ${(r.elapsedMs / 1000).toFixed(1)}s`}
+                  </span>
                 </div>
-                <div className="text-xs text-muted-foreground mb-2">
-                  Dauer: {((result.elapsedMs ?? 0) / 1000).toFixed(1)} s
-                  {result.force ? ' · force: ja' : ''}
-                </div>
-                <div className="border rounded overflow-hidden mt-2">
-                  <table className="w-full text-xs">
-                    <thead className="bg-muted/40">
-                      <tr>
-                        <th className="text-left px-2 py-1 font-mono uppercase tracking-wider">Datei</th>
-                        <th className="text-left px-2 py-1 font-mono uppercase tracking-wider">Status</th>
-                        <th className="text-right px-2 py-1 font-mono uppercase tracking-wider">Chunks</th>
-                        <th className="text-left px-2 py-1 font-mono uppercase tracking-wider">Anmerkung</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {result.summary.map((r, i) => (
-                        <tr key={`${r.file}-${i}`}>
-                          <td className="px-2 py-1 font-mono">{r.file}</td>
-                          <td className="px-2 py-1">
-                            <span
-                              className={
-                                r.status === 'processed'
-                                  ? 'text-emerald-700 dark:text-emerald-400'
-                                  : r.status === 'skipped'
-                                    ? 'text-muted-foreground'
-                                    : r.status === 'pending'
-                                      ? 'text-amber-700 dark:text-amber-400'
-                                      : 'text-red-700 dark:text-red-400'
-                              }
-                            >
-                              {r.status}
-                            </span>
-                          </td>
-                          <td className="px-2 py-1 text-right">{r.chunks ?? '—'}</td>
-                          <td className="px-2 py-1 text-muted-foreground">{r.reason || ''}</td>
+                {r.status === 'error' && (
+                  <div className="text-sm">{r.error}</div>
+                )}
+                {r.status === 'success' && r.deadlineHit && (
+                  <div className="text-xs text-amber-700 dark:text-amber-400 mb-2">
+                    Soft-Deadline erreicht — bitte nochmal hochladen, um die Pending-Dateien zu erledigen.
+                  </div>
+                )}
+                {r.status === 'success' && r.summary && (
+                  <div className="border rounded overflow-hidden mt-2">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/40">
+                        <tr>
+                          <th className="text-left px-2 py-1 font-mono uppercase tracking-wider">Datei</th>
+                          <th className="text-left px-2 py-1 font-mono uppercase tracking-wider">Status</th>
+                          <th className="text-right px-2 py-1 font-mono uppercase tracking-wider">Chunks</th>
+                          <th className="text-left px-2 py-1 font-mono uppercase tracking-wider">Anmerkung</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y">
+                        {r.summary.map((s, si) => (
+                          <tr key={`${s.file}-${si}`}>
+                            <td className="px-2 py-1 font-mono">{s.file}</td>
+                            <td className="px-2 py-1">
+                              <span
+                                className={
+                                  s.status === 'processed'
+                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                    : s.status === 'skipped'
+                                      ? 'text-muted-foreground'
+                                      : s.status === 'pending'
+                                        ? 'text-amber-700 dark:text-amber-400'
+                                        : 'text-red-700 dark:text-red-400'
+                                }
+                              >
+                                {s.status}
+                              </span>
+                            </td>
+                            <td className="px-2 py-1 text-right">{s.chunks ?? '—'}</td>
+                            <td className="px-2 py-1 text-muted-foreground">{s.reason || ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </AlertDescription>
             </Alert>
-          )}
+          ))}
         </CardContent>
       </Card>
 
