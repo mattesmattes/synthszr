@@ -277,6 +277,20 @@ export async function POST(request: NextRequest) {
           return null
         }
 
+        // Defensive guard against hallucinated tags: if NOTHING but bracketed
+        // tags remains after we also strip every "[…]" block, OpenAI TTS
+        // returns 0 bytes (the cleanText becomes empty server-side).
+        // We've seen ChatGPT-generated scripts produce "[waiting]",
+        // "[pondering]", etc. — none of which are in DIRECTIVE_TAG_NAMES.
+        // Drop the line here so the silent-take guard doesn't have to.
+        const visibleAfterAllTags = ttsText.replace(/\[[^\]]*\]/g, '').trim()
+        if (!visibleAfterAllTags) {
+          console.log(
+            `[Podcast Jobs] Skipping line ${globalIndex + 1} — only bracketed tags after strip: "${line.text.slice(0, 80)}"`
+          )
+          return null
+        }
+
         const buffer = await generateSegmentOpenAI(ttsText, voiceId as OpenAIVoice, job.model || 'gpt-4o-mini-tts')
 
         // Upload segment immediately after generation
