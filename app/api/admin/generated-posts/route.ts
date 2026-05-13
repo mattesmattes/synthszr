@@ -5,7 +5,6 @@ import { pregenerateStockSynthszr } from '@/lib/stock-synthszr/pregenerate'
 import { syncPostCompanyMentions } from '@/lib/companies/sync'
 import { queueTranslations } from '@/lib/translations/queue'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
-import { generatePostAudio, getTTSSettings } from '@/lib/tts/openai-tts'
 import { embedPostContent, upsertPostEmbedding } from '@/lib/search/embeddings'
 
 export async function GET() {
@@ -165,53 +164,6 @@ export async function PUT(request: NextRequest) {
           console.error('[translations] Unexpected error queuing translations:', err)
         })
 
-      // Generate TTS audio after translations are ready (async, don't block response)
-      // Wait a bit for translations to complete, then generate with English content
-      ;(async () => {
-        try {
-          const settings = await getTTSSettings()
-          if (!settings.tts_enabled) {
-            console.log(`[TTS] Skipped - TTS is disabled`)
-            return
-          }
-
-          // Wait for translations to be processed (they're queued with priority 10)
-          // Check every 30 seconds for up to 5 minutes
-          let englishContent = null
-          for (let attempt = 0; attempt < 10; attempt++) {
-            await new Promise(resolve => setTimeout(resolve, 30000)) // 30 sec
-
-            const { data: translation } = await supabase
-              .from('content_translations')
-              .select('content')
-              .eq('generated_post_id', id)
-              .eq('language_code', 'en')
-              .eq('translation_status', 'completed')
-              .single()
-
-            if (translation?.content) {
-              englishContent = translation.content
-              console.log(`[TTS] Found English translation for post ${id}`)
-              break
-            }
-            console.log(`[TTS] Waiting for English translation (attempt ${attempt + 1}/10)...`)
-          }
-
-          if (englishContent) {
-            console.log(`[TTS] Generating audio for post ${id} with English content...`)
-            const result = await generatePostAudio(id, englishContent, 'en')
-            if (result.success) {
-              console.log(`[TTS] Audio generated for post ${id}: ${result.audioUrl}`)
-            } else {
-              console.error(`[TTS] Failed to generate audio for post ${id}: ${result.error}`)
-            }
-          } else {
-            console.log(`[TTS] Skipped - No English translation available for post ${id}`)
-          }
-        } catch (err) {
-          console.error('[TTS] Unexpected error generating audio:', err)
-        }
-      })()
     }
 
     // Sync company mentions to post_company_mentions table (async, don't block response)
