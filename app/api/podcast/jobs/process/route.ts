@@ -34,6 +34,14 @@ const TTS_BATCH_SIZE = 5
 const MAX_RETRIES = 3
 const INITIAL_RETRY_DELAY_MS = 1000
 
+// Minimum acceptable MP3 buffer size in bytes.
+// OpenAI TTS occasionally returns ~200-byte empty responses with HTTP 200.
+// At ~16 KB/sec for 128 kbps MP3, a real 1-second take is ≥ 16 KB; we set
+// a conservative floor of 2 KB so we don't false-positive on short
+// directives like "Ja." but still catch every silent take we've seen.
+const MIN_AUDIO_BYTES = 2048
+const SUSPECT_SHORT_AUDIO_MARKER = 'suspect-short-audio-buffer'
+
 /**
  * Retry wrapper with exponential backoff for transient API errors
  */
@@ -50,7 +58,8 @@ async function withRetry<T>(
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))
 
-      // Check if it's a retryable error (5xx, connection errors, stream termination)
+      // Check if it's a retryable error (5xx, connection errors, stream termination,
+      // or a suspect-short audio buffer — the silent-take failure mode)
       const isRetryable =
         lastError.message.includes('503') ||
         lastError.message.includes('502') ||
@@ -61,7 +70,8 @@ async function withRetry<T>(
         lastError.message.includes('timeout') ||
         lastError.message.includes('terminated') ||
         lastError.message.includes('ECONNRESET') ||
-        lastError.message.includes('fetch failed')
+        lastError.message.includes('fetch failed') ||
+        lastError.message.includes(SUSPECT_SHORT_AUDIO_MARKER)
 
       if (!isRetryable || attempt === maxRetries) {
         throw lastError
@@ -151,7 +161,16 @@ async function generateSegmentOpenAI(
         throw new Error(`OpenAI TTS API error: ${response.status} - ${errorText}`)
       }
 
-      return Buffer.from(await response.arrayBuffer())
+      const buf = Buffer.from(await response.arrayBuffer())
+      // Silent-take mitigation: OpenAI occasionally returns a tiny MP3
+      // (a few hundred bytes) without throwing. Treat as transient and
+      // let withRetry have another go.
+      if (buf.length < MIN_AUDIO_BYTES) {
+        throw new Error(
+          `${SUSPECT_SHORT_AUDIO_MARKER}: got ${buf.length}B for "${cleanText.slice(0, 60)}…"`
+        )
+      }
+      return buf
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         throw new Error(`OpenAI TTS timeout after 30000ms`)
@@ -317,6 +336,30 @@ export async function POST(request: NextRequest) {
       if (batchEnd < lines.length) {
         await new Promise(resolve => setTimeout(resolve, 200))
       }
+    }
+
+    // Post-batch verification: catch any silent take that slipped past the
+    // per-call retry guard. Fails the job before mixing rather than baking
+    // a 20-second silence into the final podcast.
+    const undersizedSegments: Array<{ index: number; bytes: number; preview: string }> = []
+    for (let i = 0; i < segmentBuffers.length; i++) {
+      const seg = segmentBuffers[i]
+      if (!seg) continue
+      if (seg.buffer.length < MIN_AUDIO_BYTES) {
+        undersizedSegments.push({
+          index: i,
+          bytes: seg.buffer.length,
+          preview: seg.text.slice(0, 80),
+        })
+      }
+    }
+    if (undersizedSegments.length > 0) {
+      const detail = undersizedSegments
+        .map((s) => `#${s.index + 1} (${s.bytes}B): "${s.preview}…"`)
+        .join('\n  ')
+      throw new Error(
+        `Silent-take guard tripped: ${undersizedSegments.length} segment(s) below ${MIN_AUDIO_BYTES} bytes — aborting before mix.\n  ${detail}`
+      )
     }
 
     // Build segments + metadata arrays for concatenation
