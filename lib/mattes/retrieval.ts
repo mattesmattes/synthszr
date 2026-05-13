@@ -23,8 +23,8 @@ export interface MattesPassage {
   similarity: number
 }
 
-const DEFAULT_TOP_K = 4
-const DEFAULT_THRESHOLD = 0.4
+const DEFAULT_TOP_K = 2
+const DEFAULT_THRESHOLD = 0.55
 const MAX_QUERY_CHARS = 6000
 
 export async function findRelevantMattesPassages(

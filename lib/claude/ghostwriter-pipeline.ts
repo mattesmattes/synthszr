@@ -279,7 +279,7 @@ export async function writeSection(
   let mattesBlock = ''
   try {
     const { findRelevantMattesPassages, formatPassagesForPrompt } = await import('@/lib/mattes/retrieval')
-    const passages = await findRelevantMattesPassages(queryForMattes, { limit: 4 })
+    const passages = await findRelevantMattesPassages(queryForMattes, { limit: 2 })
     mattesBlock = formatPassagesForPrompt(passages)
     if (passages.length > 0) {
       console.log(`[Pipeline] Retrieved ${passages.length} Mattes passages for "${heading.slice(0, 40)}…"`)
