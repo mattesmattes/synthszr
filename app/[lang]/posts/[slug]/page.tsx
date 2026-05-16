@@ -369,6 +369,9 @@ export default async function PostPage({ params }: PageProps) {
                       className="w-full h-full object-cover"
                       fetchPriority="high"
                       decoding="async"
+                      // Nearest-neighbour resampling — see featured-article.tsx
+                      // for the moiré rationale.
+                      style={{ imageRendering: 'pixelated' }}
                     />
                   </picture>
                 </Link>

@@ -72,6 +72,12 @@ export function FeaturedArticle({
                   className="w-full h-full object-cover"
                   fetchPriority="high"
                   decoding="async"
+                  // Nearest-neighbour resampling. Floyd-Steinberg dither
+                  // interferes with the default bilinear filter on
+                  // viewports that don't land on an integer scale of
+                  // 1408 → produces moiré bands. Nearest-neighbour
+                  // keeps each dither dot intact.
+                  style={{ imageRendering: 'pixelated' }}
                 />
               </picture>
             </a>
