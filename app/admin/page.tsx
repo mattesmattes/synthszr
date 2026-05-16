@@ -434,7 +434,7 @@ export default function AdminPage() {
     // Fetch manual posts
     const { data: manualPosts } = await supabase
       .from('posts')
-      .select('id, title, slug, excerpt, content, category, published, created_at')
+      .select('id, title, slug, excerpt, content, category, status, created_at')
       .order('created_at', { ascending: false })
 
     // Fetch AI-generated posts
@@ -462,7 +462,7 @@ export default function AdminPage() {
           excerpt: p.excerpt,
           content: parsedContent as Record<string, unknown>,
           category: p.category || 'general',
-          status: (p.published ? 'published' : 'draft') as 'draft' | 'published' | 'archived',
+          status: (p.status || 'draft') as 'draft' | 'published' | 'archived',
           created_at: p.created_at,
           source: 'manual' as const,
           word_count: countWords(parsedContent as Record<string, unknown>),
@@ -654,7 +654,7 @@ export default function AdminPage() {
       if (post.source === 'manual') {
         const { error } = await supabase
           .from('posts')
-          .update({ published: newStatus === 'published', updated_at: new Date().toISOString() })
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
           .eq('id', post.id)
         if (error) throw error
       } else {
@@ -691,7 +691,7 @@ export default function AdminPage() {
             slug: editForm.slug,
             excerpt: editForm.excerpt || null,
             category: editForm.category,
-            published: editForm.status === 'published',
+            status: editForm.status,
             content: editForm.content,
             updated_at: new Date().toISOString(),
           })
