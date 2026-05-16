@@ -575,3 +575,21 @@
 .flying-player-enter {
   animation: flying-player-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* ===== Dithered cover images ===== */
+/* Floyd-Steinberg dither needs nearest-neighbour resampling to avoid
+   moiré on non-integer scales (default bilinear interferes with the
+   dot pattern). Above ~500px viewport the source-to-display ratio is
+   ≤3x and pixelated looks crisp; below that ratio it drops to ~5x and
+   nearest-neighbour starts visibly throwing away source pixels, which
+   reads as coarse grain. So we keep bilinear (auto) on phone-narrow
+   viewports — the dither pattern becomes a soft halftone that the eye
+   reads as texture, no moiré because the pattern is sub-perceivable. */
+.dithered-cover {
+  image-rendering: pixelated;
+}
+@media (max-width: 500px) {
+  .dithered-cover {
+    image-rendering: auto;
+  }
+}

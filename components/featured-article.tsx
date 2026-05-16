@@ -69,15 +69,11 @@ export function FeaturedArticle({
                   alt={title}
                   width={1408}
                   height={1408}
-                  className="w-full h-full object-cover"
+                  // .dithered-cover: pixelated above 500px viewport,
+                  // bilinear below — see app/globals.css for rationale.
+                  className="w-full h-full object-cover dithered-cover"
                   fetchPriority="high"
                   decoding="async"
-                  // Nearest-neighbour resampling. Floyd-Steinberg dither
-                  // interferes with the default bilinear filter on
-                  // viewports that don't land on an integer scale of
-                  // 1408 → produces moiré bands. Nearest-neighbour
-                  // keeps each dither dot intact.
-                  style={{ imageRendering: 'pixelated' }}
                 />
               </picture>
             </a>

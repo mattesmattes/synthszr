@@ -153,15 +153,12 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
               <div className="relative flex flex-col items-center justify-center mx-auto w-[704px] max-w-[calc(100%+48px)] aspect-[16/9] md:aspect-[11/6] bg-neon-cyan">
                 {/* Clickable background to home */}
                 <Link href="/" className="absolute inset-0 z-0">
-                  {/* Floyd-Steinberg-dithered cover. Pixelated rendering
-                      = nearest-neighbour resampling; default bilinear
-                      filter would alias against the dither dots and
-                      throw visible moiré bands on non-integer scales. */}
+                  {/* .dithered-cover: pixelated above 500px viewport,
+                      bilinear below — see app/globals.css for rationale. */}
                   <img
                     src={post.cover_image_url}
                     alt=""
-                    className="w-full h-full object-cover"
-                    style={{ imageRendering: 'pixelated' }}
+                    className="w-full h-full object-cover dithered-cover"
                   />
                 </Link>
                 {/* Logo centered */}

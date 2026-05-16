@@ -366,12 +366,11 @@ export default async function PostPage({ params }: PageProps) {
                       alt={post.title}
                       width={1408}
                       height={1408}
-                      className="w-full h-full object-cover"
+                      // .dithered-cover: pixelated above 500px viewport,
+                      // bilinear below — see app/globals.css for rationale.
+                      className="w-full h-full object-cover dithered-cover"
                       fetchPriority="high"
                       decoding="async"
-                      // Nearest-neighbour resampling — see featured-article.tsx
-                      // for the moiré rationale.
-                      style={{ imageRendering: 'pixelated' }}
                     />
                   </picture>
                 </Link>
