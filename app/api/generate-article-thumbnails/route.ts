@@ -52,14 +52,16 @@ async function cropAndResizeToSquare(imageBase64: string): Promise<string> {
   const left = Math.floor((width - cropSize) / 2)
   const top = Math.floor((height - cropSize) / 2)
 
-  // Crop to square, resize, normalize, then add a midtone-anchored
-  // contrast bump (linear 1.4*in - 50) so the dithering pass produces
-  // crisper black/white separation.
+  // Crop to square, resize, normalize, then apply tone curve
+  // out = 1.13*in - 8. Slope 1.13 preserves (slightly improves) shadow
+  // tonal separation; the small negative offset lifts highlights toward
+  // 255 instead of crushing shadows. Brighter overall while keeping
+  // dark-area detail for the Floyd-Steinberg pass.
   const resizedBuffer = await sharp(imageBuffer)
     .extract({ left, top, width: cropSize, height: cropSize })
     .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
     .normalise()
-    .linear(1.1, -13)
+    .linear(1.13, -8)
     .png()
     .toBuffer()
 
