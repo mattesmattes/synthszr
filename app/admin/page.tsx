@@ -1605,9 +1605,6 @@ function GenerateImagesButton({ postId, currentImageModel }: { postId: string; c
       })
 
       if (response.ok) {
-        const respData = await response.json().catch(() => null) as { results?: Array<{ success: boolean; model?: string }> } | null
-        const usedModelCover = respData?.results?.find(r => r.success && r.model)?.model
-
         // Also trigger article thumbnail generation
         const content = typeof post.content === 'string' ? JSON.parse(post.content) : post.content
         const articles: Array<{ index: number; text: string; vote: null }> = []
@@ -1638,8 +1635,6 @@ function GenerateImagesButton({ postId, currentImageModel }: { postId: string; c
           }).catch(err => console.error('[Thumbnails] Error:', err))
         }
 
-        const modelLine = usedModelCover ? ` (Modell: ${usedModelCover})` : ''
-        alert(`Bildgenerierung gestartet${modelLine}! Die Seite wird aktualisiert.`)
         window.location.reload()
       } else {
         const error = await response.json()
