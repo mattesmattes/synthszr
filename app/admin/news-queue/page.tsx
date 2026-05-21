@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Slider } from '@/components/ui/slider'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -712,15 +713,39 @@ export default function NewsQueuePage() {
             <Link className="h-3 w-3 mr-1" />
             Artikel hinzufügen
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-xs"
-            onClick={fetchBalancedSelection}
-          >
-            <Play className="h-3 w-3 mr-1" />
-            Balancierte Auswahl anzeigen
-          </Button>
+          {/* Tagespager — Pending-Modus erlaubt bis zu 3 Tage zurück
+              (zusätzlich zur Live-Sicht "heute + gestern"). Bei anderen
+              Status-Filtern ist der Datums-Begriff irrelevant, da blenden
+              wir das Dropdown aus. */}
+          {statusFilter === 'pending' && (
+            <Select
+              value={viewDay ?? 'current'}
+              onValueChange={(value) => setViewDay(value === 'current' ? null : value)}
+            >
+              <SelectTrigger className="h-8 text-xs w-[220px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="current">Aktuell (heute + gestern)</SelectItem>
+                {[2, 3, 4].map((daysAgo) => {
+                  const d = new Date()
+                  d.setUTCDate(d.getUTCDate() - daysAgo)
+                  const iso = d.toISOString().slice(0, 10)
+                  const label = d.toLocaleDateString('de-DE', {
+                    weekday: 'short',
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                  })
+                  return (
+                    <SelectItem key={iso} value={iso}>
+                      {label}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+          )}
           {stats && stats.selected > 0 && (
             <Button
               size="sm"
@@ -823,82 +848,6 @@ export default function NewsQueuePage() {
               </div>
             </CardContent>
           </Card>
-        </div>
-      )}
-
-      {/* Day pager — only relevant for pending; lets the user step back
-          one calendar day at a time from the rolling 48h "Aktuell" view
-          to inspect items that have aged out of the live window. */}
-      {statusFilter === 'pending' && (
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-xs"
-            onClick={() => {
-              // Stepping back from "Aktuell" lands on the day before
-              // yesterday (the rolling window already covers today + gestern).
-              if (!viewDay) {
-                const dayBeforeYesterday = new Date()
-                dayBeforeYesterday.setUTCDate(dayBeforeYesterday.getUTCDate() - 2)
-                setViewDay(dayBeforeYesterday.toISOString().slice(0, 10))
-              } else {
-                const prev = new Date(`${viewDay}T00:00:00.000Z`)
-                prev.setUTCDate(prev.getUTCDate() - 1)
-                setViewDay(prev.toISOString().slice(0, 10))
-              }
-            }}
-            disabled={loading}
-          >
-            <ChevronLeft className="h-3.5 w-3.5 mr-1" />
-            Vortag
-          </Button>
-          <span className="text-xs font-medium px-3 py-1.5 rounded bg-muted min-w-[180px] text-center">
-            {viewDay
-              ? new Date(`${viewDay}T00:00:00.000Z`).toLocaleDateString('de-DE', {
-                  weekday: 'short',
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric',
-                })
-              : 'Aktuell (heute + gestern)'}
-          </span>
-          {viewDay && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-xs"
-                onClick={() => {
-                  // Stepping forward: one day newer; if that lands inside the
-                  // rolling 48h window again, return to live mode.
-                  const next = new Date(`${viewDay}T00:00:00.000Z`)
-                  next.setUTCDate(next.getUTCDate() + 1)
-                  const yesterdayUtc = new Date()
-                  yesterdayUtc.setUTCDate(yesterdayUtc.getUTCDate() - 1)
-                  yesterdayUtc.setUTCHours(0, 0, 0, 0)
-                  if (next.getTime() >= yesterdayUtc.getTime()) {
-                    setViewDay(null)
-                  } else {
-                    setViewDay(next.toISOString().slice(0, 10))
-                  }
-                }}
-                disabled={loading}
-              >
-                Neuer
-                <ChevronRight className="h-3.5 w-3.5 ml-1" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-xs"
-                onClick={() => setViewDay(null)}
-                disabled={loading}
-              >
-                Zurück zu Aktuell
-              </Button>
-            </>
-          )}
         </div>
       )}
 
