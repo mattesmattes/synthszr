@@ -179,7 +179,17 @@ export default function NewsQueuePage() {
       const isPending = statusFilter === 'pending'
       const fetchLimit = isPending ? 500 : PAGE_SIZE
       const offset = isPending ? 0 : page * PAGE_SIZE
-      const dayQuery = isPending && viewDay ? `&day=${viewDay}` : ''
+      // Day pager → compute from/to as ISO timestamps in the browser's
+      // local timezone. Sending UTC dates would mis-align with the
+      // local-time day-grouping in the UI and hide items queued
+      // around local midnight.
+      let dayQuery = ''
+      if (isPending && viewDay) {
+        const [y, m, d] = viewDay.split('-').map(Number)
+        const localStart = new Date(y, m - 1, d, 0, 0, 0, 0)
+        const localEnd = new Date(y, m - 1, d + 1, 0, 0, 0, 0)
+        dayQuery = `&from=${encodeURIComponent(localStart.toISOString())}&to=${encodeURIComponent(localEnd.toISOString())}`
+      }
       const [statsRes, distRes, itemsRes] = await Promise.all([
         fetch('/api/admin/news-queue?action=stats'),
         fetch('/api/admin/news-queue?action=distribution'),
@@ -728,9 +738,15 @@ export default function NewsQueuePage() {
               <SelectContent>
                 <SelectItem value="current">Aktuell (heute + gestern)</SelectItem>
                 {[2, 3, 4].map((daysAgo) => {
+                  // Local-time arithmetic so the value (YYYY-MM-DD) and
+                  // the German label both refer to the same calendar day
+                  // in the user's timezone. UTC-based arithmetic would
+                  // drift by ~2h around midnight and mis-match the
+                  // day-grouping headers in the item list.
                   const d = new Date()
-                  d.setUTCDate(d.getUTCDate() - daysAgo)
-                  const iso = d.toISOString().slice(0, 10)
+                  d.setDate(d.getDate() - daysAgo)
+                  d.setHours(0, 0, 0, 0)
+                  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
                   const label = d.toLocaleDateString('de-DE', {
                     weekday: 'short',
                     day: '2-digit',

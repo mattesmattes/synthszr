@@ -192,19 +192,25 @@ export async function GET(request: NextRequest) {
 
         // Sorting and filtering by status
         if (status === 'pending') {
-          // Optional ?day=YYYY-MM-DD pages back to a single calendar day
-          // (UTC-based window). Without the param we keep the default
-          // rolling 48h view of "today + yesterday".
-          // Note: when the user pages back we drop the expires_at guard,
-          // because items past their 3-day TTL are still worth showing
-          // for context (read-only view of older days).
-          const dayParam = searchParams.get('day')
-          if (dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam)) {
-            const dayStart = new Date(`${dayParam}T00:00:00.000Z`)
-            const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
+          // Optional ?from=ISO&to=ISO pair pages back to a single
+          // calendar day. The boundaries are computed in the user's
+          // local timezone client-side and sent as full ISO strings,
+          // so the backend doesn't have to guess a timezone. This
+          // matches the day-grouping in the UI (also local-time
+          // based) — without that alignment, items queued shortly
+          // after local midnight would group under one date label
+          // but get filtered into the previous UTC date, which is
+          // exactly the "items disappear when paging back" bug.
+          //
+          // Note: when the user pages back we drop the expires_at
+          // guard, because items past their 3-day TTL are still
+          // worth showing for context (read-only view of older days).
+          const fromParam = searchParams.get('from')
+          const toParam = searchParams.get('to')
+          if (fromParam && toParam) {
             query = query
-              .gte('queued_at', dayStart.toISOString())
-              .lt('queued_at', dayEnd.toISOString())
+              .gte('queued_at', fromParam)
+              .lt('queued_at', toParam)
               .order('queued_at', { ascending: false })
               .order('total_score', { ascending: false })
           } else {
