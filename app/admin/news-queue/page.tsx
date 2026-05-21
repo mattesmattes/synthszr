@@ -123,6 +123,9 @@ export default function NewsQueuePage() {
   const [loading, setLoading] = useState(true)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [statusFilter, setStatusFilter] = useState<string>('pending')
+  // Day pager for pending: null = live (rolling 48h, today + yesterday),
+  // otherwise a YYYY-MM-DD string for a single calendar day in the past.
+  const [viewDay, setViewDay] = useState<string | null>(null)
   const [viewingItem, setViewingItem] = useState<QueueItem | null>(null)
   const [loadingContent, setLoadingContent] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
@@ -170,15 +173,16 @@ export default function NewsQueuePage() {
   const fetchData = useCallback(async (page = currentPage) => {
     setLoading(true)
     try {
-      // For pending: fetch all items (48h filter keeps count manageable)
-      // For other statuses: paginate normally
+      // For pending: fetch all items (48h window or single-day pager
+      // keeps the count manageable). For other statuses: paginate normally.
       const isPending = statusFilter === 'pending'
       const fetchLimit = isPending ? 500 : PAGE_SIZE
       const offset = isPending ? 0 : page * PAGE_SIZE
+      const dayQuery = isPending && viewDay ? `&day=${viewDay}` : ''
       const [statsRes, distRes, itemsRes] = await Promise.all([
         fetch('/api/admin/news-queue?action=stats'),
         fetch('/api/admin/news-queue?action=distribution'),
-        fetch(`/api/admin/news-queue?action=list&status=${statusFilter}&limit=${fetchLimit}&offset=${offset}`)
+        fetch(`/api/admin/news-queue?action=list&status=${statusFilter}&limit=${fetchLimit}&offset=${offset}${dayQuery}`)
       ])
 
       if (statsRes.ok) setStats(await statsRes.json())
@@ -192,7 +196,7 @@ export default function NewsQueuePage() {
       console.error('Failed to fetch queue data:', error)
     }
     setLoading(false)
-  }, [statusFilter, currentPage])
+  }, [statusFilter, currentPage, viewDay])
 
   useEffect(() => {
     fetchData()
@@ -250,6 +254,9 @@ export default function NewsQueuePage() {
   // Reset page when filter changes
   useEffect(() => {
     setCurrentPage(0)
+    // Leaving the pending tab also exits the day pager — the date
+    // navigator only makes sense for pending items.
+    if (statusFilter !== 'pending') setViewDay(null)
   }, [statusFilter])
 
   // Fetch content from daily_repo when preview dialog opens and content is missing
@@ -816,6 +823,82 @@ export default function NewsQueuePage() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Day pager — only relevant for pending; lets the user step back
+          one calendar day at a time from the rolling 48h "Aktuell" view
+          to inspect items that have aged out of the live window. */}
+      {statusFilter === 'pending' && (
+        <div className="flex items-center justify-center gap-2 mb-3">
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs"
+            onClick={() => {
+              // Stepping back from "Aktuell" lands on the day before
+              // yesterday (the rolling window already covers today + gestern).
+              if (!viewDay) {
+                const dayBeforeYesterday = new Date()
+                dayBeforeYesterday.setUTCDate(dayBeforeYesterday.getUTCDate() - 2)
+                setViewDay(dayBeforeYesterday.toISOString().slice(0, 10))
+              } else {
+                const prev = new Date(`${viewDay}T00:00:00.000Z`)
+                prev.setUTCDate(prev.getUTCDate() - 1)
+                setViewDay(prev.toISOString().slice(0, 10))
+              }
+            }}
+            disabled={loading}
+          >
+            <ChevronLeft className="h-3.5 w-3.5 mr-1" />
+            Vortag
+          </Button>
+          <span className="text-xs font-medium px-3 py-1.5 rounded bg-muted min-w-[180px] text-center">
+            {viewDay
+              ? new Date(`${viewDay}T00:00:00.000Z`).toLocaleDateString('de-DE', {
+                  weekday: 'short',
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                })
+              : 'Aktuell (heute + gestern)'}
+          </span>
+          {viewDay && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs"
+                onClick={() => {
+                  // Stepping forward: one day newer; if that lands inside the
+                  // rolling 48h window again, return to live mode.
+                  const next = new Date(`${viewDay}T00:00:00.000Z`)
+                  next.setUTCDate(next.getUTCDate() + 1)
+                  const yesterdayUtc = new Date()
+                  yesterdayUtc.setUTCDate(yesterdayUtc.getUTCDate() - 1)
+                  yesterdayUtc.setUTCHours(0, 0, 0, 0)
+                  if (next.getTime() >= yesterdayUtc.getTime()) {
+                    setViewDay(null)
+                  } else {
+                    setViewDay(next.toISOString().slice(0, 10))
+                  }
+                }}
+                disabled={loading}
+              >
+                Neuer
+                <ChevronRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs"
+                onClick={() => setViewDay(null)}
+                disabled={loading}
+              >
+                Zurück zu Aktuell
+              </Button>
+            </>
+          )}
         </div>
       )}
 

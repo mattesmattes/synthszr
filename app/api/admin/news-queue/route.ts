@@ -192,13 +192,29 @@ export async function GET(request: NextRequest) {
 
         // Sorting and filtering by status
         if (status === 'pending') {
-          // Only show items from last 48 hours that haven't expired
-          const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
-          query = query
-            .gt('expires_at', new Date().toISOString())
-            .gte('queued_at', cutoff48h)
-            .order('queued_at', { ascending: false })
-            .order('total_score', { ascending: false })
+          // Optional ?day=YYYY-MM-DD pages back to a single calendar day
+          // (UTC-based window). Without the param we keep the default
+          // rolling 48h view of "today + yesterday".
+          // Note: when the user pages back we drop the expires_at guard,
+          // because items past their 3-day TTL are still worth showing
+          // for context (read-only view of older days).
+          const dayParam = searchParams.get('day')
+          if (dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam)) {
+            const dayStart = new Date(`${dayParam}T00:00:00.000Z`)
+            const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
+            query = query
+              .gte('queued_at', dayStart.toISOString())
+              .lt('queued_at', dayEnd.toISOString())
+              .order('queued_at', { ascending: false })
+              .order('total_score', { ascending: false })
+          } else {
+            const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+            query = query
+              .gt('expires_at', new Date().toISOString())
+              .gte('queued_at', cutoff48h)
+              .order('queued_at', { ascending: false })
+              .order('total_score', { ascending: false })
+          }
         } else {
           query = query.order('total_score', { ascending: false })
         }
