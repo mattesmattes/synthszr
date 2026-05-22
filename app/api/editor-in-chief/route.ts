@@ -9,7 +9,11 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 
 export const runtime = 'nodejs'
 // Editor-in-Chief processes the full article in one shot — give it room.
-export const maxDuration = 180
+// 180s was OK for 16k-token outputs at Sonnet speeds, but with the new
+// 32k cap and the user running Opus 4.7 (slower), a 10-section article
+// can hit ~7-9 min total. Vercel Pro allows up to 800s; 600s leaves a
+// safety margin.
+export const maxDuration = 600
 
 /**
  * POST /api/editor-in-chief
@@ -219,9 +223,13 @@ async function* streamModel(
   // bleeding through.
   if (resolved.provider === 'anthropic') {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    // 16k was tight for full-length articles (10 sections × news + take +
+    // editor notes) — observed a truncation after ~9 sections on the
+    // May 22 UFO-Transparenz post. Doubled to 32k; Claude Sonnet 4.6
+    // and Opus 4.7 both support up to 64k output, so this is safe.
     const stream = anthropic.messages.stream({
       model: resolved.modelId,
-      max_tokens: 16384,
+      max_tokens: 32000,
       messages: [{ role: 'user', content: userMessage }],
     })
     for await (const event of stream) {
@@ -233,7 +241,7 @@ async function* streamModel(
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
     const stream = await openai.chat.completions.create({
       model: resolved.modelId,
-      max_completion_tokens: 16384,
+      max_completion_tokens: 32000,
       messages: [{ role: 'user', content: userMessage }],
       stream: true,
     })
