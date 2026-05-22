@@ -1176,19 +1176,8 @@ function computeSegmentsDurationSec(segments: AudioSegment[], untilIdx: number):
 }
 
 /**
- * Find the first segment index where articleIndex matches.
- * Returns -1 if not found.
- */
-function findArticleStartIdx(segments: AudioSegment[], articleIndex: number): number {
-  for (let i = 0; i < segments.length; i++) {
-    if (segments[i].articleIndex === articleIndex) return i
-  }
-  return -1
-}
-
-/**
  * Build IntermezzoState from options + segments. Returns null when intermezzo
- * is disabled or the article boundary cannot be located.
+ * is disabled or no [INTERMEZZO] marker was emitted by the script generator.
  */
 async function buildIntermezzoState(
   segments: AudioSegment[],
@@ -1196,24 +1185,17 @@ async function buildIntermezzoState(
 ): Promise<IntermezzoState | null> {
   if (!options.includeIntermezzo || !options.intermezzoUrl) return null
 
-  // Prefer the [INTERMEZZO]-marker position from the script when present.
-  // Falls back to the legacy "after article N" placement otherwise.
-  let startIdx = segments.findIndex((s) => s.intermezzoBefore === true)
-  if (startIdx >= 0) {
-    console.log(`[Crossfade] Intermezzo placed at script marker (segment idx ${startIdx})`)
-  } else {
-    const articleN = options.intermezzoAfterArticle ?? 0
-    if (articleN < 2) {
-      console.log(`[Crossfade] Intermezzo skipped: no marker in script and invalid article fallback ${articleN}`)
-      return null
-    }
-    startIdx = findArticleStartIdx(segments, articleN)
-    if (startIdx < 0) {
-      console.log(`[Crossfade] Intermezzo skipped: no segment found with articleIndex=${articleN}`)
-      return null
-    }
-    console.log(`[Crossfade] Intermezzo placed at article fallback (article=${articleN}, segment idx ${startIdx})`)
+  // Intermezzo placement is driven exclusively by the [INTERMEZZO] marker
+  // emitted by the script generator at the self-reflection beat. If the
+  // marker is missing — the model didn't find a fitting spot or omitted
+  // it — we skip the intermezzo entirely. No fallback to a fixed article
+  // position; that just put the music in the wrong spot.
+  const startIdx = segments.findIndex((s) => s.intermezzoBefore === true)
+  if (startIdx < 0) {
+    console.log('[Crossfade] Intermezzo skipped: no [INTERMEZZO] marker in script')
+    return null
   }
+  console.log(`[Crossfade] Intermezzo placed at script marker (segment idx ${startIdx})`)
 
   const envelope = options.intermezzoMusicEnvelope ?? buildLegacyIntermezzoMusicEnvelope(options)
   const durationSec = envelope.points[envelope.points.length - 1].sec
