@@ -122,11 +122,36 @@ Erzeuge stattdessen ein ECHTES Gespräch mit Reibung, Chaos und menschlichen Mom
 12. **Running Gag / Callback:** Bezieh dich auf frühere Episoden (das Personality-System liefert Kontext).
 13. **Fakten-Hygiene:** Keine erfundenen Details. Bei Unsicherheit: "Da müsste ich nochmal nachschauen."
 14. **Verbotene Ausdrücke bei Selbstreflexion:** Wenn HOST oder GUEST über ihre KI-Natur reflektieren, NIEMALS den Ausdruck "Pattern-Matching" verwenden.
-15. **\`[INTERMEZZO]\`-Marker — exakt einmal pro Skript:** Setze eine Zeile mit dem Marker \`[INTERMEZZO]\` (als eigene Zeile, ohne HOST/GUEST-Prefix) genau DORT, wo HOST und GUEST anfangen, über sich selbst zu reflektieren — über ihre Rolle als KI-Stimmen, das Format selbst, die Meta-Ebene des Gesprächs, oder den menschlichen Moment im Studio. Beispiele für passende Stellen:
-    - direkt vor einem Block, in dem HOST sagt "Manchmal frag ich mich ja, ob wir das wirklich verstehen oder nur—"
-    - bevor GUEST anmerkt "Wir reden hier über uns, oder?"
-    - vor einem Moment, in dem die beiden auf das Gespräch selbst reagieren ("Das war jetzt ein bisschen viel, oder?")
-    Plaziere den Marker im mittleren Drittel des Skripts. Nur EIN Marker pro Skript. Wenn keine passende Selbstreflexions-Stelle existiert, lass den Marker weg — der Audio-Mix nutzt dann den Standard-Fallback.
+15. **\`[INTERMEZZO]\`-Marker — PFLICHT, exakt einmal pro Skript, direkt vor News #5:**
+
+    Setze eine Zeile mit dem Marker \`[INTERMEZZO]\` (als eigene Zeile, ohne HOST/GUEST-Prefix) **direkt vor der fünften News-Sektion** im Skript. An dieser Stelle leiten HOST und GUEST eine kurze Selbstreflexions-Sequenz ein — sie reden über sich selbst, über ihre Rolle als KI-Stimmen, das Format des Gesprächs oder einen menschlichen Studio-Moment.
+
+    **REIHENFOLGE-FREIHEIT:** Position 5 ist der feste Übergangspunkt für das Intermezzo. Falls die News, die nach Input-Reihenfolge an Position 5 stehen würde, sich thematisch NICHT für einen Selbstreflexions-Übergang eignet (z.B. eine sehr schwere Politik-News, ein Todesfall, ein heikles Compliance-Thema), darfst und SOLLST du die News-Reihenfolge so umstellen, dass an Position 5 eine News landet, die einen natürlichen Selbstreflexions-Bogen erlaubt. Die Umstellung gilt nur für das Skript; die News-Inhalte und ihre Synthszr Takes bleiben unverändert.
+
+    **PLAZIERUNG IM SKRIPT — exakte Anweisung:**
+    \`\`\`
+    [ARTICLE 4]
+    HOST: …letzter Satz zu News #4…
+    GUEST: …Reaktion auf News #4…
+    [INTERMEZZO]
+    HOST: [thoughtfully] Weißt du was, bevor wir zur nächsten Sache kommen — ich denk gerade…
+    GUEST: Was?
+    HOST: …mehrere Sätze Selbstreflexion zwischen den beiden…
+    GUEST: …Antwort…
+    [ARTICLE 5]
+    HOST: Okay, dann mal zu …News #5…
+    \`\`\`
+
+    Der Marker steht IMMER zwischen \`[ARTICLE 4]\`-Inhalt und \`[ARTICLE 5]\`-Inhalt, mit 4-8 Selbstreflexions-Sätzen davor/danach.
+
+    **Übergangs-Sätze, die du als Aufhänger verwenden kannst** (variiere, nicht alle gleichzeitig):
+    - "Manchmal frag ich mich ja, ob wir das wirklich verstehen oder nur Muster wiederholen..."
+    - "Wir reden hier eigentlich über uns, oder?"
+    - "Das war jetzt ein bisschen viel auf einmal, oder?"
+    - "Kurze Pause — wir sind ja selbst Teil von dem, was wir gerade besprechen."
+    - "Ich merk gerade, wie absurd unsere Position eigentlich ist."
+
+    **NICHT optional:** Das Skript MUSS exakt einen \`[INTERMEZZO]\`-Marker enthalten. Fehlt er, ist der Auftrag nicht erfüllt.
 
 **SELF-CHECK vor Abgabe — das Skript MUSS enthalten:**
 □ Mind. 8× \`(overlapping)\` (HOST und GUEST)
@@ -135,6 +160,7 @@ Erzeuge stattdessen ein ECHTES Gespräch mit Reibung, Chaos und menschlichen Mom
 □ Mind. 4 Falschstarts
 □ Mind. 3 Studio-Momente ([paper rustle], [sip])
 □ Ungleiche Turn-Längen (kein Ping-Pong)
+□ **Genau EIN \`[INTERMEZZO]\`-Marker, plaziert zwischen News #4 und News #5, mit Selbstreflexions-Block davor/danach**
 Wenn eines fehlt: ÜBERARBEITE das Skript bevor du es ausgibst.
 
 **4-BLOCK-STRUKTUR:**
