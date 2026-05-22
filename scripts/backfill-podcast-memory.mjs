@@ -16,7 +16,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 
 const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
 const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
@@ -30,7 +30,7 @@ if (!url || !supabaseKey || !anthropicKey || !geminiKey) {
 
 const supabase = createClient(url, supabaseKey)
 const anthropic = new Anthropic({ apiKey: anthropicKey })
-const genAI = new GoogleGenerativeAI(geminiKey)
+const genAI = new GoogleGenAI({ apiKey: geminiKey })
 
 const force = process.argv.includes('--force')
 const EXTRACTION_MODEL = 'claude-haiku-4-5-20251001'
@@ -80,9 +80,14 @@ async function extract(script) {
 
 async function embed(text) {
   if (!text.trim()) return null
-  const model = genAI.getGenerativeModel({ model: 'gemini-embedding-001' })
-  const result = await model.embedContent(text.slice(0, 6000))
-  const v = result.embedding?.values
+  // gemini-embedding-001 defaults to 3072 dims; the DB column is
+  // vector(768) so we must request the reduced output here.
+  const result = await genAI.models.embedContent({
+    model: 'gemini-embedding-001',
+    contents: text.slice(0, 8000),
+    config: { outputDimensionality: 768 },
+  })
+  const v = result.embeddings?.[0]?.values
   return v && v.length > 0 ? v : null
 }
 
