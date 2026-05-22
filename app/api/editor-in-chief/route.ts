@@ -159,7 +159,7 @@ function finalizeOutput(
 > ⚠ ${reason}. Bitte den Editor-in-Chief manuell erneut ausführen, oder den Prompt verschärfen.
 
 - **Reihenfolge (vorher → nachher):** _nicht dokumentiert_
-- **Synthszr Takes — Analogien:** _nicht dokumentiert_
+- **Stil-Edits:** _nicht dokumentiert_
 - **Verständlichkeit:** _nicht dokumentiert_
 `
     console.warn('[Editor-in-Chief] Appended fallback Editor-Notizen block', {
