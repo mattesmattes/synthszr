@@ -27,6 +27,7 @@ import { requireAdmin } from '@/lib/auth/session'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
 import { getPersonalityState, buildPersonalityBrief, stripMomentsSection } from '@/lib/podcast/personality'
 import { retrieveMemory, buildMemoryBrief } from '@/lib/podcast/memory'
+import { ensureIntermezzoMarker } from '@/lib/podcast/intermezzo'
 import Anthropic from '@anthropic-ai/sdk'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 
@@ -581,6 +582,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'AI generated empty script' }, { status: 500 })
     }
 
+    // Post-generation guarantee: the main model ignores rule #15
+    // (set an [INTERMEZZO] marker at the self-reflection beat) almost
+    // every time. A second pass with Haiku locates the strongest
+    // self-reflection line and splices the marker in. Fail-soft.
+    const scriptWithMarker = await ensureIntermezzoMarker(scriptContent)
+
     // NOTE: Personality evolution (advanceState) happens in jobs/process/route.ts
     // AFTER the podcast audio is successfully generated — not here at script generation time.
     // This prevents test scripts from advancing the personality state.
@@ -590,7 +597,7 @@ export async function POST(request: NextRequest) {
     // only picks up HOST:/GUEST: lines, so the MOMENTS section is safely ignored.
 
     // Count lines and estimate duration (exclude MOMENTS section for accuracy)
-    const scriptForStats = stripMomentsSection(scriptContent)
+    const scriptForStats = stripMomentsSection(scriptWithMarker)
     const lines = scriptForStats.split('\n').filter(line =>
       line.trim().match(/^(HOST|GUEST)\s*(?:\(overlapping\))?\s*:/i)
     )
@@ -601,7 +608,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      script: scriptContent,
+      script: scriptWithMarker,
       lineCount: lines.length,
       wordCount: totalWords,
       estimatedDuration,

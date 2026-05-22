@@ -21,6 +21,7 @@ import {
 import { concatenateWithCrossfade, mixingSettingsToCrossfadeOptions, type AudioSegment } from '@/lib/audio/crossfade'
 import { getPersonalityState, buildPersonalityBrief, advanceState } from '@/lib/podcast/personality'
 import { retrieveMemory, buildMemoryBrief } from '@/lib/podcast/memory'
+import { ensureIntermezzoMarker } from '@/lib/podcast/intermezzo'
 import Anthropic from '@anthropic-ai/sdk'
 
 // TTS language mapping
@@ -327,14 +328,20 @@ async function generatePodcastForPost(
       messages: [{ role: 'user', content: fullPrompt }],
     })
 
-    const script = message.content
+    const rawScript = message.content
       .filter(block => block.type === 'text')
       .map(block => (block as { type: 'text'; text: string }).text)
       .join('\n')
 
-    if (!script.trim()) {
+    if (!rawScript.trim()) {
       throw new Error('AI generated empty script')
     }
+
+    // Post-generation Haiku pass that guarantees an [INTERMEZZO] marker
+    // at the strongest self-reflection beat — the main model ignores
+    // the prompt rule consistently. Fail-soft: returns rawScript when
+    // the pass can't find a suitable line.
+    const script = await ensureIntermezzoMarker(rawScript)
 
     // Evolve personality state after successful generation
     await advanceState(personalityState, script)
