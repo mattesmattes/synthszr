@@ -16,6 +16,7 @@ export interface PodcastLine {
   text: string // Can include emotion tags like [cheerfully] or free-form [warm and upbeat, like greeting a friend]
   overlapping?: boolean // True when marked with (overlapping) — both speakers audible simultaneously
   articleIndex?: number // 1-based news article this line belongs to (set by [ARTICLE N] markers in script)
+  intermezzoBefore?: boolean // True when this line directly follows a [INTERMEZZO] marker in the script
 }
 
 /**
@@ -584,6 +585,12 @@ export function parseScriptText(rawScript: string): PodcastLine[] {
   // [ARTICLE N] marker lines split the script into news-article sections.
   // Lines before the first marker (or in scripts without markers) belong to article 1.
   let currentArticle = 1
+  // A standalone [INTERMEZZO] marker hands the position of the
+  // self-reflection block over to the audio mixer — the next real HOST/GUEST
+  // line inherits intermezzoBefore=true and becomes the fade-in anchor.
+  // Only the first marker counts; further occurrences are ignored.
+  let pendingIntermezzo = false
+  let intermezzoAlreadyAssigned = false
 
   for (const rawLine of rawLines) {
     const trimmed = rawLine.trim()
@@ -595,14 +602,27 @@ export function parseScriptText(rawScript: string): PodcastLine[] {
       continue
     }
 
+    const intermezzoMatch = /^\[\s*INTERMEZZO\s*\]\s*$/i.test(trimmed)
+    if (intermezzoMatch) {
+      if (!intermezzoAlreadyAssigned) pendingIntermezzo = true
+      continue
+    }
+
     const hostMatch = trimmed.match(/^HOST\s*(?:\(overlapping\))?\s*:\s*(.+)$/i)
     const guestMatch = trimmed.match(/^GUEST\s*(?:\(overlapping\))?\s*:\s*(.+)$/i)
     const isOverlapping = /\(overlapping\)/i.test(trimmed)
 
-    if (hostMatch) {
-      lines.push({ speaker: 'HOST', text: hostMatch[1].trim(), articleIndex: currentArticle, ...(isOverlapping && { overlapping: true }) })
-    } else if (guestMatch) {
-      lines.push({ speaker: 'GUEST', text: guestMatch[1].trim(), articleIndex: currentArticle, ...(isOverlapping && { overlapping: true }) })
+    if (hostMatch || guestMatch) {
+      const intermezzoFlag = pendingIntermezzo ? { intermezzoBefore: true as const } : {}
+      if (pendingIntermezzo) {
+        pendingIntermezzo = false
+        intermezzoAlreadyAssigned = true
+      }
+      if (hostMatch) {
+        lines.push({ speaker: 'HOST', text: hostMatch[1].trim(), articleIndex: currentArticle, ...(isOverlapping && { overlapping: true }), ...intermezzoFlag })
+      } else if (guestMatch) {
+        lines.push({ speaker: 'GUEST', text: guestMatch[1].trim(), articleIndex: currentArticle, ...(isOverlapping && { overlapping: true }), ...intermezzoFlag })
+      }
     }
   }
 

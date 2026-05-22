@@ -29,7 +29,8 @@ export interface AudioSegment {
   speaker: 'HOST' | 'GUEST'
   text: string
   overlapping?: boolean // True for (overlapping) lines — additive mix instead of crossfade
-  articleIndex?: number // 1-based news article — used for intermezzo placement
+  articleIndex?: number // 1-based news article — used for intermezzo placement (fallback)
+  intermezzoBefore?: boolean // Marks the segment where the [INTERMEZZO] marker fires (overrides articleIndex placement)
 }
 
 export interface CrossfadeOptions {
@@ -1194,16 +1195,24 @@ async function buildIntermezzoState(
   options: CrossfadeOptions
 ): Promise<IntermezzoState | null> {
   if (!options.includeIntermezzo || !options.intermezzoUrl) return null
-  const articleN = options.intermezzoAfterArticle ?? 0
-  if (articleN < 2) {
-    console.log(`[Crossfade] Intermezzo skipped: invalid article index ${articleN}`)
-    return null
-  }
 
-  const startIdx = findArticleStartIdx(segments, articleN)
-  if (startIdx < 0) {
-    console.log(`[Crossfade] Intermezzo skipped: no segment found with articleIndex=${articleN}`)
-    return null
+  // Prefer the [INTERMEZZO]-marker position from the script when present.
+  // Falls back to the legacy "after article N" placement otherwise.
+  let startIdx = segments.findIndex((s) => s.intermezzoBefore === true)
+  if (startIdx >= 0) {
+    console.log(`[Crossfade] Intermezzo placed at script marker (segment idx ${startIdx})`)
+  } else {
+    const articleN = options.intermezzoAfterArticle ?? 0
+    if (articleN < 2) {
+      console.log(`[Crossfade] Intermezzo skipped: no marker in script and invalid article fallback ${articleN}`)
+      return null
+    }
+    startIdx = findArticleStartIdx(segments, articleN)
+    if (startIdx < 0) {
+      console.log(`[Crossfade] Intermezzo skipped: no segment found with articleIndex=${articleN}`)
+      return null
+    }
+    console.log(`[Crossfade] Intermezzo placed at article fallback (article=${articleN}, segment idx ${startIdx})`)
   }
 
   const envelope = options.intermezzoMusicEnvelope ?? buildLegacyIntermezzoMusicEnvelope(options)
@@ -1212,7 +1221,7 @@ async function buildIntermezzoState(
   const segmentsBefore = computeSegmentsDurationSec(segments, startIdx)
   const startTotalSec = introOffset + segmentsBefore
 
-  console.log(`[Crossfade] Intermezzo: article ${articleN} starts at segment ${startIdx} → ${startTotalSec.toFixed(1)}s (intro offset ${introOffset.toFixed(1)}s + ${segmentsBefore.toFixed(1)}s of dialog), duration ${durationSec.toFixed(1)}s`)
+  console.log(`[Crossfade] Intermezzo starts at segment ${startIdx} → ${startTotalSec.toFixed(1)}s (intro offset ${introOffset.toFixed(1)}s + ${segmentsBefore.toFixed(1)}s of dialog), duration ${durationSec.toFixed(1)}s`)
 
   const pcm = await loadIntermezzo(options.intermezzoUrl)
 

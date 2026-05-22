@@ -117,9 +117,33 @@ KEINE Militär-/Kriegsbildsprache (Schlachten, Waffen, Mobilmachung, Kampfverbä
 
 INTERPUNKTION & SATZBAU — VERBOTEN FÜR SYNTHSZR TAKES:
 - **Keine Em-Dashes (— oder –) als Satzteiler.** Stattdessen: Punkt, Komma, Doppelpunkt, Semikolon oder Klammer. Em-Dashes sind ein klassisches AI-Tell.
-- **Keine Kontrast-Konstruktionen** ("Nicht X, sondern Y" / "ist kein X, das ist Y" / "weniger X, mehr Y" / "vergiss X, das ist Y"). Das gemeinte Y direkt positiv hinschreiben. Sarkasmus als eigener Satz mit direktem Statement (Beispiel oben: "OpenAI nennt das Sicherheitskultur.").
 - **Verstärker-Adverbien streichen** ("exakt", "zufällig", "buchstäblich", "tatsächlich", "letztendlich") wenn sie nichts hinzufügen.
 - **Drei-Listen-Aufzählungen vermeiden** ("X ist optional, Y ist privat, Z ist diffus" — wirken rhythmisch geschult statt gedacht). Maximal zwei parallele Glieder, dann Punkt.
+
+KONTRAST-KONSTRUKTIONEN — FATAL, KEINE EINZIGE ERLAUBT:
+Diese Konstruktion ist das stärkste AI-Tell überhaupt: ein erstes Framing aufbauen, um es zu negieren und durch ein "tieferes" zu ersetzen. Wirkt rhetorisch hohl, klingt nach LinkedIn-Influencer. Wenn auch nur EINE im Take auftaucht, ist der Take durchgefallen — du musst zurück und umformulieren.
+
+VERBOTENE MUSTER (in jeder Variation):
+- "Das ist kein X, sondern Y."
+- "Das ist kein X mehr, sondern Y."
+- "Das ist nicht X. Das ist Y."
+- "Nicht X. Y."
+- "Vergiss X. Das ist Y."
+- "Weniger X, mehr Y."
+- "X ist nicht Y, X ist Z."
+- "Was wie X aussieht, ist eigentlich Y."
+
+NEGATIVBEISPIEL (FATALER FEHLER):
+> "Das ist kein gewöhnliches Venture Capital mehr, sondern vertikale Integration durch die Hintertür."
+→ Klassische Negation+Korrektur. Direkt streichen und neu formulieren.
+
+POSITIV (so JA — Y direkt aussprechen):
+> "Das ist vertikale Integration durch die Hintertür, getarnt als Venture Capital."
+oder, wenn die Pointe ein Sarkasmus ist:
+> "Sie nennen es Venture Capital. Es ist vertikale Integration durch die Hintertür."
+
+SELF-CHECK VOR ABGABE:
+Lies deinen Take laut durch. Steht irgendwo "kein", "nicht", "vergiss", "weniger" als Auftakt zu einer Korrektur des nächsten Halbsatzes? Wenn ja: streichen, Y direkt positiv hinschreiben oder als zweiten Satz mit klarem Statement.
 
 INHALTLICHE VERBOTE (toxische Muster):
 - Einstieg mit Bewertung: "Das ist wichtig/bedeutend/bemerkenswert/spannend"

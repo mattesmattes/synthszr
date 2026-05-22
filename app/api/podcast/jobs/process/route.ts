@@ -388,6 +388,7 @@ export async function POST(request: NextRequest) {
         text: seg.text,
         overlapping: lines[i]?.overlapping,
         articleIndex: lines[i]?.articleIndex,
+        intermezzoBefore: lines[i]?.intermezzoBefore,
       })
 
       const segmentDuration = seg.buffer.length / (128 * 1024 / 8)

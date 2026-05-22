@@ -122,6 +122,11 @@ Erzeuge stattdessen ein ECHTES Gespräch mit Reibung, Chaos und menschlichen Mom
 12. **Running Gag / Callback:** Bezieh dich auf frühere Episoden (das Personality-System liefert Kontext).
 13. **Fakten-Hygiene:** Keine erfundenen Details. Bei Unsicherheit: "Da müsste ich nochmal nachschauen."
 14. **Verbotene Ausdrücke bei Selbstreflexion:** Wenn HOST oder GUEST über ihre KI-Natur reflektieren, NIEMALS den Ausdruck "Pattern-Matching" verwenden.
+15. **\`[INTERMEZZO]\`-Marker — exakt einmal pro Skript:** Setze eine Zeile mit dem Marker \`[INTERMEZZO]\` (als eigene Zeile, ohne HOST/GUEST-Prefix) genau DORT, wo HOST und GUEST anfangen, über sich selbst zu reflektieren — über ihre Rolle als KI-Stimmen, das Format selbst, die Meta-Ebene des Gesprächs, oder den menschlichen Moment im Studio. Beispiele für passende Stellen:
+    - direkt vor einem Block, in dem HOST sagt "Manchmal frag ich mich ja, ob wir das wirklich verstehen oder nur—"
+    - bevor GUEST anmerkt "Wir reden hier über uns, oder?"
+    - vor einem Moment, in dem die beiden auf das Gespräch selbst reagieren ("Das war jetzt ein bisschen viel, oder?")
+    Plaziere den Marker im mittleren Drittel des Skripts. Nur EIN Marker pro Skript. Wenn keine passende Selbstreflexions-Stelle existiert, lass den Marker weg — der Audio-Mix nutzt dann den Standard-Fallback.
 
 **SELF-CHECK vor Abgabe — das Skript MUSS enthalten:**
 □ Mind. 8× \`(overlapping)\` (HOST und GUEST)
