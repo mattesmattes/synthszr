@@ -191,6 +191,10 @@ export default function CreateArticlePage() {
   // Editor-in-Chief routine state — runs after generation, replaces
   // articleContent with the redaction LLM's revised markdown.
   const [editorRunning, setEditorRunning] = useState(false)
+  // Set to true after a fresh ghostwriter run finishes WITHOUT the inline
+  // Editor-in-Chief (which is currently disabled, see ENABLE_INLINE_EIC).
+  // The button highlights itself so the user remembers to trigger it.
+  const [eicNeedsRun, setEicNeedsRun] = useState(false)
   const [editorStatus, setEditorStatus] = useState<string | null>(null)
   const [editorError, setEditorError] = useState<string | null>(null)
 
@@ -350,6 +354,7 @@ export default function CreateArticlePage() {
     setGenerating(true)
     setPipelineStatus(null)
     setPipelineProgress(null)
+    setEicNeedsRun(false)
     startTransition(() => {
       setArticleContent('')
       setUsedModel(null)
@@ -474,6 +479,9 @@ export default function CreateArticlePage() {
               : 'Editor-in-Chief fehlgeschlagen — Originaltext bleibt erhalten'
           )
         }
+      } else if (accumulated.trim().length > 0) {
+        // Inline EIC is off — flag the manual button as the next step.
+        setEicNeedsRun(true)
       }
     } catch (error) {
       console.error('Generation error:', error)
@@ -561,6 +569,7 @@ export default function CreateArticlePage() {
     setEditorRunning(true)
     setEditorError(null)
     setEditorStatus('Editor-in-Chief startet...')
+    setEicNeedsRun(false)
 
     try {
       const revised = await runEditorInChiefStream(articleContent, usedModel, setEditorStatus)
@@ -1162,17 +1171,22 @@ export default function CreateArticlePage() {
             </div>
           )}
 
-          {/* Editor-in-Chief manual re-run — the routine already runs
-              automatically inside generateArticle, this button is for
-              re-running after manual edits or if the user tweaked the
-              active editor prompt. */}
+          {/* Editor-in-Chief — manual trigger. The inline auto-run is
+              currently disabled (see ENABLE_INLINE_EIC in generateArticle),
+              so the user has to fire this off explicitly. The button
+              highlights itself in yellow when a fresh generation just
+              finished without the EIC pass. */}
           {articleContent && !generating && (
             <div className="space-y-1">
               <Button
                 onClick={runEditorInChief}
                 disabled={editorRunning}
-                variant="outline"
-                className="w-full gap-2"
+                variant={eicNeedsRun ? 'default' : 'outline'}
+                className={
+                  eicNeedsRun
+                    ? 'w-full gap-2 bg-[#CCFF00] text-black hover:bg-[#B8E600]'
+                    : 'w-full gap-2'
+                }
                 size="lg"
               >
                 {editorRunning ? (
@@ -1183,12 +1197,14 @@ export default function CreateArticlePage() {
                 ) : (
                   <>
                     <ClipboardEdit className="h-5 w-5" />
-                    Editor-in-Chief erneut ausführen
+                    {eicNeedsRun ? 'Editor-in-Chief starten (noch nicht gelaufen)' : 'Editor-in-Chief erneut ausführen'}
                   </>
                 )}
               </Button>
               <p className="text-[11px] text-muted-foreground text-center">
-                Läuft automatisch nach jeder Generierung. Nochmal triggern z.B. nach Prompt-Änderung.
+                {eicNeedsRun
+                  ? 'Wird derzeit NICHT automatisch ausgeführt — bitte manuell triggern.'
+                  : 'Bereits gelaufen. Erneut triggern z.B. nach Prompt-Änderung.'}
               </p>
             </div>
           )}
