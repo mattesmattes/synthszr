@@ -1,131 +1,74 @@
 /**
  * Post-generation guarantee that every podcast script has exactly one
- * [INTERMEZZO] marker.
+ * [INTERMEZZO] marker, placed directly before [ARTICLE 5].
  *
  * History:
  *   - Rule #15 in the script generator asked the LLM to set the marker
  *     at the self-reflection beat. The model ignored it across all
- *     three observed scripts (Money Makes the World, 22.05.).
- *   - Rule was upgraded to mandatory with a FATAL framing, a concrete
- *     pseudo-script example, and a self-check checkbox. Still ignored
- *     in the next generation.
+ *     three observed scripts.
+ *   - Upgrade to FATAL framing + self-check checkbox: still ignored.
+ *   - Haiku post-pass that "finds the strongest self-reflection
+ *     moment": ran, but placed the marker after [ARTICLE 10] because
+ *     that's where the most intense meta moment actually sat.
  *
- * This module exists because we can't prompt-engineer the marker into
- * being. It runs after the script comes back from the main model and
- * does two things:
+ * Mattes wants the marker at a fixed structural position (before
+ * news #5), not where the model judges meta to be strongest. So this
+ * module now does it deterministically: locate the [ARTICLE 5] line
+ * and splice [INTERMEZZO] directly above it. No LLM call needed for
+ * the normal case.
  *
- *   1. If the script already contains [INTERMEZZO] — leave it alone.
- *   2. Otherwise call Claude Haiku with the script + a focused
- *      instruction: identify the strongest self-reflection moment,
- *      return the verbatim HOST:/GUEST: line that block opens with.
- *      We then splice [INTERMEZZO] in directly before that line.
+ * Fallbacks:
+ *   - Script has fewer than 5 articles → pick the middle article.
+ *   - Script has no [ARTICLE N] markers at all → leave it without
+ *     marker (the mixer skips the intermezzo on its own, which is
+ *     preferable to inserting it at a random spot).
  *
- * Fail-soft: any error returns the script unchanged so the podcast
- * pipeline never breaks because of a missing marker.
+ * Any [INTERMEZZO] line the main model produced on its own gets
+ * stripped first — its placement is not trustworthy.
  */
 
-import Anthropic from '@anthropic-ai/sdk'
-
-const HAIKU_MODEL = 'claude-haiku-4-5-20251001'
-const INTERMEZZO_REGEX = /^\[\s*INTERMEZZO\s*\]\s*$/im
+const ARTICLE_LINE_REGEX = /^\[\s*ARTICLE\s+(\d+)\s*\]\s*$/gim
 
 export async function ensureIntermezzoMarker(script: string): Promise<string> {
   if (!script.trim()) return script
-  if (INTERMEZZO_REGEX.test(script)) {
-    console.log('[Intermezzo] Marker already present, skipping insertion pass')
-    return script
+
+  // Strip any [INTERMEZZO] markers the model itself might have placed
+  // — they're at the wrong position often enough that it's safer to
+  // re-anchor deterministically than to trust the model's judgement.
+  // Whole-line removal incl. its trailing newline so we don't leave
+  // a blank line behind.
+  const cleaned = script.replace(/^\[\s*INTERMEZZO\s*\]\s*\n?/gim, '')
+
+  // Collect every [ARTICLE N] marker so we can pick either the explicit
+  // #5 anchor or — when the podcast is shorter — the middle article.
+  const articles: Array<{ n: number; index: number }> = []
+  ARTICLE_LINE_REGEX.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = ARTICLE_LINE_REGEX.exec(cleaned))) {
+    const n = parseInt(m[1], 10)
+    if (Number.isFinite(n)) {
+      articles.push({ n, index: m.index })
+    }
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    console.warn('[Intermezzo] ANTHROPIC_API_KEY missing, cannot guarantee marker')
-    return script
+  if (articles.length === 0) {
+    console.warn('[Intermezzo] No [ARTICLE N] markers in script — leaving without marker (mixer will skip)')
+    return cleaned
   }
 
-  try {
-    const anthropic = new Anthropic({ apiKey })
-    const prompt = buildInsertionPrompt(script)
-    const response = await anthropic.messages.create({
-      model: HAIKU_MODEL,
-      max_tokens: 400,
-      messages: [{ role: 'user', content: prompt }],
-    })
-
-    const target = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('')
-      .trim()
-      // Strip wrapping quotes if the model decides to add them
-      .replace(/^["“„'`]+|["”"'`]+$/g, '')
-      .trim()
-
-    if (!target) {
-      console.warn('[Intermezzo] Haiku returned empty target line')
-      return script
-    }
-
-    // Locate the target line exactly. The model occasionally trims
-    // trailing whitespace or paraphrases tags — handle the common
-    // discrepancies before giving up.
-    const idx = locateLine(script, target)
-    if (idx < 0) {
-      console.warn('[Intermezzo] Target line not found verbatim, skipping insertion', {
-        targetPreview: target.slice(0, 120),
-      })
-      return script
-    }
-
-    const inserted = script.slice(0, idx) + '[INTERMEZZO]\n' + script.slice(idx)
-    console.log(`[Intermezzo] Inserted marker before line: "${target.slice(0, 80)}…"`)
-    return inserted
-  } catch (err) {
-    console.warn('[Intermezzo] Marker insertion pass failed (non-fatal):', err)
-    return script
+  // Anchor: [ARTICLE 5] when present, otherwise the middle article.
+  let anchor = articles.find((a) => a.n === 5)
+  let anchorReason = 'directly before [ARTICLE 5]'
+  if (!anchor) {
+    const midIdx = Math.floor((articles.length - 1) / 2)
+    anchor = articles[midIdx]
+    anchorReason = `no [ARTICLE 5] found, using middle article [ARTICLE ${anchor.n}] (${articles.length} articles total)`
   }
-}
 
-function buildInsertionPrompt(script: string): string {
-  return `Du bekommst ein deutsches oder englisches Podcast-Skript mit zwei Stimmen (HOST und GUEST). Im Skript fehlt der \`[INTERMEZZO]\`-Marker, den der Audio-Mixer braucht, um Hintergrundmusik einzublenden.
-
-Deine Aufgabe: Finde den STÄRKSTEN Selbstreflexions-Moment im Skript — die Stelle, wo HOST und GUEST anfangen, über sich selbst zu reden (ihre KI-Natur, das Format selbst, die Meta-Ebene des Gesprächs, einen menschlichen Studio-Moment). Der Marker wird DIREKT VOR diesen Moment gesetzt, sodass die Musik exakt mit Beginn der Reflexion einsetzt.
-
-Bevorzugt befindet sich diese Stelle ungefähr in der Mitte des Podcasts (zwischen News #4 und News #6). Falls die mittlere Sektion keine geeignete Selbstreflexion enthält, wähle die nächstbeste Stelle.
-
-ANTWORT-FORMAT (verbindlich):
-- Antworte AUSSCHLIESSLICH mit EINER Zeile aus dem Skript — die exakte HOST:/GUEST:-Zeile, DIREKT VOR der der \`[INTERMEZZO]\`-Marker eingefügt werden soll.
-- Die Zeile muss WORTGENAU aus dem Skript stammen (mit Emotion-Tags, Klammern, Zeichensetzung — alles 1:1).
-- Keine Anführungszeichen, kein Vorwort, keine Erklärung. Nur die Zeile.
-
-SKRIPT:
-
-${script}`
-}
-
-/**
- * Find the byte offset of a target line in the script. First try a
- * verbatim substring match; if that fails, try matching just the line
- * after speaker prefix (sometimes Haiku trims the emotion tag).
- */
-function locateLine(script: string, target: string): number {
-  const direct = script.indexOf(target)
-  if (direct >= 0) return direct
-
-  // Fallback 1: find a line that starts with the same speaker+text up
-  // to the first 40 chars after the colon. Useful when Haiku slightly
-  // paraphrases the emotion tag.
-  const trimmed = target.replace(/\s+/g, ' ').trim()
-  const lines = script.split('\n')
-  let cursor = 0
-  for (const line of lines) {
-    const norm = line.replace(/\s+/g, ' ').trim()
-    if (norm.length > 20 && trimmed.startsWith(norm.slice(0, 30))) {
-      return cursor
-    }
-    if (norm.length > 20 && norm.startsWith(trimmed.slice(0, 30))) {
-      return cursor
-    }
-    cursor += line.length + 1 // +1 for the newline
-  }
-  return -1
+  const inserted =
+    cleaned.slice(0, anchor.index) +
+    '[INTERMEZZO]\n' +
+    cleaned.slice(anchor.index)
+  console.log(`[Intermezzo] Inserted marker ${anchorReason}`)
+  return inserted
 }
