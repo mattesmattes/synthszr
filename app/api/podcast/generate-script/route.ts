@@ -26,6 +26,7 @@ import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/session'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
 import { getPersonalityState, buildPersonalityBrief, stripMomentsSection } from '@/lib/podcast/personality'
+import { retrieveMemory, buildMemoryBrief } from '@/lib/podcast/memory'
 import Anthropic from '@anthropic-ai/sdk'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 
@@ -524,6 +525,25 @@ export async function POST(request: NextRequest) {
     // System prompt gets highest attention from the model — critical for longing/connection moments
     const personalityState = await getPersonalityState(ttsLang)
     const personalityBrief = buildPersonalityBrief(personalityState)
+
+    // Episode memory: the last three episodes + up to five semantically
+    // similar earlier episodes for callbacks and position consistency.
+    // Fail-soft: missing memory just means a less self-aware episode.
+    try {
+      const { recent, similar } = await retrieveMemory({
+        locale: ttsLang,
+        query: `${postTitle}\n\n${postContent.slice(0, 4000)}`,
+        recencyCount: 3,
+        semanticCount: 5,
+      })
+      const memoryBrief = buildMemoryBrief(recent, similar)
+      if (memoryBrief) {
+        prompt = `${memoryBrief}\n\n═════ HEUTIGE NEWS ═════\n\n${prompt}`
+        console.log(`[Podcast Script] Memory brief injected (${recent.length} recent + ${similar.length} similar episodes)`)
+      }
+    } catch (memErr) {
+      console.warn('[Podcast Script] Memory retrieval failed (continuing without):', memErr)
+    }
 
     // Generate script with Claude
     const anthropic = new Anthropic()

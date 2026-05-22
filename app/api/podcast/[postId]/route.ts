@@ -20,6 +20,7 @@ import {
 } from '@/lib/tts/elevenlabs-tts'
 import { concatenateWithCrossfade, mixingSettingsToCrossfadeOptions, type AudioSegment } from '@/lib/audio/crossfade'
 import { getPersonalityState, buildPersonalityBrief, advanceState } from '@/lib/podcast/personality'
+import { retrieveMemory, buildMemoryBrief } from '@/lib/podcast/memory'
 import Anthropic from '@anthropic-ai/sdk'
 
 // TTS language mapping
@@ -294,10 +295,28 @@ async function generatePodcastForPost(
       .replace('{title}', postTitle)
       .replace('{content}', postContent)
 
-    // Inject personality brief
+    // Inject personality brief + episode memory.
     const personalityState = await getPersonalityState(ttsLang)
     const personalityBrief = buildPersonalityBrief(personalityState)
-    const fullPrompt = prompt + '\n\n' + personalityBrief
+    let memoryBrief = ''
+    try {
+      const { recent, similar } = await retrieveMemory({
+        locale: ttsLang,
+        query: `${postTitle}\n\n${postContent.slice(0, 4000)}`,
+        recencyCount: 3,
+        semanticCount: 5,
+      })
+      memoryBrief = buildMemoryBrief(recent, similar)
+    } catch (memErr) {
+      console.warn('[Podcast] Memory retrieval failed (continuing without):', memErr)
+    }
+    const fullPrompt = [
+      memoryBrief && `${memoryBrief}\n\n═════ HEUTIGE NEWS ═════\n`,
+      prompt,
+      personalityBrief,
+    ]
+      .filter(Boolean)
+      .join('\n\n')
 
     console.log(`[Podcast] Generating script for post ${postId} in ${locale} (episode #${personalityState.episode_count + 1}, phase: ${personalityState.relationship_phase})`)
 
@@ -319,6 +338,11 @@ async function generatePodcastForPost(
 
     // Evolve personality state after successful generation
     await advanceState(personalityState, script)
+    // Memory EXTRACTION happens only on the jobs/process pipeline,
+    // which is the one that produces a podcast_jobs row that the
+    // memory table can foreign-key against. Single-shot generations
+    // through this route still BENEFIT from the memory brief above
+    // (read-only), but don't write back.
 
     // Parse script
     const lines = parseScriptText(script)

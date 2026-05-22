@@ -23,6 +23,7 @@ import {
 import { concatenateWithCrossfade, mixingSettingsToCrossfadeOptions, type AudioSegment } from '@/lib/audio/crossfade'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
 import { getPersonalityState, advanceState } from '@/lib/podcast/personality'
+import { extractEpisodeMemory } from '@/lib/podcast/memory'
 
 // Maximum duration for this function (Vercel Pro max is 800 seconds)
 export const maxDuration = 800
@@ -508,14 +509,31 @@ export async function POST(request: NextRequest) {
     // This ensures test scripts (script-only, no audio) don't advance the personality.
     const LOCALE_TO_TTS_LANG: Record<string, string> = { de: 'de', en: 'en', cs: 'en', nds: 'en' }
     const personalityLocale = LOCALE_TO_TTS_LANG[job.source_locale] || 'en'
+    let nextEpisodeNumber = 1
     try {
       const personalityState = await getPersonalityState(personalityLocale)
+      nextEpisodeNumber = personalityState.episode_count + 1
       await advanceState(personalityState, job.script)
-      console.log(`[Podcast Jobs] Personality advanced for locale "${personalityLocale}" (episode #${personalityState.episode_count + 1})`)
+      console.log(`[Podcast Jobs] Personality advanced for locale "${personalityLocale}" (episode #${nextEpisodeNumber})`)
     } catch (personalityError) {
       // Non-fatal: don't fail the job if personality evolution fails
       console.error(`[Podcast Jobs] Personality evolution failed (non-fatal):`, personalityError)
     }
+
+    // Persistent episode memory — distil the just-shipped script into a
+    // structured row (topics, positions, gags, key moments) for use in
+    // future script generations. Fire-and-forget on a copy of the
+    // identifiers; failures stay non-fatal to the audio job.
+    extractEpisodeMemory({
+      jobId: job.id,
+      postId: job.post_id || null,
+      episodeNumber: nextEpisodeNumber,
+      locale: personalityLocale,
+      script: job.script,
+      recordedAt: new Date().toISOString(),
+    }).catch((memErr) => {
+      console.warn('[Podcast Jobs] Memory extraction failed (non-fatal):', memErr)
+    })
 
     return NextResponse.json({
       success: true,
