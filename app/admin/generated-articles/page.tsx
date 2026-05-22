@@ -62,6 +62,7 @@ import { TiptapEditor } from '@/components/tiptap-editor'
 import { TiptapRenderer } from '@/components/tiptap-renderer'
 import { convertTiptapToMarkdown, parseTiptapContent } from '@/lib/utils/tiptap-to-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
+import { runEditorInChiefOnMarkdown } from '@/lib/editor-in-chief/run-stream'
 import { PostImageGallery } from '@/components/post-image-gallery'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -375,10 +376,11 @@ export default function GeneratedArticlesPage() {
     setEditorRerunError(null)
   }
 
-  // Re-run on the dialog's TipTap content: scans Synthszr Takes for
-  // repeated analogies and rewrites the duplicates with fresh ones.
-  // tiptap → markdown → /api/admin/posts/dedupe-analogies → markdown →
-  // tiptap. Does not auto-save — user reviews and hits Speichern.
+  // Re-run on the dialog's TipTap content: runs the full Editor-in-Chief
+  // routine (DB prompt → section sort, style discipline incl. contrast
+  // killer, readability check, editor notes). tiptap → markdown →
+  // /api/editor-in-chief → markdown → tiptap. Does not auto-save — user
+  // reviews and hits Speichern.
   async function rerunEditorInChiefInDialog() {
     if (editorRerunning) return
     setEditorRerunning(true)
@@ -391,79 +393,20 @@ export default function GeneratedArticlesPage() {
       const markdown = convertTiptapToMarkdown(doc)
       if (!markdown.trim()) throw new Error('Konvertierter Markdown ist leer')
 
-      setEditorRerunStatus('Analysiere Analogien…')
-
-      const res = await fetch('/api/admin/posts/dedupe-analogies', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ content: markdown }),
+      setEditorRerunStatus('Editor-in-Chief startet…')
+      const revisedMarkdown = await runEditorInChiefOnMarkdown(markdown, {
+        onStatus: setEditorRerunStatus,
       })
-
-      if (!res.ok || !res.body) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || `HTTP ${res.status}`)
-      }
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buf = ''
-      let revisedMarkdown: string | null = null
-      let duplicates = 0
-      let totalTakes = 0
-      let note: string | null = null
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-        const frames = buf.split('\n\n')
-        buf = frames.pop() || ''
-        for (const frame of frames) {
-          const line = frame.trim()
-          if (!line.startsWith('data:')) continue
-          const json = line.slice(5).trim()
-          if (!json) continue
-          try {
-            const evt = JSON.parse(json)
-            if (evt.error) throw new Error(evt.error)
-            if (evt.stage === 'parsed' && typeof evt.takeCount === 'number') {
-              totalTakes = evt.takeCount
-              setEditorRerunStatus(`Analysiere Analogien in ${evt.takeCount} Takes…`)
-            }
-            if (evt.stage === 'duplicates-identified' && Array.isArray(evt.duplicates)) {
-              duplicates = evt.duplicates.length
-              setEditorRerunStatus(duplicates === 0
-                ? 'Keine wiederholten Analogien gefunden.'
-                : `${duplicates} Duplikat${duplicates === 1 ? '' : 'e'} gefunden — schreibe um…`)
-            }
-            if (evt.stage === 'rewriting' && typeof evt.takeIndex === 'number') {
-              setEditorRerunStatus(`Schreibe Take ${evt.takeIndex}/${totalTakes} um (Analogie: ${evt.oldAnalogy})…`)
-            }
-            if (evt.done) {
-              if (typeof evt.content === 'string') revisedMarkdown = evt.content
-              if (typeof evt.note === 'string') note = evt.note
-            }
-          } catch (e) {
-            if (e instanceof SyntaxError) continue
-            throw e
-          }
-        }
-      }
-
-      if (!revisedMarkdown) throw new Error('Dedupe-Pass lieferte keinen Inhalt')
 
       setEditorRerunStatus('Konvertiere zurück zu TipTap...')
       const newTiptap = markdownToTiptap(revisedMarkdown)
       setEditForm({ ...editForm, content: newTiptap })
 
-      const summary = duplicates === 0
-        ? (note || 'Keine Duplikate gefunden — Artikel unverändert.')
-        : `${duplicates} Take${duplicates === 1 ? '' : 's'} mit frischer Analogie umgeschrieben. Bitte prüfen und speichern.`
+      const summary = 'Editor-in-Chief fertig. Bitte prüfen und speichern.'
       setEditorRerunStatus(summary)
       setTimeout(() => setEditorRerunStatus(null), 8000)
     } catch (err) {
-      console.error('[Analogy Dedupe Re-Run dialog] Error:', err)
+      console.error('[Editor-in-Chief Re-Run dialog] Error:', err)
       setEditorRerunError(err instanceof Error ? err.message : 'Unbekannter Fehler')
       setEditorRerunStatus(null)
     } finally {

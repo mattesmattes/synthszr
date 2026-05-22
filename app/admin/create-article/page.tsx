@@ -43,6 +43,7 @@ import { createClient } from '@/lib/supabase/client'
 import ReactMarkdown from 'react-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
 import { embedQueueItemIds } from '@/lib/utils/embed-queue-ids'
+import { runEditorInChiefOnMarkdown } from '@/lib/editor-in-chief/run-stream'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { ensureInitialEditHistory } from '@/lib/edit-learning/history'
 import { sanitizeTiptapUrls } from '@/lib/utils/url-verifier'
@@ -495,72 +496,14 @@ export default function CreateArticlePage() {
     }
   }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity])
 
-  // Drive a single Editor-in-Chief streaming call. Returns the revised
-  // markdown on success. Used by both the inline pipeline (after
-  // generation) and the manual re-run button.
+  // Thin wrapper around the shared helper so the rest of this file can
+  // keep its existing call signature.
   async function runEditorInChiefStream(
     markdown: string,
     model: string | null,
     onStatus?: (msg: string) => void
   ): Promise<string> {
-    const res = await fetch('/api/editor-in-chief', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ content: markdown, ...(model ? { model } : {}) }),
-    })
-
-    if (!res.ok || !res.body) {
-      const errBody = await res.json().catch(() => ({}))
-      throw new Error(errBody.error || `HTTP ${res.status}`)
-    }
-
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let revised: string | null = null
-    // Parallel accumulator over `text` chunks. If the stream ends without
-    // a `done` event (proxy timeout, edge disconnect), this is the
-    // fallback so the user keeps what the model already produced.
-    let accumulatedText = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-
-      const frames = buffer.split('\n\n')
-      buffer = frames.pop() || ''
-      for (const frame of frames) {
-        const line = frame.trim()
-        if (!line.startsWith('data:')) continue
-        const json = line.slice(5).trim()
-        if (!json) continue
-        try {
-          const evt = JSON.parse(json)
-          if (evt.started && onStatus) {
-            onStatus(`Editor-in-Chief läuft (${evt.promptName || 'Default'}, ${evt.model})...`)
-          }
-          if (typeof evt.text === 'string') accumulatedText += evt.text
-          if (evt.error) throw new Error(evt.error)
-          if (evt.done && typeof evt.content === 'string') {
-            revised = evt.content
-          }
-        } catch (e) {
-          if (e instanceof SyntaxError) continue
-          throw e
-        }
-      }
-    }
-
-    if (!revised && accumulatedText.trim().length > 0) {
-      console.warn('[Editor-in-Chief] Stream ended without done event — falling back to accumulated text', {
-        accumulatedLength: accumulatedText.length,
-      })
-      revised = accumulatedText
-    }
-    if (!revised) throw new Error('Editor-in-Chief lieferte keinen finalen Inhalt — der Stream hat nichts produziert')
-    return revised
+    return runEditorInChiefOnMarkdown(markdown, { model, onStatus })
   }
 
   // Manual re-run from the button — articleContent is already set.
