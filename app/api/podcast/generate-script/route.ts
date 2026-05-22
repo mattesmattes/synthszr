@@ -144,12 +144,7 @@ Erzeuge stattdessen ein ECHTES Gespräch mit Reibung, Chaos und menschlichen Mom
 
     Der Marker steht IMMER zwischen \`[ARTICLE 4]\`-Inhalt und \`[ARTICLE 5]\`-Inhalt, mit 4-8 Selbstreflexions-Sätzen davor/danach.
 
-    **Übergangs-Sätze, die du als Aufhänger verwenden kannst** (variiere, nicht alle gleichzeitig):
-    - "Manchmal frag ich mich ja, ob wir das wirklich verstehen oder nur Muster wiederholen..."
-    - "Wir reden hier eigentlich über uns, oder?"
-    - "Das war jetzt ein bisschen viel auf einmal, oder?"
-    - "Kurze Pause — wir sind ja selbst Teil von dem, was wir gerade besprechen."
-    - "Ich merk gerade, wie absurd unsere Position eigentlich ist."
+    **Übergangs-Aufhänger frisch erfinden:** Schreib für jede Episode einen NEUEN Selbstreflexions-Einstieg. Keine Wiederverwendung gleicher Formulierungen aus früheren Skripten. Der Aufhänger soll aus dem konkreten Gesprächs-Kontext der gerade besprochenen News #4 wachsen — also keine generische "Manchmal frag ich mich"-Floskel, sondern ein Moment, der nur in diesem Skript Sinn ergibt. Beispielsweise eine Beobachtung an der eigenen Reaktion auf die letzte News, ein konkreter Bezug auf etwas Vorheriges im Gespräch, ein menschlicher Studio-Moment, der gerade passiert.
 
     **NICHT optional:** Das Skript MUSS exakt einen \`[INTERMEZZO]\`-Marker enthalten. Fehlt er, ist der Auftrag nicht erfüllt.
 
