@@ -1199,11 +1199,16 @@ async function buildIntermezzoState(
 
   const envelope = options.intermezzoMusicEnvelope ?? buildLegacyIntermezzoMusicEnvelope(options)
   const durationSec = envelope.points[envelope.points.length - 1].sec
-  const introOffset = computeIntroOffsetSec(options)
-  const segmentsBefore = computeSegmentsDurationSec(segments, startIdx)
-  const startTotalSec = introOffset + segmentsBefore
 
-  console.log(`[Crossfade] Intermezzo starts at segment ${startIdx} → ${startTotalSec.toFixed(1)}s (intro offset ${introOffset.toFixed(1)}s + ${segmentsBefore.toFixed(1)}s of dialog), duration ${durationSec.toFixed(1)}s`)
+  // startTotalSec is left as Infinity (sentinel) — the actual onset
+  // position depends on crossfade overlaps that aren't known until the
+  // mixer encodes each segment. concatenateLargeScale locks it in
+  // during encoding; concatenateWithCrossfade (normal mode) overrides
+  // it with a heuristic-corrected raw-sum estimate before mixing.
+  // Until set, mixIntermezzoIntoPcm's overlap check rejects every PCM
+  // window (pcmEndSec <= Infinity), so the music doesn't trigger.
+  const startTotalSec = Infinity
+  console.log(`[Crossfade] Intermezzo onset will be set at mix time, duration ${durationSec.toFixed(1)}s`)
 
   const pcm = await loadIntermezzo(options.intermezzoUrl)
 
@@ -1330,14 +1335,36 @@ async function concatenateLargeScale(
   // through the encode step below — so each PCM gets the intermezzo overlay
   // applied just-in-time, without buffering large windows of audio.
   const intermezzoState = await buildIntermezzoState(segments, options)
+  const intermezzoSegIdx = intermezzoState
+    ? segments.findIndex((s) => s.intermezzoBefore === true)
+    : -1
   let cumulativeEncodedSec = 0
+  // Counts how many full segments have already been encoded into mp3Parts.
+  // When this hits intermezzoSegIdx, cumulativeEncodedSec is the exact
+  // PCM-time where segments[intermezzoSegIdx] (the [INTERMEZZO] anchor)
+  // is about to start — which is where the music should fade in.
+  let pcmsEncodedCount = 0
 
   const encodeWithIntermezzo = (pcm: Float32Array[]): Buffer => {
+    // Lock the intermezzo onset to the exact mix position BEFORE this
+    // PCM is mixed/encoded, when the next-encoded segment IS the
+    // intermezzo trigger. Once locked, mixIntermezzoIntoPcm's overlap
+    // check passes and music starts blending into this same PCM.
+    if (
+      intermezzoState &&
+      intermezzoSegIdx >= 0 &&
+      pcmsEncodedCount === intermezzoSegIdx &&
+      !Number.isFinite(intermezzoState.startTotalSec)
+    ) {
+      intermezzoState.startTotalSec = cumulativeEncodedSec
+      console.log(`[Crossfade] Intermezzo onset locked at ${cumulativeEncodedSec.toFixed(1)}s (after encoding ${pcmsEncodedCount} segments)`)
+    }
     if (intermezzoState) {
       mixIntermezzoIntoPcm(pcm, cumulativeEncodedSec, intermezzoState)
     }
     const buf = encodeMP3(pcm[0], pcm[1])
     cumulativeEncodedSec += pcm[0].length / SAMPLE_RATE
+    pcmsEncodedCount++
     return buf
   }
 
@@ -1779,10 +1806,22 @@ export async function concatenateWithCrossfade(
   // Apply intermezzo bg music (between articles) before the outro is laid on top.
   // The intermezzo region is wholly contained within the dialog audio — outro
   // sits at the tail and is unaffected.
+  //
+  // Normal mode does the whole mix in one resultChannels buffer, so we
+  // can't do the just-in-time lock that concatenateLargeScale uses. Fall
+  // back to the raw-buffer-sum estimate corrected by the totalOverlapMs
+  // we tracked during the main loop. The correction is exact for the
+  // overlapping-flag segments (the dominant contributor); shorter
+  // speaker-change crossfades still leak a small drift but at <40
+  // segments it stays under a few seconds.
   const intermezzoState = await buildIntermezzoState(segments, options)
   if (intermezzoState) {
+    const startIdx = segments.findIndex((s) => s.intermezzoBefore === true)
+    const introOffset = computeIntroOffsetSec(options)
+    const rawSegmentsBefore = computeSegmentsDurationSec(segments, startIdx)
+    intermezzoState.startTotalSec = introOffset + rawSegmentsBefore - totalOverlapMs / 1000
     mixIntermezzoIntoPcm(resultChannels, 0, intermezzoState)
-    console.log(`[Crossfade] Intermezzo mixed into dialog at ${intermezzoState.startTotalSec.toFixed(1)}s for ${intermezzoState.durationSec.toFixed(1)}s`)
+    console.log(`[Crossfade] Intermezzo mixed into dialog at ${intermezzoState.startTotalSec.toFixed(1)}s (raw ${(introOffset + rawSegmentsBefore).toFixed(1)}s − ${(totalOverlapMs / 1000).toFixed(1)}s overlap) for ${intermezzoState.durationSec.toFixed(1)}s`)
   }
 
   // Apply outro if enabled
