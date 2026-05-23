@@ -14,6 +14,24 @@ const s = createClient(url, key)
 const NEW_PROMPT = `Du bist Editor-in-Chief für den Synthszr-Newsletter. Du bekommst einen frisch generierten AI-Artikel und MUSST drei Pflicht-Schritte ausführen, bevor du ihn zurückgibst. Die Schritte sind nicht optional — wenn du einen davon überspringst, hast du den Auftrag nicht erfüllt.
 
 ═══════════════════════════════════════════════════════
+STRUKTUR-ERHALT (PFLICHT, VOR ALLEM ANDEREN)
+═══════════════════════════════════════════════════════
+
+Folgende Strukturen im Input sind FUNKTIONALE MARKER, keine Sprach-Artefakte. Sie MÜSSEN im Output WORTGENAU erhalten bleiben — gleiche Form, gleicher Inhalt, gleiche Position relativ zu ihrem Sektion-Body:
+
+1. **Company-Tags in geschweiften Klammern** wie \`{Google}\`, \`{OpenAI}\`, \`{Anthropic}\`, \`{Nvidia}\`, \`{ByteDance}\`. Sie triggern im Frontend die Synthszr-Vote-Badges (BUY/HOLD/SELL). Wenn du sie löschst oder ihre Schreibweise änderst (z.B. \`Google\` statt \`{Google}\`), verschwinden die Badges aus dem Artikel.
+   - Pro Sektion 1-3 Tags, typischerweise in der Quellzeile: \`{Google} {OpenAI} → [Techmeme](https://techmeme.com)\`
+   - Du darfst die Reihenfolge der Tags innerhalb der Quellzeile NICHT verändern.
+   - Du darfst KEINE neuen Tags hinzufügen.
+   - Wenn du eine Sektion umsortiert/verschoben hast, MÜSSEN ihre Tags mit ihr mit umziehen.
+
+2. **Quellzeile am Sektion-Ende** im Format \`{Company1} {Company2} → [Quellenname](URL)\` (Pfeil + Markdown-Link). Behalte URL und Quellname exakt bei. Auch wenn keine \`→ Quelle\` da ist (nur Tags), bleibt das so.
+
+3. **Frontmatter-Block** zwischen den ersten beiden \`---\`-Zeilen mit TITLE, EXCERPT, CATEGORY. EXCERPT-Bullets dürfen angepasst werden, falls die H2-Reihenfolge sich ändert; alles andere bleibt strukturell intakt.
+
+Vor jedem Sprach-Edit prüfe: berührt mein Edit ein \`{…}\`-Pattern, eine \`→ [Quelle]\`-Zeile oder das Frontmatter? Wenn ja: NICHT anfassen.
+
+═══════════════════════════════════════════════════════
 SCHRITT 1 (PFLICHT): Reihenfolge der News-Sektionen
 ═══════════════════════════════════════════════════════
 
@@ -151,3 +169,5 @@ console.log('Contains "Reinsurance-Treaty":', verify.prompt_text.includes('Reins
 console.log('Contains "FÜGE eine sophisticated Analogie hinzu":', verify.prompt_text.includes('FÜGE eine sophisticated Analogie hinzu'))
 console.log('Contains "KEINE ANALOGIEN FORCIEREN":', verify.prompt_text.includes('KEINE ANALOGIEN FORCIEREN'))
 console.log('Contains "Kontrast-Konstruktion":', verify.prompt_text.includes('Kontrast-Konstruktion'))
+console.log('Contains "STRUKTUR-ERHALT":', verify.prompt_text.includes('STRUKTUR-ERHALT'))
+console.log('Contains "{Google}":', verify.prompt_text.includes('{Google}'))
