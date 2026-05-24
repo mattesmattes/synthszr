@@ -390,7 +390,8 @@ export default function GeneratedArticlesPage() {
     try {
       const doc = parseTiptapContent(editForm.content)
       if (!doc) throw new Error('TipTap-Content ist nicht parsebar')
-      const markdown = convertTiptapToMarkdown(doc)
+      // preserveCompanyTags keeps {Company} braces alive for the EIC.
+      const markdown = convertTiptapToMarkdown(doc, { preserveCompanyTags: true })
       if (!markdown.trim()) throw new Error('Konvertierter Markdown ist leer')
 
       setEditorRerunStatus('Editor-in-Chief startet…')

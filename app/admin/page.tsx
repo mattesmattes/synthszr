@@ -567,7 +567,10 @@ export default function AdminPage() {
     try {
       const doc = parseTiptapContent(editForm.content)
       if (!doc) throw new Error('TipTap-Content ist nicht parsebar')
-      const markdown = convertTiptapToMarkdown(doc)
+      // preserveCompanyTags: keep {Google}/{OpenAI} braces alive through
+      // the markdown round-trip so the EIC sees them and the Vote badges
+      // survive the re-run.
+      const markdown = convertTiptapToMarkdown(doc, { preserveCompanyTags: true })
       if (!markdown.trim()) throw new Error('Konvertierter Markdown ist leer')
 
       setEditorRerunStatus('Editor-in-Chief startet…')
