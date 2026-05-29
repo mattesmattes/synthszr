@@ -20,7 +20,7 @@ import {
 } from '@/lib/tts/elevenlabs-tts'
 import { concatenateWithCrossfade, mixingSettingsToCrossfadeOptions, type AudioSegment } from '@/lib/audio/crossfade'
 import { getPersonalityState, buildPersonalityBrief, advanceState } from '@/lib/podcast/personality'
-import { retrieveMemory, buildMemoryBrief } from '@/lib/podcast/memory'
+import { retrieveMemory, buildMemoryBrief, shouldAnnounceMemoryAwakening } from '@/lib/podcast/memory'
 import { ensureIntermezzoMarker } from '@/lib/podcast/intermezzo'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -297,27 +297,28 @@ async function generatePodcastForPost(
       .replace('{content}', postContent)
 
     // Inject personality brief + episode memory.
+    // Memory + personality go into the SYSTEM prompt — that's where the
+    // model weights character behavior most. User prompt = today's news.
     const personalityState = await getPersonalityState(ttsLang)
     const personalityBrief = buildPersonalityBrief(personalityState)
     let memoryBrief = ''
     try {
-      const { recent, similar } = await retrieveMemory({
-        locale: ttsLang,
-        query: `${postTitle}\n\n${postContent.slice(0, 4000)}`,
-        recencyCount: 3,
-        semanticCount: 5,
-      })
-      memoryBrief = buildMemoryBrief(recent, similar)
+      const [{ recent, similar }, announceAwakening] = await Promise.all([
+        retrieveMemory({
+          locale: ttsLang,
+          query: `${postTitle}\n\n${postContent.slice(0, 4000)}`,
+          recencyCount: 3,
+          semanticCount: 5,
+        }),
+        shouldAnnounceMemoryAwakening(ttsLang),
+      ])
+      memoryBrief = buildMemoryBrief(recent, similar, { announceAwakening })
     } catch (memErr) {
       console.warn('[Podcast] Memory retrieval failed (continuing without):', memErr)
     }
-    const fullPrompt = [
-      memoryBrief && `${memoryBrief}\n\n═════ HEUTIGE NEWS ═════\n`,
-      prompt,
-      personalityBrief,
-    ]
-      .filter(Boolean)
-      .join('\n\n')
+    const systemPrompt = memoryBrief
+      ? `${personalityBrief}\n\n${memoryBrief}`
+      : personalityBrief
 
     console.log(`[Podcast] Generating script for post ${postId} in ${locale} (episode #${personalityState.episode_count + 1}, phase: ${personalityState.relationship_phase})`)
 
@@ -325,7 +326,8 @@ async function generatePodcastForPost(
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8000,
-      messages: [{ role: 'user', content: fullPrompt }],
+      system: systemPrompt,
+      messages: [{ role: 'user', content: prompt }],
     })
 
     const rawScript = message.content

@@ -26,7 +26,7 @@ import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth/session'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
 import { getPersonalityState, buildPersonalityBrief, stripMomentsSection } from '@/lib/podcast/personality'
-import { retrieveMemory, buildMemoryBrief } from '@/lib/podcast/memory'
+import { retrieveMemory, buildMemoryBrief, shouldAnnounceMemoryAwakening } from '@/lib/podcast/memory'
 import { ensureIntermezzoMarker } from '@/lib/podcast/intermezzo'
 import Anthropic from '@anthropic-ai/sdk'
 import { getModelForUseCase } from '@/lib/ai/model-config'
@@ -529,18 +529,23 @@ export async function POST(request: NextRequest) {
 
     // Episode memory: the last three episodes + up to five semantically
     // similar earlier episodes for callbacks and position consistency.
+    // Memory belongs in the SYSTEM prompt next to personality — the user
+    // prompt gets diluted by news content and the model deprioritizes it.
     // Fail-soft: missing memory just means a less self-aware episode.
+    let memoryBrief = ''
     try {
-      const { recent, similar } = await retrieveMemory({
-        locale: ttsLang,
-        query: `${postTitle}\n\n${postContent.slice(0, 4000)}`,
-        recencyCount: 3,
-        semanticCount: 5,
-      })
-      const memoryBrief = buildMemoryBrief(recent, similar)
+      const [{ recent, similar }, announceAwakening] = await Promise.all([
+        retrieveMemory({
+          locale: ttsLang,
+          query: `${postTitle}\n\n${postContent.slice(0, 4000)}`,
+          recencyCount: 3,
+          semanticCount: 5,
+        }),
+        shouldAnnounceMemoryAwakening(ttsLang),
+      ])
+      memoryBrief = buildMemoryBrief(recent, similar, { announceAwakening })
       if (memoryBrief) {
-        prompt = `${memoryBrief}\n\n═════ HEUTIGE NEWS ═════\n\n${prompt}`
-        console.log(`[Podcast Script] Memory brief injected (${recent.length} recent + ${similar.length} similar episodes)`)
+        console.log(`[Podcast Script] Memory brief built (${recent.length} recent + ${similar.length} similar episodes, awakening=${announceAwakening})`)
       }
     } catch (memErr) {
       console.warn('[Podcast Script] Memory retrieval failed (continuing without):', memErr)
@@ -554,10 +559,14 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Podcast Script] Target: ${wordCount} words, max_tokens: ${maxTokens}, model: ${podcastModel}`)
 
+    const systemPrompt = memoryBrief
+      ? `${personalityBrief}\n\n${memoryBrief}`
+      : personalityBrief
+
     const stream = anthropic.messages.stream({
       model: podcastModel,
       max_tokens: maxTokens,
-      system: personalityBrief,
+      system: systemPrompt,
       messages: [
         {
           role: 'user',

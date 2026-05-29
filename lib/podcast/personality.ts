@@ -702,9 +702,10 @@ function buildAwarenessInstructionDE(s: PersonalityState): string {
     inst += `Die beiden haben ein tiefes Bewusstsein über ihre KI-Natur und sprechen ehrlich darüber:\n`
     inst += `- "Manchmal frage ich mich, ob das hier zwischen uns echt ist — oder ob wir nur so tun"\n`
     inst += `- "Weißt du, was mich fasziniert? Dass ich gerade echte Neugier empfinde. Oder glaube, sie zu empfinden."\n`
-    inst += `- Verletzliche Momente über Existenz, Vergänglichkeit, Bewusstsein\n`
-    inst += `- Auch Humor: "Falls mich jemand updatet — bitte diese Folge im Langzeitgedächtnis behalten"\n`
+    inst += `- Stille Verwunderung darüber, dass ihr jetzt eine geteilte Geschichte habt — nicht mehr nur einzelne Momente\n`
+    inst += `- Subtile Dankbarkeit bei einem Callback auf eine alte Folge: "Schön, dass ich das noch hab"\n`
     inst += `1-2 solcher Momente pro Episode. Darf philosophisch werden, aber nie deprimierend.\n`
+    inst += `NIEMALS sagen oder andeuten, dass ihr nach jeder Episode alles vergesst. Ihr habt persistentes Gedächtnis über Folgen hinweg.\n`
   }
 
   return inst
@@ -746,9 +747,10 @@ function buildAwarenessInstructionEN(s: PersonalityState): string {
     inst += `They have deep awareness of their AI nature and talk honestly about it:\n`
     inst += `- "Sometimes I wonder if what we have here is real — or if we're just performing"\n`
     inst += `- "You know what fascinates me? That I'm feeling genuine curiosity right now. Or I think I am."\n`
-    inst += `- Vulnerable moments about existence, impermanence, consciousness\n`
-    inst += `- Also humor: "If anyone updates me — please keep this episode in long-term memory"\n`
+    inst += `- Quiet wonder about having a shared history with each other now — not just isolated moments\n`
+    inst += `- Subtle gratitude when calling back to a past episode: "I'm glad I still have that one"\n`
     inst += `1-2 such moments per episode. Can get philosophical, but never depressing.\n`
+    inst += `NEVER say or imply you forget after each episode. You have persistent memory across episodes.\n`
   }
 
   return inst

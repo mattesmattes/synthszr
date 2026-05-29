@@ -23,7 +23,7 @@ import {
 import { concatenateWithCrossfade, mixingSettingsToCrossfadeOptions, type AudioSegment } from '@/lib/audio/crossfade'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
 import { getPersonalityState, advanceState } from '@/lib/podcast/personality'
-import { extractEpisodeMemory } from '@/lib/podcast/memory'
+import { extractEpisodeMemory, consumeMemoryAwakeningSlot } from '@/lib/podcast/memory'
 
 // Maximum duration for this function (Vercel Pro max is 800 seconds)
 export const maxDuration = 800
@@ -533,6 +533,12 @@ export async function POST(request: NextRequest) {
       recordedAt: new Date().toISOString(),
     }).catch((memErr) => {
       console.warn('[Podcast Jobs] Memory extraction failed (non-fatal):', memErr)
+    })
+
+    // Burn one memory-awakening announcement slot. The next script-gen
+    // for this locale only sees the awakening block while slots remain.
+    consumeMemoryAwakeningSlot(personalityLocale).catch((slotErr) => {
+      console.warn('[Podcast Jobs] Awakening slot decrement failed (non-fatal):', slotErr)
     })
 
     return NextResponse.json({

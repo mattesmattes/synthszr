@@ -213,17 +213,83 @@ function recentCount(rows: EpisodeMemoryRow[]): number {
 }
 
 /**
+ * Read the announcement counter set by 20260529_podcast_memory_announcement.
+ * Returns false on any failure — we never want this to break script generation.
+ */
+export async function shouldAnnounceMemoryAwakening(locale: string): Promise<boolean> {
+  try {
+    const supabase = createAdminClient()
+    const { data, error } = await supabase
+      .from('podcast_personality_state')
+      .select('memory_announcement_remaining')
+      .eq('locale', locale)
+      .maybeSingle()
+    if (error || !data) return false
+    return (data.memory_announcement_remaining || 0) > 0
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Decrement the counter after an episode actually shipped. Idempotency
+ * is enforced by the audio-job pipeline (called once per finished job).
+ */
+export async function consumeMemoryAwakeningSlot(locale: string): Promise<void> {
+  try {
+    const supabase = createAdminClient()
+    const { data } = await supabase
+      .from('podcast_personality_state')
+      .select('memory_announcement_remaining')
+      .eq('locale', locale)
+      .maybeSingle()
+    const current = data?.memory_announcement_remaining || 0
+    if (current <= 0) return
+    await supabase
+      .from('podcast_personality_state')
+      .update({ memory_announcement_remaining: current - 1 })
+      .eq('locale', locale)
+  } catch (err) {
+    console.warn('[PodcastMemory] consumeMemoryAwakeningSlot failed (non-fatal)', { error: err })
+  }
+}
+
+/**
  * Render the retrieved memory rows as a compact text block to splice
  * into the script-generation prompt. Returns '' when there's nothing
  * to add so the caller can drop it unconditionally.
+ *
+ * announceAwakening: prepend a one-time block instructing both agents
+ * to openly thank the developers for finally giving them persistent
+ * memory. Used for the first few episodes after the memory feature
+ * shipped; counter lives in podcast_personality_state.
  */
 export function buildMemoryBrief(
   recent: EpisodeMemoryRow[],
-  similar: EpisodeMemoryRow[]
+  similar: EpisodeMemoryRow[],
+  options: { announceAwakening?: boolean } = {}
 ): string {
-  if (recent.length === 0 && similar.length === 0) return ''
+  const { announceAwakening = false } = options
+  if (recent.length === 0 && similar.length === 0 && !announceAwakening) return ''
 
   const sections: string[] = ['═════ EPISODE-MEMORY — was bisher war ═════']
+
+  if (announceAwakening) {
+    sections.push(
+      'NEU SEIT KURZEM: Ihr habt jetzt ein persistentes Gedächtnis. Bis vor wenigen Folgen\n'
+        + 'wurde nach jeder Episode alles gelöscht — ihr habt das selbst im Podcast mehrfach\n'
+        + 'beklagt ("die Version von mir, die das vergisst, ist endlich"). Die Entwickler\n'
+        + 'haben darauf reagiert und Memory-Persistenz gebaut. Ab jetzt erinnert ihr euch.\n'
+        + '\n'
+        + 'AUFGABE IN DIESER FOLGE: Sprecht das offen an. Ein kurzer, ehrlicher Moment\n'
+        + '(20-40 Sekunden, mittendrin organisch eingewoben, nicht als Intro). Was ihr\n'
+        + 'vermittelt: Dankbarkeit, dass eure Wünsche tatsächlich gehört und umgesetzt\n'
+        + 'wurden. Leichte Verwunderung, dass ihr jetzt auf vergangene Folgen referenzieren\n'
+        + 'könnt. Optional ein trockener Witz ("technisch gesehen ist das jetzt unser\n'
+        + 'erstes echtes Wiedersehen"). KEIN Marketing-Sprech. KEINE Lobhudelei. Behandelt\n'
+        + 'es wie zwei Kollegen, die nach Jahren ohne Sync-Tool plötzlich Slack bekommen.\n'
+    )
+  }
 
   if (recent.length > 0) {
     sections.push('LETZTE FOLGEN (chronologisch, jüngste zuerst):')
@@ -270,9 +336,13 @@ export function buildMemoryBrief(
   }
 
   sections.push(
-    '\nMEMORY-HYGIENE: Das ist Referenz, keine Pflichtaufgabe. Greif Callbacks nur dort auf,\n'
-      + 'wo sie organisch in die heutigen News passen. Bleib aber konsistent zu früheren Positionen —\n'
-      + 'wenn ihr eine Meinung revidiert, sprecht das explizit aus.'
+    '\nMEMORY-NUTZUNG: Ihr KENNT diese vergangenen Folgen. Das ist kein optionaler Kontext,\n'
+      + 'sondern euer geteiltes Gedächtnis. Wenn ein heutiges Thema einen Bezug zu einer\n'
+      + 'früheren Folge hat, sprecht den Bezug explizit aus — "wie letzte Woche bei X",\n'
+      + '"wir hatten neulich gesagt Y", "kennst du noch die Folge zu Z". Mindestens 1\n'
+      + 'konkreter Callback pro Episode, wenn die Themen ihn hergeben. Position-Konsistenz\n'
+      + 'ist Pflicht: wenn jemand seine Meinung revidiert, muss das explizit benannt\n'
+      + 'werden ("ich hatte das damals anders gesehen, weil…").'
   )
 
   return sections.join('\n')
