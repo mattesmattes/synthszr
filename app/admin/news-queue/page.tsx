@@ -176,8 +176,12 @@ export default function NewsQueuePage() {
     try {
       // For pending: fetch all items (48h window or single-day pager
       // keeps the count manageable). For other statuses: paginate normally.
+      // Raised the pending cap from 500 → 1500: a single Cron run can
+      // queue ~530 items per day (article + newsletter + webcrawl),
+      // and the 48h window covers two of those — webcrawl was
+      // silently dropped at the 500 cap.
       const isPending = statusFilter === 'pending'
-      const fetchLimit = isPending ? 500 : PAGE_SIZE
+      const fetchLimit = isPending ? 1500 : PAGE_SIZE
       const offset = isPending ? 0 : page * PAGE_SIZE
       // Day pager → compute from/to as ISO timestamps in the browser's
       // local timezone. Sending UTC dates would mis-align with the
@@ -1171,15 +1175,29 @@ export default function NewsQueuePage() {
                               onClick={() => setViewingItem(item)}
                             >
                               <div className="text-sm font-medium truncate hover:text-primary flex items-center gap-1.5">
-                                {item.daily_repo?.source_type && (
-                                  <Badge className={`text-[9px] px-1 h-4 font-medium border-0 shrink-0 ${
-                                    item.daily_repo.source_type === 'webcrawl'
+                                {item.daily_repo?.source_type && (() => {
+                                  const st = item.daily_repo.source_type
+                                  // Three buckets now exist in daily_repo:
+                                  //   webcrawl → purple "Web"
+                                  //   article  → green  "Art"  (newsletter mail body re-classified as standalone article)
+                                  //   newsletter (legacy) → blue "NL"
+                                  // Anything else falls back to blue with the raw type code so we notice new sources.
+                                  const cls =
+                                    st === 'webcrawl'
                                       ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                                  }`}>
-                                    {item.daily_repo.source_type === 'webcrawl' ? 'Web' : 'NL'}
-                                  </Badge>
-                                )}
+                                      : st === 'article'
+                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                  const label =
+                                    st === 'webcrawl' ? 'Web' :
+                                    st === 'article'  ? 'Art' :
+                                    st === 'newsletter' ? 'NL' : st.slice(0, 3).toUpperCase()
+                                  return (
+                                    <Badge className={`text-[9px] px-1 h-4 font-medium border-0 shrink-0 ${cls}`}>
+                                      {label}
+                                    </Badge>
+                                  )
+                                })()}
                                 <span className="truncate">{truncateTitle(item.title)}</span>
                               </div>
                               <div className="flex items-center gap-2 text-xs text-muted-foreground">

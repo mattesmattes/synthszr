@@ -167,7 +167,13 @@ export async function GET(request: NextRequest) {
         const supabase = await createClient()
         const adminClient = createAdminClient()
         const status = searchParams.get('status') || 'pending'
-        const limit = parseIntParam(searchParams.get('limit'), 50, 1, 500)
+        // LIMIT cap raised to 2000 because a single Cron run can now
+        // queue ~530 items per day (article + newsletter + webcrawl)
+        // and the UI fetches today + yesterday in one shot. Old cap
+        // of 500 was cutting off the lower-scored half — typically
+        // exactly the webcrawl bucket because article-pipeline items
+        // get sub-second-newer queued_at timestamps.
+        const limit = parseIntParam(searchParams.get('limit'), 50, 1, 2000)
         const offset = parseIntParam(searchParams.get('offset'), 0, 0)
 
         // Reset stale selected items (selected > 2 hours ago) before listing
@@ -207,19 +213,27 @@ export async function GET(request: NextRequest) {
           // worth showing for context (read-only view of older days).
           const fromParam = searchParams.get('from')
           const toParam = searchParams.get('to')
+          // Order primarily by total_score so that, when the LIMIT
+          // is reached, the highest-scoring items survive the cut
+          // (instead of the article-pipeline batch winning every
+          // top slot purely on sub-second-newer queued_at stamps,
+          // pushing webcrawl out of the result set). queued_at is
+          // kept as the tiebreaker so equal scores still appear
+          // chronologically. The UI re-groups by calendar day on
+          // the client anyway, so this doesn't disturb layout.
           if (fromParam && toParam) {
             query = query
               .gte('queued_at', fromParam)
               .lt('queued_at', toParam)
-              .order('queued_at', { ascending: false })
               .order('total_score', { ascending: false })
+              .order('queued_at', { ascending: false })
           } else {
             const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
             query = query
               .gt('expires_at', new Date().toISOString())
               .gte('queued_at', cutoff48h)
-              .order('queued_at', { ascending: false })
               .order('total_score', { ascending: false })
+              .order('queued_at', { ascending: false })
           }
         } else {
           query = query.order('total_score', { ascending: false })
