@@ -191,60 +191,65 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        let query = supabase
-          .from('news_queue')
-          .select('*, daily_repo:daily_repo_id(source_type)', { count: 'exact' })
-          .eq('status', status)
-
-        // Sorting and filtering by status
-        if (status === 'pending') {
-          // Optional ?from=ISO&to=ISO pair pages back to a single
-          // calendar day. The boundaries are computed in the user's
-          // local timezone client-side and sent as full ISO strings,
-          // so the backend doesn't have to guess a timezone. This
-          // matches the day-grouping in the UI (also local-time
-          // based) — without that alignment, items queued shortly
-          // after local midnight would group under one date label
-          // but get filtered into the previous UTC date, which is
-          // exactly the "items disappear when paging back" bug.
-          //
-          // Note: when the user pages back we drop the expires_at
-          // guard, because items past their 3-day TTL are still
-          // worth showing for context (read-only view of older days).
-          const fromParam = searchParams.get('from')
-          const toParam = searchParams.get('to')
-          // Order primarily by total_score so that, when the LIMIT
-          // is reached, the highest-scoring items survive the cut
-          // (instead of the article-pipeline batch winning every
-          // top slot purely on sub-second-newer queued_at stamps,
-          // pushing webcrawl out of the result set). queued_at is
-          // kept as the tiebreaker so equal scores still appear
-          // chronologically. The UI re-groups by calendar day on
-          // the client anyway, so this doesn't disturb layout.
-          if (fromParam && toParam) {
-            query = query
-              .gte('queued_at', fromParam)
-              .lt('queued_at', toParam)
-              .order('total_score', { ascending: false })
-              .order('queued_at', { ascending: false })
+        // Build the filter chain in a reusable factory so we can
+        // re-run identical queries against different .range() windows
+        // (PostgREST hard-caps every response at 1000 rows, so a 2000-
+        // row window needs two paginated fetches).
+        const fromParamLocal = searchParams.get('from')
+        const toParamLocal = searchParams.get('to')
+        const isPendingLocal = status === 'pending'
+        const buildQuery = (withCount: boolean) => {
+          let q = supabase
+            .from('news_queue')
+            .select(
+              '*, daily_repo:daily_repo_id(source_type)',
+              withCount ? { count: 'exact' } : undefined,
+            )
+            .eq('status', status)
+          if (isPendingLocal) {
+            if (fromParamLocal && toParamLocal) {
+              q = q
+                .gte('queued_at', fromParamLocal)
+                .lt('queued_at', toParamLocal)
+                .order('total_score', { ascending: false })
+                .order('queued_at', { ascending: false })
+            } else {
+              const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+              q = q
+                .gt('expires_at', new Date().toISOString())
+                .gte('queued_at', cutoff)
+                .order('total_score', { ascending: false })
+                .order('queued_at', { ascending: false })
+            }
           } else {
-            const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
-            query = query
-              .gt('expires_at', new Date().toISOString())
-              .gte('queued_at', cutoff48h)
-              .order('total_score', { ascending: false })
-              .order('queued_at', { ascending: false })
+            q = q.order('total_score', { ascending: false })
           }
-        } else {
-          query = query.order('total_score', { ascending: false })
+          return q
         }
 
-        query = query.range(offset, offset + limit - 1)
-
-        const { data, error, count } = await query
-
-        if (error) {
-          return NextResponse.json({ error: error.message }, { status: 500 })
+        // Supabase / PostgREST caps any single response at 1000 rows
+        // regardless of .range() width. When the requested window
+        // exceeds 1000 we page through it server-side and concatenate.
+        // Without this, today + yesterday (≥1000 items) silently
+        // truncates and the UI looks empty for one of the two days.
+        const PAGE = 1000
+        const upper = offset + limit - 1
+        type Row = Awaited<ReturnType<typeof buildQuery>>['data'] extends (infer R)[] | null ? R : never
+        let data: Row[] = []
+        let count: number | null = null
+        let cursor = offset
+        while (cursor <= upper) {
+          const chunkEnd = Math.min(cursor + PAGE - 1, upper)
+          const isFirst = cursor === offset
+          const { data: chunk, error, count: c } = await buildQuery(isFirst).range(cursor, chunkEnd)
+          if (error) {
+            return NextResponse.json({ error: error.message }, { status: 500 })
+          }
+          if (isFirst) count = c ?? null
+          if (!chunk || chunk.length === 0) break
+          data = data.concat(chunk as Row[])
+          if (chunk.length < chunkEnd - cursor + 1) break
+          cursor += PAGE
         }
 
         return NextResponse.json({
@@ -289,6 +294,9 @@ export async function POST(request: NextRequest) {
             synthesisScore?: number
             relevanceScore?: number
             uniquenessScore?: number
+            sourcePubRate?: number
+            contentLength?: number
+            metadata?: Record<string, unknown>
           }>
         }
 

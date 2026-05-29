@@ -73,6 +73,7 @@ interface QueueItem {
   source_url: string | null
   daily_repo_id: string | null
   daily_repo: { source_type: string } | null
+  metadata?: Record<string, unknown> | null
   synthesis_score: number
   relevance_score: number
   uniqueness_score: number
@@ -433,9 +434,19 @@ export default function NewsQueuePage() {
             excerpt: manualText.slice(0, 200),
             sourceUrl: manualUrl,
             sourceEmail,
-            synthesisScore: 9.0,
-            relevanceScore: 9.0,
-            uniquenessScore: 9.0,
+            // Manually added items get a flat total_score of ~20 — well
+            // above the normal ceiling (~11) so they sit at the top of
+            // the pending list. total_score is GENERATED ALWAYS as
+            //   source_pub_rate*17.5 + relevance*0.82 + synthesis*0.31
+            //   + min(content_length/10000,1)*0.31
+            // → with all axes maxed + source_pub_rate=0.48 we land at
+            //   0.48*17.5 + 10*0.82 + 10*0.31 + 1*0.31 ≈ 20.05.
+            synthesisScore: 10,
+            relevanceScore: 10,
+            uniquenessScore: 10,
+            sourcePubRate: 0.48,
+            // Marker for the UI badge + downstream filtering.
+            metadata: { manual: true },
           }]
         })
       })
@@ -676,24 +687,37 @@ export default function NewsQueuePage() {
   // Extract all total scores for gradient calculation
   const allTotalScores = filteredItems.map(item => item.total_score)
 
-  // Group items by calendar day (newest day first), sorted by score within each day
+  // Group items by calendar day (newest day first), sorted by score within each day.
+  // We track the canonical local-midnight Date alongside each bucket so we
+  // can sort groups by date DESC at the end. Otherwise the Map preserves
+  // insertion order, which now reflects total_score sort — that put 28.5.
+  // ahead of 29.5. when 28.5. contained the single highest-scoring item.
   const dayGroups = (() => {
-    const groups = new Map<string, QueueItem[]>()
+    const groups = new Map<string, { dateMs: number; items: QueueItem[] }>()
     for (const item of filteredItems) {
-      const dayKey = new Date(item.queued_at).toLocaleDateString('de-DE', {
+      const d = new Date(item.queued_at)
+      const dayKey = d.toLocaleDateString('de-DE', {
         weekday: 'short',
         day: '2-digit',
         month: '2-digit',
         year: 'numeric'
       })
-      if (!groups.has(dayKey)) groups.set(dayKey, [])
-      groups.get(dayKey)!.push(item)
+      const dayMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      let bucket = groups.get(dayKey)
+      if (!bucket) {
+        bucket = { dateMs: dayMidnight, items: [] }
+        groups.set(dayKey, bucket)
+      }
+      bucket.items.push(item)
     }
     // Sort items within each day by total_score descending
-    for (const [, dayItems] of groups) {
+    for (const { items: dayItems } of groups.values()) {
       dayItems.sort((a, b) => b.total_score - a.total_score)
     }
+    // Sort groups by date DESC so today is always the first header.
     return Array.from(groups.entries())
+      .sort(([, a], [, b]) => b.dateMs - a.dateMs)
+      .map(([key, { items }]) => [key, items] as [string, QueueItem[]])
   })()
 
   return (
@@ -1175,23 +1199,36 @@ export default function NewsQueuePage() {
                               onClick={() => setViewingItem(item)}
                             >
                               <div className="text-sm font-medium truncate hover:text-primary flex items-center gap-1.5">
-                                {item.daily_repo?.source_type && (() => {
-                                  const st = item.daily_repo.source_type
-                                  // Three buckets now exist in daily_repo:
-                                  //   webcrawl → purple "Web"
-                                  //   article  → green  "Art"  (newsletter mail body re-classified as standalone article)
-                                  //   newsletter (legacy) → blue "NL"
-                                  // Anything else falls back to blue with the raw type code so we notice new sources.
-                                  const cls =
-                                    st === 'webcrawl'
-                                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                                      : st === 'article'
-                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                                  const label =
-                                    st === 'webcrawl' ? 'Web' :
-                                    st === 'article'  ? 'Art' :
-                                    st === 'newsletter' ? 'NL' : st.slice(0, 3).toUpperCase()
+                                {(() => {
+                                  // Source-type buckets:
+                                  //   metadata.manual → amber "Manual"  (user-added, score boosted to ~20)
+                                  //   webcrawl        → purple "Web"
+                                  //   article         → green  "Art"   (newsletter body re-classified)
+                                  //   newsletter      → blue   "NL"    (legacy)
+                                  //   any other       → blue with the first 3 chars of the raw type
+                                  // Manual wins over source_type because user intent overrides
+                                  // automatic pipeline classification.
+                                  const isManual = item.metadata && (item.metadata as { manual?: boolean }).manual === true
+                                  const st = item.daily_repo?.source_type
+                                  if (!isManual && !st) return null
+                                  let cls: string
+                                  let label: string
+                                  if (isManual) {
+                                    cls = 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                                    label = 'Manual'
+                                  } else if (st === 'webcrawl') {
+                                    cls = 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                    label = 'Web'
+                                  } else if (st === 'article') {
+                                    cls = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                    label = 'Art'
+                                  } else if (st === 'newsletter') {
+                                    cls = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                    label = 'NL'
+                                  } else {
+                                    cls = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                    label = (st as string).slice(0, 3).toUpperCase()
+                                  }
                                   return (
                                     <Badge className={`text-[9px] px-1 h-4 font-medium border-0 shrink-0 ${cls}`}>
                                       {label}
