@@ -3,6 +3,7 @@ import type { LanguageCode } from '@/lib/types'
 import { PUBLIC_LOCALES, DEFAULT_LOCALE } from './config'
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
+const DEFAULT_OG_IMAGE = `${BASE_URL}/og-image.jpg`
 
 interface LocalizedMetadataOptions {
   title: string
@@ -50,6 +51,10 @@ export function generateLocalizedMetadata({
     : effectiveLocale === 'nds' ? 'nds_DE'
     : `${effectiveLocale}_${effectiveLocale.toUpperCase()}`
 
+  // Fall back to the brand OG image so link previews on LinkedIn, X, etc.
+  // never render a blank placeholder. Pages with their own cover override it.
+  const effectiveOgImage = ogImage || DEFAULT_OG_IMAGE
+
   return {
     title,
     description,
@@ -67,15 +72,13 @@ export function generateLocalizedMetadata({
       locale: ogLocale,
       type: ogType,
       siteName: 'Synthszr',
-      ...(ogImage && {
-        images: [{ url: ogImage, width: 1200, height: 630 }],
-      }),
+      images: [{ url: effectiveOgImage, width: 1200, height: 630 }],
     },
     twitter: {
-      card: ogImage ? 'summary_large_image' : 'summary',
+      card: 'summary_large_image',
       title,
       description: description || undefined,
-      ...(ogImage && { images: [ogImage] }),
+      images: [effectiveOgImage],
     },
     ...(noIndex && {
       robots: {
