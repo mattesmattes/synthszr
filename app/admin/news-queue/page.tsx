@@ -745,7 +745,7 @@ export default function NewsQueuePage() {
           <Button
             size="sm"
             variant="outline"
-            className="text-xs"
+            className="text-xs bg-[#CCFF00] text-black border-[#CCFF00] hover:bg-[#CCFF00]/90 hover:text-black"
             onClick={() => setShowManualAddDialog(true)}
           >
             <Link className="h-3 w-3 mr-1" />
