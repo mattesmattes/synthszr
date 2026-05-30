@@ -3,7 +3,10 @@ import type { LanguageCode } from '@/lib/types'
 import { PUBLIC_LOCALES, DEFAULT_LOCALE } from './config'
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
-const DEFAULT_OG_IMAGE = `${BASE_URL}/og-image.jpg`
+// Versioned filename forces LinkedIn / X / Facebook to drop their
+// cached image. Bumping the suffix is the only reliable cache-buster
+// because the scrapers key on the exact URL, not on Last-Modified.
+const DEFAULT_OG_IMAGE = `${BASE_URL}/og-image-v2.jpg`
 
 interface LocalizedMetadataOptions {
   title: string
