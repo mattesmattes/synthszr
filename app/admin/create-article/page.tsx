@@ -170,7 +170,21 @@ export default function CreateArticlePage() {
   const [queueStats, setQueueStats] = useState<QueueStats>({ pending: 0, selected: 0, used: 0, oldestSelectedAt: null })
   const [sourceDistribution, setSourceDistribution] = useState<SourceDistribution[]>([])
   const [usedQueueItemIds, setUsedQueueItemIds] = useState<string[]>([])
-  const [maxQueueItems, setMaxQueueItems] = useState(20)
+  // Slider value persists across page reloads via localStorage so the
+  // explicit choice survives navigation. Default 30 reflects the typical
+  // working volume — the prior default of 20 silently capped users who
+  // expected more sections.
+  const [maxQueueItems, setMaxQueueItems] = useState(() => {
+    if (typeof window === 'undefined') return 30
+    const stored = window.localStorage.getItem('synthszr:maxQueueItems')
+    const parsed = stored ? parseInt(stored, 10) : NaN
+    return Number.isFinite(parsed) && parsed >= 1 && parsed <= 40 ? parsed : 30
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('synthszr:maxQueueItems', String(maxQueueItems))
+  }, [maxQueueItems])
 
   // Keep digests for reference (image generation uses digest content)
   const [digests, setDigests] = useState<Digest[]>([])

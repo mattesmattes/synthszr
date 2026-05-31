@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     // Model comes from central settings (admin/settings → KI-Modelle tab)
     const configModel = await getModelForUseCase('ghostwriter')
     const model = configModel as AIModel
-    console.log(`[Ghostwriter-Queue] Model: ${model} (from settings), Items: ${queueItemIds?.length || 'auto-select'}, useSelected: ${useSelected}`)
+    console.log(`[Ghostwriter-Queue] Model: ${model} (from settings), Items: ${queueItemIds?.length || 'auto-select'}, useSelected: ${useSelected}, maxItems: ${maxItems}`)
 
     const supabase = await createClient()
 
