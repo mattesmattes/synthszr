@@ -71,7 +71,7 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
   queue_ranking: {
     label: 'Queue-Ranking',
     description: 'News-Queue-Artikel nach persönlichem Geschmack vorschlagen',
-    defaultModel: 'claude-sonnet-4-6-20260301',
+    defaultModel: 'claude-sonnet-4-6',
     allowedProviders: ['anthropic', 'google'],
   },
   image_generation: {
