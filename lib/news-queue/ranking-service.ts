@@ -13,6 +13,9 @@ import type { RankingCandidate, RankedSuggestion } from './ranking-types'
 const MAX_CANDIDATES = 200
 const RECENCY_HOURS = 24
 const TARGET = 15
+// Stubs (headline-only items with almost no body) can't produce an article and
+// shouldn't be suggested. Articles run into the thousands of chars; 500 is a safe floor.
+const MIN_CONTENT_LENGTH = 500
 
 export interface RankingResult {
   runId: string
@@ -26,14 +29,16 @@ export async function generateRankingSuggestions(): Promise<RankingResult> {
   const since = new Date(Date.now() - RECENCY_HOURS * 3600 * 1000).toISOString()
   const { data: rows } = await supabase
     .from('news_queue')
-    .select('id, title, excerpt, source_display_name, total_score, email_received_at, queued_at')
+    .select('id, title, excerpt, source_display_name, total_score, email_received_at, queued_at, content_length')
     .eq('status', 'pending')
     .gt('expires_at', new Date().toISOString())
     .gte('queued_at', since)
     .order('total_score', { ascending: false })
     .limit(300)
 
-  const cleaned = (rows || []).filter((r) => !isJunkTitle(r.title)).slice(0, MAX_CANDIDATES)
+  const cleaned = (rows || [])
+    .filter((r) => !isJunkTitle(r.title) && (r.content_length ?? 0) >= MIN_CONTENT_LENGTH)
+    .slice(0, MAX_CANDIDATES)
   const byId = new Map<string, RankingCandidate>()
   const dateById = new Map<string, string | null>()
   for (const r of cleaned) {
