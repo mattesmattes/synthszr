@@ -14,7 +14,7 @@ import type { RankingCandidate, RankedSuggestion } from './ranking-types'
 const DEFAULT_STAGE1: 'rrf' | 'all' = 'all'
 const STAGE1_TOPK = 80
 const MAX_FOR_ALL = 200
-const RECENCY_HOURS = 48
+const RECENCY_HOURS = 24
 const TARGET = 15
 
 export interface RankingResult {
@@ -27,8 +27,8 @@ export async function generateRankingSuggestions(
 ): Promise<RankingResult> {
   const supabase = createAdminClient()
 
-  // Recent pending candidates only — matches the daily curation workflow
-  // (~150/day inflow) rather than the full unexpired backlog (~1000+ items).
+  // Last 24h of pending candidates — a daily newsletter is curated from the
+  // current day's articles (the queue is already organized day-wise).
   const since = new Date(Date.now() - RECENCY_HOURS * 3600 * 1000).toISOString()
   const { data: rows } = await supabase
     .from('news_queue')
