@@ -48,18 +48,32 @@ export async function recordFeedback(
   finalRank: number | null
 ): Promise<void> {
   const supabase = createAdminClient()
-  // upsert handles 'added' items that were never suggested
-  const { error } = await supabase.from('ranking_suggestions').upsert(
-    {
-      run_id: runId,
-      queue_item_id: queueItemId,
+
+  // Update the existing suggestion's action fields, preserving suggested_rank/
+  // llm_reason/confidence written by recordSuggestions.
+  const { data: updated, error: updateError } = await supabase
+    .from('ranking_suggestions')
+    .update({
       user_action: action,
       final_rank: finalRank,
       acted_at: new Date().toISOString(),
-    },
-    { onConflict: 'run_id,queue_item_id' }
-  )
-  if (error) throw new Error(`recordFeedback failed: ${error.message}`)
+    })
+    .eq('run_id', runId)
+    .eq('queue_item_id', queueItemId)
+    .select('id')
+
+  if (updateError) throw new Error(`recordFeedback update failed: ${updateError.message}`)
+  if (updated && updated.length > 0) return
+
+  // No existing row → the item was user-added (never suggested). Insert it.
+  const { error: insertError } = await supabase.from('ranking_suggestions').insert({
+    run_id: runId,
+    queue_item_id: queueItemId,
+    user_action: action,
+    final_rank: finalRank,
+    acted_at: new Date().toISOString(),
+  })
+  if (insertError) throw new Error(`recordFeedback insert failed: ${insertError.message}`)
 }
 
 /**
