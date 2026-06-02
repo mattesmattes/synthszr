@@ -585,35 +585,16 @@ async function getSimpleSelection(
 
 /**
  * Get items that have been manually selected (status='selected')
- * These are items the user explicitly chose for article generation
+ * These are items the user explicitly chose for article generation.
  *
- * IMPORTANT: First resets any "stale" selected items (selected > 2 hours ago)
- * This handles the case where items were selected but the article was never saved
+ * Pure read — does NOT mutate. Selections persist until used or explicitly
+ * deselected; cleanup of genuinely abandoned selections is handled by the
+ * resetStuckSelectedItems() cron (24h), not on every read, so a day's
+ * selections never silently revert.
  */
 export async function getSelectedItems(): Promise<NewsQueueItem[]> {
   const supabase = createAdminClient()
 
-  // FIRST: Reset any stale selected items (older than 2 hours)
-  // This handles items that were selected but the generated article was never saved
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-
-  const { data: staleItems } = await supabase
-    .from('news_queue')
-    .update({
-      status: 'pending',
-      selected_at: null
-    })
-    .eq('status', 'selected')
-    .lt('selected_at', twoHoursAgo)
-    .select('id')
-
-  if (staleItems && staleItems.length > 0) {
-    console.log(`[NewsQueue] Reset ${staleItems.length} stale selected items (older than 2h) to pending`)
-  }
-
-  // Now get remaining selected items (fresh selections)
-  // NOTE: No expires_at filter here — selected items have their own staleness
-  // check via selected_at (2h above). expires_at is only for pending items.
   const { data: selectedItems, error } = await supabase
     .from('news_queue')
     .select('*')
@@ -748,8 +729,7 @@ export async function expireOldItems(): Promise<number> {
 }
 
 /**
- * Get queue statistics
- * Note: Automatically resets stale selected items (> 2 hours) before counting
+ * Get queue statistics. Pure read — does not mutate selections.
  */
 export async function getQueueStats(): Promise<{
   pending: number
@@ -763,18 +743,8 @@ export async function getQueueStats(): Promise<{
   const supabase = createAdminClient()
   const now = new Date().toISOString()
 
-  // Reset stale selected items (> 2 hours) before counting
-  // This keeps stats consistent with getSelectedItems() behavior
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-  const { data: resetItems } = await supabase
-    .from('news_queue')
-    .update({ status: 'pending', selected_at: null })
-    .eq('status', 'selected')
-    .lt('selected_at', twoHoursAgo)
-    .select('id')
-  if (resetItems && resetItems.length > 0) {
-    console.log(`[NewsQueue] getQueueStats: Reset ${resetItems.length} stale selected items to pending`)
-  }
+  // Pure read — no longer mutates selections. (Abandoned selections are
+  // recycled by the resetStuckSelectedItems() cron, not on every stats load.)
 
   // Fetch recent items (7-day window) for pending/used/expired counts
   // Paginate to bypass PostgREST 1000-row limit
