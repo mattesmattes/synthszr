@@ -35,12 +35,15 @@ export async function GET(req: NextRequest) {
 
   const { data: sugg } = await supabase
     .from('ranking_suggestions')
-    .select('queue_item_id, suggested_rank, llm_reason, confidence, user_action, news_queue(title, source_display_name)')
+    .select('queue_item_id, suggested_rank, llm_reason, confidence, user_action, news_queue(title, source_display_name, email_received_at, queued_at)')
     .eq('run_id', run.id)
+    .neq('user_action', 'rejected') // verworfene Items bleiben auch nach Reload ausgeblendet
     .order('suggested_rank', { ascending: true })
 
   const suggestions = (sugg || []).map((s) => {
-    const nq = s.news_queue as unknown as { title: string; source_display_name: string | null } | null
+    const nq = s.news_queue as unknown as {
+      title: string; source_display_name: string | null; email_received_at: string | null; queued_at: string | null
+    } | null
     return {
       queueItemId: s.queue_item_id,
       rank: s.suggested_rank,
@@ -49,6 +52,7 @@ export async function GET(req: NextRequest) {
       userAction: s.user_action,
       title: nq?.title ?? '',
       source: nq?.source_display_name ?? null,
+      date: nq?.email_received_at ?? nq?.queued_at ?? null,
     }
   })
 

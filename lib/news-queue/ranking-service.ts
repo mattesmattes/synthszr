@@ -16,7 +16,7 @@ const TARGET = 15
 
 export interface RankingResult {
   runId: string
-  suggestions: Array<RankedSuggestion & { title: string; source: string | null }>
+  suggestions: Array<RankedSuggestion & { title: string; source: string | null; date: string | null }>
 }
 
 export async function generateRankingSuggestions(): Promise<RankingResult> {
@@ -26,7 +26,7 @@ export async function generateRankingSuggestions(): Promise<RankingResult> {
   const since = new Date(Date.now() - RECENCY_HOURS * 3600 * 1000).toISOString()
   const { data: rows } = await supabase
     .from('news_queue')
-    .select('id, title, excerpt, source_display_name, total_score')
+    .select('id, title, excerpt, source_display_name, total_score, email_received_at, queued_at')
     .eq('status', 'pending')
     .gt('expires_at', new Date().toISOString())
     .gte('queued_at', since)
@@ -35,6 +35,7 @@ export async function generateRankingSuggestions(): Promise<RankingResult> {
 
   const cleaned = (rows || []).filter((r) => !isJunkTitle(r.title)).slice(0, MAX_CANDIDATES)
   const byId = new Map<string, RankingCandidate>()
+  const dateById = new Map<string, string | null>()
   for (const r of cleaned) {
     byId.set(r.id, {
       queueItemId: r.id,
@@ -44,6 +45,8 @@ export async function generateRankingSuggestions(): Promise<RankingResult> {
       totalScore: Number(r.total_score) || 0,
       winnerSimilarity: 0,
     })
+    // Newsletter date the article came from (email received), fallback queued.
+    dateById.set(r.id, r.email_received_at ?? r.queued_at ?? null)
   }
   const pool = [...byId.values()]
 
@@ -68,7 +71,7 @@ export async function generateRankingSuggestions(): Promise<RankingResult> {
     runId,
     suggestions: suggestions.map((s) => {
       const c = byId.get(s.queueItemId)
-      return { ...s, title: c?.title ?? '', source: c?.source ?? null }
+      return { ...s, title: c?.title ?? '', source: c?.source ?? null, date: dateById.get(s.queueItemId) ?? null }
     }),
   }
 }

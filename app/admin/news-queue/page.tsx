@@ -613,6 +613,14 @@ export default function NewsQueuePage() {
     setActionLoading(null)
   }
 
+  // A suggestion "Behalten" in the ranking panel moved the item to the selected
+  // queue server-side (status='selected'); reflect it in the page right away so
+  // it leaves the pending list and bumps the selected count.
+  const handleSuggestionAccepted = (queueItemId: string) => {
+    setItems((prev) => prev.filter((item) => item.id !== queueItemId))
+    setStats((prev) => (prev ? { ...prev, pending: Math.max(0, prev.pending - 1), selected: prev.selected + 1 } : prev))
+  }
+
   const toggleSelect = (id: string) => {
     const newSelected = new Set(selectedItems)
     if (newSelected.has(id)) {
@@ -1112,7 +1120,7 @@ export default function NewsQueuePage() {
       )}
 
       <div className="mb-6">
-        <RankingSuggestionsPanel />
+        <RankingSuggestionsPanel onAccepted={handleSuggestionAccepted} />
       </div>
 
       {/* Queue Items - Full Width */}

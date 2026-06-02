@@ -10,9 +10,17 @@ interface Suggestion {
   userAction?: string
   title: string
   source: string | null
+  date: string | null
 }
 
-export function RankingSuggestionsPanel() {
+function fmtDate(d: string | null): string | null {
+  if (!d) return null
+  const dt = new Date(d)
+  if (isNaN(dt.getTime())) return null
+  return dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+export function RankingSuggestionsPanel({ onAccepted }: { onAccepted?: (queueItemId: string) => void } = {}) {
   const [runId, setRunId] = useState<string | null>(null)
   const [items, setItems] = useState<Suggestion[]>([])
   const [loading, setLoading] = useState(false)
@@ -45,7 +53,15 @@ export function RankingSuggestionsPanel() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ runId, queueItemId, action }),
     })
-    setItems((prev) => prev.map((s) => (s.queueItemId === queueItemId ? { ...s, userAction: action } : s)))
+    if (action === 'rejected') {
+      // Verwerfen → sofort ausblenden.
+      setItems((prev) => prev.filter((s) => s.queueItemId !== queueItemId))
+    } else {
+      // Behalten → als ausgewählt markieren und der Seite melden, damit das Item
+      // sichtbar in die Selected-Ansicht/-Zählung wandert.
+      setItems((prev) => prev.map((s) => (s.queueItemId === queueItemId ? { ...s, userAction: action } : s)))
+      onAccepted?.(queueItemId)
+    }
   }
 
   return (
@@ -68,7 +84,16 @@ export function RankingSuggestionsPanel() {
                 <span className="mr-2 font-mono text-xs text-neutral-400">#{s.rank}</span>
                 <span className="font-medium">{s.title}</span>
                 {s.source && <span className="ml-1 text-xs text-neutral-500">[{s.source}]</span>}
-                {s.reason && <p className="mt-0.5 text-xs text-neutral-600">{s.reason}</p>}
+                {s.reason && (
+                  <p className="mt-0.5 text-xs text-neutral-600">
+                    {fmtDate(s.date) && (
+                      <span className="mr-1.5 rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[10px] text-neutral-500 align-middle">
+                        {fmtDate(s.date)}
+                      </span>
+                    )}
+                    {s.reason}
+                  </p>
+                )}
               </div>
               <div className="flex shrink-0 gap-1">
                 <button onClick={() => feedback(s.queueItemId, 'accepted')} className="rounded bg-lime-500 px-2 py-0.5 text-xs text-white">Behalten</button>
