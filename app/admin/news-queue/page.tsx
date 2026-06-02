@@ -43,6 +43,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import { RankingSuggestionsPanel } from '@/components/admin/ranking-suggestions-panel'
 
 interface QueueStats {
   pending: number
@@ -1109,6 +1110,10 @@ export default function NewsQueuePage() {
           )}
         </div>
       )}
+
+      <div className="mb-6">
+        <RankingSuggestionsPanel />
+      </div>
 
       {/* Queue Items - Full Width */}
       <div>
