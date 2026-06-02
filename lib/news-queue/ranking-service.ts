@@ -66,6 +66,12 @@ export async function generateRankingSuggestions(
     pool = fused.map((id) => byId.get(id)!).filter(Boolean)
   }
 
+  // No candidates in the recency window → nothing to rank. Skip the LLM call
+  // and avoid persisting an orphan empty run.
+  if (pool.length === 0) {
+    return { runId: '', suggestions: [] }
+  }
+
   // Stage 2: rerank.
   const { positives, negatives } = await getRecentLabels(15)
   const suggestions = await runReranker(pool, positives, negatives, TARGET)

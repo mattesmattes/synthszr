@@ -16,6 +16,7 @@ export function RankingSuggestionsPanel() {
   const [runId, setRunId] = useState<string | null>(null)
   const [items, setItems] = useState<Suggestion[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function loadLatest() {
     const res = await fetch('/api/admin/ranking')
@@ -29,11 +30,13 @@ export function RankingSuggestionsPanel() {
 
   async function generate() {
     setLoading(true)
+    setError(null)
     try {
       const res = await fetch('/api/admin/ranking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       const data = await res.json()
       if (data.ok) { setRunId(data.runId); setItems(data.suggestions || []) }
-    } finally { setLoading(false) }
+      else setError(data.error || `Fehler (HTTP ${res.status})`)
+    } catch (e) { setError(String(e)) } finally { setLoading(false) }
   }
 
   async function feedback(queueItemId: string, action: 'accepted' | 'rejected') {
@@ -54,6 +57,7 @@ export function RankingSuggestionsPanel() {
           {loading ? 'Generiere…' : 'Vorschläge generieren'}
         </button>
       </div>
+      {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
       {items.length === 0 && <p className="text-sm text-neutral-500">Noch keine Vorschläge.</p>}
       <ol className="space-y-2">
         {items.map((s) => (
