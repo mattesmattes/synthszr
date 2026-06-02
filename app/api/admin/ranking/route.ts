@@ -11,9 +11,7 @@ export async function POST(req: NextRequest) {
   const authError = await requireAdmin(req)
   if (authError) return authError
   try {
-    const body = await req.json().catch(() => ({}))
-    const stage1 = body.stage1 === 'all' ? 'all' : body.stage1 === 'rrf' ? 'rrf' : undefined
-    const result = await generateRankingSuggestions(stage1)
+    const result = await generateRankingSuggestions()
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
     console.error('[API/ranking] POST failed:', err)

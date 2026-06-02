@@ -26,7 +26,8 @@ export async function runReranker(
   candidates: RankingCandidate[],
   positives: LabelExample[],
   negatives: LabelExample[],
-  targetCount = 15
+  targetCount = 15,
+  recentlyCovered: string[] = []
 ): Promise<RankedSuggestion[]> {
   const fallback = (): RankedSuggestion[] =>
     [...candidates]
@@ -38,7 +39,7 @@ export async function runReranker(
   if (!process.env.ANTHROPIC_API_KEY) return fallback()
 
   const validIds = new Set(candidates.map((c) => c.queueItemId))
-  const prompt = buildRerankerPrompt(shuffle(candidates), positives, negatives, targetCount)
+  const prompt = buildRerankerPrompt(shuffle(candidates), positives, negatives, targetCount, recentlyCovered)
 
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })

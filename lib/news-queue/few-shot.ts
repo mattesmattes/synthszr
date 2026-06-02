@@ -10,31 +10,42 @@ export function buildRerankerPrompt(
   candidates: RankingCandidate[],
   positives: LabelExample[],
   negatives: LabelExample[],
-  targetCount: number
+  targetCount: number,
+  recentlyCovered: string[] = []
 ): string {
   const parts: string[] = []
 
   parts.push(
-    `Du bist Mattes' redaktioneller Co-Pilot für einen Tech-/Business-Newsletter.`,
-    `Wähle aus den KANDIDATEN die ${targetCount} relevantesten Artikel nach Mattes' Geschmack aus und ordne sie.`,
-    `Bevorzuge substanzielle, originelle Tech-/Business-Themen; meide Werbung, Rätsel, Listicles, Geraune.`,
+    `Du bist Mattes' redaktioneller Co-Pilot für einen TÄGLICHEN Tech-/Business-NEWS-Newsletter.`,
+    `Wähle aus den KANDIDATEN die ${targetCount} wichtigsten NACHRICHTEN des Tages nach Mattes' Geschmack und ordne sie.`,
+    `Bevorzuge konkrete Ereignisse: Produktlaunches, Firmen-/Strategie-Moves, Forschungsdurchbrüche, Sicherheitsvorfälle, Marktbewegungen, bemerkenswerte Aussagen relevanter Personen.`,
+    `MEIDE strikt: Tutorials, How-Tos, "Roadmaps", "Guides", Cost-Optimization-Listicles, Meinungsstücke ohne Neuigkeit, Werbung, Newsletter-Sektions-Header, Rätsel.`,
     ``
   )
 
-  if (positives.length > 0 || negatives.length > 0) {
-    parts.push(`## FRÜHER AUSGEWÄHLT (positiv — solche Themen will Mattes):`)
+  if (positives.length > 0) {
+    parts.push(`## ARTIKEL, DIE MATTES ZULETZT GEWÄHLT HAT (Vorbild für Typ & Geschmack):`)
     for (const ex of positives) parts.push(`- ${ex.title}${ex.source ? ` (${ex.source})` : ''}`)
-    parts.push(``, `## FRÜHER IGNORIERT (negativ — solche Themen will Mattes NICHT):`)
+    parts.push(``)
+  }
+
+  if (negatives.length > 0) {
+    parts.push(`## ARTIKEL, DIE MATTES VERWORFEN HAT (solche Art NICHT vorschlagen):`)
     for (const ex of negatives) parts.push(`- ${ex.title}${ex.source ? ` (${ex.source})` : ''}`)
     parts.push(``)
   }
 
-  parts.push(`## KANDIDATEN:`)
+  if (recentlyCovered.length > 0) {
+    parts.push(`## BEREITS IN DEN LETZTEN NEWSLETTERN BEHANDELT — Doppelungen vermeiden, diese Themen NICHT erneut vorschlagen:`)
+    for (const t of recentlyCovered) parts.push(`- ${t}`)
+    parts.push(``)
+  }
+
+  parts.push(`## KANDIDATEN (heute):`)
   for (const c of candidates) {
     const preview = (c.excerpt || '').slice(0, 200)
     parts.push(
-      `- id=${c.queueItemId} | score=${c.totalScore.toFixed(1)} sim=${c.winnerSimilarity.toFixed(2)}` +
-        ` | ${c.title}${c.source ? ` [${c.source}]` : ''}${preview ? `\n    ${preview}` : ''}`
+      `- id=${c.queueItemId} | ${c.title}${c.source ? ` [${c.source}]` : ''}${preview ? `\n    ${preview}` : ''}`
     )
   }
 

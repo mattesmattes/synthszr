@@ -28,6 +28,21 @@ describe('buildRerankerPrompt', () => {
   })
   it('omits the examples sections when none are given', () => {
     const p = buildRerankerPrompt(candidates, [], [], 15)
-    expect(p).not.toContain('FRÜHER AUSGEWÄHLT')
+    expect(p).not.toContain('ZULETZT GEWÄHLT')
+    expect(p).not.toContain('VERWORFEN')
+  })
+  it('lists recently covered topics as a dedup avoid-list', () => {
+    const p = buildRerankerPrompt(candidates, positives, negatives, 15, ['Token-Kosten explodieren', 'Frankreich KI-Hub'])
+    expect(p).toContain('BEREITS IN DEN LETZTEN NEWSLETTERN BEHANDELT')
+    expect(p).toContain('Token-Kosten explodieren')
+  })
+  it('omits the dedup section when nothing was recently covered', () => {
+    const p = buildRerankerPrompt(candidates, positives, negatives, 15, [])
+    expect(p).not.toContain('BEREITS IN DEN LETZTEN NEWSLETTERN')
+  })
+  it('instructs to prefer news over tutorials/guides', () => {
+    const p = buildRerankerPrompt(candidates, positives, negatives, 15)
+    expect(p).toContain('NACHRICHTEN')
+    expect(p.toLowerCase()).toContain('tutorials')
   })
 })
