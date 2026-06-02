@@ -15,6 +15,7 @@ export type UseCase =
   | 'podcast_script'
   | 'edit_analysis'
   | 'pattern_extraction'
+  | 'queue_ranking'
   | 'image_generation'
 
 export interface UseCaseInfo {
@@ -66,6 +67,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     description: 'Muster aus wiederkehrenden Edits extrahieren',
     defaultModel: 'claude-sonnet-4-6-20260301',
     allowedProviders: ['anthropic'],
+  },
+  queue_ranking: {
+    label: 'Queue-Ranking',
+    description: 'News-Queue-Artikel nach persönlichem Geschmack vorschlagen',
+    defaultModel: 'claude-sonnet-4-6-20260301',
+    allowedProviders: ['anthropic', 'google'],
   },
   image_generation: {
     label: 'Bildgenerierung',
