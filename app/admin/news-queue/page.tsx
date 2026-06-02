@@ -84,6 +84,7 @@ interface QueueItem {
   expires_at: string
   email_received_at: string | null
   skip_reason: string | null
+  via_ranking?: boolean // true when this selected item came from accepting an AI suggestion
 }
 
 interface BalancedSelection {
@@ -1163,7 +1164,7 @@ export default function NewsQueuePage() {
                         {dayItems.map((item, idx) => (
                           <div
                             key={item.id}
-                            className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors"
+                            className={`flex items-center gap-2 px-3 py-2 transition-colors ${item.via_ranking ? 'bg-lime-50 hover:bg-lime-100' : 'hover:bg-muted/50'}`}
                           >
                             {/* Rank number within day */}
                             <span className="text-[10px] font-mono text-muted-foreground w-6 text-right shrink-0">

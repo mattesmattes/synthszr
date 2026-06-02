@@ -176,20 +176,8 @@ export async function GET(request: NextRequest) {
         const limit = parseIntParam(searchParams.get('limit'), 50, 1, 2000)
         const offset = parseIntParam(searchParams.get('offset'), 0, 0)
 
-        // Reset stale selected items (selected > 2 hours ago) before listing
-        // This keeps the UI consistent with getSelectedItems() behavior
-        if (status === 'selected') {
-          const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-          const { data: resetItems } = await adminClient
-            .from('news_queue')
-            .update({ status: 'pending', selected_at: null })
-            .eq('status', 'selected')
-            .lt('selected_at', twoHoursAgo)
-            .select('id')
-          if (resetItems && resetItems.length > 0) {
-            console.log(`[NewsQueue] Reset ${resetItems.length} stale selected items to pending`)
-          }
-        }
+        // (No time-based auto-reset here — selections persist until used or
+        // explicitly deselected; abandoned ones are recycled by the 24h cron.)
 
         // Build the filter chain in a reusable factory so we can
         // re-run identical queries against different .range() windows
@@ -250,6 +238,21 @@ export async function GET(request: NextRequest) {
           data = data.concat(chunk as Row[])
           if (chunk.length < chunkEnd - cursor + 1) break
           cursor += PAGE
+        }
+
+        // Flag which selected items came from accepting an AI suggestion
+        // (vs. manual selection) so the UI can tint them green.
+        if (status === 'selected' && data.length > 0) {
+          const ids = (data as { id: string }[]).map((r) => r.id)
+          const { data: accepted } = await adminClient
+            .from('ranking_suggestions')
+            .select('queue_item_id')
+            .eq('user_action', 'accepted')
+            .in('queue_item_id', ids)
+          const viaSet = new Set((accepted || []).map((a) => a.queue_item_id))
+          for (const r of data as { id: string; via_ranking?: boolean }[]) {
+            r.via_ranking = viaSet.has(r.id)
+          }
         }
 
         return NextResponse.json({

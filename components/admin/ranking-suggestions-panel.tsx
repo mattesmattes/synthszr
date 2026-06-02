@@ -49,19 +49,15 @@ export function RankingSuggestionsPanel({ onAccepted }: { onAccepted?: (queueIte
 
   async function feedback(queueItemId: string, action: 'accepted' | 'rejected') {
     if (!runId) return
+    // Both actions remove the item from the suggestions list immediately.
+    // "Behalten" additionally moves it into the selected queue (status=selected
+    // server-side); onAccepted tells the page so it shows up under "Selected".
+    setItems((prev) => prev.filter((s) => s.queueItemId !== queueItemId))
     await fetch('/api/admin/ranking-feedback', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ runId, queueItemId, action }),
     })
-    if (action === 'rejected') {
-      // Verwerfen → sofort ausblenden.
-      setItems((prev) => prev.filter((s) => s.queueItemId !== queueItemId))
-    } else {
-      // Behalten → als ausgewählt markieren und der Seite melden, damit das Item
-      // sichtbar in die Selected-Ansicht/-Zählung wandert.
-      setItems((prev) => prev.map((s) => (s.queueItemId === queueItemId ? { ...s, userAction: action } : s)))
-      onAccepted?.(queueItemId)
-    }
+    if (action === 'accepted') onAccepted?.(queueItemId)
   }
 
   return (
@@ -77,8 +73,7 @@ export function RankingSuggestionsPanel({ onAccepted }: { onAccepted?: (queueIte
       {items.length === 0 && <p className="text-sm text-neutral-500">Noch keine Vorschläge.</p>}
       <ol className="space-y-2">
         {items.map((s) => (
-          <li key={s.queueItemId}
-            className={`rounded border p-2 text-sm ${s.userAction === 'rejected' ? 'opacity-40' : ''} ${s.userAction === 'accepted' ? 'border-lime-400 bg-lime-50' : 'border-neutral-200'}`}>
+          <li key={s.queueItemId} className="rounded border border-neutral-200 bg-white p-2 text-sm">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <span className="mr-2 font-mono text-xs text-neutral-400">#{s.rank}</span>

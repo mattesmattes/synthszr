@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     .from('ranking_suggestions')
     .select('queue_item_id, suggested_rank, llm_reason, confidence, user_action, news_queue(title, source_display_name, email_received_at, queued_at)')
     .eq('run_id', run.id)
-    .neq('user_action', 'rejected') // verworfene Items bleiben auch nach Reload ausgeblendet
+    .eq('user_action', 'pending') // nur unbearbeitete Vorschläge; Behalten→selected, Verwerfen→weg bleiben nach Reload ausgeblendet
     .order('suggested_rank', { ascending: true })
 
   const suggestions = (sugg || []).map((s) => {
