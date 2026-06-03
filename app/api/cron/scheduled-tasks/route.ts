@@ -627,10 +627,24 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
     )
     console.log(`[DailyAnalysis] Synthesis complete: ${synthResult.synthesesDeveloped} syntheses created`)
 
+    // Step 4: Generate today's assisted-ranking suggestions on the freshly
+    // queued articles, so the panel shows fresh suggestions each morning
+    // without a manual click. Graceful — a failure must not fail the pipeline.
+    let rankingSuggested = 0
+    try {
+      const { generateRankingSuggestions } = await import('@/lib/news-queue/ranking-service')
+      const ranking = await generateRankingSuggestions()
+      rankingSuggested = ranking.suggestions.length
+      console.log(`[DailyAnalysis] Generated ${rankingSuggested} ranking suggestions`)
+    } catch (rankErr) {
+      console.error('[DailyAnalysis] Ranking generation failed (non-fatal):', rankErr)
+    }
+
     return {
       success: true,
       digestId: newDigest.id,
       synthesesCreated: synthResult.synthesesDeveloped,
+      rankingSuggested,
     }
   } catch (synthError) {
     console.error('[DailyAnalysis] Synthesis failed:', synthError)
