@@ -91,7 +91,7 @@ const USE_CASE_DEFINITIONS: Record<string, UseCaseInfo> = {
   article_planning: {
     label: 'Artikel-Planung',
     description: 'Struktur, Reihenfolge und Überschriften planen',
-    defaultModel: 'gemini-2.0-flash',
+    defaultModel: 'gemini-2.5-flash',
     allowedProviders: ['anthropic', 'openai', 'google'],
   },
   proofreading: {

@@ -71,7 +71,7 @@ export function resolveModel(model: string): { provider: 'anthropic' | 'openai' 
   if (model.startsWith('claude-opus-4')) return { provider: 'anthropic', modelId: model.includes('-2025') ? model : 'claude-opus-4-20250514' }
   if (model.startsWith('claude-sonnet-4')) return { provider: 'anthropic', modelId: model.includes('-2025') ? model : 'claude-sonnet-4-20250514' }
   if (model.startsWith('claude-haiku')) return { provider: 'anthropic', modelId: model.includes('-2025') || model.includes('-2024') ? model : 'claude-haiku-4-5-20251001' }
-  if (model.startsWith('gemini')) return { provider: 'google', modelId: model }
+  if (model.startsWith('gemini')) return { provider: 'google', modelId: model === 'gemini-2.0-flash' ? 'gemini-2.5-flash' : model }
   if (model.startsWith('gpt')) return { provider: 'openai', modelId: model }
   return null
 }
@@ -379,7 +379,8 @@ ${originalText}`
     }
   } else if (model === 'gemini-2.5-pro' || model === 'gemini-2.0-flash') {
     const geminiModel = genAI.getGenerativeModel({
-      model: model,
+      // 'gemini-2.0-flash' was retired by Google → route that legacy choice to 2.5-flash
+      model: model === 'gemini-2.5-pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash',
       systemInstruction: deduplicationSystem,
     })
 

@@ -157,7 +157,7 @@ async function processQueueItem(
     .eq('code', item.target_language)
     .single()
 
-  const model = (language?.llm_model as TranslationModel) || 'gemini-2.0-flash'
+  const model = (language?.llm_model as TranslationModel) || 'gemini-2.5-flash'
 
   if (item.content_type === 'generated_post' && item.content_id) {
     return await processGeneratedPost(supabase, item, model)
