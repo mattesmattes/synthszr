@@ -640,11 +640,11 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
       console.error('[DailyAnalysis] Ranking generation failed (non-fatal):', rankErr)
     }
 
+    void rankingSuggested
     return {
       success: true,
       digestId: newDigest.id,
       synthesesCreated: synthResult.synthesesDeveloped,
-      rankingSuggested,
     }
   } catch (synthError) {
     console.error('[DailyAnalysis] Synthesis failed:', synthError)
