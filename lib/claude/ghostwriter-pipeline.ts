@@ -416,9 +416,9 @@ async function callModelNonStreaming(
     return response.choices[0]?.message?.content || ''
   }
 
-  // Fallback: Gemini Flash
+  // Fallback: Gemini Flash (gemini-2.0-flash was retired by Google → 404)
   const fallback = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash',
     systemInstruction: systemPrompt,
   })
   const fullPrompt = options?.cacheableUserPrefix

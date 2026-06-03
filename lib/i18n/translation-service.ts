@@ -10,13 +10,13 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
 export type TranslationModel =
   | 'claude-sonnet-4'
   | 'claude-haiku-3.5'
-  | 'gemini-2.0-flash'
+  | 'gemini-2.5-flash'
   | 'gemini-2.5-pro'
 
 export const TRANSLATION_MODEL_LABELS: Record<TranslationModel, string> = {
   'claude-sonnet-4': 'Claude Sonnet 4',
   'claude-haiku-3.5': 'Claude Haiku 3.5',
-  'gemini-2.0-flash': 'Gemini 2.0 Flash',
+  'gemini-2.5-flash': 'Gemini 2.0 Flash',
   'gemini-2.5-pro': 'Gemini 2.5 Pro',
 }
 
@@ -29,7 +29,7 @@ export function getAvailableModels(): TranslationModel[] {
   }
 
   if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    available.push('gemini-2.0-flash', 'gemini-2.5-pro')
+    available.push('gemini-2.5-flash', 'gemini-2.5-pro')
   }
 
   return available
@@ -71,7 +71,7 @@ export async function testApiKeys(): Promise<{
   if (googleKey) {
     results.google.lastChars = googleKey.slice(-4)
     try {
-      const gemini = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+      const gemini = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
       await gemini.generateContent('Say "ok"')
       results.google.valid = true
     } catch (error) {
@@ -137,7 +137,7 @@ interface TranslationResult {
 export async function translateContent(
   source: TranslationInput,
   targetLanguage: LanguageCode,
-  model: TranslationModel = 'gemini-2.0-flash'
+  model: TranslationModel = 'gemini-2.5-flash'
 ): Promise<TranslationResult> {
   const targetLangName = LANGUAGE_NAMES[targetLanguage]
 
@@ -360,14 +360,14 @@ async function translateWithGemini(
   userPrompt: string,
   model: TranslationModel
 ): Promise<string> {
-  const primaryId = model === 'gemini-2.5-pro' ? 'gemini-2.5-pro' : 'gemini-2.0-flash'
+  const primaryId = model === 'gemini-2.5-pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash'
 
   try {
     return await callGeminiWithRetry(primaryId, systemPrompt, userPrompt, 3)
   } catch (error) {
     if (primaryId === 'gemini-2.5-pro' && isOverloadError(error)) {
       console.warn('[Translation] gemini-2.5-pro overloaded after retries, falling back to gemini-2.0-flash')
-      return await callGeminiWithRetry('gemini-2.0-flash', systemPrompt, userPrompt, 2)
+      return await callGeminiWithRetry('gemini-2.5-flash', systemPrompt, userPrompt, 2)
     }
     throw error
   }
@@ -476,7 +476,7 @@ function generateSlug(title: string): string {
 export async function translateUIStrings(
   strings: Record<string, string>,
   targetLanguage: LanguageCode,
-  model: TranslationModel = 'gemini-2.0-flash'
+  model: TranslationModel = 'gemini-2.5-flash'
 ): Promise<{ success: boolean; translations?: Record<string, string>; error?: string }> {
   const targetLangName = LANGUAGE_NAMES[targetLanguage]
 
