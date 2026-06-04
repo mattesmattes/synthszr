@@ -117,16 +117,16 @@ async function generateImageDirectGoogle(prompt: string): Promise<GenerateImageR
 
   const genAI = new GoogleGenerativeAI(apiKey)
 
-  // Use gemini-2.0-flash-exp for image generation (supports imagen)
+  // Use gemini-2.5-flash-image for image generation (supports imagen)
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash-exp',
+    model: 'gemini-2.5-flash-image',
     generationConfig: {
       // @ts-expect-error - responseModalities is valid for image generation
       responseModalities: ['TEXT', 'IMAGE'],
     },
   })
 
-  console.log('[Gemini Direct] Generating image with gemini-2.0-flash-exp...')
+  console.log('[Gemini Direct] Generating image with gemini-2.5-flash-image...')
 
   try {
     const result = await model.generateContent(prompt)
@@ -152,7 +152,7 @@ async function generateImageDirectGoogle(prompt: string): Promise<GenerateImageR
             success: true,
             imageBase64: data,
             mimeType: mimeType || 'image/png',
-            model: 'google/gemini-2.0-flash-exp',
+            model: 'google/gemini-2.5-flash-image',
           }
         }
       }

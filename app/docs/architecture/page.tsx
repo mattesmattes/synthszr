@@ -157,8 +157,8 @@ export default function ArchitecturePage() {
 
         <Subsection title="Anthropic Claude (text generation + reasoning)">
           <ul className="list-disc pl-5 space-y-1 text-sm">
-            <li><strong>Claude Opus 4.6</strong> (<Code>claude-opus-4-6-20260301</Code>) — Ghostwriter plan + main generation when settings select Opus.</li>
-            <li><strong>Claude Sonnet 4.6</strong> (<Code>claude-sonnet-4-6-20260301</Code>) — default Ghostwriter model; also used for edit-diff classification.</li>
+            <li><strong>Claude Opus 4.8</strong> (<Code>claude-opus-4-8</Code>) — default Ghostwriter model (section writing) with adaptive thinking + effort.</li>
+            <li><strong>Claude Sonnet 4.6</strong> (<Code>claude-sonnet-4-6</Code>) — alternate Ghostwriter model; used for edit-diff classification, podcast/pattern tasks.</li>
             <li><strong>Claude Haiku 4.5</strong> (<Code>claude-haiku-4-5-20251001</Code>) — fast paths: proofread pass, translation, edit clustering.</li>
             <li>Integration via official <Code>@anthropic-ai/sdk</Code>; uses <strong>prompt caching</strong> on long system prompts (post-refactor pattern).</li>
             <li>Older model IDs (<Code>opus-4</Code>, <Code>sonnet-4</Code>, <Code>haiku-3.5</Code>) are kept as fallback strings for admin settings migration; not part of the live path.</li>

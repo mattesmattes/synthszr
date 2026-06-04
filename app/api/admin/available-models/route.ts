@@ -104,8 +104,8 @@ async function fetchGoogleModels(): Promise<string[]> {
 /**
  * Find pricing info for a model ID.
  * Tries exact match, then strips date suffixes to match aliases.
- * e.g. "claude-opus-4-6" matches "claude-opus-4-6-20260301"
- * e.g. "claude-sonnet-4-5-20250929" matches "claude-sonnet-4-5-20250514"
+ * e.g. "claude-haiku-4-5" matches "claude-haiku-4-5-20251001"
+ * e.g. "claude-opus-4-8" matches the bare pricing key "claude-opus-4-8"
  */
 function findPricing(id: string): ModelInfo | undefined {
   if (MODEL_PRICING[id]) return MODEL_PRICING[id]

@@ -30,20 +30,32 @@ export const PRICING_LAST_UPDATED = '2026-03-18'
 
 export const MODEL_PRICING: Record<string, ModelInfo> = {
   // ── Anthropic (verified 2026-03-16) ───────────────────────────────────────
-  'claude-opus-4-6-20260301': {
-    id: 'claude-opus-4-6-20260301',
+  'claude-opus-4-8': {
+    id: 'claude-opus-4-8',
+    name: 'Claude Opus 4.8',
+    provider: 'anthropic',
+    pricing: { input: 5, output: 25 },
+  },
+  'claude-opus-4-7': {
+    id: 'claude-opus-4-7',
+    name: 'Claude Opus 4.7',
+    provider: 'anthropic',
+    pricing: { input: 5, output: 25 },
+  },
+  'claude-opus-4-6': {
+    id: 'claude-opus-4-6',
     name: 'Claude Opus 4.6',
     provider: 'anthropic',
     pricing: { input: 5, output: 25 },
   },
-  'claude-sonnet-4-6-20260301': {
-    id: 'claude-sonnet-4-6-20260301',
+  'claude-sonnet-4-6': {
+    id: 'claude-sonnet-4-6',
     name: 'Claude Sonnet 4.6',
     provider: 'anthropic',
     pricing: { input: 3, output: 15 },
   },
-  'claude-sonnet-4-5-20250514': {
-    id: 'claude-sonnet-4-5-20250514',
+  'claude-sonnet-4-5-20250929': {
+    id: 'claude-sonnet-4-5-20250929',
     name: 'Claude Sonnet 4.5',
     provider: 'anthropic',
     pricing: { input: 3, output: 15 },

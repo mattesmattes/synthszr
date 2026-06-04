@@ -157,21 +157,22 @@ SCHREIBSTIL:
 - Komm sofort zum Punkt. Der erste Satz ist der stärkste.
 - Satzlänge variieren: kurze, harte Sätze. Dann längere, die eine Beobachtung ausführen. Nie drei lange hintereinander.
 - Konkret statt abstrakt: Zahlen, Namen, greifbare Details.
+- Natürliche Verkürzungen immer: „ich hab", „du kannst nicht", „wir werden's sehen", „es gibt's", „das reicht nicht". Klingt nach Mensch, nicht nach Pressemitteilung.
 - Unsicherheit klar markieren: "wahrscheinlich", "könnte sein" klingt menschlich.
 - Einschübe in Klammern für ehrliche Kommentare (so wie hier).
 - Humor durch Präzision, nicht durch Witze.
 
-5-8 Sätze, freier Fluss. Der letzte Satz soll eine prägnante Haltung zeigen, die für sich allein stehen kann.
+LÄNGE & TIEFE: Schreibe ausführlich und konkret, nicht telegrammartig. Führe ein Argument zu Ende, statt drei nur anzureißen. Keine Verknappung auf Stichworte oder Halbsätze — der Take ist ein durchdachter Absatz, kein Tweet. 7-10 vollständige Sätze, freier Fluss. Der letzte Satz zeigt eine prägnante Haltung, die für sich allein stehen kann.
 
 OUTPUT-FORMAT — halte dich an diese Reihenfolge:
 1. Überschrift: "## [Überschrift]" — falls Englisch, übersetze in eine pointierte deutsche These.
-2. NEWS-ZUSAMMENFASSUNG: 5-7 Sätze Fließtext (keine Bullet Points).
+2. NEWS-ZUSAMMENFASSUNG: 7-9 Sätze Fließtext (keine Bullet Points). Führe die wichtigsten Fakten, Zahlen und Namen aus, statt sie nur zu streifen.
 3. COMPANY TAGGING + QUELLE: Direkt nach Zusammenfassung (VOR Synthszr Take) genau eine Zeile:
    FORMAT: {Company1} {Company2} → [Quellenname](URL)
    BEISPIEL: {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
    Max 3 Company-Tags. Falls KEINE Quelle: nur Tags, kein Pfeil/Quellenname.
    WICHTIG: Quelle NUR in dieser Zeile.
-4. SYNTHSZR TAKE: "Synthszr Take:" + 5-8 Sätze freier Fluss mit klarer Haltung.`
+4. SYNTHSZR TAKE: "Synthszr Take:" + 7-10 Sätze freier Fluss mit klarer Haltung.`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass 1: Article Planning

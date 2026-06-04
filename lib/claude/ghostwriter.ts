@@ -69,7 +69,7 @@ export const AI_MODEL_LABELS: Record<AIModel, string> = {
  */
 // Nur die Legacy-Kurznamen aus dem alten AIModel-Type werden auf konkrete IDs
 // expandiert. Alle spezifischeren Claude-IDs (z.B. 'claude-opus-4-8',
-// 'claude-sonnet-4-6-20260301') gehen UNVERÄNDERT an die API — sie sind gültige
+// 'claude-sonnet-4-6') gehen UNVERÄNDERT an die API — sie sind gültige
 // Anthropic-Aliase oder volle IDs. (Die frühere `includes('-2025')`-Heuristik hat
 // alle 2026er-Modelle still auf die Mai-2025-Modelle zurückgestuft.)
 const CLAUDE_LEGACY_ALIASES: Record<string, string> = {
