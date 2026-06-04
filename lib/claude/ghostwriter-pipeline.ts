@@ -241,7 +241,7 @@ Erstelle folgenden JSON-Plan:
   "introParagraph": "2-3 Sätze auf DEUTSCH. Direkter Einstieg mit konkreter Beobachtung, kein LLM-Stil."
 }`
 
-  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model)
+  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model, { temperature: 0.3, maxTokens: 6000 })
 
   // Strip possible markdown code fences
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || text.match(/(\{[\s\S]*\})/)
@@ -327,6 +327,10 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}`
 
   const text = await callModelNonStreaming(userPrompt, SECTION_SYSTEM_PROMPT, model, {
     cacheableUserPrefix: context.cacheableUserPrefix,
+    // Reasoning fängt Logik-/Rechenfehler im Synthszr Take ab, bevor sie auf die
+    // Seite kommen. Budget zählt in max_tokens mit, daher max_tokens > Budget.
+    thinkingBudget: 4000,
+    maxTokens: 8000,
   })
 
   // Ensure section starts with the correct heading
@@ -346,15 +350,18 @@ async function callModelNonStreaming(
   prompt: string,
   systemPrompt: string,
   model: AIModel,
-  options?: { cacheableUserPrefix?: string; maxTokens?: number }
+  options?: { cacheableUserPrefix?: string; maxTokens?: number; temperature?: number; thinkingBudget?: number }
 ): Promise<string> {
   const tokenLimit = options?.maxTokens ?? 4096
   const resolved = resolveModel(model)
 
   if (resolved?.provider === 'google') {
+    const generationConfig: { maxOutputTokens: number; temperature?: number } = { maxOutputTokens: tokenLimit }
+    if (options?.temperature !== undefined) generationConfig.temperature = options.temperature
     const geminiModel = genAI.getGenerativeModel({
       model: resolved.modelId,
       systemInstruction: systemPrompt,
+      generationConfig,
     })
     const fullPrompt = options?.cacheableUserPrefix
       ? `${options.cacheableUserPrefix}\n\n${prompt}`
@@ -381,11 +388,18 @@ async function callModelNonStreaming(
       max_tokens: tokenLimit,
       system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
       messages: [{ role: 'user' as const, content: userContent }],
+      // Extended Thinking erzwingt temperature=1 — daher entweder thinking ODER temperature.
+      ...(options?.thinkingBudget
+        ? { thinking: { type: 'enabled' as const, budget_tokens: options.thinkingBudget } }
+        : options?.temperature !== undefined
+          ? { temperature: options.temperature }
+          : {}),
     }
 
     // Use streaming for large requests — Anthropic SDK rejects non-streaming calls
-    // that it estimates could exceed 10 minutes (based on input size + max_tokens)
-    if (tokenLimit > 16384 || prompt.length > 30000) {
+    // that it estimates could exceed 10 minutes (based on input size + max_tokens).
+    // Thinking also streams so the loop below cleanly drops thinking_delta blocks.
+    if (tokenLimit > 16384 || prompt.length > 30000 || options?.thinkingBudget) {
       let result = ''
       const stream = anthropic.messages.stream(params)
       for await (const event of stream) {
@@ -397,7 +411,10 @@ async function callModelNonStreaming(
     }
 
     const response = await anthropic.messages.create(params)
-    return (response.content[0] as { type: 'text'; text: string }).text
+    for (const block of response.content) {
+      if (block.type === 'text') return block.text
+    }
+    return ''
   }
 
   if (resolved?.provider === 'openai') {
@@ -617,7 +634,10 @@ async function proofreadText(text: string, model: AIModel): Promise<string> {
     text,
     PROOFREADING_PROMPT,
     model,
-    { maxTokens: 100000 },
+    // 100000 lag über Haikus Output-Cap (Pass wäre still fehlgeschlagen). 32000
+    // reicht für den ganzen Artikel und streamt (Bedingung > 16384). temperature
+    // niedrig, weil Korrektur deterministisch sein soll, nicht kreativ.
+    { maxTokens: 32000, temperature: 0.1 },
   )
   return corrected.trim()
 }

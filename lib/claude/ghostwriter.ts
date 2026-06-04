@@ -67,10 +67,19 @@ export const AI_MODEL_LABELS: Record<AIModel, string> = {
  * Resolve a model ID (full or short) to provider + actual API model ID.
  * Accepts both short names (e.g. 'claude-sonnet-4') and full IDs (e.g. 'claude-sonnet-4-20250514').
  */
+// Nur die Legacy-Kurznamen aus dem alten AIModel-Type werden auf konkrete IDs
+// expandiert. Alle spezifischeren Claude-IDs (z.B. 'claude-opus-4-8',
+// 'claude-sonnet-4-6-20260301') gehen UNVERÄNDERT an die API — sie sind gültige
+// Anthropic-Aliase oder volle IDs. (Die frühere `includes('-2025')`-Heuristik hat
+// alle 2026er-Modelle still auf die Mai-2025-Modelle zurückgestuft.)
+const CLAUDE_LEGACY_ALIASES: Record<string, string> = {
+  'claude-opus-4': 'claude-opus-4-20250514',
+  'claude-sonnet-4': 'claude-sonnet-4-20250514',
+  'claude-haiku': 'claude-haiku-4-5-20251001',
+}
+
 export function resolveModel(model: string): { provider: 'anthropic' | 'openai' | 'google'; modelId: string } | null {
-  if (model.startsWith('claude-opus-4')) return { provider: 'anthropic', modelId: model.includes('-2025') ? model : 'claude-opus-4-20250514' }
-  if (model.startsWith('claude-sonnet-4')) return { provider: 'anthropic', modelId: model.includes('-2025') ? model : 'claude-sonnet-4-20250514' }
-  if (model.startsWith('claude-haiku')) return { provider: 'anthropic', modelId: model.includes('-2025') || model.includes('-2024') ? model : 'claude-haiku-4-5-20251001' }
+  if (model.startsWith('claude')) return { provider: 'anthropic', modelId: CLAUDE_LEGACY_ALIASES[model] ?? model }
   if (model.startsWith('gemini')) return { provider: 'google', modelId: model === 'gemini-2.0-flash' ? 'gemini-2.5-flash' : model }
   if (model.startsWith('gpt')) return { provider: 'openai', modelId: model }
   return null
@@ -226,6 +235,9 @@ async function* streamClaude(
   const stream = anthropic.messages.stream({
     model: modelId,
     max_tokens: 16384,
+    // Niedrigere Temperatur reduziert Drift/Rechenfehler. Kein Extended Thinking
+    // im Single-Pass: der Cron bricht nach 120s ab, Thinking würde das riskieren.
+    temperature: 0.5,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
   })
