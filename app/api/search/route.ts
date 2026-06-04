@@ -44,7 +44,10 @@ const EMBEDDING_THRESHOLD = 0.35
 // candidate sets don't benefit much, and the round-trip dominates the
 // total response time.
 const RERANK_MIN_QUERY_LEN = 5
-const RERANK_MIN_CANDIDATES = 4
+// Low bar: the rerank step now also filters out false positives, so it's worth
+// running even on 2-3 candidates (semantic recall can return a couple of
+// off-topic neighbours that should be dropped, not just reordered).
+const RERANK_MIN_CANDIDATES = 2
 
 function tiptapToPlain(content: unknown): string {
   if (!content) return ''

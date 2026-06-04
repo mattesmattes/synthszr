@@ -1,13 +1,18 @@
 /**
- * LLM re-ranker for search candidates.
+ * LLM relevance filter + re-ranker for search candidates.
  *
- * Takes the raw post hits (already merged from embedding + substring
- * search) and asks Claude Haiku to reorder them by relevance to the
- * query. Returns the same hits permuted; never adds, never drops.
+ * Takes the raw post hits (merged from embedding + substring search) and asks
+ * Claude Haiku to (a) DROP hits that don't genuinely match the query and
+ * (b) order the rest by relevance. Returns a subset, possibly empty.
  *
- * Falls back to the input order if the LLM call fails or the response
- * can't be parsed — search must keep working even when the re-ranker
- * is offline.
+ * Why filtering matters: semantic recall returns the nearest neighbours for
+ * ANY query, so an off-topic term that appears in no post (e.g. "openrouter")
+ * otherwise surfaces the nearest KI posts as false positives. The model's
+ * selection is the precision gate.
+ *
+ * Safety: if the LLM call fails or the response can't be parsed, falls back to
+ * the full input order — search keeps working, just unfiltered. An explicit
+ * empty array ([]) from the model means "nothing relevant" and is honoured.
  */
 
 import Anthropic from '@anthropic-ai/sdk'
@@ -39,12 +44,16 @@ export async function rerankPostHits<T extends RerankableHit>(
     .join('\n\n')
 
   const prompt = `Du bekommst eine Suchanfrage und eine Liste nummerierter Treffer.
-Sortiere die Treffer nach Relevanz zur Anfrage. Treffer, die das gemeinte Konzept
-direkt adressieren, kommen zuerst; reine Wortübereinstimmungen ohne thematische
-Nähe nach hinten.
+Wähle NUR die Treffer aus, die die Anfrage thematisch wirklich treffen, und
+sortiere sie nach Relevanz (relevantester zuerst). Lass Treffer weg, die nur
+oberflächlich passen (z.B. zufällige Wortteile, bloß dasselbe Themengebiet) oder
+gar nichts mit der Anfrage zu tun haben.
 
-Antworte AUSSCHLIESSLICH mit einem JSON-Array der ursprünglichen Nummern in der
-neuen Reihenfolge, z.B. [3, 1, 5, 2, 4]. Keine Erklärung, kein Markdown.
+Wenn KEIN Treffer die Anfrage wirklich trifft, antworte mit einem leeren Array: []
+
+Antworte AUSSCHLIESSLICH mit einem JSON-Array der ursprünglichen Nummern der
+relevanten Treffer in neuer Reihenfolge, z.B. [3, 1, 5] oder []. Keine Erklärung,
+kein Markdown.
 
 ANFRAGE: "${query}"
 
@@ -71,12 +80,20 @@ ${numbered}`
       .map((b) => b.text)
       .join('')
 
-    const match = text.match(/\[[\d,\s]+\]/)
-    if (!match) return hits
+    const match = text.match(/\[[\d,\s]*\]/) // allow [] = nothing relevant
+    if (!match) return hits // unparseable → keep all (safety, never nuke results)
 
-    const order = JSON.parse(match[0]) as number[]
+    let order: number[]
+    try {
+      order = JSON.parse(match[0]) as number[]
+    } catch {
+      return hits
+    }
     if (!Array.isArray(order)) return hits
 
+    // The model's selection IS the relevance filter: keep only the chosen hits
+    // in the given order and drop the rest. An empty array means nothing
+    // genuinely matched (off-topic query) → no blog results.
     const seen = new Set<number>()
     const reordered: T[] = []
     for (const oneBased of order) {
@@ -85,10 +102,6 @@ ${numbered}`
         reordered.push(candidates[idx])
         seen.add(idx)
       }
-    }
-    // Append any candidates the LLM forgot to keep parity
-    for (let i = 0; i < candidates.length; i++) {
-      if (!seen.has(i)) reordered.push(candidates[i])
     }
     return reordered
   } catch (err) {
