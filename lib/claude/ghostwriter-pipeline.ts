@@ -300,18 +300,37 @@ export async function writeSection(
   // the Synthszr Take in the author's voice and argument patterns.
   // Non-fatal: if the RPC fails or the corpus is empty, the prompt
   // generation proceeds without the block.
-  const queryForMattes = `${heading}\n\n${(item.content || '').slice(0, 4000)}`
+  const retrievalQuery = `${heading}\n\n${(item.content || '').slice(0, 4000)}`
   let mattesBlock = ''
-  try {
-    const { findRelevantMattesPassages, formatPassagesForPrompt } = await import('@/lib/mattes/retrieval')
-    const passages = await findRelevantMattesPassages(queryForMattes, { limit: 2 })
-    mattesBlock = formatPassagesForPrompt(passages)
-    if (passages.length > 0) {
-      console.log(`[Pipeline] Retrieved ${passages.length} Mattes passages for "${heading.slice(0, 40)}…"`)
-    }
-  } catch (err) {
-    console.warn('[Pipeline] Mattes retrieval failed (continuing):', err)
-  }
+  let historyBlock = ''
+  // Voice grounding (Mattes corpus) and historical callbacks (past Synthszr
+  // posts) run in parallel — both are non-fatal and must not serialize latency.
+  await Promise.all([
+    (async () => {
+      try {
+        const { findRelevantMattesPassages, formatPassagesForPrompt } = await import('@/lib/mattes/retrieval')
+        const passages = await findRelevantMattesPassages(retrievalQuery, { limit: 2 })
+        mattesBlock = formatPassagesForPrompt(passages)
+        if (passages.length > 0) {
+          console.log(`[Pipeline] Retrieved ${passages.length} Mattes passages for "${heading.slice(0, 40)}…"`)
+        }
+      } catch (err) {
+        console.warn('[Pipeline] Mattes retrieval failed (continuing):', err)
+      }
+    })(),
+    (async () => {
+      try {
+        const { findRelevantPastPosts, formatPastPostsForPrompt } = await import('@/lib/posts/historical-retrieval')
+        const past = await findRelevantPastPosts(retrievalQuery, { limit: 3 })
+        historyBlock = formatPastPostsForPrompt(past)
+        if (past.length > 0) {
+          console.log(`[Pipeline] Retrieved ${past.length} past posts for "${heading.slice(0, 40)}…"`)
+        }
+      } catch (err) {
+        console.warn('[Pipeline] History retrieval failed (continuing):', err)
+      }
+    })(),
+  ])
 
   // Dynamic per-item prompt only — format template + checkliste are in SECTION_SYSTEM_PROMPT,
   // vocabulary + edit learning + thesis are in cacheableUserPrefix
@@ -324,14 +343,14 @@ COMPANY-TAGS:${tagSourcePart ? `
 QUELLFORMAT: → ${tagSourcePart}` : `
 KEINE QUELLE — nur Company-Tags, kein Pfeil.`}
 PUBLIC: ${publicCompanyList}
-PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}`
+PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${historyBlock ? `\n\n${historyBlock}` : ''}`
 
   const text = await callModelNonStreaming(userPrompt, SECTION_SYSTEM_PROMPT, model, {
     cacheableUserPrefix: context.cacheableUserPrefix,
     // Reasoning fängt Logik-/Rechenfehler im Synthszr Take ab, bevor sie auf die
     // Seite kommen. 2026er-Modelle: adaptiv + effort; Altmodelle: budget_tokens.
     thinking: true,
-    effort: 'high',
+    effort: 'xhigh',
     maxTokens: 16000,
   })
 
