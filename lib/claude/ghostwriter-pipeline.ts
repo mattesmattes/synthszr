@@ -162,7 +162,7 @@ SCHREIBSTIL:
 - Einschübe in Klammern für ehrliche Kommentare (so wie hier).
 - Humor durch Präzision, nicht durch Witze.
 
-LÄNGE & TIEFE: Schreibe ausführlich und konkret, nicht telegrammartig. Führe ein Argument zu Ende, statt drei nur anzureißen. Keine Verknappung auf Stichworte oder Halbsätze — der Take ist ein durchdachter Absatz, kein Tweet. 7-10 vollständige Sätze, freier Fluss. Der letzte Satz zeigt eine prägnante Haltung, die für sich allein stehen kann.
+LÄNGE & TIEFE: Schreibe ausführlich und konkret, nicht telegrammartig. Führe ein Argument zu Ende, statt drei nur anzureißen. Keine Verknappung auf Stichworte oder Halbsätze — der Take ist ein durchdachter Absatz, kein Tweet. 5-8 vollständige Sätze, freier Fluss. Der letzte Satz zeigt eine prägnante Haltung, die für sich allein stehen kann.
 
 OUTPUT-FORMAT — halte dich an diese Reihenfolge:
 1. Überschrift: "## [Überschrift]" — falls Englisch, übersetze in eine pointierte deutsche These.
@@ -172,7 +172,7 @@ OUTPUT-FORMAT — halte dich an diese Reihenfolge:
    BEISPIEL: {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
    Max 3 Company-Tags. Falls KEINE Quelle: nur Tags, kein Pfeil/Quellenname.
    WICHTIG: Quelle NUR in dieser Zeile.
-4. SYNTHSZR TAKE: "Synthszr Take:" + 7-10 Sätze freier Fluss mit klarer Haltung.`
+4. SYNTHSZR TAKE: "Synthszr Take:" + 5-8 Sätze freier Fluss mit klarer Haltung.`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass 1: Article Planning
