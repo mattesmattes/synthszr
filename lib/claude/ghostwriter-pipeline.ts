@@ -328,9 +328,10 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}`
   const text = await callModelNonStreaming(userPrompt, SECTION_SYSTEM_PROMPT, model, {
     cacheableUserPrefix: context.cacheableUserPrefix,
     // Reasoning fängt Logik-/Rechenfehler im Synthszr Take ab, bevor sie auf die
-    // Seite kommen. Budget zählt in max_tokens mit, daher max_tokens > Budget.
-    thinkingBudget: 4000,
-    maxTokens: 8000,
+    // Seite kommen. 2026er-Modelle: adaptiv + effort; Altmodelle: budget_tokens.
+    thinking: true,
+    effort: 'high',
+    maxTokens: 16000,
   })
 
   // Ensure section starts with the correct heading
@@ -350,7 +351,7 @@ async function callModelNonStreaming(
   prompt: string,
   systemPrompt: string,
   model: AIModel,
-  options?: { cacheableUserPrefix?: string; maxTokens?: number; temperature?: number; thinkingBudget?: number }
+  options?: { cacheableUserPrefix?: string; maxTokens?: number; temperature?: number; thinking?: boolean; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' }
 ): Promise<string> {
   const tokenLimit = options?.maxTokens ?? 4096
   const resolved = resolveModel(model)
@@ -383,25 +384,39 @@ async function callModelNonStreaming(
           ]
         : [{ type: 'text', text: prompt }]
 
-    const params = {
-      model: resolved.modelId,
+    // Modell-Capabilities (Stand 2026): 2026er-Modelle nutzen adaptives Thinking
+    // (kein budget_tokens); Opus 4.7/4.8 lehnen temperature UND budget_tokens mit
+    // 400 ab. effort gibt es ab Opus 4.5 + Sonnet 4.6, NICHT auf Haiku/Sonnet 4.5.
+    const id = resolved.modelId
+    const adaptiveThinking = /claude-opus-4-[678]\b/.test(id) || id.startsWith('claude-sonnet-4-6')
+    const supportsEffort = /claude-opus-4-[5678]\b/.test(id) || id.startsWith('claude-sonnet-4-6')
+    const rejectsSampling = /claude-opus-4-[78]\b/.test(id)
+
+    // SDK 0.71 typisiert adaptive/output_config noch nicht; die Felder werden zur
+    // Laufzeit korrekt weitergereicht (gegen Production verifiziert), daher das `any`.
+    const params: Record<string, unknown> = {
+      model: id,
       max_tokens: tokenLimit,
-      system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
-      messages: [{ role: 'user' as const, content: userContent }],
-      // Extended Thinking erzwingt temperature=1 — daher entweder thinking ODER temperature.
-      ...(options?.thinkingBudget
-        ? { thinking: { type: 'enabled' as const, budget_tokens: options.thinkingBudget } }
-        : options?.temperature !== undefined
-          ? { temperature: options.temperature }
-          : {}),
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: userContent }],
+    }
+    if (options?.thinking) {
+      if (adaptiveThinking) {
+        params.thinking = { type: 'adaptive' }
+        if (supportsEffort && options.effort) params.output_config = { effort: options.effort }
+      } else {
+        params.thinking = { type: 'enabled', budget_tokens: Math.min(4000, tokenLimit - 1024) }
+      }
+    } else if (options?.temperature !== undefined && !rejectsSampling) {
+      params.temperature = options.temperature
     }
 
-    // Use streaming for large requests — Anthropic SDK rejects non-streaming calls
-    // that it estimates could exceed 10 minutes (based on input size + max_tokens).
-    // Thinking also streams so the loop below cleanly drops thinking_delta blocks.
-    if (tokenLimit > 16384 || prompt.length > 30000 || options?.thinkingBudget) {
+    // Thinking + große Requests streamen: vermeidet den 10-Minuten-Reject des SDK,
+    // und die Schleife verwirft thinking_delta sauber (nur text_delta zählt).
+    if (tokenLimit > 16384 || prompt.length > 30000 || options?.thinking) {
       let result = ''
-      const stream = anthropic.messages.stream(params)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const stream = anthropic.messages.stream(params as any)
       for await (const event of stream) {
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
           result += event.delta.text
@@ -410,7 +425,8 @@ async function callModelNonStreaming(
       return result
     }
 
-    const response = await anthropic.messages.create(params)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const response = (await anthropic.messages.create(params as any)) as Anthropic.Message
     for (const block of response.content) {
       if (block.type === 'text') return block.text
     }

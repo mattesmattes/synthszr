@@ -29,7 +29,7 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
   ghostwriter: {
     label: 'Ghostwriter',
     description: 'Blog-Artikel aus dem Digest generieren',
-    defaultModel: 'claude-sonnet-4-6-20260301',
+    defaultModel: 'claude-opus-4-8',
     allowedProviders: ['anthropic', 'openai', 'google'],
   },
   article_planning: {
@@ -53,19 +53,19 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
   podcast_script: {
     label: 'Podcast-Skript',
     description: 'Podcast-Skripte aus Blog-Artikeln generieren',
-    defaultModel: 'claude-sonnet-4-6-20260301',
+    defaultModel: 'claude-sonnet-4-6',
     allowedProviders: ['anthropic'],
   },
   edit_analysis: {
     label: 'Edit-Analyse',
     description: 'Manuelle Edits klassifizieren und analysieren',
-    defaultModel: 'claude-sonnet-4-6-20260301',
+    defaultModel: 'claude-sonnet-4-6',
     allowedProviders: ['anthropic'],
   },
   pattern_extraction: {
     label: 'Pattern-Extraktion',
     description: 'Muster aus wiederkehrenden Edits extrahieren',
-    defaultModel: 'claude-sonnet-4-6-20260301',
+    defaultModel: 'claude-sonnet-4-6',
     allowedProviders: ['anthropic'],
   },
   queue_ranking: {

@@ -235,9 +235,6 @@ async function* streamClaude(
   const stream = anthropic.messages.stream({
     model: modelId,
     max_tokens: 16384,
-    // Niedrigere Temperatur reduziert Drift/Rechenfehler. Kein Extended Thinking
-    // im Single-Pass: der Cron bricht nach 120s ab, Thinking würde das riskieren.
-    temperature: 0.5,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
   })
