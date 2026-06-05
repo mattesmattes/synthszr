@@ -25,6 +25,9 @@ export default function LanguagesPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [backfilling, setBackfilling] = useState<string | null>(null)
+  // Backfill-Datum nur lokal halten: synchron, kein DB-Roundtrip — sonst Race
+  // zwischen Eingabe (async PUT) und Backfill-Klick → from_date=null → alles wird übersetzt.
+  const [backfillDates, setBackfillDates] = useState<Record<string, string>>({})
 
   useEffect(() => {
     fetchLanguages()
@@ -196,13 +199,12 @@ export default function LanguagesPage() {
                       <Input
                         id={`backfill-date-${language.code}`}
                         type="date"
-                        value={language.backfill_from_date || ''}
-                        onChange={(e) => updateLanguage(language.code, { backfill_from_date: e.target.value || null })}
-                        disabled={saving === language.code}
+                        value={backfillDates[language.code] ?? ''}
+                        onChange={(e) => setBackfillDates(prev => ({ ...prev, [language.code]: e.target.value }))}
                       />
                     </div>
                     <Button
-                      onClick={() => triggerBackfill(language.code, language.backfill_from_date)}
+                      onClick={() => triggerBackfill(language.code, backfillDates[language.code] || null)}
                       disabled={backfilling === language.code}
                       variant="outline"
                     >
