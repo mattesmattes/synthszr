@@ -11,8 +11,14 @@ export interface TipPromo {
   text_color: string
   active: boolean
   sort_order: number
+  type: 'static' | 'podcast'
   created_at: string
   updated_at: string
+  // Render-time enrichment for type='podcast' (set by getActiveTipPromo):
+  podcast?: {
+    showNotesShort: string
+    episodeTitle: string | null
+  }
 }
 
 export interface TipPromoConfig {
