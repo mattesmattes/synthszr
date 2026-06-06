@@ -1,16 +1,5 @@
 import type { ReactNode } from 'react'
-
-const APPLE = {
-  name: 'Apple Podcasts',
-  image: '/podcast-apple.png',
-  url: 'https://podcasts.apple.com/de/podcast/synthszr/id1879733990',
-}
-
-const SPOTIFY = {
-  name: 'Spotify',
-  image: '/podcast-spotify.png',
-  url: 'https://open.spotify.com/show/0FJkPjKXvobgqI8U881yiF?si=wMJJ-CQxQdyuW18VXQZQOQ',
-}
+import { PODCAST_APPLE as APPLE, PODCAST_SPOTIFY as SPOTIFY } from '@/lib/podcast/platform-links'
 
 function BadgeLink({ name, image, url }: { name: string; image: string; url: string }) {
   return (
