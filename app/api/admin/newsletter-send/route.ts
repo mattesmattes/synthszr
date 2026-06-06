@@ -162,7 +162,6 @@ export async function POST(request: NextRequest) {
           baseUrl: BASE_URL,
           promo: activePromo,
           locale: testLocale,
-          hidePodcastBadges: activeTipPromo?.type === 'podcast',
         })
       )
 
@@ -303,7 +302,6 @@ export async function POST(request: NextRequest) {
           baseUrl: BASE_URL,
           promo: activePromo,
           locale: locale as LanguageCode,
-          hidePodcastBadges: activeTipPromo?.type === 'podcast',
         })
       )
 

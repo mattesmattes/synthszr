@@ -737,12 +737,10 @@ export async function generateEmailContentWithVotes(
     let promoInner: string
     if (isPodcast) {
       const badgeBtn = (url: string, img: string, name: string) =>
-        `<a href="${escapeAttr(url)}" style="display:inline-block;width:220px;background:#ffffff;border-radius:14px;padding:10px 0;text-decoration:none;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.15);"><img src="${baseUrl}${img}" alt="${escapeAttr(name)}" height="30" style="height:30px;width:auto;border:0;vertical-align:middle;" /></a>`
+        `<a href="${escapeAttr(url)}" style="display:inline-block;width:170px;background:#ffffff;border-radius:12px;padding:8px 0;margin:0 6px;text-decoration:none;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.15);"><img src="${baseUrl}${img}" alt="${escapeAttr(name)}" height="24" style="height:24px;width:auto;border:0;vertical-align:middle;" /></a>`
       promoInner = `<div style="line-height:1.45;">${escapeHtml(tipPromo.podcast!.showNotesShort)}</div>
       <div style="margin-top:14px;text-align:center;">
-        ${badgeBtn(PODCAST_APPLE.url, PODCAST_APPLE.image, PODCAST_APPLE.name)}
-        <div style="height:10px;line-height:10px;font-size:0;">&nbsp;</div>
-        ${badgeBtn(PODCAST_SPOTIFY.url, PODCAST_SPOTIFY.image, PODCAST_SPOTIFY.name)}
+        ${badgeBtn(PODCAST_APPLE.url, PODCAST_APPLE.image, PODCAST_APPLE.name)}${badgeBtn(PODCAST_SPOTIFY.url, PODCAST_SPOTIFY.image, PODCAST_SPOTIFY.name)}
       </div>`
     } else {
       const bodyHtml = sanitizeHtmlForEmail(tipPromo.body)

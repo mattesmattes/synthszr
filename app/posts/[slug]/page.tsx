@@ -12,7 +12,6 @@ import { HomeSearch } from "@/components/home-search"
 import { PostSearchHighlight } from "@/components/post-search-highlight"
 import { AudioPlayer } from "@/components/audio-player"
 import { PodcastBadges } from "@/components/podcast-badges"
-import { getActiveTipPromo } from "@/lib/tip-promos/get-active"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 
 // ISR: revalidate every 60s. Uses the anon Supabase client so Next.js can
@@ -108,11 +107,6 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   const newerPost: AdjacentPost | null = newerPosts?.[0] || null
   const olderPost: AdjacentPost | null = olderPosts?.[0] || null
 
-  // Hide the cover podcast badges when a podcast tip-promo is active — the
-  // promo itself already renders the Apple/Spotify badges.
-  const activeTipPromo = await getActiveTipPromo()
-  const hidePodcastBadges = activeTipPromo?.type === 'podcast'
-
   const formatDateWithWeekday = (date: string) => {
     const d = new Date(date)
     const weekday = d.toLocaleDateString("de-DE", { weekday: "long" })
@@ -176,7 +170,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
                   />
                 </Link>
               </div>
-              <PodcastBadges hideBadges={hidePodcastBadges}>
+              <PodcastBadges>
                 <Suspense fallback={null}>
                   <AudioPlayer postId={post.id} locale="de" />
                 </Suspense>

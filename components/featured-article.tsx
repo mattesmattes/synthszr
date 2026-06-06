@@ -23,7 +23,6 @@ interface FeaturedArticleProps {
   postId?: string // For article thumbnails
   queueItemIds?: string[] // For stable thumbnail matching
   coverAnimation?: CoverAnimationConfig
-  hidePodcastBadges?: boolean // Hide cover podcast badges when a podcast tip-promo is active
 }
 
 export function FeaturedArticle({
@@ -38,7 +37,6 @@ export function FeaturedArticle({
   postId,
   queueItemIds,
   coverAnimation,
-  hidePodcastBadges = false,
 }: FeaturedArticleProps) {
   const postUrl = `/${locale}/posts/${slug}`
 
@@ -95,7 +93,7 @@ export function FeaturedArticle({
               )}
             </a>
           </div>
-          <PodcastBadges hideBadges={hidePodcastBadges}>
+          <PodcastBadges>
             {postId && (
               <Suspense fallback={null}>
                 <AudioPlayer postId={postId} locale={locale === 'de' ? 'de' : 'en'} />

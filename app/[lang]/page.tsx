@@ -8,7 +8,6 @@ import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 // import { CalligramFooter } from "@/components/calligram-footer"
 import { createAnonClient } from "@/lib/supabase/admin"
-import { getActiveTipPromo } from "@/lib/tip-promos/get-active"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
 import { LOCALE_STRINGS } from "@/lib/i18n/config"
@@ -193,11 +192,6 @@ export default async function Page({ params }: PageProps) {
     .slice(1)
     .filter(post => new Date(post.created_at) >= sevenDaysAgo)
 
-  // Hide the cover podcast badges when a podcast tip-promo is active — the
-  // promo itself already renders the Apple/Spotify badges.
-  const activeTipPromo = await getActiveTipPromo()
-  const hidePodcastBadges = activeTipPromo?.type === 'podcast'
-
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
@@ -242,7 +236,6 @@ export default async function Page({ params }: PageProps) {
               postId={featuredPost.id}
               queueItemIds={featuredPost.pending_queue_item_ids || undefined}
               coverAnimation={coverAnimation}
-              hidePodcastBadges={hidePodcastBadges}
             />
 
             <AdPromo />

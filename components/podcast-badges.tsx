@@ -44,17 +44,17 @@ function BadgeLink({ name, image, url }: { name: string; image: string; url: str
  * Desktop (md+): nowrap. Apple on the left, Player in the middle
  * (flex-1, order reset), Spotify on the right.
  */
-export function PodcastBadges({ children, hideBadges = false }: { children?: ReactNode; hideBadges?: boolean }) {
+export function PodcastBadges({ children }: { children?: ReactNode }) {
   return (
     <div className="px-4 py-3" style={{ backgroundColor: '#ffffff' }}>
       <div className="flex flex-wrap items-center justify-center gap-3 pt-2 md:flex-nowrap md:justify-between md:gap-4 lg:gap-6">
-        {!hideBadges && <BadgeLink {...APPLE} />}
+        <BadgeLink {...APPLE} />
         {children && (
           <div className="order-last w-full flex justify-center md:order-none md:w-auto md:flex-1 md:min-w-0">
             {children}
           </div>
         )}
-        {!hideBadges && <BadgeLink {...SPOTIFY} />}
+        <BadgeLink {...SPOTIFY} />
       </div>
     </div>
   )
@@ -66,12 +66,12 @@ export function PodcastBadges({ children, hideBadges = false }: { children?: Rea
  */
 export function PodcastPromoBadges() {
   return (
-    <div className="mt-3 flex flex-col items-center gap-2.5">
+    <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
       {[APPLE, SPOTIFY].map((b) => (
         <a key={b.name} href={b.url} target="_blank" rel="noopener noreferrer"
-           className="flex w-56 items-center justify-center rounded-2xl bg-white px-5 py-2.5 shadow-sm hover:shadow-md transition-shadow">
+           className="flex w-44 items-center justify-center rounded-xl bg-white px-3 py-2 shadow-sm hover:shadow-md transition-shadow">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={b.image} alt={b.name} style={{ height: 30, width: 'auto' }} />
+          <img src={b.image} alt={b.name} style={{ height: 24, width: 'auto' }} />
         </a>
       ))}
     </div>
