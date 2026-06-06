@@ -3,8 +3,12 @@ import type { TipPromo, TipPromoConfig } from './types'
 
 const DEFAULT_CONFIG: TipPromoConfig = { mode: 'rotate', constantId: null }
 
-async function enrichPodcast(promo: TipPromo): Promise<TipPromo | null> {
-  if (promo.type !== 'podcast') return promo
+/**
+ * The latest published episode's short show notes for the podcast promo.
+ * Shared by getActiveTipPromo (render) and the admin route (live preview).
+ * Returns null when no published episode has stored show notes yet.
+ */
+export async function getLatestPodcastForPromo(): Promise<{ showNotesShort: string; episodeTitle: string | null } | null> {
   const supabase = createAdminClient()
   const { data: ep } = await supabase
     .from('post_podcasts')
@@ -14,8 +18,15 @@ async function enrichPodcast(promo: TipPromo): Promise<TipPromo | null> {
     .order('podigee_published_at', { ascending: false })
     .limit(1)
     .maybeSingle()
-  if (!ep?.show_notes_short) return null // no episode → don't show the promo
-  return { ...promo, podcast: { showNotesShort: ep.show_notes_short, episodeTitle: ep.episode_title ?? null } }
+  if (!ep?.show_notes_short) return null
+  return { showNotesShort: ep.show_notes_short, episodeTitle: ep.episode_title ?? null }
+}
+
+async function enrichPodcast(promo: TipPromo): Promise<TipPromo | null> {
+  if (promo.type !== 'podcast') return promo
+  const podcast = await getLatestPodcastForPromo()
+  if (!podcast) return null // no episode → don't show the promo
+  return { ...promo, podcast }
 }
 
 /**

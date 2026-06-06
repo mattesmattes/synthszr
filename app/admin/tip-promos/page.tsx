@@ -16,6 +16,7 @@ const DEFAULT_GRADIENT = { from: '#B4E37A', to: '#F6E23E', direction: 'to bottom
 export default function TipPromosAdminPage() {
   const [promos, setPromos] = useState<TipPromo[]>([])
   const [config, setConfig] = useState<TipPromoConfig>({ mode: 'rotate', constantId: null })
+  const [podcastPreview, setPodcastPreview] = useState<{ showNotesShort: string; episodeTitle: string | null } | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingConfig, setSavingConfig] = useState(false)
   const [activeTab, setActiveTab] = useState<string>('')
@@ -27,6 +28,7 @@ export default function TipPromosAdminPage() {
       fetch('/api/admin/tip-promos/config').then(r => r.json()),
     ])
     setPromos(pRes.promos ?? [])
+    setPodcastPreview(pRes.podcastPreview ?? null)
     setConfig(cRes.config ?? { mode: 'rotate', constantId: null })
     setLoading(false)
     if (pRes.promos?.[0]) setActiveTab(pRes.promos[0].id)
@@ -192,7 +194,7 @@ export default function TipPromosAdminPage() {
           </TabsList>
           {promos.map(p => (
             <TabsContent key={p.id} value={p.id} className="space-y-4 mt-4">
-              <TipEditor promo={p} onUpdate={patch => updatePromo(p.id, patch)} onDelete={() => deletePromo(p.id)} onDuplicate={() => duplicatePromo(p)} />
+              <TipEditor promo={p} podcastPreview={podcastPreview} onUpdate={patch => updatePromo(p.id, patch)} onDelete={() => deletePromo(p.id)} onDuplicate={() => duplicatePromo(p)} />
             </TabsContent>
           ))}
         </Tabs>
@@ -201,12 +203,17 @@ export default function TipPromosAdminPage() {
   )
 }
 
-function TipEditor({ promo, onUpdate, onDelete, onDuplicate }: {
+function TipEditor({ promo, podcastPreview, onUpdate, onDelete, onDuplicate }: {
   promo: TipPromo
+  podcastPreview: { showNotesShort: string; episodeTitle: string | null } | null
   onUpdate: (patch: Partial<TipPromo>) => void
   onDelete: () => void
   onDuplicate: () => void
 }) {
+  // For a podcast promo the copy + badges are enriched at render time; mirror that
+  // here so the preview matches the live box instead of the unused static body.
+  const previewPromo: TipPromo =
+    promo.type === 'podcast' && podcastPreview ? { ...promo, podcast: podcastPreview } : promo
   return (
     <div className="grid gap-6 md:grid-cols-[1fr_320px]">
       <div className="space-y-4">
@@ -326,8 +333,13 @@ function TipEditor({ promo, onUpdate, onDelete, onDuplicate }: {
       <div className="sticky top-4 self-start">
         <Label className="text-xs uppercase tracking-wider text-muted-foreground">Vorschau</Label>
         <div className="mt-2 rounded-lg border border-border bg-card p-4">
-          <TipPromoBox promo={promo} />
+          <TipPromoBox promo={previewPromo} />
         </div>
+        {promo.type === 'podcast' && !podcastPreview && (
+          <p className="mt-1 text-[10px] text-amber-600">
+            Noch keine veröffentlichte Episode mit Show Notes — der Promo wird erst nach der nächsten Folge ausgespielt.
+          </p>
+        )}
         <p className="mt-2 text-[10px] text-muted-foreground">
           So erscheint die Box im Artikel (vor dem Synthszr Take).
         </p>

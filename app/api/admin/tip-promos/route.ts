@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
+import { getLatestPodcastForPromo } from '@/lib/tip-promos/get-active'
 
 export const runtime = 'nodejs'
 
@@ -9,14 +10,19 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
   const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('tip_promos')
-    .select('*')
-    .order('sort_order', { ascending: true })
-    .order('created_at', { ascending: true })
+  const [{ data, error }, podcastPreview] = await Promise.all([
+    supabase
+      .from('tip_promos')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
+    // Current podcast show notes so the admin preview can render a podcast promo
+    // the way it will actually appear (the render-time enrichment isn't in the row).
+    getLatestPodcastForPromo(),
+  ])
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ promos: data })
+  return NextResponse.json({ promos: data, podcastPreview })
 }
 
 export async function POST(request: NextRequest) {
