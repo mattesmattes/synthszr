@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import sharp from 'sharp'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
+import { summarizeShowNotes } from '@/lib/podcast/show-notes'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -286,10 +287,15 @@ export async function POST(request: NextRequest) {
     // post_id alone if no exact audio match is found.
     {
       const nowIso = new Date().toISOString()
+      const showNotesShort = description ? await summarizeShowNotes(description, 'en') : null
       const update = {
         podigee_episode_id: episodeId,
         podigee_episode_url: episodeUrl,
         podigee_published_at: nowIso,
+        episode_title: title,
+        episode_subtitle: subtitle,
+        show_notes: description || null,
+        show_notes_short: showNotesShort,
       }
 
       const { data: byAudio } = await supabase
