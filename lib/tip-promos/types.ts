@@ -16,8 +16,8 @@ export interface TipPromo {
   updated_at: string
   // Render-time enrichment for type='podcast' (set by getActiveTipPromo):
   podcast?: {
-    showNotesShort: string
     episodeTitle: string | null
+    episodeSubtitle: string | null
     appleUrl: string | null // per-episode Apple Podcasts deep link; Spotify stays show-level
   }
 }

@@ -24,17 +24,18 @@ function mockSupabase(opts: { promos: unknown[]; episode: unknown | null }) {
 describe('getActiveTipPromo — podcast enrichment', () => {
   beforeEach(() => vi.resetModules())
 
-  it('enriches a podcast promo with the latest episode show notes', async () => {
+  it('enriches a podcast promo with the latest episode title + subtitle', async () => {
     vi.doMock('@/lib/supabase/admin', () => ({
-      createAdminClient: () => mockSupabase({ promos: [podcastPromo], episode: { show_notes_short: 'Short notes…', episode_title: 'Ep 1' } }),
+      createAdminClient: () => mockSupabase({ promos: [podcastPromo], episode: { episode_title: 'Ep 1', episode_subtitle: 'A subtitle', apple_episode_url: null } }),
     }))
     const { getActiveTipPromo } = await import('@/lib/tip-promos/get-active')
     const promo = await getActiveTipPromo()
     expect(promo?.type).toBe('podcast')
-    expect(promo?.podcast?.showNotesShort).toBe('Short notes…')
+    expect(promo?.podcast?.episodeTitle).toBe('Ep 1')
+    expect(promo?.podcast?.episodeSubtitle).toBe('A subtitle')
   })
 
-  it('returns null for a podcast promo when no episode with show notes exists', async () => {
+  it('returns null for a podcast promo when no episode with metadata exists', async () => {
     vi.doMock('@/lib/supabase/admin', () => ({
       createAdminClient: () => mockSupabase({ promos: [podcastPromo], episode: null }),
     }))

@@ -411,7 +411,7 @@ export interface TipPromoEmailInput {
   gradient_direction: string
   text_color: string
   type?: 'static' | 'podcast'
-  podcast?: { showNotesShort: string; episodeTitle: string | null; appleUrl: string | null } | null
+  podcast?: { episodeTitle: string | null; episodeSubtitle: string | null; appleUrl: string | null } | null
 }
 
 export async function generateEmailContentWithVotes(
@@ -743,7 +743,10 @@ export async function generateEmailContentWithVotes(
       const badgeBtn = (url: string, img: string, name: string) =>
         `<a href="${escapeAttr(url)}" style="display:block;width:150px;background:#ffffff;border-radius:12px;padding:9px 0;text-decoration:none;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.15);"><img src="${baseUrl}${img}" alt="${escapeAttr(name)}" style="max-height:20px;max-width:118px;width:auto;height:auto;border:0;vertical-align:middle;" /></a>`
       const appleUrl = tipPromo.podcast!.appleUrl || PODCAST_APPLE.url
-      promoInner = `<div style="line-height:1.45;">${escapeHtml(tipPromo.podcast!.showNotesShort)}</div>
+      const subtitleHtml = tipPromo.podcast!.episodeSubtitle
+        ? `<div style="line-height:1.4;margin-top:2px;">${escapeHtml(tipPromo.podcast!.episodeSubtitle)}</div>`
+        : ''
+      promoInner = `<div style="font-weight:700;line-height:1.4;">${escapeHtml(tipPromo.podcast!.episodeTitle ?? '')}</div>${subtitleHtml}
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:14px auto 0;"><tr>
         <td style="padding:0 5px;">${badgeBtn(appleUrl, PODCAST_APPLE.image, PODCAST_APPLE.name)}</td>
         <td style="padding:0 5px;">${badgeBtn(PODCAST_SPOTIFY.url, PODCAST_SPOTIFY.image, PODCAST_SPOTIFY.name)}</td>

@@ -16,7 +16,7 @@ const DEFAULT_GRADIENT = { from: '#B4E37A', to: '#F6E23E', direction: 'to bottom
 export default function TipPromosAdminPage() {
   const [promos, setPromos] = useState<TipPromo[]>([])
   const [config, setConfig] = useState<TipPromoConfig>({ mode: 'rotate', constantId: null })
-  const [podcastPreview, setPodcastPreview] = useState<{ showNotesShort: string; episodeTitle: string | null; appleUrl: string | null } | null>(null)
+  const [podcastPreview, setPodcastPreview] = useState<{ episodeTitle: string; episodeSubtitle: string | null; appleUrl: string | null } | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingConfig, setSavingConfig] = useState(false)
   const [activeTab, setActiveTab] = useState<string>('')
@@ -205,7 +205,7 @@ export default function TipPromosAdminPage() {
 
 function TipEditor({ promo, podcastPreview, onUpdate, onDelete, onDuplicate }: {
   promo: TipPromo
-  podcastPreview: { showNotesShort: string; episodeTitle: string | null; appleUrl: string | null } | null
+  podcastPreview: { episodeTitle: string; episodeSubtitle: string | null; appleUrl: string | null } | null
   onUpdate: (patch: Partial<TipPromo>) => void
   onDelete: () => void
   onDuplicate: () => void
