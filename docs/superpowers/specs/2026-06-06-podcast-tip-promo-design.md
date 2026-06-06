@@ -11,6 +11,8 @@ Ein neuer Tip-Promo-Typ, der den aktuellen Podcast bewirbt:
 
 Erscheint wie die bestehenden Tip-Promos in **beiden** Pfaden: Web-Artikel und E-Mail-Newsletter.
 
+**(c)** Solange ein Podcast-Tip-Promo aktiv ist, werden die **bestehenden** Podcast-Icons unter dem Cover-Image (Web + Newsletter) **ausgeblendet** — sonst erscheinen die Apple/Spotify-Badges doppelt.
+
 ## Kontext / Ausgangslage
 
 - Tip-Promos sind statische, in `tip_promos` gespeicherte Datensätze (`headline`, `body`-HTML, `cta_label`, `link_url`, Gradient/Farben), gerendert von `TipPromoBox` (Web) bzw. `generateEmailContentWithVotes` (Newsletter). Auswahl über `getActiveTipPromo()` (`mode: rotate | constant | off`).
@@ -95,6 +97,15 @@ Bei `type='podcast'`:
 
 Apple/Spotify-Show-URLs aus `podcast-badges.tsx` in eine geteilte Konstante extrahieren (z.B. `lib/podcast/platform-links.ts`), damit Web-Badge, Email-HTML und künftige Stellen eine Quelle haben.
 
+### 9. Cover-Badges ausblenden bei aktivem Podcast-Promo
+
+Wenn `getActiveTipPromo()` einen aktiven `type='podcast'`-Promo liefert, werden die bestehenden Podcast-Icons unter dem Cover **nicht** gerendert (Anti-Doppelung).
+
+- **Web:** `app/posts/[slug]/page.tsx` (Z.173) und `app/[lang]/posts/[slug]/page.tsx` (Z.389) rufen `getActiveTipPromo()` bereits/zusätzlich server-side auf und rendern `<PodcastBadges>` nur, wenn **kein** aktiver Podcast-Promo vorliegt. `components/featured-article.tsx` (Z.96) erhält ein Flag `hidePodcastBadges` als Prop (entscheidung trifft die aufrufende Page, die den aktiven Promo kennt).
+- **Newsletter:** `lib/resend/templates/newsletter.tsx` (Z.255-265, „Podcast Promo Section" mit `/api/newsletter/promo-block`) erhält ein Flag (z.B. `hidePodcastBadges` / aus `activeTipPromo.type==='podcast'` abgeleitet) und überspringt die Section. Das Flag wird von `generateEmailContentWithVotes`/den Newsletter-Send-Routen durchgereicht, die `getActiveTipPromo()` ohnehin schon aufrufen.
+
+**Bedingung:** Ausgeblendet wird nur, wenn der aktive Promo `type='podcast'` ist **und** tatsächlich ausgespielt wird (d.h. es existiert eine aktuelle Episode mit Show Notes). Liefert der Podcast-Promo nichts (keine Episode), bleiben die Cover-Badges sichtbar.
+
 ## Datenfluss
 
 ```
@@ -145,3 +156,6 @@ Render (Web + Newsletter)
 | `lib/email/tiptap-to-html.ts` | Podcast-Rendering (Email) |
 | `app/admin/tip-promos/page.tsx` | Typ-Auswahl + Vorschau |
 | `app/api/admin/tip-promos/route.ts`, `[id]/route.ts`, `active/route.ts` | `type`-Handling |
+| `app/posts/[slug]/page.tsx`, `app/[lang]/posts/[slug]/page.tsx` | Cover-`PodcastBadges` bei aktivem Podcast-Promo ausblenden |
+| `components/featured-article.tsx` | `hidePodcastBadges`-Prop |
+| `lib/resend/templates/newsletter.tsx` | Cover-Badge-Section bei aktivem Podcast-Promo überspringen |
