@@ -23,14 +23,22 @@ export const runtime = 'nodejs'
 export async function GET() {
   try {
     const W = 1200
-    const BADGE_H = 144
     const PAD_TOP = 32
     const PAD_BOT = 32
     const GAP_X = 96 // generous gap between Apple and Spotify
+    const TARGET_ROW_W = 980 // both badges + gap fill ~80% of W, centered
 
     // Load badge images from public folder
     const appleBuf = readFileSync(join(process.cwd(), 'public', 'podcast-apple.png'))
     const spotifyBuf = readFileSync(join(process.cwd(), 'public', 'podcast-spotify.png'))
+
+    // Derive a badge height so the row (apple + gap + spotify) fits TARGET_ROW_W,
+    // regardless of each PNG's aspect ratio (trimmed logos differ in width).
+    const appleMeta = await sharp(Buffer.from(appleBuf)).metadata()
+    const spotifyMeta = await sharp(Buffer.from(spotifyBuf)).metadata()
+    const appleRatio = appleMeta.width! / appleMeta.height!
+    const spotifyRatio = spotifyMeta.width! / spotifyMeta.height!
+    const BADGE_H = Math.round((TARGET_ROW_W - GAP_X) / (appleRatio + spotifyRatio))
 
     // Resize each badge to BADGE_H tall (preserve aspect ratio)
     const resizeBadge = async (buf: Buffer) => {
