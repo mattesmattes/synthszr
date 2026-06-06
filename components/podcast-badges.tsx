@@ -14,12 +14,10 @@ function BadgeLink({ name, image, url }: { name: string; image: string; url: str
       <img
         src={image}
         alt={name}
-        width={300}
-        height={75}
         loading="lazy"
         decoding="async"
-        className="h-auto max-h-9 w-auto"
-        style={{ aspectRatio: '4 / 1' }}
+        className="w-auto"
+        style={{ height: 30 }}
       />
     </a>
   )
@@ -68,12 +66,12 @@ export function PodcastBadges({ children, hideBadges = false }: { children?: Rea
  */
 export function PodcastPromoBadges() {
   return (
-    <div className="mt-3 flex items-center justify-center gap-4">
+    <div className="mt-3 flex flex-col items-center gap-2.5">
       {[APPLE, SPOTIFY].map((b) => (
         <a key={b.name} href={b.url} target="_blank" rel="noopener noreferrer"
-           className="inline-block hover:opacity-80 transition-opacity">
+           className="flex w-56 items-center justify-center rounded-2xl bg-white px-5 py-2.5 shadow-sm hover:shadow-md transition-shadow">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={b.image} alt={b.name} style={{ height: 28, width: 'auto' }} />
+          <img src={b.image} alt={b.name} style={{ height: 30, width: 'auto' }} />
         </a>
       ))}
     </div>

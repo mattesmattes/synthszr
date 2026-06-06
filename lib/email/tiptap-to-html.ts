@@ -736,10 +736,13 @@ export async function generateEmailContentWithVotes(
     const isPodcast = tipPromo.type === 'podcast' && !!tipPromo.podcast
     let promoInner: string
     if (isPodcast) {
+      const badgeBtn = (url: string, img: string, name: string) =>
+        `<a href="${escapeAttr(url)}" style="display:inline-block;width:220px;background:#ffffff;border-radius:14px;padding:10px 0;text-decoration:none;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.15);"><img src="${baseUrl}${img}" alt="${escapeAttr(name)}" height="30" style="height:30px;width:auto;border:0;vertical-align:middle;" /></a>`
       promoInner = `<div style="line-height:1.45;">${escapeHtml(tipPromo.podcast!.showNotesShort)}</div>
-      <div style="margin-top:12px;">
-        <a href="${escapeAttr(PODCAST_APPLE.url)}" style="text-decoration:none;display:inline-block;margin:0 8px;"><img src="${baseUrl}${PODCAST_APPLE.image}" alt="${escapeAttr(PODCAST_APPLE.name)}" height="28" style="height:28px;width:auto;border:0;" /></a>
-        <a href="${escapeAttr(PODCAST_SPOTIFY.url)}" style="text-decoration:none;display:inline-block;margin:0 8px;"><img src="${baseUrl}${PODCAST_SPOTIFY.image}" alt="${escapeAttr(PODCAST_SPOTIFY.name)}" height="28" style="height:28px;width:auto;border:0;" /></a>
+      <div style="margin-top:14px;text-align:center;">
+        ${badgeBtn(PODCAST_APPLE.url, PODCAST_APPLE.image, PODCAST_APPLE.name)}
+        <div style="height:10px;line-height:10px;font-size:0;">&nbsp;</div>
+        ${badgeBtn(PODCAST_SPOTIFY.url, PODCAST_SPOTIFY.image, PODCAST_SPOTIFY.name)}
       </div>`
     } else {
       const bodyHtml = sanitizeHtmlForEmail(tipPromo.body)
