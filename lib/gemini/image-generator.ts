@@ -541,15 +541,33 @@ export async function applyDithering(
     image = image.resize(workWidth, workHeight, { kernel: sharp.kernel.lanczos2 })
   }
 
+  // Midtone rescue before 1-bit diffusion. Floyd-Steinberg renders midtones as a
+  // ~50%-density dot field; without enough local contrast the drawing collapses
+  // into texture there. CLAHE lifts local (midtone) contrast so form survives,
+  // and normalise stretches the tonal range so highlights aren't crushed (the
+  // source skews dark/mid). Both run at working resolution so the CLAHE tiles
+  // match the dot scale.
+  const claheTile = Math.max(32, Math.round(Math.min(workWidth, workHeight) / 8))
+  image = image
+    .clahe({ width: claheTile, height: claheTile, maxSlope: 3 })
+    .normalise()
+
   const { data, info } = await image.raw().toBuffer({ resolveWithObject: true })
 
   const width = info.width
   const height = info.height
   const pixels = new Float32Array(data) // Use float for error accumulation
 
-  // Floyd-Steinberg error diffusion
+  // Floyd-Steinberg error diffusion with a serpentine scan (alternating row
+  // direction). Plain left-to-right FS biases the error flow one way and produces
+  // the diagonal "worm" artifacts most visible in midtones; alternating the
+  // direction per row breaks them up. Error is diffused along the scan direction.
   for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
+    const leftToRight = (y & 1) === 0
+    const dir = leftToRight ? 1 : -1
+    const xStart = leftToRight ? 0 : width - 1
+    const xEnd = leftToRight ? width : -1
+    for (let x = xStart; x !== xEnd; x += dir) {
       const idx = y * width + x
       const oldPixel = pixels[idx]
       const newPixel = oldPixel < 128 ? 0 : 255
@@ -557,17 +575,19 @@ export async function applyDithering(
 
       const error = (oldPixel - newPixel) * gain
 
-      // Distribute error to neighbors
-      if (x + 1 < width) {
-        pixels[idx + 1] += error * 7 / 16
+      // Distribute error to neighbors, mirrored along the scan direction
+      const xNext = x + dir
+      const xPrev = x - dir
+      if (xNext >= 0 && xNext < width) {
+        pixels[idx + dir] += error * 7 / 16
       }
       if (y + 1 < height) {
-        if (x > 0) {
-          pixels[(y + 1) * width + (x - 1)] += error * 3 / 16
+        if (xPrev >= 0 && xPrev < width) {
+          pixels[(y + 1) * width + xPrev] += error * 3 / 16
         }
         pixels[(y + 1) * width + x] += error * 5 / 16
-        if (x + 1 < width) {
-          pixels[(y + 1) * width + (x + 1)] += error * 1 / 16
+        if (xNext >= 0 && xNext < width) {
+          pixels[(y + 1) * width + xNext] += error * 1 / 16
         }
       }
     }
