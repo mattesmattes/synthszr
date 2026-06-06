@@ -66,12 +66,12 @@ export function PodcastBadges({ children }: { children?: ReactNode }) {
  */
 export function PodcastPromoBadges() {
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
+    <div className="mt-3 flex items-stretch justify-center gap-2 sm:gap-3">
       {[APPLE, SPOTIFY].map((b) => (
         <a key={b.name} href={b.url} target="_blank" rel="noopener noreferrer"
-           className="flex w-44 items-center justify-center rounded-xl bg-white px-3 py-2 shadow-sm hover:shadow-md transition-shadow">
+           className="flex flex-1 min-w-0 max-w-44 items-center justify-center rounded-xl bg-white px-3 py-2 shadow-sm hover:shadow-md transition-shadow">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={b.image} alt={b.name} style={{ height: 24, width: 'auto' }} />
+          <img src={b.image} alt={b.name} className="h-auto w-auto max-h-6 max-w-full object-contain" />
         </a>
       ))}
     </div>

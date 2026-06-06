@@ -736,12 +736,15 @@ export async function generateEmailContentWithVotes(
     const isPodcast = tipPromo.type === 'podcast' && !!tipPromo.podcast
     let promoInner: string
     if (isPodcast) {
+      // Table layout keeps the two buttons side-by-side on narrow mobile email
+      // clients (inline-block would wrap). Buttons sized so both fit at ~320px.
       const badgeBtn = (url: string, img: string, name: string) =>
-        `<a href="${escapeAttr(url)}" style="display:inline-block;width:170px;background:#ffffff;border-radius:12px;padding:8px 0;margin:0 6px;text-decoration:none;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.15);"><img src="${baseUrl}${img}" alt="${escapeAttr(name)}" height="24" style="height:24px;width:auto;border:0;vertical-align:middle;" /></a>`
+        `<a href="${escapeAttr(url)}" style="display:block;width:140px;background:#ffffff;border-radius:12px;padding:8px 0;text-decoration:none;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.15);"><img src="${baseUrl}${img}" alt="${escapeAttr(name)}" height="22" style="height:22px;width:auto;border:0;vertical-align:middle;" /></a>`
       promoInner = `<div style="line-height:1.45;">${escapeHtml(tipPromo.podcast!.showNotesShort)}</div>
-      <div style="margin-top:14px;text-align:center;">
-        ${badgeBtn(PODCAST_APPLE.url, PODCAST_APPLE.image, PODCAST_APPLE.name)}${badgeBtn(PODCAST_SPOTIFY.url, PODCAST_SPOTIFY.image, PODCAST_SPOTIFY.name)}
-      </div>`
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:14px auto 0;"><tr>
+        <td style="padding:0 5px;">${badgeBtn(PODCAST_APPLE.url, PODCAST_APPLE.image, PODCAST_APPLE.name)}</td>
+        <td style="padding:0 5px;">${badgeBtn(PODCAST_SPOTIFY.url, PODCAST_SPOTIFY.image, PODCAST_SPOTIFY.name)}</td>
+      </tr></table>`
     } else {
       const bodyHtml = sanitizeHtmlForEmail(tipPromo.body)
       const ctaHtml = tipPromo.link_url && tipPromo.cta_label
