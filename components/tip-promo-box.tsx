@@ -31,7 +31,7 @@ export function TipPromoBox({ promo, inline = false }: TipPromoBoxProps) {
       {isPodcast ? (
         <>
           <div className="leading-snug">{promo.podcast!.showNotesShort}</div>
-          <PodcastPromoBadges />
+          <PodcastPromoBadges appleUrl={promo.podcast!.appleUrl} />
         </>
       ) : (
         <div

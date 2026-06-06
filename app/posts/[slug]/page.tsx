@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { createAnonClient } from "@/lib/supabase/admin"
+import { createAnonClient, createAdminClient } from "@/lib/supabase/admin"
 import { BlogHeader } from "@/components/blog-header"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
 import { Newsletter } from "@/components/newsletter"
@@ -82,6 +82,17 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   if (!post) {
     notFound()
   }
+
+  // Load the post's Apple episode URL for the cover podcast badge
+  const adminDb = createAdminClient()
+  const { data: pp } = await adminDb
+    .from('post_podcasts')
+    .select('apple_episode_url')
+    .eq('post_id', post.id)
+    .not('apple_episode_url', 'is', null)
+    .limit(1)
+    .maybeSingle()
+  const appleEpisodeUrl = pp?.apple_episode_url ?? null
 
   // Fetch adjacent posts for navigation
   const currentDate = post.created_at
@@ -170,7 +181,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
                   />
                 </Link>
               </div>
-              <PodcastBadges>
+              <PodcastBadges appleEpisodeUrl={appleEpisodeUrl}>
                 <Suspense fallback={null}>
                   <AudioPlayer postId={post.id} locale="de" />
                 </Suspense>

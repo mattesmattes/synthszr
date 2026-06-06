@@ -23,6 +23,7 @@ interface FeaturedArticleProps {
   postId?: string // For article thumbnails
   queueItemIds?: string[] // For stable thumbnail matching
   coverAnimation?: CoverAnimationConfig
+  appleEpisodeUrl?: string | null
 }
 
 export function FeaturedArticle({
@@ -37,6 +38,7 @@ export function FeaturedArticle({
   postId,
   queueItemIds,
   coverAnimation,
+  appleEpisodeUrl,
 }: FeaturedArticleProps) {
   const postUrl = `/${locale}/posts/${slug}`
 
@@ -93,7 +95,7 @@ export function FeaturedArticle({
               )}
             </a>
           </div>
-          <PodcastBadges>
+          <PodcastBadges appleEpisodeUrl={appleEpisodeUrl}>
             {postId && (
               <Suspense fallback={null}>
                 <AudioPlayer postId={postId} locale={locale === 'de' ? 'de' : 'en'} />

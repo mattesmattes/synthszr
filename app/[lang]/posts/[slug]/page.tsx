@@ -2,7 +2,7 @@ import { Suspense } from "react"
 import ReactDOM from "react-dom"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { createAnonClient } from "@/lib/supabase/admin"
+import { createAnonClient, createAdminClient } from "@/lib/supabase/admin"
 import { PostContentView } from "@/components/post-content-view"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
@@ -256,6 +256,17 @@ export default async function PostPage({ params }: PageProps) {
     notFound()
   }
 
+  // Load the post's Apple episode URL for the cover podcast badge
+  const adminDb = createAdminClient()
+  const { data: pp } = await adminDb
+    .from('post_podcasts')
+    .select('apple_episode_url')
+    .eq('post_id', post.id)
+    .not('apple_episode_url', 'is', null)
+    .limit(1)
+    .maybeSingle()
+  const appleEpisodeUrl = pp?.apple_episode_url ?? null
+
   // Fetch adjacent posts for navigation
   const currentDate = post.created_at
 
@@ -386,7 +397,7 @@ export default async function PostPage({ params }: PageProps) {
                   />
                 </Link>
               </div>
-              <PodcastBadges>
+              <PodcastBadges appleEpisodeUrl={appleEpisodeUrl}>
                 <Suspense fallback={null}>
                   <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
                 </Suspense>

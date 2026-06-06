@@ -6,6 +6,7 @@ import { AdPromo } from "@/components/ad-promo"
 import { HomeSearch } from "@/components/home-search"
 // import { CalligramFooter } from "@/components/calligram-footer"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import type { CoverAnimationConfig } from "@/lib/types/cover-animation"
 
 // Disable caching to always show current cover images
@@ -110,6 +111,20 @@ export default async function Page() {
     .slice(1)
     .filter(post => new Date(post.created_at) >= sevenDaysAgo)
 
+  // Load the featured post's Apple episode URL for the cover podcast badge
+  let appleEpisodeUrl: string | null = null
+  if (featuredPost?.id) {
+    const adminDb = createAdminClient()
+    const { data: pp } = await adminDb
+      .from('post_podcasts')
+      .select('apple_episode_url')
+      .eq('post_id', featuredPost.id)
+      .not('apple_episode_url', 'is', null)
+      .limit(1)
+      .maybeSingle()
+    appleEpisodeUrl = pp?.apple_episode_url ?? null
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* <BlogHeader /> */}
@@ -134,6 +149,7 @@ export default async function Page() {
               postId={featuredPost.id}
               queueItemIds={featuredPost.pending_queue_item_ids || undefined}
               coverAnimation={coverAnimation}
+              appleEpisodeUrl={appleEpisodeUrl}
             />
 
             <AdPromo />

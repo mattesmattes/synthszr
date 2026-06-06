@@ -14,6 +14,7 @@
 import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import { summarizeShowNotes } from '@/lib/podcast/show-notes'
+import { fetchAppleEpisodeUrl } from '@/lib/podcast/apple-lookup'
 
 config({ path: '.env.backfill.local' })
 
@@ -80,10 +81,11 @@ async function main() {
       continue
     }
     const short = await summarizeShowNotes(showNotes, 'en')
+    const appleUrl = await fetchAppleEpisodeUrl(ep.title ?? null, group[0].podigee_published_at ?? null)
     const ids = group.map((g) => g.id)
     const { error: upErr } = await supabase
       .from('post_podcasts')
-      .update({ show_notes: showNotes, show_notes_short: short, episode_title: ep.title ?? null, episode_subtitle: ep.subtitle ?? null })
+      .update({ show_notes: showNotes, show_notes_short: short, episode_title: ep.title ?? null, episode_subtitle: ep.subtitle ?? null, apple_episode_url: appleUrl })
       .in('id', ids)
     if (upErr) {
       console.error(`Episode ${epId}: update failed —`, upErr.message)
@@ -91,6 +93,7 @@ async function main() {
     }
     console.log(`Episode ${epId}: backfilled ${ids.length} row(s) [${group.map((g) => g.locale).join(', ')}]  full=${showNotes.length} → short=${short.length} chars`)
     console.log(`  short: ${short}`)
+    console.log(`  apple: ${appleUrl ?? '(not found on Apple yet)'}`)
   }
   console.log('Done.')
 }

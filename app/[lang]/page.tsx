@@ -7,7 +7,7 @@ import { HomeSearch } from "@/components/home-search"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 // import { CalligramFooter } from "@/components/calligram-footer"
-import { createAnonClient } from "@/lib/supabase/admin"
+import { createAnonClient, createAdminClient } from "@/lib/supabase/admin"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
 import { LOCALE_STRINGS } from "@/lib/i18n/config"
@@ -192,6 +192,20 @@ export default async function Page({ params }: PageProps) {
     .slice(1)
     .filter(post => new Date(post.created_at) >= sevenDaysAgo)
 
+  // Load the featured post's Apple episode URL for the cover podcast badge
+  let appleEpisodeUrl: string | null = null
+  if (featuredPost?.id) {
+    const adminDb = createAdminClient()
+    const { data: pp } = await adminDb
+      .from('post_podcasts')
+      .select('apple_episode_url')
+      .eq('post_id', featuredPost.id)
+      .not('apple_episode_url', 'is', null)
+      .limit(1)
+      .maybeSingle()
+    appleEpisodeUrl = pp?.apple_episode_url ?? null
+  }
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
@@ -236,6 +250,7 @@ export default async function Page({ params }: PageProps) {
               postId={featuredPost.id}
               queueItemIds={featuredPost.pending_queue_item_ids || undefined}
               coverAnimation={coverAnimation}
+              appleEpisodeUrl={appleEpisodeUrl}
             />
 
             <AdPromo />

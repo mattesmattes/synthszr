@@ -3,6 +3,7 @@ import sharp from 'sharp'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { summarizeShowNotes } from '@/lib/podcast/show-notes'
+import { fetchAppleEpisodeUrl } from '@/lib/podcast/apple-lookup'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -288,6 +289,9 @@ export async function POST(request: NextRequest) {
     {
       const nowIso = new Date().toISOString()
       const showNotesShort = description ? await summarizeShowNotes(description, 'en') : null
+      // Apple often hasn't indexed the just-published episode yet → may be null
+      // now; the scheduled-tasks cron backfills it once Apple catches up.
+      const appleEpisodeUrl = await fetchAppleEpisodeUrl(title, nowIso)
       const update = {
         podigee_episode_id: episodeId,
         podigee_episode_url: episodeUrl,
@@ -296,6 +300,7 @@ export async function POST(request: NextRequest) {
         episode_subtitle: subtitle,
         show_notes: description || null,
         show_notes_short: showNotesShort,
+        apple_episode_url: appleEpisodeUrl,
       }
 
       const { data: byAudio } = await supabase

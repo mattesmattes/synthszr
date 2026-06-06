@@ -44,11 +44,12 @@ function BadgeLink({ name, image, url }: { name: string; image: string; url: str
  * Desktop (md+): nowrap. Apple on the left, Player in the middle
  * (flex-1, order reset), Spotify on the right.
  */
-export function PodcastBadges({ children }: { children?: ReactNode }) {
+export function PodcastBadges({ children, appleEpisodeUrl }: { children?: ReactNode; appleEpisodeUrl?: string | null }) {
   return (
     <div className="px-4 py-3" style={{ backgroundColor: '#ffffff' }}>
       <div className="flex flex-wrap items-center justify-center gap-3 pt-2 md:flex-nowrap md:justify-between md:gap-4 lg:gap-6">
-        <BadgeLink {...APPLE} />
+        {/* Apple links to the episode (if known); Spotify stays show-level. */}
+        <BadgeLink {...APPLE} url={appleEpisodeUrl || APPLE.url} />
         {children && (
           <div className="order-last w-full flex justify-center md:order-none md:w-auto md:flex-1 md:min-w-0">
             {children}
@@ -64,10 +65,13 @@ export function PodcastBadges({ children }: { children?: ReactNode }) {
  * Compact, standalone Apple + Spotify badges for the podcast tip-promo
  * (no audio player, no children) — rendered below the promo show notes.
  */
-export function PodcastPromoBadges() {
+export function PodcastPromoBadges({ appleUrl }: { appleUrl?: string | null }) {
+  // Apple links to the specific episode (resolved via iTunes Lookup); Spotify
+  // stays show-level (no key-free Spotify episode lookup available).
+  const items = [{ ...APPLE, url: appleUrl || APPLE.url }, SPOTIFY]
   return (
     <div className="mt-3 flex items-stretch justify-center gap-2 sm:gap-3">
-      {[APPLE, SPOTIFY].map((b) => (
+      {items.map((b) => (
         <a key={b.name} href={b.url} target="_blank" rel="noopener noreferrer"
            className="flex flex-1 min-w-0 max-w-44 items-center justify-center rounded-xl bg-white px-3 py-2 shadow-sm hover:shadow-md transition-shadow">
           {/* eslint-disable-next-line @next/next/no-img-element */}

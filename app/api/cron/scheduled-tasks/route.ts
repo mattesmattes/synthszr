@@ -320,6 +320,17 @@ export async function GET(request: NextRequest) {
     results.translationQueue = 'error'
   }
 
+  // Apple episode links: Apple indexes new episodes with a delay, so the link is
+  // often missing at publish time. Backfill recently published episodes here.
+  try {
+    const { backfillMissingAppleEpisodeUrls } = await import('@/lib/podcast/apple-lookup')
+    const filled = await backfillMissingAppleEpisodeUrls()
+    results.appleEpisodeLinks = filled > 0 ? `filled_${filled}` : 'none'
+  } catch (error) {
+    console.error('[Scheduler] Apple episode link backfill error:', error)
+    results.appleEpisodeLinks = 'error'
+  }
+
   return NextResponse.json({
     success: true,
     timestamp: now.toISOString(),

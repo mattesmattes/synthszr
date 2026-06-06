@@ -18,6 +18,7 @@ export interface TipPromo {
   podcast?: {
     showNotesShort: string
     episodeTitle: string | null
+    appleUrl: string | null // per-episode Apple Podcasts deep link; Spotify stays show-level
   }
 }
 
