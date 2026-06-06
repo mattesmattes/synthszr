@@ -6,6 +6,7 @@
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { isExcludedCompanyName } from '@/lib/data/company-exclusions'
 import { sanitizeUrl } from '@/lib/utils/url-sanitizer'
+import { PODCAST_APPLE, PODCAST_SPOTIFY } from '@/lib/podcast/platform-links'
 
 export interface TiptapNode {
   type: string
@@ -409,6 +410,8 @@ export interface TipPromoEmailInput {
   gradient_to: string
   gradient_direction: string
   text_color: string
+  type?: 'static' | 'podcast'
+  podcast?: { showNotesShort: string; episodeTitle: string | null } | null
 }
 
 export async function generateEmailContentWithVotes(
@@ -730,17 +733,28 @@ export async function generateEmailContentWithVotes(
   // Synthszr-Take styling pass; we match on the leading label case-insensitively.
   if (tipPromo) {
     const gradient = `linear-gradient(${tipPromo.gradient_direction}, ${tipPromo.gradient_from}, ${tipPromo.gradient_to})`
-    const bodyHtml = sanitizeHtmlForEmail(tipPromo.body)
-    const ctaHtml = tipPromo.link_url && tipPromo.cta_label
-      ? `<div style="margin-top:8px;"><a href="${escapeAttr(tipPromo.link_url)}" style="color:${escapeAttr(tipPromo.text_color)};font-weight:600;text-decoration:underline;">${escapeHtml(tipPromo.cta_label)}</a></div>`
-      : ''
+    const isPodcast = tipPromo.type === 'podcast' && !!tipPromo.podcast
+    let promoInner: string
+    if (isPodcast) {
+      promoInner = `<div style="line-height:1.45;">${escapeHtml(tipPromo.podcast!.showNotesShort)}</div>
+      <div style="margin-top:12px;">
+        <a href="${escapeAttr(PODCAST_APPLE.url)}" style="text-decoration:none;display:inline-block;margin:0 8px;"><img src="${baseUrl}${PODCAST_APPLE.image}" alt="${escapeAttr(PODCAST_APPLE.name)}" height="28" style="height:28px;width:auto;border:0;" /></a>
+        <a href="${escapeAttr(PODCAST_SPOTIFY.url)}" style="text-decoration:none;display:inline-block;margin:0 8px;"><img src="${baseUrl}${PODCAST_SPOTIFY.image}" alt="${escapeAttr(PODCAST_SPOTIFY.name)}" height="28" style="height:28px;width:auto;border:0;" /></a>
+      </div>`
+    } else {
+      const bodyHtml = sanitizeHtmlForEmail(tipPromo.body)
+      const ctaHtml = tipPromo.link_url && tipPromo.cta_label
+        ? `<div style="margin-top:8px;"><a href="${escapeAttr(tipPromo.link_url)}" style="color:${escapeAttr(tipPromo.text_color)};font-weight:600;text-decoration:underline;">${escapeHtml(tipPromo.cta_label)}</a></div>`
+        : ''
+      promoInner = `<div style="line-height:1.45;">${bodyHtml}</div>
+      ${ctaHtml}`
+    }
     const box = `
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;">
   <tr><td>
     <div style="background:${gradient};color:${tipPromo.text_color};border-radius:12px;padding:14px 18px;text-align:center;font-family:inherit;">
       <div style="font-weight:700;letter-spacing:0.15em;text-transform:uppercase;font-size:12px;margin-bottom:6px;">${escapeHtml(tipPromo.headline)}</div>
-      <div style="line-height:1.45;">${bodyHtml}</div>
-      ${ctaHtml}
+      ${promoInner}
     </div>
   </td></tr>
 </table>`.trim()

@@ -1,5 +1,6 @@
 import type { TipPromo } from '@/lib/tip-promos/types'
 import { sanitizeAdminHtml } from '@/lib/security/sanitize-html'
+import { PodcastPromoBadges } from '@/components/podcast-badges'
 
 interface TipPromoBoxProps {
   promo: TipPromo
@@ -14,7 +15,8 @@ interface TipPromoBoxProps {
  */
 export function TipPromoBox({ promo, inline = false }: TipPromoBoxProps) {
   const gradient = `linear-gradient(${promo.gradient_direction}, ${promo.gradient_from}, ${promo.gradient_to})`
-  const hasCta = promo.link_url && promo.cta_label
+  const isPodcast = promo.type === 'podcast' && !!promo.podcast
+  const hasCta = !isPodcast && promo.link_url && promo.cta_label
   const isExternal = promo.link_url?.startsWith('http')
 
   return (
@@ -25,10 +27,19 @@ export function TipPromoBox({ promo, inline = false }: TipPromoBoxProps) {
       <div className="font-bold tracking-widest uppercase text-xs mb-1">
         {promo.headline}
       </div>
-      <div
-        className="leading-snug"
-        dangerouslySetInnerHTML={{ __html: sanitizeAdminHtml(promo.body) }}
-      />
+
+      {isPodcast ? (
+        <>
+          <div className="leading-snug">{promo.podcast!.showNotesShort}</div>
+          <PodcastPromoBadges />
+        </>
+      ) : (
+        <div
+          className="leading-snug"
+          dangerouslySetInnerHTML={{ __html: sanitizeAdminHtml(promo.body) }}
+        />
+      )}
+
       {hasCta && (
         <a
           href={promo.link_url}

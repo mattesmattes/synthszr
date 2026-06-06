@@ -61,3 +61,21 @@ export function PodcastBadges({ children }: { children?: ReactNode }) {
     </div>
   )
 }
+
+/**
+ * Compact, standalone Apple + Spotify badges for the podcast tip-promo
+ * (no audio player, no children) — rendered below the promo show notes.
+ */
+export function PodcastPromoBadges() {
+  return (
+    <div className="mt-3 flex items-center justify-center gap-4">
+      {[APPLE, SPOTIFY].map((b) => (
+        <a key={b.name} href={b.url} target="_blank" rel="noopener noreferrer"
+           className="inline-block hover:opacity-80 transition-opacity">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={b.image} alt={b.name} style={{ height: 28, width: 'auto' }} />
+        </a>
+      ))}
+    </div>
+  )
+}
