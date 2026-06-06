@@ -926,12 +926,43 @@ export async function resetSelectedToPending(): Promise<number> {
 /**
  * Reset stuck "selected" items back to pending
  * Items that were selected but not used within maxHours are reset
- * This prevents items from being stuck forever if a draft is abandoned
+ * This prevents items from being stuck forever if a draft is abandoned.
+ *
+ * Exception: items the user deliberately accepted from the assisted-ranking
+ * panel ("Behalten") are a curatorial choice, not an abandoned draft. Recycling
+ * them made them reappear in the queue and suggestions the next day. They are
+ * excluded here and stay selected until used or explicitly removed
+ * (resetSelectedToPending / the per-item "Remove" action still reset them).
  */
 export async function resetStuckSelectedItems(maxHours: number = 24): Promise<number> {
   const supabase = createAdminClient()
 
   const cutoffTime = new Date(Date.now() - maxHours * 60 * 60 * 1000).toISOString()
+
+  // Candidate stuck items first, so we can exclude deliberately-accepted ones.
+  const { data: stuck, error: selError } = await supabase
+    .from('news_queue')
+    .select('id')
+    .eq('status', 'selected')
+    .lt('selected_at', cutoffTime)
+
+  if (selError) {
+    console.error('[NewsQueue] Failed to read stuck selected items:', selError)
+    return 0
+  }
+  if (!stuck || stuck.length === 0) return 0
+
+  // Protect items accepted via the ranking panel from auto-recycling.
+  const candidateIds = stuck.map((r) => r.id)
+  const { data: accepted } = await supabase
+    .from('ranking_suggestions')
+    .select('queue_item_id')
+    .eq('user_action', 'accepted')
+    .in('queue_item_id', candidateIds)
+  const protectedIds = new Set((accepted || []).map((a) => a.queue_item_id))
+
+  const toReset = candidateIds.filter((id) => !protectedIds.has(id))
+  if (toReset.length === 0) return 0
 
   const { data, error } = await supabase
     .from('news_queue')
@@ -939,8 +970,7 @@ export async function resetStuckSelectedItems(maxHours: number = 24): Promise<nu
       status: 'pending',
       selected_at: null
     })
-    .eq('status', 'selected')
-    .lt('selected_at', cutoffTime)
+    .in('id', toReset)
     .select('id')
 
   if (error) {
@@ -949,7 +979,7 @@ export async function resetStuckSelectedItems(maxHours: number = 24): Promise<nu
   }
 
   if (data && data.length > 0) {
-    console.log(`[NewsQueue] Reset ${data.length} stuck selected items (older than ${maxHours}h) to pending`)
+    console.log(`[NewsQueue] Reset ${data.length} stuck selected items (older than ${maxHours}h) to pending` + (protectedIds.size > 0 ? ` (${protectedIds.size} ranking-accepted protected)` : ''))
   }
 
   return data?.length || 0
