@@ -11,6 +11,7 @@ export async function GET() {
   return NextResponse.json({
     promo: {
       id: promo.id,
+      type: promo.type,
       headline: promo.headline,
       body: promo.body,
       link_url: promo.link_url,
@@ -19,6 +20,7 @@ export async function GET() {
       gradient_to: promo.gradient_to,
       gradient_direction: promo.gradient_direction,
       text_color: promo.text_color,
+      podcast: promo.podcast,
     },
   })
 }

@@ -26,6 +26,8 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const supabase = createAdminClient()
 
+  const type = body.type === 'podcast' ? 'podcast' : 'static'
+
   const { data, error } = await supabase
     .from('tip_promos')
     .insert({
@@ -40,6 +42,7 @@ export async function POST(request: NextRequest) {
       text_color: body.text_color ?? '#1a1a0a',
       active: body.active ?? false,
       sort_order: body.sort_order ?? 0,
+      type,
     })
     .select()
     .single()

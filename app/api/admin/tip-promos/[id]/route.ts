@@ -20,6 +20,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   for (const key of ALLOWED_FIELDS) {
     if (key in body) update[key] = body[key]
   }
+  if ('type' in body) update.type = body.type === 'podcast' ? 'podcast' : 'static'
 
   const supabase = createAdminClient()
   const { data, error } = await supabase

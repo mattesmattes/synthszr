@@ -50,6 +50,7 @@ export default function TipPromosAdminPage() {
         text_color: DEFAULT_GRADIENT.text,
         active: false,
         sort_order: promos.length,
+        type: 'static',
       }),
     })
     const json = await res.json()
@@ -90,6 +91,7 @@ export default function TipPromosAdminPage() {
         text_color: source.text_color,
         active: false,
         sort_order: promos.length,
+        type: source.type,
       }),
     })
     const json = await res.json()
@@ -229,36 +231,55 @@ function TipEditor({ promo, onUpdate, onDelete, onDuplicate }: {
             <Input value={promo.name} onChange={e => onUpdate({ name: e.target.value })} />
           </div>
           <div>
+            <Label className="text-xs">Typ</Label>
+            <select
+              value={promo.type}
+              onChange={e => onUpdate({ type: e.target.value as TipPromo['type'] })}
+              className="w-full rounded border px-2 py-2 text-sm bg-background"
+            >
+              <option value="static">Statisch</option>
+              <option value="podcast">Podcast</option>
+            </select>
+          </div>
+          <div>
             <Label className="text-xs">Headline</Label>
             <Input value={promo.headline} onChange={e => onUpdate({ headline: e.target.value })} />
           </div>
-          <div>
-            <Label className="text-xs">Copytext (HTML erlaubt: &lt;b&gt; &lt;i&gt; &lt;a&gt;)</Label>
-            <Textarea
-              value={promo.body}
-              onChange={e => onUpdate({ body: e.target.value })}
-              rows={5}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-xs">URL (optional)</Label>
-              <Input
-                value={promo.link_url}
-                onChange={e => onUpdate({ link_url: e.target.value })}
-                placeholder="https://…"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Linktext (optional)</Label>
-              <Input
-                value={promo.cta_label}
-                onChange={e => onUpdate({ cta_label: e.target.value })}
-                placeholder="z.B. Mehr erfahren"
-                disabled={!promo.link_url}
-              />
-            </div>
-          </div>
+          {promo.type === 'podcast' ? (
+            <p className="rounded border border-dashed border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+              Copy-Text + Apple/Spotify-Badges werden automatisch aus der aktuellen Podcast-Episode erzeugt.
+            </p>
+          ) : (
+            <>
+              <div>
+                <Label className="text-xs">Copytext (HTML erlaubt: &lt;b&gt; &lt;i&gt; &lt;a&gt;)</Label>
+                <Textarea
+                  value={promo.body}
+                  onChange={e => onUpdate({ body: e.target.value })}
+                  rows={5}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">URL (optional)</Label>
+                  <Input
+                    value={promo.link_url}
+                    onChange={e => onUpdate({ link_url: e.target.value })}
+                    placeholder="https://…"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Linktext (optional)</Label>
+                  <Input
+                    value={promo.cta_label}
+                    onChange={e => onUpdate({ cta_label: e.target.value })}
+                    placeholder="z.B. Mehr erfahren"
+                    disabled={!promo.link_url}
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
