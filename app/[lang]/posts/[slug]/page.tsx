@@ -392,13 +392,11 @@ export default async function PostPage({ params }: PageProps) {
                   />
                 </Link>
               </div>
-              {!hidePodcastBadges && (
-                <PodcastBadges>
-                  <Suspense fallback={null}>
-                    <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
-                  </Suspense>
-                </PodcastBadges>
-              )}
+              <PodcastBadges hideBadges={hidePodcastBadges}>
+                <Suspense fallback={null}>
+                  <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
+                </Suspense>
+              </PodcastBadges>
             </div>
           )}
 

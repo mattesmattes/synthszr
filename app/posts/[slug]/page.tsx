@@ -176,13 +176,11 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
                   />
                 </Link>
               </div>
-              {!hidePodcastBadges && (
-                <PodcastBadges>
-                  <Suspense fallback={null}>
-                    <AudioPlayer postId={post.id} locale="de" />
-                  </Suspense>
-                </PodcastBadges>
-              )}
+              <PodcastBadges hideBadges={hidePodcastBadges}>
+                <Suspense fallback={null}>
+                  <AudioPlayer postId={post.id} locale="de" />
+                </Suspense>
+              </PodcastBadges>
             </div>
           )}
 

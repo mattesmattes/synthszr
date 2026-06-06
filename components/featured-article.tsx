@@ -95,15 +95,13 @@ export function FeaturedArticle({
               )}
             </a>
           </div>
-          {!hidePodcastBadges && (
-            <PodcastBadges>
-              {postId && (
-                <Suspense fallback={null}>
-                  <AudioPlayer postId={postId} locale={locale === 'de' ? 'de' : 'en'} />
-                </Suspense>
-              )}
-            </PodcastBadges>
-          )}
+          <PodcastBadges hideBadges={hidePodcastBadges}>
+            {postId && (
+              <Suspense fallback={null}>
+                <AudioPlayer postId={postId} locale={locale === 'de' ? 'de' : 'en'} />
+              </Suspense>
+            )}
+          </PodcastBadges>
         </div>
       )}
 

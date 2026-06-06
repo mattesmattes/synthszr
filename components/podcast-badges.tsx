@@ -46,17 +46,17 @@ function BadgeLink({ name, image, url }: { name: string; image: string; url: str
  * Desktop (md+): nowrap. Apple on the left, Player in the middle
  * (flex-1, order reset), Spotify on the right.
  */
-export function PodcastBadges({ children }: { children?: ReactNode }) {
+export function PodcastBadges({ children, hideBadges = false }: { children?: ReactNode; hideBadges?: boolean }) {
   return (
     <div className="px-4 py-3" style={{ backgroundColor: '#ffffff' }}>
       <div className="flex flex-wrap items-center justify-center gap-3 pt-2 md:flex-nowrap md:justify-between md:gap-4 lg:gap-6">
-        <BadgeLink {...APPLE} />
+        {!hideBadges && <BadgeLink {...APPLE} />}
         {children && (
           <div className="order-last w-full flex justify-center md:order-none md:w-auto md:flex-1 md:min-w-0">
             {children}
           </div>
         )}
-        <BadgeLink {...SPOTIFY} />
+        {!hideBadges && <BadgeLink {...SPOTIFY} />}
       </div>
     </div>
   )
