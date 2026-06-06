@@ -33,6 +33,7 @@ interface NewsletterEmailProps {
   baseUrl?: string
   locale?: LanguageCode
   promo?: AdPromo | null
+  hidePodcastBadges?: boolean
 }
 
 // Localized UI strings
@@ -152,6 +153,7 @@ export function NewsletterEmail({
   baseUrl = 'https://synthszr.vercel.app',
   locale = 'de',
   promo = null,
+  hidePodcastBadges = false,
 }: NewsletterEmailProps) {
   const formattedDate = postDate ? formatUpdateDate(postDate, locale) : null
   const strings = UI_STRINGS[locale] || UI_STRINGS.de
@@ -253,6 +255,7 @@ export function NewsletterEmail({
           )}
 
           {/* Podcast Promo Section */}
+          {!hidePodcastBadges && (
           <Section style={{ padding: '0', backgroundColor: '#ffffff' }}>
 <Link href={withSid(`${postUrl}?autoplay=true`)} style={{ textDecoration: 'none' }}>
               <Img
@@ -263,6 +266,7 @@ export function NewsletterEmail({
               />
             </Link>
           </Section>
+          )}
 
           {/* Main Content */}
           <Section style={contentSection}>

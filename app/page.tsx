@@ -6,6 +6,7 @@ import { AdPromo } from "@/components/ad-promo"
 import { HomeSearch } from "@/components/home-search"
 // import { CalligramFooter } from "@/components/calligram-footer"
 import { createClient } from "@/lib/supabase/server"
+import { getActiveTipPromo } from "@/lib/tip-promos/get-active"
 import type { CoverAnimationConfig } from "@/lib/types/cover-animation"
 
 // Disable caching to always show current cover images
@@ -110,6 +111,11 @@ export default async function Page() {
     .slice(1)
     .filter(post => new Date(post.created_at) >= sevenDaysAgo)
 
+  // Hide the cover podcast badges when a podcast tip-promo is active — the
+  // promo itself already renders the Apple/Spotify badges.
+  const activeTipPromo = await getActiveTipPromo()
+  const hidePodcastBadges = activeTipPromo?.type === 'podcast'
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* <BlogHeader /> */}
@@ -134,6 +140,7 @@ export default async function Page() {
               postId={featuredPost.id}
               queueItemIds={featuredPost.pending_queue_item_ids || undefined}
               coverAnimation={coverAnimation}
+              hidePodcastBadges={hidePodcastBadges}
             />
 
             <AdPromo />

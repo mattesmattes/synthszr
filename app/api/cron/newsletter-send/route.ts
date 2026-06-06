@@ -280,6 +280,7 @@ export async function GET(request: NextRequest) {
           baseUrl: BASE_URL,
           locale: locale as LanguageCode,
           promo: activePromo,
+          hidePodcastBadges: activeTipPromo?.type === 'podcast',
         })
       )
 

@@ -13,6 +13,7 @@ import { HomeSearch } from "@/components/home-search"
 import { PostSearchHighlight } from "@/components/post-search-highlight"
 import { AudioPlayer } from "@/components/audio-player"
 import { PodcastBadges } from "@/components/podcast-badges"
+import { getActiveTipPromo } from "@/lib/tip-promos/get-active"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
@@ -280,6 +281,11 @@ export default async function PostPage({ params }: PageProps) {
   const newerPost: AdjacentPost | null = newerPosts?.[0] || null
   const olderPost: AdjacentPost | null = olderPosts?.[0] || null
 
+  // Hide the cover podcast badges when a podcast tip-promo is active — the
+  // promo itself already renders the Apple/Spotify badges.
+  const activeTipPromo = await getActiveTipPromo()
+  const hidePodcastBadges = activeTipPromo?.type === 'podcast'
+
   const formatDateWithWeekday = (date: string) => {
     return formatUpdateDate(date, locale)
   }
@@ -386,11 +392,13 @@ export default async function PostPage({ params }: PageProps) {
                   />
                 </Link>
               </div>
-              <PodcastBadges>
-                <Suspense fallback={null}>
-                  <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
-                </Suspense>
-              </PodcastBadges>
+              {!hidePodcastBadges && (
+                <PodcastBadges>
+                  <Suspense fallback={null}>
+                    <AudioPlayer postId={post.id} locale={locale === 'de' ? 'de' : 'en'} />
+                  </Suspense>
+                </PodcastBadges>
+              )}
             </div>
           )}
 
