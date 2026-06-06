@@ -7,6 +7,7 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies
 import { isExcludedCompanyName } from '@/lib/data/company-exclusions'
 import { sanitizeUrl } from '@/lib/utils/url-sanitizer'
 import { PODCAST_APPLE, PODCAST_SPOTIFY } from '@/lib/podcast/platform-links'
+import { applyEpisodeDateToHeadline } from '@/lib/tip-promos/headline'
 
 export interface TiptapNode {
   type: string
@@ -411,7 +412,7 @@ export interface TipPromoEmailInput {
   gradient_direction: string
   text_color: string
   type?: 'static' | 'podcast'
-  podcast?: { episodeTitle: string | null; episodeSubtitle: string | null; appleUrl: string | null } | null
+  podcast?: { episodeTitle: string | null; episodeSubtitle: string | null; appleUrl: string | null; episodeDate: string | null } | null
 }
 
 export async function generateEmailContentWithVotes(
@@ -759,11 +760,14 @@ export async function generateEmailContentWithVotes(
       promoInner = `<div style="line-height:1.45;">${bodyHtml}</div>
       ${ctaHtml}`
     }
+    const headlineText = isPodcast
+      ? applyEpisodeDateToHeadline(tipPromo.headline, tipPromo.podcast!.episodeDate)
+      : tipPromo.headline
     const box = `
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;">
   <tr><td>
     <div style="background:${gradient};color:${tipPromo.text_color};border-radius:12px;padding:14px 18px;text-align:center;font-family:inherit;">
-      <div style="font-weight:700;letter-spacing:0.15em;text-transform:uppercase;font-size:12px;margin-bottom:6px;">${escapeHtml(tipPromo.headline)}</div>
+      <div style="font-weight:700;letter-spacing:0.15em;text-transform:uppercase;font-size:12px;margin-bottom:6px;">${escapeHtml(headlineText)}</div>
       ${promoInner}
     </div>
   </td></tr>

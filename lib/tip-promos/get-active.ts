@@ -8,18 +8,23 @@ const DEFAULT_CONFIG: TipPromoConfig = { mode: 'rotate', constantId: null }
  * Shared by getActiveTipPromo (render) and the admin route (live preview).
  * Returns null when no published episode has stored show notes yet.
  */
-export async function getLatestPodcastForPromo(): Promise<{ episodeTitle: string; episodeSubtitle: string | null; appleUrl: string | null } | null> {
+export async function getLatestPodcastForPromo(): Promise<{ episodeTitle: string; episodeSubtitle: string | null; appleUrl: string | null; episodeDate: string | null } | null> {
   const supabase = createAdminClient()
   const { data: ep } = await supabase
     .from('post_podcasts')
-    .select('episode_title, episode_subtitle, apple_episode_url')
+    .select('episode_title, episode_subtitle, apple_episode_url, podigee_published_at')
     .not('podigee_episode_url', 'is', null)
     .not('episode_title', 'is', null)
     .order('podigee_published_at', { ascending: false })
     .limit(1)
     .maybeSingle()
   if (!ep?.episode_title) return null
-  return { episodeTitle: ep.episode_title, episodeSubtitle: ep.episode_subtitle ?? null, appleUrl: ep.apple_episode_url ?? null }
+  return {
+    episodeTitle: ep.episode_title,
+    episodeSubtitle: ep.episode_subtitle ?? null,
+    appleUrl: ep.apple_episode_url ?? null,
+    episodeDate: ep.podigee_published_at ?? null,
+  }
 }
 
 async function enrichPodcast(promo: TipPromo): Promise<TipPromo | null> {

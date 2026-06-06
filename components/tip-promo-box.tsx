@@ -1,6 +1,7 @@
 import type { TipPromo } from '@/lib/tip-promos/types'
 import { sanitizeAdminHtml } from '@/lib/security/sanitize-html'
 import { PodcastPromoBadges } from '@/components/podcast-badges'
+import { applyEpisodeDateToHeadline } from '@/lib/tip-promos/headline'
 
 interface TipPromoBoxProps {
   promo: TipPromo
@@ -25,7 +26,7 @@ export function TipPromoBox({ promo, inline = false }: TipPromoBoxProps) {
       style={{ background: gradient, color: promo.text_color }}
     >
       <div className="font-bold tracking-widest uppercase text-xs mb-1">
-        {promo.headline}
+        {isPodcast ? applyEpisodeDateToHeadline(promo.headline, promo.podcast!.episodeDate) : promo.headline}
       </div>
 
       {isPodcast ? (
