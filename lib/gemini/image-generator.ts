@@ -852,12 +852,12 @@ const NEON_CYAN_RGB = { r: 0, g: 255, b: 255 }
 export async function generateEmailCover(
   rawImageBase64: string
 ): Promise<{ base64: string; mimeType: string }> {
-  // 2× the ~600px display size: the email cover is shown nearly full-width, so on
-  // Retina/HiDPI clients a 604px image gets upscaled (smooth) to ~1200 device px,
-  // melting the 1-bit dots into gray and making them look coarse vs the small
-  // thumbnails. Dithering at 1208 → ~1:1 on Retina (no client upscale) → as fine
-  // as the thumbnails.
-  const EMAIL_COVER_SIZE = 1208
+  // Middle ground (~1.5× the ~600px display). A full 2× (1208) was Retina-sharp
+  // but moiréd on Gmail iOS, which downscales large 1-bit images with a coarse
+  // filter; 1× (604) was moiré-free but soft on Desktop Retina. 900 stays under
+  // the iOS moiré threshold while only lightly upscaling on Desktop Retina
+  // (900→1200). Thumbnails avoid the dilemma entirely by being shown small.
+  const EMAIL_COVER_SIZE = 900
   // Letterbox trim is now done up-front in generateSatiricalImage via
   // sharp.trim(). The raw image arriving here is already letterbox-free,
   // so a plain center-crop to square is enough.
@@ -868,7 +868,7 @@ export async function generateEmailCover(
   const { width, height } = metadata
   if (!width || !height) throw new Error('Invalid image dimensions')
 
-  // Step 1+2+3: Center-crop to square, resize to 2× display size, normalise contrast
+  // Step 1+2+3: Center-crop to square, resize to ~1.5× display size, normalise contrast
   const cropSize = Math.min(width, height)
   const left = Math.floor((width - cropSize) / 2)
   const top = Math.floor((height - cropSize) / 2)
@@ -883,7 +883,7 @@ export async function generateEmailCover(
 
   const resizedBase64 = resizedBuffer.toString('base64')
 
-  // Step 4: Dither at native 2× resolution (gain 1.0, coarseness 1)
+  // Step 4: Dither at native resolution (gain 1.0, coarseness 1)
   const dithered = await applyDithering(resizedBase64, 1.0, 1)
 
   // Step 5: Color transform — white→neon yellow, dark→black
