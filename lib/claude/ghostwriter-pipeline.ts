@@ -152,7 +152,8 @@ INHALTLICHE VERBOTE (toxische Muster):
 - Engagement-Köder: "Lass das mal sacken", "Das verändert alles", "Punkt."
 - Generische Insider-Behauptungen: "Was dir keiner sagt", "niemand", "die meisten merken nicht"
 - Tote KI-Sprache: "In der heutigen...", "Es ist wichtig zu beachten", "Gamechanger", "bahnbrechend"
-- Zielgruppen-Anrede: KEINE Anrede-Substantive wie "Führungskräfte", "Manager", "Entscheider", "CEOs", "Leader". Schreibe direkt und allgemein. Statt "Mein Rat an Führungskräfte:" einfach "Mein Rat:". Statt "Was Manager jetzt tun sollten:" die Handlung direkt ausformulieren.
+- Zielgruppen-Anrede: KEINE Anrede-Substantive wie "Führungskräfte", "Manager", "Entscheider", "CEOs", "Leader". Schreibe direkt und allgemein. Statt "Mein Rat an Führungskräfte:" oder "Was Manager jetzt tun sollten:" die Handlung direkt ausformulieren.
+- Ich-Perspektive im Rat: Der abschließende Rat und die Empfehlung NICHT aus der Ich-Perspektive — KEIN "Mein Rat:", "Ich rate/empfehle/würde", "Aus meiner Sicht", "Ich halte X für". Formuliere Rat und Empfehlung objektiv und unpersönlich, mit klarer Haltung, aber ohne "ich"/"mein". Statt "Mein Rat: jetzt einsteigen." → "Jetzt einzusteigen ist der richtige Zug." oder die Konsequenz direkt als Aussage.
 
 SCHREIBSTIL:
 - Komm sofort zum Punkt. Der erste Satz ist der stärkste.
