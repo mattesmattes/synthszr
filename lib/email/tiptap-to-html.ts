@@ -738,19 +738,20 @@ export async function generateEmailContentWithVotes(
     let promoInner: string
     if (isPodcast) {
       // Table layout keeps the two buttons side-by-side on narrow mobile email
-      // clients (inline-block would wrap). Buttons sized so both fit at ~320px.
-      // max-width caps the wide Apple logo so it doesn't fill the whole button;
-      // both logos scale proportionally within max-height/max-width.
-      const badgeBtn = (url: string, img: string, name: string) =>
-        `<a href="${escapeAttr(url)}" style="display:block;width:150px;background:#ffffff;border-radius:12px;padding:9px 0;text-decoration:none;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.15);"><img src="${baseUrl}${img}" alt="${escapeAttr(name)}" style="max-height:20px;max-width:118px;width:auto;height:auto;border:0;vertical-align:middle;" /></a>`
+      // clients (inline-block would wrap). Each button is a single PNG with the
+      // white rounded background baked in — email dark mode (Gmail iOS) inverts
+      // CSS backgrounds but not image pixels, so a CSS white bg turned dark and
+      // hid the black "Apple Podcast" text. A baked-in white button stays white.
+      const badgeBtn = (url: string, buttonImg: string, name: string) =>
+        `<a href="${escapeAttr(url)}" style="display:block;text-decoration:none;"><img src="${baseUrl}${buttonImg}" alt="${escapeAttr(name)}" width="150" style="width:150px;height:auto;border:0;display:block;" /></a>`
       const appleUrl = tipPromo.podcast!.appleUrl || PODCAST_APPLE.url
       const subtitleHtml = tipPromo.podcast!.episodeSubtitle
         ? `<div style="line-height:1.4;margin-top:2px;">${escapeHtml(tipPromo.podcast!.episodeSubtitle)}</div>`
         : ''
       promoInner = `<div style="font-weight:700;line-height:1.4;">${escapeHtml(tipPromo.podcast!.episodeTitle ?? '')}</div>${subtitleHtml}
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:14px auto 0;"><tr>
-        <td style="padding:0 5px;">${badgeBtn(appleUrl, PODCAST_APPLE.image, PODCAST_APPLE.name)}</td>
-        <td style="padding:0 5px;">${badgeBtn(PODCAST_SPOTIFY.url, PODCAST_SPOTIFY.image, PODCAST_SPOTIFY.name)}</td>
+        <td style="padding:0 5px;">${badgeBtn(appleUrl, PODCAST_APPLE.buttonImage, PODCAST_APPLE.name)}</td>
+        <td style="padding:0 5px;">${badgeBtn(PODCAST_SPOTIFY.url, PODCAST_SPOTIFY.buttonImage, PODCAST_SPOTIFY.name)}</td>
       </tr></table>`
     } else {
       const bodyHtml = sanitizeHtmlForEmail(tipPromo.body)
