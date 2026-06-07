@@ -351,8 +351,11 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
     cacheableUserPrefix: context.cacheableUserPrefix,
     // Reasoning fängt Logik-/Rechenfehler im Synthszr Take ab, bevor sie auf die
     // Seite kommen. 2026er-Modelle: adaptiv + effort; Altmodelle: budget_tokens.
+    // 'high' statt 'xhigh': ~30% schneller pro Section, damit 40 Sektionen ins
+    // 300s-Function-Limit passen (zusammen mit concurrency 6). Minimal weniger
+    // Reasoning, aber für die Section-Länge ausreichend.
     thinking: true,
-    effort: 'xhigh',
+    effort: 'high',
     maxTokens: 16000,
   })
 
@@ -492,7 +495,10 @@ export async function* runGhostwriterPipeline(
   model: AIModel,
   options: { concurrency?: number; vocabularyContext?: string } = {},
 ): AsyncGenerator<PipelineEvent | { type: 'section'; text: string } | { type: 'metadata'; text: string }> {
-  const { concurrency = 2, vocabularyContext } = options
+  // concurrency 6 (was 2): with up to 40 sections, Opus must finish within the
+  // Vercel Pro 300s function limit (maxDuration=800 is capped to 300 by the plan).
+  // 40 / 6 × ~30s ≈ 200s leaves headroom for planning + proofread before timeout.
+  const { concurrency = 6, vocabularyContext } = options
   // ── Pass 1: Plan ────────────────────────────────────────────────────────────
   yield { type: 'planning', message: `Struktur für ${items.length} Items planen...` }
 
