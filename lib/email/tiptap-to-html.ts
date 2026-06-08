@@ -735,6 +735,9 @@ export async function generateEmailContentWithVotes(
   if (tipPromo) {
     const gradient = `linear-gradient(${tipPromo.gradient_direction}, ${tipPromo.gradient_from}, ${tipPromo.gradient_to})`
     const isPodcast = tipPromo.type === 'podcast' && !!tipPromo.podcast
+    const headlineText = isPodcast
+      ? applyDateToHeadline(tipPromo.headline)
+      : tipPromo.headline
     let promoInner: string
     if (isPodcast) {
       // Table layout keeps the two buttons side-by-side on narrow mobile email
@@ -745,10 +748,12 @@ export async function generateEmailContentWithVotes(
       const badgeBtn = (url: string, buttonImg: string, name: string) =>
         `<a href="${escapeAttr(url)}" style="display:block;text-decoration:none;"><img src="${baseUrl}${buttonImg}" alt="${escapeAttr(name)}" width="150" style="width:150px;height:auto;border:0;display:block;" /></a>`
       const appleUrl = tipPromo.podcast!.appleUrl || PODCAST_APPLE.url
-      const subtitleHtml = tipPromo.podcast!.episodeSubtitle
-        ? `<div style="line-height:1.4;margin-top:2px;">${escapeHtml(tipPromo.podcast!.episodeSubtitle)}</div>`
-        : ''
-      promoInner = `<div style="font-weight:700;line-height:1.4;">${escapeHtml(tipPromo.podcast!.episodeTitle ?? '')}</div>${subtitleHtml}
+      // Headline + title + subtitle as a transparent PNG (black text). Gmail iOS
+      // dark mode inverts CSS text (black→white) but not image pixels, so HTML
+      // text turned white and vanished on the light green box; the image stays
+      // black-on-green in every client/mode (same trick as the buttons).
+      const textImg = `${baseUrl}/api/newsletter/podcast-promo-text?headline=${encodeURIComponent(headlineText)}&title=${encodeURIComponent(tipPromo.podcast!.episodeTitle ?? '')}&subtitle=${encodeURIComponent(tipPromo.podcast!.episodeSubtitle ?? '')}`
+      promoInner = `<img src="${escapeAttr(textImg)}" alt="${escapeAttr(headlineText)}" width="520" style="width:100%;max-width:520px;height:auto;border:0;display:block;margin:0 auto;" />
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:14px auto 0;"><tr>
         <td style="padding:0 5px;">${badgeBtn(appleUrl, PODCAST_APPLE.buttonImage, PODCAST_APPLE.name)}</td>
         <td style="padding:0 5px;">${badgeBtn(PODCAST_SPOTIFY.url, PODCAST_SPOTIFY.buttonImage, PODCAST_SPOTIFY.name)}</td>
@@ -761,14 +766,16 @@ export async function generateEmailContentWithVotes(
       promoInner = `<div style="line-height:1.45;">${bodyHtml}</div>
       ${ctaHtml}`
     }
-    const headlineText = isPodcast
-      ? applyDateToHeadline(tipPromo.headline)
-      : tipPromo.headline
+    // Podcast headline is baked into the text image; only static promos render the
+    // headline as (invertible, but light-bg) HTML.
+    const headlineDiv = isPodcast
+      ? ''
+      : `<div style="font-weight:700;letter-spacing:0.15em;text-transform:uppercase;font-size:12px;margin-bottom:6px;">${escapeHtml(headlineText)}</div>`
     const box = `
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;">
   <tr><td>
     <div style="background:${gradient};color:${tipPromo.text_color};border-radius:12px;padding:14px 18px;text-align:center;font-family:inherit;">
-      <div style="font-weight:700;letter-spacing:0.15em;text-transform:uppercase;font-size:12px;margin-bottom:6px;">${escapeHtml(headlineText)}</div>
+      ${headlineDiv}
       ${promoInner}
     </div>
   </td></tr>
