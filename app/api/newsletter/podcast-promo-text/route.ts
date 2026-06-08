@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { ImageResponse } from 'next/og'
 import React from 'react'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 export const runtime = 'nodejs'
 
@@ -24,15 +26,15 @@ export const runtime = 'nodejs'
 const W = 1040 // 2× of the ~520px content width
 
 // Bundled Liberation Sans (Helvetica-compatible) so bold renders — next/og's
-// default Geist only ships Regular, leaving the title un-bold. import.meta.url
-// makes Next trace these into the function bundle.
-let fontCache: { regular: ArrayBuffer; bold: ArrayBuffer } | null = null
-async function loadFonts() {
+// default Geist only ships Regular, leaving the title un-bold. The new URL(...,
+// import.meta.url) reference makes Next trace these .ttf into the function
+// bundle; readFileSync (not fetch) because this is the Node runtime, where fetch
+// can't read file:// URLs.
+let fontCache: { regular: Buffer; bold: Buffer } | null = null
+function loadFonts() {
   if (fontCache) return fontCache
-  const [regular, bold] = await Promise.all([
-    fetch(new URL('./font-regular.ttf', import.meta.url)).then((r) => r.arrayBuffer()),
-    fetch(new URL('./font-bold.ttf', import.meta.url)).then((r) => r.arrayBuffer()),
-  ])
+  const regular = readFileSync(fileURLToPath(new URL('./font-regular.ttf', import.meta.url)))
+  const bold = readFileSync(fileURLToPath(new URL('./font-bold.ttf', import.meta.url)))
   fontCache = { regular, bold }
   return fontCache
 }
@@ -115,7 +117,7 @@ export async function GET(req: NextRequest) {
     children
   )
 
-  const { regular, bold } = await loadFonts()
+  const { regular, bold } = loadFonts()
   return new ImageResponse(tree, {
     width: W,
     height,
