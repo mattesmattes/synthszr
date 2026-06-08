@@ -23,6 +23,20 @@ export const runtime = 'nodejs'
 
 const W = 1040 // 2× of the ~520px content width
 
+// Bundled Liberation Sans (Helvetica-compatible) so bold renders — next/og's
+// default Geist only ships Regular, leaving the title un-bold. import.meta.url
+// makes Next trace these into the function bundle.
+let fontCache: { regular: ArrayBuffer; bold: ArrayBuffer } | null = null
+async function loadFonts() {
+  if (fontCache) return fontCache
+  const [regular, bold] = await Promise.all([
+    fetch(new URL('./font-regular.ttf', import.meta.url)).then((r) => r.arrayBuffer()),
+    fetch(new URL('./font-bold.ttf', import.meta.url)).then((r) => r.arrayBuffer()),
+  ])
+  fontCache = { regular, bold }
+  return fontCache
+}
+
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
   const headline = (sp.get('headline') || '').toUpperCase()
@@ -95,10 +109,19 @@ export async function GET(req: NextRequest) {
         justifyContent: 'center',
         padding: `${PAD_Y}px 48px`,
         background: 'transparent',
+        fontFamily: 'LibSans',
       },
     },
     children
   )
 
-  return new ImageResponse(tree, { width: W, height })
+  const { regular, bold } = await loadFonts()
+  return new ImageResponse(tree, {
+    width: W,
+    height,
+    fonts: [
+      { name: 'LibSans', data: regular, weight: 400, style: 'normal' },
+      { name: 'LibSans', data: bold, weight: 700, style: 'normal' },
+    ],
+  })
 }
