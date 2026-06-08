@@ -19,7 +19,6 @@ export interface TipPromo {
     episodeTitle: string | null
     episodeSubtitle: string | null
     appleUrl: string | null // per-episode Apple Podcasts deep link; Spotify stays show-level
-    episodeDate: string | null // ISO; replaces "TODAY" in the headline
   }
 }
 

@@ -1,14 +1,19 @@
 // Pure helper (no DB import) so it's safe in both client and server render paths.
 
 /**
- * Replace the word "TODAY" in a podcast promo headline with the episode's
- * publish date, e.g. "SYNTHSZR PODCAST TODAY" → "SYNTHSZR PODCAST Saturday, June 6".
- * Headline CSS uppercases it. No-op if the headline has no "today" or no date.
+ * Replace the word "TODAY" in a podcast promo headline with the CURRENT date in
+ * the Berlin timezone, e.g. "SYNTHSZR PODCAST TODAY" → "SYNTHSZR PODCAST Sunday,
+ * June 8". Resolved at render time — for the newsletter that's the send day, for
+ * the web that's the view day — NOT when the post/episode was produced. Headline
+ * CSS uppercases it. No-op if the headline has no "today".
  */
-export function applyEpisodeDateToHeadline(headline: string, episodeDate: string | null): string {
-  if (!episodeDate || !/today/i.test(headline)) return headline
-  const d = new Date(episodeDate)
-  if (isNaN(d.getTime())) return headline
-  const formatted = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+export function applyDateToHeadline(headline: string): string {
+  if (!/today/i.test(headline)) return headline
+  const formatted = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'Europe/Berlin',
+  })
   return headline.replace(/today/i, formatted)
 }
