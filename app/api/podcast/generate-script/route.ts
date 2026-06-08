@@ -173,7 +173,8 @@ Der Podcast MUSS mit einer freundlichen Verabschiedung enden, die folgende Eleme
 Beispiel: "Wir sehen uns morgen wieder! Und wenn euch die Folge gefallen hat, empfehlt uns gerne weiter."
 
 **WICHTIG: Im gesamten Dialog wird der GUEST IMMER als "Synthesizer" bezeichnet — NIEMALS als "Synthszr".**
-Der GUEST (Synthesizer) bringt die "Synthesizer Take" Meinungen aus dem Artikel ein.
+Der GUEST (Synthesizer) bringt die pointierten Meinungen/Einschätzungen aus dem Artikel ein (im Artikel als "Synthszr Take" markiert).
+**WICHTIG: Die Worte "Synthesizer Take" / "Synthszr Take" werden im gesprochenen Dialog NIEMALS verwendet.** Stattdessen natürliche Gesprächswendungen — der HOST fragt z.B. "Wie siehst du das?", "Was ist deine Sicht dazu?", "Was ist dein Standpunkt?", "Wie ist deine Meinung?"; der GUEST antwortet z.B. "Meine Sicht ist...", "Mein Standpunkt dazu:", "Ich sehe das so:", "Meine Meinung:".
 
 **KRITISCH — Ziel-Länge: {duration} Minuten = {wordCount}–{maxWordCount} Wörter:**
 - Das Skript MUSS mindestens {wordCount} Wörter lang sein.
@@ -315,7 +316,8 @@ The podcast MUST end with a friendly farewell that includes:
 Example: "We'll see you again tomorrow! And if you enjoyed this episode, please share it with your friends."
 
 **IMPORTANT: In the entire dialogue, the GUEST is ALWAYS referred to as "Synthesizer" — NEVER as "Synthszr".**
-GUEST (Synthesizer) should bring in the "Synthesizer Take" opinions from the article.
+GUEST (Synthesizer) brings in the article's pointed opinions/takes (marked as "Synthszr Take" in the article).
+**IMPORTANT: The words "Synthesizer Take" / "Synthszr Take" are NEVER spoken in the dialogue.** Use natural conversational phrasing instead — the HOST asks e.g. "What's your view on this?", "What's your take?", "Where do you stand?", "What's your opinion?"; the GUEST replies e.g. "My take is...", "My point of view:", "The way I see it:", "My standpoint:".
 
 **CRITICAL — Target Length: {duration} minutes = {wordCount}–{maxWordCount} words:**
 - The script MUST be at least {wordCount} words long.

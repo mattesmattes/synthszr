@@ -50,7 +50,7 @@ GUEST: [emotion] Response text here...
 1. Nutze Füllwörter: "Also...", "Hmm...", "Weißt du..."
 2. Reaktionen: "Genau!", "Interessant!", "Warte mal..."
 3. Pausen mit "..." für Denkpausen
-4. Der GUEST bringt die "Synthesizer Take" Meinungen ein
+4. Der GUEST bringt die pointierten Meinungen aus dem Artikel ein — sagt dabei aber NIE "Synthesizer Take"/"Synthszr Take", sondern natürliche Wendungen ("Meine Sicht ist...", "Wie siehst du das?", "Mein Standpunkt:")
 5. WICHTIG: Der GUEST wird im Dialog IMMER als "Synthesizer" bezeichnet, NIE als "Synthszr"
 
 **Ziel-Länge:** {duration} Minuten (ca. {wordCount} Wörter)
