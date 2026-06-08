@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
-import sharp from 'sharp'
+import { NextRequest } from 'next/server'
+import { ImageResponse } from 'next/og'
+import React from 'react'
 
 export const runtime = 'nodejs'
 
@@ -7,95 +8,97 @@ export const runtime = 'nodejs'
  * GET /api/newsletter/podcast-promo-text?headline=…&title=…&subtitle=…
  *
  * Renders the podcast tip-promo TEXT (headline + episode title + subtitle) as a
- * transparent PNG with black text, baked at 2× for Retina. The newsletter places
- * it over the gradient box.
+ * transparent PNG with black text, at 2× for Retina. The newsletter overlays it
+ * on the gradient box.
  *
  * Why an image: Gmail iOS dark mode inverts CSS text colors (black → white) but
- * NOT the gradient background-image, so black HTML text turned white on the light
- * green box and became unreadable. Image pixels are immune to that inversion, so
- * the text stays black on green in every client/mode — same trick as the buttons.
+ * NOT image pixels or the gradient background-image, so black HTML text turned
+ * white and vanished on the light green box. Image pixels are immune — the text
+ * stays black-on-green in every client/mode (same trick as the buttons).
+ *
+ * Uses next/og (Satori) rather than sharp+SVG: Satori embeds its own font, so it
+ * renders real glyphs on Vercel where librsvg has no system font (it produced
+ * empty tofu boxes).
  */
 
 const W = 1040 // 2× of the ~520px content width
-const PAD_X = 48
-const USABLE = W - PAD_X * 2
-
-// Approximate per-character width factor for the sans-serif used by librsvg.
-function wrap(text: string, fontSize: number, letterSpacing = 0): string[] {
-  const charW = fontSize * 0.54 + letterSpacing
-  const maxChars = Math.max(1, Math.floor(USABLE / charW))
-  const words = text.split(/\s+/).filter(Boolean)
-  const lines: string[] = []
-  let cur = ''
-  for (const w of words) {
-    const next = cur ? `${cur} ${w}` : w
-    if (next.length <= maxChars) cur = next
-    else {
-      if (cur) lines.push(cur)
-      cur = w
-    }
-  }
-  if (cur) lines.push(cur)
-  return lines.length ? lines : ['']
-}
-
-function escapeXml(s: string): string {
-  return s.replace(/[<>&'"]/g, (c) =>
-    c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : c === "'" ? '&apos;' : '&quot;'
-  )
-}
 
 export async function GET(req: NextRequest) {
-  try {
-    const sp = req.nextUrl.searchParams
-    const headline = (sp.get('headline') || '').toUpperCase()
-    const title = sp.get('title') || ''
-    const subtitle = sp.get('subtitle') || ''
+  const sp = req.nextUrl.searchParams
+  const headline = (sp.get('headline') || '').toUpperCase()
+  const title = sp.get('title') || ''
+  const subtitle = sp.get('subtitle') || ''
 
-    const FONT = 'Helvetica, Arial, DejaVu Sans, sans-serif'
-    // 2× sizes
-    const H_SIZE = 24, H_LH = 30, H_LS = 3.4 // headline (bold, uppercase, tracked)
-    const T_SIZE = 36, T_LH = 44 // title (bold)
-    const S_SIZE = 30, S_LH = 38 // subtitle
-    const GAP_AFTER_H = 14
-    const GAP_AFTER_T = 8
-    const PAD_TOP = 28, PAD_BOT = 28
+  // Estimate height: Satori wraps flex text automatically, but ImageResponse
+  // needs a fixed canvas. Approximate line counts from char width per font size.
+  const titleLines = title ? Math.max(1, Math.ceil(title.length / 30)) : 0
+  const subLines = subtitle ? Math.max(1, Math.ceil(subtitle.length / 42)) : 0
+  const PAD_Y = 30
+  const height =
+    PAD_Y +
+    30 + // headline line
+    (titleLines ? 14 + titleLines * 46 : 0) +
+    (subLines ? 8 + subLines * 40 : 0) +
+    PAD_Y
 
-    const hLines = wrap(headline, H_SIZE, H_LS)
-    const tLines = title ? wrap(title, T_SIZE) : []
-    const sLines = subtitle ? wrap(subtitle, S_SIZE) : []
-
-    let y = PAD_TOP
-    const els: string[] = []
-    const cx = W / 2
-
-    for (const line of hLines) {
-      y += H_SIZE
-      els.push(`<text x="${cx}" y="${y}" font-family="${FONT}" font-size="${H_SIZE}" font-weight="700" letter-spacing="${H_LS}" fill="#000000" text-anchor="middle">${escapeXml(line)}</text>`)
-      y += H_LH - H_SIZE
-    }
-    if (tLines.length) y += GAP_AFTER_H
-    for (const line of tLines) {
-      y += T_SIZE
-      els.push(`<text x="${cx}" y="${y}" font-family="${FONT}" font-size="${T_SIZE}" font-weight="700" fill="#000000" text-anchor="middle">${escapeXml(line)}</text>`)
-      y += T_LH - T_SIZE
-    }
-    if (sLines.length) y += GAP_AFTER_T
-    for (const line of sLines) {
-      y += S_SIZE
-      els.push(`<text x="${cx}" y="${y}" font-family="${FONT}" font-size="${S_SIZE}" fill="#000000" text-anchor="middle">${escapeXml(line)}</text>`)
-      y += S_LH - S_SIZE
-    }
-    const H = Math.round(y + PAD_BOT)
-
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${els.join('')}</svg>`
-    const png = await sharp(Buffer.from(svg)).png({ compressionLevel: 6 }).toBuffer()
-
-    return new NextResponse(new Uint8Array(png), {
-      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' },
-    })
-  } catch (error) {
-    console.error('[Podcast Promo Text] Error:', error)
-    return new NextResponse('Image generation failed', { status: 500 })
+  const children: React.ReactElement[] = [
+    React.createElement(
+      'div',
+      {
+        key: 'h',
+        style: {
+          fontSize: 22,
+          fontWeight: 700,
+          letterSpacing: 3,
+          color: '#000000',
+          textTransform: 'uppercase',
+          textAlign: 'center',
+        },
+      },
+      headline
+    ),
+  ]
+  if (title) {
+    children.push(
+      React.createElement(
+        'div',
+        {
+          key: 't',
+          style: { fontSize: 36, fontWeight: 700, color: '#000000', textAlign: 'center', marginTop: 14, lineHeight: 1.25 },
+        },
+        title
+      )
+    )
   }
+  if (subtitle) {
+    children.push(
+      React.createElement(
+        'div',
+        {
+          key: 's',
+          style: { fontSize: 30, fontWeight: 400, color: '#000000', textAlign: 'center', marginTop: 8, lineHeight: 1.3 },
+        },
+        subtitle
+      )
+    )
+  }
+
+  const tree = React.createElement(
+    'div',
+    {
+      style: {
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: `${PAD_Y}px 48px`,
+        background: 'transparent',
+      },
+    },
+    children
+  )
+
+  return new ImageResponse(tree, { width: W, height })
 }
