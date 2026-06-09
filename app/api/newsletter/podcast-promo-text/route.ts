@@ -47,14 +47,14 @@ export async function GET(req: NextRequest) {
 
   // Estimate height: Satori wraps flex text automatically, but ImageResponse
   // needs a fixed canvas. Approximate line counts from char width per font size.
-  const titleLines = title ? Math.max(1, Math.ceil(title.length / 30)) : 0
-  const subLines = subtitle ? Math.max(1, Math.ceil(subtitle.length / 42)) : 0
+  const titleLines = title ? Math.max(1, Math.ceil(title.length / 26)) : 0
+  const subLines = subtitle ? Math.max(1, Math.ceil(subtitle.length / 37)) : 0
   const PAD_Y = 30
   const height =
     PAD_Y +
-    30 + // headline line
-    (titleLines ? 14 + titleLines * 46 : 0) +
-    (subLines ? 8 + subLines * 40 : 0) +
+    36 + // headline line
+    (titleLines ? 14 + titleLines * 54 : 0) +
+    (subLines ? 8 + subLines * 46 : 0) +
     PAD_Y
 
   const children: React.ReactElement[] = [
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
       {
         key: 'h',
         style: {
-          fontSize: 22,
+          fontSize: 26,
           fontWeight: 700,
           letterSpacing: 3,
           color: '#000000',
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
         'div',
         {
           key: 't',
-          style: { fontSize: 36, fontWeight: 700, color: '#000000', textAlign: 'center', marginTop: 14, lineHeight: 1.25 },
+          style: { fontSize: 42, fontWeight: 700, color: '#000000', textAlign: 'center', marginTop: 14, lineHeight: 1.25 },
         },
         title
       )
@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
         'div',
         {
           key: 's',
-          style: { fontSize: 30, fontWeight: 400, color: '#000000', textAlign: 'center', marginTop: 8, lineHeight: 1.3 },
+          style: { fontSize: 34, fontWeight: 400, color: '#000000', textAlign: 'center', marginTop: 8, lineHeight: 1.3 },
         },
         subtitle
       )
