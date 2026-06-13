@@ -1082,14 +1082,14 @@ function convertNodeToHtml(node: TiptapNode): string {
     }
     case 'heading': {
       const level = node.attrs?.level || 2
-      // Email-safe heading sizes (increased by one step)
+      // Email-safe heading sizes (increased by two steps)
       const headingSizes: Record<number, string> = {
-        1: '32px',
-        2: '26px',
-        3: '22px',
-        4: '18px',
-        5: '16px',
-        6: '14px',
+        1: '34px',
+        2: '28px',
+        3: '24px',
+        4: '20px',
+        5: '18px',
+        6: '16px',
       }
       const fontSize = headingSizes[Number(level)] || '22px'
       let headingHtml = renderContent(node.content)

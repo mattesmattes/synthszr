@@ -176,7 +176,7 @@ export function NewsletterEmail({
 
             .content-area h2 {
               font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-              font-size: 18px;
+              font-size: 20px;
               font-weight: 600;
               color: #1a1a1a;
               margin-top: 32px;
@@ -186,7 +186,7 @@ export function NewsletterEmail({
 
             .content-area h3 {
               font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-              font-size: 16px;
+              font-size: 18px;
               font-weight: 600;
               color: #1a1a1a;
               margin-top: 24px;
@@ -195,7 +195,7 @@ export function NewsletterEmail({
 
             .content-area p {
               font-family: 'Source Serif 4', Georgia, serif;
-              font-size: 16px;
+              font-size: 18px;
               line-height: 1.7;
               color: #374151;
               margin-bottom: 16px;
@@ -203,7 +203,7 @@ export function NewsletterEmail({
 
             .content-area ul, .content-area ol {
               font-family: 'Source Serif 4', Georgia, serif;
-              font-size: 16px;
+              font-size: 18px;
               line-height: 1.7;
               color: #374151;
               margin-bottom: 16px;
@@ -497,7 +497,7 @@ const excerptBulletLine = {
 
 const contentStyle = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '16px',
+  fontSize: '18px',
   lineHeight: '1.7',
   color: '#374151',
 }
