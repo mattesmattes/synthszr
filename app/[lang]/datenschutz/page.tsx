@@ -106,12 +106,10 @@ export default async function DatenschutzPage({ params }: PageProps) {
 
       <footer className="border-t border-border">
         <div className="mx-auto max-w-5xl px-6 py-12">
-          <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-6">
-              <FooterBrands />
+          <div className="flex flex-col gap-6">
+            <FooterBrands />
+            <div className="flex flex-wrap items-center gap-6 text-xs">
               <LanguageSwitcher currentLocale={locale} />
-            </div>
-            <div className="flex gap-6 text-xs">
               <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
                 LinkedIn
               </a>

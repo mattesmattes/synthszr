@@ -204,9 +204,9 @@ export default async function Page() {
 
       <footer className="border-t border-border">
         <div className="mx-auto max-w-5xl px-6 py-12">
-          <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-6">
             <FooterBrands />
-            <div className="flex gap-6 text-xs">
+            <div className="flex flex-wrap gap-6 text-xs">
               <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
                 LinkedIn
               </a>

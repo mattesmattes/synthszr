@@ -45,7 +45,7 @@ function BrandLogo({ name, href, logo, h, w }: { name: string; href: string; log
 
 export function FooterBrands() {
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 sm:gap-x-10">
+    <div className="flex flex-nowrap items-center gap-x-6 sm:gap-x-10">
       {BRANDS.map((b) => (
         <BrandLogo key={b.name} {...b} />
       ))}
