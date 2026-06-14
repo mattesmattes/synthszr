@@ -55,7 +55,7 @@ const UI_STRINGS: Record<LanguageCode, {
     listenPodcast: 'Podcast anhören',
   },
   en: {
-    footer: 'You are receiving this email because you subscribed to the Synthszr Newsletter.',
+    footer: 'You are receiving this email because you subscribed to Synthszr.',
     readArticle: 'Read article on synthszr.com',
     changeLanguage: 'Change language',
     unsubscribe: 'Unsubscribe',
@@ -64,7 +64,7 @@ const UI_STRINGS: Record<LanguageCode, {
     listenPodcast: 'Listen to podcast',
   },
   fr: {
-    footer: 'Vous recevez cet e-mail car vous êtes abonné à la newsletter Synthszr.',
+    footer: 'Vous recevez cet e-mail car vous êtes abonné à Synthszr.',
     readArticle: 'Lire l\'article sur synthszr.com',
     changeLanguage: 'Changer de langue',
     unsubscribe: 'Se désabonner',
@@ -73,7 +73,7 @@ const UI_STRINGS: Record<LanguageCode, {
     listenPodcast: 'Écouter le podcast',
   },
   es: {
-    footer: 'Recibes este correo porque te suscribiste al boletín de Synthszr.',
+    footer: 'Recibes este correo porque te suscribiste a Synthszr.',
     readArticle: 'Leer artículo en synthszr.com',
     changeLanguage: 'Cambiar idioma',
     unsubscribe: 'Cancelar suscripción',
@@ -82,7 +82,7 @@ const UI_STRINGS: Record<LanguageCode, {
     listenPodcast: 'Escuchar podcast',
   },
   it: {
-    footer: 'Ricevi questa email perché sei iscritto alla newsletter di Synthszr.',
+    footer: 'Ricevi questa email perché sei iscritto a Synthszr.',
     readArticle: 'Leggi l\'articolo su synthszr.com',
     changeLanguage: 'Cambia lingua',
     unsubscribe: 'Annulla iscrizione',
@@ -91,7 +91,7 @@ const UI_STRINGS: Record<LanguageCode, {
     listenPodcast: 'Ascolta il podcast',
   },
   pt: {
-    footer: 'Você está recebendo este e-mail porque assinou a newsletter Synthszr.',
+    footer: 'Você está recebendo este e-mail porque assinou a Synthszr.',
     readArticle: 'Ler artigo em synthszr.com',
     changeLanguage: 'Mudar idioma',
     unsubscribe: 'Cancelar inscrição',
@@ -100,7 +100,7 @@ const UI_STRINGS: Record<LanguageCode, {
     listenPodcast: 'Ouvir podcast',
   },
   nl: {
-    footer: 'Je ontvangt deze e-mail omdat je je hebt aangemeld voor de Synthszr nieuwsbrief.',
+    footer: 'Je ontvangt deze e-mail omdat je je hebt aangemeld voor Synthszr.',
     readArticle: 'Lees artikel op synthszr.com',
     changeLanguage: 'Taal wijzigen',
     unsubscribe: 'Afmelden',
@@ -109,7 +109,7 @@ const UI_STRINGS: Record<LanguageCode, {
     listenPodcast: 'Luister naar podcast',
   },
   pl: {
-    footer: 'Otrzymujesz ten e-mail, ponieważ subskrybujesz newsletter Synthszr.',
+    footer: 'Otrzymujesz ten e-mail, ponieważ subskrybujesz Synthszr.',
     readArticle: 'Przeczytaj artykuł na synthszr.com',
     changeLanguage: 'Zmień język',
     unsubscribe: 'Wypisz się',
@@ -118,7 +118,7 @@ const UI_STRINGS: Record<LanguageCode, {
     listenPodcast: 'Słuchaj podcastu',
   },
   cs: {
-    footer: 'Tento e-mail vám přišel, protože jste přihlášeni k odběru newsletteru Synthszr.',
+    footer: 'Tento e-mail vám přišel, protože jste přihlášeni k odběru Synthszr.',
     readArticle: 'Přečíst článek na synthszr.com',
     changeLanguage: 'Změnit jazyk',
     unsubscribe: 'Odhlásit odběr',
@@ -127,7 +127,7 @@ const UI_STRINGS: Record<LanguageCode, {
     listenPodcast: 'Poslechnout podcast',
   },
   nds: {
-    footer: 'Du kriggst disse E-Mail, wiel du den Synthszr Newsletter abonneert hest.',
+    footer: 'Du kriggst disse E-Mail, wiel du Synthszr abonneert hest.',
     readArticle: 'Artikel op synthszr.com lesen',
     changeLanguage: 'Spraak ännern',
     unsubscribe: 'Afmellen',
