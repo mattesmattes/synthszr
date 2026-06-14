@@ -33,6 +33,7 @@ interface ScheduleConfig {
     enabled: boolean
     hour: number
     minute: number
+    maxItems?: number // number of news articles (digest sections) in the auto-generated post
   }
   newsletterSend?: {
     enabled: boolean
@@ -46,7 +47,7 @@ const DEFAULT_SCHEDULE: ScheduleConfig = {
   newsletterFetch: { enabled: true, hour: 4, minute: 0 },    // 04:00 MEZ
   webcrawlFetch:   { enabled: true, hour: 4, minute: 30 },   // 04:30 MEZ
   dailyAnalysis:   { enabled: true, hour: 5, minute: 0 },    // 05:00 MEZ
-  postGeneration:  { enabled: false, hour: 9, minute: 0 },
+  postGeneration:  { enabled: false, hour: 9, minute: 0, maxItems: MAX_DIGEST_SECTIONS },
   newsletterSend:  { enabled: false, hour: 9, minute: 30 },
 }
 
@@ -213,7 +214,7 @@ export async function GET(request: NextRequest) {
       } else {
         console.log('[Scheduler] Triggering post generation...')
         try {
-          await generateDailyPost(supabase, baseUrl)
+          await generateDailyPost(supabase, baseUrl, config.postGeneration.maxItems ?? MAX_DIGEST_SECTIONS)
           await markTaskRun(supabase, 'post_generation')
           results.postGeneration = 'completed'
         } catch (error) {
@@ -341,7 +342,7 @@ export async function GET(request: NextRequest) {
 }
 
 // Generate a blog post from the latest digest
-async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>, baseUrl: string) {
+async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>, baseUrl: string, maxSections: number = MAX_DIGEST_SECTIONS) {
   // Get the latest digest that doesn't have a generated post yet
   const { data: digest } = await supabase
     .from('daily_digests')
@@ -500,7 +501,7 @@ async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>,
       }
     }
 
-    const sectionsToProcess = sections.slice(0, MAX_DIGEST_SECTIONS)
+    const sectionsToProcess = sections.slice(0, maxSections)
 
     if (sectionsToProcess.length > 0) {
       console.log(`[PostGen] Triggering image generation for ${sectionsToProcess.length} sections`)

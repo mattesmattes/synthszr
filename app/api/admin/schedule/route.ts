@@ -22,6 +22,7 @@ export interface ScheduleConfig {
     enabled: boolean
     hour: number
     minute: number
+    maxItems?: number
   }
   newsletterSend?: {
     enabled: boolean

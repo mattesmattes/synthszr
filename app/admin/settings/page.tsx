@@ -71,6 +71,7 @@ interface ScheduleConfig {
     enabled: boolean
     hour: number
     minute: number
+    maxItems?: number
   }
   newsletterSend: {
     enabled: boolean
@@ -167,7 +168,7 @@ const DEFAULT_SCHEDULE: ScheduleConfig = {
   newsletterFetch: { enabled: true, hour: 4, minute: 0 },
   webcrawlFetch: { enabled: true, hour: 4, minute: 30 },
   dailyAnalysis: { enabled: true, hour: 5, minute: 0 },
-  postGeneration: { enabled: false, hour: 9, minute: 0 },
+  postGeneration: { enabled: false, hour: 9, minute: 0, maxItems: 3 },
   newsletterSend: { enabled: false, hour: 9, minute: 30 },
 }
 
@@ -316,6 +317,7 @@ export default function SettingsPage() {
           },
           postGeneration: {
             ...data.postGeneration,
+            maxItems: data.postGeneration?.maxItems ?? 3,
           },
           newsletterSend: data.newsletterSend ? {
             ...data.newsletterSend,
@@ -712,6 +714,7 @@ export default function SettingsPage() {
                     description="Wann soll aus dem Digest ein Blogpost mit Bildern generiert werden?"
                     config={schedule.postGeneration}
                     onChange={(config) => setSchedule({ ...schedule, postGeneration: config })}
+                    maxItemsField={{ label: 'Anzahl News-Artikel', min: 1, max: 15 }}
                   />
                   <ScheduleRow
                     label={<span className="flex items-center gap-2"><Mail className="h-4 w-4" /> Newsletter-Versand</span>}
@@ -983,11 +986,13 @@ function ScheduleRow({
   description,
   config,
   onChange,
+  maxItemsField,
 }: {
   label: React.ReactNode
   description: string
-  config: { enabled: boolean; hour: number; minute: number }
-  onChange: (config: { enabled: boolean; hour: number; minute: number }) => void
+  config: { enabled: boolean; hour: number; minute: number; maxItems?: number }
+  onChange: (config: { enabled: boolean; hour: number; minute: number; maxItems?: number }) => void
+  maxItemsField?: { label: string; min: number; max: number }
 }) {
   return (
     <div className="space-y-3 pb-4 border-b">
@@ -1035,6 +1040,27 @@ function ScheduleRow({
             </SelectContent>
           </Select>
           <span className="text-sm text-muted-foreground">Uhr (MEZ)</span>
+        </div>
+      )}
+      {config.enabled && maxItemsField && (
+        <div className="flex items-center gap-2">
+          <Label className="text-sm text-muted-foreground">{maxItemsField.label}</Label>
+          <Input
+            type="number"
+            min={maxItemsField.min}
+            max={maxItemsField.max}
+            value={config.maxItems ?? maxItemsField.min}
+            onChange={(e) => {
+              const n = parseInt(e.target.value)
+              onChange({
+                ...config,
+                maxItems: Number.isFinite(n)
+                  ? Math.max(maxItemsField.min, Math.min(maxItemsField.max, n))
+                  : maxItemsField.min,
+              })
+            }}
+            className="w-20"
+          />
         </div>
       )}
     </div>
