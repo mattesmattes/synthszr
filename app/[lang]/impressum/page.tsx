@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TiptapRenderer } from '@/components/tiptap-renderer'
 import { LanguageSwitcher } from '@/components/language-switcher'
+import { FooterBrands } from '@/components/footer-brands'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import type { LanguageCode } from '@/lib/types'
@@ -93,9 +94,7 @@ export default async function ImpressumPage({ params }: PageProps) {
         <div className="mx-auto max-w-5xl px-6 py-12">
           <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-6">
-              <a href="https://oh-so.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
-                <img src="/oh-so-logo.svg" alt="OH-SO" className="h-9" />
-              </a>
+              <FooterBrands />
               <LanguageSwitcher currentLocale={locale} />
             </div>
             <div className="flex gap-6 text-xs">

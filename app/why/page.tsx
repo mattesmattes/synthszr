@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
+import { FooterBrands } from "@/components/footer-brands"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
 import { ArrowLeft } from "lucide-react"
@@ -57,9 +58,7 @@ export default async function WhyPage() {
       <footer className="border-t border-border">
         <div className="mx-auto max-w-5xl px-6 py-12">
           <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
-            <a href="https://oh-so.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
-              <img src="/oh-so-logo.svg" alt="OH-SO" className="h-9" />
-            </a>
+            <FooterBrands />
             <div className="flex gap-6 text-xs">
               <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
                 LinkedIn

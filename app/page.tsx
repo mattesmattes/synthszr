@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { BlogHeader } from "@/components/blog-header"
+import { FooterBrands } from "@/components/footer-brands"
 import { FeaturedArticle } from "@/components/featured-article"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
@@ -204,9 +205,7 @@ export default async function Page() {
       <footer className="border-t border-border">
         <div className="mx-auto max-w-5xl px-6 py-12">
           <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
-            <a href="https://oh-so.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
-              <img src="/oh-so-logo.svg" alt="OH-SO" className="h-9" />
-            </a>
+            <FooterBrands />
             <div className="flex gap-6 text-xs">
               <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
                 LinkedIn

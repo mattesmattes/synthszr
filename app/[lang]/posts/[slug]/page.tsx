@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { createAnonClient, createAdminClient } from "@/lib/supabase/admin"
 import { PostContentView } from "@/components/post-content-view"
+import { FooterBrands } from "@/components/footer-brands"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
 import { SwipeNavigation } from "@/components/swipe-navigation"
@@ -476,17 +477,7 @@ export default async function PostPage({ params }: PageProps) {
         <div className="mx-auto max-w-5xl px-6 py-12">
           <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-6">
-              <a href="https://oh-so.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
-                <img
-                  src="/oh-so-logo.svg"
-                  alt="OH-SO"
-                  width={86}
-                  height={36}
-                  loading="lazy"
-                  decoding="async"
-                  className="h-9"
-                />
-              </a>
+              <FooterBrands />
               <Suspense fallback={null}>
                 <LanguageSwitcher currentLocale={locale} />
               </Suspense>
