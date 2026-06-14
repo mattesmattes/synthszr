@@ -397,16 +397,16 @@ export function NewsletterEmail({
               <tbody>
                 <tr>
                   <td style={footerBrandCell}>
-                    <Link href="https://oh-so.com"><Img src={`${baseUrl}/footer/email-oh-so.png`} alt="OH-SO" height="22" style={{ height: '22px', width: 'auto', opacity: 0.6 }} /></Link>
+                    <Link href="https://oh-so.com"><Img src={`${baseUrl}/footer/email-oh-so.png`} alt="OH-SO" height="25" style={{ height: '25px', width: 'auto' }} /></Link>
                   </td>
                   <td style={footerBrandCell}>
-                    <Link href="https://oh-so.com/raidar"><Img src={`${baseUrl}/footer/email-raidar.png`} alt="RAIDAR" height="12" style={{ height: '12px', width: 'auto', opacity: 0.6 }} /></Link>
+                    <Link href="https://oh-so.com/raidar"><Img src={`${baseUrl}/footer/email-raidar.png`} alt="RAIDAR" height="14" style={{ height: '14px', width: 'auto' }} /></Link>
                   </td>
                   <td style={footerBrandCell}>
-                    <Link href="https://codecrash.ai"><Img src={`${baseUrl}/footer/email-voxel.png`} alt="CODE CRASH" height="32" style={{ height: '32px', width: 'auto', opacity: 0.6 }} /></Link>
+                    <Link href="https://codecrash.ai"><Img src={`${baseUrl}/footer/email-voxel.png`} alt="CODE CRASH" height="37" style={{ height: '37px', width: 'auto' }} /></Link>
                   </td>
                   <td style={footerBrandCell}>
-                    <Link href="https://www.synthszr.com"><Img src={`${baseUrl}/footer/email-synthszr.png`} alt="SYNTHSZR" height="13" style={{ height: '13px', width: 'auto', opacity: 0.6 }} /></Link>
+                    <Link href="https://www.synthszr.com"><Img src={`${baseUrl}/footer/email-synthszr.png`} alt="SYNTHSZR" height="15" style={{ height: '15px', width: 'auto' }} /></Link>
                   </td>
                 </tr>
               </tbody>
@@ -545,7 +545,7 @@ const footerBrandsTable = {
 }
 
 const footerBrandCell = {
-  padding: '0 10px',
+  padding: '0 20px',
   verticalAlign: 'middle' as const,
 }
 
