@@ -475,9 +475,9 @@ export default async function PostPage({ params }: PageProps) {
 
       <footer className="border-t border-border">
         <div className="mx-auto max-w-5xl px-6 py-12">
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col items-center gap-6">
             <FooterBrands />
-            <div className="flex flex-wrap items-center gap-6 text-xs">
+            <div className="flex flex-wrap items-center justify-center gap-6 text-xs">
               <Suspense fallback={null}>
                 <LanguageSwitcher currentLocale={locale} />
               </Suspense>
