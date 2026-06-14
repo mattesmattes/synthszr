@@ -567,7 +567,7 @@ const ccPromoTextCell = {
 
 const ccPromoLabel = {
   fontFamily: "'SF Mono', Monaco, monospace",
-  fontSize: '9px',
+  fontSize: '11px',
   fontWeight: '500',
   textTransform: 'uppercase' as const,
   letterSpacing: '0.5px',
@@ -578,7 +578,7 @@ const ccPromoLabel = {
 
 const ccPromoHeading = {
   fontFamily: "'SF Mono', Monaco, monospace",
-  fontSize: '20px',
+  fontSize: '22px',
   fontWeight: '700',
   color: '#000000',
   margin: '0 0 10px',
@@ -587,7 +587,7 @@ const ccPromoHeading = {
 
 const ccPromoCopy = {
   fontFamily: "'Source Serif 4', Georgia, serif",
-  fontSize: '14px',
+  fontSize: '16px',
   lineHeight: '1.5',
   color: 'rgba(0,0,0,0.65)',
   margin: '0 0 12px',
@@ -595,7 +595,7 @@ const ccPromoCopy = {
 
 const ccPromoLink = {
   fontFamily: "'SF Mono', Monaco, monospace",
-  fontSize: '11px',
+  fontSize: '13px',
   fontWeight: '600',
   color: '#000000',
   textDecoration: 'none',

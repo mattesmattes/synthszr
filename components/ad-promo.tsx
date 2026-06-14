@@ -86,22 +86,22 @@ function TextBlock({ promo }: { promo: AdPromo }) {
     >
       {promo.eyebrow && (
         <p
-          className="font-mono text-[10px] font-medium uppercase tracking-wider"
+          className="font-mono text-xs font-medium uppercase tracking-wider"
           style={{ color: text, opacity: 0.5 }}
         >
           {promo.eyebrow}
         </p>
       )}
-      <h2 className="mt-1 font-mono text-xl font-bold leading-tight" style={{ color: text }}>
+      <h2 className="mt-1 font-mono text-2xl font-bold leading-tight" style={{ color: text }}>
         {promo.title}
       </h2>
       <p
-        className="mt-3 text-sm leading-relaxed"
+        className="mt-3 text-base leading-relaxed"
         style={{ fontFamily: 'var(--font-serif), serif', color: text, opacity: 0.7 }}
         dangerouslySetInnerHTML={{ __html: sanitizeAdminHtml(promo.body) }}
       />
       <span
-        className="mt-4 inline-block font-mono text-xs font-semibold"
+        className="mt-4 inline-block font-mono text-sm font-semibold"
         style={{ color: text }}
       >
         {promo.cta_label}
