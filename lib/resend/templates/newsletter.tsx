@@ -391,15 +391,26 @@ export function NewsletterEmail({
 
           {/* Footer */}
           <Section style={footerSection}>
-            <Link href="https://oh-so.com">
-              <Img
-                src={`${baseUrl}/oh-so-logo.png`}
-                alt="OH-SO"
-                width="32"
-                height="32"
-                style={footerLogo}
-              />
-            </Link>
+            {/* Partner-brand bar (same 4 logos as web footer / codecrash.ai).
+                Email-safe: real PNGs in a centered table (no CSS mask/SVG). */}
+            <table role="presentation" cellPadding={0} cellSpacing={0} align="center" style={footerBrandsTable}>
+              <tbody>
+                <tr>
+                  <td style={footerBrandCell}>
+                    <Link href="https://oh-so.com"><Img src={`${baseUrl}/footer/email-oh-so.png`} alt="OH-SO" height="22" style={{ height: '22px', width: 'auto', opacity: 0.6 }} /></Link>
+                  </td>
+                  <td style={footerBrandCell}>
+                    <Link href="https://oh-so.com/raidar"><Img src={`${baseUrl}/footer/email-raidar.png`} alt="RAIDAR" height="12" style={{ height: '12px', width: 'auto', opacity: 0.6 }} /></Link>
+                  </td>
+                  <td style={footerBrandCell}>
+                    <Link href="https://codecrash.ai"><Img src={`${baseUrl}/footer/email-voxel.png`} alt="CODE CRASH" height="32" style={{ height: '32px', width: 'auto', opacity: 0.6 }} /></Link>
+                  </td>
+                  <td style={footerBrandCell}>
+                    <Link href="https://www.synthszr.com"><Img src={`${baseUrl}/footer/email-synthszr.png`} alt="SYNTHSZR" height="13" style={{ height: '13px', width: 'auto', opacity: 0.6 }} /></Link>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
             <Text style={footer}>
               {actualFooterText}
             </Text>
@@ -529,9 +540,13 @@ const footerSection = {
   textAlign: 'center' as const,
 }
 
-const footerLogo = {
+const footerBrandsTable = {
   margin: '0 auto 16px',
-  opacity: 0.6,
+}
+
+const footerBrandCell = {
+  padding: '0 10px',
+  verticalAlign: 'middle' as const,
 }
 
 const footer = {
