@@ -714,7 +714,7 @@ export default function SettingsPage() {
                     description="Wann soll aus dem Digest ein Blogpost mit Bildern generiert werden?"
                     config={schedule.postGeneration}
                     onChange={(config) => setSchedule({ ...schedule, postGeneration: config })}
-                    maxItemsField={{ label: 'Anzahl News-Artikel', min: 1, max: 15 }}
+                    maxItemsField={{ label: 'Anzahl News-Artikel', min: 1, max: 40 }}
                   />
                   <ScheduleRow
                     label={<span className="flex items-center gap-2"><Mail className="h-4 w-4" /> Newsletter-Versand</span>}
