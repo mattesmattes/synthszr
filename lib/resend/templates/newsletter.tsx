@@ -46,7 +46,7 @@ const UI_STRINGS: Record<LanguageCode, {
   listenPodcast: string
 }> = {
   de: {
-    footer: 'Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.',
+    footer: 'Du erhältst diese E-Mail, weil du Synthszr abonniert hast.',
     readArticle: 'Artikel auf synthszr.com lesen',
     changeLanguage: 'Sprache ändern',
     unsubscribe: 'Abbestellen',
