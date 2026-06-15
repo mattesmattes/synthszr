@@ -7,6 +7,8 @@ import { processAnalysis } from '@/lib/analysis/processor'
 import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPublishedPostsQueueItems } from '@/lib/news-queue/service'
 import { MAX_DIGEST_SECTIONS, MAX_CONTENT_PREVIEW_CHARS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresholds'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
+import { parseArticleContent, generateSlug } from '@/lib/utils/parse-article-content'
+import { sanitizeTiptapUrls } from '@/lib/utils/url-verifier'
 
 export const runtime = 'nodejs'
 export const maxDuration = 800 // 13 minutes max (Vercel Pro limit)
@@ -342,11 +344,12 @@ export async function GET(request: NextRequest) {
 }
 
 // Generate a blog post from the latest digest
-async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>, baseUrl: string, maxSections: number = MAX_DIGEST_SECTIONS) {
-  // Get the latest digest that doesn't have a generated post yet
+async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>, baseUrl: string, maxItems: number = MAX_DIGEST_SECTIONS) {
+  // Get the latest digest — used to link the post (digest_id) and to keep this
+  // task idempotent (one auto-post per digest/day).
   const { data: digest } = await supabase
     .from('daily_digests')
-    .select('id, digest_date, analysis_content')
+    .select('id, digest_date')
     .order('digest_date', { ascending: false })
     .limit(1)
     .single()
@@ -356,7 +359,7 @@ async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>,
     return
   }
 
-  // Check if post already exists for this digest
+  // Idempotency: skip if a post already exists for this digest
   const { data: existingPost } = await supabase
     .from('generated_posts')
     .select('id')
@@ -368,110 +371,126 @@ async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>,
     return
   }
 
-  console.log('[PostGen] Generating post for digest:', digest.digest_date)
+  console.log('[PostGen] Generating queue-based post for digest:', digest.digest_date, `(maxItems=${maxItems})`)
 
-  // Get active ghostwriter prompt
+  // Active prompt id for the prompt_id column. The queue route resolves the
+  // active prompt itself, so we only need the id here for attribution.
   const { data: promptData } = await supabase
     .from('ghostwriter_prompts')
-    .select('prompt_text')
+    .select('id')
     .eq('is_active', true)
     .single()
 
-  // Get vocabulary
-  const { data: vocabulary } = await supabase
-    .from('vocabulary')
-    .select('word, replacement')
-    .eq('enabled', true)
-
-  const vocabMap = new Map(vocabulary?.map(v => [v.word.toLowerCase(), v.replacement]) || [])
-
-  // Call ghostwriter API
-
+  // Generate via the SAME queue pipeline the manual create-article flow uses
+  // (/api/ghostwriter-queue): manually-selected items first, filled up from the
+  // balanced selection, written by the ghostwriter model from settings. Calling
+  // the canonical route (instead of duplicating its ~250 lines of selection +
+  // pipeline + dedup) is what keeps this caller from drifting out of sync — the
+  // exact failure mode that previously left this task silently broken.
+  // Bounded at 280s so it fails cleanly before the 300s function cap.
   const ghostwriterController = new AbortController()
-  const ghostwriterTimeoutId = setTimeout(() => ghostwriterController.abort(), 120000) // 120s timeout
+  const ghostwriterTimeoutId = setTimeout(() => ghostwriterController.abort(), 280000)
 
-  let response: Response
+  let blogContent = ''
+  let usedQueueItemIds: string[] = []
+  let usedModel: string | null = null
+
   try {
-    response = await fetch(`${baseUrl}/api/ghostwriter`, {
+    const response = await fetch(`${baseUrl}/api/ghostwriter-queue`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.CRON_SECRET}`,
       },
       body: JSON.stringify({
-        digestContent: digest.analysis_content,
-        customPrompt: promptData?.prompt_text,
-        vocabularyIntensity: 10,
+        useSelected: true,
+        maxItems,
+        vocabularyIntensity: 50,
       }),
       signal: ghostwriterController.signal,
     })
-    clearTimeout(ghostwriterTimeoutId)
-  } catch (error) {
-    clearTimeout(ghostwriterTimeoutId)
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('[PostGen] Ghostwriter API timeout after 120s')
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '')
+      throw new Error(`Ghostwriter-Queue API failed: ${response.status} ${errBody.slice(0, 200)}`)
     }
-    throw error
-  }
 
-  if (!response.ok) {
-    throw new Error(`Ghostwriter API failed: ${response.status}`)
-  }
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('No reader')
 
-  // Read the streamed response
-  const reader = response.body?.getReader()
-  if (!reader) throw new Error('No reader')
+    const decoder = new TextDecoder()
+    let buffer = ''
 
-  const decoder = new TextDecoder()
-  let blogContent = ''
+    // SSE consume, mirrors create-article's accumulator: reset on `clear`
+    // (proofread/dedup rewrites), append on `text`, capture model + used item
+    // ids on `done`. Buffer across chunks so events split mid-stream survive.
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n\n')
+      buffer = lines.pop() || ''
 
-    const chunk = decoder.decode(value, { stream: true })
-    const lines = chunk.split('\n\n')
-
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
         try {
           const data = JSON.parse(line.slice(6))
+          if (data.clear) blogContent = ''
           if (data.text) blogContent += data.text
-        } catch {
-          // Ignore parse errors
+          if (data.model) usedModel = data.model
+          if (data.done && Array.isArray(data.queueItemIds)) usedQueueItemIds = data.queueItemIds
+          if (data.error) throw new Error(data.error)
+        } catch (e) {
+          if (e instanceof SyntaxError) continue
+          throw e
         }
       }
     }
+  } catch (error) {
+    clearTimeout(ghostwriterTimeoutId)
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('[PostGen] Ghostwriter-Queue timeout after 280s')
+    }
+    throw error
   }
+  clearTimeout(ghostwriterTimeoutId)
 
-  if (!blogContent) {
+  if (!blogContent.trim()) {
     throw new Error('No blog content generated')
   }
 
-  // Apply vocabulary replacements
-  let processedContent = blogContent
-  for (const [word, replacement] of vocabMap) {
-    const regex = new RegExp(`\\b${word}\\b`, 'gi')
-    processedContent = processedContent.replace(regex, replacement)
+  // Parse frontmatter (TITLE/EXCERPT/CATEGORY) → metadata + body, identical to
+  // the manual create-article save (shared parser).
+  const { metadata, body } = parseArticleContent(blogContent)
+  const title = metadata.title || `Artikel vom ${new Date(digest.digest_date).toLocaleDateString('de-DE')}`
+  const slug = metadata.slug || generateSlug(title)
+
+  // Convert markdown to TipTap + sanitize tracking URLs
+  const { markdownToTiptap } = await import('@/lib/utils/markdown-to-tiptap')
+  let tiptapContent = markdownToTiptap(body)
+  const { content: sanitizedContent, changes } = sanitizeTiptapUrls(tiptapContent)
+  if (changes.length > 0) {
+    console.log(`[PostGen] Sanitized ${changes.length} tracking URLs`)
+    tiptapContent = sanitizedContent
   }
 
-  // Extract title from content
-  const titleMatch = processedContent.match(/^#\s+(.+)$/m)
-  const title = titleMatch?.[1] || `Artikel vom ${new Date(digest.digest_date).toLocaleDateString('de-DE')}`
-
-  // Convert markdown to TipTap format
-  const { markdownToTiptap } = await import('@/lib/utils/markdown-to-tiptap')
-  const tiptapContent = markdownToTiptap(processedContent)
-
-  // Create the post
+  // Create the draft post. Queue items stay 'selected' and are marked 'used'
+  // only when the post is published — same as the manual draft flow.
   const { data: newPost, error } = await supabase
     .from('generated_posts')
     .insert({
       digest_id: digest.id,
+      prompt_id: promptData?.id ?? null,
       title,
+      slug,
+      excerpt: metadata.excerpt || null,
+      category: metadata.category || 'AI & Tech',
       content: JSON.stringify(tiptapContent),
-      word_count: processedContent.split(/\s+/).length,
+      word_count: body.split(/\s+/).length,
       status: 'draft',
+      ai_model: usedModel,
+      pending_queue_item_ids: usedQueueItemIds.length > 0 ? usedQueueItemIds : [],
     })
     .select()
     .single()
@@ -480,28 +499,31 @@ async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>,
     throw new Error(`Failed to create post: ${error.message}`)
   }
 
-  console.log('[PostGen] Created post:', newPost.id)
+  console.log('[PostGen] Created queue-based draft post:', newPost.id, `(${usedQueueItemIds.length} queue items, model: ${usedModel})`)
 
   // Trigger image generation
-  if (newPost && processedContent) {
+  if (newPost && body) {
     // Split blog content into sections by headings
     const sections: Array<{ title: string; content: string }> = []
     const headingRegex = /^(#{1,2})\s+(.+)$/gm
-    const matches = [...processedContent.matchAll(headingRegex)]
+    const matches = [...body.matchAll(headingRegex)]
 
     for (let i = 0; i < matches.length; i++) {
       const match = matches[i]
       const sectionTitle = match[2].trim()
       const startIndex = match.index! + match[0].length
-      const endIndex = matches[i + 1]?.index ?? processedContent.length
-      const content = processedContent.slice(startIndex, endIndex).trim()
+      const endIndex = matches[i + 1]?.index ?? body.length
+      const content = body.slice(startIndex, endIndex).trim()
 
       if (content.length > 50) {
         sections.push({ title: sectionTitle, content })
       }
     }
 
-    const sectionsToProcess = sections.slice(0, maxSections)
+    // Cap image generation at MAX_DIGEST_SECTIONS regardless of article count —
+    // 40 image calls would blow the timeout; cover + a couple sections suffice.
+    // Thumbnails remain a manual step (edit page → Bilder tab), like manual drafts.
+    const sectionsToProcess = sections.slice(0, MAX_DIGEST_SECTIONS)
 
     if (sectionsToProcess.length > 0) {
       console.log(`[PostGen] Triggering image generation for ${sectionsToProcess.length} sections`)
