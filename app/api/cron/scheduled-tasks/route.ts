@@ -7,9 +7,7 @@ import { processAnalysis } from '@/lib/analysis/processor'
 import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPublishedPostsQueueItems } from '@/lib/news-queue/service'
 import { MAX_DIGEST_SECTIONS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresholds'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
-import { parseArticleContent, generateSlug } from '@/lib/utils/parse-article-content'
-import { sanitizeTiptapUrls } from '@/lib/utils/url-verifier'
-import { generateQueueArticle } from '@/lib/claude/queue-article'
+import { getModelForUseCase } from '@/lib/ai/model-config'
 
 export const runtime = 'nodejs'
 export const maxDuration = 800 // 13 minutes max (Vercel Pro limit)
@@ -215,19 +213,52 @@ export async function GET(request: NextRequest) {
         console.log('[Scheduler] Skipping post generation - daily analysis not completed')
         results.postGeneration = 'skipped_dependency_failed'
       } else {
-        console.log('[Scheduler] Triggering post generation...')
+        // Enqueue a resumable article job (processed over later ticks by the
+        // advanceArticleJob block below). The job's finalize phase calls
+        // markTaskRun('post_generation') when the post is actually written.
+        console.log('[Scheduler] Enqueuing daily post job...')
         try {
-          await generateDailyPost(supabase, config.postGeneration.maxItems ?? MAX_DIGEST_SECTIONS)
-          await markTaskRun(supabase, 'post_generation')
-          results.postGeneration = 'completed'
+          const { data: digest } = await supabase
+            .from('daily_digests')
+            .select('id')
+            .order('digest_date', { ascending: false })
+            .limit(1)
+            .single()
+          if (!digest) {
+            results.postGeneration = 'no_digest'
+          } else {
+            const { createArticleJob } = await import('@/lib/article-jobs/service')
+            const model = await getModelForUseCase('ghostwriter')
+            const r = await createArticleJob({
+              digestId: digest.id,
+              maxItems: config.postGeneration.maxItems ?? MAX_DIGEST_SECTIONS,
+              model,
+              effort: 'medium',
+              vocabularyIntensity: 50,
+            })
+            results.postGeneration = r.created ? 'job_enqueued' : `skipped_${r.reason}`
+          }
         } catch (error) {
-          console.error('[Scheduler] Post generation error:', error)
+          console.error('[Scheduler] Post generation enqueue error:', error)
           results.postGeneration = 'error'
         }
       }
     } else {
       results.postGeneration = recentlyRan ? 'already_ran' : 'not_scheduled'
     }
+  }
+
+  // Article-Job Processing: advance the oldest open article job by ONE phase
+  // (planning → writing(×n) → finalizing → done). Runs every tick so a job
+  // enqueued at 05:30 completes over the following ticks, each well under 300s.
+  // Placed early so the writing phase gets a generous time budget. Best-effort,
+  // non-fatal for the rest of the cron.
+  try {
+    const { advanceArticleJob } = await import('@/lib/article-jobs/service')
+    results.articleJob = await advanceArticleJob()
+  } catch (error) {
+    console.error('[Scheduler] Article job error:', error)
+    results.articleJob = 'error'
   }
 
   // Newsletter Send
@@ -342,123 +373,6 @@ export async function GET(request: NextRequest) {
     currentTimeUTC: `${now.getUTCHours()}:${String(now.getUTCMinutes()).padStart(2, '0')}`,
     results,
   })
-}
-
-// Generate a blog post from the latest digest
-async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>, maxItems: number = MAX_DIGEST_SECTIONS) {
-  // Get the latest digest — used to link the post (digest_id) and to keep this
-  // task idempotent (one auto-post per digest/day).
-  const { data: digest } = await supabase
-    .from('daily_digests')
-    .select('id, digest_date')
-    .order('digest_date', { ascending: false })
-    .limit(1)
-    .single()
-
-  if (!digest) {
-    console.log('[PostGen] No digest found')
-    return
-  }
-
-  // Idempotency: skip if a post already exists for this digest
-  const { data: existingPost } = await supabase
-    .from('generated_posts')
-    .select('id')
-    .eq('digest_id', digest.id)
-    .single()
-
-  if (existingPost) {
-    console.log('[PostGen] Post already exists for digest:', digest.id)
-    return
-  }
-
-  console.log('[PostGen] Generating queue-based post for digest:', digest.digest_date, `(maxItems=${maxItems})`)
-
-  // Active prompt id for the prompt_id column. The queue route resolves the
-  // active prompt itself, so we only need the id here for attribution.
-  const { data: promptData } = await supabase
-    .from('ghostwriter_prompts')
-    .select('id')
-    .eq('is_active', true)
-    .single()
-
-  // Generate via the SAME queue pipeline the manual create-article flow uses,
-  // IN-PROCESS via generateQueueArticle(). An HTTP subrequest from the cron
-  // fails: the cron's request host is the apex (307→www, which drops the
-  // Authorization header) or the protected *.vercel.app deployment URL (401),
-  // so the subrequest never reaches the route. Calling the shared orchestration
-  // directly (no HTTP, no auth, no redirect) is the same pattern as
-  // processNewsletters/processWebcrawl. Bounded by the 300s function cap.
-  let blogContent = ''
-  let usedQueueItemIds: string[] = []
-  let usedModel: string | null = null
-
-  // Model = settings default (Opus). Sonnet was NOT faster in this pipeline
-  // (effort + thinking dominate, not token speed), so the speed lever is the
-  // per-section effort: the auto-post uses 'medium' (vs the manual flow's 'high')
-  // so 40 Opus sections finish with margin under the 300s cron cap. Budget is
-  // also helped by the removed image-gen tail.
-  // Same SSE-style events as the manual flow: reset on `clear` (proofread/dedup
-  // rewrites), append on `text`, capture model + used item ids on `done`.
-  for await (const ev of generateQueueArticle({ useSelected: true, maxItems, vocabularyIntensity: 50, effort: 'medium' })) {
-    if (ev.clear) blogContent = ''
-    if (ev.text) blogContent += ev.text
-    if (ev.model) usedModel = ev.model
-    if (ev.done && Array.isArray(ev.queueItemIds)) usedQueueItemIds = ev.queueItemIds
-  }
-
-  if (!blogContent.trim()) {
-    throw new Error('No blog content generated')
-  }
-
-  // Parse frontmatter (TITLE/EXCERPT/CATEGORY) → metadata + body, identical to
-  // the manual create-article save (shared parser).
-  const { metadata, body } = parseArticleContent(blogContent)
-  const title = metadata.title || `Artikel vom ${new Date(digest.digest_date).toLocaleDateString('de-DE')}`
-  const slug = metadata.slug || generateSlug(title)
-
-  // Convert markdown to TipTap + sanitize tracking URLs
-  const { markdownToTiptap } = await import('@/lib/utils/markdown-to-tiptap')
-  let tiptapContent = markdownToTiptap(body)
-  const { content: sanitizedContent, changes } = sanitizeTiptapUrls(tiptapContent)
-  if (changes.length > 0) {
-    console.log(`[PostGen] Sanitized ${changes.length} tracking URLs`)
-    tiptapContent = sanitizedContent
-  }
-
-  // Create the draft post. Queue items stay 'selected' and are marked 'used'
-  // only when the post is published — same as the manual draft flow.
-  const { data: newPost, error } = await supabase
-    .from('generated_posts')
-    .insert({
-      digest_id: digest.id,
-      prompt_id: promptData?.id ?? null,
-      title,
-      slug,
-      excerpt: metadata.excerpt || null,
-      category: metadata.category || 'AI & Tech',
-      content: JSON.stringify(tiptapContent),
-      word_count: body.split(/\s+/).length,
-      status: 'draft',
-      ai_model: usedModel,
-      pending_queue_item_ids: usedQueueItemIds.length > 0 ? usedQueueItemIds : [],
-    })
-    .select()
-    .single()
-
-  if (error) {
-    throw new Error(`Failed to create post: ${error.message}`)
-  }
-
-  console.log('[PostGen] Created queue-based draft post:', newPost.id, `(${usedQueueItemIds.length} queue items, model: ${usedModel})`)
-
-  // Cover image is intentionally NOT generated here: a cron→/api/generate-image
-  // subrequest hits the same 401 (apex redirect / deployment protection) as the
-  // generation subrequest did, and moving image generation in-process is a
-  // separate change. The cover is generated on review (edit page → Bilder tab),
-  // consistent with how the manual draft flow defers thumbnails.
-
-  console.log('[PostGen] Post generation complete')
 }
 
 // Run daily analysis, save digest, and trigger synthesis
