@@ -39,9 +39,12 @@ export interface QueueArticleParams {
   useSelected?: boolean     // Use manually selected items (status='selected'); default true
   maxItems?: number         // Max items if using/​filling balanced selection; default 25
   vocabularyIntensity?: number // 0–100; default 50
-  model?: string            // Override the ghostwriter model (e.g. the scheduled
-                            // auto-post runs Sonnet to fit the 300s cron cap);
-                            // defaults to the 'ghostwriter' use-case (Opus).
+  model?: string            // Override the ghostwriter model; defaults to the
+                            // 'ghostwriter' use-case (Opus).
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' // Per-section reasoning
+                            // effort. The scheduled auto-post passes 'medium'
+                            // (faster) so 40 items fit the 300s cron cap; the
+                            // manual flow leaves it at the default ('high').
 }
 
 /** Loosely-typed event — all fields optional so both consumers read directly. */
@@ -67,6 +70,7 @@ export async function* generateQueueArticle(params: QueueArticleParams): AsyncGe
     maxItems = 25,
     vocabularyIntensity = 50,
     model: modelOverride,
+    effort,
   } = params
 
   // Model: explicit override (e.g. cron auto-post) wins; otherwise central
@@ -262,7 +266,7 @@ export async function* generateQueueArticle(params: QueueArticleParams): AsyncGe
 
   let fullText = ''
 
-  for await (const event of runGhostwriterPipeline(pipelineItems, model, { vocabularyContext })) {
+  for await (const event of runGhostwriterPipeline(pipelineItems, model, { vocabularyContext, effort })) {
     if (event.type === 'planning') {
       yield { phase: 'pipeline', message: event.message }
     } else if (event.type === 'planned') {

@@ -393,13 +393,14 @@ async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>,
   let usedQueueItemIds: string[] = []
   let usedModel: string | null = null
 
-  // Model = settings default (Opus). Measured: Opus generates ~40 items in ~270s,
-  // Sonnet was NOT faster in this pipeline (effort 'high' + thinking dominate, not
-  // token speed), so the model is left on Opus. Budget is kept via the article
-  // count (config.postGeneration.maxItems) + the removed image-gen tail.
+  // Model = settings default (Opus). Sonnet was NOT faster in this pipeline
+  // (effort + thinking dominate, not token speed), so the speed lever is the
+  // per-section effort: the auto-post uses 'medium' (vs the manual flow's 'high')
+  // so 40 Opus sections finish with margin under the 300s cron cap. Budget is
+  // also helped by the removed image-gen tail.
   // Same SSE-style events as the manual flow: reset on `clear` (proofread/dedup
   // rewrites), append on `text`, capture model + used item ids on `done`.
-  for await (const ev of generateQueueArticle({ useSelected: true, maxItems, vocabularyIntensity: 50 })) {
+  for await (const ev of generateQueueArticle({ useSelected: true, maxItems, vocabularyIntensity: 50, effort: 'medium' })) {
     if (ev.clear) blogContent = ''
     if (ev.text) blogContent += ev.text
     if (ev.model) usedModel = ev.model

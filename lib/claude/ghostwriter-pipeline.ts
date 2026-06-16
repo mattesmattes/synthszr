@@ -279,6 +279,7 @@ export async function writeSection(
   context: {
     relevantCompanies: { public: string[]; premarket: string[] }
     cacheableUserPrefix: string
+    effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
   },
 ): Promise<string> {
   const publicCompanyList = context.relevantCompanies.public.join(', ') || '(keine erkannt)'
@@ -353,9 +354,11 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
     // Seite kommen. 2026er-Modelle: adaptiv + effort; Altmodelle: budget_tokens.
     // 'high' statt 'xhigh': ~30% schneller pro Section, damit 40 Sektionen ins
     // 300s-Function-Limit passen (zusammen mit concurrency 6). Minimal weniger
-    // Reasoning, aber für die Section-Länge ausreichend.
+    // Reasoning, aber für die Section-Länge ausreichend. Der Cron-Auto-Post
+    // übergibt 'medium' (noch schneller), um 40 Items sicher ins 300s-Cap zu
+    // bringen; der manuelle Flow lässt es auf 'high'.
     thinking: true,
-    effort: 'high',
+    effort: context.effort ?? 'high',
     maxTokens: 16000,
   })
 
@@ -493,12 +496,12 @@ async function callModelNonStreaming(
 export async function* runGhostwriterPipeline(
   items: PipelineItem[],
   model: AIModel,
-  options: { concurrency?: number; vocabularyContext?: string } = {},
+  options: { concurrency?: number; vocabularyContext?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' } = {},
 ): AsyncGenerator<PipelineEvent | { type: 'section'; text: string } | { type: 'metadata'; text: string }> {
   // concurrency 6 (was 2): with up to 40 sections, Opus must finish within the
   // Vercel Pro 300s function limit (maxDuration=800 is capped to 300 by the plan).
   // 40 / 6 × ~30s ≈ 200s leaves headroom for planning + proofread before timeout.
-  const { concurrency = 6, vocabularyContext } = options
+  const { concurrency = 6, vocabularyContext, effort } = options
   // ── Pass 1: Plan ────────────────────────────────────────────────────────────
   yield { type: 'planning', message: `Struktur für ${items.length} Items planen...` }
 
@@ -608,6 +611,7 @@ export async function* runGhostwriterPipeline(
         results[i] = await writeSection(item, heading, model, {
           relevantCompanies: itemCompanies,
           cacheableUserPrefix,
+          effort,
         })
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
