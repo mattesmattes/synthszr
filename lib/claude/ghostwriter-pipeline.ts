@@ -20,7 +20,7 @@ import {
   trackPatternUsage,
   type LearnedPattern,
 } from '@/lib/edit-learning/retrieval'
-import { type AIModel, resolveModel } from './ghostwriter'
+import { type AIModel, resolveModel, findDuplicateMetaphors, streamMetaphorDeduplication } from './ghostwriter'
 import { isCreditBalanceError, recordCreditAlertIfApplicable } from '@/lib/alerts/system-alert'
 
 export class CreditBalanceExhaustedError extends Error {
@@ -490,6 +490,149 @@ async function callModelNonStreaming(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Resumable building blocks (shared by the streaming runner and the job pipeline)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SectionContext {
+  cacheableUserPrefix: string
+  companiesPerItem: Map<string, { public: string[]; premarket: string[] }>
+  metadataBlock: string
+  loadedPatterns: LearnedPattern[]
+}
+
+/**
+ * Builds the per-run context shared across every section call: edit-learning
+ * patterns/examples, the company map, the cacheable user prefix and the
+ * metadata block. Extracted from runGhostwriterPipeline so the resumable job
+ * pipeline can rebuild the same context on a later cron tick.
+ */
+export async function buildSectionContext(
+  items: PipelineItem[],
+  plan: ArticlePlan,
+  vocabularyContext: string | undefined,
+): Promise<SectionContext> {
+  // ── Edit Learning: Load patterns and examples ──────────────────────────────
+  let editLearningContext = ''
+  let loadedPatterns: LearnedPattern[] = []
+  try {
+    const [patterns, examples] = await Promise.all([
+      getActiveLearnedPatterns(0.4, 20),
+      findSimilarEditExamples(
+        items.map(i => i.title).join(' ').slice(0, 2000), 3, 7
+      ),
+    ])
+    loadedPatterns = patterns
+    if (patterns.length > 0 || examples.length > 0) {
+      const enhancement = buildPromptEnhancement(patterns, examples)
+      if (enhancement) {
+        editLearningContext = enhancement
+        console.log(`[Pipeline] Edit learning: ${patterns.length} patterns, ${examples.length} examples`)
+      }
+    }
+  } catch (err) {
+    console.error('[Pipeline] Failed to load Edit Learning patterns:', err)
+  }
+
+  // ── Pre-extract relevant companies per item (avoids sending all 492 names per call) ──
+  const companiesPerItem = new Map<string, { public: string[]; premarket: string[] }>()
+  for (const item of items) {
+    companiesPerItem.set(item.id, extractRelevantCompanies(`${item.title} ${item.content || ''}`))
+  }
+
+  // ── Build cacheable user prefix (shared across all section calls) ──
+  // For Anthropic: cached after first call, 29 subsequent calls pay $1.88/M instead of $15/M
+  const prefixParts: string[] = []
+  if (vocabularyContext) prefixParts.push(vocabularyContext)
+  if (editLearningContext) prefixParts.push(editLearningContext)
+  prefixParts.push(`ARTIKEL-KONTEXT: ${plan.thesis}\n\nSchreibe GENAU DIESEN EINEN Abschnitt. Kein Intro, keine anderen News, kein Abschluss.`)
+  const cacheableUserPrefix = prefixParts.join('\n\n')
+
+  // Build metadata block (title/excerpt/category/intro)
+  const excerptLines = plan.excerptBullets
+    .map(b => (b.startsWith('•') ? b : `• ${b}`))
+    .join('\n')
+  const metadataBlock = `---\nTITLE: ${plan.articleTitle}\nEXCERPT:\n${excerptLines}\nCATEGORY: ${plan.category || 'AI & Tech'}\n---\n\n${plan.introParagraph}\n\n`
+
+  return { cacheableUserPrefix, companiesPerItem, metadataBlock, loadedPatterns }
+}
+
+export interface WriteBatchResult {
+  sections: string[]   // NUR die in DIESEM Aufruf geschriebenen, in Reihenfolge
+  nextCursor: number
+  done: boolean
+}
+
+/**
+ * Writes ordered sections starting at `cursor`, in batches of `concurrency` (6),
+ * until the wall-clock budget (`budgetMs` since `startedAt`) is exhausted after a
+ * completed batch. The remaining sections resume on the next cron tick. Used by
+ * the resumable job pipeline; the streaming runner keeps its own progressive
+ * worker loop.
+ */
+export async function writeSectionsBatch(
+  orderedItems: PipelineItem[],
+  plan: ArticlePlan,
+  ctx: SectionContext,
+  cursor: number,
+  model: AIModel,
+  effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max',
+  budgetMs: number,
+  startedAt: number,
+): Promise<WriteBatchResult> {
+  const out: string[] = []
+  let i = cursor
+  const concurrency = 6
+  while (i < orderedItems.length) {
+    const batch = orderedItems.slice(i, i + concurrency)
+    const results = await Promise.all(batch.map((item, k) => {
+      const itemIdx = plan.ordering[i + k]
+      const heading = plan.headings[String(itemIdx)] || item.title
+      const itemCompanies = ctx.companiesPerItem.get(item.id) || { public: [], premarket: [] }
+      return writeSection(item, heading, model, {
+        relevantCompanies: itemCompanies,
+        cacheableUserPrefix: ctx.cacheableUserPrefix,
+        effort,
+      }).catch(err => `## ${heading}\n\n*Fehler: ${err instanceof Error ? err.message : String(err)}*\n`)
+    }))
+    out.push(...results.map(r => r + '\n\n'))
+    i += batch.length
+    if (Date.now() - startedAt > budgetMs) break   // Budget erschöpft -> Rest im nächsten Tick
+  }
+  return { sections: out, nextCursor: i, done: i >= orderedItems.length }
+}
+
+/**
+ * Assembles metadata + sections, proofreads, then de-duplicates metaphors.
+ * ONLY for the resumable job path — the manual streaming flow keeps its own
+ * proofread (in this file) and dedup (in queue-article.ts). Do NOT call this
+ * from runGhostwriterPipeline or the dedup would run twice.
+ */
+export async function finalizeArticle(
+  metadataBlock: string,
+  sections: string[],
+  model: AIModel,
+  vocabulary: Array<{ term: string }> | null,
+): Promise<string> {
+  const body = sections.join('')
+  let full = metadataBlock + body
+  // Proofread
+  try {
+    const proofreadingModel = await getModelForUseCase('proofreading') as AIModel
+    full = metadataBlock + await proofreadText(body, proofreadingModel)
+  } catch (err) {
+    console.error('[Pipeline] Proofreading failed:', err)
+  }
+  // Metaphor de-duplication (mirrors queue-article.ts post-processing)
+  const duplicates = findDuplicateMetaphors(full, vocabulary || undefined)
+  if (duplicates.size > 0) {
+    let deduped = ''
+    for await (const chunk of streamMetaphorDeduplication(full, duplicates, model)) deduped += chunk
+    if (deduped.trim()) full = deduped
+  }
+  return full
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main pipeline runner (async generator for streaming progress)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -530,48 +673,11 @@ export async function* runGhostwriterPipeline(
 
   yield { type: 'planned', itemCount: items.length }
 
-  // ── Edit Learning: Load patterns and examples ──────────────────────────────
-  let editLearningContext = ''
-  let loadedPatterns: LearnedPattern[] = []
-  try {
-    const [patterns, examples] = await Promise.all([
-      getActiveLearnedPatterns(0.4, 20),
-      findSimilarEditExamples(
-        items.map(i => i.title).join(' ').slice(0, 2000), 3, 7
-      ),
-    ])
-    loadedPatterns = patterns
-    if (patterns.length > 0 || examples.length > 0) {
-      const enhancement = buildPromptEnhancement(patterns, examples)
-      if (enhancement) {
-        editLearningContext = enhancement
-        console.log(`[Pipeline] Edit learning: ${patterns.length} patterns, ${examples.length} examples`)
-      }
-    }
-  } catch (err) {
-    console.error('[Pipeline] Failed to load Edit Learning patterns:', err)
-  }
-
-  // ── Pre-extract relevant companies per item (avoids sending all 492 names per call) ──
-  const companiesPerItem = new Map<string, { public: string[]; premarket: string[] }>()
-  for (const item of items) {
-    companiesPerItem.set(item.id, extractRelevantCompanies(`${item.title} ${item.content || ''}`))
-  }
-
-  // ── Build cacheable user prefix (shared across all section calls) ──
-  // For Anthropic: cached after first call, 29 subsequent calls pay $1.88/M instead of $15/M
-  const prefixParts: string[] = []
-  if (vocabularyContext) prefixParts.push(vocabularyContext)
-  if (editLearningContext) prefixParts.push(editLearningContext)
-  prefixParts.push(`ARTIKEL-KONTEXT: ${plan.thesis}\n\nSchreibe GENAU DIESEN EINEN Abschnitt. Kein Intro, keine anderen News, kein Abschluss.`)
-  const cacheableUserPrefix = prefixParts.join('\n\n')
+  // ── Build shared section context (edit-learning, companies, prefix, metadata) ──
+  const { cacheableUserPrefix, companiesPerItem, metadataBlock, loadedPatterns } =
+    await buildSectionContext(items, plan, vocabularyContext)
 
   // Emit metadata block immediately so client can show title/excerpt
-  const excerptLines = plan.excerptBullets
-    .map(b => (b.startsWith('•') ? b : `• ${b}`))
-    .join('\n')
-
-  const metadataBlock = `---\nTITLE: ${plan.articleTitle}\nEXCERPT:\n${excerptLines}\nCATEGORY: ${plan.category || 'AI & Tech'}\n---\n\n${plan.introParagraph}\n\n`
   yield { type: 'metadata', text: metadataBlock }
 
   // ── Pass 2: Write sections in parallel ──────────────────────────────────────
