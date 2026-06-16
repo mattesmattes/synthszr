@@ -63,21 +63,23 @@ export interface QueueArticleEvent {
   queueItemIds?: string[]
 }
 
-export async function* generateQueueArticle(params: QueueArticleParams): AsyncGenerator<QueueArticleEvent> {
-  const {
-    queueItemIds,
-    useSelected = true,
-    maxItems = 25,
-    vocabularyIntensity = 50,
-    model: modelOverride,
-    effort,
-  } = params
-
-  // Model: explicit override (e.g. cron auto-post) wins; otherwise central
-  // settings (admin/settings → KI-Modelle tab, 'ghostwriter' use-case).
-  const configModel = modelOverride ?? (await getModelForUseCase('ghostwriter'))
-  const model = configModel as AIModel
-  console.log(`[Ghostwriter-Queue] Model: ${model} (from settings), Items: ${queueItemIds?.length || 'auto-select'}, useSelected: ${useSelected}, maxItems: ${maxItems}`)
+/**
+ * Selects news-queue items (specific IDs → manually-selected → balanced fill),
+ * enriches them with full daily_repo content, and maps them to PipelineItems.
+ *
+ * Extracted from generateQueueArticle so the resumable article-job path and the
+ * manual /api/ghostwriter-queue flow share ONE selection/enrichment — no drift.
+ */
+export async function selectAndEnrichItems(opts: {
+  queueItemIds?: string[]
+  useSelected?: boolean
+  maxItems?: number
+}): Promise<{
+  pipelineItems: PipelineItem[]
+  usedItemIds: string[]
+  sourceDistribution: { source: string; count: number; percentage: number }[]
+}> {
+  const { queueItemIds, useSelected = true, maxItems = 25 } = opts
 
   const supabase = createAdminClient()
 
@@ -224,7 +226,7 @@ export async function* generateQueueArticle(params: QueueArticleParams): AsyncGe
     sourceCount[item.source_identifier] = (sourceCount[item.source_identifier] || 0) + 1
   }
 
-  const distribution = Object.entries(sourceCount)
+  const sourceDistribution = Object.entries(sourceCount)
     .map(([source, count]) => ({
       source,
       count,
@@ -232,7 +234,33 @@ export async function* generateQueueArticle(params: QueueArticleParams): AsyncGe
     }))
     .sort((a, b) => b.count - a.count)
 
-  console.log(`[Ghostwriter-Queue] Source distribution:`, distribution)
+  console.log(`[Ghostwriter-Queue] Source distribution:`, sourceDistribution)
+
+  // Track item IDs for marking as used
+  const usedItemIds = selectedItems.map(i => i.id)
+
+  const pipelineItems: PipelineItem[] = selectedItems.map(item => ({
+    id: item.id,
+    title: item.title,
+    content: item.content ? sanitizeContentUrls(item.content) : null,
+    source_display_name: item.source_display_name,
+    source_url: sanitizeUrl(item.source_url) || deriveSourceUrl(null, item.source_identifier),
+    source_identifier: item.source_identifier,
+  }))
+
+  return { pipelineItems, usedItemIds, sourceDistribution }
+}
+
+/**
+ * Fetches the vocabulary dictionary and builds the vocabulary-guidelines block.
+ * Returns the prompt context plus the (slim) vocabulary list used by metaphor
+ * de-duplication. Extracted from generateQueueArticle for the article-job path.
+ */
+export async function buildVocabularyContext(vocabularyIntensity: number): Promise<{
+  vocabularyContext: string
+  vocabulary: Array<{ term: string }> | null
+}> {
+  const supabase = createAdminClient()
 
   // Get vocabulary (used by both pipeline and dedup)
   const { data: vocabulary } = await supabase
@@ -248,21 +276,35 @@ export async function* generateQueueArticle(params: QueueArticleParams): AsyncGe
     vocabularyContext += vocabulary.map(v => `- "${v.term}": ${v.preferred_usage || ''}`).join('\n')
   }
 
-  // Track item IDs for marking as used
-  const usedItemIds = selectedItems.map(i => i.id)
+  return { vocabularyContext, vocabulary: vocabulary ?? null }
+}
 
-  const pipelineItems: PipelineItem[] = selectedItems.map(item => ({
-    id: item.id,
-    title: item.title,
-    content: item.content ? sanitizeContentUrls(item.content) : null,
-    source_display_name: item.source_display_name,
-    source_url: sanitizeUrl(item.source_url) || deriveSourceUrl(null, item.source_identifier),
-    source_identifier: item.source_identifier,
-  }))
+export async function* generateQueueArticle(params: QueueArticleParams): AsyncGenerator<QueueArticleEvent> {
+  const {
+    queueItemIds,
+    useSelected = true,
+    maxItems = 25,
+    vocabularyIntensity = 50,
+    model: modelOverride,
+    effort,
+  } = params
+
+  // Model: explicit override (e.g. cron auto-post) wins; otherwise central
+  // settings (admin/settings → KI-Modelle tab, 'ghostwriter' use-case).
+  const configModel = modelOverride ?? (await getModelForUseCase('ghostwriter'))
+  const model = configModel as AIModel
+  console.log(`[Ghostwriter-Queue] Model: ${model} (from settings), Items: ${queueItemIds?.length || 'auto-select'}, useSelected: ${useSelected}, maxItems: ${maxItems}`)
+
+  // Select + enrich items (shared with the resumable article-job path)
+  const { pipelineItems, usedItemIds, sourceDistribution: distribution } =
+    await selectAndEnrichItems({ queueItemIds, useSelected, maxItems })
+
+  // Build vocabulary context (shared with the article-job path)
+  const { vocabularyContext, vocabulary } = await buildVocabularyContext(vocabularyIntensity)
 
   console.log(`[Ghostwriter-Queue] Running pipeline with ${pipelineItems.length} items, model: ${model}`)
 
-  yield { model, started: true, itemCount: selectedItems.length, sourceDistribution: distribution, pipeline: true }
+  yield { model, started: true, itemCount: pipelineItems.length, sourceDistribution: distribution, pipeline: true }
 
   let fullText = ''
 
