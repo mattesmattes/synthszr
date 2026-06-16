@@ -157,9 +157,30 @@ async function persistDraftPost(supabase: AdminClient, job: ArticleJob, fullMark
   const { metadata, body } = parseArticleContent(fullMarkdown)
   const title = metadata.title || `Artikel`
 
-  let tiptap = markdownToTiptap(body)
-  const { content, changes } = sanitizeTiptapUrls(tiptap)
-  if (changes.length) tiptap = content as typeof tiptap
+  // TipTap's generateJSON (inside markdownToTiptap) needs a DOM. The cron runs
+  // in Node without `window`, so provide a temporary jsdom global ONLY for the
+  // synchronous conversion, then restore it — a reused (Fluid Compute) instance
+  // must not keep a fake `window` that would flip browser/server branches in
+  // later code. No `await` between setup and teardown → no request interleaving.
+  const g = globalThis as Record<string, unknown>
+  const hadWindow = 'window' in g
+  if (!hadWindow) {
+    const { JSDOM } = await import('jsdom')
+    const dom = new JSDOM('')
+    g.window = dom.window as unknown
+    g.document = dom.window.document as unknown
+  }
+  let tiptap: Record<string, unknown>
+  try {
+    tiptap = markdownToTiptap(body)
+    const { content, changes } = sanitizeTiptapUrls(tiptap)
+    if (changes.length) tiptap = content as Record<string, unknown>
+  } finally {
+    if (!hadWindow) {
+      delete g.window
+      delete g.document
+    }
+  }
 
   const { data: newPost, error } = await supabase
     .from('generated_posts')
