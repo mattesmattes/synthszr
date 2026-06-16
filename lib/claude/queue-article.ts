@@ -39,6 +39,9 @@ export interface QueueArticleParams {
   useSelected?: boolean     // Use manually selected items (status='selected'); default true
   maxItems?: number         // Max items if using/​filling balanced selection; default 25
   vocabularyIntensity?: number // 0–100; default 50
+  model?: string            // Override the ghostwriter model (e.g. the scheduled
+                            // auto-post runs Sonnet to fit the 300s cron cap);
+                            // defaults to the 'ghostwriter' use-case (Opus).
 }
 
 /** Loosely-typed event — all fields optional so both consumers read directly. */
@@ -63,10 +66,12 @@ export async function* generateQueueArticle(params: QueueArticleParams): AsyncGe
     useSelected = true,
     maxItems = 25,
     vocabularyIntensity = 50,
+    model: modelOverride,
   } = params
 
-  // Model comes from central settings (admin/settings → KI-Modelle tab)
-  const configModel = await getModelForUseCase('ghostwriter')
+  // Model: explicit override (e.g. cron auto-post) wins; otherwise central
+  // settings (admin/settings → KI-Modelle tab, 'ghostwriter' use-case).
+  const configModel = modelOverride ?? (await getModelForUseCase('ghostwriter'))
   const model = configModel as AIModel
   console.log(`[Ghostwriter-Queue] Model: ${model} (from settings), Items: ${queueItemIds?.length || 'auto-select'}, useSelected: ${useSelected}, maxItems: ${maxItems}`)
 

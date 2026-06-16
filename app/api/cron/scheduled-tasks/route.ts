@@ -5,7 +5,7 @@ import { processWebcrawl } from '@/lib/webcrawl/processor'
 import { processNewsletters } from '@/lib/newsletter/processor'
 import { processAnalysis } from '@/lib/analysis/processor'
 import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPublishedPostsQueueItems } from '@/lib/news-queue/service'
-import { MAX_DIGEST_SECTIONS, MAX_CONTENT_PREVIEW_CHARS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresholds'
+import { MAX_DIGEST_SECTIONS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresholds'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
 import { parseArticleContent, generateSlug } from '@/lib/utils/parse-article-content'
 import { sanitizeTiptapUrls } from '@/lib/utils/url-verifier'
@@ -217,7 +217,7 @@ export async function GET(request: NextRequest) {
       } else {
         console.log('[Scheduler] Triggering post generation...')
         try {
-          await generateDailyPost(supabase, baseUrl, config.postGeneration.maxItems ?? MAX_DIGEST_SECTIONS)
+          await generateDailyPost(supabase, config.postGeneration.maxItems ?? MAX_DIGEST_SECTIONS)
           await markTaskRun(supabase, 'post_generation')
           results.postGeneration = 'completed'
         } catch (error) {
@@ -345,7 +345,7 @@ export async function GET(request: NextRequest) {
 }
 
 // Generate a blog post from the latest digest
-async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>, baseUrl: string, maxItems: number = MAX_DIGEST_SECTIONS) {
+async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>, maxItems: number = MAX_DIGEST_SECTIONS) {
   // Get the latest digest — used to link the post (digest_id) and to keep this
   // task idempotent (one auto-post per digest/day).
   const { data: digest } = await supabase
@@ -393,9 +393,12 @@ async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>,
   let usedQueueItemIds: string[] = []
   let usedModel: string | null = null
 
+  // Auto-post runs on Sonnet (≈2× faster than Opus) so the full article count
+  // fits the 300s cron cap with margin for insert + markTaskRun. Manual
+  // create-article keeps Opus (settings default). 'claude-sonnet-4-6' = live id.
   // Same SSE-style events as the manual flow: reset on `clear` (proofread/dedup
   // rewrites), append on `text`, capture model + used item ids on `done`.
-  for await (const ev of generateQueueArticle({ useSelected: true, maxItems, vocabularyIntensity: 50 })) {
+  for await (const ev of generateQueueArticle({ useSelected: true, maxItems, vocabularyIntensity: 50, model: 'claude-sonnet-4-6' })) {
     if (ev.clear) blogContent = ''
     if (ev.text) blogContent += ev.text
     if (ev.model) usedModel = ev.model
@@ -447,62 +450,11 @@ async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>,
 
   console.log('[PostGen] Created queue-based draft post:', newPost.id, `(${usedQueueItemIds.length} queue items, model: ${usedModel})`)
 
-  // Trigger image generation
-  if (newPost && body) {
-    // Split blog content into sections by headings
-    const sections: Array<{ title: string; content: string }> = []
-    const headingRegex = /^(#{1,2})\s+(.+)$/gm
-    const matches = [...body.matchAll(headingRegex)]
-
-    for (let i = 0; i < matches.length; i++) {
-      const match = matches[i]
-      const sectionTitle = match[2].trim()
-      const startIndex = match.index! + match[0].length
-      const endIndex = matches[i + 1]?.index ?? body.length
-      const content = body.slice(startIndex, endIndex).trim()
-
-      if (content.length > 50) {
-        sections.push({ title: sectionTitle, content })
-      }
-    }
-
-    // Cap image generation at MAX_DIGEST_SECTIONS regardless of article count —
-    // 40 image calls would blow the timeout; cover + a couple sections suffice.
-    // Thumbnails remain a manual step (edit page → Bilder tab), like manual drafts.
-    const sectionsToProcess = sections.slice(0, MAX_DIGEST_SECTIONS)
-
-    if (sectionsToProcess.length > 0) {
-      console.log(`[PostGen] Triggering image generation for ${sectionsToProcess.length} sections`)
-
-      const imageController = new AbortController()
-      const imageTimeoutId = setTimeout(() => imageController.abort(), 30000) // 30s timeout
-
-      try {
-        await fetch(`${baseUrl}/api/generate-image`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-          },
-          body: JSON.stringify({
-            postId: newPost.id,
-            newsItems: sectionsToProcess.map(s => ({
-              text: `${s.title}\n\n${s.content.slice(0, MAX_CONTENT_PREVIEW_CHARS)}`,
-            })),
-          }),
-          signal: imageController.signal,
-        })
-        clearTimeout(imageTimeoutId)
-      } catch (err) {
-        clearTimeout(imageTimeoutId)
-        if (err instanceof Error && err.name === 'AbortError') {
-          console.error('[PostGen] Image generation timeout after 30s')
-        } else {
-          console.error('[PostGen] Image generation error:', err)
-        }
-      }
-    }
-  }
+  // Cover image is intentionally NOT generated here: a cron→/api/generate-image
+  // subrequest hits the same 401 (apex redirect / deployment protection) as the
+  // generation subrequest did, and moving image generation in-process is a
+  // separate change. The cover is generated on review (edit page → Bilder tab),
+  // consistent with how the manual draft flow defers thumbnails.
 
   console.log('[PostGen] Post generation complete')
 }
