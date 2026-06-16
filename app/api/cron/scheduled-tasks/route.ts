@@ -9,6 +9,7 @@ import { MAX_DIGEST_SECTIONS, MAX_CONTENT_PREVIEW_CHARS, MIN_ANALYSIS_LENGTH } f
 import { verifyCronAuth } from '@/lib/security/cron-auth'
 import { parseArticleContent, generateSlug } from '@/lib/utils/parse-article-content'
 import { sanitizeTiptapUrls } from '@/lib/utils/url-verifier'
+import { generateQueueArticle } from '@/lib/claude/queue-article'
 
 export const runtime = 'nodejs'
 export const maxDuration = 800 // 13 minutes max (Vercel Pro limit)
@@ -381,80 +382,25 @@ async function generateDailyPost(supabase: ReturnType<typeof createAdminClient>,
     .eq('is_active', true)
     .single()
 
-  // Generate via the SAME queue pipeline the manual create-article flow uses
-  // (/api/ghostwriter-queue): manually-selected items first, filled up from the
-  // balanced selection, written by the ghostwriter model from settings. Calling
-  // the canonical route (instead of duplicating its ~250 lines of selection +
-  // pipeline + dedup) is what keeps this caller from drifting out of sync — the
-  // exact failure mode that previously left this task silently broken.
-  // Bounded at 280s so it fails cleanly before the 300s function cap.
-  const ghostwriterController = new AbortController()
-  const ghostwriterTimeoutId = setTimeout(() => ghostwriterController.abort(), 280000)
-
+  // Generate via the SAME queue pipeline the manual create-article flow uses,
+  // IN-PROCESS via generateQueueArticle(). An HTTP subrequest from the cron
+  // fails: the cron's request host is the apex (307→www, which drops the
+  // Authorization header) or the protected *.vercel.app deployment URL (401),
+  // so the subrequest never reaches the route. Calling the shared orchestration
+  // directly (no HTTP, no auth, no redirect) is the same pattern as
+  // processNewsletters/processWebcrawl. Bounded by the 300s function cap.
   let blogContent = ''
   let usedQueueItemIds: string[] = []
   let usedModel: string | null = null
 
-  try {
-    const response = await fetch(`${baseUrl}/api/ghostwriter-queue`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-      },
-      body: JSON.stringify({
-        useSelected: true,
-        maxItems,
-        vocabularyIntensity: 50,
-      }),
-      signal: ghostwriterController.signal,
-    })
-
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => '')
-      throw new Error(`Ghostwriter-Queue API failed: ${response.status} ${errBody.slice(0, 200)}`)
-    }
-
-    const reader = response.body?.getReader()
-    if (!reader) throw new Error('No reader')
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    // SSE consume, mirrors create-article's accumulator: reset on `clear`
-    // (proofread/dedup rewrites), append on `text`, capture model + used item
-    // ids on `done`. Buffer across chunks so events split mid-stream survive.
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        try {
-          const data = JSON.parse(line.slice(6))
-          if (data.clear) blogContent = ''
-          if (data.text) blogContent += data.text
-          if (data.model) usedModel = data.model
-          if (data.done && Array.isArray(data.queueItemIds)) usedQueueItemIds = data.queueItemIds
-          if (data.error) throw new Error(data.error)
-        } catch (e) {
-          if (e instanceof SyntaxError) continue
-          throw e
-        }
-      }
-    }
-  } catch (error) {
-    clearTimeout(ghostwriterTimeoutId)
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('[PostGen] Ghostwriter-Queue timeout after 280s')
-    }
-    throw error
+  // Same SSE-style events as the manual flow: reset on `clear` (proofread/dedup
+  // rewrites), append on `text`, capture model + used item ids on `done`.
+  for await (const ev of generateQueueArticle({ useSelected: true, maxItems, vocabularyIntensity: 50 })) {
+    if (ev.clear) blogContent = ''
+    if (ev.text) blogContent += ev.text
+    if (ev.model) usedModel = ev.model
+    if (ev.done && Array.isArray(ev.queueItemIds)) usedQueueItemIds = ev.queueItemIds
   }
-  clearTimeout(ghostwriterTimeoutId)
 
   if (!blogContent.trim()) {
     throw new Error('No blog content generated')
