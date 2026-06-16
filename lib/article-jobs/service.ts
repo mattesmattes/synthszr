@@ -285,7 +285,10 @@ export async function advanceArticleJob(): Promise<string> {
     // Tick error: leave the job 'processing' so the next tick resumes from the
     // stored cursor. attempts (incremented above) guards against an infinite
     // loop — the max_attempts check at the top eventually trips it to 'error'.
+    // Persist the message (status stays 'processing') for debuggability.
+    const msg = err instanceof Error ? (err.stack || err.message) : String(err)
     console.error('[ArticleJobs] advance error:', err)
+    await supabase.from('article_jobs').update({ error_message: msg.slice(0, 1000) }).eq('id', job.id)
     return 'tick_error'
   }
 }
