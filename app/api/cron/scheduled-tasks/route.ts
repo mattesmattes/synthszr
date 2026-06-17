@@ -34,7 +34,8 @@ interface ScheduleConfig {
     enabled: boolean
     hour: number
     minute: number
-    maxItems?: number // number of news articles (digest sections) in the auto-generated post
+    maxItems?: number
+    effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
   }
   newsletterSend?: {
     enabled: boolean
@@ -233,7 +234,7 @@ export async function GET(request: NextRequest) {
               digestId: digest.id,
               maxItems: config.postGeneration.maxItems ?? MAX_DIGEST_SECTIONS,
               model,
-              effort: 'medium',
+              effort: config.postGeneration.effort ?? 'high',
               vocabularyIntensity: 50,
             })
             results.postGeneration = r.created ? 'job_enqueued' : `skipped_${r.reason}`
