@@ -145,39 +145,52 @@ export async function markJobError(id: string, message: string): Promise<void> {
 }
 
 /**
+ * Server-safe markdown → TipTap JSON.
+ *
+ * @tiptap's generateJSON() calls elementFromString(), which hard-throws
+ * "[tiptap error]: there is no window object". markdown-to-tiptap.ts is also
+ * imported by the client (create-article), so Turbopack dead-code-eliminates the
+ * runtime `typeof window` guard in the server chunk — a global jsdom shim does
+ * NOT help there. We therefore bypass elementFromString entirely: build the HTML
+ * with marked, parse it with a jsdom DOM + prosemirror's DOMParser, using the
+ * SAME extension schema (via getSchema) as markdownToTiptap. getSchema and
+ * prosemirror DOMParser don't touch `window`, so this works in the cron.
+ */
+async function markdownToTiptapServer(markdown: string): Promise<Record<string, unknown>> {
+  const { marked } = await import('marked')
+  const { getSchema } = await import('@tiptap/core')
+  const { DOMParser: PMDOMParser } = await import('@tiptap/pm/model')
+  const StarterKit = (await import('@tiptap/starter-kit')).default
+  const Link = (await import('@tiptap/extension-link')).default
+  const { HeadingWithQueueId } = await import('@/lib/tiptap/heading-with-queue-id')
+  const { normalizeQuotes } = await import('@/lib/utils/typography')
+  const { JSDOM } = await import('jsdom')
+
+  const html = marked.parse(normalizeQuotes(markdown, 'de'), { async: false }) as string
+  const schema = getSchema([
+    StarterKit.configure({ heading: false }),
+    HeadingWithQueueId.configure({ levels: [1, 2, 3, 4, 5, 6] }),
+    Link.configure({ openOnClick: false }),
+  ])
+  const dom = new JSDOM(`<body>${html}</body>`)
+  return PMDOMParser.fromSchema(schema).parse(dom.window.document.body).toJSON() as Record<string, unknown>
+}
+
+/**
  * Inserts the assembled markdown as a draft generated_post. Mirrors the manual
  * saveAsDraft flow (parse frontmatter → markdown→TipTap → URL sanitize).
  * Returns the new post id.
  */
 async function persistDraftPost(supabase: AdminClient, job: ArticleJob, fullMarkdown: string): Promise<string> {
   const { parseArticleContent, generateSlug } = await import('@/lib/utils/parse-article-content')
-  const { markdownToTiptap } = await import('@/lib/utils/markdown-to-tiptap')
   const { sanitizeTiptapUrls } = await import('@/lib/utils/url-verifier')
 
   const { metadata, body } = parseArticleContent(fullMarkdown)
   const title = metadata.title || `Artikel`
 
-  // TipTap's generateJSON (inside markdownToTiptap) needs a DOM. The cron runs
-  // in Node without `window`, so provide a temporary jsdom global ONLY for the
-  // synchronous conversion, then restore it — a reused (Fluid Compute) instance
-  // must not keep a fake `window` that would flip browser/server branches in
-  // later code. No `await` between setup and teardown → no request interleaving.
-  const g = globalThis as Record<string, unknown>
-  const { JSDOM } = await import('jsdom')
-  const dom = new JSDOM('')
-  const prevWindow = g.window
-  const prevDocument = g.document
-  g.window = dom.window as unknown
-  g.document = dom.window.document as unknown
-  let tiptap: Record<string, unknown>
-  try {
-    tiptap = markdownToTiptap(body)
-    const { content, changes } = sanitizeTiptapUrls(tiptap)
-    if (changes.length) tiptap = content as Record<string, unknown>
-  } finally {
-    g.window = prevWindow
-    g.document = prevDocument
-  }
+  let tiptap = await markdownToTiptapServer(body)
+  const { content, changes } = sanitizeTiptapUrls(tiptap)
+  if (changes.length) tiptap = content as Record<string, unknown>
 
   const { data: newPost, error } = await supabase
     .from('generated_posts')
