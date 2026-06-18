@@ -74,12 +74,15 @@ export async function selectAndEnrichItems(opts: {
   queueItemIds?: string[]
   useSelected?: boolean
   maxItems?: number
+  dedupeTopics?: boolean   // Drop same-event-different-source near-duplicates
+                           // (semantic embedding dedup). Used by the unattended
+                           // auto-post; the manual flow leaves it off.
 }): Promise<{
   pipelineItems: PipelineItem[]
   usedItemIds: string[]
   sourceDistribution: { source: string; count: number; percentage: number }[]
 }> {
-  const { queueItemIds, useSelected = true, maxItems = 25 } = opts
+  const { queueItemIds, useSelected = true, maxItems = 25, dedupeTopics = false } = opts
 
   const supabase = createAdminClient()
 
@@ -219,6 +222,42 @@ export async function selectAndEnrichItems(opts: {
   }
 
   console.log(`[Ghostwriter-Queue] Enriched ${selectedItems.length} items with content`)
+
+  // Semantic topic dedup (auto-post path only): the same news event is reported
+  // by several sources with completely different headlines, which the title-bigram
+  // dedup in the synthesis pipeline misses. Embedding cosine similarity catches
+  // them; we keep the highest-scored item per topic. Skipped for explicit
+  // queueItemIds (a deliberate exact set chosen by a human). Best-effort — a
+  // failure inside dedupeByTopic returns the input unchanged.
+  if (dedupeTopics && !queueItemIds?.length && selectedItems.length > 1) {
+    const { dedupeByTopic } = await import('@/lib/news-queue/semantic-dedup')
+    const { kept, dropped } = await dedupeByTopic(
+      selectedItems.map(i => ({
+        id: i.id,
+        title: i.title,
+        content: i.content,
+        source_identifier: i.source_identifier,
+        total_score: (i as { total_score?: number }).total_score,
+      }))
+    )
+    if (dropped.length > 0) {
+      console.log(`[Ghostwriter-Queue] Semantic dedup: dropped ${dropped.length} duplicate-topic items, ${kept.length} unique remain`)
+      for (const d of dropped) {
+        console.log(`[Ghostwriter-Queue]   drop "${d.title.slice(0, 50)}" (sim=${d.similarity.toFixed(2)} → kept ${d.similarTo})`)
+      }
+      const keptIds = new Set(kept.map(k => k.id))
+      const droppedIds = selectedItems.filter(i => !keptIds.has(i.id)).map(i => i.id)
+      // Release dropped items back to 'pending' — selectItemsForArticle already
+      // marked them 'selected'; leaving them stuck would hide them for 24h.
+      await supabase
+        .from('news_queue')
+        .update({ status: 'pending', selected_at: null })
+        .in('id', droppedIds)
+      // Reduce to the kept set, preserving the original enriched objects.
+      const byId = new Map(selectedItems.map(i => [i.id, i]))
+      selectedItems = kept.map(k => byId.get(k.id)).filter(Boolean) as typeof selectedItems
+    }
+  }
 
   // Analyze source distribution for the selected items
   const sourceCount: Record<string, number> = {}

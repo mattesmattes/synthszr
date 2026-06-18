@@ -99,7 +99,7 @@ export async function createArticleJob(opts: {
   if (existingJob) return { created: false, reason: 'job_exists' }
 
   // Select + enrich items (shared helper — same selection as the manual flow)
-  const { pipelineItems, usedItemIds } = await selectAndEnrichItems({ maxItems: opts.maxItems })
+  const { pipelineItems, usedItemIds } = await selectAndEnrichItems({ maxItems: opts.maxItems, dedupeTopics: true })
   if (pipelineItems.length === 0) return { created: false, reason: 'no_items' }
 
   const { error } = await supabase.from('article_jobs').insert({
