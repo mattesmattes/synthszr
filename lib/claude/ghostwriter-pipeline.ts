@@ -244,13 +244,34 @@ Erstelle folgenden JSON-Plan:
   "introParagraph": "2-3 Sätze auf DEUTSCH. Direkter Einstieg mit konkreter Beobachtung, kein LLM-Stil."
 }`
 
-  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model, { temperature: 0.3, maxTokens: 6000 })
+  // 16000 statt 6000: ein Plan über bis zu 40 Items (40 Headings als volle
+  // deutsche Thesen-Sätze + ordering + bullets) übersteigt 6000 Tokens deutlich
+  // und wurde sonst mitten im JSON abgeschnitten.
+  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model, { temperature: 0.3, maxTokens: 16000 })
 
-  // Strip possible markdown code fences
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || text.match(/(\{[\s\S]*\})/)
-  const jsonStr = jsonMatch?.[1] || text
+  // JSON aus möglichen Markdown-Fences extrahieren. Robust auch gegen einen
+  // geöffneten, aber nicht geschlossenen ```json-Block (führende Fence strippen,
+  // dann den {...}-Span nehmen), damit eine abgeschnittene Antwort einen klaren
+  // Parse-Fehler liefert statt des kryptischen "Unexpected token '`'".
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
+  let jsonStr: string
+  if (fenced) {
+    jsonStr = fenced[1]
+  } else {
+    const stripped = text.trim().replace(/^```(?:json)?\s*/i, '')
+    jsonStr = stripped.match(/\{[\s\S]*\}/)?.[0] ?? stripped
+  }
 
-  const plan = JSON.parse(jsonStr) as ArticlePlan
+  let plan: ArticlePlan
+  try {
+    plan = JSON.parse(jsonStr) as ArticlePlan
+  } catch (err) {
+    const closed = jsonStr.trimEnd().endsWith('}')
+    throw new Error(
+      `planArticle: JSON.parse fehlgeschlagen (${closed ? 'vollständig' : 'abgeschnitten — Output-Budget zu klein?'}). ` +
+      `${err instanceof Error ? err.message : String(err)} | head: ${jsonStr.slice(0, 80)}`
+    )
+  }
 
   // Validate: ensure all items are in ordering
   const presentSet = new Set(plan.ordering)
@@ -385,7 +406,19 @@ async function callModelNonStreaming(
   const resolved = resolveModel(model)
 
   if (resolved?.provider === 'google') {
-    const generationConfig: { maxOutputTokens: number; temperature?: number } = { maxOutputTokens: tokenLimit }
+    // gemini-2.5-* aktivieren Thinking standardmäßig und ziehen die Thinking-Tokens
+    // aus demselben maxOutputTokens-Budget. Bei großen strukturierten Antworten
+    // (z.B. 40-Item-Artikelplan) wird die sichtbare Ausgabe dann mit
+    // finishReason=MAX_TOKENS mitten im JSON abgeschnitten — der Plan kommt als
+    // unvollständiger ```json-Block an, den JSON.parse mit "Unexpected token '`'"
+    // ablehnt. Diese Non-Streaming-Calls wollen deterministische Vollausgabe statt
+    // Chain-of-Thought, daher Thinking explizit deaktivieren (thinkingBudget: 0),
+    // damit das gesamte Budget der Antwort zur Verfügung steht.
+    const generationConfig: {
+      maxOutputTokens: number
+      temperature?: number
+      thinkingConfig?: { thinkingBudget: number }
+    } = { maxOutputTokens: tokenLimit, thinkingConfig: { thinkingBudget: 0 } }
     if (options?.temperature !== undefined) generationConfig.temperature = options.temperature
     const geminiModel = genAI.getGenerativeModel({
       model: resolved.modelId,
