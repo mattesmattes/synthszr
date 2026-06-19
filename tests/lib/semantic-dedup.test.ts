@@ -44,4 +44,42 @@ describe('clusterByEmbedding', () => {
     const one = [{ id: '1', title: 'a' }]
     expect(clusterByEmbedding(one, [A], 0.8).kept).toEqual(one)
   })
+
+  it('tags batch duplicates with reason "batch"', () => {
+    const items = [{ id: '1', title: 'x' }, { id: '2', title: 'y' }]
+    const { dropped } = clusterByEmbedding(items, [A, A_NEAR], 0.8)
+    expect(dropped[0].reason).toBe('batch')
+  })
+})
+
+describe('clusterByEmbedding — recent coverage (prior embeddings)', () => {
+  it('drops an item that matches recent coverage, reason "recent_coverage"', () => {
+    const items = [{ id: '1', title: 'DeepSeek raises $7.4B' }]
+    const prior = [{ title: 'DeepSeek $7.4B round (yesterday)', embedding: A_NEAR }]
+    const { kept, dropped } = clusterByEmbedding(items, [A], 0.8, prior)
+    expect(kept).toHaveLength(0)
+    expect(dropped).toHaveLength(1)
+    expect(dropped[0].reason).toBe('recent_coverage')
+    expect(dropped[0].similarTo).toBe('DeepSeek $7.4B round (yesterday)')
+    expect(dropped[0].similarity).toBeGreaterThanOrEqual(0.8)
+  })
+
+  it('keeps an item whose embedding is unlike all recent coverage', () => {
+    const items = [{ id: '1', title: 'fresh topic' }]
+    const prior = [{ title: 'old unrelated story', embedding: ORTHOGONAL }]
+    const { kept, dropped } = clusterByEmbedding(items, [A], 0.8, prior)
+    expect(kept.map(k => k.id)).toEqual(['1'])
+    expect(dropped).toHaveLength(0)
+  })
+
+  it('drops only the covered item, keeps the unrelated one', () => {
+    // item 1 is unrelated to coverage (kept); item 2 repeats covered news (dropped)
+    const items = [{ id: '1', title: 'unrelated' }, { id: '2', title: 'repeat' }]
+    const prior = [{ title: 'covered last week', embedding: A }]
+    const { kept, dropped } = clusterByEmbedding(items, [ORTHOGONAL, A_NEAR], 0.8, prior)
+    expect(kept.map(k => k.id)).toEqual(['1'])
+    expect(dropped).toHaveLength(1)
+    expect(dropped[0].id).toBe('2')
+    expect(dropped[0].reason).toBe('recent_coverage')
+  })
 })

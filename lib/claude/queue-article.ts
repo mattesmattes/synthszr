@@ -238,12 +238,16 @@ export async function selectAndEnrichItems(opts: {
         content: i.content,
         source_identifier: i.source_identifier,
         total_score: (i as { total_score?: number }).total_score,
-      }))
+      })),
+      // Also drop news already covered in posts published in the last 3 days.
+      { recentCoverageDays: 3 }
     )
     if (dropped.length > 0) {
-      console.log(`[Ghostwriter-Queue] Semantic dedup: dropped ${dropped.length} duplicate-topic items, ${kept.length} unique remain`)
+      const batchN = dropped.filter(d => d.reason === 'batch').length
+      const coverN = dropped.filter(d => d.reason === 'recent_coverage').length
+      console.log(`[Ghostwriter-Queue] Semantic dedup: dropped ${dropped.length} items (${batchN} batch-dupe, ${coverN} already-covered), ${kept.length} unique remain`)
       for (const d of dropped) {
-        console.log(`[Ghostwriter-Queue]   drop "${d.title.slice(0, 50)}" (sim=${d.similarity.toFixed(2)} → kept ${d.similarTo})`)
+        console.log(`[Ghostwriter-Queue]   drop[${d.reason}] "${d.title.slice(0, 50)}" (sim=${d.similarity.toFixed(2)} → ${d.similarTo})`)
       }
       const keptIds = new Set(kept.map(k => k.id))
       const droppedIds = selectedItems.filter(i => !keptIds.has(i.id)).map(i => i.id)
