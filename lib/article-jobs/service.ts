@@ -184,6 +184,24 @@ async function markdownToTiptapServer(markdown: string): Promise<Record<string, 
 async function persistDraftPost(supabase: AdminClient, job: ArticleJob, fullMarkdown: string): Promise<string> {
   const { parseArticleContent, generateSlug } = await import('@/lib/utils/parse-article-content')
   const { sanitizeTiptapUrls } = await import('@/lib/utils/url-verifier')
+  const { buildUniqueSlug } = await import('@/lib/article-jobs/unique-slug')
+
+  // Idempotency: a previous finalize tick may have inserted the draft and then
+  // timed out before persisting status=done, leaving the job 'processing'. On the
+  // next tick we'd otherwise insert a SECOND draft and collide on the unique slug.
+  // Reuse the existing draft for this digest instead of re-inserting.
+  const { data: existingDraft } = await supabase
+    .from('generated_posts')
+    .select('id')
+    .eq('digest_id', job.digest_id)
+    .eq('status', 'draft')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (existingDraft) {
+    console.log(`[ArticleJobs] persistDraftPost: draft for digest already exists (${existingDraft.id}), reusing`)
+    return existingDraft.id
+  }
 
   const { metadata, body } = parseArticleContent(fullMarkdown)
   const title = metadata.title || `Artikel`
@@ -192,12 +210,22 @@ async function persistDraftPost(supabase: AdminClient, job: ArticleJob, fullMark
   const { content, changes } = sanitizeTiptapUrls(tiptap)
   if (changes.length) tiptap = content as Record<string, unknown>
 
+  // Unique slug: generateSlug is deterministic, so a duplicate/near-identical
+  // title would violate idx_generated_posts_slug_unique and fail the insert.
+  const slug = await buildUniqueSlug(
+    metadata.slug || generateSlug(title),
+    async (s) => {
+      const { data } = await supabase.from('generated_posts').select('id').eq('slug', s).maybeSingle()
+      return !!data
+    },
+  )
+
   const { data: newPost, error } = await supabase
     .from('generated_posts')
     .insert({
       digest_id: job.digest_id,
       title,
-      slug: metadata.slug || generateSlug(title),
+      slug,
       excerpt: metadata.excerpt || null,
       category: metadata.category || 'AI & Tech',
       content: JSON.stringify(tiptap),
