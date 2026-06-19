@@ -367,6 +367,26 @@ export async function GET(request: NextRequest) {
     results.appleEpisodeLinks = 'error'
   }
 
+  // Cron heartbeat: unconditional record of every completed invocation so the
+  // tick cadence is observable (Vercel retains runtime logs only briefly). The
+  // gap between consecutive heartbeats = the real cron interval; the articleJob
+  // field shows whether each tick reached + what it did to the open job.
+  try {
+    await supabase
+      .from('settings')
+      .upsert({
+        key: 'cron_heartbeat',
+        value: {
+          timestamp: now.toISOString(),
+          mez: `${currentHour}:${String(currentMinute).padStart(2, '0')}`,
+          articleJob: results.articleJob ?? null,
+          postGeneration: results.postGeneration ?? null,
+        },
+      }, { onConflict: 'key' })
+  } catch (error) {
+    console.error('[Scheduler] heartbeat write failed:', error)
+  }
+
   return NextResponse.json({
     success: true,
     timestamp: now.toISOString(),
