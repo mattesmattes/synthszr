@@ -13,6 +13,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { getModelForUseCase } from '@/lib/ai/model-config'
+import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import {
   getActiveLearnedPatterns,
   findSimilarEditExamples,
@@ -388,6 +389,10 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   if (!trimmed.startsWith('##')) {
     trimmed = `## ${heading}\n\n${trimmed}`
   }
+
+  // Company-Tag/Quelle-Zeile an den letzten Absatz der Zusammenfassung anhängen
+  // statt sie als eigenen Absatz stehen zu lassen.
+  trimmed = joinCompanyTagToSummary(trimmed)
 
   return trimmed
 }
