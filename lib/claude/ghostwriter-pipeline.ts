@@ -826,10 +826,12 @@ async function proofreadText(text: string, model: AIModel): Promise<string> {
     text,
     PROOFREADING_PROMPT,
     model,
-    // 100000 lag über Haikus Output-Cap (Pass wäre still fehlgeschlagen). 32000
-    // reicht für den ganzen Artikel und streamt (Bedingung > 16384). temperature
-    // niedrig, weil Korrektur deterministisch sein soll, nicht kreativ.
-    { maxTokens: 32000, temperature: 0.1 },
+    // 64000 = Haiku-4.5 Output-Cap. 32000 reichte für lange manuelle Artikel
+    // NICHT — der korrigierte Output wurde mitten im Satz abgeschnitten und
+    // ersetzte den vollständigen Artikel (der Aufrufer prüft zusätzlich via
+    // isLikelyTruncated). Streamt (Bedingung > 16384). temperature niedrig,
+    // weil Korrektur deterministisch sein soll, nicht kreativ.
+    { maxTokens: 64000, temperature: 0.1 },
   )
   return corrected.trim()
 }

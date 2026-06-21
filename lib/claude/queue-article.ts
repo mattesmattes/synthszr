@@ -30,6 +30,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
 import { runGhostwriterPipeline, type PipelineItem } from '@/lib/claude/ghostwriter-pipeline'
+import { isLikelyTruncated } from '@/lib/claude/rewrite-truncation'
 import { getBalancedSelection, getSelectedItems, selectItemsForArticle, deriveSourceUrl } from '@/lib/news-queue/service'
 import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
 import { getModelForUseCase } from '@/lib/ai/model-config'
@@ -366,10 +367,16 @@ export async function* generateQueueArticle(params: QueueArticleParams): AsyncGe
     } else if (event.type === 'proofreading') {
       yield { phase: 'proofreading', message: event.message }
     } else if (event.type === 'proofread') {
-      // Replace entire text with proofread version
-      yield { clear: true }
-      yield { text: event.text }
-      fullText = event.text
+      // Replace entire text with the proofread version — but ONLY if it wasn't
+      // truncated at max_tokens. A cut-off proofread would otherwise replace the
+      // complete article with a version that ends mid-sentence.
+      if (!isLikelyTruncated(fullText, event.text)) {
+        yield { clear: true }
+        yield { text: event.text }
+        fullText = event.text
+      } else {
+        console.warn(`[Ghostwriter-Queue] Proofread truncated (${event.text.length}/${fullText.length} chars) — keeping original`)
+      }
     }
   }
 
@@ -380,9 +387,24 @@ export async function* generateQueueArticle(params: QueueArticleParams): AsyncGe
       .map(([m, p]) => `${m} (${p.length}x)`)
       .join(', ')
     yield { phase: 'deduplication', message: `Prüfe auf wiederholte Metaphern: ${duplicateList}...` }
-    yield { clear: true }
-    for await (const chunk of streamMetaphorDeduplication(fullText, duplicates, model)) {
-      yield { text: chunk }
+    // Accumulate the full rewrite first, then swap it in atomically — only if it
+    // wasn't truncated. Streaming chunks live would commit a cut-off rewrite to
+    // the editor before we could detect the truncation. Best-effort: any failure
+    // keeps the (complete) pre-dedup text.
+    try {
+      let deduped = ''
+      for await (const chunk of streamMetaphorDeduplication(fullText, duplicates, model)) {
+        deduped += chunk
+      }
+      if (deduped.trim().length > 0 && !isLikelyTruncated(fullText, deduped)) {
+        yield { clear: true }
+        yield { text: deduped }
+        fullText = deduped
+      } else {
+        console.warn(`[Ghostwriter-Queue] Metaphor dedup truncated (${deduped.length}/${fullText.length} chars) — keeping original`)
+      }
+    } catch (err) {
+      console.error('[Ghostwriter-Queue] Metaphor dedup failed, keeping original:', err)
     }
   }
 

@@ -413,7 +413,10 @@ ${originalText}`
 
     const stream = anthropic.messages.stream({
       model: modelId,
-      max_tokens: 16384,
+      // 64000: 16384 schnitt lange Artikel beim Metaphern-Rewrite mitten im Satz
+      // ab. Der Aufrufer prüft zusätzlich via isLikelyTruncated und verwirft eine
+      // abgeschnittene Umschreibung, statt den vollständigen Artikel zu ersetzen.
+      max_tokens: 64000,
       system: deduplicationSystem,
       messages: [{ role: 'user', content: deduplicationPrompt }],
     })
