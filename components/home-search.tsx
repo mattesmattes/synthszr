@@ -12,6 +12,7 @@ interface PostHit {
   excerpt: string | null
   snippet: string | null
   type: 'manual' | 'ai'
+  created_at: string
 }
 
 interface CompanyHit {
@@ -82,6 +83,24 @@ const STRINGS: Record<string, SearchStrings> = {
 
 function getStrings(locale: string): SearchStrings {
   return STRINGS[locale] || STRINGS.en
+}
+
+// Map our short locale codes to BCP-47 tags for date formatting.
+const DATE_LOCALE: Record<string, string> = {
+  de: 'de-DE',
+  en: 'en-US',
+  cs: 'cs-CZ',
+  nds: 'de-DE',
+}
+
+function formatHitDate(iso: string, locale: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString(DATE_LOCALE[locale] || 'en-US', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
 }
 
 /**
@@ -365,8 +384,16 @@ export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
                           className="block px-4 py-3 hover:bg-muted/30 transition-colors"
                           onClick={() => setQuery('')}
                         >
-                          <div className="font-medium text-sm leading-snug">
-                            <HighlightedText text={p.title} query={query} />
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="font-medium text-sm leading-snug min-w-0">
+                              <HighlightedText text={p.title} query={query} />
+                            </div>
+                            <time
+                              dateTime={p.created_at}
+                              className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0 mt-0.5"
+                            >
+                              {formatHitDate(p.created_at, locale)}
+                            </time>
                           </div>
                           {previewText && (
                             <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
