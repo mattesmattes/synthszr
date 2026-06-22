@@ -84,9 +84,15 @@ export function GmailCountdown() {
             : `Noch ${daysLeft} Tage bis zum Ablauf der Gmail-Verbindung`}
         </p>
         <p className="text-sm opacity-90">
-          Gmail in den Einstellungen unter „Verbindungen" neu verbinden, um zurückzusetzen.
+          Gmail neu verbinden, um den Countdown zurückzusetzen.
         </p>
       </div>
+      <a
+        href="/api/gmail/authorize"
+        className="ml-auto shrink-0 rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-900 shadow-sm transition-colors hover:bg-white/90"
+      >
+        Neu verbinden
+      </a>
     </div>
   )
 }
