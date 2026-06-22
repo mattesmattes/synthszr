@@ -40,6 +40,7 @@ export async function GET() {
         connected: true,
         email: profile.email,
         messagesTotal: profile.messagesTotal,
+        updatedAt: tokenData.updated_at,
       })
     } catch {
       // Token might be invalid
@@ -47,6 +48,7 @@ export async function GET() {
         connected: false,
         email: tokenData.email,
         error: 'Token expired or invalid',
+        updatedAt: tokenData.updated_at,
       })
     }
   } catch (error) {

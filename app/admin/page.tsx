@@ -62,6 +62,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { GmailCountdown } from '@/components/gmail-countdown'
 import { TiptapEditor } from '@/components/tiptap-editor'
 import { TiptapRenderer } from '@/components/tiptap-renderer'
 import { PostImageGallery } from '@/components/post-image-gallery'
@@ -718,6 +719,7 @@ export default function AdminPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-full overflow-x-hidden">
+      <GmailCountdown />
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
