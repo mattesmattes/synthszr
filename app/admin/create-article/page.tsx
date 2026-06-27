@@ -309,42 +309,72 @@ export default function CreateArticlePage() {
         const err = await createRes.json().catch(() => ({}))
         throw new Error(err.error || 'Job konnte nicht angelegt werden')
       }
-      const { jobId } = await createRes.json()
+      const { jobId, itemCount } = await createRes.json()
 
-      const phaseLabel: Record<string, string> = {
-        planning: 'Struktur wird geplant…',
-        writing: 'Abschnitte werden geschrieben',
-        finalizing: 'Artikel wird finalisiert…',
+      const startMs = Date.now()
+      const fmtElapsed = () => {
+        const s = Math.round((Date.now() - startMs) / 1000)
+        return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+      }
+      type JobStatus = { status?: string; phase?: string | null; cursor?: number; total?: number; generatedPostId?: string | null; error?: string | null }
+      const describe = (st: JobStatus) => {
+        const total = st.total || itemCount || 0
+        switch (st.phase) {
+          case 'planning': return `Plane Artikel-Struktur${total ? ` für ${total} News` : ''}…`
+          case 'writing': {
+            const cur = Math.min(st.cursor ?? 0, total || (st.cursor ?? 0))
+            return `Schreibe & lektoriere Abschnitt ${cur}${total ? ` von ${total}` : ''}`
+          }
+          case 'finalizing': return 'Prüfe Metaphern & stelle Artikel fertig…'
+          default: return 'Generiere Artikel…'
+        }
+      }
+      const applyStatus = (st: JobStatus) => {
+        setPipelineStatus(`${describe(st)} · ${fmtElapsed()}`)
+        const total = st.total || 0
+        if (st.phase === 'writing' && total > 0) {
+          setPipelineProgress({ current: Math.min(st.cursor ?? 0, total), total })
+        } else {
+          setPipelineProgress(null)
+        }
       }
 
       let postId: string | null = null
       while (true) {
-        const advRes = await fetch('/api/admin/article-job?advance=1', {
+        // Run one advance (a full phase — can take minutes) while polling a light
+        // status endpoint in parallel, so the UI shows live section progress and
+        // an elapsed timer instead of freezing for the whole phase.
+        let advanceDone = false
+        const advancePromise = fetch('/api/admin/article-job?advance=1', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({ jobId }),
-        })
+        }).finally(() => { advanceDone = true })
+
+        void (async () => {
+          while (!advanceDone) {
+            await new Promise(r => setTimeout(r, 2500))
+            if (advanceDone) break
+            try {
+              const s = await fetch(`/api/admin/article-job?jobId=${jobId}`, { credentials: 'include' })
+              if (s.ok) applyStatus(await s.json())
+            } catch { /* transient poll error — keep last status */ }
+          }
+        })()
+
+        const advRes = await advancePromise
         if (!advRes.ok) {
           const err = await advRes.json().catch(() => ({}))
           throw new Error(err.error || 'Generierung fehlgeschlagen')
         }
-        const st = await advRes.json()
-
-        if (st.phase === 'writing' && st.total > 0) {
-          const cur = Math.min(st.cursor, st.total)
-          setPipelineStatus(`Abschnitt ${cur} von ${st.total}`)
-          setPipelineProgress({ current: cur, total: st.total })
-        } else {
-          setPipelineStatus(phaseLabel[st.phase ?? ''] ?? 'Generiere Artikel…')
-          setPipelineProgress(null)
-        }
+        const st: JobStatus = await advRes.json()
+        applyStatus(st)
 
         if (st.status === 'error') throw new Error(st.error || 'Job fehlgeschlagen')
-        if (st.status === 'done') { postId = st.generatedPostId; break }
+        if (st.status === 'done') { postId = st.generatedPostId ?? null; break }
 
-        // Brief pause between phases to keep the poll loop gentle.
-        await new Promise(resolve => setTimeout(resolve, 1500))
+        await new Promise(resolve => setTimeout(resolve, 1200))
       }
 
       if (!postId) throw new Error('Kein Entwurf erzeugt')

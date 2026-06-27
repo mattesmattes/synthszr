@@ -634,6 +634,7 @@ export async function writeSectionsBatch(
   budgetMs: number,
   startedAt: number,
   proofreadModel?: AIModel,
+  onBatch?: (nextCursor: number, newSections: string[]) => Promise<void>,
 ): Promise<WriteBatchResult> {
   const out: string[] = []
   let i = cursor
@@ -665,6 +666,9 @@ export async function writeSectionsBatch(
     }))
     out.push(...results.map(r => r + '\n\n'))
     i += batch.length
+    // Persist progress after each batch so a parallel status poll shows live
+    // section-by-section progress (and resume is batch-granular, not just per-tick).
+    if (onBatch) { try { await onBatch(i, [...out]) } catch (err) { console.warn('[Pipeline] onBatch persist failed:', err) } }
     if (Date.now() - startedAt > budgetMs) break   // Budget erschöpft -> Rest im nächsten Tick
   }
   return { sections: out, nextCursor: i, done: i >= orderedItems.length }

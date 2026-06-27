@@ -393,6 +393,7 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
       // Proofread runs per-section here (resumable) instead of one full-article
       // proofread in finalize that exceeded the 300s limit on long articles.
       const proofreadModel = (await getModelForUseCase('proofreading')) as AIModel
+      const prevWritten = job.written_sections ?? []
       const res = await writeSectionsBatch(
         orderedItems,
         plan,
@@ -403,8 +404,15 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
         150_000,
         startedAt,
         proofreadModel,
+        // Persist after each batch → the client's status poll shows live progress.
+        async (nextCursor, newSections) => {
+          await supabase
+            .from('article_jobs')
+            .update({ written_sections: [...prevWritten, ...newSections], cursor: nextCursor })
+            .eq('id', job.id)
+        },
       )
-      const written = [...(job.written_sections ?? []), ...res.sections]
+      const written = [...prevWritten, ...res.sections]
       await supabase
         .from('article_jobs')
         .update({

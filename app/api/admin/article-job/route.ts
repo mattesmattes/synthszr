@@ -13,6 +13,22 @@ import {
 export const maxDuration = 300
 
 /**
+ * GET ?jobId=… → lightweight status poll (status, phase, cursor, total, …).
+ * Used by the client in parallel with a long-running advance so the UI shows
+ * live section-by-section progress instead of freezing during a phase.
+ */
+export async function GET(request: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+
+  const jobId = request.nextUrl.searchParams.get('jobId')
+  if (!jobId) return NextResponse.json({ error: 'jobId fehlt' }, { status: 400 })
+  const status = await getArticleJobStatus(jobId)
+  if (!status) return NextResponse.json({ error: 'Job nicht gefunden' }, { status: 404 })
+  return NextResponse.json(status)
+}
+
+/**
  * POST            → create a manual article job, returns { jobId, itemCount }
  * POST ?advance=1 → advance { jobId } by one phase, returns the polled status
  */
