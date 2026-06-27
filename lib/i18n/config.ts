@@ -89,29 +89,35 @@ export function formatUpdateDate(date: string | Date, locale: LanguageCode): str
     year: 'numeric'
   })
 
+  // Issue number = whole calendar days since the synthszr epoch (29 Dec 2025).
+  // Computed from UTC-normalized calendar parts so it matches the displayed date
+  // regardless of server timezone (the displayed day/month/year above is local).
+  const SYNTHSZR_EPOCH_UTC = Date.UTC(2025, 11, 29) // month is 0-indexed → 11 = December
+  const issue = Math.max(0, Math.round((Date.UTC(year, d.getMonth(), d.getDate()) - SYNTHSZR_EPOCH_UTC) / 86_400_000))
+  const prefix = `synthszr #${issue}`
+
   switch (locale) {
     case 'de':
-      return `Update vom ${weekday}, den ${day}.${month}.${year}`
+      return `${prefix} vom ${weekday}, den ${day}.${month}.${year}`
     case 'en':
-      return `Update from ${weekday}, ${fullDate}`
+      return `${prefix} from ${weekday}, ${fullDate}`
     case 'fr':
-      return `Mise à jour du ${weekday.toLowerCase()} ${fullDate}`
+      return `${prefix} du ${weekday.toLowerCase()} ${fullDate}`
     case 'es':
-      return `Actualización del ${weekday.toLowerCase()}, ${fullDate}`
+      return `${prefix} del ${weekday.toLowerCase()}, ${fullDate}`
     case 'it':
-      return `Aggiornamento di ${weekday.toLowerCase()} ${fullDate}`
+      return `${prefix} di ${weekday.toLowerCase()} ${fullDate}`
     case 'pt':
-      return `Atualização de ${weekday.toLowerCase()}, ${fullDate}`
+      return `${prefix} de ${weekday.toLowerCase()}, ${fullDate}`
     case 'nl':
-      return `Update van ${weekday.toLowerCase()} ${fullDate}`
+      return `${prefix} van ${weekday.toLowerCase()} ${fullDate}`
     case 'pl':
-      return `Aktualizacja z ${weekday}, ${day}.${month}.${year}`
+      return `${prefix} z ${weekday}, ${day}.${month}.${year}`
     case 'cs':
-      return `Aktualizace z ${weekday} ${fullDate}`
+      return `${prefix} z ${weekday} ${fullDate}`
     case 'nds':
-      // Low German: use German-style formatting with Plattdüütsch prefix
-      return `Updoot vun ${weekday}, den ${day}.${month}.${year}`
+      return `${prefix} vun ${weekday}, den ${day}.${month}.${year}`
     default:
-      return `Update vom ${weekday}, den ${day}.${month}.${year}`
+      return `${prefix} vom ${weekday}, den ${day}.${month}.${year}`
   }
 }

@@ -125,7 +125,10 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
     const day = d.getDate().toString().padStart(2, '0')
     const month = (d.getMonth() + 1).toString().padStart(2, '0')
     const year = d.getFullYear()
-    return `Update vom ${weekday}, den ${day}.${month}.${year}`
+    // Issue number = whole calendar days since the synthszr epoch (29 Dec 2025),
+    // mirrors formatUpdateDate in lib/i18n/config.ts.
+    const issue = Math.max(0, Math.round((Date.UTC(year, d.getMonth(), d.getDate()) - Date.UTC(2025, 11, 29)) / 86_400_000))
+    return `synthszr #${issue} vom ${weekday}, den ${day}.${month}.${year}`
   }
 
   const formatNavDate = (date: string) => {
