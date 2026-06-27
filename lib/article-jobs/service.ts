@@ -36,7 +36,8 @@ type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 /** Stored job row (jsonb columns arrive loosely-typed from Supabase). */
 interface ArticleJob {
   id: string
-  digest_id: string
+  digest_id: string | null
+  source: string
   status: string
   phase: string | null
   model: string
@@ -118,6 +119,51 @@ export async function createArticleJob(opts: {
   return { created: true }
 }
 
+/**
+ * Enqueues a MANUAL article job (admin "AI Artikel generieren" button). Unlike
+ * the auto path this has no digest (source='manual', digest_id=null), uses the
+ * human's exact selection (no topic-dedup), and is driven by the browser polling
+ * advanceArticleJob(jobId) — the 15-min cron only picks it up as a fallback.
+ * Returns the new job id so the client can drive + poll it.
+ */
+export async function createManualArticleJob(opts: {
+  queueItemIds?: string[]
+  useSelected?: boolean
+  maxItems: number
+  model: string
+  effort: string
+  vocabularyIntensity: number
+}): Promise<{ jobId: string; itemCount: number } | { error: string }> {
+  const supabase = createAdminClient()
+
+  const { pipelineItems, usedItemIds } = await selectAndEnrichItems({
+    queueItemIds: opts.queueItemIds,
+    useSelected: opts.useSelected ?? true,
+    maxItems: opts.maxItems,
+  })
+  if (pipelineItems.length === 0) return { error: 'no_items' }
+
+  const { data, error } = await supabase
+    .from('article_jobs')
+    .insert({
+      digest_id: null,
+      source: 'manual',
+      status: 'pending',
+      phase: 'planning',
+      model: opts.model,
+      effort: opts.effort,
+      max_items: opts.maxItems,
+      vocabulary_intensity: opts.vocabularyIntensity,
+      selected_items: pipelineItems,
+      used_item_ids: usedItemIds,
+    })
+    .select('id')
+    .single()
+  if (error) return { error: `insert_failed: ${error.message}` }
+
+  return { jobId: data.id, itemCount: pipelineItems.length }
+}
+
 /** Oldest open (pending|processing) job, or null. */
 export async function getNextOpenJob(): Promise<ArticleJob | null> {
   const supabase = createAdminClient()
@@ -129,6 +175,43 @@ export async function getNextOpenJob(): Promise<ArticleJob | null> {
     .limit(1)
     .maybeSingle()
   return (data as ArticleJob | null) ?? null
+}
+
+/** A specific job by id (for browser-driven manual advance + status polling). */
+async function getJobById(id: string): Promise<ArticleJob | null> {
+  const supabase = createAdminClient()
+  const { data } = await supabase.from('article_jobs').select('*').eq('id', id).maybeSingle()
+  return (data as ArticleJob | null) ?? null
+}
+
+/**
+ * Lightweight status for client polling: phase, progress, and the resulting
+ * draft id once done. `total` is the section count, `cursor` how many are written.
+ */
+export async function getArticleJobStatus(jobId: string): Promise<{
+  status: string
+  phase: string | null
+  cursor: number
+  total: number
+  generatedPostId: string | null
+  error: string | null
+} | null> {
+  const job = await getJobById(jobId)
+  if (!job) return null
+  const supabase = createAdminClient()
+  const { data: row } = await supabase
+    .from('article_jobs')
+    .select('generated_post_id')
+    .eq('id', jobId)
+    .maybeSingle()
+  return {
+    status: job.status,
+    phase: job.phase,
+    cursor: job.cursor ?? 0,
+    total: job.selected_items?.length ?? 0,
+    generatedPostId: (row?.generated_post_id as string | null) ?? null,
+    error: job.status === 'error' ? (job as unknown as { error_message?: string }).error_message ?? 'unknown' : null,
+  }
 }
 
 /** Marks a job as permanently failed. */
@@ -207,6 +290,22 @@ async function persistDraftPost(supabase: AdminClient, job: ArticleJob, fullMark
   const title = metadata.title || `Artikel`
 
   let tiptap = await markdownToTiptapServer(body)
+
+  // Embed queue item IDs into H2 headings for stable thumbnail matching (mirrors
+  // the manual saveAsDraft flow). Best-effort — failure must not block the draft.
+  if (job.used_item_ids?.length) {
+    try {
+      const { embedQueueItemIds } = await import('@/lib/utils/embed-queue-ids')
+      const { data: queueItems } = await supabase
+        .from('news_queue')
+        .select('id, title, content')
+        .in('id', job.used_item_ids)
+      if (queueItems?.length) tiptap = embedQueueItemIds(tiptap, queueItems)
+    } catch (err) {
+      console.error('[ArticleJobs] embedQueueItemIds failed (non-fatal):', err)
+    }
+  }
+
   const { content, changes } = sanitizeTiptapUrls(tiptap)
   if (changes.length) tiptap = content as Record<string, unknown>
 
@@ -246,10 +345,13 @@ async function persistDraftPost(supabase: AdminClient, job: ArticleJob, fullMark
  * Returns a short status string. Tick-level errors leave the job 'processing'
  * (resumes next tick); only attempts ≥ max_attempts trips it into 'error'.
  */
-export async function advanceArticleJob(): Promise<string> {
+export async function advanceArticleJob(jobId?: string): Promise<string> {
   const supabase = createAdminClient()
-  const job = await getNextOpenJob()
+  // With jobId the browser drives one specific (manual) job; without it the cron
+  // advances the oldest open job — covers auto-posts and stalled manual jobs.
+  const job = jobId ? await getJobById(jobId) : await getNextOpenJob()
   if (!job) return 'no_job'
+  if (job.status !== 'pending' && job.status !== 'processing') return job.status
 
   if (job.attempts >= job.max_attempts) {
     await markJobError(job.id, 'max_attempts exceeded')

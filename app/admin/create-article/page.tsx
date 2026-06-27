@@ -40,6 +40,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
 import { parseArticleContent, generateSlug, type ArticleMetadata } from '@/lib/utils/parse-article-content'
@@ -86,6 +87,7 @@ interface SourceDistribution {
 const CATEGORIES = ['AI & Tech', 'Marketing', 'Design', 'Business', 'Code', 'Synthese']
 
 export default function CreateArticlePage() {
+  const router = useRouter()
   // Queue-based state (replaces digest selection)
   const [queueStats, setQueueStats] = useState<QueueStats>({ pending: 0, selected: 0, used: 0, oldestSelectedAt: null })
   const [sourceDistribution, setSourceDistribution] = useState<SourceDistribution[]>([])
@@ -121,7 +123,9 @@ export default function CreateArticlePage() {
   const [saving, setSaving] = useState(false)
   const [vocabOpen, setVocabOpen] = useState(false)
   const [vocabularyIntensity, setVocabularyIntensity] = useState(50)
-  const [usedModel, setUsedModel] = useState<string | null>(null)
+  // Manual-editor model tag; the job sets ai_model server-side, so this stays
+  // null unless someone hand-edits in the editor (saveAsDraft / EIC button).
+  const [usedModel] = useState<string | null>(null)
 
   // Editor-in-Chief routine state — runs after generation, replaces
   // articleContent with the redaction LLM's revised markdown.
@@ -287,148 +291,109 @@ export default function CreateArticlePage() {
     }
 
     setGenerating(true)
-    setPipelineStatus(null)
+    setPipelineStatus('Job wird angelegt…')
     setPipelineProgress(null)
     setEicNeedsRun(false)
-    startTransition(() => {
-      setArticleContent('')
-      setUsedModel(null)
-      setUsedQueueItemIds([])
-    })
 
     try {
-      // Use Queue-based Ghostwriter API
-      // Priority: 1. Selected items, 2. Pending items (balanced selection)
-      const response = await fetch('/api/ghostwriter-queue', {
+      // Resumable article job instead of one 300s inline stream (which aborted
+      // past ~20 news items). The browser drives the job by advancing one phase
+      // per poll; the 15-min cron is only a fallback if this tab is closed.
+      const createRes = await fetch('/api/admin/article-job', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          useSelected: true,
-          maxItems: maxQueueItems,
-          vocabularyIntensity,
-          pipeline: true,
-        }),
         credentials: 'include',
+        body: JSON.stringify({ useSelected: true, maxItems: maxQueueItems, vocabularyIntensity }),
       })
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}))
+        throw new Error(err.error || 'Job konnte nicht angelegt werden')
+      }
+      const { jobId } = await createRes.json()
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Generierung fehlgeschlagen')
+      const phaseLabel: Record<string, string> = {
+        planning: 'Struktur wird geplant…',
+        writing: 'Abschnitte werden geschrieben',
+        finalizing: 'Artikel wird finalisiert…',
       }
 
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('No reader')
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-      // Local accumulator mirrors articleContent so we can hand the final
-      // markdown to the Editor-in-Chief without a render-cycle race.
-      // Also reset on `data.clear` so the deduplication-rewrite path
-      // doesn't double-feed the editor.
-      let accumulated = ''
-      let modelUsed: string | null = null
-
+      let postId: string | null = null
       while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6))
-              if (data.clear) {
-                // Clear content for new version (deduplication phase)
-                accumulated = ''
-                startTransition(() => setArticleContent(''))
-              }
-              if (data.phase === 'deduplication') {
-                setPipelineStatus('Metaphern-Check...')
-              }
-              if (data.phase === 'pipeline') {
-                setPipelineStatus(data.message || null)
-                if (data.progress) {
-                  setPipelineProgress(data.progress)
-                }
-              }
-              if (data.started) {
-                const mode = data.pipeline ? 'Pipeline' : 'Single-Pass'
-                console.log(`[Ghostwriter-Queue] Started (${mode}) with ${data.itemCount} items from queue`)
-                if (data.sourceDistribution) {
-                  console.log('[Ghostwriter-Queue] Source distribution:', data.sourceDistribution)
-                }
-              }
-              if (data.text) {
-                accumulated += data.text
-                startTransition(() => setArticleContent(prev => prev + data.text))
-              }
-              if (data.model) {
-                modelUsed = data.model
-                setUsedModel(data.model)
-              }
-              if (data.done) {
-                // Store the queue item IDs for marking as used after save
-                if (data.queueItemIds) {
-                  setUsedQueueItemIds(data.queueItemIds)
-                  console.log(`[Ghostwriter-Queue] Will mark ${data.queueItemIds.length} items as used after save`)
-                }
-              }
-              if (data.error) {
-                throw new Error(data.error)
-              }
-            } catch (e) {
-              if (e instanceof SyntaxError) continue
-              throw e
-            }
-          }
+        const advRes = await fetch('/api/admin/article-job?advance=1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ jobId }),
+        })
+        if (!advRes.ok) {
+          const err = await advRes.json().catch(() => ({}))
+          throw new Error(err.error || 'Generierung fehlgeschlagen')
         }
+        const st = await advRes.json()
+
+        if (st.phase === 'writing' && st.total > 0) {
+          const cur = Math.min(st.cursor, st.total)
+          setPipelineStatus(`Abschnitt ${cur} von ${st.total}`)
+          setPipelineProgress({ current: cur, total: st.total })
+        } else {
+          setPipelineStatus(phaseLabel[st.phase ?? ''] ?? 'Generiere Artikel…')
+          setPipelineProgress(null)
+        }
+
+        if (st.status === 'error') throw new Error(st.error || 'Job fehlgeschlagen')
+        if (st.status === 'done') { postId = st.generatedPostId; break }
+
+        // Brief pause between phases to keep the poll loop gentle.
+        await new Promise(resolve => setTimeout(resolve, 1500))
       }
 
-      // ─────────────────────────────────────────────────────────────────
-      // Editor-in-Chief inline pipeline step — TEMPORARILY DISABLED.
-      // Cause: the pass appears to truncate generation (Mattes saw 7 of
-      // 40 articles before abort). Until we identify whether the editor
-      // call is consuming the budget or interfering with the ghostwriter
-      // stream, the inline step is off. Manual re-run via the button on
-      // the Generate page or in the post edit dialogs still works on
-      // demand.
-      // To re-enable: flip ENABLE_INLINE_EIC back to true.
-      // ─────────────────────────────────────────────────────────────────
-      const ENABLE_INLINE_EIC = false
-      if (ENABLE_INLINE_EIC && accumulated.trim().length > 0) {
-        setPipelineStatus('Editor-in-Chief redigiert...')
-        setPipelineProgress(null)
-        try {
-          const revised = await runEditorInChiefStream(accumulated, modelUsed, (msg) => {
-            setPipelineStatus(msg)
-          })
-          startTransition(() => setArticleContent(revised))
-        } catch (eicErr) {
-          console.error('[Editor-in-Chief inline] Error:', eicErr)
-          setEditorError(
-            eicErr instanceof Error
-              ? `Editor-in-Chief fehlgeschlagen: ${eicErr.message} (Originaltext bleibt erhalten, manueller Re-Run möglich)`
-              : 'Editor-in-Chief fehlgeschlagen — Originaltext bleibt erhalten'
-          )
+      if (!postId) throw new Error('Kein Entwurf erzeugt')
+
+      // Post-processing mirrors saveAsDraft's fire-and-forget side effects. These
+      // run client-side (with the session cookie) to avoid the cron 401-subrequest
+      // problem; embedQueueItemIds already ran server-side inside the job.
+      setPipelineStatus('Bilder & Ratings werden angestoßen…')
+      try {
+        const collectText = (node: { text?: string; content?: unknown[] }): string => {
+          if (!node) return ''
+          const self = node.text ?? ''
+          const kids = Array.isArray(node.content)
+            ? node.content.map(c => collectText(c as { text?: string; content?: unknown[] })).join(' ')
+            : ''
+          return `${self} ${kids}`
         }
-      } else if (accumulated.trim().length > 0) {
-        // Inline EIC is off — flag the manual button as the next step.
-        setEicNeedsRun(true)
+        const { data: post } = await supabase
+          .from('generated_posts')
+          .select('content, pending_queue_item_ids')
+          .eq('id', postId)
+          .single()
+        if (post?.content) {
+          triggerSynthszrRatings(collectText(JSON.parse(post.content)))
+        }
+        const qids: string[] = post?.pending_queue_item_ids ?? []
+        if (qids.length > 0) {
+          const { data: qi } = await supabase
+            .from('news_queue')
+            .select('content, title')
+            .in('id', qids)
+            .limit(1)
+          const newsContent = qi?.[0]?.content || qi?.[0]?.title
+          if (newsContent) triggerImageGeneration(postId, newsContent)
+        }
+      } catch (postErr) {
+        console.error('[Create Article] Post-processing trigger failed (non-fatal):', postErr)
       }
+
+      // Draft is persisted server-side — open it in the editor.
+      router.push(`/admin/generated-articles/edit/${postId}`)
     } catch (error) {
       console.error('Generation error:', error)
-      startTransition(() => {
-        setArticleContent(prev => prev + `\n\n**Fehler:** ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
-      })
-    } finally {
       setGenerating(false)
       setPipelineStatus(null)
       setPipelineProgress(null)
+      alert(error instanceof Error ? error.message : 'Unbekannter Fehler bei der Generierung')
     }
-  }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity])
+  }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity, router])
 
   // Thin wrapper around the shared helper so the rest of this file can
   // keep its existing call signature.
