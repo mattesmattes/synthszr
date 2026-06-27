@@ -390,6 +390,9 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
         .filter(Boolean) as PipelineItem[]
       const { vocabularyContext } = await buildVocabularyContext(job.vocabulary_intensity)
       const ctx = await buildSectionContext(job.selected_items, plan, vocabularyContext)
+      // Proofread runs per-section here (resumable) instead of one full-article
+      // proofread in finalize that exceeded the 300s limit on long articles.
+      const proofreadModel = (await getModelForUseCase('proofreading')) as AIModel
       const res = await writeSectionsBatch(
         orderedItems,
         plan,
@@ -397,8 +400,9 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
         job.cursor,
         job.model as AIModel,
         job.effort,
-        210_000,
+        150_000,
         startedAt,
+        proofreadModel,
       )
       const written = [...(job.written_sections ?? []), ...res.sections]
       await supabase

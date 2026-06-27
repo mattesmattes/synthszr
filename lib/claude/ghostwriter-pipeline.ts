@@ -607,6 +607,23 @@ export interface WriteBatchResult {
  * the resumable job pipeline; the streaming runner keeps its own progressive
  * worker loop.
  */
+// Per-phase hard limits so a single resumable tick never approaches the 300s
+// Vercel function cap (a batch waits for its slowest section via Promise.all).
+const SECTION_WRITE_TIMEOUT_MS = 100_000     // hung/slow section → placeholder
+const SECTION_PROOFREAD_TIMEOUT_MS = 45_000  // proofread is best-effort per section
+const DEDUP_BUDGET_MS = 180_000              // whole-text dedup is best-effort
+
+/** Resolves to the promise's value, or `fallback` if it doesn't settle within ms. */
+async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<T>(resolve => { timer = setTimeout(() => resolve(fallback), ms) })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 export async function writeSectionsBatch(
   orderedItems: PipelineItem[],
   plan: ArticlePlan,
@@ -616,21 +633,35 @@ export async function writeSectionsBatch(
   effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max',
   budgetMs: number,
   startedAt: number,
+  proofreadModel?: AIModel,
 ): Promise<WriteBatchResult> {
   const out: string[] = []
   let i = cursor
   const concurrency = 6
   while (i < orderedItems.length) {
     const batch = orderedItems.slice(i, i + concurrency)
-    const results = await Promise.all(batch.map((item, k) => {
+    const results = await Promise.all(batch.map(async (item, k) => {
       const itemIdx = plan.ordering[i + k]
       const heading = plan.headings[String(itemIdx)] || item.title
       const itemCompanies = ctx.companiesPerItem.get(item.id) || { public: [], premarket: [] }
-      return writeSection(item, heading, model, {
-        relevantCompanies: itemCompanies,
-        cacheableUserPrefix: ctx.cacheableUserPrefix,
-        effort,
-      }).catch(err => `## ${heading}\n\n*Fehler: ${err instanceof Error ? err.message : String(err)}*\n`)
+      // Hard per-section timeout: one slow/hung section must not drag the whole
+      // batch past the function limit (Job stalled at cursor=0 otherwise).
+      let section = await withTimeout(
+        writeSection(item, heading, model, {
+          relevantCompanies: itemCompanies,
+          cacheableUserPrefix: ctx.cacheableUserPrefix,
+          effort,
+        }),
+        SECTION_WRITE_TIMEOUT_MS,
+        `## ${heading}\n\n*Zeitüberschreitung beim Schreiben dieses Abschnitts.*\n`,
+      ).catch(err => `## ${heading}\n\n*Fehler: ${err instanceof Error ? err.message : String(err)}*\n`)
+      // Proofread per section (small, fast, resumable) instead of one giant
+      // full-article proofread in finalize that blows the 300s limit.
+      if (proofreadModel) {
+        section = await withTimeout(proofreadText(section, proofreadModel), SECTION_PROOFREAD_TIMEOUT_MS, section)
+          .catch(() => section)
+      }
+      return section
     }))
     out.push(...results.map(r => r + '\n\n'))
     i += batch.length
@@ -651,21 +682,29 @@ export async function finalizeArticle(
   model: AIModel,
   vocabulary: Array<{ term: string }> | null,
 ): Promise<string> {
+  // Proofreading now happens per-section during the writing phase (resumable,
+  // within budget). Finalize only de-duplicates metaphors — which needs a
+  // whole-text view — and assembles. Dedup is best-effort with a hard timeout
+  // so finalize can't exceed the 300s function limit on long articles; if it
+  // doesn't finish in time we keep the (complete) un-deduped article.
   const body = sections.join('')
   let full = metadataBlock + body
-  // Proofread
-  try {
-    const proofreadingModel = await getModelForUseCase('proofreading') as AIModel
-    full = metadataBlock + await proofreadText(body, proofreadingModel)
-  } catch (err) {
-    console.error('[Pipeline] Proofreading failed:', err)
-  }
-  // Metaphor de-duplication (mirrors queue-article.ts post-processing)
   const duplicates = findDuplicateMetaphors(full, vocabulary || undefined)
   if (duplicates.size > 0) {
-    let deduped = ''
-    for await (const chunk of streamMetaphorDeduplication(full, duplicates, model)) deduped += chunk
+    const deduped = await withTimeout(
+      (async () => {
+        let d = ''
+        for await (const chunk of streamMetaphorDeduplication(full, duplicates, model)) d += chunk
+        return d
+      })(),
+      DEDUP_BUDGET_MS,
+      '',
+    ).catch(err => {
+      console.error('[Pipeline] Metaphor dedup failed (keeping original):', err)
+      return ''
+    })
     if (deduped.trim()) full = deduped
+    else console.warn('[Pipeline] Metaphor dedup skipped/timed out — keeping un-deduped article')
   }
   return full
 }
