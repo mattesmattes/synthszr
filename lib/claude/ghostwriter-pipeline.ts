@@ -227,10 +227,17 @@ SCHLECHTE HEADLINES (VERBOTEN):
 - "KI-Update: Die wichtigsten News" ← generisch, hohl
 - "Spannende Entwicklungen in der KI-Welt" ← tote Sprache
 - "OpenAI launcht GPT-5.2" ← reine Nacherzählung, keine These
+- "Gemini 3.5 Flash: Google integriert Computersteuerung ins Modell" ← Schema "Produktname: Erklärung", reine Nacherzählung mit Doppelpunkt-Etikett
+
+STRUKTUR-VARIANZ (HÖCHSTE PRIORITÄT — gegen Monotonie):
+- VERMEIDE das Muster "Eigenname/Produkt: Beschreibung" (z.B. "Gemini 3.5: Google macht X"). Es darf NICHT die Standardform sein.
+- Über ALLE headings hinweg: maximal EINE einzige darf das Doppelpunkt-Schema "Begriff: Aussage" nutzen — der Rest MUSS andere Strukturen haben.
+- Mische die grammatischen Formen bewusst: vollständiger Aussagesatz, Frage, Gegensatz/Kontrast, Konditional ("Wenn …, dann …"), lakonische Beobachtung, Zahl/Detail im Satz. Keine zwei aufeinanderfolgenden headings im selben Schema.
+- Der Produktname gehört in den SATZ, nicht als Etikett davor: "Google steckt die Maus jetzt direkt ins Modell" statt "Gemini 3.5: Google integriert …".
 
 REGELN PRO FELD:
 - articleTitle: Übergreifende These oder pointierter Gedanke aus ALLEN Items zusammen. Was ist die tiefere Erkenntnis?
-- headings: KEINE Nacherzählung ("X launcht Y"). Eine These, Implikation oder pointierte Beobachtung.
+- headings: KEINE Nacherzählung ("X launcht Y") und KEIN "Produkt: Erklärung"-Etikett. Eine These, Implikation oder pointierte Beobachtung — als echter Satz, mit wechselnder Struktur (siehe STRUKTUR-VARIANZ).
 - excerptBullets: Eigenständige Mini-Headlines, je max 65 Zeichen. Jede soll für sich stehen und neugierig machen.
 - thesis: Der rote Faden. Nicht die offensichtliche Gemeinsamkeit ("alles über KI"), sondern die tiefere Verbindung.
 

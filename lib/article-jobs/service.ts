@@ -164,13 +164,26 @@ export async function createManualArticleJob(opts: {
   return { jobId: data.id, itemCount: pipelineItems.length }
 }
 
-/** Oldest open (pending|processing) job, or null. */
+/** A job counts as browser-driven (and off-limits to the cron) if it was
+ *  advanced within this window. Longer than any single advance (≤300s) + poll
+ *  gap, so an in-flight phase never looks idle. */
+const LEASE_STALE_MS = 6 * 60 * 1000
+
+/**
+ * Oldest open (pending|processing) job the cron may advance — EXCLUDING jobs a
+ * browser is actively driving (last_advanced_at within LEASE_STALE_MS). Without
+ * this the cron raced the manual browser polling on the same row (double work,
+ * inconsistent phase, undefined-field crashes). Tab closed → stamp goes stale →
+ * the job becomes eligible here and the cron resumes it as a fallback.
+ */
 export async function getNextOpenJob(): Promise<ArticleJob | null> {
   const supabase = createAdminClient()
+  const staleBefore = new Date(Date.now() - LEASE_STALE_MS).toISOString()
   const { data } = await supabase
     .from('article_jobs')
     .select('*')
     .in('status', ['pending', 'processing'])
+    .or(`last_advanced_at.is.null,last_advanced_at.lt.${staleBefore}`)
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
@@ -359,12 +372,15 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
   }
 
   const startedAt = Date.now()
+  // last_advanced_at = lease stamp: marks the job as actively driven so the cron
+  // (getNextOpenJob) won't grab it from under a polling browser.
   await supabase
     .from('article_jobs')
     .update({
       status: 'processing',
       attempts: job.attempts + 1,
       started_at: job.started_at ?? new Date().toISOString(),
+      last_advanced_at: new Date().toISOString(),
     })
     .eq('id', job.id)
 
