@@ -17,6 +17,7 @@ export type UseCase =
   | 'pattern_extraction'
   | 'queue_ranking'
   | 'image_generation'
+  | 'ranking_extract'
 
 export interface UseCaseInfo {
   label: string
@@ -79,6 +80,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     description: 'Article-Thumbnails und Cover-Bilder',
     defaultModel: 'google/gemini-3-pro-image',
     allowedProviders: ['openai', 'google'],
+  },
+  ranking_extract: {
+    label: 'Rankings — Produkt-Extraktion',
+    description: 'AI-Produkte aus News-Items extrahieren (hochvolumig)',
+    defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
   },
 }
 
