@@ -62,8 +62,9 @@ export async function resolveProduct(opts: {
 
   if (!inserted) {
     // Race: parallel angelegt → re-select + Heilung
-    const { data: raced } = await supabase
+    const { data: raced, error: raceErr } = await supabase
       .from('products').select('id').eq('canonical_key', p.canonical_key).single()
+    if (raceErr) throw raceErr
     if (!raced) throw new Error(`resolveProduct: race-reselect fehlgeschlagen für ${p.canonical_key}`)
     await ensureCreatedEvent(supabase, raced.id, p.canonical_key, opts.evidence)
     await ensureAlias(supabase, raced.id, p.vendor_namespace, opts.detectedName)
