@@ -94,10 +94,15 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
             processedAny = true
           } catch (itemErr) {
             const msg = itemErr instanceof Error ? itemErr.message : String(itemErr)
-            await supabase.from('daily_repo').update({
+            // Sichtbar machen (eine systematische extract-Störung wäre sonst unsichtbar)
+            // und den attempts-Update prüfen, sonst kann ein DB-Teilausfall den
+            // Poison-Counter still verschlucken → Item läuft jeden Tick erneut durchs LLM.
+            console.error('[RankingJobs] extract item failed', item.id, msg)
+            const { error: attErr } = await supabase.from('daily_repo').update({
               product_processing_attempts: (item.product_processing_attempts ?? 0) + 1,
               product_processing_error: msg.slice(0, 500),
             }).eq('id', item.id)
+            if (attErr) console.error('[RankingJobs] attempts update failed', item.id, attErr.message)
           }
           await supabase.from('ranking_jobs').update({ last_advanced_at: new Date().toISOString() }).eq('id', j.id)
           if (Date.now() - startedAt >= EXTRACT_BUDGET_MS - EXTRACT_TAIL_MS) break
