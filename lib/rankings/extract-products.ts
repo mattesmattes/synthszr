@@ -49,24 +49,24 @@ export async function extractProducts(title: string, content: string): Promise<E
   const { getModelForUseCase } = await import('@/lib/ai/model-config')
   if (!process.env.ANTHROPIC_API_KEY) return { ok: false, error: 'ANTHROPIC_API_KEY missing', retryable: true }
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const model = await getModelForUseCase('ranking_extract')
-  const tool = {
-    name: 'report_products',
-    description: 'Melde alle in der News genannten AI-Produkte',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        products: {
-          type: 'array',
-          items: { type: 'object', properties: { name: { type: 'string' }, vendor: { type: 'string' }, excerpt: { type: 'string' } }, required: ['name', 'vendor'] },
-        },
-      },
-      required: ['products'],
-    },
-  }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {
+    const model = await getModelForUseCase('ranking_extract')
+    const tool = {
+      name: 'report_products',
+      description: 'Melde alle in der News genannten AI-Produkte',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          products: {
+            type: 'array',
+            items: { type: 'object', properties: { name: { type: 'string' }, vendor: { type: 'string' }, excerpt: { type: 'string' } }, required: ['name', 'vendor'] },
+          },
+        },
+        required: ['products'],
+      },
+    }
     const resp = await client.messages.create({
       model, max_tokens: 1536, tools: [tool],
       tool_choice: { type: 'tool', name: 'report_products' },
