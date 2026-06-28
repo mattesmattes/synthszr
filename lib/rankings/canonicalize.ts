@@ -47,7 +47,7 @@ export function parseProductName(raw: string): ParsedProduct {
 
 /** Eindeutiger Identitäts-Anker. Vendor zuerst, damit generische Namen nicht kollidieren. */
 export function canonicalKey(vendorNamespace: string, p: ParsedProduct): string {
-  return `${vendorNamespace.toLowerCase()}@${p.family}@${p.version ?? ''}@${p.qualifier ?? ''}`
+  return `${vendorNamespace.toLowerCase()}@${p.family.toLowerCase()}@${p.version ?? ''}@${p.qualifier ?? ''}`
 }
 
 /** Permanenter, lesbarer URL-Slug — vendor-namespaced gegen Kollision generischer Namen. */

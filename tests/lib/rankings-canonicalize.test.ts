@@ -55,6 +55,10 @@ describe('canonicalKey', () => {
   it('leere version/qualifier als leerer Slot', () => {
     expect(canonicalKey('anysphere', parseProductName('Cursor'))).toBe('anysphere@cursor@@')
   })
+  it('lowercased family auch bei manuell gebautem ParsedProduct (SQL-Konsistenz)', () => {
+    expect(canonicalKey('OpenAI', { family: 'GPT', version: '5.6', qualifier: 'Earth' }))
+      .toBe('openai@gpt@5.6@Earth')
+  })
 })
 
 describe('productSlug', () => {
