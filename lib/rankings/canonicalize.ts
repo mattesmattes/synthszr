@@ -44,3 +44,23 @@ export function parseProductName(raw: string): ParsedProduct {
     qualifier: qualifiers.length ? qualifiers.join(' ') : null,
   }
 }
+
+/** Eindeutiger Identitäts-Anker. Vendor zuerst, damit generische Namen nicht kollidieren. */
+export function canonicalKey(vendorNamespace: string, p: ParsedProduct): string {
+  return `${vendorNamespace.toLowerCase()}@${p.family}@${p.version ?? ''}@${p.qualifier ?? ''}`
+}
+
+/** Permanenter, lesbarer URL-Slug — vendor-namespaced gegen Kollision generischer Namen. */
+export function productSlug(vendorNamespace: string, p: ParsedProduct): string {
+  return [vendorNamespace, p.family, p.version, p.qualifier]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+/** Normalform für product_aliases.alias_normalized (vendor-scoped unique + Trigram-Lookup). */
+export function normalizeAlias(raw: string): string {
+  return raw.trim().toLowerCase().replace(/[\s\-_]+/g, ' ').trim()
+}
