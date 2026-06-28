@@ -37,7 +37,9 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
     .rpc('claim_ranking_job', { stale_before: staleBeforeIso(Date.now()) })
     .maybeSingle()
   if (error) { console.error('[RankingJobs] claim failed:', error); return 'claim_error' }
-  if (!job) return 'no_job'
+  // claim_ranking_job (RETURNS ranking_jobs) liefert bei kein-Match eine All-NULL-Row,
+  // nicht 0 Zeilen → über job.id prüfen, sonst würde noop_phase statt no_job zurückkommen.
+  if (!job || (job as RankingJob).id == null) return 'no_job'
 
   const j = job as RankingJob
   switch (j.phase) {
