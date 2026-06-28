@@ -1,78 +1,89 @@
-# Synthszr Rankings — Phase 1a (resolveProduct + Idempotenz) Implementation Plan
+# Synthszr Rankings — Phase 1a (resolveProduct + Idempotenz) Implementation Plan v2
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Die deterministische, idempotente `resolveProduct`-Funktion bauen: ein erkannter AI-Produktname (+ Vendor) wird auf einen `products`-Eintrag aufgelöst oder neu angelegt — vendor-sicher, versions-granular, ohne Duplikate bei Wiederanlauf.
+**Goal:** Die deterministische, idempotente, vendor-sichere `resolveProduct`-Funktion bauen: ein erkannter AI-Produktname (+ Vendor) wird auf einen `products`-Eintrag aufgelöst oder neu angelegt — versions-granular, ohne Duplikate und mit selbstheilender „genau ein created-Event"-Invariante bei Wiederanlauf/Crash.
 
-**Architecture:** `resolveProduct` nutzt **ausschließlich den exakten `canonical_key`** als Identitäts-Anker (aus Phase-0-`canonicalize`). Pfad: parse → canonical_key → select-or-insert (idempotent, race-safe via `ON CONFLICT DO NOTHING` + re-select) → bei Neu: Identity-Event `created` + Alias registrieren + Family-Embedding (best-effort) → bei Bestehend: `last_seen` aktualisieren. **Keine** Trigram-/Embedding-Fuzzy-Disambiguierung in 1a (die ist Phase 1b mit LLM-Tiebreak und darf Versionen nie mergen). Die reine Payload-Bildung ist als pure Funktion vom DB-Roundtrip getrennt (unit-testbar; SQL-konsistent zum `canonical_key`-GENERATED-Ausdruck).
+**Architecture:** Auflösung ausschließlich über den exakten `canonical_key` (Phase-0-`canonicalize`). Pure Payload-Bildung (`resolve-product-payload.ts`) ist DB-/Embedding-frei und damit echt unit-testbar. `resolveProduct` (`resolve-product.ts`) macht race-safe Upsert + selbstheilendes `ensureCreatedEvent`/`ensureAlias` (INSERT + `23505`-Catch gegen DB-Unique-Constraints), läuft in allen Branches → ein Crash zwischen Produkt-Insert und Event/Alias heilt beim nächsten Lauf. Keine Fuzzy-/Embedding-Disambiguierung in 1a.
 
-**Tech Stack:** TypeScript, Supabase (`createAdminClient`, `.upsert`/`.insert` onConflict), `generateEmbedding` (gemini-embedding-001/768), vitest.
+**Tech Stack:** TypeScript, Supabase (`.upsert` onConflict, INSERT mit 23505-Catch), `generateEmbedding` (gemini-768, best-effort), vitest.
 
 ## Global Constraints
 
-- **Spec:** `docs/superpowers/specs/2026-06-28-synthszr-rankings-design.md` §5 (Kanonisierung). **Memory:** `project_synthszr_rankings.md` (Phase-1-Notizen).
-- **Versions-Sicherheit (KRITISCH):** Auflösung NUR über exakten `canonical_key`. Verschiedene version/qualifier ⇒ verschiedene Produkte. In 1a niemals zwei Produkte mergen.
-- **Idempotenz:** Mehrfaches `resolveProduct` desselben Namens (und seiner Schreibvarianten) erzeugt GENAU EIN Produkt und GENAU EIN `product_identity_events`-`created`. Race-safe (zwei gleichzeitige Inserts → kein Duplikat).
-- **Konsistenz:** Der in JS gebaute `canonical_key` muss exakt dem SQL-GENERATED-Ausdruck entsprechen (`lower(vendor)@lower(family)@coalesce(version,'')@coalesce(qualifier,'')`). Da `products.canonical_key` eine GENERATED column ist, wird er NICHT von JS geschrieben — JS nutzt ihn nur zum Lookup. Schreibe beim Insert `vendor_namespace/family/version/qualifier`, NICHT `canonical_key`.
-- **Embeddings sind best-effort:** `generateEmbedding` kann fehlschlagen (API/Key) → Produkt wird trotzdem angelegt (`family_embedding` bleibt null), niemals Abbruch.
-- **Tests:** vitest (`npm test`). Pure Logik = echte Unit-Tests. DB-Integrationstest mit `describe.skipIf(!process.env.SUPABASE_SERVICE_ROLE_KEY)` (läuft nur mit DB-Keys; CI/lokal ohne Keys übersprungen) — zusätzlich Controller-Prod-Verifikation nach der Implementierung.
+- **Spec:** `docs/superpowers/specs/2026-06-28-synthszr-rankings-design.md` §5. **Memory:** `project_synthszr_rankings.md`.
+- **Phase-0-Prerequisite (erfüllt):** vendor-namespaced Slugs (`productSlug(vendorNamespace, parsed)`) + vendor-scoped Aliases (`product_aliases.vendor_namespace`, `UNIQUE(vendor_namespace, alias_normalized)`) sind migriert. `products.canonical_key` ist GENERATED (`lower(vendor_namespace)@lower(family)@coalesce(version,'')@coalesce(qualifier,'')`).
+- **Versions-Sicherheit (KRITISCH):** Auflösung NUR über exakten `canonical_key`. Verschiedene version/qualifier ⇒ verschiedene Produkte. Verschiedene Vendors mit gleichem Namen ⇒ verschiedene Produkte. Kein Merge in 1a.
+- **Idempotenz + Crash-Safety:** Mehrfaches resolve (inkl. Schreibvarianten) ⇒ genau 1 Produkt, genau 1 `created`-Event, genau 1 vendor-scoped Alias. Race-safe; ein Crash zwischen Inserts heilt selbst.
+- **Input-Validierung:** leerer Vendor, leerer Name oder leere geparste `family` ⇒ `throw`. Keine leeren Identity-Zeilen.
+- **canonical_key wird NIE von JS geschrieben** (GENERATED) — nur zum Lookup gebildet. Insert schreibt `vendor_namespace/family/version/qualifier`.
+- **Embedding best-effort:** Fehler ODER falsche Dimension (≠768) ⇒ `family_embedding=null`, nie Abbruch.
+- **Tests:** vitest. Pure Logik = Unit-Tests (keine DB/Embedding-Imports). DB-Test: `describe.skipIf(!hasDbKeys)`, **dynamischer** Import von `resolveProduct` in der Suite, **random Vendor pro Lauf**, Embedding **gemockt**. Plus Controller-Prod-Verifikation.
 - **Commits:** ein Commit pro Task, auf `main`, Trailer `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 
 ---
 
-### Task 1: Pure Payload-Bildung `buildProductInsert`
+### Task 1: Pure Payload-Bildung (`resolve-product-payload.ts`)
 
 **Files:**
-- Create: `lib/rankings/resolve-product.ts`
-- Create: `tests/lib/rankings-resolve-product.test.ts`
+- Create: `lib/rankings/resolve-product-payload.ts`
+- Create: `tests/lib/rankings-resolve-payload.test.ts`
 
 **Interfaces:**
-- Consumes: `parseProductName`, `canonicalKey`, `productSlug` aus `@/lib/rankings/canonicalize` (Phase 0).
-- Produces: `interface ProductInsert { vendor_namespace, family, version, qualifier, canonical_name, slug, canonical_key }` und `buildProductInsert(vendor: string, detectedName: string): ProductInsert`. `canonical_key` ist nur zum Lookup (NICHT in den DB-Insert übernehmen — GENERATED). Task 2 konsumiert das.
+- Consumes: `parseProductName`, `canonicalKey`, `productSlug` aus `@/lib/rankings/canonicalize`.
+- Produces: `normalizeVendorNamespace(raw: string): string`; `interface ProductInsert { vendor_namespace, family, version, qualifier, canonical_name, slug, canonical_key }`; `buildProductInsert(vendor: string, detectedName: string): ProductInsert` (wirft bei leerem Vendor/Name/family). DB-frei. Task 3 konsumiert es.
 
 - [ ] **Step 1: Failing tests schreiben**
 
 ```typescript
-// tests/lib/rankings-resolve-product.test.ts
+// tests/lib/rankings-resolve-payload.test.ts
 import { describe, it, expect } from 'vitest'
-import { buildProductInsert } from '@/lib/rankings/resolve-product'
+import { buildProductInsert, normalizeVendorNamespace } from '@/lib/rankings/resolve-product-payload'
+
+describe('normalizeVendorNamespace', () => {
+  it('normalisiert Casing, Whitespace und Sonderzeichen', () => {
+    expect(normalizeVendorNamespace(' Open AI ')).toBe('open-ai')
+    expect(normalizeVendorNamespace('OpenAI')).toBe('openai')
+    expect(normalizeVendorNamespace('open-ai')).toBe('open-ai')
+  })
+})
 
 describe('buildProductInsert', () => {
-  it('baut vendor/family/version/qualifier + key + slug', () => {
+  it('baut Felder + key + slug', () => {
     const r = buildProductInsert('OpenAI', 'GPT-5.6 Earth')
     expect(r.vendor_namespace).toBe('openai')
-    expect(r.family).toBe('gpt')
-    expect(r.version).toBe('5.6')
-    expect(r.qualifier).toBe('earth')
+    expect(r.family).toBe('gpt'); expect(r.version).toBe('5.6'); expect(r.qualifier).toBe('earth')
     expect(r.canonical_key).toBe('openai@gpt@5.6@earth')
     expect(r.slug).toBe('openai-gpt-5-6-earth')
     expect(r.canonical_name).toBe('GPT-5.6 Earth')
   })
-  it('Schreibvarianten erzeugen denselben canonical_key + slug', () => {
-    const a = buildProductInsert('openai', 'GPT-5.6')
-    const b = buildProductInsert('OpenAI', 'gpt 5.6')
-    expect(a.canonical_key).toBe(b.canonical_key)
-    expect(a.slug).toBe(b.slug)
+  it('Schreibvarianten → selber key + slug', () => {
+    expect(buildProductInsert('openai', 'GPT-5.6').canonical_key)
+      .toBe(buildProductInsert('OpenAI', 'gpt 5.6').canonical_key)
   })
-  it('verschiedene Versionen erzeugen verschiedene keys', () => {
+  it('verschiedene Versionen → verschiedene keys', () => {
     expect(buildProductInsert('openai', 'GPT-5.6').canonical_key)
       .not.toBe(buildProductInsert('openai', 'GPT-5.5').canonical_key)
   })
-  it('canonical_name bleibt im Original-Casing erhalten', () => {
-    expect(buildProductInsert('anysphere', 'Cursor').canonical_name).toBe('Cursor')
+  it('robuste Vendor-Normalisierung im key/slug', () => {
+    expect(buildProductInsert(' Open AI ', 'GPT-5.6').vendor_namespace).toBe('open-ai')
+    expect(buildProductInsert(' Open AI ', 'GPT-5.6').slug).toBe('open-ai-gpt-5-6')
+  })
+  it('lehnt leere Inputs ab', () => {
+    expect(() => buildProductInsert('', 'GPT-5.6')).toThrow()
+    expect(() => buildProductInsert('openai', '')).toThrow()
+    expect(() => buildProductInsert('openai', '   ')).toThrow()
   })
 })
 ```
 
 - [ ] **Step 2: Test laufen lassen, Fehlschlag verifizieren**
 
-Run: `npm test -- rankings-resolve-product`
-Expected: FAIL — "Failed to resolve import '@/lib/rankings/resolve-product'".
+Run: `npm test -- rankings-resolve-payload` → FAIL ("Failed to resolve import …").
 
 - [ ] **Step 3: Implementierung**
 
 ```typescript
-// lib/rankings/resolve-product.ts
+// lib/rankings/resolve-product-payload.ts
 import { parseProductName, canonicalKey, productSlug } from '@/lib/rankings/canonicalize'
 
 export interface ProductInsert {
@@ -82,225 +93,264 @@ export interface ProductInsert {
   qualifier: string | null
   canonical_name: string
   slug: string
-  /** Nur für den Lookup — NICHT in den DB-Insert (products.canonical_key ist GENERATED). */
+  /** Nur zum Lookup — NICHT in den DB-Insert (products.canonical_key ist GENERATED). */
   canonical_key: string
 }
 
-/**
- * Reine, deterministische Payload-Bildung. Vendor wird gelowercased (konsistent
- * zum SQL lower(vendor_namespace)); parseProductName liefert family/version/
- * qualifier bereits lowercase. canonical_name behält das Original-Casing.
- */
+/** Robuste Vendor-Namespace-Normalform: casefold + Sonderzeichen→'-' (konsistent zu slug). */
+export function normalizeVendorNamespace(raw: string): string {
+  return raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+/** Reine, deterministische Payload-Bildung. Wirft bei leerem Vendor/Name/family. */
 export function buildProductInsert(vendor: string, detectedName: string): ProductInsert {
-  const parsed = parseProductName(detectedName)
-  const vendor_namespace = vendor.toLowerCase()
+  const vendor_namespace = normalizeVendorNamespace(vendor)
+  if (!vendor_namespace) throw new Error('buildProductInsert: vendor_namespace leer')
+  const name = detectedName.trim()
+  if (!name) throw new Error('buildProductInsert: detectedName leer')
+  const parsed = parseProductName(name) // wirft selbst bei leerem Namen (Phase-0-guard)
+  if (!parsed.family) throw new Error('buildProductInsert: family leer')
   return {
     vendor_namespace,
     family: parsed.family,
     version: parsed.version,
     qualifier: parsed.qualifier,
-    canonical_name: detectedName,
+    canonical_name: name,
     slug: productSlug(vendor_namespace, parsed),
     canonical_key: canonicalKey(vendor_namespace, parsed),
   }
 }
 ```
 
-- [ ] **Step 4: Test laufen lassen, Erfolg verifizieren**
-
-Run: `npm test -- rankings-resolve-product`
-Expected: PASS (4 Fälle).
+- [ ] **Step 4: Test laufen lassen** → `npm test -- rankings-resolve-payload` → PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add lib/rankings/resolve-product.ts tests/lib/rankings-resolve-product.test.ts
-git commit -m "feat(rankings): buildProductInsert (pure Payload-Bildung)
+git add lib/rankings/resolve-product-payload.ts tests/lib/rankings-resolve-payload.test.ts
+git commit -m "feat(rankings): pure buildProductInsert + normalizeVendorNamespace
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 2: `resolveProduct` (idempotente DB-Auflösung) + Integrationstest
+### Task 2: Migration — Partial-Unique-Index für created-Event
 
 **Files:**
-- Modify: `lib/rankings/resolve-product.ts`
-- Modify: `tests/lib/rankings-resolve-product.test.ts`
+- Create: `supabase/migrations/20260628180000_rankings_one_created_event.sql`
 
 **Interfaces:**
-- Consumes: `buildProductInsert` (Task 1); `createAdminClient` aus `@/lib/supabase/admin`; `generateEmbedding` aus `@/lib/embeddings/generator`; `normalizeAlias` aus `@/lib/rankings/canonicalize`.
-- Produces: `resolveProduct(opts: { vendor: string; detectedName: string; evidence?: string }): Promise<{ productId: string; canonicalKey: string; isNew: boolean }>`. Phase 1b (extract) konsumiert das pro erkanntem Produkt.
+- Produces: garantiert höchstens EIN `product_identity_events`-Eintrag mit `event_type='created'` pro `product_id` (DB-Ebene). Task 3 verlässt sich darauf (INSERT + 23505-Catch = race-safe ohne Duplikat).
 
-Ablauf (race-safe, idempotent):
-1. `buildProductInsert` → `canonical_key`.
-2. `SELECT id FROM products WHERE canonical_key = key`. Treffer → `UPDATE last_seen` → return `{isNew:false}`.
-3. Kein Treffer → `generateEmbedding(family)` (best-effort, null bei Fehler) → `INSERT ... ON CONFLICT (canonical_key) DO NOTHING` → `.select()`.
-   - Insert lieferte Zeile (`isNew=true`): Identity-Event `created` + Alias-Upsert (vendor-scoped, `ON CONFLICT DO NOTHING`).
-   - Insert lieferte nichts (Race: parallel angelegt): re-`SELECT` → return `{isNew:false}`.
+- [ ] **Step 1: Migration schreiben**
 
-- [ ] **Step 1: Integrationstest schreiben (skipIf ohne DB-Keys)**
+```sql
+-- Genau-ein-created-Event pro Produkt auf DB-Ebene garantieren (Phase 1a).
+-- resolveProduct macht INSERT + fängt 23505 (unique_violation) ab → race-safe,
+-- selbstheilend, ohne auf PostgREST-onConflict gegen einen Partial-Index zu setzen.
+CREATE UNIQUE INDEX IF NOT EXISTS product_identity_events_one_created_per_product
+  ON product_identity_events(product_id)
+  WHERE event_type = 'created';
+```
+
+- [ ] **Step 2: Anwenden** → `supabase db push --dry-run` (zeigt nur diese Migration), dann `echo "y" | supabase db push` → "Finished" ohne Fehler.
+
+- [ ] **Step 3: Verifizieren** (Prod-Keys via `vercel env pull --environment=production` ins Scratchpad):
+
+```bash
+# Index existiert (zwei created-Events auf dieselbe product_id → 2. schlägt fehl):
+curl -s "$SUPABASE_URL/rest/v1/product_identity_events?select=id&limit=1" \
+  -H "apikey: $SRK" -H "Authorization: Bearer $SRK" -o /dev/null -w "%{http_code}\n"   # 200
+```
+(Die echte Duplikat-Abwehr wird im Task-3-Integrationstest geprüft.)
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add supabase/migrations/20260628180000_rankings_one_created_event.sql
+git commit -m "feat(rankings): Partial-Unique-Index — genau ein created-Event pro Produkt
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+### Task 3: `resolveProduct` (idempotent, selbstheilend) + Integrationstest
+
+**Files:**
+- Create: `lib/rankings/resolve-product.ts`
+- Create: `tests/lib/rankings-resolve-product-db.test.ts`
+
+**Interfaces:**
+- Consumes: `buildProductInsert`/`ProductInsert` (Task 1); `createAdminClient` (`@/lib/supabase/admin`); `generateEmbedding` (`@/lib/embeddings/generator`); `normalizeAlias` (`@/lib/rankings/canonicalize`). DB-/Embedding-Imports liegen NUR in dieser Datei (Pure-Tests aus Task 1 bleiben sauber).
+- Produces: `resolveProduct(opts: { vendor: string; detectedName: string; evidence?: string }): Promise<{ productId: string; canonicalKey: string; isNew: boolean }>`.
+
+Ablauf: `buildProductInsert` → exakter `canonical_key`-SELECT (Treffer → `last_seen`-Update + `ensureCreatedEvent`/`ensureAlias` [Heilung] → isNew:false) → sonst `generateEmbedding` (best-effort, nur wenn `length===768`) → `.upsert({...}, {onConflict:'canonical_key', ignoreDuplicates:true}).select('id').maybeSingle()` → wenn null (Race) re-SELECT (+Heilung, isNew:false) → sonst `ensureCreatedEvent`+`ensureAlias` (isNew:true). `ensureCreatedEvent`/`ensureAlias`: INSERT, bei `error.code==='23505'` ignorieren, sonst throw.
+
+- [ ] **Step 1: Integrationstest schreiben (skipIf, dynamic import, random vendor, Embedding gemockt)**
 
 ```typescript
-import { resolveProduct } from '@/lib/rankings/resolve-product'
-import { createAdminClient } from '@/lib/supabase/admin'
+// tests/lib/rankings-resolve-product-db.test.ts
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
+
+vi.mock('@/lib/embeddings/generator', () => ({ generateEmbedding: vi.fn(async () => [] as number[]) }))
 
 const hasDb = !!process.env.SUPABASE_SERVICE_ROLE_KEY && !!process.env.NEXT_PUBLIC_SUPABASE_URL
 
-describe.skipIf(!hasDb)('resolveProduct — Idempotenz (DB)', () => {
-  const supabase = createAdminClient()
-  const VENDOR = 'testvendor'
-  // Eindeutiger Name pro Lauf, damit parallele Läufe sich nicht stören:
-  const NAME = `ZZTest Model 9.9`
+describe.skipIf(!hasDb)('resolveProduct — Idempotenz & Vendor-Sicherheit (DB)', () => {
+  const RUN = Math.abs(Date.now() % 100000).toString(36)
+  const VENDOR = `zztestvendor-${RUN}`
+  let supabase: ReturnType<typeof import('@/lib/supabase/admin').createAdminClient>
 
-  async function cleanup() {
-    await supabase.from('products').delete().eq('vendor_namespace', VENDOR)
-  }
-  beforeAll(cleanup)
-  afterAll(cleanup)
+  beforeAll(async () => {
+    const { createAdminClient } = await import('@/lib/supabase/admin')
+    supabase = createAdminClient()
+  })
+  afterAll(async () => { await supabase.from('products').delete().like('vendor_namespace', `zztestvendor-${RUN}%`) })
 
-  it('mehrfaches resolve + Schreibvariante → genau 1 Produkt, 1 created-Event', async () => {
-    const a = await resolveProduct({ vendor: VENDOR, detectedName: NAME })
-    const b = await resolveProduct({ vendor: VENDOR, detectedName: 'zztest  model 9.9' }) // Schreibvariante
-    const c = await resolveProduct({ vendor: VENDOR, detectedName: NAME })
-    expect(a.canonicalKey).toBe(b.canonicalKey)
-    expect(a.canonicalKey).toBe(c.canonicalKey)
-    expect(a.isNew).toBe(true)
-    expect(b.isNew).toBe(false)
-    expect(c.isNew).toBe(false)
-
+  it('mehrfaches resolve + Schreibvariante → 1 Produkt, 1 created, 1 alias', async () => {
+    const { resolveProduct } = await import('@/lib/rankings/resolve-product')
+    const a = await resolveProduct({ vendor: VENDOR, detectedName: 'ZZModel 9.9' })
+    const b = await resolveProduct({ vendor: VENDOR, detectedName: 'zzmodel  9.9' })
+    const c = await resolveProduct({ vendor: VENDOR, detectedName: 'ZZModel 9.9' })
+    expect(b.canonicalKey).toBe(a.canonicalKey); expect(c.canonicalKey).toBe(a.canonicalKey)
+    expect(a.isNew).toBe(true); expect(b.isNew).toBe(false); expect(c.isNew).toBe(false)
     const { data: prods } = await supabase.from('products').select('id').eq('vendor_namespace', VENDOR)
     expect(prods).toHaveLength(1)
-    const { data: events } = await supabase
-      .from('product_identity_events').select('id').eq('product_id', a.productId).eq('event_type', 'created')
-    expect(events).toHaveLength(1)
+    const { data: ev } = await supabase.from('product_identity_events').select('id').eq('product_id', a.productId).eq('event_type', 'created')
+    expect(ev).toHaveLength(1)
+    const { data: al } = await supabase.from('product_aliases').select('id').eq('product_id', a.productId)
+    expect(al!.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('verschiedene Versionen → 2 Produkte', async () => {
-    await resolveProduct({ vendor: VENDOR, detectedName: 'ZZVer 1.0' })
-    await resolveProduct({ vendor: VENDOR, detectedName: 'ZZVer 2.0' })
-    const { data } = await supabase.from('products').select('id').eq('vendor_namespace', VENDOR).like('family', 'zzver')
-    expect(data!.length).toBe(2)
+  it('verschiedene Versionen/Qualifier → verschiedene Produkte', async () => {
+    const { resolveProduct } = await import('@/lib/rankings/resolve-product')
+    const v1 = await resolveProduct({ vendor: VENDOR, detectedName: 'ZZSplit 1.0' })
+    const v2 = await resolveProduct({ vendor: VENDOR, detectedName: 'ZZSplit 2.0' })
+    const q = await resolveProduct({ vendor: VENDOR, detectedName: 'ZZSplit 1.0 mini' })
+    expect(new Set([v1.productId, v2.productId, q.productId]).size).toBe(3)
+  })
+
+  it('gleicher Name, verschiedene Vendors → verschiedene Produkte', async () => {
+    const { resolveProduct } = await import('@/lib/rankings/resolve-product')
+    const a = await resolveProduct({ vendor: `${VENDOR}-a`, detectedName: 'Studio' })
+    const b = await resolveProduct({ vendor: `${VENDOR}-b`, detectedName: 'Studio' })
+    expect(a.canonicalKey).not.toBe(b.canonicalKey)
+    expect(a.productId).not.toBe(b.productId)
   })
 })
 ```
 
-Ergänze `beforeAll, afterAll` (und `describe`) im vitest-Import oben in der Datei.
+- [ ] **Step 2: Test laufen lassen** → `npm test -- rankings-resolve-product-db` → ohne DB-Keys SKIPPED; mit Keys FAIL (resolveProduct fehlt).
 
-- [ ] **Step 2: Test laufen lassen**
-
-Run: `npm test -- rankings-resolve-product`
-Expected: Ohne DB-Keys → die DB-`describe`-Suite wird SKIPPED (Task-1-Unit-Tests laufen weiter PASS). Falls `.env.local` Prod-Keys hat → FAIL ("resolveProduct is not a function").
-
-- [ ] **Step 3: `resolveProduct` implementieren (an Datei anhängen)**
+- [ ] **Step 3: Implementierung**
 
 ```typescript
+// lib/rankings/resolve-product.ts
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateEmbedding } from '@/lib/embeddings/generator'
 import { normalizeAlias } from '@/lib/rankings/canonicalize'
+import { buildProductInsert } from '@/lib/rankings/resolve-product-payload'
+
+type Admin = ReturnType<typeof createAdminClient>
+
+/** INSERT, das eine DB-Unique-Verletzung (23505) als „schon da" toleriert. */
+async function insertIgnoreDup(supabase: Admin, table: string, row: Record<string, unknown>) {
+  const { error } = await supabase.from(table).insert(row)
+  if (error && error.code !== '23505') throw error
+}
+
+async function ensureCreatedEvent(supabase: Admin, productId: string, key: string, evidence?: string) {
+  await insertIgnoreDup(supabase, 'product_identity_events', {
+    product_id: productId, event_type: 'created', new_key: key, confidence: 0, evidence: evidence ?? null,
+  })
+}
+
+async function ensureAlias(supabase: Admin, productId: string, vendor: string, detectedName: string) {
+  await insertIgnoreDup(supabase, 'product_aliases', {
+    product_id: productId, vendor_namespace: vendor,
+    alias_raw: detectedName, alias_normalized: normalizeAlias(detectedName), alias_type: 'spelling',
+  })
+}
 
 /**
- * Löst einen erkannten Produktnamen idempotent auf den products-Eintrag auf
- * (oder legt ihn an). Identität ausschließlich über den exakten canonical_key.
+ * Löst einen erkannten Produktnamen idempotent + selbstheilend auf den
+ * products-Eintrag auf. Identität ausschließlich über den exakten canonical_key.
  */
 export async function resolveProduct(opts: {
-  vendor: string
-  detectedName: string
-  evidence?: string
+  vendor: string; detectedName: string; evidence?: string
 }): Promise<{ productId: string; canonicalKey: string; isNew: boolean }> {
   const supabase = createAdminClient()
   const p = buildProductInsert(opts.vendor, opts.detectedName)
 
-  // 1) Exakter Lookup
+  // 1) Exakter Lookup → Heilung + last_seen
   const { data: existing } = await supabase
     .from('products').select('id').eq('canonical_key', p.canonical_key).maybeSingle()
   if (existing) {
     await supabase.from('products').update({ last_seen: new Date().toISOString() }).eq('id', existing.id)
+    await ensureCreatedEvent(supabase, existing.id, p.canonical_key, opts.evidence)
+    await ensureAlias(supabase, existing.id, p.vendor_namespace, opts.detectedName)
     return { productId: existing.id, canonicalKey: p.canonical_key, isNew: false }
   }
 
-  // 2) Family-Embedding (best-effort)
+  // 2) Family-Embedding (best-effort, nur exakte Dimension)
   let familyEmbedding: number[] | null = null
-  try {
-    const emb = await generateEmbedding(p.family)
-    if (emb.length > 0) familyEmbedding = emb
-  } catch { /* non-fatal */ }
+  try { const e = await generateEmbedding(p.family); if (Array.isArray(e) && e.length === 768) familyEmbedding = e } catch { /* non-fatal */ }
 
-  // 3) Race-safe Insert (canonical_key NICHT setzen — GENERATED)
-  const { data: inserted } = await supabase
+  // 3) Race-safe Upsert (canonical_key NICHT setzen — GENERATED)
+  const { data: inserted, error: insErr } = await supabase
     .from('products')
-    .insert({
-      vendor_namespace: p.vendor_namespace,
-      family: p.family,
-      version: p.version,
-      qualifier: p.qualifier,
-      canonical_name: p.canonical_name,
-      slug: p.slug,
-      family_embedding: familyEmbedding,
-      identity_status: 'candidate',
-      visibility_status: 'visible',
-      confidence_band: 'low',
+    .upsert({
+      vendor_namespace: p.vendor_namespace, family: p.family, version: p.version, qualifier: p.qualifier,
+      canonical_name: p.canonical_name, slug: p.slug, family_embedding: familyEmbedding,
+      identity_status: 'candidate', visibility_status: 'visible', confidence_band: 'low',
     }, { onConflict: 'canonical_key', ignoreDuplicates: true })
-    .select('id')
-    .maybeSingle()
+    .select('id').maybeSingle()
+  if (insErr) throw insErr
 
   if (!inserted) {
-    // Race: ein paralleler Lauf hat es angelegt → re-select
+    // Race: parallel angelegt → re-select + Heilung
     const { data: raced } = await supabase
       .from('products').select('id').eq('canonical_key', p.canonical_key).single()
+    await ensureCreatedEvent(supabase, raced.id, p.canonical_key, opts.evidence)
+    await ensureAlias(supabase, raced.id, p.vendor_namespace, opts.detectedName)
     return { productId: raced.id, canonicalKey: p.canonical_key, isNew: false }
   }
 
-  // 4) Identity-Event + Alias (beide non-fatal/idempotent)
-  await supabase.from('product_identity_events').insert({
-    product_id: inserted.id, event_type: 'created', new_key: p.canonical_key,
-    confidence: 0, evidence: opts.evidence ?? null,
-  })
-  await supabase.from('product_aliases').insert({
-    product_id: inserted.id, vendor_namespace: p.vendor_namespace,
-    alias_raw: opts.detectedName, alias_normalized: normalizeAlias(opts.detectedName), alias_type: 'spelling',
-  }, { onConflict: 'vendor_namespace,alias_normalized', ignoreDuplicates: true } as never)
-
+  await ensureCreatedEvent(supabase, inserted.id, p.canonical_key, opts.evidence)
+  await ensureAlias(supabase, inserted.id, p.vendor_namespace, opts.detectedName)
   return { productId: inserted.id, canonicalKey: p.canonical_key, isNew: true }
 }
 ```
 
-- [ ] **Step 4: Test laufen lassen**
+- [ ] **Step 4: Test laufen lassen** → `npm test -- rankings-resolve-product-db` (ohne Keys SKIPPED, mit Keys PASS) + `npm test -- rankings-resolve-payload` (weiter PASS).
 
-Run: `npm test -- rankings-resolve-product`
-Expected: Ohne DB-Keys → DB-Suite SKIPPED, Unit-Tests PASS. Mit Keys → alle PASS.
-
-- [ ] **Step 5: Typecheck**
-
-Run: `npm run build` (bis „Compiled successfully") oder `npx tsc --noEmit`
-Expected: keine Typfehler in `lib/rankings/resolve-product.ts`.
+- [ ] **Step 5: Typecheck** → `npm run build` (bis „Compiled successfully") oder `npx tsc --noEmit` → keine Typfehler.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add lib/rankings/resolve-product.ts tests/lib/rankings-resolve-product.test.ts
-git commit -m "feat(rankings): resolveProduct — idempotente, versions-sichere Produktauflösung
+git add lib/rankings/resolve-product.ts tests/lib/rankings-resolve-product-db.test.ts
+git commit -m "feat(rankings): resolveProduct — idempotent, selbstheilend, versions-/vendor-sicher
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
 
-## Controller-Prod-Verifikation (nach Task 2, außerhalb vitest)
+## Controller-Prod-Verifikation (nach Task 3)
 
-Da `tests/setup.ts` nur `.env.local` lädt (ohne garantierte DB-Keys), wird die Idempotenz zusätzlich gegen Prod verifiziert: ein temporäres Admin-Skript/Endpoint ruft `resolveProduct` 3× (Name + Schreibvariante) auf, dann REST-Query auf `products` (genau 1 Zeile für den Test-Vendor) + `product_identity_events` (genau 1 `created`), danach Cleanup der Test-Zeilen. (Mit `vercel env pull --environment=production` ins Scratchpad für die Keys.)
+`vercel env pull --environment=production` ins Scratchpad. Da `tests/setup.ts` nur `.env.local` lädt (ohne garantierte DB-Keys), Idempotenz zusätzlich gegen Prod prüfen: ein Wegwerf-Skript importiert `resolveProduct`, ruft es 3× (Name + Schreibvariante) mit einem random Test-Vendor, dann REST-Query: `products` (genau 1), `product_identity_events` created (genau 1), `product_aliases` (≥1). Vendor-Isolation: gleicher Name unter zwei Test-Vendors → 2 Produkte. Danach Test-Zeilen löschen.
 
 ## Self-Review
 
-**Spec-Coverage (§5):** Exakter-canonical_key-Anker ✓, idempotenter race-safer Upsert ✓, Identity-Event `created` ✓, vendor-scoped Alias ✓, Family-Embedding gespeichert (best-effort) ✓. Fuzzy-/Embedding-Disambiguierung bewusst Phase 1b (Versions-Merge-Gefahr).
+**Review-Feedback eingearbeitet (P0):** `.upsert` statt `.insert(onConflict)` ✓; created-Event crash-safe via Partial-Unique-Index + 23505-Catch, selbstheilend in allen Branches ✓; dynamic import im DB-Test (kein Bruch vor Skip) ✓; Pure/DB-Datei-Split (Pure-Tests DB-frei) ✓; `normalizeVendorNamespace` ✓; Empty-Guards + Tests ✓; Phase-0-Prerequisite in Constraints ✓. **P1:** Embedding-Dim-Check (===768) ✓; random Vendor pro Lauf ✓; Embedding gemockt ✓.
 
-**Phase-1-Notiz-Bezug:** Der Idempotenz-Test adressiert die Review-Notiz „Tick-Abbruch → Wiederanlauf ohne Duplikate" auf Produkt-Ebene. (Observation-Ebene folgt in 1b/1c.)
+**Konsistenz:** `buildProductInsert`/`ProductInsert` (Task 1) → `resolveProduct` (Task 3). `canonical_key` nur gelesen (GENERATED). Vendor-Normalisierung in JS deckungsgleich zur DB (SQL `lower()` ändert den schon-normalisierten Wert nicht).
 
-**Placeholder-Scan:** Keine TODO/TBD. Der `as never`-Cast bei der Alias-Upsert-Option ist nötig, weil supabase-js' Typen `ignoreDuplicates` für `.insert` enger typen — funktional korrekt (Insert mit onConflict).
+**Placeholder-Scan:** keine TODO/TBD.
 
-**Typ-Konsistenz:** `ProductInsert`/`buildProductInsert` (Task 1) → konsumiert in `resolveProduct` (Task 2). `canonical_key` wird nur gelesen, nie geschrieben (GENERATED column).
+## Nicht in Phase 1a (→ 1b/1c)
 
-## Nicht in Phase 1a
-
-- Trigram-/Family-Embedding-Fuzzy-Disambiguierung + LLM-Tiebreak → Phase 1b (find_product_by_alias / find_similar_products_by_family RPCs inkl. anon-REVOKE).
-- extract/enrich/aggregate-Bodies, Taxonomie-Resolve, Score → Phase 1b/1c.
+Trigram-/Family-Embedding-Fuzzy + LLM-Tiebreak (find_product_by_alias / find_similar_products_by_family RPCs, anon-REVOKE); extract/enrich/aggregate-Bodies; Taxonomie-Resolve; Score. `canonical_name`-„bester Display-Name"-Regel + `normalizeAlias`-letter/digit-Angleichung: P1-Notizen für 1b.
