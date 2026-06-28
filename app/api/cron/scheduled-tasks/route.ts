@@ -100,6 +100,7 @@ export async function GET(request: NextRequest) {
 
   const supabase = createAdminClient()
   const now = new Date()
+  const schedulerStartedAt = Date.now()
 
   // Extract base URL from the incoming request itself — avoids cross-origin redirects
   // that strip Authorization headers when using VERCEL_URL or NEXT_PUBLIC_APP_URL
@@ -262,6 +263,26 @@ export async function GET(request: NextRequest) {
     results.articleJob = 'error'
   }
 
+  // Rankings: tägliches extract-Enqueue + jeden Tick eine Phase weiter, NUR wenn
+  // genug Tick-Budget übrig ist (Article-Job hat Vorrang). advanceRankingJob ist
+  // Claim-/Lease-geschützt (FOR UPDATE SKIP LOCKED).
+  try {
+    const remainingMs = 300_000 - (Date.now() - schedulerStartedAt)
+    if (currentHour >= 6) {
+      const { createRankingJob } = await import('@/lib/rankings/jobs')
+      results.rankingEnqueue = (await createRankingJob({ mode: 'daily' })).created ? 'enqueued' : 'skipped'
+    }
+    if (remainingMs > 150_000) {
+      const { advanceRankingJob } = await import('@/lib/rankings/jobs')
+      results.rankingJob = await advanceRankingJob()
+    } else {
+      results.rankingJob = 'skipped_budget'
+    }
+  } catch (error) {
+    console.error('[Scheduler] Ranking job error:', error)
+    results.rankingJob = 'error'
+  }
+
   // Newsletter Send
   if (config.newsletterSend?.enabled) {
     const shouldRunSend = runAll || isTimeMatch(config.newsletterSend.hour, config.newsletterSend.minute, currentHour, currentMinute)
@@ -381,6 +402,8 @@ export async function GET(request: NextRequest) {
           mez: `${currentHour}:${String(currentMinute).padStart(2, '0')}`,
           articleJob: results.articleJob ?? null,
           postGeneration: results.postGeneration ?? null,
+          rankingJob: results.rankingJob ?? null,
+          rankingEnqueue: results.rankingEnqueue ?? null,
         },
       }, { onConflict: 'key' })
   } catch (error) {
