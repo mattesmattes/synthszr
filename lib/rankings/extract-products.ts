@@ -16,13 +16,28 @@ const LLM_TIMEOUT_MS = 50_000
 
 /** Baut den Extraktions-Prompt (pure, gehärtet). */
 export function buildExtractPrompt(title: string, content: string): string {
-  return `Extrahiere ALLE konkret benannten AI-PRODUKTE aus dieser Tech-News.
+  return `Extrahiere die konkret benannten AI-PRODUKTE aus dieser Tech-News.
+
+EINSCHLIESSEN (nur diese Produktarten):
+- KI-/Sprachmodelle (z.B. GPT-5.6, Claude Opus 4.8, Gemini 2.5 Pro, Llama 3.1)
+- AI-Apps & -Assistenten (z.B. ChatGPT, Perplexity)
+- AI-Coding-Tools/IDEs (z.B. Cursor, Claude Code, Copilot)
+- Bild-/Video-/Audio-Generatoren (z.B. Sora, Midjourney, Veo)
+- AI-Agenten/-Plattformen mit eigenem Produktnamen
+
+AUSSCHLIESSEN (NICHT extrahieren):
+- Firmen/Vendoren OHNE konkret genanntes Produkt (z.B. "OpenAI", "JetBrains", "Google" allein)
+- Benchmarks/Evals/Datasets (z.B. "Terminal Bench", "MMLU", "SWE-bench")
+- Code-Libraries/Frameworks/SDKs (z.B. "LangChain", "React")
+- Dateien/Configs/Repos/Verzeichnisse (z.B. "CLAUDE.md", "README", "package.json")
+- Personen, Autoren, Newsletter, Podcasts, Blogs, Kurse, Skill-Sets
+- generische Begriffe ("KI", "Chatbot", "Agent", "Modell" ohne Eigennamen)
+- Konzepte/Tags/Features ohne eigenständigen Produktnamen
 
 REGELN:
-- Nur echte Produkte/Modelle/Tools (z.B. ein konkretes Sprachmodell, eine IDE, ein Bild-/Video-Generator), KEINE Firmen ohne konkretes Produkt, keine generischen Begriffe ("KI", "Chatbot").
-- Erfinde KEINE Produktnamen. Wenn kein konkretes AI-Produkt genannt wird, gib eine LEERE Liste zurück.
-- name: exakter im Text genannter Produktname inkl. Version/Qualifier.
-- vendor: der Hersteller/Eigentümer des Produkts (NICHT der zitierte Publisher/das Newsportal), als kurzer Markenname OHNE Rechtsform ("OpenAI", nicht "OpenAI Inc.").
+- Im Zweifel WEGLASSEN. Erfinde KEINE Produktnamen. Wenn nichts klar passt, gib eine LEERE Liste zurück.
+- name: exakter im Text genannter Produktname inkl. Version/Variante (z.B. "GPT-5.6 Terra"). KEINE Zusätze wie "model"/"Modell".
+- vendor: Hersteller/Eigentümer des Produkts (NICHT der zitierte Publisher/das Newsportal), kurzer Markenname OHNE Rechtsform ("OpenAI", nicht "OpenAI Inc."). Wenn der Hersteller unklar ist, nimm den im Text genannten.
 - excerpt: kurzer wörtlicher Beleg-Ausschnitt aus dem Text.
 
 TITEL: ${title}

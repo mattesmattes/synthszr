@@ -33,14 +33,57 @@ describe('parseProductName', () => {
   it('DALL-E 3', () => {
     expect(parseProductName('DALL-E 3')).toEqual({ family: 'dall e', version: '3', qualifier: null })
   })
-  it('o3-mini', () => {
-    expect(parseProductName('o3-mini')).toEqual({ family: 'o', version: '3', qualifier: 'mini' })
+  it('o3-mini (kurzer Identifier o3 bleibt intakt)', () => {
+    expect(parseProductName('o3-mini')).toEqual({ family: 'o3', version: null, qualifier: 'mini' })
   })
   it('Llama 3.1 405B (size-token als qualifier)', () => {
     expect(parseProductName('Llama 3.1 405B')).toEqual({ family: 'llama', version: '3.1', qualifier: '405b' })
   })
   it('wirft bei leerem Namen', () => {
     expect(() => parseProductName('   ')).toThrow()
+  })
+
+  // Varianten-Konsistenz: benannte Varianten derselben Version → gleiche family+version,
+  // nur qualifier unterscheidet (alles NACH der Version ist Qualifier).
+  it('GPT-5.6 Varianten teilen family+version (Sol/Terra/Luna)', () => {
+    const sol = parseProductName('GPT-5.6 Sol')
+    const terra = parseProductName('GPT-5.6 Terra')
+    const luna = parseProductName('GPT-5.6 Luna')
+    const plain = parseProductName('GPT-5.6')
+    for (const v of [sol, terra, luna, plain]) {
+      expect(v.family).toBe('gpt')
+      expect(v.version).toBe('5.6')
+    }
+    expect(sol.qualifier).toBe('sol')
+    expect(terra.qualifier).toBe('terra')
+    expect(luna.qualifier).toBe('luna')
+    expect(plain.qualifier).toBeNull()
+  })
+  it('Ornith Dense/MoE-Varianten teilen family (Architektur als Qualifier)', () => {
+    const dense = parseProductName('Ornith-1.0-9B Dense')
+    const moe = parseProductName('Ornith-1.0-35B MoE')
+    expect(dense.family).toBe('ornith')
+    expect(moe.family).toBe('ornith')
+    expect(dense.version).toBe('1.0')
+    expect(dense.qualifier).toContain('9b')
+    expect(moe.qualifier).toContain('moe')
+  })
+  it('DeepSeek-V4-Pro (V4 → version, Pro → qualifier)', () => {
+    expect(parseProductName('DeepSeek-V4-Pro')).toEqual({ family: 'deepseek', version: '4', qualifier: 'pro' })
+  })
+  it('1.6T Size-Token wird Qualifier, nicht family', () => {
+    const p = parseProductName('DeepSeek-V4-Pro-1.6T')
+    expect(p.family).toBe('deepseek')
+    expect(p.qualifier).toContain('1.6t')
+  })
+  it('strippt model-Füllwort', () => {
+    expect(parseProductName('Codex 5.2 model')).toEqual({ family: 'codex', version: '5.2', qualifier: null })
+  })
+  it('keine leere family — Qualifier wird promotet (Opus 4.5)', () => {
+    expect(parseProductName('Opus 4.5')).toEqual({ family: 'opus', version: '4.5', qualifier: null })
+  })
+  it('normalisiert Unicode-Bindestrich (U+2011) wie ASCII', () => {
+    expect(parseProductName('GPT‑5.6')).toEqual(parseProductName('GPT-5.6'))
   })
 })
 

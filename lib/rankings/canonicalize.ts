@@ -1,4 +1,7 @@
-/** Bekannte Produkt-Qualifier (Größen-/Varianten-Tiers), reihenfolge-unabhängig erkannt. */
+/** Bekannte Produkt-Qualifier, die auch VOR der Version stehen können
+ *  (z.B. "Claude Opus 4.8"). Nach der Version stehende Tokens gelten ohnehin
+ *  generisch als Qualifier (siehe parseProductName), daher muss dieses Set nur
+ *  die pre-version-Tiers abdecken. */
 const QUALIFIERS = new Set([
   'mini', 'nano', 'micro', 'small', 'medium', 'large', 'pro', 'max', 'plus',
   'turbo', 'flash', 'lite', 'air', 'ultra', 'preview', 'beta', 'alpha', 'rc',
@@ -6,8 +9,11 @@ const QUALIFIERS = new Set([
   'thinking', 'vision',
 ])
 
-/** Modell-Größen-Token wie 405b, 70b, 8b, 1.5b — identitätsrelevant, gelten als qualifier. */
-const SIZE_TOKEN = /^\d+(?:\.\d+)?[bmk]$/i
+/** Füllwörter, die nicht zur Produktidentität gehören (z.B. "5.2-Codex model"). */
+const STOPWORDS = new Set(['model', 'modell', 'the'])
+
+/** Modell-Größen-Token: 405b, 70b, 8b, 1.5b, 1.6t — identitätsrelevant → Qualifier. */
+const SIZE_TOKEN = /^\d+(?:\.\d+)?[bmkt]$/i
 
 export interface ParsedProduct {
   family: string
@@ -17,25 +23,48 @@ export interface ParsedProduct {
 
 /**
  * Zerlegt einen rohen Produktnamen deterministisch in {family, version, qualifier}.
- * Versionsnummer und Qualifier sind Teil der Produktidentität — Schreibvarianten
- * (Casing, Bindestriche, fehlende Leerzeichen) mergen, Versionen/Varianten nie.
+ * Heuristik: family = Tokens VOR der ersten Versionsnummer (außer bekannte
+ * pre-version-Qualifier); alles NACH der Version sowie Size-Token gilt als
+ * Qualifier. So landen benannte Varianten ("GPT-5.6 Sol/Terra/Luna") konsistent
+ * als Qualifier statt in der family. Schreibvarianten mergen, Versionen/Varianten nie.
  */
 export function parseProductName(raw: string): ParsedProduct {
-  const cleaned = raw.trim().replace(/_+/g, ' ').replace(/([a-zA-Z])(\d)/g, '$1 $2')
-  const tokens = cleaned.split(/[\s\-/]+/).filter(Boolean)
+  // Unicode-Bindestriche (‑ – — etc.) auf ASCII-"-" normalisieren, damit der Split
+  // sie trennt (LLMs liefern teils U+2011 statt "-"). Buchstabe→Ziffer nur bei ≥2
+  // Buchstaben trennen ("GPT5.6"→"GPT 5.6"), damit kurze IDs wie "V4"/"M3" intakt bleiben.
+  const cleaned = raw.trim()
+    .replace(/[‐-―−]/g, '-')
+    .replace(/_+/g, ' ')
+    .replace(/([a-zA-Z]{2,})(\d)/g, '$1 $2')
+  const tokens = cleaned.split(/[\s\-/]+/).filter(Boolean).filter(t => !STOPWORDS.has(t.toLowerCase()))
   if (tokens.length === 0) throw new Error('parseProductName: leerer Produktname')
 
+  // Pass 1: Index der ersten echten Versionsnummer finden (Size-Token zählt nicht als Version).
   let version: string | null = null
+  let versionIdx = -1
+  for (let i = 0; i < tokens.length; i++) {
+    const low = tokens[i].toLowerCase()
+    if (SIZE_TOKEN.test(low)) continue
+    const m = low.match(/^v?(\d+(?:\.\d+)*[a-z]?)$/) // 5.6, v3, 4o, v4
+    if (m) { version = m[1]; versionIdx = i; break }
+  }
+
+  // Pass 2: Tokens zuordnen.
   const qualifiers: string[] = []
   const familyTokens: string[] = []
-
-  for (const tok of tokens) {
+  tokens.forEach((tok, i) => {
+    if (i === versionIdx) return
     const low = tok.toLowerCase()
-    if (SIZE_TOKEN.test(low)) { qualifiers.push(low); continue }       // 405b → qualifier (vor version!)
-    const vMatch = low.match(/^v?(\d+(?:\.\d+)*[a-z]?)$/)               // 5.6, v3, 4o
-    if (vMatch && version === null) { version = vMatch[1]; continue }
-    if (QUALIFIERS.has(low)) { qualifiers.push(low); continue }
-    familyTokens.push(low)
+    if (SIZE_TOKEN.test(low)) { qualifiers.push(low); return }
+    if (QUALIFIERS.has(low)) { qualifiers.push(low); return }
+    if (versionIdx >= 0 && i > versionIdx) { qualifiers.push(low); return } // nach der Version → Qualifier
+    familyTokens.push(low) // vor der Version (oder gar keine Version) → family
+  })
+
+  // Fallback: kein family-Token (z.B. "Opus 4.5") → ersten Qualifier zur family
+  // promoten, statt eine leere family zu erzeugen (DB-/Slug-Schutz).
+  if (familyTokens.length === 0 && qualifiers.length > 0) {
+    familyTokens.push(qualifiers.shift()!)
   }
 
   return {
