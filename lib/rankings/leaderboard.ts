@@ -49,17 +49,23 @@ export async function getRankedProducts(
   if (pErr) throw new Error(`leaderboard products: ${pErr.message}`)
   if (!products?.length) return []
 
-  const { data: mentions, error: mErr } = await supabase
-    .from('product_mentions')
-    .select('product_id, mention_date')
-  if (mErr) throw new Error(`leaderboard mentions: ${mErr.message}`)
-
+  // Alle Mentions paginiert laden — PostgREST cappt sonst still bei 1000 Zeilen,
+  // wodurch (seit dem Backfill > 1000 Mentions) die Momentum-Scores aus einer
+  // willkürlichen Teilmenge berechnet würden und Produkte aus dem Ranking fielen.
   const datesByProduct = new Map<string, string[]>()
-  for (const m of mentions ?? []) {
-    if (!m.mention_date) continue
-    const arr = datesByProduct.get(m.product_id) ?? []
-    arr.push(m.mention_date)
-    datesByProduct.set(m.product_id, arr)
+  for (let off = 0; ; off += 1000) {
+    const { data: batch, error: mErr } = await supabase
+      .from('product_mentions')
+      .select('product_id, mention_date')
+      .range(off, off + 999)
+    if (mErr) throw new Error(`leaderboard mentions: ${mErr.message}`)
+    for (const m of batch ?? []) {
+      if (!m.mention_date) continue
+      const arr = datesByProduct.get(m.product_id) ?? []
+      arr.push(m.mention_date)
+      datesByProduct.set(m.product_id, arr)
+    }
+    if (!batch || batch.length < 1000) break
   }
 
   const scored = products
