@@ -9,6 +9,13 @@ interface PageProps {
   params: Promise<{ lang: string; slug: string }>
 }
 
+function sentimentClass(score: number | null): string {
+  if (score == null) return 'bg-gray-100 text-gray-700'
+  if (score >= 0.3) return 'bg-[#CCFF00]/40 text-black'
+  if (score <= -0.3) return 'bg-red-100 text-red-700'
+  return 'bg-gray-100 text-gray-700'
+}
+
 function fmtDate(d: string | null): string {
   if (!d) return '—'
   try {
@@ -66,6 +73,33 @@ export default async function ProductDetailPage({ params }: PageProps) {
           <div className="text-base font-semibold mt-2">{fmtDate(p.lastSeen)}</div>
         </div>
       </div>
+
+      {/* Sentiment */}
+      {p.sentiment && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold mb-2">Tonalität</h2>
+          <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${sentimentClass(p.sentiment.score)}`}>
+            {p.sentiment.label}
+            {p.sentiment.score != null && <span className="opacity-70"> · {p.sentiment.score > 0 ? '+' : ''}{p.sentiment.score.toFixed(2)}</span>}
+          </span>
+        </div>
+      )}
+
+      {/* Features */}
+      {p.features.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold mb-3">Features</h2>
+          <dl className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
+            {p.features.map((f, i) => (
+              <div key={i} className="flex gap-4 p-3 text-sm">
+                <dt className="w-44 shrink-0 text-gray-500">{f.dimension}</dt>
+                <dd className="font-medium">{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="text-xs text-gray-400 mt-2">Aus News-Belegen extrahiert — Web-Research für vollständige Specs folgt.</p>
+        </div>
+      )}
 
       {/* Belege */}
       <h2 className="text-lg font-semibold mb-3">Belege ({p.mentions.length})</h2>

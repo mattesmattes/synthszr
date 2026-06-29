@@ -23,8 +23,12 @@ export interface ProductDetail {
   mentionCount: number
   rank: number | null
   score: number | null
+  sentiment: { label: string; score: number | null } | null
+  features: Array<{ dimension: string; value: string }>
   mentions: ProductMentionView[]
 }
+
+const SENTIMENT_DIM = '__sentiment'
 
 /** Supabase typisiert den daily_repo-Join je nach FK-Erkennung als Objekt ODER
  *  Array — beide Formen auf den title herunterbrechen. */
@@ -69,6 +73,19 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
   const ranked = await getRankedProducts({ limit: 10_000, minMentions: 2 })
   const entry = ranked.find((r) => r.slug === slug)
 
+  // Sentiment + Features (enrich, 1b-iii)
+  const { data: feats } = await supabase
+    .from('product_features_current')
+    .select('dimension_key, value_text, value_numeric')
+    .eq('product_id', product.id)
+  const sentimentRow = (feats ?? []).find((f) => f.dimension_key === SENTIMENT_DIM)
+  const sentiment = sentimentRow
+    ? { label: (sentimentRow.value_text as string) ?? 'neutral', score: sentimentRow.value_numeric as number | null }
+    : null
+  const features = (feats ?? [])
+    .filter((f) => f.dimension_key !== SENTIMENT_DIM)
+    .map((f) => ({ dimension: f.dimension_key as string, value: f.value_text as string }))
+
   return {
     id: product.id,
     canonicalName: product.canonical_name,
@@ -83,6 +100,8 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
     mentionCount: dates.length,
     rank: entry?.rank ?? null,
     score: entry?.score ?? null,
+    sentiment,
+    features,
     mentions: rows.map((m) => ({
       excerpt: m.excerpt as string | null,
       mentionDate: m.mention_date as string | null,
