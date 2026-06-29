@@ -23,14 +23,16 @@ function localeFrom(): string {
   return LOCALES.includes(parts[1]) ? parts[1] : 'de'
 }
 
-/** Trend aus der 30-Tage-Sparkline: erste vs. zweite Hälfte. */
+/** Aktueller Trend: letzter Momentum-Wert vs. ~7 Tage davor (nicht erste vs.
+ *  zweite Hälfte — die wäre während des Backfills immer "up", weil der Verlauf
+ *  dann monoton von 0 hochläuft). */
 function sparkTrend(spark: number[]): 'up' | 'down' | 'flat' {
-  if (!spark || spark.length < 4) return 'flat'
-  const half = Math.floor(spark.length / 2)
-  const a = spark.slice(0, half).reduce((s, v) => s + v, 0) / half
-  const b = spark.slice(half).reduce((s, v) => s + v, 0) / (spark.length - half)
-  if (b > a * 1.1) return 'up'
-  if (b < a * 0.9) return 'down'
+  if (!spark || spark.length < 8) return 'flat'
+  const last = spark[spark.length - 1]
+  const ref = spark[spark.length - 8] // ~7 Tage davor
+  if (ref < 0.01) return last > 0.05 ? 'up' : 'flat'
+  if (last > ref * 1.08) return 'up'
+  if (last < ref * 0.92) return 'down'
   return 'flat'
 }
 
@@ -190,7 +192,7 @@ export function appendProductVoteBlock(container: HTMLElement, products: Product
     block.className = 'synthszr-product-vote'
     block.style.cssText = 'font-size:13px;'
     const label = document.createElement('span')
-    label.textContent = 'Synthszr Vote: '
+    label.textContent = 'Synthszr Charts: '
     label.style.cssText = 'font-weight:700;text-transform:uppercase;font-size:0.8125em;'
     block.appendChild(label)
 
