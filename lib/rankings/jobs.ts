@@ -4,6 +4,7 @@ import { staleBeforeIso } from '@/lib/rankings/jobs-lease'
 interface RankingJob {
   id: string; phase: string; cursor: number
   attempts: number; max_attempts: number; status: string; mode: string
+  spend_tokens: number
 }
 
 const EXTRACT_BATCH = 5
@@ -54,6 +55,7 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
       const sinceIso = new Date(Date.now() - DAILY_WINDOW_DAYS * 86_400_000).toISOString()
 
       let processedAny = false
+      let spentTokens = j.spend_tokens ?? 0 // kumulativ über alle Ticks dieses Jobs
       while (Date.now() - startedAt < EXTRACT_BUDGET_MS - EXTRACT_TAIL_MS) {
         let sel = supabase
           .from('daily_repo')
@@ -77,6 +79,7 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
             if (looksAiProductRelevant(item.title ?? '', item.content ?? '')) {
               const res = await extractProducts(item.title ?? '', item.content ?? '')
               if (!res.ok) throw new Error(`extract: ${res.error}`) // retrybar: Item NICHT als verarbeitet markieren
+              if (res.usage) spentTokens += res.usage.inputTokens + res.usage.outputTokens
               const seen = new Set<string>()
               for (const prod of res.products) {
                 const { productId } = await resolveProduct({ vendor: prod.vendor, detectedName: prod.name, evidence: `daily_repo:${item.id}` })
@@ -118,7 +121,7 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
             }).eq('id', item.id)
             if (attErr) console.error('[RankingJobs] attempts update failed', item.id, attErr.message)
           }
-          await supabase.from('ranking_jobs').update({ last_advanced_at: new Date().toISOString() }).eq('id', j.id)
+          await supabase.from('ranking_jobs').update({ last_advanced_at: new Date().toISOString(), spend_tokens: spentTokens }).eq('id', j.id)
           if (Date.now() - startedAt >= EXTRACT_BUDGET_MS - EXTRACT_TAIL_MS) break
         }
       }
@@ -130,5 +133,42 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
     case 'assets':
     default:
       return 'noop_phase'   // Phase 1+ implementiert die Phasen-Bodies
+  }
+}
+
+/** Status für die Admin-Anzeige: jüngster Daily-Job (inkl. spend_tokens) +
+ *  Fortschritt im aktuellen Fenster + erzeugte Produkte/Mentions. */
+export async function getRankingExtractStatus() {
+  const supabase = createAdminClient()
+  const since = new Date(Date.now() - DAILY_WINDOW_DAYS * 86_400_000).toISOString()
+  const head = { count: 'exact' as const, head: true }
+
+  const { data: job } = await supabase
+    .from('ranking_jobs')
+    .select('id, mode, phase, status, spend_tokens, run_date, last_advanced_at, error_message')
+    .eq('mode', 'daily')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const [products, mentions, windowTotal, windowDone, skips] = await Promise.all([
+    supabase.from('products').select('id', head),
+    supabase.from('product_mentions').select('id', head),
+    supabase.from('daily_repo').select('id', head).gte('newsletter_date', since),
+    supabase.from('daily_repo').select('id', head).gte('newsletter_date', since).not('processed_for_products_at', 'is', null),
+    supabase.from('daily_repo').select('id', head).gte('newsletter_date', since).eq('processed_for_products_model', 'prefilter-skip'),
+  ])
+
+  const windowTotalN = windowTotal.count ?? 0
+  const windowDoneN = windowDone.count ?? 0
+  return {
+    job: job ?? null,
+    windowDays: DAILY_WINDOW_DAYS,
+    products: products.count ?? 0,
+    mentions: mentions.count ?? 0,
+    windowTotal: windowTotalN,
+    windowDone: windowDoneN,
+    windowRemaining: Math.max(0, windowTotalN - windowDoneN),
+    prefilterSkips: skips.count ?? 0,
   }
 }

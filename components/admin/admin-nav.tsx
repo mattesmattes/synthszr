@@ -142,6 +142,11 @@ const navGroups: NavGroup[] = [
         label: 'Analyse-Prompts',
         href: '/admin/prompts',
         icon: MessageSquare
+      },
+      {
+        label: 'Produkt-Rankings',
+        href: '/admin/rankings',
+        icon: TrendingUp
       }
     ]
   },
