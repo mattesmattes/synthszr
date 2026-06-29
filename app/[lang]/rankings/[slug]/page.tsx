@@ -62,6 +62,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
             {p.vendor}
             {p.version && <> · v{p.version}</>}
             {p.qualifier && <> · {p.qualifier}</>}
+            {p.releasedAt && <> · seit {p.releasedAt}</>}
             {' · '}{p.mentionCount}× · zuletzt {fmtDate(p.lastSeen)}
           </p>
         </div>
@@ -70,6 +71,11 @@ export default async function ProductDetailPage({ params }: PageProps) {
           <div className="text-[10px] uppercase tracking-wide text-gray-400">Momentum</div>
         </div>
       </header>
+
+      {/* Produktbeschreibung (aus Web-Research) */}
+      {p.description && (
+        <p className="text-[15px] text-gray-800 leading-relaxed mb-6">{p.description}</p>
+      )}
 
       {/* Momentum-Verlauf */}
       <div className="rounded-xl border border-gray-200 p-3 mb-6">

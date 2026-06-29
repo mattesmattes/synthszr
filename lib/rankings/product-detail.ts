@@ -24,12 +24,15 @@ export interface ProductDetail {
   rank: number | null
   score: number | null
   sentiment: { label: string; score: number | null } | null
+  description: string | null
+  releasedAt: string | null
   features: Array<{ dimension: string; value: string }>
   history: Array<{ t: number; value: number }>
   mentions: ProductMentionView[]
 }
 
 const SENTIMENT_DIM = '__sentiment'
+const META_DIMS = new Set([SENTIMENT_DIM, '__description', '__released'])
 
 /** Supabase typisiert den daily_repo-Join je nach FK-Erkennung als Objekt ODER
  *  Array — beide Formen auf den title herunterbrechen. */
@@ -83,8 +86,10 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
   const sentiment = sentimentRow
     ? { label: (sentimentRow.value_text as string) ?? 'neutral', score: sentimentRow.value_numeric as number | null }
     : null
+  const description = (feats ?? []).find((f) => f.dimension_key === '__description')?.value_text as string | undefined
+  const releasedAt = (feats ?? []).find((f) => f.dimension_key === '__released')?.value_text as string | undefined
   const features = (feats ?? [])
-    .filter((f) => f.dimension_key !== SENTIMENT_DIM)
+    .filter((f) => !META_DIMS.has(f.dimension_key as string))
     .map((f) => ({ dimension: f.dimension_key as string, value: f.value_text as string }))
 
   return {
@@ -102,6 +107,8 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
     rank: entry?.rank ?? null,
     score: entry?.score ?? null,
     sentiment,
+    description: description ?? null,
+    releasedAt: releasedAt ?? null,
     features,
     history: momentumHistory(dates, new Date(), 21, 24),
     mentions: rows.map((m) => ({
