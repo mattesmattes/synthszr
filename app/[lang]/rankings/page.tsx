@@ -3,6 +3,7 @@ import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboa
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { MomentumChart } from '@/components/rankings/momentum-chart'
 import { MultiMomentumChart } from '@/components/rankings/multi-momentum-chart'
+import { PinButton, PinBar } from '@/components/rankings/pin-controls'
 
 const MEDAL = ['🥇', '🥈', '🥉']
 
@@ -77,10 +78,10 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
       ) : (
         <ol className="space-y-1">
           {products.map((p) => (
-            <li key={p.id}>
+            <li key={p.id} className="flex items-center gap-1">
               <Link
                 href={`/${lang}/rankings/${p.slug}`}
-                className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors hover:border-black ${
+                className={`flex-1 min-w-0 flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors hover:border-black ${
                   p.rank <= 3 ? 'border-black/20 bg-gray-50' : 'border-gray-200'
                 }`}
               >
@@ -100,14 +101,16 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
                 <MomentumChart points={p.history} variant="spark" width={60} height={22} />
                 <div className="w-8 text-right text-sm font-bold shrink-0 tabular-nums">{p.score}</div>
               </Link>
+              <PinButton slug={p.slug} />
             </li>
           ))}
         </ol>
       )}
 
       <footer className="mt-8 text-[11px] text-gray-400 border-t pt-3">
-        Score = Momentum (Erwähnungen, recency-gewichtet, Halbwertszeit 14 Tage). Sparkline = Verlauf 21 Tage. Nur Produkte mit ≥2 Erwähnungen.
+        Score = Momentum (Erwähnungen, recency-gewichtet, Halbwertszeit 14 Tage). Sparkline = Verlauf 90 Tage. Nur Produkte mit ≥2 Erwähnungen. Pinne Produkte (📌) für den Vergleich.
       </footer>
+      <PinBar lang={lang} />
     </main>
   )
 }

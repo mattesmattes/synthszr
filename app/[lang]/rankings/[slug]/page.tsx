@@ -6,6 +6,7 @@ import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { SingleMomentumChart } from '@/components/rankings/single-momentum-chart'
 import { PremarketSynthesisBlock } from '@/components/rankings/premarket-synthesis-block'
 import { MentionList } from '@/components/rankings/mention-list'
+import { PinButton, PinBar } from '@/components/rankings/pin-controls'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,9 +75,12 @@ export default async function ProductDetailPage({ params }: PageProps) {
             {' · '}{p.mentionCount}× · zuletzt {fmtDate(p.lastSeen)}
           </p>
         </div>
-        <div className="ml-auto shrink-0 text-right">
-          <div className="text-3xl font-bold leading-none tabular-nums">{p.score ?? '—'}</div>
-          <div className="text-[10px] uppercase tracking-wide text-gray-400">Momentum</div>
+        <div className="ml-auto shrink-0 flex items-start gap-2">
+          <PinButton slug={p.slug} />
+          <div className="text-right">
+            <div className="text-3xl font-bold leading-none tabular-nums">{p.score ?? '—'}</div>
+            <div className="text-[10px] uppercase tracking-wide text-gray-400">Momentum</div>
+          </div>
         </div>
       </header>
 
@@ -105,15 +109,16 @@ export default async function ProductDetailPage({ params }: PageProps) {
       {p.features.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-3">Features</h2>
-          <dl className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
-            {p.features.map((f, i) => (
-              <div key={i} className="flex gap-4 p-3 text-sm">
-                <dt className="w-44 shrink-0 text-gray-500">{f.dimension}</dt>
-                <dd className="font-medium">{f.value}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="text-xs text-gray-400 mt-2">Aus News-Belegen extrahiert — Web-Research für vollständige Specs folgt.</p>
+          <table className="w-full border border-gray-200 rounded-xl overflow-hidden text-sm">
+            <tbody>
+              {p.features.map((f, i) => (
+                <tr key={i} className={i % 2 ? 'bg-gray-50/60' : ''}>
+                  <td className="w-48 align-top px-3 py-2 text-gray-500 border-r border-gray-100">{f.dimension}</td>
+                  <td className="px-3 py-2 font-medium">{f.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -124,8 +129,9 @@ export default async function ProductDetailPage({ params }: PageProps) {
       {vendorSyn && <PremarketSynthesisBlock company={vendorSyn.company} synthesis={vendorSyn.synthesis} />}
 
       <footer className="mt-10 text-xs text-gray-400 border-t pt-4">
-        MVP — Score = Momentum (recency-gewichtete Erwähnungen). Sentiment, Features &amp; Kategorie folgen.
+        Score = Momentum (recency-gewichtete Erwähnungen). Specs/Beschreibung via Web-Research.
       </footer>
+      <PinBar lang={lang} />
     </main>
   )
 }
