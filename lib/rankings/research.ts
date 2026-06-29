@@ -20,6 +20,11 @@ const ReportSchema = z.object({
 const EMPTY = new Set(['unbekannt', 'unknown', 'n/a', 'na', '-', 'keine angabe'])
 const LLM_TIMEOUT_MS = 90_000
 
+/** Entfernt web_search-Citation-Markup (<cite index="...">…</cite>) aus dem Text. */
+function stripCite(s: string): string {
+  return s.replace(/<\/?cite[^>]*>/g, '').trim()
+}
+
 /** Pure: validiert die Research-Antwort gegen die gültigen Dimensionen. */
 export function parseResearchResponse(raw: unknown, validDimensions: Set<string>): ResearchResult {
   const outer = ReportSchema.safeParse(raw)
@@ -31,10 +36,10 @@ export function parseResearchResponse(raw: unknown, validDimensions: Set<string>
     if (!p.success || !validDimensions.has(p.data.dimension) || seen.has(p.data.dimension)) continue
     if (EMPTY.has(p.data.value.toLowerCase())) continue
     seen.add(p.data.dimension)
-    features.push({ dimension: p.data.dimension, value: p.data.value })
+    features.push({ dimension: p.data.dimension, value: stripCite(p.data.value) })
   }
   return {
-    description: outer.data.description?.trim() || null,
+    description: outer.data.description ? stripCite(outer.data.description) || null : null,
     releaseDate: outer.data.release_date?.trim() || null,
     features,
   }
