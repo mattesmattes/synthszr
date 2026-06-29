@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { getProductDetail } from '@/lib/rankings/product-detail'
 import { getVendorSynthesis } from '@/lib/rankings/vendor-synthesis'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
-import { MomentumChart } from '@/components/rankings/momentum-chart'
+import { SingleMomentumChart } from '@/components/rankings/single-momentum-chart'
 import { PremarketSynthesisBlock } from '@/components/rankings/premarket-synthesis-block'
 import { MentionList } from '@/components/rankings/mention-list'
 
@@ -87,8 +87,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
       {/* Momentum-Verlauf */}
       <div className="rounded-xl border border-gray-200 p-3 mb-6">
-        <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Momentum-Verlauf (21 Tage)</div>
-        <MomentumChart points={p.history} variant="full" height={110} />
+        <SingleMomentumChart points={p.history} height={120} />
       </div>
 
       {/* Sentiment */}

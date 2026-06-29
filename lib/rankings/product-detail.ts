@@ -125,7 +125,7 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
     description: description ?? null,
     releasedAt: releasedAt ?? null,
     features,
-    history: momentumHistory(dates, new Date(), 21, 24),
+    history: momentumHistory(dates, new Date(), 90, 90),
     mentions: rows.map((m) => ({
       excerpt: m.excerpt as string | null,
       mentionDate: m.mention_date as string | null,

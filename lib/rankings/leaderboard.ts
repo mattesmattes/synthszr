@@ -83,7 +83,7 @@ export async function getRankedProducts(
     ...p,
     rank: i + 1,
     score: toDisplayScore(p.momentum, maxMomentum),
-    history: momentumHistory(datesByProduct.get(p.id) ?? [], now, 21, 12),
+    history: momentumHistory(datesByProduct.get(p.id) ?? [], now, 90, 90),
   }))
 }
 

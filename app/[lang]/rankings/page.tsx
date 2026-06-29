@@ -68,7 +68,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
       {/* Vergleichs-Chart: nur bei gewählter Kategorie, Top-Produkte über der Liste */}
       {category && products.length > 0 && (
         <div className="mb-4">
-          <MultiMomentumChart series={products.slice(0, 8).map((p) => ({ label: p.canonicalName, points: p.history }))} />
+          <MultiMomentumChart lang={lang} series={products.slice(0, 8).map((p) => ({ label: p.canonicalName, slug: p.slug, vendor: p.vendor, points: p.history }))} />
         </div>
       )}
 
