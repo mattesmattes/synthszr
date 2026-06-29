@@ -46,30 +46,32 @@ export default async function RankingsPage({ params }: PageProps) {
       ) : (
         <ol className="space-y-2">
           {products.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center gap-4 rounded-xl border border-gray-200 p-4 hover:border-black transition-colors"
-            >
-              <div className={`w-8 text-center text-lg font-bold ${p.rank <= 3 ? 'text-black' : 'text-gray-400'}`}>
-                {p.rank}
-              </div>
+            <li key={p.id}>
+              <Link
+                href={`/${lang}/rankings/${p.slug}`}
+                className="flex items-center gap-4 rounded-xl border border-gray-200 p-4 hover:border-black transition-colors"
+              >
+                <div className={`w-8 text-center text-lg font-bold ${p.rank <= 3 ? 'text-black' : 'text-gray-400'}`}>
+                  {p.rank}
+                </div>
 
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold truncate">{p.canonicalName}</div>
-                <div className="text-xs text-gray-500 truncate">
-                  {p.vendor} · {p.mentionCount} {p.mentionCount === 1 ? 'Erwähnung' : 'Erwähnungen'} · zuletzt {fmtDate(p.lastSeen)}
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold truncate">{p.canonicalName}</div>
+                  <div className="text-xs text-gray-500 truncate">
+                    {p.vendor} · {p.mentionCount} {p.mentionCount === 1 ? 'Erwähnung' : 'Erwähnungen'} · zuletzt {fmtDate(p.lastSeen)}
+                  </div>
                 </div>
-              </div>
 
-              <div className="w-28 shrink-0">
-                <div className="flex justify-between items-baseline mb-1">
-                  <span className="text-[10px] uppercase tracking-wide text-gray-400">Momentum</span>
-                  <span className="text-sm font-bold">{p.score}</span>
+                <div className="w-28 shrink-0">
+                  <div className="flex justify-between items-baseline mb-1">
+                    <span className="text-[10px] uppercase tracking-wide text-gray-400">Momentum</span>
+                    <span className="text-sm font-bold">{p.score}</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#CCFF00] border-r border-black/10" style={{ width: `${Math.max(3, p.score)}%` }} />
+                  </div>
                 </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-[#CCFF00] border-r border-black/10" style={{ width: `${Math.max(3, p.score)}%` }} />
-                </div>
-              </div>
+              </Link>
             </li>
           ))}
         </ol>
