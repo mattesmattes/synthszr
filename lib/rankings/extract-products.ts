@@ -33,11 +33,14 @@ AUSSCHLIESSEN (NICHT extrahieren):
 - Personen, Autoren, Newsletter, Podcasts, Blogs, Kurse, Skill-Sets
 - generische Begriffe ("KI", "Chatbot", "Agent", "Modell" ohne Eigennamen)
 - Konzepte/Tags/Features ohne eigenständigen Produktnamen
+- EINZELNE FEATURES/MODI/PLUGINS/UNTER-FUNKTIONEN eines Produkts NICHT als eigenes Produkt
+  (z.B. KEINE "Codex Record & Replay", "Codex Sites", "Cursor /automate", "Claude Code Routines"
+  → nur das KERN-Produkt: "Codex", "Cursor", "Claude Code")
 
 REGELN:
 - Im Zweifel WEGLASSEN. Erfinde KEINE Produktnamen. Wenn nichts klar passt, gib eine LEERE Liste zurück.
-- name: exakter im Text genannter Produktname inkl. Version/Variante (z.B. "GPT-5.6 Terra"). KEINE Zusätze wie "model"/"Modell".
-- vendor: Hersteller/Eigentümer des Produkts (NICHT der zitierte Publisher/das Newsportal), kurzer Markenname OHNE Rechtsform ("OpenAI", nicht "OpenAI Inc."). Wenn der Hersteller unklar ist, nimm den im Text genannten.
+- name: das KERN-Produkt inkl. Version/Variante (z.B. "GPT-5.6 Terra", "Claude Opus 4.8"). NICHT einzelne Features/Modi/Editionen/Versions-Patches anhängen. KEINE Zusätze wie "model"/"Modell"/Versionsnummern wie "v2.1.190".
+- vendor: der ETABLIERTE Hersteller-Markenname, KONSISTENT über alle Nennungen (z.B. immer "OpenAI" für GPT/ChatGPT/Codex, "Anysphere" für Cursor, "Anthropic" für Claude, "Google" für Gemini, "xAI" für Grok). Nutze den allgemein bekannten Hersteller — verwende NICHT "unknown", wenn der Hersteller eines bekannten Produkts klar ist.
 - excerpt: kurzer wörtlicher Beleg-Ausschnitt aus dem Text.
 
 TITEL: ${title}
