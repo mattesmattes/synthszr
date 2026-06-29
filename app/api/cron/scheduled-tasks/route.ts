@@ -263,24 +263,29 @@ export async function GET(request: NextRequest) {
     results.articleJob = 'error'
   }
 
-  // Rankings: tägliches extract-Enqueue + jeden Tick eine Phase weiter, NUR wenn
-  // genug Tick-Budget übrig ist (Article-Job hat Vorrang). advanceRankingJob ist
-  // Claim-/Lease-geschützt (FOR UPDATE SKIP LOCKED).
-  try {
-    const remainingMs = 300_000 - (Date.now() - schedulerStartedAt)
-    if (currentHour >= 6) {
-      const { createRankingJob } = await import('@/lib/rankings/jobs')
-      results.rankingEnqueue = (await createRankingJob({ mode: 'daily' })).created ? 'enqueued' : 'skipped'
+  // Rankings: pausiert bis Spend-Budget steht (Beobachtungsphase) — läuft autonom
+  // NUR wenn RANKINGS_CRON_ENABLED=true. Bis dahin manueller Lauf via /admin/rankings.
+  // advanceRankingJob ist Claim-/Lease-geschützt (FOR UPDATE SKIP LOCKED); Article-Job
+  // hat Vorrang (Budget-Guard).
+  if (process.env.RANKINGS_CRON_ENABLED === 'true') {
+    try {
+      const remainingMs = 300_000 - (Date.now() - schedulerStartedAt)
+      if (currentHour >= 6) {
+        const { createRankingJob } = await import('@/lib/rankings/jobs')
+        results.rankingEnqueue = (await createRankingJob({ mode: 'daily' })).created ? 'enqueued' : 'skipped'
+      }
+      if (remainingMs > 150_000) {
+        const { advanceRankingJob } = await import('@/lib/rankings/jobs')
+        results.rankingJob = await advanceRankingJob()
+      } else {
+        results.rankingJob = 'skipped_budget'
+      }
+    } catch (error) {
+      console.error('[Scheduler] Ranking job error:', error)
+      results.rankingJob = 'error'
     }
-    if (remainingMs > 150_000) {
-      const { advanceRankingJob } = await import('@/lib/rankings/jobs')
-      results.rankingJob = await advanceRankingJob()
-    } else {
-      results.rankingJob = 'skipped_budget'
-    }
-  } catch (error) {
-    console.error('[Scheduler] Ranking job error:', error)
-    results.rankingJob = 'error'
+  } else {
+    results.rankingJob = 'cron_disabled'
   }
 
   // Newsletter Send
