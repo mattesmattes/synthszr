@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { momentumScore, toDisplayScore } from '@/lib/rankings/score'
+import { momentumScore, toDisplayScore, momentumHistory } from '@/lib/rankings/score'
 
 export interface RankedProduct {
   id: string
@@ -11,6 +11,7 @@ export interface RankedProduct {
   momentum: number    // roher Sortier-Wert
   mentionCount: number
   lastSeen: string | null
+  history: Array<{ t: number; value: number }> // Momentum-Verlauf (Sparkline)
 }
 
 /**
@@ -82,6 +83,7 @@ export async function getRankedProducts(
     ...p,
     rank: i + 1,
     score: toDisplayScore(p.momentum, maxMomentum),
+    history: momentumHistory(datesByProduct.get(p.id) ?? [], now, 21, 12),
   }))
 }
 

@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { momentumScore } from '@/lib/rankings/score'
+import { momentumScore, momentumHistory } from '@/lib/rankings/score'
 import { getRankedProducts } from '@/lib/rankings/leaderboard'
 
 export interface ProductMentionView {
@@ -25,6 +25,7 @@ export interface ProductDetail {
   score: number | null
   sentiment: { label: string; score: number | null } | null
   features: Array<{ dimension: string; value: string }>
+  history: Array<{ t: number; value: number }>
   mentions: ProductMentionView[]
 }
 
@@ -102,6 +103,7 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
     score: entry?.score ?? null,
     sentiment,
     features,
+    history: momentumHistory(dates, new Date(), 21, 24),
     mentions: rows.map((m) => ({
       excerpt: m.excerpt as string | null,
       mentionDate: m.mention_date as string | null,

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboard'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
+import { MomentumChart } from '@/components/rankings/momentum-chart'
 
 const MEDAL = ['🥇', '🥈', '🥉']
 
@@ -40,7 +41,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
     <Link
       key={href}
       href={href}
-      className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap border transition-colors ${
+      className={`px-2.5 py-1 rounded-full text-xs whitespace-nowrap border transition-colors ${
         active ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'
       }`}
     >
@@ -50,62 +51,54 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-10">
-      <header className="mb-6">
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Synthszr Rankings</h1>
-        <p className="text-gray-600 mt-2">
-          Welche AI-Produkte gerade <b>Momentum</b> haben — täglich aus tausenden Tech-News extrahiert.
+      <header className="mb-4">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Synthszr Rankings</h1>
+        <p className="text-gray-600 text-sm mt-1">
+          Welche AI-Produkte gerade <b>Momentum</b> haben — täglich aus tausenden Tech-News.
         </p>
       </header>
 
       {/* Kategorie-Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-6 -mx-1 px-1">
+      <div className="flex gap-1.5 overflow-x-auto pb-2 mb-4 -mx-1 px-1">
         {tab(tabBase, 'Alle', !category)}
         {categories.map((c) => tab(`${tabBase}?category=${c.slug}`, c.name, category === c.slug))}
       </div>
 
       {products.length === 0 ? (
-        <p className="text-gray-500">Noch keine Produkte in dieser Kategorie.</p>
+        <p className="text-gray-500 text-sm">Noch keine Produkte in dieser Kategorie.</p>
       ) : (
-        <ol className="space-y-2">
+        <ol className="space-y-1">
           {products.map((p) => (
             <li key={p.id}>
               <Link
                 href={`/${lang}/rankings/${p.slug}`}
-                className={`flex items-center gap-3 sm:gap-4 rounded-xl border p-4 transition-colors hover:border-black ${
-                  p.rank <= 3 ? 'border-black/25 bg-gray-50' : 'border-gray-200'
+                className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors hover:border-black ${
+                  p.rank <= 3 ? 'border-black/20 bg-gray-50' : 'border-gray-200'
                 }`}
               >
-                <div className="w-7 text-center text-lg font-bold shrink-0">
+                <div className="w-5 text-center text-sm font-bold shrink-0">
                   {p.rank <= 3 ? MEDAL[p.rank - 1] : <span className="text-gray-400">{p.rank}</span>}
                 </div>
 
-                <VendorAvatar vendor={p.vendor} size={40} />
+                <VendorAvatar vendor={p.vendor} size={30} />
 
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">{p.canonicalName}</div>
-                  <div className="text-xs text-gray-500 truncate">
-                    {p.vendor} · {p.mentionCount} {p.mentionCount === 1 ? 'Erwähnung' : 'Erwähnungen'} · zuletzt {fmtDate(p.lastSeen)}
+                  <div className="font-semibold text-sm truncate leading-tight">{p.canonicalName}</div>
+                  <div className="text-[11px] text-gray-500 truncate leading-tight">
+                    {p.vendor} · {p.mentionCount}× · {fmtDate(p.lastSeen)}
                   </div>
                 </div>
 
-                <div className="w-28 shrink-0">
-                  <div className="flex justify-between items-baseline mb-1">
-                    <span className="text-[10px] uppercase tracking-wide text-gray-400">Momentum</span>
-                    <span className="text-sm font-bold">{p.score}</span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-[#CCFF00] border-r border-black/10" style={{ width: `${Math.max(3, p.score)}%` }} />
-                  </div>
-                </div>
+                <MomentumChart points={p.history} variant="spark" width={60} height={22} />
+                <div className="w-8 text-right text-sm font-bold shrink-0 tabular-nums">{p.score}</div>
               </Link>
             </li>
           ))}
         </ol>
       )}
 
-      <footer className="mt-10 text-xs text-gray-400 border-t pt-4">
-        MVP — Score = Momentum (Erwähnungs-Häufigkeit, recency-gewichtet, Halbwertszeit 14 Tage).
-        Nur Produkte mit ≥2 Erwähnungen. Sentiment &amp; Features folgen.
+      <footer className="mt-8 text-[11px] text-gray-400 border-t pt-3">
+        Score = Momentum (Erwähnungen, recency-gewichtet, Halbwertszeit 14 Tage). Sparkline = Verlauf 21 Tage. Nur Produkte mit ≥2 Erwähnungen.
       </footer>
     </main>
   )

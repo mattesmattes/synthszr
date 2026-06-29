@@ -22,3 +22,28 @@ export function toDisplayScore(momentum: number, maxMomentum: number): number {
   if (maxMomentum <= 0) return 0
   return Math.round((momentum / maxMomentum) * 100)
 }
+
+/**
+ * Rekonstruiert den Momentum-Verlauf aus den Mention-Daten: an `points`
+ * gleichmäßigen Stützstellen über die letzten `days` Tage der Momentum-Wert,
+ * wie er an diesem Stichtag gewesen wäre (nur Mentions bis dahin, recency-
+ * gewichtet relativ zum Stichtag). Braucht keine Snapshots.
+ */
+export function momentumHistory(
+  mentionDates: Array<string | Date>, now: Date, days = 21, points = 12,
+): Array<{ t: number; value: number }> {
+  const ms = mentionDates.map((d) => new Date(d).getTime()).filter((t) => isFinite(t))
+  const span = days * 86_400_000
+  const out: Array<{ t: number; value: number }> = []
+  for (let i = 0; i < points; i++) {
+    const t = now.getTime() - span * (1 - i / (points - 1)) // now-days … now
+    let m = 0
+    for (const dt of ms) {
+      const ageDays = (t - dt) / 86_400_000
+      if (ageDays < 0) continue // Mention liegt nach dem Stichtag
+      m += Math.pow(0.5, ageDays / HALFLIFE_DAYS)
+    }
+    out.push({ t, value: m })
+  }
+  return out
+}

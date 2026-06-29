@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { getProductDetail } from '@/lib/rankings/product-detail'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
+import { MomentumChart } from '@/components/rankings/momentum-chart'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,39 +44,34 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-10">
-      <Link href={`/${lang}/rankings`} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-black mb-6">
+      <Link href={`/${lang}/rankings`} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-black mb-4">
         <ArrowLeft className="w-4 h-4" /> Alle Rankings
       </Link>
 
-      <header className="mb-8 flex items-start gap-4">
-        <VendorAvatar vendor={p.vendor} size={56} />
-        <div>
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{p.canonicalName}</h1>
-            {p.rank && <span className="text-sm font-semibold px-2 py-0.5 rounded bg-black text-white">#{p.rank}</span>}
+      <header className="mb-4 flex items-start gap-3">
+        <VendorAvatar vendor={p.vendor} size={44} />
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{p.canonicalName}</h1>
+            {p.rank && <span className="text-xs font-semibold px-2 py-0.5 rounded bg-black text-white">#{p.rank}</span>}
           </div>
-          <p className="text-gray-500 mt-1 text-sm">
+          <p className="text-gray-500 text-xs mt-0.5">
             {p.vendor}
-            {p.version && <> · Version {p.version}</>}
+            {p.version && <> · v{p.version}</>}
             {p.qualifier && <> · {p.qualifier}</>}
+            {' · '}{p.mentionCount}× · zuletzt {fmtDate(p.lastSeen)}
           </p>
+        </div>
+        <div className="ml-auto shrink-0 text-right">
+          <div className="text-3xl font-bold leading-none tabular-nums">{p.score ?? '—'}</div>
+          <div className="text-[10px] uppercase tracking-wide text-gray-400">Momentum</div>
         </div>
       </header>
 
-      {/* Kennzahlen */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="rounded-xl border-2 border-black p-4 bg-[#CCFF00]/20">
-          <div className="text-xs uppercase tracking-wide text-gray-600">Momentum</div>
-          <div className="text-3xl font-bold mt-1">{p.score ?? '—'}</div>
-        </div>
-        <div className="rounded-xl border border-gray-200 p-4">
-          <div className="text-xs uppercase tracking-wide text-gray-500">Erwähnungen</div>
-          <div className="text-3xl font-bold mt-1">{p.mentionCount}</div>
-        </div>
-        <div className="rounded-xl border border-gray-200 p-4">
-          <div className="text-xs uppercase tracking-wide text-gray-500">Zuletzt</div>
-          <div className="text-base font-semibold mt-2">{fmtDate(p.lastSeen)}</div>
-        </div>
+      {/* Momentum-Verlauf */}
+      <div className="rounded-xl border border-gray-200 p-3 mb-6">
+        <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Momentum-Verlauf (21 Tage)</div>
+        <MomentumChart points={p.history} variant="full" height={110} />
       </div>
 
       {/* Sentiment */}
@@ -107,11 +103,11 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
       {/* Belege */}
       <h2 className="text-lg font-semibold mb-3">Belege ({p.mentions.length})</h2>
-      <ul className="space-y-3">
+      <ul className="space-y-1.5">
         {p.mentions.map((m, i) => (
-          <li key={i} className="rounded-lg border border-gray-200 p-4">
-            {m.excerpt && <p className="text-sm text-gray-800">„{m.excerpt}"</p>}
-            <div className="text-xs text-gray-400 mt-2">
+          <li key={i} className="rounded-lg border border-gray-200 px-3 py-2">
+            {m.excerpt && <p className="text-sm text-gray-800 leading-snug">„{m.excerpt}"</p>}
+            <div className="text-[11px] text-gray-400 mt-1">
               {m.sourceTitle ?? 'Newsletter'} · {fmtDate(m.mentionDate)}
             </div>
           </li>
