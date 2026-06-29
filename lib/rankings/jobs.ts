@@ -127,9 +127,14 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
             processedAny = true
           } catch (itemErr) {
             const msg = itemErr instanceof Error ? itemErr.message : String(itemErr)
-            // Sichtbar machen (eine systematische extract-Störung wäre sonst unsichtbar)
-            // und den attempts-Update prüfen, sonst kann ein DB-Teilausfall den
-            // Poison-Counter still verschlucken → Item läuft jeden Tick erneut durchs LLM.
+            // Fatale API-/Billing-Fehler (Credit leer, Auth, ungültiger Request, Quota)
+            // sind KEIN News-Problem → Job als 'error' markieren und sofort abbrechen,
+            // OHNE die News-attempts zu verbrennen (sonst werden gute News fälschlich
+            // dauerhaft ausgeschlossen, wie beim leeren Anthropic-Guthaben gesehen).
+            if (/credit balance|invalid_request_error|authentication|permission_error|insufficient|quota|\b401\b|\b403\b/i.test(msg)) {
+              await supabase.from('ranking_jobs').update({ status: 'error', error_message: msg.slice(0, 500), last_advanced_at: new Date().toISOString() }).eq('id', j.id)
+              throw new Error(`FATAL_API: ${msg.slice(0, 200)}`)
+            }
             console.error('[RankingJobs] extract item failed', item.id, msg)
             const { error: attErr } = await supabase.from('daily_repo').update({
               product_processing_attempts: (item.product_processing_attempts ?? 0) + 1,
