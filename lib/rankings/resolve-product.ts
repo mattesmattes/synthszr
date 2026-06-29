@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { generateEmbedding } from '@/lib/embeddings/generator'
 import { normalizeAlias } from '@/lib/rankings/canonicalize'
 import { buildProductInsert } from '@/lib/rankings/resolve-product-payload'
+import { isExcludedProduct } from '@/lib/rankings/product-exclusions'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -34,12 +35,14 @@ export async function resolveProduct(opts: {
 }): Promise<{ productId: string; canonicalKey: string; isNew: boolean }> {
   const supabase = createAdminClient()
   const p = buildProductInsert(opts.vendor, opts.detectedName)
+  // Reiner Herstellername (z.B. "Anthropic") → kein Chart-Produkt, ausblenden.
+  const visibility = isExcludedProduct(p.family) ? 'excluded' : 'visible'
 
   // 1) Exakter Lookup → Heilung + last_seen
   const { data: existing } = await supabase
     .from('products').select('id').eq('canonical_key', p.canonical_key).maybeSingle()
   if (existing) {
-    await supabase.from('products').update({ last_seen: new Date().toISOString() }).eq('id', existing.id)
+    await supabase.from('products').update({ last_seen: new Date().toISOString(), visibility_status: visibility }).eq('id', existing.id)
     await ensureCreatedEvent(supabase, existing.id, p.canonical_key, opts.evidence)
     await ensureAlias(supabase, existing.id, p.vendor_namespace, opts.detectedName)
     return { productId: existing.id, canonicalKey: p.canonical_key, isNew: false }
@@ -55,7 +58,7 @@ export async function resolveProduct(opts: {
     .upsert({
       vendor_namespace: p.vendor_namespace, family: p.family, version: p.version, qualifier: p.qualifier,
       canonical_name: p.canonical_name, slug: p.slug, family_embedding: familyEmbedding,
-      identity_status: 'candidate', visibility_status: 'visible', confidence_band: 'low',
+      identity_status: 'candidate', visibility_status: visibility, confidence_band: 'low',
     }, { onConflict: 'canonical_key', ignoreDuplicates: true })
     .select('id').maybeSingle()
   if (insErr) throw insErr
