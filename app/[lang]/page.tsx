@@ -4,7 +4,7 @@ import { FeaturedArticle } from "@/components/featured-article"
 import { FooterBrands } from "@/components/footer-brands"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
-import { HomeSearch } from "@/components/home-search"
+import { HomeHero } from "@/components/home-hero"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 // import { CalligramFooter } from "@/components/calligram-footer"
@@ -233,8 +233,8 @@ export default async function Page({ params }: PageProps) {
 
         {featuredPost ? (
           <>
-            {/* Search bar replaces the legacy hero text */}
-            <HomeSearch locale={locale} />
+            {/* Charts-Promo; "Search" (Nav) blendet das Such-Formular ein */}
+            <HomeHero locale={locale} />
 
             <FeaturedArticle
               slug={featuredPost.slug}

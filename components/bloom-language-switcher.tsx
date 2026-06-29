@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import Image from 'next/image'
 import type { LanguageCode, Language } from '@/lib/types'
 import { addLocaleToPathname } from '@/lib/i18n/config'
@@ -108,12 +107,9 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
         <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-center">
           <Image src="/oh-so-icon.svg" alt="OH-SO" width={32} height={32} />
         </div>
-        <Link href={currentLocale === 'de' ? '/companies' : `/${currentLocale}/companies`} className={linkStyle}>
-          Show Companies
-        </Link>
-        <Link href={currentLocale === 'de' ? '/rankings' : `/${currentLocale}/rankings`} className={linkStyle}>
-          Rankings
-        </Link>
+        <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
+          Search
+        </button>
       </div>
     )
   }
@@ -158,15 +154,10 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
         <Image src="/oh-so-icon.svg" alt="OH-SO" width={32} height={32} />
       </div>
 
-      {/* Show Companies link */}
-      <Link href={currentLocale === 'de' ? '/companies' : `/${currentLocale}/companies`} className={linkStyle}>
-        Show Companies
-      </Link>
-
-      {/* Rankings link */}
-      <Link href={currentLocale === 'de' ? '/rankings' : `/${currentLocale}/rankings`} className={linkStyle}>
-        Rankings
-      </Link>
+      {/* Search toggle */}
+      <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
+        Search
+      </button>
     </div>
   )
 }
