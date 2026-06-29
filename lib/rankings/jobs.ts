@@ -10,7 +10,7 @@ const EXTRACT_BATCH = 5
 const EXTRACT_BUDGET_MS = 180_000
 const EXTRACT_TAIL_MS = 45_000
 const MAX_ITEM_ATTEMPTS = 3
-const DAILY_WINDOW_DAYS = 7
+const DAILY_WINDOW_DAYS = 1
 const EXTRACT_VERSION = '1b-i'
 
 /** Legt einen Ranking-Job an. Täglich idempotent via UNIQUE(mode, run_date) WHERE mode='daily'.
@@ -48,6 +48,7 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
       const { extractProducts } = await import('@/lib/rankings/extract-products')
       const { resolveProduct } = await import('@/lib/rankings/resolve-product')
       const { mentionHash } = await import('@/lib/rankings/mention')
+      const { looksAiProductRelevant } = await import('@/lib/rankings/prefilter')
       const { getModelForUseCase } = await import('@/lib/ai/model-config')
       const model = await getModelForUseCase('ranking_extract')
       const sinceIso = new Date(Date.now() - DAILY_WINDOW_DAYS * 86_400_000).toISOString()
@@ -73,26 +74,37 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
         }
         for (const item of items) {
           try {
-            const res = await extractProducts(item.title ?? '', item.content ?? '')
-            if (!res.ok) throw new Error(`extract: ${res.error}`) // retrybar: Item NICHT als verarbeitet markieren
-            const seen = new Set<string>()
-            for (const prod of res.products) {
-              const { productId } = await resolveProduct({ vendor: prod.vendor, detectedName: prod.name, evidence: `daily_repo:${item.id}` })
-              if (seen.has(productId)) continue // Dedup pro Item
-              seen.add(productId)
-              const { error: mErr } = await supabase.from('product_mentions').insert({
-                product_id: productId, daily_repo_id: item.id,
-                excerpt: (prod.excerpt ?? '').slice(0, 2000), excerpt_hash: mentionHash(productId),
-                mention_date: item.newsletter_date, model,
-              })
-              if (mErr && mErr.code !== '23505') throw new Error(`mention insert: ${mErr.message}`)
+            if (looksAiProductRelevant(item.title ?? '', item.content ?? '')) {
+              const res = await extractProducts(item.title ?? '', item.content ?? '')
+              if (!res.ok) throw new Error(`extract: ${res.error}`) // retrybar: Item NICHT als verarbeitet markieren
+              const seen = new Set<string>()
+              for (const prod of res.products) {
+                const { productId } = await resolveProduct({ vendor: prod.vendor, detectedName: prod.name, evidence: `daily_repo:${item.id}` })
+                if (seen.has(productId)) continue // Dedup pro Item
+                seen.add(productId)
+                const { error: mErr } = await supabase.from('product_mentions').insert({
+                  product_id: productId, daily_repo_id: item.id,
+                  excerpt: (prod.excerpt ?? '').slice(0, 2000), excerpt_hash: mentionHash(productId),
+                  mention_date: item.newsletter_date, model,
+                })
+                if (mErr && mErr.code !== '23505') throw new Error(`mention insert: ${mErr.message}`)
+              }
+              const { error: upErr } = await supabase.from('daily_repo').update({
+                processed_for_products_at: new Date().toISOString(),
+                processed_for_products_version: EXTRACT_VERSION,
+                processed_for_products_model: model,
+              }).eq('id', item.id)
+              if (upErr) throw new Error(`processed update: ${upErr.message}`)
+            } else {
+              // Vorfilter: kein AI-Indikator → kein (teurer) LLM-Call, als verarbeitet
+              // markieren (0 Produkte). model='prefilter-skip' macht Skips auswertbar.
+              const { error: skErr } = await supabase.from('daily_repo').update({
+                processed_for_products_at: new Date().toISOString(),
+                processed_for_products_version: EXTRACT_VERSION,
+                processed_for_products_model: 'prefilter-skip',
+              }).eq('id', item.id)
+              if (skErr) throw new Error(`prefilter skip update: ${skErr.message}`)
             }
-            const { error: upErr } = await supabase.from('daily_repo').update({
-              processed_for_products_at: new Date().toISOString(),
-              processed_for_products_version: EXTRACT_VERSION,
-              processed_for_products_model: model,
-            }).eq('id', item.id)
-            if (upErr) throw new Error(`processed update: ${upErr.message}`)
             processedAny = true
           } catch (itemErr) {
             const msg = itemErr instanceof Error ? itemErr.message : String(itemErr)
