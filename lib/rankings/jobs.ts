@@ -167,7 +167,8 @@ export async function getRankingExtractStatus() {
     .order('last_advanced_at', { ascending: false, nullsFirst: false })
     .limit(1).maybeSingle()
   if (!job) {
-    const r = await supabase.from('ranking_jobs').select(sel).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    // Kein aktiver Lauf → den täglichen Stand zeigen (nicht einen alten Backfill).
+    const r = await supabase.from('ranking_jobs').select(sel).eq('mode', 'daily').order('created_at', { ascending: false }).limit(1).maybeSingle()
     job = r.data
   }
 
