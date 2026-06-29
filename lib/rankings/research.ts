@@ -45,16 +45,18 @@ export function parseResearchResponse(raw: unknown, validDimensions: Set<string>
   }
 }
 
-/** Recherchiert ein Produkt per Web-Suche → Beschreibung + Release + Spec-Werte. */
+/** Fasst ein Produkt AUS DEN NEWS-BELEGEN zusammen → Beschreibung + Release +
+ *  Spec-Werte. Keine Web-Suche: für synthszr-Produkte (die es real nicht gibt)
+ *  halluziniert web_search, deshalb ausschließlich die Newsletter-Auszüge als Quelle. */
 export async function researchProduct(
-  name: string, vendor: string, categoryName: string, dimensions: string[],
+  name: string, vendor: string, categoryName: string, dimensions: string[], evidence: string,
 ): Promise<ResearchResult> {
-  if (!process.env.ANTHROPIC_API_KEY) return { description: null, releaseDate: null, features: [] }
+  if (!process.env.ANTHROPIC_API_KEY || !evidence.trim()) return { description: null, releaseDate: null, features: [] }
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const report = {
     name: 'report_research',
-    description: 'Melde die recherchierten Produktdaten',
+    description: 'Melde die aus den Belegen zusammengefassten Produktdaten',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -66,22 +68,25 @@ export async function researchProduct(
     },
   }
   const dims = dimensions.map((d) => `- ${d}`).join('\n')
-  const prompt = `Recherchiere im Web das AI-Produkt "${name}" von ${vendor} (Kategorie: ${categoryName}).
-Suche aktuelle, belastbare Quellen. Ermittle:
-1. description: 2-4 Sätze, was das Produkt ist + was es besonders macht.
-2. release_date: Erscheinungsdatum (z.B. "März 2026" oder "2026-03"), falls bekannt.
-3. features: konkrete Werte NUR für diese Dimensionen (sonst weglassen, nicht raten):
-${dims}
-   dimension EXAKT wie oben, value kurz + konkret (z.B. "1M Token", "1,6T Parameter").
+  const prompt = `Hier sind Auszüge aus AI-Newsletter-Artikeln, die das Produkt "${name}" von ${vendor} (Kategorie: ${categoryName}) erwähnen:
 
-Suche zuerst, dann rufe report_research mit den belegten Daten auf.`
+${evidence}
+
+Erstelle AUSSCHLIESSLICH auf Basis dieser Auszüge (erfinde NICHTS — keine Zahlen, Specs oder Eigenschaften, die nicht ausdrücklich in den Auszügen stehen):
+1. description: 2-4 nüchterne Sätze, was das Produkt laut den Auszügen ist und was es besonders macht. Kein Marketing-Sprech.
+2. release_date: nur wenn in den Auszügen genannt (z.B. "Juni 2026").
+3. features: konkrete Werte NUR für diese Dimensionen und NUR wenn in den Auszügen belegt (sonst weglassen):
+${dims}
+   dimension EXAKT wie oben, value kurz + konkret.
+
+Wenn die Auszüge zu wenig hergeben, lass description leer und features weg. Lieber leer als erfunden.`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {
     const resp = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001', max_tokens: 1500,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 } as any, report],
+      model: 'claude-haiku-4-5-20251001', max_tokens: 1200,
+      tools: [report],
+      tool_choice: { type: 'tool', name: 'report_research' },
       messages: [{ role: 'user', content: prompt }],
     }, { signal: controller.signal })
     const block = resp.content.find((b) => b.type === 'tool_use' && b.name === 'report_research')
@@ -123,9 +128,24 @@ export async function runProductResearch(opts: { limit?: number; minMentions?: n
     if (existing) continue
 
     const dimensions = Array.isArray(cat.feature_dimensions) ? (cat.feature_dimensions as string[]) : []
+    // News-Auszüge als ALLEINIGE Quelle (keine Web-Suche → keine Halluzination)
+    const { data: ments } = await supabase
+      .from('product_mentions')
+      .select('excerpt')
+      .eq('product_id', m.product_id)
+      .not('excerpt', 'is', null)
+      .order('mention_date', { ascending: false })
+      .limit(25)
+    const evidence = (ments ?? [])
+      .map((x) => (x.excerpt as string)?.trim())
+      .filter(Boolean)
+      .map((e) => `- ${e}`)
+      .join('\n')
+      .slice(0, 8000)
+    if (!evidence.trim()) continue
     const res = await researchProduct(
       (prod as { canonical_name: string }).canonical_name, (prod as { vendor_namespace: string }).vendor_namespace,
-      cat.name as string, dimensions,
+      cat.name as string, dimensions, evidence,
     )
     if (!res.description && res.features.length === 0) continue
 
