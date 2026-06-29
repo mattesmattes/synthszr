@@ -1,13 +1,14 @@
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { getRankedProducts } from '@/lib/rankings/leaderboard'
+import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboard'
 
 // force-dynamic statt ISR: die Seite lädt zur Laufzeit aus der DB (kein Build-time-
-// Prerender — sonst scheitert der Export pro Locale). Konsistent mit /companies.
+// Prerender pro Locale — sonst scheitert der Export). Konsistent mit /companies.
 export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: Promise<{ lang: string }>
+  searchParams: Promise<{ category?: string }>
 }
 
 export const metadata = {
@@ -24,25 +25,44 @@ function fmtDate(d: string | null): string {
   }
 }
 
-export default async function RankingsPage({ params }: PageProps) {
+export default async function RankingsPage({ params, searchParams }: PageProps) {
   const { lang } = await params
-  const products = await getRankedProducts(50)
+  const { category } = await searchParams
+  const [products, categories] = await Promise.all([
+    getRankedProducts({ limit: 50, minMentions: 2, category }),
+    getActiveCategories(),
+  ])
+
+  const tabBase = `/${lang}/rankings`
+  const tab = (href: string, label: string, active: boolean) => (
+    <Link
+      key={href}
+      href={href}
+      className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap border transition-colors ${
+        active ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'
+      }`}
+    >
+      {label}
+    </Link>
+  )
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-10">
-      <Link href={`/${lang}`} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-black mb-6">
-        <ArrowLeft className="w-4 h-4" /> Zurück
-      </Link>
-
-      <header className="mb-8">
+      <header className="mb-6">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Synthszr Rankings</h1>
         <p className="text-gray-600 mt-2">
           Welche AI-Produkte gerade <b>Momentum</b> haben — täglich aus tausenden Tech-News extrahiert.
         </p>
       </header>
 
+      {/* Kategorie-Tabs */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-6 -mx-1 px-1">
+        {tab(tabBase, 'Alle', !category)}
+        {categories.map((c) => tab(`${tabBase}?category=${c.slug}`, c.name, category === c.slug))}
+      </div>
+
       {products.length === 0 ? (
-        <p className="text-gray-500">Noch keine Produkte erfasst. Die Extraktion läuft.</p>
+        <p className="text-gray-500">Noch keine Produkte in dieser Kategorie.</p>
       ) : (
         <ol className="space-y-2">
           {products.map((p) => (
@@ -79,7 +99,7 @@ export default async function RankingsPage({ params }: PageProps) {
 
       <footer className="mt-10 text-xs text-gray-400 border-t pt-4">
         MVP — Score = Momentum (Erwähnungs-Häufigkeit, recency-gewichtet, Halbwertszeit 14 Tage).
-        Sentiment, Features &amp; Kategorien folgen.
+        Nur Produkte mit ≥2 Erwähnungen. Sentiment &amp; Features folgen.
       </footer>
     </main>
   )

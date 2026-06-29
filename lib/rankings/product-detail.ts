@@ -65,8 +65,8 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
   const rows = mentions ?? []
   const dates = rows.map((m) => m.mention_date as string).filter(Boolean)
 
-  // Rang/Score konsistent zum Leaderboard (relativ zum Spitzenreiter).
-  const ranked = await getRankedProducts(10_000)
+  // Rang/Score konsistent zum öffentlichen Leaderboard (≥2 Erwähnungen).
+  const ranked = await getRankedProducts({ limit: 10_000, minMentions: 2 })
   const entry = ranked.find((r) => r.slug === slug)
 
   return {

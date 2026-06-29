@@ -17,17 +17,34 @@ export interface RankedProduct {
  * MVP-Leaderboard: berechnet den Momentum-Score on-the-fly aus product_mentions
  * für alle SICHTBAREN Produkte (visibility_status='visible' — RLS erlaubt zwar
  * öffentliches Lesen, der Filter ist die eigentliche Sichtbarkeitskontrolle).
- * Nur Produkte mit ≥1 Mention werden gerankt. Precompute (product_rankings) +
- * Kategorien folgen in 1c-voll.
+ * - opts.category: nur Produkte dieser Kategorie (via product_category_membership).
+ * - opts.minMentions: blendet 1×-Noise/FPs aus den öffentlichen Ansichten aus.
+ * Precompute (product_rankings) folgt in 1c-voll.
  */
-export async function getRankedProducts(limit = 50): Promise<RankedProduct[]> {
+export async function getRankedProducts(
+  opts: { limit?: number; category?: string; minMentions?: number } = {},
+): Promise<RankedProduct[]> {
+  const { limit = 50, category, minMentions = 1 } = opts
   const supabase = createAdminClient()
   const now = new Date()
 
-  const { data: products, error: pErr } = await supabase
+  let productQuery = supabase
     .from('products')
     .select('id, canonical_name, vendor_namespace, slug')
     .eq('visibility_status', 'visible')
+
+  if (category) {
+    const { data: mem, error: memErr } = await supabase
+      .from('product_category_membership')
+      .select('product_id')
+      .eq('category', category)
+    if (memErr) throw new Error(`leaderboard membership: ${memErr.message}`)
+    const ids = (mem ?? []).map((m) => m.product_id as string)
+    if (!ids.length) return []
+    productQuery = productQuery.in('id', ids)
+  }
+
+  const { data: products, error: pErr } = await productQuery
   if (pErr) throw new Error(`leaderboard products: ${pErr.message}`)
   if (!products?.length) return []
 
@@ -57,7 +74,7 @@ export async function getRankedProducts(limit = 50): Promise<RankedProduct[]> {
         lastSeen: dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null,
       }
     })
-    .filter((p) => p.mentionCount > 0)
+    .filter((p) => p.mentionCount >= Math.max(1, minMentions))
     .sort((a, b) => b.momentum - a.momentum)
 
   const maxMomentum = scored[0]?.momentum ?? 0
@@ -66,4 +83,16 @@ export async function getRankedProducts(limit = 50): Promise<RankedProduct[]> {
     rank: i + 1,
     score: toDisplayScore(p.momentum, maxMomentum),
   }))
+}
+
+/** Aktive Kategorien für die Ranking-Filter (nach Anzeigereihenfolge). */
+export async function getActiveCategories(): Promise<Array<{ slug: string; name: string }>> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('product_categories')
+    .select('slug, name')
+    .eq('status', 'active')
+    .order('display_order')
+  if (error) throw new Error(`categories: ${error.message}`)
+  return (data ?? []).map((c) => ({ slug: c.slug as string, name: c.name as string }))
 }
