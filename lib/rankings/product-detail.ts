@@ -26,6 +26,14 @@ export interface ProductDetail {
   mentions: ProductMentionView[]
 }
 
+/** Supabase typisiert den daily_repo-Join je nach FK-Erkennung als Objekt ODER
+ *  Array — beide Formen auf den title herunterbrechen. */
+function joinedTitle(dr: unknown): string | null {
+  if (!dr) return null
+  const obj = Array.isArray(dr) ? dr[0] : dr
+  return (obj as { title?: string | null } | undefined)?.title ?? null
+}
+
 /** Macht Newsletter-Titel anzeigbar: Markdown-Links → Text, getrimmt. */
 function cleanTitle(t: string | null): string | null {
   if (!t) return null
@@ -79,7 +87,7 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
       excerpt: m.excerpt as string | null,
       mentionDate: m.mention_date as string | null,
       sentiment: m.sentiment as number | null,
-      sourceTitle: cleanTitle((m.daily_repo as { title: string | null } | null)?.title ?? null),
+      sourceTitle: cleanTitle(joinedTitle(m.daily_repo)),
     })),
   }
 }
