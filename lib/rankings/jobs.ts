@@ -12,6 +12,7 @@ const EXTRACT_BUDGET_MS = 180_000
 const EXTRACT_TAIL_MS = 45_000
 const MAX_ITEM_ATTEMPTS = 3
 const DAILY_WINDOW_DAYS = 1
+const BACKFILL_WINDOW_DAYS = 60
 const EXTRACT_VERSION = '1b-i'
 // Harter Token-Cap pro Job (Kostenbremse). ~$3/Tag bei Haiku. Pro Job via
 // ranking_jobs.budget_extract überschreibbar; bei Cap stoppt extract sauber.
@@ -55,7 +56,8 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
       const { looksAiProductRelevant } = await import('@/lib/rankings/prefilter')
       const { getModelForUseCase } = await import('@/lib/ai/model-config')
       const model = await getModelForUseCase('ranking_extract')
-      const sinceIso = new Date(Date.now() - DAILY_WINDOW_DAYS * 86_400_000).toISOString()
+      const windowDays = j.mode === 'daily' ? DAILY_WINDOW_DAYS : BACKFILL_WINDOW_DAYS
+      const sinceIso = new Date(Date.now() - windowDays * 86_400_000).toISOString()
 
       let processedAny = false
       let spentTokens = j.spend_tokens ?? 0 // kumulativ über alle Ticks dieses Jobs
@@ -68,7 +70,7 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
           .or(`product_processing_attempts.is.null,product_processing_attempts.lt.${MAX_ITEM_ATTEMPTS}`)
           .order('newsletter_date', { ascending: false })
           .limit(EXTRACT_BATCH)
-        if (j.mode === 'daily') sel = sel.gte('newsletter_date', sinceIso) // Daily: nur jüngstes Fenster
+        sel = sel.gte('newsletter_date', sinceIso) // Fenster: daily 1 Tag, backfill 60 Tage
         const { data: items, error: selErr } = await sel
         if (selErr) throw new Error(`daily_repo fetch: ${selErr.message}`)
         if (!items || items.length === 0) {
