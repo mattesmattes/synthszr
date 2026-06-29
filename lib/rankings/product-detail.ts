@@ -46,6 +46,21 @@ function joinedField(dr: unknown, field: 'title' | 'content' | 'source_email' | 
   return (obj as Record<string, string | null> | undefined)?.[field] ?? null
 }
 
+/** HTML → lesbarer Plain-Text: Block-Tags zu Umbrüchen, restliche Tags entfernt,
+ *  Entities dekodiert. Sicher (kein dangerouslySetInnerHTML). */
+function htmlToText(html: string | null): string | null {
+  if (!html) return null
+  const text = html
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<\/(p|div|li|h[1-6]|blockquote|tr|figure|figcaption)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/&#x27;/gi, "'")
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  return text || null
+}
+
 /** "DEV Community <yo@dev.to>" → "DEV Community"; Fallback: Domain bzw. ganze Adresse. */
 function parseMedium(email: string | null): string | null {
   if (!email) return null
@@ -145,7 +160,7 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
       sourceTitle: cleanTitle(joinedField(m.daily_repo, 'title')),
       sourceMedium: parseMedium(joinedField(m.daily_repo, 'source_email')),
       sourceUrl: joinedField(m.daily_repo, 'source_url'),
-      sourceContent: joinedField(m.daily_repo, 'content')?.slice(0, 6000) ?? null,
+      sourceContent: htmlToText(joinedField(m.daily_repo, 'content'))?.slice(0, 6000) ?? null,
     })),
   }
 }
