@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
 import { getProductDetail } from '@/lib/rankings/product-detail'
 import { getVendorSynthesis } from '@/lib/rankings/vendor-synthesis'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
@@ -48,9 +47,17 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-10">
-      <Link href={`/${lang}/rankings`} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-black mb-4">
-        <ArrowLeft className="w-4 h-4" /> Alle Rankings
-      </Link>
+      <nav className="flex items-center gap-1.5 text-sm text-gray-500 mb-4 flex-wrap">
+        <Link href={`/${lang}/rankings`} className="hover:text-black">Alle Rankings</Link>
+        {p.category && (
+          <>
+            <span className="text-gray-300">›</span>
+            <Link href={`/${lang}/rankings?category=${p.category.slug}`} className="hover:text-black">{p.category.name}</Link>
+          </>
+        )}
+        <span className="text-gray-300">›</span>
+        <span className="text-gray-800 font-medium truncate">{p.canonicalName}</span>
+      </nav>
 
       <header className="mb-4 flex items-start gap-3">
         <VendorAvatar vendor={p.vendor} size={44} />

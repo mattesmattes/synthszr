@@ -24,6 +24,7 @@ export interface ProductDetail {
   mentionCount: number
   rank: number | null
   score: number | null
+  category: { slug: string; name: string } | null
   sentiment: { label: string; score: number | null } | null
   description: string | null
   releasedAt: string | null
@@ -62,6 +63,18 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
     .maybeSingle()
   if (pErr) throw new Error(`product detail: ${pErr.message}`)
   if (!product) return null
+
+  // primäre Kategorie (für Breadcrumb)
+  const { data: catRow } = await supabase
+    .from('product_category_membership')
+    .select('category, product_categories:category(name)')
+    .eq('product_id', product.id)
+    .eq('is_primary', true)
+    .maybeSingle()
+  const catName = catRow
+    ? (Array.isArray(catRow.product_categories) ? catRow.product_categories[0] : catRow.product_categories)?.name as string | undefined
+    : undefined
+  const category = catRow ? { slug: catRow.category as string, name: catName ?? (catRow.category as string) } : null
 
   const { data: mentions, error: mErr } = await supabase
     .from('product_mentions')
@@ -107,6 +120,7 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
     mentionCount: dates.length,
     rank: entry?.rank ?? null,
     score: entry?.score ?? null,
+    category,
     sentiment,
     description: description ?? null,
     releasedAt: releasedAt ?? null,
