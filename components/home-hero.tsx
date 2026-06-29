@@ -25,7 +25,7 @@ export function HomeHero({ locale }: { locale?: string }) {
     <div className="flex justify-center">
       <Link
         href={href}
-        className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 rounded-full border-2 border-black px-5 py-2.5 text-sm sm:text-base hover:bg-[#CCFF00]/25 transition-colors text-center"
+        className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 py-2 text-sm sm:text-base hover:opacity-70 transition-opacity text-center"
       >
         <span className="font-bold tracking-tight">Neu: SYNTHSZR CHARTS</span>
         <span className="text-gray-600">— welche Produkte gerade rocken</span>
