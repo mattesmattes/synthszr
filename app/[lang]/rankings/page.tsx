@@ -58,8 +58,8 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         </p>
       </header>
 
-      {/* Kategorie-Tabs */}
-      <div className="flex gap-1.5 overflow-x-auto pb-2 mb-4 -mx-1 px-1">
+      {/* Kategorie-Tabs — umbrechend, damit alle Pills sichtbar sind */}
+      <div className="flex flex-wrap gap-1.5 mb-4">
         {tab(tabBase, 'Alle', !category)}
         {categories.map((c) => tab(`${tabBase}?category=${c.slug}`, c.name, category === c.slug))}
       </div>
