@@ -49,10 +49,11 @@ function joinedField(dr: unknown, field: 'title' | 'content' | 'source_email' | 
 /** "DEV Community <yo@dev.to>" → "DEV Community"; Fallback: Domain bzw. ganze Adresse. */
 function parseMedium(email: string | null): string | null {
   if (!email) return null
+  const strip = (s: string) => s.trim().replace(/^["']+|["']+$/g, '').trim()
   const m = email.match(/^\s*([^<]+?)\s*</)
-  if (m) return m[1].trim()
+  if (m) return strip(m[1])
   const dom = email.match(/@([^>\s]+)/)
-  return dom ? dom[1] : email.trim()
+  return dom ? dom[1] : strip(email)
 }
 
 /** Macht Newsletter-Titel anzeigbar: Markdown-Links → Text, getrimmt. */
