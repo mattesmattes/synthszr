@@ -17,8 +17,8 @@ interface PageProps {
 }
 
 export const metadata = {
-  title: 'Synthszr Rankings — AI-Produkte mit Momentum',
-  description: 'Welche AI-Produkte gerade in der Tech-Berichterstattung Momentum haben — täglich aus tausenden News extrahiert.',
+  title: 'Synthszr Charts — welche AI-Produkte den Takt vorgeben',
+  description: 'Welche AI-Produkte gerade den Takt vorgeben — täglich aus tausenden News ausgewertet.',
 }
 
 function fmtDate(d: string | null): string {
@@ -54,9 +54,9 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
   return (
     <main className="max-w-3xl mx-auto px-4 py-10">
       <header className="mb-4">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Synthszr Rankings</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Synthszr Charts</h1>
         <p className="text-gray-600 text-sm mt-1">
-          Welche AI-Produkte gerade <b>Momentum</b> haben — täglich aus tausenden Tech-News.
+          Welche AI-Produkte gerade den <b>Takt vorgeben</b> — täglich aus tausenden News ausgewertet.
         </p>
       </header>
 
