@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboard'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { MomentumChart } from '@/components/rankings/momentum-chart'
+import { MultiMomentumChart } from '@/components/rankings/multi-momentum-chart'
 
 const MEDAL = ['🥇', '🥈', '🥉']
 
@@ -63,6 +64,13 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         {tab(tabBase, 'Alle', !category)}
         {categories.map((c) => tab(`${tabBase}?category=${c.slug}`, c.name, category === c.slug))}
       </div>
+
+      {/* Vergleichs-Chart: nur bei gewählter Kategorie, Top-Produkte über der Liste */}
+      {category && products.length > 0 && (
+        <div className="mb-4">
+          <MultiMomentumChart series={products.slice(0, 8).map((p) => ({ label: p.canonicalName, points: p.history }))} />
+        </div>
+      )}
 
       {products.length === 0 ? (
         <p className="text-gray-500 text-sm">Noch keine Produkte in dieser Kategorie.</p>
