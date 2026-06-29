@@ -113,7 +113,7 @@ export default function RankingsAdminPage() {
 
       {/* Job-Status */}
       <div className="text-sm text-gray-700 space-y-1">
-        <div>Job: <b>{s?.job?.status ?? '—'}</b> / Phase <b>{s?.job?.phase ?? '—'}</b> / {s?.job?.run_date ?? '—'}</div>
+        <div>Job: <b>{s?.job?.mode ?? '—'}</b> · <b>{s?.job?.status ?? '—'}</b> · Phase {s?.job?.phase ?? '—'} · {s?.job?.run_date ?? '—'}</div>
         {lastResult && <div>Letzter Schritt: <code>{lastResult}</code></div>}
         {s?.job?.error_message && <div className="text-red-600">Fehler: {s.job.error_message}</div>}
         {error && <div className="text-red-600">Fehler: {error}</div>}

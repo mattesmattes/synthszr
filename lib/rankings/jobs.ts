@@ -156,16 +156,23 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
  *  Fortschritt im aktuellen Fenster + erzeugte Produkte/Mentions. */
 export async function getRankingExtractStatus() {
   const supabase = createAdminClient()
-  const since = new Date(Date.now() - DAILY_WINDOW_DAYS * 86_400_000).toISOString()
   const head = { count: 'exact' as const, head: true }
+  const sel = 'id, mode, phase, status, spend_tokens, budget_extract, run_date, last_advanced_at, error_message'
 
-  const { data: job } = await supabase
-    .from('ranking_jobs')
-    .select('id, mode, phase, status, spend_tokens, budget_extract, run_date, last_advanced_at, error_message')
-    .eq('mode', 'daily')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  // Aktiver Job (egal Modus) hat Vorrang — sonst sieht man bei laufendem Backfill
+  // nur den abgeschlossenen daily-Job. Fallback: jüngster Job überhaupt.
+  let { data: job } = await supabase
+    .from('ranking_jobs').select(sel)
+    .in('status', ['pending', 'processing'])
+    .order('last_advanced_at', { ascending: false, nullsFirst: false })
+    .limit(1).maybeSingle()
+  if (!job) {
+    const r = await supabase.from('ranking_jobs').select(sel).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    job = r.data
+  }
+
+  const windowDays = job?.mode === 'backfill' ? BACKFILL_WINDOW_DAYS : DAILY_WINDOW_DAYS
+  const since = new Date(Date.now() - windowDays * 86_400_000).toISOString()
 
   const [products, mentions, windowTotal, windowDone, skips] = await Promise.all([
     supabase.from('products').select('id', head),
@@ -179,7 +186,7 @@ export async function getRankingExtractStatus() {
   const windowDoneN = windowDone.count ?? 0
   return {
     job: job ?? null,
-    windowDays: DAILY_WINDOW_DAYS,
+    windowDays,
     tokenBudget: job?.budget_extract ?? EXTRACT_TOKEN_BUDGET_DEFAULT,
     products: products.count ?? 0,
     mentions: mentions.count ?? 0,
