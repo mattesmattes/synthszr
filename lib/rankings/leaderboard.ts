@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { momentumScore, toDisplayScore, momentumHistory } from '@/lib/rankings/score'
+import { isExcludedProduct } from '@/lib/rankings/product-exclusions'
 
 export interface RankedProduct {
   id: string
@@ -31,7 +32,7 @@ export async function getRankedProducts(
 
   let productQuery = supabase
     .from('products')
-    .select('id, canonical_name, vendor_namespace, slug')
+    .select('id, canonical_name, vendor_namespace, slug, family, version, qualifier')
     .eq('visibility_status', 'visible')
 
   if (category) {
@@ -45,9 +46,15 @@ export async function getRankedProducts(
     productQuery = productQuery.in('id', ids)
   }
 
-  const { data: products, error: pErr } = await productQuery
+  const { data: productsRaw, error: pErr } = await productQuery
   if (pErr) throw new Error(`leaderboard products: ${pErr.message}`)
-  if (!products?.length) return []
+  if (!productsRaw?.length) return []
+  // Nackte Herstellernamen (Anthropic, Mistral …) zur Laufzeit ausschließen —
+  // robust gegen visibility_status-Races mit laufenden Extract-Jobs.
+  const products = productsRaw.filter(
+    (p) => !(isExcludedProduct(p.family as string) && !p.version && !p.qualifier),
+  )
+  if (!products.length) return []
 
   // Alle Mentions paginiert laden — PostgREST cappt sonst still bei 1000 Zeilen,
   // wodurch (seit dem Backfill > 1000 Mentions) die Momentum-Scores aus einer
