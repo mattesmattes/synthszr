@@ -35,8 +35,9 @@ export async function resolveProduct(opts: {
 }): Promise<{ productId: string; canonicalKey: string; isNew: boolean }> {
   const supabase = createAdminClient()
   const p = buildProductInsert(opts.vendor, opts.detectedName)
-  // Reiner Herstellername (z.B. "Anthropic") → kein Chart-Produkt, ausblenden.
-  const visibility = isExcludedProduct(p.family) ? 'excluded' : 'visible'
+  // NACKTER Herstellername (z.B. "Anthropic", "Mistral") → kein Chart-Produkt.
+  // Mit Modell-Zusatz (Version/Qualifier, z.B. "Mistral Large 3") bleibt es ein Produkt.
+  const visibility = isExcludedProduct(p.family) && !p.version && !p.qualifier ? 'excluded' : 'visible'
 
   // 1) Exakter Lookup → Heilung + last_seen
   const { data: existing } = await supabase
