@@ -16,7 +16,8 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies
 
 // DOM processors
 import { processMattesSyntheseText } from "@/lib/tiptap/dom-processors/synthese-text"
-import { processSynthszrRatingLinks, injectCompanyLinks } from "@/lib/tiptap/dom-processors/rating-links"
+import { processSynthszrRatingLinks } from "@/lib/tiptap/dom-processors/rating-links"
+import { injectProductLinks, type ProductLinkData } from "@/lib/tiptap/dom-processors/product-links"
 import { processNewsHeadings } from "@/lib/tiptap/dom-processors/news-headings"
 import { hideExplicitCompanyTags } from "@/lib/tiptap/dom-processors/company-tags"
 import { sanitizeAllLinks } from "@/lib/tiptap/dom-processors/link-sanitizer"
@@ -56,9 +57,25 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
   // Track companies that have already been triggered for generation (prevents infinite loops)
   const generationTriggeredRef = useRef<Set<string>>(new Set())
 
+  // Chart-Produkte (Name → Slug) für die Produkt-Verlinkung im Fließtext
+  const [productLinks, setProductLinks] = useState<ProductLinkData>(new Map())
+
   useEffect(() => {
     setIsMounted(true)
     setDevicePixelRatio(window.devicePixelRatio || 1)
+  }, [])
+
+  // Chart-Produkte laden (für Produkt-Links im Text)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/rankings/products')
+      .then((r) => (r.ok ? r.json() : { products: [] }))
+      .then((data: { products?: Array<{ name: string; slug: string }> }) => {
+        if (cancelled || !data?.products?.length) return
+        setProductLinks(new Map(data.products.map((p) => [p.name.toLowerCase(), { displayName: p.name, slug: p.slug }])))
+      })
+      .catch(() => { /* silent — Produkt-Links sind nicht essenziell */ })
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -176,11 +193,11 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       setRatingPortals(result.publicPortals)
       setPremarketRatingPortals(result.premarketPortals)
       hideExplicitCompanyTags(containerRef.current!)
-      injectCompanyLinks(containerRef.current!, result.companyLinkData)
+      injectProductLinks(containerRef.current!, productLinks)
     }
 
     runProcessing()
-  }, [originalContent])
+  }, [originalContent, productLinks])
 
   // Process content after editor is ready
   useEffect(() => {
@@ -225,8 +242,8 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       // 5. Hide {Company} syntax AFTER company detection and badge placement
       hideExplicitCompanyTags(container)
 
-      // 6. Inject company links AFTER tag hiding to avoid matching {Company} patterns
-      injectCompanyLinks(container, result.companyLinkData)
+      // 6. Produkt-Links im Fließtext (zu den Charts), NACH dem Ausblenden der {Company}-Tags
+      injectProductLinks(container, productLinks)
 
       // 7. Insert placeholder slot before the first Synthszr Take for the tip-promo box
       const slot = insertTipPromoSlot(container)
@@ -243,7 +260,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
     }
 
     processContent()
-  }, [editorReady, content, articleThumbnails, queueItemIds, originalContent, handleRefreshNeeded])
+  }, [editorReady, content, articleThumbnails, queueItemIds, originalContent, handleRefreshNeeded, productLinks])
 
   if (!editor) {
     return null
