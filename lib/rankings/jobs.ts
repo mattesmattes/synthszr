@@ -12,7 +12,7 @@ const EXTRACT_BUDGET_MS = 180_000
 const EXTRACT_TAIL_MS = 45_000
 const MAX_ITEM_ATTEMPTS = 3
 const DAILY_WINDOW_DAYS = 1
-const BACKFILL_WINDOW_DAYS = 60
+const BACKFILL_WINDOW_DAYS = 90
 const EXTRACT_VERSION = '1b-i'
 // Harter Token-Cap pro Job (Kostenbremse). ~$3/Tag bei Haiku. Pro Job via
 // ranking_jobs.budget_extract überschreibbar; bei Cap stoppt extract sauber.
