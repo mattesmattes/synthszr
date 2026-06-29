@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getRankedProducts } from '@/lib/rankings/leaderboard'
 
-export const revalidate = 300 // ISR: alle 5 Min neu (Ranking ändert sich nicht sekündlich)
+// force-dynamic statt ISR: die Seite lädt zur Laufzeit aus der DB (kein Build-time-
+// Prerender — sonst scheitert der Export pro Locale). Konsistent mit /companies.
+export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: Promise<{ lang: string }>
