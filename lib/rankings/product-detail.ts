@@ -7,6 +7,7 @@ export interface ProductMentionView {
   mentionDate: string | null
   sentiment: number | null
   sourceTitle: string | null
+  sourceContent: string | null
 }
 
 export interface ProductDetail {
@@ -36,10 +37,10 @@ const META_DIMS = new Set([SENTIMENT_DIM, '__description', '__released'])
 
 /** Supabase typisiert den daily_repo-Join je nach FK-Erkennung als Objekt ODER
  *  Array — beide Formen auf den title herunterbrechen. */
-function joinedTitle(dr: unknown): string | null {
+function joinedField(dr: unknown, field: 'title' | 'content'): string | null {
   if (!dr) return null
   const obj = Array.isArray(dr) ? dr[0] : dr
-  return (obj as { title?: string | null } | undefined)?.title ?? null
+  return (obj as Record<string, string | null> | undefined)?.[field] ?? null
 }
 
 /** Macht Newsletter-Titel anzeigbar: Markdown-Links → Text, getrimmt. */
@@ -64,10 +65,10 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
 
   const { data: mentions, error: mErr } = await supabase
     .from('product_mentions')
-    .select('excerpt, mention_date, sentiment, daily_repo:daily_repo_id(title)')
+    .select('excerpt, mention_date, sentiment, daily_repo:daily_repo_id(title, content)')
     .eq('product_id', product.id)
     .order('mention_date', { ascending: false })
-    .limit(100)
+    .limit(60)
   if (mErr) throw new Error(`product detail mentions: ${mErr.message}`)
 
   const rows = mentions ?? []
@@ -115,7 +116,8 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
       excerpt: m.excerpt as string | null,
       mentionDate: m.mention_date as string | null,
       sentiment: m.sentiment as number | null,
-      sourceTitle: cleanTitle(joinedTitle(m.daily_repo)),
+      sourceTitle: cleanTitle(joinedField(m.daily_repo, 'title')),
+      sourceContent: joinedField(m.daily_repo, 'content')?.slice(0, 6000) ?? null,
     })),
   }
 }

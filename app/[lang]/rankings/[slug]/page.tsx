@@ -6,6 +6,7 @@ import { getVendorSynthesis } from '@/lib/rankings/vendor-synthesis'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { MomentumChart } from '@/components/rankings/momentum-chart'
 import { PremarketSynthesisBlock } from '@/components/rankings/premarket-synthesis-block'
+import { MentionList } from '@/components/rankings/mention-list'
 
 export const dynamic = 'force-dynamic'
 
@@ -112,17 +113,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
       {/* Belege */}
       <h2 className="text-lg font-semibold mb-3">Belege ({p.mentions.length})</h2>
-      <ul className="space-y-1">
-        {p.mentions.map((m, i) => (
-          <li key={i} className="flex items-baseline gap-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-sm">
-            <span className="text-red-600 text-xs font-semibold shrink-0 tabular-nums">{fmtDate(m.mentionDate)}</span>
-            <span className="text-gray-800 truncate" title={m.excerpt ?? m.sourceTitle ?? ''}>
-              {m.excerpt ? `„${m.excerpt}"` : (m.sourceTitle ?? 'Newsletter')}
-            </span>
-          </li>
-        ))}
-        {p.mentions.length === 0 && <li className="text-gray-500 text-sm">Keine Belege.</li>}
-      </ul>
+      <MentionList mentions={p.mentions} />
 
       {vendorSyn && <PremarketSynthesisBlock company={vendorSyn.company} synthesis={vendorSyn.synthesis} />}
 
