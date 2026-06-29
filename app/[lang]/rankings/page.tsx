@@ -34,7 +34,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
   const { lang } = await params
   const { category } = await searchParams
   const [products, categories] = await Promise.all([
-    getRankedProducts({ limit: 50, minMentions: 2, category }),
+    getRankedProducts({ limit: category ? 25 : 50, minMentions: 2, category }),
     getActiveCategories(),
   ])
 
