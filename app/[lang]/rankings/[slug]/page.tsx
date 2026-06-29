@@ -2,8 +2,10 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { getProductDetail } from '@/lib/rankings/product-detail'
+import { getVendorSynthesis } from '@/lib/rankings/vendor-synthesis'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { MomentumChart } from '@/components/rankings/momentum-chart'
+import { PremarketSynthesisBlock } from '@/components/rankings/premarket-synthesis-block'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +43,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const { lang, slug } = await params
   const p = await getProductDetail(slug)
   if (!p) notFound()
+  const vendorSyn = await getVendorSynthesis(p.vendor)
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-10">
@@ -114,6 +117,8 @@ export default async function ProductDetailPage({ params }: PageProps) {
         ))}
         {p.mentions.length === 0 && <li className="text-gray-500 text-sm">Keine Belege.</li>}
       </ul>
+
+      {vendorSyn && <PremarketSynthesisBlock company={vendorSyn.company} synthesis={vendorSyn.synthesis} />}
 
       <footer className="mt-10 text-xs text-gray-400 border-t pt-4">
         MVP — Score = Momentum (recency-gewichtete Erwähnungen). Sentiment, Features &amp; Kategorie folgen.
