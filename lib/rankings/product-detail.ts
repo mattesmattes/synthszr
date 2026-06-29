@@ -7,6 +7,8 @@ export interface ProductMentionView {
   mentionDate: string | null
   sentiment: number | null
   sourceTitle: string | null
+  sourceMedium: string | null
+  sourceUrl: string | null
   sourceContent: string | null
 }
 
@@ -38,10 +40,19 @@ const META_DIMS = new Set([SENTIMENT_DIM, '__description', '__released'])
 
 /** Supabase typisiert den daily_repo-Join je nach FK-Erkennung als Objekt ODER
  *  Array — beide Formen auf den title herunterbrechen. */
-function joinedField(dr: unknown, field: 'title' | 'content'): string | null {
+function joinedField(dr: unknown, field: 'title' | 'content' | 'source_email' | 'source_url'): string | null {
   if (!dr) return null
   const obj = Array.isArray(dr) ? dr[0] : dr
   return (obj as Record<string, string | null> | undefined)?.[field] ?? null
+}
+
+/** "DEV Community <yo@dev.to>" → "DEV Community"; Fallback: Domain bzw. ganze Adresse. */
+function parseMedium(email: string | null): string | null {
+  if (!email) return null
+  const m = email.match(/^\s*([^<]+?)\s*</)
+  if (m) return m[1].trim()
+  const dom = email.match(/@([^>\s]+)/)
+  return dom ? dom[1] : email.trim()
 }
 
 /** Macht Newsletter-Titel anzeigbar: Markdown-Links → Text, getrimmt. */
@@ -78,7 +89,7 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
 
   const { data: mentions, error: mErr } = await supabase
     .from('product_mentions')
-    .select('excerpt, mention_date, sentiment, daily_repo:daily_repo_id(title, content)')
+    .select('excerpt, mention_date, sentiment, daily_repo:daily_repo_id(title, content, source_email, source_url)')
     .eq('product_id', product.id)
     .order('mention_date', { ascending: false })
     .limit(60)
@@ -131,6 +142,8 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
       mentionDate: m.mention_date as string | null,
       sentiment: m.sentiment as number | null,
       sourceTitle: cleanTitle(joinedField(m.daily_repo, 'title')),
+      sourceMedium: parseMedium(joinedField(m.daily_repo, 'source_email')),
+      sourceUrl: joinedField(m.daily_repo, 'source_url'),
       sourceContent: joinedField(m.daily_repo, 'content')?.slice(0, 6000) ?? null,
     })),
   }

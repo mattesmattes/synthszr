@@ -1,12 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X } from 'lucide-react'
+import { X, ExternalLink } from 'lucide-react'
 
 export interface MentionView {
   excerpt: string | null
   mentionDate: string | null
   sourceTitle: string | null
+  sourceMedium: string | null
+  sourceUrl: string | null
   sourceContent: string | null
 }
 
@@ -30,10 +32,10 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
-  // nach Quelle gruppieren
+  // nach Medium (Quelle) gruppieren
   const groups = new Map<string, MentionView[]>()
   for (const m of mentions) {
-    const src = m.sourceTitle?.trim() || 'Ohne Quelle'
+    const src = m.sourceMedium?.trim() || 'Sonstige'
     if (!groups.has(src)) groups.set(src, [])
     groups.get(src)!.push(m)
   }
@@ -48,7 +50,6 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
 
   return (
     <>
-      {/* Quellen-Pills (Anzahl Artikel) */}
       <div className="flex flex-wrap gap-1.5">
         {sorted.map(([src, ms]) => (
           <button
@@ -64,7 +65,6 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
         {sorted.length === 0 && <span className="text-gray-500 text-sm">Keine Belege.</span>}
       </div>
 
-      {/* Aufgeklappte Belege je Quelle */}
       {sorted.filter(([src]) => expanded.has(src)).map(([src, ms]) => (
         <div key={src} className="mt-3">
           <div className="text-xs font-semibold text-gray-500 mb-1">{src}</div>
@@ -76,7 +76,7 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
                   className="w-full flex items-baseline gap-2 text-left rounded-md border border-gray-200 px-2.5 py-1.5 text-sm hover:border-black transition-colors"
                 >
                   <span className="text-black text-xs font-bold shrink-0 tabular-nums">{fmtDate(m.mentionDate)}</span>
-                  <span className="font-semibold text-gray-900 truncate">{m.excerpt ? `„${m.excerpt}"` : src}</span>
+                  <span className="font-semibold text-gray-900 truncate">{m.sourceTitle || (m.excerpt ? `„${m.excerpt}"` : src)}</span>
                 </button>
               </li>
             ))}
@@ -89,7 +89,7 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
           <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-4 mb-3">
               <div>
-                <div className="text-xs font-bold text-black tabular-nums">{fmtDate(open.mentionDate)}</div>
+                <div className="text-xs font-bold text-black tabular-nums">{fmtDate(open.mentionDate)}{open.sourceMedium ? ` · ${open.sourceMedium}` : ''}</div>
                 <h3 className="text-lg font-bold leading-tight mt-0.5">{open.sourceTitle ?? 'Newsletter'}</h3>
               </div>
               <button onClick={() => setOpen(null)} className="shrink-0 text-gray-400 hover:text-black" aria-label="Schließen">
@@ -102,6 +102,11 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
             {open.sourceContent
               ? <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{open.sourceContent}</div>
               : <p className="text-sm text-gray-400">Kein Volltext verfügbar.</p>}
+            {open.sourceUrl && (
+              <a href={open.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-black underline mt-4">
+                Zum Original-Artikel <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
           </div>
         </div>
       )}
