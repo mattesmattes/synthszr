@@ -4,7 +4,7 @@ import { FooterBrands } from "@/components/footer-brands"
 import { FeaturedArticle } from "@/components/featured-article"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
-import { HomeSearch } from "@/components/home-search"
+import { HomeHero } from "@/components/home-hero"
 // import { CalligramFooter } from "@/components/calligram-footer"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -134,8 +134,8 @@ export default async function Page() {
 
         {featuredPost ? (
           <>
-            {/* Search bar replaces the legacy hero text */}
-            <HomeSearch />
+            {/* Charts-Promo; "Search" (Nav) blendet das Such-Formular ein */}
+            <HomeHero />
 
             <FeaturedArticle
               slug={featuredPost.slug}

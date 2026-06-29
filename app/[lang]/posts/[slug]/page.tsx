@@ -10,7 +10,7 @@ import { AdPromo } from "@/components/ad-promo"
 import { SwipeNavigation } from "@/components/swipe-navigation"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
-import { HomeSearch } from "@/components/home-search"
+import { HomeHero } from "@/components/home-hero"
 import { PostSearchHighlight } from "@/components/post-search-highlight"
 import { AudioPlayer } from "@/components/audio-player"
 import { PodcastBadges } from "@/components/podcast-badges"
@@ -355,7 +355,7 @@ export default async function PostPage({ params }: PageProps) {
           <BloomLanguageSwitcher currentLocale={locale} />
         </Suspense>
 
-        <HomeSearch locale={locale} />
+        <HomeHero locale={locale} />
         <Suspense fallback={null}>
           <PostSearchHighlight targetId="post-article" />
         </Suspense>

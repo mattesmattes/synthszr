@@ -9,7 +9,7 @@ import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
 import { SwipeNavigation } from "@/components/swipe-navigation"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
-import { HomeSearch } from "@/components/home-search"
+import { HomeHero } from "@/components/home-hero"
 import { PostSearchHighlight } from "@/components/post-search-highlight"
 import { AudioPlayer } from "@/components/audio-player"
 import { PodcastBadges } from "@/components/podcast-badges"
@@ -154,7 +154,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           <BloomLanguageSwitcher currentLocale="de" />
         </Suspense>
 
-        <HomeSearch locale="de" />
+        <HomeHero locale="de" />
         <Suspense fallback={null}>
           <PostSearchHighlight targetId="post-article" />
         </Suspense>
