@@ -1,9 +1,13 @@
-// DOM processor: verlinkt Produktnamen (aus den Synthszr Charts) im Fließtext
-// zu /{locale}/rankings/{slug} und hängt eine Momentum-Pill (30-Tage-Sparkline +
-// Score) an. Pro Produkt wird nur die ERSTE Erwähnung verlinkt (sonst überladen).
-// Ersetzt die frühere Company-Verlinkung; Vote-Badges bleiben unberührt.
+// DOM processor: Produkt-Verlinkung + Produkt-Vote-Block.
+// - injectProductLinks: verlinkt Produktnamen (aus den Charts) im Fließtext zu
+//   /{locale}/rankings/{slug} (NUR Links, keine Pills).
+// - appendProductVoteBlock: hängt pro Synthszr-Take-Sektion einen "Synthszr Vote:"-
+//   Block an mit den im Abschnitt genannten Produkten + farbcodierter Momentum-Pill
+//   (grün=steigend, rot=fallend, schwarz=stagnierend) + Score.
+// Ersetzt die frühere Company-Vote-Logik.
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
+const LOCALES = ['de', 'en', 'cs', 'nds']
 
 export interface ProductLinkEntry {
   displayName: string
@@ -14,31 +18,46 @@ export interface ProductLinkEntry {
 
 export type ProductLinkData = Map<string, ProductLinkEntry> // key: displayName.toLowerCase()
 
-const LOCALES = ['de', 'en', 'cs', 'nds']
+function localeFrom(): string {
+  const parts = window.location.pathname.split('/')
+  return LOCALES.includes(parts[1]) ? parts[1] : 'de'
+}
 
-/** Baut die Momentum-Pill (Mini-Sparkline der letzten 30 Tage + Score-Zahl). */
-function buildPill(entry: ProductLinkEntry): HTMLElement {
+/** Trend aus der 30-Tage-Sparkline: erste vs. zweite Hälfte. */
+function sparkTrend(spark: number[]): 'up' | 'down' | 'flat' {
+  if (!spark || spark.length < 4) return 'flat'
+  const half = Math.floor(spark.length / 2)
+  const a = spark.slice(0, half).reduce((s, v) => s + v, 0) / half
+  const b = spark.slice(half).reduce((s, v) => s + v, 0) / (spark.length - half)
+  if (b > a * 1.1) return 'up'
+  if (b < a * 0.9) return 'down'
+  return 'flat'
+}
+
+const TREND_COLOR = { up: '#16a34a', down: '#dc2626', flat: '#111827' } as const
+
+/** Momentum-Pill: farbige Mini-Sparkline (Trend) + Score. */
+function buildVotePill(entry: ProductLinkEntry): HTMLElement {
+  const color = TREND_COLOR[sparkTrend(entry.spark)]
   const pill = document.createElement('span')
   pill.className = 'synthszr-product-pill'
   pill.style.cssText =
-    'display:inline-flex;align-items:center;gap:3px;margin:0 2px;padding:1px 5px;border:1px solid #e5e7eb;border-radius:9999px;vertical-align:middle;line-height:1;white-space:nowrap;'
+    'display:inline-flex;align-items:center;gap:3px;margin-left:4px;padding:1px 6px;border:1px solid #e5e7eb;border-radius:9999px;vertical-align:middle;line-height:1;white-space:nowrap;'
 
   const spark = entry.spark ?? []
   if (spark.length >= 2) {
     const svg = document.createElementNS(SVG_NS, 'svg')
-    svg.setAttribute('width', '26')
-    svg.setAttribute('height', '11')
-    svg.setAttribute('viewBox', '0 0 26 11')
+    svg.setAttribute('width', '30')
+    svg.setAttribute('height', '12')
+    svg.setAttribute('viewBox', '0 0 30 12')
     svg.setAttribute('preserveAspectRatio', 'none')
     const max = Math.max(...spark, 0.0001)
-    const pts = spark
-      .map((v, i) => `${((i / (spark.length - 1)) * 26).toFixed(1)},${(10 - (v / max) * 9).toFixed(1)}`)
-      .join(' ')
+    const pts = spark.map((v, i) => `${((i / (spark.length - 1)) * 30).toFixed(1)},${(11 - (v / max) * 10).toFixed(1)}`).join(' ')
     const line = document.createElementNS(SVG_NS, 'polyline')
     line.setAttribute('points', pts)
     line.setAttribute('fill', 'none')
-    line.setAttribute('stroke', '#111827')
-    line.setAttribute('stroke-width', '1')
+    line.setAttribute('stroke', color)
+    line.setAttribute('stroke-width', '1.25')
     line.setAttribute('vector-effect', 'non-scaling-stroke')
     svg.appendChild(line)
     pill.appendChild(svg)
@@ -46,20 +65,17 @@ function buildPill(entry: ProductLinkEntry): HTMLElement {
 
   const num = document.createElement('span')
   num.textContent = String(entry.score)
-  num.style.cssText = 'font-size:10px;font-weight:700;color:#111827;'
+  num.style.cssText = `font-size:11px;font-weight:700;color:${color};`
   pill.appendChild(num)
   return pill
 }
 
+/** Verlinkt je Produkt die erste Erwähnung im Fließtext (keine Pill). */
 export function injectProductLinks(container: HTMLElement, products: ProductLinkData): void {
   if (products.size === 0) return
-
-  const pathParts = window.location.pathname.split('/')
-  const locale = LOCALES.includes(pathParts[1]) ? pathParts[1] : 'de'
-
-  // Längere Namen zuerst, damit "Claude Code" vor "Claude" greift.
+  const locale = localeFrom()
   const entries = [...products.values()].sort((a, b) => b.displayName.length - a.displayName.length)
-  const linked = new Set<string>() // pro Produkt nur die erste Erwähnung
+  const linked = new Set<string>()
 
   const paragraphs = container.querySelectorAll('p')
   for (const para of paragraphs) {
@@ -71,10 +87,7 @@ export function injectProductLinks(container: HTMLElement, products: ProductLink
       acceptNode(node: Node) {
         let parent = node.parentNode
         while (parent && parent !== para) {
-          if (
-            parent.nodeName === 'A' ||
-            (parent instanceof Element && parent.classList.contains('synthszr-ratings-container'))
-          ) {
+          if (parent.nodeName === 'A' || (parent instanceof Element && parent.classList.contains('synthszr-product-vote'))) {
             return NodeFilter.FILTER_REJECT
           }
           parent = parent.parentNode
@@ -93,13 +106,11 @@ function injectIntoTextNode(textNode: Text, entries: ProductLinkEntry[], locale:
   const text = textNode.textContent || ''
   if (!text.trim()) return
 
-  // Erste Erwähnung je noch-nicht-verlinktem Produkt sammeln.
   const matches: Array<{ start: number; end: number; entry: ProductLinkEntry }> = []
   for (const entry of entries) {
     if (linked.has(entry.slug)) continue
     const escaped = entry.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const regex = new RegExp(`\\b${escaped}\\b`, 'i')
-    const match = regex.exec(text)
+    const match = new RegExp(`\\b${escaped}\\b`, 'i').exec(text)
     if (!match) continue
     const hasOverlap = matches.some((m) => m.start < match.index + match[0].length && m.end > match.index)
     if (!hasOverlap) matches.push({ start: match.index, end: match.index + match[0].length, entry })
@@ -113,19 +124,87 @@ function injectIntoTextNode(textNode: Text, entries: ProductLinkEntry[], locale:
   const fragment = document.createDocumentFragment()
   let lastIndex = 0
   for (const match of matches) {
-    if (linked.has(match.entry.slug)) continue
-    if (match.start < lastIndex) continue // Überlappung mit bereits eingefügtem Match
+    if (linked.has(match.entry.slug) || match.start < lastIndex) continue
     if (match.start > lastIndex) fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.start)))
     const link = document.createElement('a')
     link.href = `/${locale}/rankings/${match.entry.slug}`
     link.textContent = text.slice(match.start, match.end)
     link.className = 'text-foreground underline hover:text-foreground/70'
     fragment.appendChild(link)
-    fragment.appendChild(buildPill(match.entry))
     linked.add(match.entry.slug)
     lastIndex = match.end
   }
   if (lastIndex < text.length) fragment.appendChild(document.createTextNode(text.slice(lastIndex)))
-
   parent.replaceChild(fragment, textNode)
+}
+
+/** Findet die in einem Textabschnitt genannten Chart-Produkte (längste zuerst, kein Overlap). */
+function mentionedProducts(text: string, entries: ProductLinkEntry[]): ProductLinkEntry[] {
+  const taken: Array<{ start: number; end: number }> = []
+  const seen = new Set<string>()
+  const found: ProductLinkEntry[] = []
+  for (const entry of entries) {
+    const escaped = entry.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const regex = new RegExp(`\\b${escaped}\\b`, 'gi')
+    let m: RegExpExecArray | null
+    while ((m = regex.exec(text)) !== null) {
+      const overlap = taken.some((t) => t.start < m!.index + m![0].length && t.end > m!.index)
+      if (overlap) continue
+      taken.push({ start: m.index, end: m.index + m[0].length })
+      if (!seen.has(entry.slug)) { seen.add(entry.slug); found.push(entry) }
+    }
+  }
+  return found
+}
+
+/** Hängt pro Synthszr-Take-Sektion einen Produkt-Vote-Block (genannte Produkte + Pills) an. */
+export function appendProductVoteBlock(container: HTMLElement, products: ProductLinkData): void {
+  if (products.size === 0) return
+  const locale = localeFrom()
+  const entries = [...products.values()].sort((a, b) => b.displayName.length - a.displayName.length)
+
+  const markers = container.querySelectorAll('.mattes-synthese, .mattes-synthese-heading')
+  markers.forEach((marker) => {
+    let mc: Element | null = marker
+    while (mc && mc.tagName !== 'P' && mc !== container) mc = mc.parentElement
+    if (!mc || mc === container) return
+    if (mc.classList.contains('synthszr-product-vote-processed')) return
+
+    // Text der News-Absätze VOR der Take + die Take selbst (für Produkt-Erkennung).
+    let textToSearch = ''
+    let prev = mc.previousElementSibling
+    while (prev) {
+      const t = (prev as HTMLElement).innerText || prev.textContent || ''
+      if (prev.tagName.match(/^H[1-6]$/)) { textToSearch = t + ' ' + textToSearch; break }
+      if (/synthszr take|synthszr contra|mattes synthese/i.test(t)) break
+      if (prev.tagName === 'P') textToSearch = t + ' ' + textToSearch
+      prev = prev.previousElementSibling
+    }
+    textToSearch += ' ' + ((mc as HTMLElement).innerText || mc.textContent || '')
+
+    const found = mentionedProducts(textToSearch, entries).slice(0, 6)
+    mc.classList.add('synthszr-product-vote-processed')
+    if (found.length === 0) return
+
+    const block = document.createElement('span')
+    block.className = 'synthszr-product-vote'
+    block.style.cssText = 'font-size:13px;'
+    const label = document.createElement('span')
+    label.textContent = 'Synthszr Vote: '
+    label.style.cssText = 'font-weight:700;text-transform:uppercase;font-size:0.8125em;'
+    block.appendChild(label)
+
+    found.forEach((entry, idx) => {
+      if (idx > 0) block.appendChild(document.createTextNode(', '))
+      const link = document.createElement('a')
+      link.href = `/${locale}/rankings/${entry.slug}`
+      link.textContent = entry.displayName
+      link.className = 'text-foreground hover:underline'
+      block.appendChild(link)
+      block.appendChild(buildVotePill(entry))
+    })
+
+    mc.appendChild(document.createTextNode(' '))
+    mc.appendChild(block)
+  })
 }

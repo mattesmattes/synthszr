@@ -16,8 +16,7 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies
 
 // DOM processors
 import { processMattesSyntheseText } from "@/lib/tiptap/dom-processors/synthese-text"
-import { processSynthszrRatingLinks } from "@/lib/tiptap/dom-processors/rating-links"
-import { injectProductLinks, type ProductLinkData } from "@/lib/tiptap/dom-processors/product-links"
+import { injectProductLinks, appendProductVoteBlock, type ProductLinkData } from "@/lib/tiptap/dom-processors/product-links"
 import { processNewsHeadings } from "@/lib/tiptap/dom-processors/news-headings"
 import { hideExplicitCompanyTags } from "@/lib/tiptap/dom-processors/company-tags"
 import { sanitizeAllLinks } from "@/lib/tiptap/dom-processors/link-sanitizer"
@@ -184,16 +183,9 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
 
     const runProcessing = async () => {
       processMattesSyntheseText(containerRef.current!)
-      const result = await processSynthszrRatingLinks(
-        containerRef.current!,
-        originalContent,
-        generationTriggeredRef,
-        handleRefreshNeeded,
-      )
-      setRatingPortals(result.publicPortals)
-      setPremarketRatingPortals(result.premarketPortals)
       hideExplicitCompanyTags(containerRef.current!)
       injectProductLinks(containerRef.current!, productLinks)
+      appendProductVoteBlock(containerRef.current!, productLinks)
     }
 
     runProcessing()
@@ -229,21 +221,14 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       // 3. Style Synthszr Take markers
       processMattesSyntheseText(container)
 
-      // 4. Process Synthszr rating links BEFORE hiding {Company} tags
-      const result = await processSynthszrRatingLinks(
-        container,
-        originalContent,
-        generationTriggeredRef,
-        handleRefreshNeeded,
-      )
-      setRatingPortals(result.publicPortals)
-      setPremarketRatingPortals(result.premarketPortals)
-
-      // 5. Hide {Company} syntax AFTER company detection and badge placement
+      // 4. {Company}-Tags ausblenden
       hideExplicitCompanyTags(container)
 
-      // 6. Produkt-Links im Fließtext (zu den Charts), NACH dem Ausblenden der {Company}-Tags
+      // 5. Produkt-Links im Fließtext (zu den Charts), NACH dem Ausblenden der {Company}-Tags
       injectProductLinks(container, productLinks)
+
+      // 6. Produkt-Vote-Block (genannte Produkte + Momentum-Pills) je Synthszr Take
+      appendProductVoteBlock(container, productLinks)
 
       // 7. Insert placeholder slot before the first Synthszr Take for the tip-promo box
       const slot = insertTipPromoSlot(container)
