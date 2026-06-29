@@ -9,6 +9,7 @@ interface ExtractStatus {
     error_message: string | null
   } | null
   windowDays: number
+  tokenBudget: number
   products: number
   mentions: number
   windowTotal: number
@@ -51,7 +52,7 @@ export default function RankingsAdminPage() {
         const data = await r.json()
         setStatus(data)
         setLastResult(data.result ?? '')
-        if (['extract_done', 'extract_empty', 'no_job'].includes(data.result) || String(data.result).startsWith('claim_error')) break
+        if (['extract_done', 'extract_empty', 'no_job', 'extract_budget_exhausted'].includes(data.result) || String(data.result).startsWith('claim_error')) break
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -65,6 +66,9 @@ export default function RankingsAdminPage() {
 
   const s = status
   const tokens = s?.job?.spend_tokens ?? 0
+  const budget = s?.tokenBudget ?? 0
+  const tokenPct = budget > 0 ? Math.min(100, Math.round((tokens / budget) * 100)) : 0
+  const budgetExhausted = !!s?.job?.error_message?.includes('Token-Budget erschöpft')
   const pct = s && s.windowTotal > 0 ? Math.round((s.windowDone / s.windowTotal) * 100) : 0
 
   return (
@@ -78,10 +82,14 @@ export default function RankingsAdminPage() {
       </div>
 
       {/* Token-Anzeige (prominent) */}
-      <div className="rounded-xl border-2 border-black p-6 bg-[#CCFF00]/20">
+      <div className={`rounded-xl border-2 p-6 ${budgetExhausted ? 'border-red-500 bg-red-50' : 'border-black bg-[#CCFF00]/20'}`}>
         <div className="text-sm font-semibold uppercase tracking-wide text-gray-700">Verbrauchte Token (aktueller Job)</div>
-        <div className="text-4xl font-bold mt-1">{fmt(tokens)}</div>
-        <div className="text-sm text-gray-600 mt-1">≈ ${estCost(tokens).toFixed(2)} (grobe Schätzung, Haiku)</div>
+        <div className="text-4xl font-bold mt-1">{fmt(tokens)} <span className="text-xl font-normal text-gray-500">/ {fmt(budget)}</span></div>
+        <div className="text-sm text-gray-600 mt-1">≈ ${estCost(tokens).toFixed(2)} (grobe Schätzung, Haiku) · Budget zu {tokenPct}% genutzt</div>
+        <div className="h-2 bg-gray-200 rounded-full overflow-hidden mt-2">
+          <div className={`h-full ${budgetExhausted ? 'bg-red-500' : 'bg-black'}`} style={{ width: `${tokenPct}%` }} />
+        </div>
+        {budgetExhausted && <div className="text-sm text-red-600 font-semibold mt-2">Token-Budget erschöpft — Lauf gestoppt. Budget erhöhen (ranking_jobs.budget_extract) oder morgen fortsetzen.</div>}
       </div>
 
       {/* Stats */}

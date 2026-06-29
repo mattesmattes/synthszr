@@ -4,7 +4,7 @@ import { staleBeforeIso } from '@/lib/rankings/jobs-lease'
 interface RankingJob {
   id: string; phase: string; cursor: number
   attempts: number; max_attempts: number; status: string; mode: string
-  spend_tokens: number
+  spend_tokens: number; budget_extract: number | null
 }
 
 const EXTRACT_BATCH = 5
@@ -13,6 +13,9 @@ const EXTRACT_TAIL_MS = 45_000
 const MAX_ITEM_ATTEMPTS = 3
 const DAILY_WINDOW_DAYS = 1
 const EXTRACT_VERSION = '1b-i'
+// Harter Token-Cap pro Job (Kostenbremse). ~$3/Tag bei Haiku. Pro Job via
+// ranking_jobs.budget_extract überschreibbar; bei Cap stoppt extract sauber.
+const EXTRACT_TOKEN_BUDGET_DEFAULT = 2_000_000
 
 /** Legt einen Ranking-Job an. Täglich idempotent via UNIQUE(mode, run_date) WHERE mode='daily'.
  *  Bei 23505 (Duplikat) → {created:false, reason:'already_created_today'}.
@@ -56,6 +59,7 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
 
       let processedAny = false
       let spentTokens = j.spend_tokens ?? 0 // kumulativ über alle Ticks dieses Jobs
+      const tokenBudget = j.budget_extract ?? EXTRACT_TOKEN_BUDGET_DEFAULT
       while (Date.now() - startedAt < EXTRACT_BUDGET_MS - EXTRACT_TAIL_MS) {
         let sel = supabase
           .from('daily_repo')
@@ -75,6 +79,16 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
           return processedAny ? 'extract_done' : 'extract_empty'
         }
         for (const item of items) {
+          if (spentTokens >= tokenBudget) {
+            // Harter Token-Cap erreicht → Job für heute abschließen (Rest bleibt
+            // unverarbeitet, wird nicht fälschlich als „done & vollständig" gewertet).
+            const { error: budErr } = await supabase.from('ranking_jobs').update({
+              status: 'done', completed_at: new Date().toISOString(), spend_tokens: spentTokens,
+              error_message: `Token-Budget erschöpft (${spentTokens}/${tokenBudget})`,
+            }).eq('id', j.id)
+            if (budErr) throw new Error(`budget stop: ${budErr.message}`)
+            return 'extract_budget_exhausted'
+          }
           try {
             if (looksAiProductRelevant(item.title ?? '', item.content ?? '')) {
               const res = await extractProducts(item.title ?? '', item.content ?? '')
@@ -145,7 +159,7 @@ export async function getRankingExtractStatus() {
 
   const { data: job } = await supabase
     .from('ranking_jobs')
-    .select('id, mode, phase, status, spend_tokens, run_date, last_advanced_at, error_message')
+    .select('id, mode, phase, status, spend_tokens, budget_extract, run_date, last_advanced_at, error_message')
     .eq('mode', 'daily')
     .order('created_at', { ascending: false })
     .limit(1)
@@ -164,6 +178,7 @@ export async function getRankingExtractStatus() {
   return {
     job: job ?? null,
     windowDays: DAILY_WINDOW_DAYS,
+    tokenBudget: job?.budget_extract ?? EXTRACT_TOKEN_BUDGET_DEFAULT,
     products: products.count ?? 0,
     mentions: mentions.count ?? 0,
     windowTotal: windowTotalN,
