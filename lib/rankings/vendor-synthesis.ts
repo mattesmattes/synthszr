@@ -18,5 +18,5 @@ export async function getVendorSynthesis(
   const item = res.data.find((d) => d.synthesis && (d.synthesis.rating || d.synthesis.rationale || d.synthesis.keyTakeaways?.length))
   if (!item?.synthesis) return null
 
-  return { company: item.premarket?.name ?? item.instrument?.name ?? v, synthesis: item.synthesis }
+  return { company: item.instrument?.name ?? item.premarket?.name ?? v, synthesis: item.synthesis }
 }
