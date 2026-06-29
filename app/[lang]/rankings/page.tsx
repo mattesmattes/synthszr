@@ -1,6 +1,8 @@
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
 import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboard'
+import { VendorAvatar } from '@/components/rankings/vendor-avatar'
+
+const MEDAL = ['🥇', '🥈', '🥉']
 
 // force-dynamic statt ISR: die Seite lädt zur Laufzeit aus der DB (kein Build-time-
 // Prerender pro Locale — sonst scheitert der Export). Konsistent mit /companies.
@@ -69,11 +71,15 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
             <li key={p.id}>
               <Link
                 href={`/${lang}/rankings/${p.slug}`}
-                className="flex items-center gap-4 rounded-xl border border-gray-200 p-4 hover:border-black transition-colors"
+                className={`flex items-center gap-3 sm:gap-4 rounded-xl border p-4 transition-colors hover:border-black ${
+                  p.rank <= 3 ? 'border-black/25 bg-gray-50' : 'border-gray-200'
+                }`}
               >
-                <div className={`w-8 text-center text-lg font-bold ${p.rank <= 3 ? 'text-black' : 'text-gray-400'}`}>
-                  {p.rank}
+                <div className="w-7 text-center text-lg font-bold shrink-0">
+                  {p.rank <= 3 ? MEDAL[p.rank - 1] : <span className="text-gray-400">{p.rank}</span>}
                 </div>
+
+                <VendorAvatar vendor={p.vendor} size={40} />
 
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold truncate">{p.canonicalName}</div>

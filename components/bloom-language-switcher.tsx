@@ -111,6 +111,9 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
         <Link href={currentLocale === 'de' ? '/companies' : `/${currentLocale}/companies`} className={linkStyle}>
           Show Companies
         </Link>
+        <Link href={currentLocale === 'de' ? '/rankings' : `/${currentLocale}/rankings`} className={linkStyle}>
+          Rankings
+        </Link>
       </div>
     )
   }
@@ -158,6 +161,11 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
       {/* Show Companies link */}
       <Link href={currentLocale === 'de' ? '/companies' : `/${currentLocale}/companies`} className={linkStyle}>
         Show Companies
+      </Link>
+
+      {/* Rankings link */}
+      <Link href={currentLocale === 'de' ? '/rankings' : `/${currentLocale}/rankings`} className={linkStyle}>
+        Rankings
       </Link>
     </div>
   )

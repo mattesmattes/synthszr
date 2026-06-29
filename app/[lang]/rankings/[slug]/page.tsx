@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { getProductDetail } from '@/lib/rankings/product-detail'
+import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,16 +47,19 @@ export default async function ProductDetailPage({ params }: PageProps) {
         <ArrowLeft className="w-4 h-4" /> Alle Rankings
       </Link>
 
-      <header className="mb-8">
-        <div className="flex items-baseline gap-3 flex-wrap">
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{p.canonicalName}</h1>
-          {p.rank && <span className="text-sm font-semibold px-2 py-0.5 rounded bg-black text-white">#{p.rank}</span>}
+      <header className="mb-8 flex items-start gap-4">
+        <VendorAvatar vendor={p.vendor} size={56} />
+        <div>
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{p.canonicalName}</h1>
+            {p.rank && <span className="text-sm font-semibold px-2 py-0.5 rounded bg-black text-white">#{p.rank}</span>}
+          </div>
+          <p className="text-gray-500 mt-1 text-sm">
+            {p.vendor}
+            {p.version && <> · Version {p.version}</>}
+            {p.qualifier && <> · {p.qualifier}</>}
+          </p>
         </div>
-        <p className="text-gray-500 mt-1 text-sm">
-          {p.vendor}
-          {p.version && <> · Version {p.version}</>}
-          {p.qualifier && <> · {p.qualifier}</>}
-        </p>
       </header>
 
       {/* Kennzahlen */}
