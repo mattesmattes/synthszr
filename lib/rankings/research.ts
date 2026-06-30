@@ -49,58 +49,109 @@ export function parseResearchResponse(raw: unknown, validDimensions: Set<string>
   }
 }
 
-/** Fasst ein Produkt AUS DEN NEWS-BELEGEN zusammen → Beschreibung + Release +
- *  Spec-Werte. Keine Web-Suche: für synthszr-Produkte (die es real nicht gibt)
- *  halluziniert web_search, deshalb ausschließlich die Newsletter-Auszüge als Quelle. */
+const REPORT_TOOL = {
+  name: 'report_research',
+  description: 'Melde die recherchierten Produktdaten',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      description: { type: 'string' },
+      description_en: { type: 'string' },
+      release_date: { type: 'string' },
+      features: { type: 'array', items: { type: 'object', properties: { dimension: { type: 'string' }, value: { type: 'string' } }, required: ['dimension', 'value'] } },
+    },
+    required: ['description', 'description_en', 'features'],
+  },
+}
+const EMPTY_RESULT: ResearchResult = { description: null, descriptionEn: null, releaseDate: null, features: [] }
+
+/**
+ * Recherchiert ein Produkt per WEB-SUCHE + Plausibilitätsgate:
+ *  1. webResearch: web_search liefert Beschreibung + Spec-Werte (darf breit suchen).
+ *  2. plausibilityGate: zweiter, skeptischer Call verwirft Specs ohne glaubwürdige
+ *     Stützung — fängt Halluzinationen bei evtl. nicht existenten Produkten ab.
+ *  Newsletter-Auszüge dienen als zusätzlicher Kontext/Beleg.
+ */
 export async function researchProduct(
   name: string, vendor: string, categoryName: string, dimensions: string[], evidence: string,
 ): Promise<ResearchResult> {
-  if (!process.env.ANTHROPIC_API_KEY || !evidence.trim()) return { description: null, descriptionEn: null, releaseDate: null, features: [] }
+  if (!process.env.ANTHROPIC_API_KEY) return EMPTY_RESULT
   const Anthropic = (await import('@anthropic-ai/sdk')).default
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const report = {
-    name: 'report_research',
-    description: 'Melde die aus den Belegen zusammengefassten Produktdaten',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        description: { type: 'string' },
-        description_en: { type: 'string' },
-        release_date: { type: 'string' },
-        features: { type: 'array', items: { type: 'object', properties: { dimension: { type: 'string' }, value: { type: 'string' } }, required: ['dimension', 'value'] } },
-      },
-      required: ['description', 'description_en', 'features'],
-    },
-  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client: any = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const validDims = new Set(dimensions)
+
+  // --- 1. Web-Recherche ---
   const dims = dimensions.map((d) => `- ${d}`).join('\n')
-  const prompt = `Hier sind Auszüge aus AI-Newsletter-Artikeln, die das Produkt "${name}" von ${vendor} (Kategorie: ${categoryName}) erwähnen:
+  const webPrompt = `Recherchiere das AI-Produkt "${name}" von ${vendor} (Kategorie: ${categoryName}) per Web-Suche.
 
-${evidence}
+Zusätzlicher Kontext aus AI-Newsletter-Auszügen:
+${evidence || '(keine)'}
 
-Erstelle AUSSCHLIESSLICH auf Basis dieser Auszüge (erfinde NICHTS — keine Zahlen, Specs oder Eigenschaften, die nicht ausdrücklich in den Auszügen stehen):
-1. description: 2-4 nüchterne Sätze auf DEUTSCH, was das Produkt laut den Auszügen ist und was es besonders macht. Kein Marketing-Sprech.
-2. description_en: dieselbe Beschreibung auf ENGLISCH (gleiche Aussagen, natürliches Englisch).
-3. release_date: nur wenn in den Auszügen genannt (z.B. "Juni 2026").
-4. features: konkrete Werte NUR für diese Dimensionen und NUR wenn in den Auszügen belegt (sonst weglassen):
+Suche nach verlässlichen, aktuellen Quellen und rufe dann report_research:
+1. description: 2-4 nüchterne Sätze auf DEUTSCH (kein Marketing).
+2. description_en: dieselbe Aussage auf ENGLISCH.
+3. release_date: nur wenn bekannt (z.B. "Juni 2026").
+4. features: konkrete Werte NUR für diese Dimensionen (dimension EXAKT wie unten), nur wenn durch eine Quelle belegt:
 ${dims}
-   dimension EXAKT wie oben, value kurz + konkret.
 
-Wenn die Auszüge zu wenig hergeben, lass description und description_en leer und features weg. Lieber leer als erfunden.`
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
+WICHTIG: Findest du das Produkt nicht zuverlässig oder gibt es keine glaubwürdigen Quellen, gib KEINE erfundenen Werte an — lieber leer als halluziniert.`
+  let raw = EMPTY_RESULT
+  const c1 = new AbortController()
+  const t1 = setTimeout(() => c1.abort(), LLM_TIMEOUT_MS)
   try {
     const resp = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001', max_tokens: 1200,
-      tools: [report],
-      tool_choice: { type: 'tool', name: 'report_research' },
-      messages: [{ role: 'user', content: prompt }],
-    }, { signal: controller.signal })
-    const block = resp.content.find((b) => b.type === 'tool_use' && b.name === 'report_research')
-    return parseResearchResponse(block && 'input' in block ? block.input : null, new Set(dimensions))
+      model: 'claude-haiku-4-5-20251001', max_tokens: 2500,
+      tools: [REPORT_TOOL, { type: 'web_search_20250305', name: 'web_search', max_uses: 4 }],
+      messages: [{ role: 'user', content: webPrompt }],
+    }, { signal: c1.signal })
+    const block = [...resp.content].reverse().find((b: { type: string; name?: string }) => b.type === 'tool_use' && b.name === 'report_research')
+    raw = parseResearchResponse(block && 'input' in block ? block.input : null, validDims)
   } catch {
-    return { description: null, descriptionEn: null, releaseDate: null, features: [] }
+    return EMPTY_RESULT
   } finally {
-    clearTimeout(timer)
+    clearTimeout(t1)
+  }
+  if (raw.features.length === 0) return raw // nichts zu gaten
+
+  // --- 2. Plausibilitätsgate ---
+  const gateTool = {
+    name: 'report_gate',
+    description: 'Melde die geprüften, belegten Features',
+    input_schema: { type: 'object' as const, properties: { features: { type: 'array', items: { type: 'object', properties: { dimension: { type: 'string' }, value: { type: 'string' } }, required: ['dimension', 'value'] } } }, required: ['features'] },
+  }
+  const featList = raw.features.map((f) => `- ${f.dimension}: ${f.value}`).join('\n')
+  const gatePrompt = `Produkt "${name}" von ${vendor}. Recherchierte Feature-Werte:
+${featList}
+
+Newsletter-Belege als Kontext:
+${evidence || '(keine)'}
+
+Prüfe JEDES Feature streng und behalte NUR Werte, die plausibel und durch eine glaubwürdige Quelle oder die Belege gestützt sind. Verwirf erfundene, spekulative oder widersprüchliche Werte — insbesondere bei Produkten, deren Existenz nicht verifizierbar ist. Rufe report_gate ausschließlich mit den behaltenen Features.`
+  const c2 = new AbortController()
+  const t2 = setTimeout(() => c2.abort(), LLM_TIMEOUT_MS)
+  try {
+    const resp = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001', max_tokens: 1000,
+      tools: [gateTool], tool_choice: { type: 'tool', name: 'report_gate' },
+      messages: [{ role: 'user', content: gatePrompt }],
+    }, { signal: c2.signal })
+    const block = resp.content.find((b: { type: string; name?: string }) => b.type === 'tool_use' && b.name === 'report_gate')
+    const input = block && 'input' in block ? (block.input as { features?: unknown[] }) : null
+    const kept: ResearchedFeature[] = []
+    const seen = new Set<string>()
+    for (const f of input?.features ?? []) {
+      const p = FeatureSchema.safeParse(f)
+      if (!p.success || !validDims.has(p.data.dimension) || seen.has(p.data.dimension)) continue
+      if (EMPTY.has(p.data.value.toLowerCase())) continue
+      seen.add(p.data.dimension)
+      kept.push({ dimension: p.data.dimension, value: stripCite(p.data.value) })
+    }
+    return { ...raw, features: kept }
+  } catch {
+    return raw // Gate-Fehler → ungefilterte (lieber als gar nichts)
+  } finally {
+    clearTimeout(t2)
   }
 }
 
@@ -128,14 +179,15 @@ export async function runProductResearch(opts: { limit?: number; minMentions?: n
 
     const { count: mc } = await supabase.from('product_mentions').select('id', { count: 'exact', head: true }).eq('product_id', m.product_id)
     if ((mc ?? 0) < minMentions) continue
-    // schon recherchiert? (englische Beschreibung vorhanden — dt. allein reicht nicht,
-    // damit bestehende Produkte mit nur dt. Beschreibung noch das en bekommen)
+    // schon mit echten FEATURES recherchiert? Nur dann skippen — Produkte mit bloßer
+    // Beschreibung (ohne Feature-Tabelle) sollen die Web-Research nachträglich bekommen.
+    const META_DIMS = new Set<string>(['__sentiment', DESCRIPTION_DIM, DESCRIPTION_EN_DIM, RELEASED_DIM])
     const { data: existing } = await supabase.from('product_features_current')
-      .select('dimension_key').eq('product_id', m.product_id).eq('dimension_key', DESCRIPTION_EN_DIM).maybeSingle()
-    if (existing) continue
+      .select('dimension_key').eq('product_id', m.product_id)
+    if ((existing ?? []).some((f) => !META_DIMS.has(f.dimension_key as string))) continue
 
     const dimensions = Array.isArray(cat.feature_dimensions) ? (cat.feature_dimensions as string[]) : []
-    // News-Auszüge als ALLEINIGE Quelle (keine Web-Suche → keine Halluzination)
+    // News-Auszüge als zusätzlicher Beleg (die eigentliche Quelle ist die Web-Suche)
     const { data: ments } = await supabase
       .from('product_mentions')
       .select('excerpt')
@@ -149,7 +201,7 @@ export async function runProductResearch(opts: { limit?: number; minMentions?: n
       .map((e) => `- ${e}`)
       .join('\n')
       .slice(0, 8000)
-    if (!evidence.trim()) continue
+    // evidence optional: die Web-Suche ist die Hauptquelle, Belege nur Kontext.
     const res = await researchProduct(
       (prod as { canonical_name: string }).canonical_name, (prod as { vendor_namespace: string }).vendor_namespace,
       cat.name as string, dimensions, evidence,
