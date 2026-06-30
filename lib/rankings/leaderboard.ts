@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { momentumScore, toDisplayScore, momentumHistory, momentumTrend } from '@/lib/rankings/score'
 import { isExcludedProduct } from '@/lib/rankings/product-exclusions'
@@ -23,11 +24,28 @@ export interface RankedProduct {
  * - opts.category: nur Produkte dieser Kategorie (via product_category_membership).
  * - opts.minMentions: blendet 1×-Noise/FPs aus den öffentlichen Ansichten aus.
  * Precompute (product_rankings) folgt in 1c-voll.
+ *
+ * Gecacht (unstable_cache, 600s): die Berechnung lädt ALLE Mentions (~44 DB-
+ * Roundtrips) — ohne Cache wäre jeder Seiten-Load mehrere Sekunden langsam.
  */
 export async function getRankedProducts(
   opts: { limit?: number; category?: string; minMentions?: number } = {},
 ): Promise<RankedProduct[]> {
-  const { limit = 50, category, minMentions = 1 } = opts
+  const { limit, category, minMentions = 1 } = opts
+  // Cache limit-unabhängig (ein Eintrag pro category+minMentions); Slice danach,
+  // damit Seite/API/Produktdetail mit verschiedenen Limits denselben Cache teilen.
+  const all = await unstable_cache(
+    () => computeRankedProducts({ category, minMentions }),
+    ['ranked-products-v1', category ?? 'all', String(minMentions)],
+    { revalidate: 600, tags: ['rankings'] },
+  )()
+  return limit ? all.slice(0, limit) : all
+}
+
+async function computeRankedProducts(
+  opts: { category?: string; minMentions?: number } = {},
+): Promise<RankedProduct[]> {
+  const { category, minMentions = 1 } = opts
   const supabase = createAdminClient()
   const now = new Date()
 
@@ -102,7 +120,7 @@ export async function getRankedProducts(
     .sort((a, b) => b.momentum - a.momentum)
 
   const maxMomentum = scored[0]?.momentum ?? 0
-  return scored.slice(0, limit).map((p, i) => ({
+  return scored.map((p, i) => ({
     ...p,
     rank: i + 1,
     score: toDisplayScore(p.momentum, maxMomentum),
