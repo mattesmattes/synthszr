@@ -28,12 +28,13 @@ function localeFrom(): string {
 const TREND_COLOR = { up: '#16a34a', down: '#dc2626', flat: '#06b6d4' } as const
 
 /** Momentum-Pill: farbige Mini-Sparkline (Trend-Farbe) + Score. */
-function buildVotePill(entry: ProductLinkEntry): HTMLElement {
+function buildVotePill(entry: ProductLinkEntry, locale: string): HTMLElement {
   const color = TREND_COLOR[entry.trend ?? 'flat']
-  const pill = document.createElement('span')
+  const pill = document.createElement('a')
   pill.className = 'synthszr-product-pill'
+  pill.href = `/${locale}/rankings/${entry.slug}`
   pill.style.cssText =
-    'display:inline-flex;align-items:center;gap:3px;margin-left:4px;padding:1px 6px;border:1px solid #e5e7eb;border-radius:9999px;vertical-align:middle;line-height:1;white-space:nowrap;'
+    'display:inline-flex;align-items:center;gap:3px;margin-left:4px;padding:1px 6px;border:1px solid #e5e7eb;border-radius:9999px;vertical-align:middle;line-height:1;white-space:nowrap;text-decoration:none;'
 
   const spark = entry.spark ?? []
   if (spark.length >= 2) {
@@ -192,7 +193,7 @@ export function appendProductVoteBlock(container: HTMLElement, products: Product
       link.textContent = entry.displayName
       link.className = 'text-foreground hover:underline'
       block.appendChild(link)
-      block.appendChild(buildVotePill(entry))
+      block.appendChild(buildVotePill(entry, locale))
     })
 
     mc.appendChild(document.createTextNode(' '))
