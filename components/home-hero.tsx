@@ -29,6 +29,7 @@ export function HomeHero({ locale }: { locale?: string }) {
       >
         <span className="font-bold tracking-tight">Neu: SYNTHSZR CHARTS</span>
         <span className="text-gray-600">— welche Produkte gerade rocken</span>
+        <span className="bg-[#00FFFF] text-black rounded px-1.5 py-0.5 text-xs font-bold">Beta</span>
       </Link>
     </div>
   )
