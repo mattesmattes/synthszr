@@ -112,7 +112,18 @@ export async function getProductDetail(slug: string, locale = 'de'): Promise<Pro
   if (mErr) throw new Error(`product detail mentions: ${mErr.message}`)
 
   const rows = mentions ?? []
-  const dates = rows.map((m) => m.mention_date as string).filter(Boolean)
+
+  // ALLE Mention-Daten für Momentum + 90-Tage-Verlauf laden — die Belege oben sind
+  // auf 60 limitiert; den Verlauf daraus zu bauen verzerrt ihn (nur die jüngsten 60
+  // Datenpunkte), weshalb Produktseite und Vergleichs-Chart unterschiedliche Kurven
+  // zeigten. Der Verlauf muss auf der vollen Mention-Historie basieren.
+  const dates: string[] = []
+  for (let off = 0; ; off += 1000) {
+    const { data } = await supabase.from('product_mentions').select('mention_date').eq('product_id', product.id).range(off, off + 999)
+    if (!data?.length) break
+    dates.push(...data.map((m) => m.mention_date as string).filter(Boolean))
+    if (data.length < 1000) break
+  }
 
   // Rang/Score relativ zur KATEGORIE (Position innerhalb der Kategorie, nicht über alle).
   const ranked = await getRankedProducts({ limit: 10_000, minMentions: 2, category: category?.slug })

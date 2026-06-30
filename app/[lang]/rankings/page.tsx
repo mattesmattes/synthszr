@@ -10,15 +10,13 @@ import { MomentumChart } from '@/components/rankings/momentum-chart'
 import { MultiMomentumChart } from '@/components/rankings/multi-momentum-chart'
 import { PinButton, PinBar } from '@/components/rankings/pin-controls'
 
-const MEDAL = ['🥇', '🥈', '🥉']
-
 // force-dynamic statt ISR: die Seite lädt zur Laufzeit aus der DB (kein Build-time-
 // Prerender pro Locale — sonst scheitert der Export). Konsistent mit /companies.
 export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: Promise<{ lang: string }>
-  searchParams: Promise<{ category?: string }>
+  searchParams: Promise<{ category?: string; sort?: string }>
 }
 
 export const metadata = {
@@ -37,12 +35,16 @@ function fmtDate(d: string | null): string {
 
 export default async function RankingsPage({ params, searchParams }: PageProps) {
   const { lang } = await params
-  const { category } = await searchParams
-  const [products, categories, translations] = await Promise.all([
+  const { category, sort } = await searchParams
+  const [ranked, categories, translations] = await Promise.all([
     getRankedProducts({ limit: category ? 50 : undefined, minMentions: 2, category }),
     getActiveCategories(),
     getTranslations(lang as LanguageCode),
   ])
+  // Standard: nach Momentum (rank). Optional: nach Unternehmen (vendor), dann Score.
+  const products = sort === 'vendor'
+    ? [...ranked].sort((a, b) => a.vendor.localeCompare(b.vendor) || b.score - a.score)
+    : ranked
   const t = (key: string) => translations[key] ?? key
   const catName = (slug: string, fallback: string) => translations[`rankings.cat.${slug}`] ?? fallback
 
@@ -83,6 +85,24 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         </div>
       )}
 
+      {products.length > 0 && (
+        <div className="flex items-center gap-1.5 mb-2 text-xs">
+          <span className="text-gray-400 mr-1">{lang === 'de' ? 'Sortieren:' : 'Sort:'}</span>
+          <Link
+            href={category ? `${tabBase}?category=${category}` : tabBase}
+            className={`px-2 py-0.5 rounded-full border transition-colors ${sort !== 'vendor' ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'}`}
+          >
+            Momentum
+          </Link>
+          <Link
+            href={`${tabBase}?${category ? `category=${category}&` : ''}sort=vendor`}
+            className={`px-2 py-0.5 rounded-full border transition-colors ${sort === 'vendor' ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'}`}
+          >
+            {lang === 'de' ? 'Unternehmen' : 'Company'}
+          </Link>
+        </div>
+      )}
+
       {products.length === 0 ? (
         <p className="text-gray-500 text-sm">{t('rankings.empty')}</p>
       ) : (
@@ -91,12 +111,10 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
             <li key={p.id} className="flex items-center gap-1">
               <Link
                 href={`/${lang}/rankings/${p.slug}`}
-                className={`flex-1 min-w-0 flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors hover:border-black ${
-                  p.rank <= 3 ? 'border-black/20 bg-gray-50' : 'border-gray-200'
-                }`}
+                className="flex-1 min-w-0 flex items-center gap-2.5 rounded-lg border border-gray-200 px-3 py-2 transition-colors hover:border-black"
               >
-                <div className="w-5 text-center text-sm font-bold shrink-0">
-                  {p.rank <= 3 ? MEDAL[p.rank - 1] : <span className="text-gray-400">{p.rank}</span>}
+                <div className="w-6 text-center text-sm font-bold shrink-0 text-gray-500 tabular-nums">
+                  {p.rank}
                 </div>
 
                 <VendorAvatar vendor={p.vendor} size={30} />
