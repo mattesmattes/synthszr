@@ -34,7 +34,6 @@ const TEXT = {
     gateSending: 'Wird gesendet…',
     gateSent: 'Wenn diese Adresse abonniert ist, haben wir dir gerade den Link zu deiner Übersicht geschickt. Schau in dein Postfach.',
     ccDesc: 'CODE CRASH (Sommer-Edition, 2. Auflage) ist Matthias Schraders Buch über den Umbruch, den agentische KI in Wirtschaft, Software und Führung auslöst. Es spannt den Bogen von Produktentwicklung über Unternehmensaufstellung bis zur Kultur im KI-Zeitalter — mit einem überraschend optimistischen Ausblick auf den Standort Deutschland.',
-    ccHardcover: 'Du bekommst die hochwertige Hardcover-Ausgabe mit persönlicher Widmung vom Autor — nicht das Paperback.',
     ccCta: 'Mehr zum Buch →',
   },
   en: {
@@ -57,7 +56,6 @@ const TEXT = {
     gateSending: 'Sending…',
     gateSent: 'If this address is subscribed, we just sent you the link to your overview. Check your inbox.',
     ccDesc: "CODE CRASH (Summer Edition, 2nd edition) is Matthias Schrader's book on the upheaval agentic AI brings to business, software, and leadership. It spans product development, org design, and culture in the AI age — with a surprisingly optimistic outlook for Germany.",
-    ccHardcover: 'You get the premium hardcover edition with a personal dedication from the author — not the paperback.',
     ccCta: 'More about the book →',
   },
 }
@@ -118,11 +116,10 @@ export default async function ReferralPage({
             <div className="rounded-2xl border border-border p-6 flex gap-5 items-start">
               <a href={CC_URL} target="_blank" rel="noopener noreferrer" className="shrink-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={CC_COVER} alt="CODE CRASH" className="w-24 h-auto rounded-md shadow-sm" />
+                <img src={CC_COVER} alt="CODE CRASH" className="w-32 h-auto rounded-md shadow-sm" />
               </a>
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">{L.ccDesc}</p>
-                <p className="text-sm font-medium">{L.ccHardcover}</p>
                 <a href={CC_URL} target="_blank" rel="noopener noreferrer" className="inline-block text-sm font-semibold text-accent hover:underline">
                   {L.ccCta}
                 </a>
