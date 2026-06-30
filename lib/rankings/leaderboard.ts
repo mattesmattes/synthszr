@@ -36,7 +36,7 @@ export async function getRankedProducts(
   // damit Seite/API/Produktdetail mit verschiedenen Limits denselben Cache teilen.
   const all = await unstable_cache(
     () => computeRankedProducts({ category, minMentions }),
-    ['ranked-products-v2', category ?? 'all', String(minMentions)],
+    ['ranked-products-v3', category ?? 'all', String(minMentions)],
     { revalidate: 600, tags: ['rankings'] },
   )()
   return limit ? all.slice(0, limit) : all

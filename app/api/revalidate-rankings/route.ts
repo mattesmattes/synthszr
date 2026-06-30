@@ -3,7 +3,8 @@ import { revalidateTag } from 'next/cache'
 
 /**
  * Leert den Rankings-Cache (Tag 'rankings') nach Daten-Änderungen (Konsolidierung,
- * Merges, Backfills) — ohne Deploy/Key-Bump und ohne die 600s-Revalidate abzuwarten.
+ * Merges, Research) — ohne Deploy/Key-Bump und ohne die 600s-Revalidate abzuwarten.
+ * NICHT unter /api/admin (Middleware-Auth würde den Secret-Check blocken).
  * Schutz: Secret = letzte 16 Zeichen des Service-Role-Keys.
  */
 export async function POST(request: Request) {
