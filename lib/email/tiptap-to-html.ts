@@ -842,8 +842,14 @@ export async function generateEmailContentWithVotes(
       </tr></table>`
     } else {
       const bodyHtml = sanitizeHtmlForEmail(tipPromo.body)
+      // Interne Links (z.B. /de/referral) absolut machen und ?sid des Empfängers
+      // anhängen, damit der Referral-Tip-Promo den persönlichen Link öffnet.
+      const rawHref = tipPromo.link_url
+      const promoHref = rawHref.startsWith('/')
+        ? `${baseUrl}${rawHref}${sidPlaceholder ? `${rawHref.includes('?') ? '&' : '?'}sid=${sidPlaceholder}` : ''}`
+        : rawHref
       const ctaHtml = tipPromo.link_url && tipPromo.cta_label
-        ? `<div style="margin-top:8px;"><a href="${escapeAttr(tipPromo.link_url)}" style="color:${escapeAttr(tipPromo.text_color)};font-weight:600;text-decoration:underline;">${escapeHtml(tipPromo.cta_label)}</a></div>`
+        ? `<div style="margin-top:8px;"><a href="${escapeAttr(promoHref)}" style="color:${escapeAttr(tipPromo.text_color)};font-weight:600;text-decoration:underline;">${escapeHtml(tipPromo.cta_label)}</a></div>`
         : ''
       promoInner = `<div style="line-height:1.45;">${bodyHtml}</div>
       ${ctaHtml}`
