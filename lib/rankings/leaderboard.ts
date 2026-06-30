@@ -1,7 +1,7 @@
 import { unstable_cache } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { momentumScore, toDisplayScore, momentumHistory, momentumTrend } from '@/lib/rankings/score'
-import { isExcludedProduct } from '@/lib/rankings/product-exclusions'
+import { isExcludedProduct, isFamilyUmbrella } from '@/lib/rankings/product-exclusions'
 
 export interface RankedProduct {
   id: string
@@ -76,10 +76,13 @@ async function computeRankedProducts(
     if (data.length < 1000) break
   }
   if (!productsRaw.length) return []
-  // Nackte Herstellernamen (Anthropic, Mistral …) zur Laufzeit ausschließen —
-  // robust gegen visibility_status-Races mit laufenden Extract-Jobs.
+  // Nackte Herstellernamen (Anthropic, Mistral …) und Modell-Familien-Oberbegriffe
+  // (GPT, Claude, Gemini ohne Version) zur Laufzeit ausschließen — das sind keine
+  // Produkte. Robust gegen visibility_status-Races mit laufenden Extract-Jobs.
   const products = productsRaw.filter(
-    (p) => !(isExcludedProduct(p.family as string) && !p.version && !p.qualifier),
+    (p) =>
+      !(isExcludedProduct(p.family as string) && !p.version && !p.qualifier) &&
+      !isFamilyUmbrella(p.family as string, p.version, p.qualifier),
   )
   if (!products.length) return []
 

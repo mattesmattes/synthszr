@@ -17,3 +17,24 @@ export function isExcludedProduct(name: string | null | undefined): boolean {
   if (!name) return false
   return EXCLUDED_PRODUCT_NAMES.has(name.trim().toLowerCase())
 }
+
+// Modell-FAMILIEN: der nackte Familienname (ohne Version/Variante) ist ein
+// Oberbegriff, KEIN Produkt. "GPT" / "Claude" / "Gemini" sind Familien — das
+// Produkt ist "GPT-5.6" / "Claude Opus 4.8" / "Gemini 2.5 Pro". Wird in den
+// Leaderboards ausgeblendet, sobald family in der Liste UND Version+Qualifier leer.
+export const FAMILY_UMBRELLAS = new Set<string>([
+  'gpt', 'chatgpt', 'claude', 'gemini', 'qwen', 'llama', 'grok', 'gemma',
+  'deepseek', 'mistral', 'glm', 'kimi', 'phi', 'command', 'nova', 'ernie',
+  'hunyuan', 'yi', 'doubao', 'minimax', 'falcon', 'dbrx', 'jamba', 'codestral',
+  'mixtral', 'pixtral', 'aya', 'olmo', 'reka', 'sonar',
+])
+
+/** Nackter Modell-Familienname (ohne Version/Qualifier) — Oberbegriff, kein Produkt. */
+export function isFamilyUmbrella(
+  family: string | null | undefined,
+  version: string | null,
+  qualifier: string | null,
+): boolean {
+  if (!family || version || qualifier) return false
+  return FAMILY_UMBRELLAS.has(family.trim().toLowerCase())
+}

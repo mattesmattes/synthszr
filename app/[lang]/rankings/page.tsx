@@ -39,7 +39,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
   const { lang } = await params
   const { category } = await searchParams
   const [products, categories, translations] = await Promise.all([
-    getRankedProducts({ minMentions: 2, category }),
+    getRankedProducts({ limit: category ? 50 : undefined, minMentions: 2, category }),
     getActiveCategories(),
     getTranslations(lang as LanguageCode),
   ])
