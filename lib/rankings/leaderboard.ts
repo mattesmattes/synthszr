@@ -30,25 +30,33 @@ export async function getRankedProducts(
   const supabase = createAdminClient()
   const now = new Date()
 
-  let productQuery = supabase
-    .from('products')
-    .select('id, canonical_name, vendor_namespace, slug, family, version, qualifier')
-    .eq('visibility_status', 'visible')
-
+  let categoryIds: string[] | null = null
   if (category) {
     const { data: mem, error: memErr } = await supabase
       .from('product_category_membership')
       .select('product_id')
       .eq('category', category)
     if (memErr) throw new Error(`leaderboard membership: ${memErr.message}`)
-    const ids = (mem ?? []).map((m) => m.product_id as string)
-    if (!ids.length) return []
-    productQuery = productQuery.in('id', ids)
+    categoryIds = (mem ?? []).map((m) => m.product_id as string)
+    if (!categoryIds.length) return []
   }
 
-  const { data: productsRaw, error: pErr } = await productQuery
-  if (pErr) throw new Error(`leaderboard products: ${pErr.message}`)
-  if (!productsRaw?.length) return []
+  // Produkte paginiert laden — sonst cappt PostgREST bei 1000 Zeilen, und seit der
+  // Backfill > 1000 sichtbare Produkte erzeugt hat, fielen Treffer (z.B. Cursor) raus.
+  const productsRaw: Array<{ id: string; canonical_name: string; vendor_namespace: string; slug: string; family: string; version: string | null; qualifier: string | null }> = []
+  for (let off = 0; ; off += 1000) {
+    let q = supabase
+      .from('products')
+      .select('id, canonical_name, vendor_namespace, slug, family, version, qualifier')
+      .eq('visibility_status', 'visible')
+    if (categoryIds) q = q.in('id', categoryIds)
+    const { data, error: pErr } = await q.range(off, off + 999)
+    if (pErr) throw new Error(`leaderboard products: ${pErr.message}`)
+    if (!data?.length) break
+    productsRaw.push(...(data as typeof productsRaw))
+    if (data.length < 1000) break
+  }
+  if (!productsRaw.length) return []
   // Nackte Herstellernamen (Anthropic, Mistral …) zur Laufzeit ausschließen —
   // robust gegen visibility_status-Races mit laufenden Extract-Jobs.
   const products = productsRaw.filter(
