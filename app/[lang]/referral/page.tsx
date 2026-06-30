@@ -9,14 +9,14 @@ import type { LanguageCode } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-// Code-Crash-Cover + Link aus dem bestehenden Ad-Promo.
-const CC_COVER = 'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/ad-promos/8f6cf663-7dcb-4824-977e-8e78f677e67d-left-1776169502592-cc-box-cover-2.png'
-const CC_URL = 'https://codecrash.ai'
+// Code-Crash-Cover + Link aus dem Ad-Promo "Code Crash Q3" (Sommer-Edition).
+const CC_COVER = 'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/ad-promos/9f56a5f4-d643-4747-8e8d-0686efbf7017-left-1781417692331-buch_cover_synthszr.png'
+const CC_URL = 'https://codecrash.ai/de'
 
 const TEXT = {
   de: {
     title: 'Teile Synthszr',
-    sub: 'Teile deinen persönlichen Empfehlungslink — pro bestätigter Anmeldung steigt dein Zähler.',
+    sub: 'Du magst Synthszr? Dann teil es mit den richtigen Leuten 💚 Jede bestätigte Anmeldung über deinen persönlichen Link bringt dich näher ans signierte CODE CRASH-Hardcover 🎁',
     count: 'Bestätigte Empfehlungen',
     remaining: (n: number) => `Nur noch ${n} bis zu deinem signierten CODE CRASH-Hardcover 🎁`,
     reward: 'Bei 10 bestätigten Empfehlungen schenken wir dir CODE CRASH als Hardcover — mit persönlicher Widmung vom Autor.',
@@ -33,13 +33,13 @@ const TEXT = {
     gateCta: 'Link senden',
     gateSending: 'Wird gesendet…',
     gateSent: 'Wenn diese Adresse abonniert ist, haben wir dir gerade den Link zu deiner Übersicht geschickt. Schau in dein Postfach.',
-    ccDesc: 'CODE CRASH ist Matthias Schraders Buch über den Umbruch, den KI in Wirtschaft, Software und Arbeit auslöst. Kein Hype, sondern eine scharfe Analyse, warum Intent zur knappsten Ressource wird — und wie Unternehmen jetzt umdenken müssen.',
+    ccDesc: 'CODE CRASH (Sommer-Edition, 2. Auflage) ist Matthias Schraders Buch über den Umbruch, den agentische KI in Wirtschaft, Software und Führung auslöst. Es spannt den Bogen von Produktentwicklung über Unternehmensaufstellung bis zur Kultur im KI-Zeitalter — mit einem überraschend optimistischen Ausblick auf den Standort Deutschland.',
     ccHardcover: 'Du bekommst die hochwertige Hardcover-Ausgabe mit persönlicher Widmung vom Autor — nicht das Paperback.',
     ccCta: 'Mehr zum Buch →',
   },
   en: {
     title: 'Share Synthszr',
-    sub: 'Share your personal referral link — every confirmed signup raises your count.',
+    sub: 'Love Synthszr? Share it with the right people 💚 Every confirmed signup via your personal link brings you closer to your signed CODE CRASH hardcover 🎁',
     count: 'Confirmed referrals',
     remaining: (n: number) => `Just ${n} more to unlock your signed CODE CRASH hardcover 🎁`,
     reward: 'Reach 10 confirmed referrals and we gift you CODE CRASH as a hardcover — with a personal dedication from the author.',
@@ -56,7 +56,7 @@ const TEXT = {
     gateCta: 'Send link',
     gateSending: 'Sending…',
     gateSent: 'If this address is subscribed, we just sent you the link to your overview. Check your inbox.',
-    ccDesc: "CODE CRASH is Matthias Schrader's book on the upheaval AI brings to business, software, and work. No hype — a sharp analysis of why intent becomes the scarcest resource, and how companies must rethink now.",
+    ccDesc: "CODE CRASH (Summer Edition, 2nd edition) is Matthias Schrader's book on the upheaval agentic AI brings to business, software, and leadership. It spans product development, org design, and culture in the AI age — with a surprisingly optimistic outlook for Germany.",
     ccHardcover: 'You get the premium hardcover edition with a personal dedication from the author — not the paperback.',
     ccCta: 'More about the book →',
   },
