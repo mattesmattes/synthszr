@@ -83,19 +83,22 @@ export async function researchProduct(
 
   // --- 1. Web-Recherche ---
   const dims = dimensions.map((d) => `- ${d}`).join('\n')
-  const webPrompt = `Recherchiere das AI-Produkt "${name}" von ${vendor} (Kategorie: ${categoryName}) per Web-Suche.
+  const webPrompt = `Recherchiere das AI-Produkt "${name}" von ${vendor} (Kategorie: ${categoryName}).
 
-Zusätzlicher Kontext aus AI-Newsletter-Auszügen:
+QUELLEN (beide gleichwertig nutzen):
+1. WEB-SUCHE für verlässliche, aktuelle Daten.
+2. Diese AI-NEWSLETTER-BELEGE — bei neuen/unbekannten Produkten, die die Web-Suche nicht findet, sind sie die PRIMÄRE Quelle. Extrahiere konkrete Angaben (Preise, Benchmarks, Datum) auch direkt aus diesen Belegen:
 ${evidence || '(keine)'}
 
-Suche nach verlässlichen, aktuellen Quellen und rufe dann report_research:
+Rufe dann report_research:
 1. description: 2-4 nüchterne Sätze auf DEUTSCH (kein Marketing).
 2. description_en: dieselbe Aussage auf ENGLISCH.
-3. release_date: nur wenn bekannt (z.B. "Juni 2026").
-4. features: konkrete Werte NUR für diese Dimensionen (dimension EXAKT wie unten), nur wenn durch eine Quelle belegt:
+3. release_date: Erscheinungsdatum (z.B. "Juni 2026") — suche aktiv in Web UND Belegen danach.
+4. features: konkrete Werte für diese Dimensionen (dimension EXAKT wie unten):
 ${dims}
+   WICHTIG, falls die Dimensionen das abdecken: Preise/Kosten, Benchmark-Ergebnisse (SWE-bench, MMLU, Terminal-Bench …) und Kontextfenster gehören in die jeweils passende Dimension — diese Angaben stehen oft in den Belegen, übernimm sie.
 
-WICHTIG: Findest du das Produkt nicht zuverlässig oder gibt es keine glaubwürdigen Quellen, gib KEINE erfundenen Werte an — lieber leer als halluziniert.`
+Belege jeden Wert durch eine Web-Quelle ODER die Newsletter-Belege. Findest du gar nichts Verlässliches, gib KEINE erfundenen Werte an — lieber leer als halluziniert.`
   let raw = EMPTY_RESULT
   const c1 = new AbortController()
   const t1 = setTimeout(() => c1.abort(), LLM_TIMEOUT_MS)
@@ -157,8 +160,8 @@ Prüfe JEDES Feature streng und behalte NUR Werte, die plausibel und durch eine 
 
 /** Recherchiert sichtbare, kategorisierte Produkte (Top nach Mentions) und schreibt
  *  Beschreibung/Release/Specs nach product_features_current (source research). */
-export async function runProductResearch(opts: { limit?: number; minMentions?: number } = {}): Promise<{ researched: number }> {
-  const { limit = 60, minMentions = 2 } = opts
+export async function runProductResearch(opts: { limit?: number; minMentions?: number; force?: boolean } = {}): Promise<{ researched: number }> {
+  const { limit = 60, minMentions = 2, force = false } = opts
   const supabase = createAdminClient()
 
   const { data: cats } = await supabase.from('product_categories').select('slug, name, feature_dimensions')
@@ -182,9 +185,11 @@ export async function runProductResearch(opts: { limit?: number; minMentions?: n
     // schon mit echten FEATURES recherchiert? Nur dann skippen — Produkte mit bloßer
     // Beschreibung (ohne Feature-Tabelle) sollen die Web-Research nachträglich bekommen.
     const META_DIMS = new Set<string>(['__sentiment', DESCRIPTION_DIM, DESCRIPTION_EN_DIM, RELEASED_DIM])
-    const { data: existing } = await supabase.from('product_features_current')
-      .select('dimension_key').eq('product_id', m.product_id)
-    if ((existing ?? []).some((f) => !META_DIMS.has(f.dimension_key as string))) continue
+    if (!force) {
+      const { data: existing } = await supabase.from('product_features_current')
+        .select('dimension_key').eq('product_id', m.product_id)
+      if ((existing ?? []).some((f) => !META_DIMS.has(f.dimension_key as string))) continue
+    }
 
     const dimensions = Array.isArray(cat.feature_dimensions) ? (cat.feature_dimensions as string[]) : []
     // News-Auszüge als zusätzlicher Beleg (die eigentliche Quelle ist die Web-Suche)
