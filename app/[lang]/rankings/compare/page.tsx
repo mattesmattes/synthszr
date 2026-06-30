@@ -68,7 +68,11 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
               </tr>
               <tr className="border-b border-gray-100">
                 <td className="p-2 text-gray-400">{t('rankings.compare_vendor')}</td>
-                {products.map((p) => <td key={p.slug} className="p-2">{p.vendor}</td>)}
+                {products.map((p) => (
+                  <td key={p.slug} className="p-2">
+                    <Link href={`/${lang}/companies/${p.vendor}`} className="hover:underline">{p.vendor}</Link>
+                  </td>
+                ))}
               </tr>
               <tr className="border-b border-gray-100">
                 <td className="p-2 text-gray-400">{t('rankings.compare_release')}</td>

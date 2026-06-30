@@ -76,7 +76,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
             {p.rank && <span className="text-xs font-semibold px-2 py-0.5 rounded bg-black text-white">#{p.rank}</span>}
           </div>
           <p className="text-gray-500 text-xs mt-0.5">
-            {p.vendor}
+            <Link href={`/${lang}/companies/${p.vendor}`} className="hover:underline">{p.vendor}</Link>
             {p.version && <> · v{p.version}</>}
             {p.qualifier && <> · {p.qualifier}</>}
             {p.releasedAt && <> · seit {p.releasedAt}</>}
