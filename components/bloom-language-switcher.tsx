@@ -104,7 +104,7 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
   if (loading || activeLanguages.length <= 1) {
     return (
       <div className="flex justify-center items-baseline gap-4 mb-6">
-        <span className={`${linkStyle} opacity-50`}>Switch Language</span>
+        <span className={`${linkStyle} opacity-50`}>Language</span>
         <Link href={currentLocale === 'de' ? '/' : `/${currentLocale}`} aria-label="Home" className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-center">
           <Image src="/oh-so-icon.svg" alt="OH-SO" width={32} height={32} />
         </Link>
@@ -123,7 +123,7 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
           onClick={() => setIsOpen(!isOpen)}
           className={`${linkStyle} cursor-pointer`}
         >
-          Switch Language
+          Language
         </button>
         {isOpen && (
           <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 py-2 bg-background border border-border rounded-2xl shadow-lg min-w-[180px] z-50">
