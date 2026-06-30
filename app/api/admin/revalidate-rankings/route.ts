@@ -12,6 +12,6 @@ export async function POST(request: Request) {
   if (!expected || secret !== expected) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
-  revalidateTag('rankings')
+  revalidateTag('rankings', 'max')
   return NextResponse.json({ revalidated: true })
 }
