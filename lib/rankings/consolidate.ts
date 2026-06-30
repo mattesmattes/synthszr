@@ -27,13 +27,86 @@ async function mergeInto(supabase: Sb, toId: string, fromIds: string[]): Promise
   }
 }
 
+// Qualifier-Tokens, die KEINE eigene Produktidentität bilden (Größen + Performance-Tiers).
+const SIZE_RE = /^\d+(?:\.\d+)?b$|^a\d+b$|^\d+x\d+b$/
+const TIER_WORDS = new Set([
+  'mini', 'nano', 'pro', 'plus', 'max', 'instant', 'lite', 'preview', 'turbo',
+  'flash', 'ultra', 'air', 'small', 'medium', 'large', 'high', 'low', 'exp', 'beta',
+])
+
+/** qualifier besteht NUR aus Größen-/Tier-Tokens (7b, 72b, 35b a3b, mini, pro, max,
+ *  preview …) → auf family+version rollen. Funktionale Varianten (coder, vl, omni,
+ *  codex, sol, cyber, tts …) und echte Modell-Versionen bleiben getrennt. */
+function isRollupQualifier(q: string | null): boolean {
+  if (!q) return false
+  const tokens = q.toLowerCase().split(/[\s\-_/]+/).filter(Boolean)
+  return tokens.length > 0 && tokens.every((t) => SIZE_RE.test(t) || TIER_WORDS.has(t))
+}
+
+/** Anzeigename fürs Basis-Produkt, wenn keine qualifier-freie Basis existiert. */
+function baseName(family: string, version: string | null): string {
+  const fam = family
+    .split(/\s+/)
+    .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)))
+    .join(' ')
+  return version ? `${fam} ${version}` : fam
+}
+
+/**
+ * D) Größen-/Tier-Varianten auf das family+version-Basis-Produkt rollen
+ *    (z.B. „GPT-5.5 Pro/Instant/72B" → „GPT-5.5"); Versionen + funktionale
+ *    Varianten bleiben unangetastet.
+ */
+export async function rollupSizeTierVariants(supabase: Sb): Promise<{ rolledUp: number }> {
+  const all: Array<{ id: string; family: string; version: string | null; qualifier: string | null; vendor_namespace: string }> = []
+  for (let off = 0; ; off += 1000) {
+    const { data } = await supabase.from('products').select('id, family, version, qualifier, vendor_namespace').eq('visibility_status', 'visible').range(off, off + 999)
+    if (!data?.length) break
+    all.push(...(data as typeof all))
+    if (data.length < 1000) break
+  }
+  const mc: Record<string, number> = {}
+  for (let off = 0; ; off += 1000) {
+    const { data } = await supabase.from('product_mentions').select('product_id').range(off, off + 999)
+    if (!data?.length) break
+    for (const m of data) mc[m.product_id] = (mc[m.product_id] ?? 0) + 1
+    if (data.length < 1000) break
+  }
+
+  const byKey = new Map<string, typeof all>()
+  for (const p of all) {
+    const k = `${p.family}|${p.version ?? ''}|${p.vendor_namespace}`
+    byKey.set(k, [...(byKey.get(k) ?? []), p])
+  }
+
+  let rolledUp = 0
+  for (const [, grp] of byKey) {
+    const variants = grp.filter((p) => isRollupQualifier(p.qualifier))
+    if (variants.length === 0) continue
+    let base = grp.find((p) => !p.qualifier)
+    let mergeFrom = variants
+    if (!base) {
+      variants.sort((a, b) => (mc[b.id] ?? 0) - (mc[a.id] ?? 0))
+      base = variants[0]
+      mergeFrom = variants.slice(1)
+      await supabase.from('products').update({ qualifier: null, canonical_name: baseName(base.family, base.version) }).eq('id', base.id)
+    }
+    if (mergeFrom.length) {
+      await mergeInto(supabase, base.id, mergeFrom.map((v) => v.id))
+      rolledUp += mergeFrom.length
+    }
+  }
+  return { rolledUp }
+}
+
 /**
  * Bereinigt die Produkt-Daten nach einem Extraktions-/Backfill-Lauf:
  *  A) 0-Mention-Leichen löschen
  *  B) Vendor-Duplikate (gleiche family/version/qualifier, verschiedene vendor) mergen
  *  C) Sub-Produkte (family beginnt mit einem Kern) zum Kern-Produkt normalisieren
+ *  D) Größen-/Tier-Varianten auf family+version rollen
  */
-export async function runConsolidation(): Promise<{ deadDeleted: number; vendorMerged: number; subMerged: number; productsAfter: number }> {
+export async function runConsolidation(): Promise<{ deadDeleted: number; vendorMerged: number; subMerged: number; rolledUp: number; productsAfter: number }> {
   const supabase = createAdminClient()
 
   // alle Produkte + Mention-Counts
@@ -95,6 +168,9 @@ export async function runConsolidation(): Promise<{ deadDeleted: number; vendorM
     subMerged += members.length - 1
   }
 
+  // D: Größen-/Tier-Varianten auf family+version rollen
+  const { rolledUp } = await rollupSizeTierVariants(supabase)
+
   const { count: productsAfter } = await supabase.from('products').select('id', { count: 'exact', head: true })
-  return { deadDeleted: dead.length, vendorMerged, subMerged, productsAfter: productsAfter ?? 0 }
+  return { deadDeleted: dead.length, vendorMerged, subMerged, rolledUp, productsAfter: productsAfter ?? 0 }
 }
