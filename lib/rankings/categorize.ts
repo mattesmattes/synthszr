@@ -112,19 +112,30 @@ export async function runCategorization(batchSize = 25): Promise<{ categorized: 
   if (cErr) throw new Error(`categories: ${cErr.message}`)
   if (!cats?.length) return { categorized: 0, pending: 0 }
 
-  const { data: products, error: pErr } = await supabase
-    .from('products')
-    .select('id, canonical_name, vendor_namespace')
-    .eq('visibility_status', 'visible')
-  if (pErr) throw new Error(`products: ${pErr.message}`)
+  // Paginiert laden — PostgREST cappt sonst still bei 1000 Zeilen. Folge: nur die
+  // ersten 1000 Produkte kategorisiert UND ein unvollständiges `done`, wodurch bereits
+  // kategorisierte Produkte erneut bearbeitet werden → Verletzung des
+  // one_primary_category_per_product-Constraints.
+  const products: Array<{ id: string; canonical_name: string; vendor_namespace: string }> = []
+  for (let off = 0; ; off += 1000) {
+    const { data, error: pErr } = await supabase
+      .from('products').select('id, canonical_name, vendor_namespace').eq('visibility_status', 'visible').range(off, off + 999)
+    if (pErr) throw new Error(`products: ${pErr.message}`)
+    if (!data?.length) break
+    products.push(...(data as typeof products))
+    if (data.length < 1000) break
+  }
 
-  const { data: existing, error: eErr } = await supabase
-    .from('product_category_membership')
-    .select('product_id')
-  if (eErr) throw new Error(`memberships: ${eErr.message}`)
-  const done = new Set((existing ?? []).map((e) => e.product_id as string))
+  const done = new Set<string>()
+  for (let off = 0; ; off += 1000) {
+    const { data, error: eErr } = await supabase.from('product_category_membership').select('product_id').range(off, off + 999)
+    if (eErr) throw new Error(`memberships: ${eErr.message}`)
+    if (!data?.length) break
+    for (const e of data) done.add(e.product_id as string)
+    if (data.length < 1000) break
+  }
 
-  const todo = (products ?? [])
+  const todo = products
     .filter((p) => !done.has(p.id))
     .map((p) => ({ id: p.id as string, name: p.canonical_name as string, vendor: p.vendor_namespace as string }))
 
