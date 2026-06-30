@@ -735,9 +735,10 @@ export async function generateEmailContentWithVotes(
       sectionText += ' ' + extractTextFromNode(doc.content[i])
     }
     const prods = findProductsInText(sectionText, chartProducts)
-    if (prods.length === 0) return TREND_BG.flat
-    const top = prods.reduce((a, b) => (b.score > a.score ? b : a))
-    return TREND_BG[top.trend ?? 'flat']
+    // Trend-Priorität: ein steigendes Produkt → grün; sonst fallend → rot; sonst cyan.
+    const hasUp = prods.some((p) => p.trend === 'up')
+    const hasDown = prods.some((p) => p.trend === 'down')
+    return TREND_BG[hasUp ? 'up' : hasDown ? 'down' : 'flat']
   })
 
   // Track article index for thumbnails (H2 headings that aren't Synthszr Take)

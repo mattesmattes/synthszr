@@ -29,18 +29,18 @@ export function ArticleThumbnailPortal({
     el = el.nextElementSibling
   }
 
-  // Prominentestes genanntes Chart-Produkt (höchster Score) bestimmt die Farbe.
-  let topTrend: 'up' | 'down' | 'flat' = 'flat'
-  let topScore = -1
+  // Trend-Priorität: sobald EIN genanntes Produkt steigt → grün; sonst fallend → rot;
+  // sonst stagnierend → cyan.
+  let hasUp = false
+  let hasDown = false
   for (const entry of productLinks.values()) {
     const escaped = entry.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    if (new RegExp(`\\b${escaped}\\b`, 'i').test(sectionText) && entry.score > topScore) {
-      topScore = entry.score
-      topTrend = entry.trend ?? 'flat'
+    if (new RegExp(`\\b${escaped}\\b`, 'i').test(sectionText)) {
+      if (entry.trend === 'up') hasUp = true
+      else if (entry.trend === 'down') hasDown = true
     }
   }
-
-  const bgColor = TREND_BG[topTrend]
+  const bgColor = TREND_BG[hasUp ? 'up' : hasDown ? 'down' : 'flat']
   const displaySize = Math.round(604 / devicePixelRatio)
 
   return (
