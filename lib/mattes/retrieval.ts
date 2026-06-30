@@ -70,6 +70,6 @@ export function formatPassagesForPrompt(passages: MattesPassage[]): string {
   return [
     'MATTES-KONTEXT (Auszüge aus eigenen Schriften, als Stil- und Argument-Anker):',
     ...blocks,
-    'Nutze diese Passagen als Stimm- und Argumentationsreferenz. Zitiere nicht wörtlich. Übernimm das Vokabular (Code Crash, Intent, Hidden Champion, Jevons-Paradoxon, Compute-Disziplin, etc.) nur dort, wo es zur News passt.',
+    'Nutze diese Passagen als Stimm- und Argumentationsreferenz. Zitiere nicht wörtlich. Übernimm das Vokabular (Intent, Hidden Champion, Jevons-Paradoxon, Compute-Disziplin, etc.) nur dort, wo es zur News passt. Erwähne NICHT den Buchtitel „Code Crash" und schreibe nicht aus der Ich-Perspektive eines Buchautors — nur Inhalt und Argumente, ohne Buch-Referenz.',
   ].join('\n\n')
 }
