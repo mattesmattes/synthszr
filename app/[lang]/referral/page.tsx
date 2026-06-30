@@ -4,6 +4,7 @@ import { ReferralShare } from '@/components/referral-share'
 import { SiteFooter } from '@/components/site-footer'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
 import { ReferralSidFallback } from '@/components/referral-sid-fallback'
+import { ReferralEmailGate } from '@/components/referral-email-gate'
 import type { LanguageCode } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,11 @@ const TEXT = {
     copy: 'Kopieren',
     copied: 'Kopiert!',
     shareText: 'Ich lese Synthszr — täglich die wichtigsten AI-News, kompakt aufbereitet. Schau rein:',
+    gatePrompt: 'Gib deine E-Mail-Adresse ein — wir senden dir den Link zu deiner persönlichen Empfehlungs-Übersicht.',
+    gatePlaceholder: 'deine@email.com',
+    gateCta: 'Link senden',
+    gateSending: 'Wird gesendet…',
+    gateSent: 'Wenn diese Adresse abonniert ist, haben wir dir gerade den Link zu deiner Übersicht geschickt. Schau in dein Postfach.',
   },
   en: {
     title: 'Share Synthszr',
@@ -38,6 +44,11 @@ const TEXT = {
     copy: 'Copy',
     copied: 'Copied!',
     shareText: 'I read Synthszr — the most important AI news daily, neatly digested. Check it out:',
+    gatePrompt: "Enter your email — we'll send you the link to your personal referral overview.",
+    gatePlaceholder: 'you@email.com',
+    gateCta: 'Send link',
+    gateSending: 'Sending…',
+    gateSent: 'If this address is subscribed, we just sent you the link to your overview. Check your inbox.',
   },
 }
 
@@ -69,9 +80,10 @@ export default async function ReferralPage({
         {!stats ? (
           <>
             <ReferralSidFallback />
-            <p className="mt-8 rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-              {L.invalid}
-            </p>
+            <ReferralEmailGate
+              lang={lang}
+              labels={{ prompt: L.gatePrompt, placeholder: L.gatePlaceholder, cta: L.gateCta, sending: L.gateSending, sent: L.gateSent }}
+            />
           </>
         ) : (
           <div className="mt-8 space-y-8">
