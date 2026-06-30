@@ -6,6 +6,7 @@ import { render } from '@react-email/components'
 import { logIfUnexpected } from '@/lib/supabase/error-handling'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 import { requireValidOrigin } from '@/lib/security/origin-check'
+import { trackReferral, generateReferralCode } from '@/lib/referrals/service'
 
 // Newsletter rate limiter: 10 requests per hour per IP (anti-spam)
 const newsletterLimiter = rateLimiters.newsletter()
@@ -24,7 +25,8 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse(rateLimitResult)
     }
     const body = await request.json()
-    const { email, name, language = 'en' } = body
+    const { email, name, language = 'en', ref } = body
+    const refCode = typeof ref === 'string' ? ref.trim().slice(0, 32) : ''
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json(
@@ -121,6 +123,7 @@ export async function POST(request: NextRequest) {
         confirmation_token: confirmationToken,
         confirmation_sent_at: new Date().toISOString(),
         preferences: { language },
+        referral_code: generateReferralCode(),
       })
       .select('id')
       .single()
@@ -131,6 +134,11 @@ export async function POST(request: NextRequest) {
         { error: 'Error saving subscription' },
         { status: 500 }
       )
+    }
+
+    // Empfehlung verbuchen (pending bis Opt-In); ignoriert unbekannten Code/Self-Referral.
+    if (refCode && newSubscriber?.id) {
+      await trackReferral(refCode, email, newSubscriber.id)
     }
 
     // Send confirmation email

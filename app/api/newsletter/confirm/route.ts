@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { BASE_URL } from '@/lib/resend/client'
 import { checkRateLimit, getClientIP, rateLimiters } from '@/lib/rate-limit'
+import { confirmReferral } from '@/lib/referrals/service'
 
 // Standard rate limiter: 30 requests per minute per IP
 const standardLimiter = rateLimiters.standard()
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     // Find subscriber by token
     const { data: subscriber, error: findError } = await supabase
       .from('subscribers')
-      .select('id, status')
+      .select('id, status, email')
       .eq('confirmation_token', token)
       .single()
 
@@ -55,6 +56,9 @@ export async function GET(request: NextRequest) {
       console.error('Confirm update error:', updateError)
       return NextResponse.redirect(`${BASE_URL}/newsletter/confirm?error=update_failed`)
     }
+
+    // Offene Empfehlung dieses Geworbenen bestätigen (+ ggf. Belohnung auslösen).
+    await confirmReferral(subscriber.id, subscriber.email)
 
     return NextResponse.redirect(`${BASE_URL}/newsletter/confirm?status=success`)
   } catch (error) {

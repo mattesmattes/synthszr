@@ -7,6 +7,17 @@ import type { LanguageCode } from "@/lib/types"
 
 type SubscribeStatus = 'idle' | 'loading' | 'success' | 'error'
 
+/** Empfehlungscode aus ?ref= lesen und persistieren, damit er eine spätere Anmeldung überlebt. */
+function getRefCode(): string | undefined {
+  if (typeof window === 'undefined') return undefined
+  const fromUrl = new URLSearchParams(window.location.search).get('ref')
+  if (fromUrl) {
+    try { localStorage.setItem('synthszr_ref', fromUrl) } catch {}
+    return fromUrl
+  }
+  try { return localStorage.getItem('synthszr_ref') || undefined } catch { return undefined }
+}
+
 interface NewsletterProps {
   locale?: LanguageCode
 }
@@ -28,7 +39,7 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
       const res = await fetch('/api/newsletter/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, language: locale }),
+        body: JSON.stringify({ email, language: locale, ref: getRefCode() }),
       })
 
       const data = await res.json()
