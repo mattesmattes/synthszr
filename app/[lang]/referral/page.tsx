@@ -16,10 +16,10 @@ const CC_URL = 'https://codecrash.ai/de'
 const TEXT = {
   de: {
     title: 'Teile Synthszr',
-    sub: 'Du magst Synthszr? Dann teil es mit den richtigen Leuten 💚 Jede bestätigte Anmeldung über deinen persönlichen Link bringt dich näher ans signierte CODE CRASH-Hardcover 🎁',
+    sub: 'Du magst synthszr? Dann teil es mit den richtigen Freunden, Kolleg:innen und für wen es sonst noch interessant sein könnte. 1.000 Dank ❤️!',
     count: 'Bestätigte Empfehlungen',
     remaining: (n: number) => `Nur noch ${n} bis zu deinem signierten CODE CRASH-Hardcover 🎁`,
-    reward: 'Bei 10 bestätigten Empfehlungen schenken wir dir CODE CRASH als Hardcover — mit persönlicher Widmung vom Autor.',
+    reward: 'Bei 10 bestätigten Empfehlungen schicke ich dir CODE CRASH als Hardcover zu — mit echter persönlicher Widmung, ganz ohne KI 😉',
     rewardDone: '🎉 Geschafft! Dein signiertes CODE CRASH-Hardcover ist freigeschaltet — wir melden uns für den Versand.',
     confirmed: 'Bestätigt',
     pending: 'Ausstehend',
@@ -39,10 +39,10 @@ const TEXT = {
   },
   en: {
     title: 'Share Synthszr',
-    sub: 'Love Synthszr? Share it with the right people 💚 Every confirmed signup via your personal link brings you closer to your signed CODE CRASH hardcover 🎁',
+    sub: 'Love synthszr? Then share it with the right friends, colleagues, and anyone else who might find it interesting. A thousand thanks ❤️!',
     count: 'Confirmed referrals',
     remaining: (n: number) => `Just ${n} more to unlock your signed CODE CRASH hardcover 🎁`,
-    reward: 'Reach 10 confirmed referrals and we gift you CODE CRASH as a hardcover — with a personal dedication from the author.',
+    reward: "Reach 10 confirmed referrals and I'll send you CODE CRASH as a hardcover — with a real personal dedication, no AI involved 😉",
     rewardDone: '🎉 Done! Your signed CODE CRASH hardcover is unlocked — we will reach out about shipping.',
     confirmed: 'Confirmed',
     pending: 'Pending',
