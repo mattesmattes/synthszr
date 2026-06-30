@@ -15,8 +15,8 @@ const ResponseSchema = z.object({ products: z.array(z.unknown()) })
 const LLM_TIMEOUT_MS = 50_000
 
 /** Baut den Extraktions-Prompt (pure, gehärtet). */
-export function buildExtractPrompt(title: string, content: string): string {
-  return `Extrahiere die konkret benannten AI-PRODUKTE aus dieser Tech-News.
+// Stabiler Anweisungsteil (gleichbleibend) → wird als System-Prompt gecacht.
+export const EXTRACT_SYSTEM = `Extrahiere die konkret benannten AI-PRODUKTE aus dieser Tech-News.
 
 EINSCHLIESSEN (nur diese Produktarten):
 - KI-/Sprachmodelle (z.B. GPT-5.6, Claude Opus 4.8, Gemini 2.5 Pro, Llama 3.1)
@@ -41,12 +41,16 @@ REGELN:
 - Im Zweifel WEGLASSEN. Erfinde KEINE Produktnamen. Wenn nichts klar passt, gib eine LEERE Liste zurück.
 - name: das KERN-Produkt inkl. Version/Variante (z.B. "GPT-5.6 Terra", "Claude Opus 4.8"). NICHT einzelne Features/Modi/Editionen/Versions-Patches anhängen. KEINE Zusätze wie "model"/"Modell"/Versionsnummern wie "v2.1.190".
 - vendor: der ETABLIERTE Hersteller-Markenname, KONSISTENT über alle Nennungen (z.B. immer "OpenAI" für GPT/ChatGPT/Codex, "Anysphere" für Cursor, "Anthropic" für Claude, "Google" für Gemini, "xAI" für Grok). Nutze den allgemein bekannten Hersteller — verwende NICHT "unknown", wenn der Hersteller eines bekannten Produkts klar ist.
-- excerpt: kurzer wörtlicher Beleg-Ausschnitt aus dem Text.
+- excerpt: kurzer wörtlicher Beleg-Ausschnitt aus dem Text.`
 
-TITEL: ${title}
+/** Variabler Teil (News) — nicht cachebar. */
+export function buildExtractUserContent(title: string, content: string): string {
+  return `TITEL: ${title}\n\nINHALT:\n${content.slice(0, 8000)}`
+}
 
-INHALT:
-${content.slice(0, 8000)}`
+/** Vollständiger Prompt (System + News) — für Tests/Abwärtskompatibilität. */
+export function buildExtractPrompt(title: string, content: string): string {
+  return `${EXTRACT_SYSTEM}\n\n${buildExtractUserContent(title, content)}`
 }
 
 /** Validiert/filtert + begrenzt Längen. Müll ⇒ []. */
@@ -88,7 +92,10 @@ export async function extractProducts(title: string, content: string): Promise<E
     const resp = await client.messages.create({
       model, max_tokens: 1536, tools: [tool],
       tool_choice: { type: 'tool', name: 'report_products' },
-      messages: [{ role: 'user', content: buildExtractPrompt(title, content) }],
+      // System-Prompt (stabil) mit Prompt-Caching: spart ~90% auf dem wiederkehrenden
+      // Anweisungsteil (cache read statt voller input-Preis). Nur der News-Content variiert.
+      system: [{ type: 'text', text: EXTRACT_SYSTEM, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: buildExtractUserContent(title, content) }],
     }, { signal: controller.signal })
     const block = resp.content.find((b) => b.type === 'tool_use')
     const products = parseExtractResponse(block && 'input' in block ? block.input : null)
