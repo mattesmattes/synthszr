@@ -69,9 +69,9 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
     let cancelled = false
     fetch('/api/rankings/products')
       .then((r) => (r.ok ? r.json() : { products: [] }))
-      .then((data: { products?: Array<{ name: string; slug: string; score: number; spark: number[]; trend: 'up' | 'down' | 'flat' }> }) => {
+      .then((data: { products?: Array<{ name: string; slug: string; score: number; rank: number | null; spark: number[]; trend: 'up' | 'down' | 'flat' }> }) => {
         if (cancelled || !data?.products?.length) return
-        setProductLinks(new Map(data.products.map((p) => [p.name.toLowerCase(), { displayName: p.name, slug: p.slug, score: p.score, spark: p.spark, trend: p.trend }])))
+        setProductLinks(new Map(data.products.map((p) => [p.name.toLowerCase(), { displayName: p.name, slug: p.slug, score: p.score, rank: p.rank, spark: p.spark, trend: p.trend }])))
       })
       .catch(() => { /* silent — Produkt-Links sind nicht essenziell */ })
     return () => { cancelled = true }

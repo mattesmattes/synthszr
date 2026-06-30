@@ -13,6 +13,7 @@ export interface ProductLinkEntry {
   displayName: string
   slug: string
   score: number
+  rank: number | null // Position in der primären Kategorie (#1, #2, …)
   spark: number[]
   trend: 'up' | 'down' | 'flat' // aus der Erwähnungs-Rate (Datenschicht), nicht aus spark
 }
@@ -54,7 +55,7 @@ function buildVotePill(entry: ProductLinkEntry): HTMLElement {
   }
 
   const num = document.createElement('span')
-  num.textContent = String(entry.score)
+  num.textContent = entry.rank ? `#${entry.rank}` : ''
   num.style.cssText = `font-size:11px;font-weight:700;color:${color};`
   pill.appendChild(num)
   return pill

@@ -264,7 +264,7 @@ function injectCompanyLinksIntoHtml(
 }
 
 // ── Synthszr Charts (ersetzen die Company-Vote-Badges im Newsletter) ──
-interface ChartProductEntry { name: string; slug: string; score: number; trend: 'up' | 'down' | 'flat' }
+interface ChartProductEntry { name: string; slug: string; rank: number | null; trend: 'up' | 'down' | 'flat' }
 
 const EMAIL_TREND = {
   up: { arrow: '↑', color: '#16a34a' },
@@ -275,12 +275,24 @@ const EMAIL_TREND = {
 /** Thumbnail-Hintergrundfarbe nach Produkt-Trend (kräftig, eingebrannt). */
 const TREND_BG = { up: '#39FF14', down: '#FF4D00', flat: '#00FFFF' } as const
 
-/** Chart-Produkte (Name + Slug + Score + Trend) für den Newsletter. Trend kommt
- *  aus der Erwähnungs-Rate (Datenschicht), nicht aus dem decay-behafteten spark. */
+/** Chart-Produkte (Name + Slug + Kategorie-Rang + Trend) für den Newsletter.
+ *  Rang = Position in der primären Kategorie (products sind momentum-sortiert). */
 async function getChartProducts(): Promise<ChartProductEntry[]> {
   try {
     const top = await getRankedProducts({ limit: 500, minMentions: 2 })
-    return top.map((p) => ({ name: p.canonicalName, slug: p.slug, score: p.score, trend: p.trend }))
+    const { createAdminClient } = await import('@/lib/supabase/admin')
+    const supabase = createAdminClient()
+    const { data: memb } = await supabase.from('product_category_membership').select('product_id, category').eq('is_primary', true)
+    const primaryCat = new Map((memb ?? []).map((m) => [m.product_id as string, m.category as string]))
+    const catCounter = new Map<string, number>()
+    const rankById = new Map<string, number>()
+    for (const p of top) {
+      const cat = primaryCat.get(p.id) ?? '__none'
+      const n = (catCounter.get(cat) ?? 0) + 1
+      catCounter.set(cat, n)
+      rankById.set(p.id, n)
+    }
+    return top.map((p) => ({ name: p.canonicalName, slug: p.slug, rank: rankById.get(p.id) ?? null, trend: p.trend }))
   } catch {
     return []
   }
@@ -312,7 +324,8 @@ function generateChartsBadgesHtml(products: ChartProductEntry[], baseUrl: string
     const prefix = idx === 0 ? '<span style="font-weight: bold; text-transform: uppercase; font-size: 13px;">Synthszr Charts:</span> ' : ', '
     const tr = EMAIL_TREND[p.trend ?? 'flat']
     const href = `${baseUrl}${localePath}/rankings/${p.slug}${sidSuffix}`
-    return `${prefix}<a href="${href}" style="color: inherit; text-decoration: none;">${p.name}</a> <a href="${href}" style="color: ${tr.color}; font-weight: bold; font-size: 12px; text-decoration: none;">${tr.arrow}${p.score}</a>`
+    const pos = p.rank ? `#${p.rank}` : ''
+    return `${prefix}<a href="${href}" style="color: inherit; text-decoration: none;">${p.name}</a> <a href="${href}" style="color: ${tr.color}; font-weight: bold; font-size: 12px; text-decoration: none;">${tr.arrow}${pos}</a>`
   }).join('')
   return `<br/><span style="display: inline-block; margin-top: 8px;">${items}</span>`
 }
