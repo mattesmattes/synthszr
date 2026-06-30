@@ -5,6 +5,7 @@ import { Suspense } from 'react'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import type { LanguageCode } from '@/lib/types'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
+import { SiteFooter } from '@/components/site-footer'
 import { getVendorSynthesis } from '@/lib/rankings/vendor-synthesis'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { SingleMomentumChart } from '@/components/rankings/single-momentum-chart'
@@ -52,6 +53,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const t = (key: string) => translations[key] ?? key
 
   return (
+    <>
     <main className="max-w-3xl mx-auto px-4 py-10">
       <Suspense fallback={null}>
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
@@ -141,5 +143,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
       </footer>
       <PinBar lang={lang} />
     </main>
+    <SiteFooter locale={lang} />
+    </>
   )
 }

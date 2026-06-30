@@ -4,6 +4,7 @@ import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboa
 import { getTranslations } from '@/lib/i18n/get-translations'
 import type { LanguageCode } from '@/lib/types'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
+import { SiteFooter } from '@/components/site-footer'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { MomentumChart } from '@/components/rankings/momentum-chart'
 import { MultiMomentumChart } from '@/components/rankings/multi-momentum-chart'
@@ -59,6 +60,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
   )
 
   return (
+    <>
     <main className="max-w-3xl mx-auto px-4 py-10">
       <Suspense fallback={null}>
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
@@ -120,5 +122,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
       </footer>
       <PinBar lang={lang} />
     </main>
+    <SiteFooter locale={lang} />
+    </>
   )
 }

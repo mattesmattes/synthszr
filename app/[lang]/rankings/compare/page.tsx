@@ -6,6 +6,7 @@ import { getTranslations } from '@/lib/i18n/get-translations'
 import type { LanguageCode } from '@/lib/types'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
+import { SiteFooter } from '@/components/site-footer'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +33,7 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
   for (const p of products) for (const f of p.features) if (!dims.includes(f.dimension)) dims.push(f.dimension)
 
   return (
+    <>
     <main className="max-w-5xl mx-auto px-4 py-10">
       <Suspense fallback={null}>
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
@@ -92,5 +94,7 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
         </div>
       )}
     </main>
+    <SiteFooter locale={lang} />
+    </>
   )
 }
