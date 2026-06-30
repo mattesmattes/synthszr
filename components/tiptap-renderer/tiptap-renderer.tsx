@@ -300,8 +300,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
         createPortal(
           <ArticleThumbnailPortal
             portal={portal}
-            ratingPortals={ratingPortals}
-            premarketRatingPortals={premarketRatingPortals}
+            productLinks={productLinks}
             devicePixelRatio={devicePixelRatio}
           />,
           portal.element,

@@ -24,7 +24,7 @@ function localeFrom(): string {
   return LOCALES.includes(parts[1]) ? parts[1] : 'de'
 }
 
-const TREND_COLOR = { up: '#16a34a', down: '#dc2626', flat: '#111827' } as const
+const TREND_COLOR = { up: '#16a34a', down: '#dc2626', flat: '#06b6d4' } as const
 
 /** Momentum-Pill: farbige Mini-Sparkline (Trend-Farbe) + Score. */
 function buildVotePill(entry: ProductLinkEntry): HTMLElement {

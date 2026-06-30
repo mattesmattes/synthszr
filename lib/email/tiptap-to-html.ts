@@ -269,8 +269,11 @@ interface ChartProductEntry { name: string; slug: string; score: number; trend: 
 const EMAIL_TREND = {
   up: { arrow: '↑', color: '#16a34a' },
   down: { arrow: '↓', color: '#dc2626' },
-  flat: { arrow: '→', color: '#111827' },
+  flat: { arrow: '→', color: '#06b6d4' },
 } as const
+
+/** Thumbnail-Hintergrundfarbe nach Produkt-Trend (kräftig, eingebrannt). */
+const TREND_BG = { up: '#39FF14', down: '#FF4D00', flat: '#00FFFF' } as const
 
 /** Chart-Produkte (Name + Slug + Score + Trend) für den Newsletter. Trend kommt
  *  aus der Erwähnungs-Rate (Datenschicht), nicht aus dem decay-behafteten spark. */
@@ -724,22 +727,17 @@ export async function generateEmailContentWithVotes(
     articleSections.push({ startIndex: currentArticleStart, endIndex: doc.content.length - 1 })
   }
 
-  // Calculate best vote color per article section (BUY > HOLD > SELL > NONE)
+  // Thumbnail-Farbe pro Artikel-Abschnitt nach dem Produkt-TREND (statt Company-Vote):
+  // das prominenteste genannte Chart-Produkt (höchster Score) bestimmt die Farbe.
   const articleVoteColors: string[] = articleSections.map(section => {
-    let bestVote: 'BUY' | 'HOLD' | 'SELL' | null = null
+    let sectionText = ''
     for (let i = section.startIndex; i <= section.endIndex && doc.content; i++) {
-      const nodeText = extractTextFromNode(doc.content[i])
-      const sectionCompanies = findCompaniesInText(nodeText)
-      for (const c of [...sectionCompanies.public, ...sectionCompanies.premarket]) {
-        const ratingData = ratingsMap.get(c.apiName.toLowerCase())
-        if (ratingData?.rating) {
-          if (!bestVote || votePriority[ratingData.rating] > votePriority[bestVote]) {
-            bestVote = ratingData.rating
-          }
-        }
-      }
+      sectionText += ' ' + extractTextFromNode(doc.content[i])
     }
-    return bestVote ? voteColors[bestVote] : voteColors['NONE']
+    const prods = findProductsInText(sectionText, chartProducts)
+    if (prods.length === 0) return TREND_BG.flat
+    const top = prods.reduce((a, b) => (b.score > a.score ? b : a))
+    return TREND_BG[top.trend ?? 'flat']
   })
 
   // Track article index for thumbnails (H2 headings that aren't Synthszr Take)

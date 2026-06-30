@@ -1,53 +1,52 @@
 "use client"
 
 import Image from "next/image"
-import { VOTE_BG_CLASSES, VOTE_PRIORITY } from "@/lib/synthszr/rating-styles"
-import type { PublicPortal, PremarketPortal, ThumbnailPortal } from "./types"
+import type { ThumbnailPortal } from "./types"
+import type { ProductLinkData } from "@/lib/tiptap/dom-processors/product-links"
+
+// Thumbnail-Hintergrund nach Produkt-Trend (statt Company-Vote):
+// steigend = neongrün, stagnierend = cyan, fallend = rot.
+const TREND_BG = { up: '#39FF14', flat: '#00FFFF', down: '#FF4D00' } as const
 
 interface ArticleThumbnailPortalProps {
   portal: ThumbnailPortal
-  ratingPortals: PublicPortal[]
-  premarketRatingPortals: PremarketPortal[]
+  productLinks: ProductLinkData
   devicePixelRatio: number
 }
 
 export function ArticleThumbnailPortal({
   portal,
-  ratingPortals,
-  premarketRatingPortals,
+  productLinks,
   devicePixelRatio,
 }: ArticleThumbnailPortalProps) {
   const { thumbnail, h2Element } = portal
 
-  // Find next H2 to define article section boundary
-  let nextH2: Element | null = h2Element.nextElementSibling
-  while (nextH2 && nextH2.tagName !== 'H2') {
-    nextH2 = nextH2.nextElementSibling
+  // Abschnittstext (von dieser H2 bis zur nächsten H2) einsammeln.
+  let sectionText = h2Element.textContent || ''
+  let el: Element | null = h2Element.nextElementSibling
+  while (el && el.tagName !== 'H2') {
+    sectionText += ' ' + (el.textContent || '')
+    el = el.nextElementSibling
   }
 
-  // Collect all ratings in this article section
-  const allRatings = [...ratingPortals, ...premarketRatingPortals]
-  let bestVote: 'BUY' | 'HOLD' | 'SELL' | null = null
-
-  for (const ratingPortal of allRatings) {
-    const el = ratingPortal.element
-    if (h2Element.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) {
-      if (!nextH2 || nextH2.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING) {
-        const rating = ratingPortal.rating
-        if (!bestVote || VOTE_PRIORITY[rating] > VOTE_PRIORITY[bestVote]) {
-          bestVote = rating
-        }
-      }
+  // Prominentestes genanntes Chart-Produkt (höchster Score) bestimmt die Farbe.
+  let topTrend: 'up' | 'down' | 'flat' = 'flat'
+  let topScore = -1
+  for (const entry of productLinks.values()) {
+    const escaped = entry.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (new RegExp(`\\b${escaped}\\b`, 'i').test(sectionText) && entry.score > topScore) {
+      topScore = entry.score
+      topTrend = entry.trend ?? 'flat'
     }
   }
 
-  const bgClass = bestVote ? VOTE_BG_CLASSES[bestVote] : VOTE_BG_CLASSES['NONE']
+  const bgColor = TREND_BG[topTrend]
   const displaySize = Math.round(604 / devicePixelRatio)
 
   return (
     <div
-      className={`rounded-full overflow-hidden mx-auto ${bgClass} bg-neon-pulse`}
-      style={{ width: displaySize, height: displaySize }}
+      className="rounded-full overflow-hidden mx-auto bg-neon-pulse"
+      style={{ width: displaySize, height: displaySize, backgroundColor: bgColor }}
     >
       <Image
         src={thumbnail.image_url}
