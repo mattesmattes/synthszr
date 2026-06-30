@@ -5,6 +5,7 @@
 
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { isExcludedCompanyName } from '@/lib/data/company-exclusions'
+import { getRankedProducts } from '@/lib/rankings/leaderboard'
 import { sanitizeUrl } from '@/lib/utils/url-sanitizer'
 import { PODCAST_APPLE, PODCAST_SPOTIFY } from '@/lib/podcast/platform-links'
 import { applyDateToHeadline } from '@/lib/tip-promos/headline'
@@ -262,6 +263,92 @@ function injectCompanyLinksIntoHtml(
   return result.join('')
 }
 
+// ── Synthszr Charts (ersetzen die Company-Vote-Badges im Newsletter) ──
+interface ChartProductEntry { name: string; slug: string; score: number; spark: number[] }
+
+const EMAIL_TREND = {
+  up: { arrow: '↑', color: '#16a34a' },
+  down: { arrow: '↓', color: '#dc2626' },
+  flat: { arrow: '→', color: '#111827' },
+} as const
+
+/** Aktueller Trend: letzter Wert vs. ~7 Tage davor (kein SVG — email-safe). */
+function chartTrend(spark: number[]): 'up' | 'down' | 'flat' {
+  if (!spark || spark.length < 8) return 'flat'
+  const last = spark[spark.length - 1], ref = spark[spark.length - 8]
+  if (ref < 0.01) return last > 0.05 ? 'up' : 'flat'
+  if (last > ref * 1.08) return 'up'
+  if (last < ref * 0.92) return 'down'
+  return 'flat'
+}
+
+/** Chart-Produkte (Name + Slug + Score + 30-Tage-Spark) für den Newsletter. */
+async function getChartProducts(): Promise<ChartProductEntry[]> {
+  try {
+    const top = await getRankedProducts({ limit: 500, minMentions: 2 })
+    return top.map((p) => ({ name: p.canonicalName, slug: p.slug, score: p.score, spark: p.history.slice(-30).map((h) => Math.round(h.value * 100) / 100) }))
+  } catch {
+    return []
+  }
+}
+
+/** Im Text genannte Chart-Produkte (längste Namen zuerst, kein Overlap, dedup), max 6. */
+function findProductsInText(text: string, products: ChartProductEntry[]): ChartProductEntry[] {
+  const sorted = [...products].sort((a, b) => b.name.length - a.name.length)
+  const taken: Array<{ s: number; e: number }> = []
+  const seen = new Set<string>()
+  const found: ChartProductEntry[] = []
+  for (const p of sorted) {
+    const escaped = p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const m = new RegExp(`\\b${escaped}\\b`, 'i').exec(text)
+    if (!m) continue
+    const ov = taken.some((t) => t.s < m.index + m[0].length && t.e > m.index)
+    if (ov || seen.has(p.slug)) continue
+    taken.push({ s: m.index, e: m.index + m[0].length }); seen.add(p.slug); found.push(p)
+  }
+  return found.slice(0, 6)
+}
+
+/** "Synthszr Charts: Claude ↑100, ChatGPT →5 …" — farbcodierter Trend + Score, email-safe. */
+function generateChartsBadgesHtml(products: ChartProductEntry[], baseUrl: string, locale?: string, sidPlaceholder?: string): string {
+  if (products.length === 0) return ''
+  const localePath = locale && locale !== 'de' ? `/${locale}` : ''
+  const sidSuffix = sidPlaceholder ? `?sid=${sidPlaceholder}` : ''
+  const items = products.map((p, idx) => {
+    const prefix = idx === 0 ? '<span style="font-weight: bold; text-transform: uppercase; font-size: 13px;">Synthszr Charts:</span> ' : ', '
+    const tr = EMAIL_TREND[chartTrend(p.spark)]
+    const href = `${baseUrl}${localePath}/rankings/${p.slug}${sidSuffix}`
+    return `${prefix}<a href="${href}" style="color: inherit; text-decoration: none;">${p.name}</a> <a href="${href}" style="color: ${tr.color}; font-weight: bold; font-size: 12px; text-decoration: none;">${tr.arrow}${p.score}</a>`
+  }).join('')
+  return `<br/><span style="display: inline-block; margin-top: 8px;">${items}</span>`
+}
+
+/** Produkt-Links im Absatz-HTML (zu /rankings/{slug}), je Produkt einmal, außerhalb von <a>. */
+function injectProductLinksIntoHtml(paraHtml: string, products: ChartProductEntry[], baseUrl: string, locale?: string, sidPlaceholder?: string): string {
+  if (products.length === 0) return paraHtml
+  const localePath = locale && locale !== 'de' ? `/${locale}` : ''
+  const sorted = [...products].sort((a, b) => b.name.length - a.name.length)
+  const linked = new Set<string>()
+  const parts = paraHtml.split(/(<[^>]+>)/g)
+  let insideAnchor = false
+  return parts.map((part) => {
+    if (/^<a[\s>]/i.test(part)) { insideAnchor = true; return part }
+    if (/^<\/a>/i.test(part)) { insideAnchor = false; return part }
+    if (part.startsWith('<') || insideAnchor) return part
+    let text = part
+    for (const p of sorted) {
+      if (linked.has(p.slug)) continue
+      const escaped = p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      text = text.replace(new RegExp(`\\b${escaped}\\b`, 'i'), (match) => {
+        linked.add(p.slug)
+        const sidSuffix = sidPlaceholder ? `?sid=${sidPlaceholder}` : ''
+        return `<a href="${baseUrl}${localePath}/rankings/${p.slug}${sidSuffix}" style="color: inherit; text-decoration: underline;">${match}</a>`
+      })
+    }
+    return text
+  }).join('')
+}
+
 /**
  * Convert post content to email-friendly HTML (sync version for backwards compatibility)
  * Handles both TipTap JSON objects and JSON strings
@@ -508,6 +595,14 @@ export async function generateEmailContentWithVotes(
     paragraphCompanies.set(para.index, companies)
   }
 
+  // Synthszr Charts (ersetzen die Vote-Badges): Chart-Produkte laden + je Take-
+  // Abschnitt die genannten Produkte.
+  const chartProducts = await getChartProducts()
+  const paragraphProducts = new Map<number, ChartProductEntry[]>()
+  for (const para of synthszrTakeParagraphs) {
+    paragraphProducts.set(para.index, findProductsInText(para.text, chartProducts))
+  }
+
   // ALSO scan for explicit {Company} tags in the ENTIRE document
   // This catches companies tagged anywhere, not just near "Synthszr Take" sections
   const explicitTagPattern = /\{([^}]+)\}/g
@@ -678,50 +773,16 @@ export async function generateEmailContentWithVotes(
 
     let baseHtml = convertNodeToHtml(node)
 
-    // Inject company page links into paragraph text (like the web renderer)
-    if (node.type === 'paragraph' && companyLinkData.length > 0) {
-      baseHtml = injectCompanyLinksIntoHtml(baseHtml, companyLinkData, baseUrl, locale, sidPlaceholder)
+    // Produkt-Links in den Absatztext injizieren (statt Company-Links)
+    if (node.type === 'paragraph' && chartProducts.length > 0) {
+      baseHtml = injectProductLinksIntoHtml(baseHtml, chartProducts, baseUrl, locale, sidPlaceholder)
     }
 
-    // Check if this is a Synthszr Take paragraph
-    const companies = paragraphCompanies.get(index)
-    if (companies && (companies.public.length > 0 || companies.premarket.length > 0)) {
-      // Build ratings for this paragraph
-      const ratings: RatingData[] = []
-
-      for (const c of companies.public) {
-        const ratingData = ratingsMap.get(c.apiName.toLowerCase())
-        if (ratingData) {
-          ratings.push({
-            company: c.apiName,
-            displayName: c.displayName,
-            rating: ratingData.rating,
-            type: 'public',
-            ticker: ratingData.ticker,
-            changePercent: ratingData.changePercent,
-            direction: ratingData.direction,
-          })
-        }
-      }
-
-      for (const c of companies.premarket) {
-        const ratingData = ratingsMap.get(c.apiName.toLowerCase())
-        if (ratingData) {
-          ratings.push({
-            company: c.apiName,
-            displayName: c.displayName,
-            rating: ratingData.rating,
-            type: 'premarket',
-            isin: ratingData.isin,
-          })
-        }
-      }
-
-      if (ratings.length > 0) {
-        const voteBadges = generateVoteBadgesHtml(ratings, baseUrl, post.slug, locale, sidPlaceholder)
-        // Insert badges before closing </p> tag
-        return prefix + baseHtml.replace(/<\/p>$/, `${voteBadges}</p>`)
-      }
+    // Synthszr-Charts-Badges an Synthszr-Take-Absätze anhängen (statt Vote-Badges)
+    const prods = paragraphProducts.get(index)
+    if (prods && prods.length > 0) {
+      const chartsBadges = generateChartsBadgesHtml(prods, baseUrl, locale, sidPlaceholder)
+      return prefix + baseHtml.replace(/<\/p>$/, `${chartsBadges}</p>`)
     }
 
     return prefix + baseHtml
