@@ -150,10 +150,10 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
         )}
       </div>
 
-      {/* OH-SO Logo in the middle */}
-      <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-center">
+      {/* OH-SO Logo in the middle → Home */}
+      <Link href={currentLocale === 'de' ? '/' : `/${currentLocale}`} aria-label="Home" className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-center">
         <Image src="/oh-so-icon.svg" alt="OH-SO" width={32} height={32} />
-      </div>
+      </Link>
 
       {/* Search toggle */}
       <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
