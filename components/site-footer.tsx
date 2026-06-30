@@ -8,11 +8,11 @@ import type { LanguageCode } from '@/lib/types'
 
 /** Vollständiger Seiten-Footer (wie auf /home): Newsletter-Anmeldung + Brand-Footer
  *  mit Sprach-Switcher und rechtlichen Links. */
-export async function SiteFooter({ locale }: { locale: string }) {
+export async function SiteFooter({ locale, showNewsletter = true }: { locale: string; showNewsletter?: boolean }) {
   const t = await getTranslations(locale as LanguageCode)
   return (
     <>
-      <Newsletter locale={locale as LanguageCode} />
+      {showNewsletter && <Newsletter locale={locale as LanguageCode} />}
       <footer className="border-t border-border mt-12">
         <div className="mx-auto w-[704px] max-w-full px-6 py-12">
           <div className="flex flex-col items-center gap-6">
