@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { X, ExternalLink } from 'lucide-react'
+import { useTranslation } from '@/lib/i18n/context'
 
 export interface MentionView {
   excerpt: string | null
@@ -22,6 +23,7 @@ function fmtDate(d: string | null): string {
 }
 
 export function MentionList({ mentions }: { mentions: MentionView[] }) {
+  const t = useTranslation()
   const [open, setOpen] = useState<MentionView | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
@@ -35,7 +37,7 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
   // nach Medium (Quelle) gruppieren
   const groups = new Map<string, MentionView[]>()
   for (const m of mentions) {
-    const src = m.sourceMedium?.trim() || 'Sonstige'
+    const src = m.sourceMedium?.trim() || t('rankings.other_source')
     if (!groups.has(src)) groups.set(src, [])
     groups.get(src)!.push(m)
   }
@@ -62,7 +64,7 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
             {src} <span className="opacity-60">({ms.length})</span>
           </button>
         ))}
-        {sorted.length === 0 && <span className="text-gray-500 text-sm">Keine Belege.</span>}
+        {sorted.length === 0 && <span className="text-gray-500 text-sm">{t('rankings.no_evidence')}</span>}
       </div>
 
       {sorted.filter(([src]) => expanded.has(src)).map(([src, ms]) => (
@@ -104,7 +106,7 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
               : <p className="text-sm text-gray-400">Kein Volltext verfügbar.</p>}
             {open.sourceUrl && (
               <a href={open.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-black underline mt-4">
-                Zum Original-Artikel <ExternalLink className="w-3.5 h-3.5" />
+                {t('rankings.to_original')} <ExternalLink className="w-3.5 h-3.5" />
               </a>
             )}
           </div>

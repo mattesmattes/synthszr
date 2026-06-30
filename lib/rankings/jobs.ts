@@ -93,7 +93,9 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
           }
           try {
             if (looksAiProductRelevant(item.title ?? '', item.content ?? '')) {
-              const res = await extractProducts(item.title ?? '', item.content ?? '')
+              // Lone-Surrogates entfernen (sonst „not valid JSON: no low surrogate" beim API-Call)
+              const clean = (s: string) => s.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')
+              const res = await extractProducts(clean(item.title ?? ''), clean(item.content ?? ''))
               if (!res.ok) throw new Error(`extract: ${res.error}`) // retrybar: Item NICHT als verarbeitet markieren
               if (res.usage) spentTokens += res.usage.inputTokens + res.usage.outputTokens
               const seen = new Set<string>()
@@ -131,7 +133,10 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
             // sind KEIN News-Problem → Job als 'error' markieren und sofort abbrechen,
             // OHNE die News-attempts zu verbrennen (sonst werden gute News fälschlich
             // dauerhaft ausgeschlossen, wie beim leeren Anthropic-Guthaben gesehen).
-            if (/credit balance|invalid_request_error|authentication|permission_error|insufficient|quota|\b401\b|\b403\b/i.test(msg)) {
+            // NUR Konto-/Auth-/Quota-Fehler sind fatal. NICHT generisch
+            // 'invalid_request_error' — das matcht auch Item-Probleme (kaputtes
+            // Unicode, zu langer Body) und würde die ganze Pipeline stoppen.
+            if (/credit balance|authentication_error|permission_error|insufficient|\bquota\b|rate_limit|\b401\b|\b403\b|\b429\b/i.test(msg)) {
               await supabase.from('ranking_jobs').update({ status: 'error', error_message: msg.slice(0, 500), last_advanced_at: new Date().toISOString() }).eq('id', j.id)
               throw new Error(`FATAL_API: ${msg.slice(0, 200)}`)
             }

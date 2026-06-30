@@ -1,5 +1,9 @@
 import Link from 'next/link'
+import { Suspense } from 'react'
 import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboard'
+import { getTranslations } from '@/lib/i18n/get-translations'
+import type { LanguageCode } from '@/lib/types'
+import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { MomentumChart } from '@/components/rankings/momentum-chart'
 import { MultiMomentumChart } from '@/components/rankings/multi-momentum-chart'
@@ -33,10 +37,13 @@ function fmtDate(d: string | null): string {
 export default async function RankingsPage({ params, searchParams }: PageProps) {
   const { lang } = await params
   const { category } = await searchParams
-  const [products, categories] = await Promise.all([
+  const [products, categories, translations] = await Promise.all([
     getRankedProducts({ limit: category ? 25 : 50, minMentions: 2, category }),
     getActiveCategories(),
+    getTranslations(lang as LanguageCode),
   ])
+  const t = (key: string) => translations[key] ?? key
+  const catName = (slug: string, fallback: string) => translations[`rankings.cat.${slug}`] ?? fallback
 
   const tabBase = `/${lang}/rankings`
   const tab = (href: string, label: string, active: boolean) => (
@@ -53,17 +60,18 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-10">
+      <Suspense fallback={null}>
+        <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
+      </Suspense>
       <header className="mb-4">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Synthszr Charts</h1>
-        <p className="text-gray-600 text-sm mt-1">
-          Welche AI-Produkte gerade den <b>Takt vorgeben</b> — täglich aus tausenden News ausgewertet.
-        </p>
+        <p className="text-gray-600 text-sm mt-1" dangerouslySetInnerHTML={{ __html: t('rankings.subtitle') }} />
       </header>
 
       {/* Kategorie-Tabs — umbrechend, damit alle Pills sichtbar sind */}
       <div className="flex flex-wrap gap-1.5 mb-4">
-        {tab(tabBase, 'Alle', !category)}
-        {categories.map((c) => tab(`${tabBase}?category=${c.slug}`, c.name, category === c.slug))}
+        {tab(tabBase, t('rankings.all'), !category)}
+        {categories.map((c) => tab(`${tabBase}?category=${c.slug}`, catName(c.slug, c.name), category === c.slug))}
       </div>
 
       {/* Vergleichs-Chart: nur bei gewählter Kategorie, Top-Produkte über der Liste */}
@@ -74,7 +82,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
       )}
 
       {products.length === 0 ? (
-        <p className="text-gray-500 text-sm">Noch keine Produkte in dieser Kategorie.</p>
+        <p className="text-gray-500 text-sm">{t('rankings.empty')}</p>
       ) : (
         <ol className="space-y-1">
           {products.map((p) => (
@@ -108,7 +116,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
       )}
 
       <footer className="mt-8 text-[11px] text-gray-400 border-t pt-3">
-        Score = Momentum (Erwähnungen, recency-gewichtet, Halbwertszeit 14 Tage). Sparkline = Verlauf 90 Tage. Nur Produkte mit ≥2 Erwähnungen. Pinne Produkte (📌) für den Vergleich.
+        {t('rankings.footer')}
       </footer>
       <PinBar lang={lang} />
     </main>

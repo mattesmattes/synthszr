@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
+import Link from 'next/link'
 import type { LanguageCode, Language } from '@/lib/types'
 import { addLocaleToPathname } from '@/lib/i18n/config'
 
@@ -104,9 +105,9 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
     return (
       <div className="flex justify-center items-baseline gap-4 mb-6">
         <span className={`${linkStyle} opacity-50`}>Switch Language</span>
-        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-center">
+        <Link href={currentLocale === 'de' ? '/' : `/${currentLocale}`} aria-label="Home" className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-center">
           <Image src="/oh-so-icon.svg" alt="OH-SO" width={32} height={32} />
-        </div>
+        </Link>
         <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
           Search
         </button>

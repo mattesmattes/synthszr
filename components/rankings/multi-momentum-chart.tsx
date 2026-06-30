@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslation } from '@/lib/i18n/context'
 import { VendorAvatar } from './vendor-avatar'
 
 interface Series {
@@ -20,6 +21,7 @@ function fmtShort(t: number): string {
 
 export function MultiMomentumChart({ series, lang }: { series: Series[]; lang: string }) {
   const router = useRouter()
+  const t = useTranslation()
   const [days, setDays] = useState(90)
   const [hover, setHover] = useState<number | null>(null)
 
@@ -41,7 +43,7 @@ export function MultiMomentumChart({ series, lang }: { series: Series[]; lang: s
   return (
     <div className="rounded-xl border border-gray-200 p-3">
       <div className="flex justify-between items-center mb-2">
-        <span className="text-xs uppercase tracking-wide text-gray-500">Momentum-Verlauf</span>
+        <span className="text-xs uppercase tracking-wide text-gray-500">{t('rankings.momentum_history')}</span>
         <div className="flex gap-1">
           {RANGES.map((d) => (
             <button
@@ -49,7 +51,7 @@ export function MultiMomentumChart({ series, lang }: { series: Series[]; lang: s
               onClick={() => setDays(d)}
               className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors ${days === d ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'}`}
             >
-              {d} Tage
+              {d} {t('rankings.days')}
             </button>
           ))}
         </div>

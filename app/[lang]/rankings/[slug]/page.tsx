@@ -1,6 +1,10 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getProductDetail } from '@/lib/rankings/product-detail'
+import { Suspense } from 'react'
+import { getTranslations } from '@/lib/i18n/get-translations'
+import type { LanguageCode } from '@/lib/types'
+import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
 import { getVendorSynthesis } from '@/lib/rankings/vendor-synthesis'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { SingleMomentumChart } from '@/components/rankings/single-momentum-chart'
@@ -44,16 +48,20 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const { lang, slug } = await params
   const p = await getProductDetail(slug)
   if (!p) notFound()
-  const vendorSyn = await getVendorSynthesis(p.vendor)
+  const [vendorSyn, translations] = await Promise.all([getVendorSynthesis(p.vendor), getTranslations(lang as LanguageCode)])
+  const t = (key: string) => translations[key] ?? key
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-10">
+      <Suspense fallback={null}>
+        <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
+      </Suspense>
       <nav className="flex items-center gap-1.5 text-sm text-gray-500 mb-4 flex-wrap">
-        <Link href={`/${lang}/rankings`} className="hover:text-black">Alle Rankings</Link>
+        <Link href={`/${lang}/rankings`} className="hover:text-black">{t('rankings.breadcrumb_all')}</Link>
         {p.category && (
           <>
             <span className="text-gray-300">›</span>
-            <Link href={`/${lang}/rankings?category=${p.category.slug}`} className="hover:text-black">{p.category.name}</Link>
+            <Link href={`/${lang}/rankings?category=${p.category.slug}`} className="hover:text-black">{translations[`rankings.cat.${p.category.slug}`] ?? p.category.name}</Link>
           </>
         )}
         <span className="text-gray-300">›</span>
@@ -79,7 +87,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
           <PinButton slug={p.slug} />
           <div className="text-right">
             <div className="text-3xl font-bold leading-none tabular-nums">{p.score ?? '—'}</div>
-            <div className="text-[10px] uppercase tracking-wide text-gray-400">Momentum</div>
+            <div className="text-[10px] uppercase tracking-wide text-gray-400">{t('rankings.momentum')}</div>
           </div>
         </div>
       </header>
@@ -108,7 +116,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
       {/* Features */}
       {p.features.length > 0 && (
         <div className="mb-8">
-          <h2 className="text-lg font-semibold mb-3">Features</h2>
+          <h2 className="text-lg font-semibold mb-3">{t('rankings.features')}</h2>
           <table className="w-full border border-gray-200 rounded-xl overflow-hidden text-sm">
             <tbody>
               {p.features.map((f, i) => (
@@ -123,13 +131,13 @@ export default async function ProductDetailPage({ params }: PageProps) {
       )}
 
       {/* Belege */}
-      <h2 className="text-lg font-semibold mb-3">Belege ({p.mentions.length})</h2>
+      <h2 className="text-lg font-semibold mb-3">{t('rankings.evidence')} ({p.mentions.length})</h2>
       <MentionList mentions={p.mentions} />
 
       {vendorSyn && <PremarketSynthesisBlock company={vendorSyn.company} synthesis={vendorSyn.synthesis} />}
 
       <footer className="mt-10 text-xs text-gray-400 border-t pt-4">
-        Score = Momentum (recency-gewichtete Erwähnungen). Specs/Beschreibung via Web-Research.
+        {t('rankings.footer_product')}
       </footer>
       <PinBar lang={lang} />
     </main>

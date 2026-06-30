@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslation } from '@/lib/i18n/context'
 
 const RANGES = [90, 30, 7]
 
@@ -10,6 +11,7 @@ function fmtShort(t: number): string {
 
 export function SingleMomentumChart({ points, height = 110 }: { points: Array<{ t: number; value: number }>; height?: number }) {
   const [days, setDays] = useState(90)
+  const t = useTranslation()
   if (!points || points.length < 2) return null
 
   const maxT = Math.max(...points.map((p) => p.t))
@@ -28,7 +30,7 @@ export function SingleMomentumChart({ points, height = 110 }: { points: Array<{ 
   return (
     <div>
       <div className="flex justify-between items-center mb-1">
-        <span className="text-xs uppercase tracking-wide text-gray-500">Momentum-Verlauf</span>
+        <span className="text-xs uppercase tracking-wide text-gray-500">{t('rankings.momentum_history')}</span>
         <div className="flex gap-1">
           {RANGES.map((d) => (
             <button
@@ -36,7 +38,7 @@ export function SingleMomentumChart({ points, height = 110 }: { points: Array<{ 
               onClick={() => setDays(d)}
               className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors ${days === d ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'}`}
             >
-              {d} Tage
+              {d} {t('rankings.days')}
             </button>
           ))}
         </div>
