@@ -14,6 +14,7 @@ export interface ProductLinkEntry {
   slug: string
   score: number
   spark: number[]
+  trend: 'up' | 'down' | 'flat' // aus der Erwähnungs-Rate (Datenschicht), nicht aus spark
 }
 
 export type ProductLinkData = Map<string, ProductLinkEntry> // key: displayName.toLowerCase()
@@ -23,24 +24,11 @@ function localeFrom(): string {
   return LOCALES.includes(parts[1]) ? parts[1] : 'de'
 }
 
-/** Aktueller Trend: letzter Momentum-Wert vs. ~7 Tage davor (nicht erste vs.
- *  zweite Hälfte — die wäre während des Backfills immer "up", weil der Verlauf
- *  dann monoton von 0 hochläuft). */
-function sparkTrend(spark: number[]): 'up' | 'down' | 'flat' {
-  if (!spark || spark.length < 8) return 'flat'
-  const last = spark[spark.length - 1]
-  const ref = spark[spark.length - 8] // ~7 Tage davor
-  if (ref < 0.01) return last > 0.05 ? 'up' : 'flat'
-  if (last > ref * 1.08) return 'up'
-  if (last < ref * 0.92) return 'down'
-  return 'flat'
-}
-
 const TREND_COLOR = { up: '#16a34a', down: '#dc2626', flat: '#111827' } as const
 
-/** Momentum-Pill: farbige Mini-Sparkline (Trend) + Score. */
+/** Momentum-Pill: farbige Mini-Sparkline (Trend-Farbe) + Score. */
 function buildVotePill(entry: ProductLinkEntry): HTMLElement {
-  const color = TREND_COLOR[sparkTrend(entry.spark)]
+  const color = TREND_COLOR[entry.trend ?? 'flat']
   const pill = document.createElement('span')
   pill.className = 'synthszr-product-pill'
   pill.style.cssText =

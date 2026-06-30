@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { momentumScore, toDisplayScore, momentumHistory } from '@/lib/rankings/score'
+import { momentumScore, toDisplayScore, momentumHistory, momentumTrend } from '@/lib/rankings/score'
 import { isExcludedProduct } from '@/lib/rankings/product-exclusions'
 
 export interface RankedProduct {
@@ -13,6 +13,7 @@ export interface RankedProduct {
   mentionCount: number
   lastSeen: string | null
   history: Array<{ t: number; value: number }> // Momentum-Verlauf (Sparkline)
+  trend: 'up' | 'down' | 'flat' // aus der Erwähnungs-Rate (7d vs. 7d davor)
 }
 
 /**
@@ -92,6 +93,7 @@ export async function getRankedProducts(
         vendor: p.vendor_namespace as string,
         slug: p.slug as string,
         momentum: momentumScore(dates, now),
+        trend: momentumTrend(dates, now),
         mentionCount: dates.length,
         lastSeen: dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null,
       }

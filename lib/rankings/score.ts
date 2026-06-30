@@ -24,6 +24,30 @@ export function toDisplayScore(momentum: number, maxMomentum: number): number {
 }
 
 /**
+ * Trend aus der ERWÄHNUNGS-RATE — Erwähnungen der letzten 7 Tage vs. der 7 Tage
+ * davor. Bewusst NICHT aus dem recency-gewichteten Momentum-Wert abgeleitet: der
+ * klingt ohne neue Erwähnungen exponentiell ab, weshalb fast jedes Produkt
+ * fälschlich „fallend" zeigte. Produkte ohne nennenswerte aktuelle Aktivität
+ * gelten als stagnierend, nicht als fallend.
+ */
+export function momentumTrend(mentionDates: Array<string | Date>, now: Date): 'up' | 'down' | 'flat' {
+  const day = 86_400_000
+  let recent = 0
+  let prev = 0
+  for (const d of mentionDates) {
+    const age = (now.getTime() - new Date(d).getTime()) / day
+    if (!isFinite(age) || age < 0 || age > 14) continue
+    if (age <= 7) recent++
+    else prev++
+  }
+  // Zu wenig aktuelle Aktivität (≤1 Erwähnung in 14 Tagen) → stabil, nicht fallend.
+  if (recent + prev < 2) return 'flat'
+  if (recent >= prev * 1.25) return 'up'
+  if (recent <= prev * 0.75) return 'down'
+  return 'flat'
+}
+
+/**
  * Rekonstruiert den Momentum-Verlauf aus den Mention-Daten: an `points`
  * gleichmäßigen Stützstellen über die letzten `days` Tage der Momentum-Wert,
  * wie er an diesem Stichtag gewesen wäre (nur Mentions bis dahin, recency-

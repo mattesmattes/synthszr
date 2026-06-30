@@ -39,6 +39,7 @@ export async function GET() {
             slug: p.slug,
             score: max > 0 ? Math.round((p.momentum / max) * 100) : 0,
             spark: p.history.slice(-30).map((h) => Math.round(h.value * 100) / 100),
+            trend: p.trend,
           }
         }),
       },

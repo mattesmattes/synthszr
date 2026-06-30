@@ -264,7 +264,7 @@ function injectCompanyLinksIntoHtml(
 }
 
 // ── Synthszr Charts (ersetzen die Company-Vote-Badges im Newsletter) ──
-interface ChartProductEntry { name: string; slug: string; score: number; spark: number[] }
+interface ChartProductEntry { name: string; slug: string; score: number; trend: 'up' | 'down' | 'flat' }
 
 const EMAIL_TREND = {
   up: { arrow: '↑', color: '#16a34a' },
@@ -272,21 +272,12 @@ const EMAIL_TREND = {
   flat: { arrow: '→', color: '#111827' },
 } as const
 
-/** Aktueller Trend: letzter Wert vs. ~7 Tage davor (kein SVG — email-safe). */
-function chartTrend(spark: number[]): 'up' | 'down' | 'flat' {
-  if (!spark || spark.length < 8) return 'flat'
-  const last = spark[spark.length - 1], ref = spark[spark.length - 8]
-  if (ref < 0.01) return last > 0.05 ? 'up' : 'flat'
-  if (last > ref * 1.08) return 'up'
-  if (last < ref * 0.92) return 'down'
-  return 'flat'
-}
-
-/** Chart-Produkte (Name + Slug + Score + 30-Tage-Spark) für den Newsletter. */
+/** Chart-Produkte (Name + Slug + Score + Trend) für den Newsletter. Trend kommt
+ *  aus der Erwähnungs-Rate (Datenschicht), nicht aus dem decay-behafteten spark. */
 async function getChartProducts(): Promise<ChartProductEntry[]> {
   try {
     const top = await getRankedProducts({ limit: 500, minMentions: 2 })
-    return top.map((p) => ({ name: p.canonicalName, slug: p.slug, score: p.score, spark: p.history.slice(-30).map((h) => Math.round(h.value * 100) / 100) }))
+    return top.map((p) => ({ name: p.canonicalName, slug: p.slug, score: p.score, trend: p.trend }))
   } catch {
     return []
   }
@@ -316,7 +307,7 @@ function generateChartsBadgesHtml(products: ChartProductEntry[], baseUrl: string
   const sidSuffix = sidPlaceholder ? `?sid=${sidPlaceholder}` : ''
   const items = products.map((p, idx) => {
     const prefix = idx === 0 ? '<span style="font-weight: bold; text-transform: uppercase; font-size: 13px;">Synthszr Charts:</span> ' : ', '
-    const tr = EMAIL_TREND[chartTrend(p.spark)]
+    const tr = EMAIL_TREND[p.trend ?? 'flat']
     const href = `${baseUrl}${localePath}/rankings/${p.slug}${sidSuffix}`
     return `${prefix}<a href="${href}" style="color: inherit; text-decoration: none;">${p.name}</a> <a href="${href}" style="color: ${tr.color}; font-weight: bold; font-size: 12px; text-decoration: none;">${tr.arrow}${p.score}</a>`
   }).join('')
