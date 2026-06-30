@@ -36,7 +36,7 @@ export interface ProductDetail {
 }
 
 const SENTIMENT_DIM = '__sentiment'
-const META_DIMS = new Set([SENTIMENT_DIM, '__description', '__released'])
+const META_DIMS = new Set([SENTIMENT_DIM, '__description', '__description_en', '__released'])
 
 /** Supabase typisiert den daily_repo-Join je nach FK-Erkennung als Objekt ODER
  *  Array — beide Formen auf den title herunterbrechen. */
@@ -79,7 +79,7 @@ function cleanTitle(t: string | null): string | null {
 }
 
 /** Lädt eine sichtbare Produkt-Detailansicht (Header + Belege + Rang/Score). */
-export async function getProductDetail(slug: string): Promise<ProductDetail | null> {
+export async function getProductDetail(slug: string, locale = 'de'): Promise<ProductDetail | null> {
   const supabase = createAdminClient()
 
   const { data: product, error: pErr } = await supabase
@@ -127,7 +127,10 @@ export async function getProductDetail(slug: string): Promise<ProductDetail | nu
   const sentiment = sentimentRow
     ? { label: (sentimentRow.value_text as string) ?? 'neutral', score: sentimentRow.value_numeric as number | null }
     : null
-  const description = (feats ?? []).find((f) => f.dimension_key === '__description')?.value_text as string | undefined
+  // Deutsch nur für 'de', alle anderen Sprachen → englische Beschreibung (Fallback: dt.)
+  const descDe = (feats ?? []).find((f) => f.dimension_key === '__description')?.value_text as string | undefined
+  const descEn = (feats ?? []).find((f) => f.dimension_key === '__description_en')?.value_text as string | undefined
+  const description = locale === 'de' ? descDe : (descEn ?? descDe)
   const releasedAt = (feats ?? []).find((f) => f.dimension_key === '__released')?.value_text as string | undefined
   const features = (feats ?? [])
     .filter((f) => !META_DIMS.has(f.dimension_key as string))

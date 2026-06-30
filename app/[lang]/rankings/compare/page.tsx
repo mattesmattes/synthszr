@@ -21,7 +21,7 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
   const { slugs: slugsParam } = await searchParams
   const slugs = (slugsParam ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 5)
   const [productsRaw, translations] = await Promise.all([
-    Promise.all(slugs.map((s) => getProductDetail(s))),
+    Promise.all(slugs.map((s) => getProductDetail(s, lang))),
     getTranslations(lang as LanguageCode),
   ])
   const products = productsRaw.filter((p): p is NonNullable<typeof p> => !!p)

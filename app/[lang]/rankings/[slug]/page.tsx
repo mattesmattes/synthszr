@@ -35,8 +35,8 @@ function fmtDate(d: string | null): string {
 }
 
 export async function generateMetadata({ params }: PageProps) {
-  const { slug } = await params
-  const p = await getProductDetail(slug)
+  const { lang, slug } = await params
+  const p = await getProductDetail(slug, lang)
   if (!p) return { title: 'Produkt nicht gefunden | Synthszr Rankings' }
   return {
     title: `${p.canonicalName} — Synthszr Ranking`,
@@ -46,7 +46,7 @@ export async function generateMetadata({ params }: PageProps) {
 
 export default async function ProductDetailPage({ params }: PageProps) {
   const { lang, slug } = await params
-  const p = await getProductDetail(slug)
+  const p = await getProductDetail(slug, lang)
   if (!p) notFound()
   const [vendorSyn, translations] = await Promise.all([getVendorSynthesis(p.vendor), getTranslations(lang as LanguageCode)])
   const t = (key: string) => translations[key] ?? key

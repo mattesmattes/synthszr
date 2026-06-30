@@ -4,16 +4,19 @@ import { createAdminClient } from '@/lib/supabase/admin'
 export interface ResearchedFeature { dimension: string; value: string }
 export interface ResearchResult {
   description: string | null
+  descriptionEn: string | null
   releaseDate: string | null
   features: ResearchedFeature[]
 }
 
 export const DESCRIPTION_DIM = '__description'
+export const DESCRIPTION_EN_DIM = '__description_en'
 export const RELEASED_DIM = '__released'
 
 const FeatureSchema = z.object({ dimension: z.string(), value: z.string().trim().min(1).max(200) })
 const ReportSchema = z.object({
   description: z.string().trim().max(800).optional(),
+  description_en: z.string().trim().max(800).optional(),
   release_date: z.string().trim().max(40).optional(),
   features: z.array(z.unknown()).optional(),
 })
@@ -28,7 +31,7 @@ function stripCite(s: string): string {
 /** Pure: validiert die Research-Antwort gegen die gültigen Dimensionen. */
 export function parseResearchResponse(raw: unknown, validDimensions: Set<string>): ResearchResult {
   const outer = ReportSchema.safeParse(raw)
-  if (!outer.success) return { description: null, releaseDate: null, features: [] }
+  if (!outer.success) return { description: null, descriptionEn: null, releaseDate: null, features: [] }
   const features: ResearchedFeature[] = []
   const seen = new Set<string>()
   for (const f of outer.data.features ?? []) {
@@ -40,6 +43,7 @@ export function parseResearchResponse(raw: unknown, validDimensions: Set<string>
   }
   return {
     description: outer.data.description ? stripCite(outer.data.description) || null : null,
+    descriptionEn: outer.data.description_en ? stripCite(outer.data.description_en) || null : null,
     releaseDate: outer.data.release_date?.trim() || null,
     features,
   }
@@ -51,7 +55,7 @@ export function parseResearchResponse(raw: unknown, validDimensions: Set<string>
 export async function researchProduct(
   name: string, vendor: string, categoryName: string, dimensions: string[], evidence: string,
 ): Promise<ResearchResult> {
-  if (!process.env.ANTHROPIC_API_KEY || !evidence.trim()) return { description: null, releaseDate: null, features: [] }
+  if (!process.env.ANTHROPIC_API_KEY || !evidence.trim()) return { description: null, descriptionEn: null, releaseDate: null, features: [] }
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const report = {
@@ -61,10 +65,11 @@ export async function researchProduct(
       type: 'object' as const,
       properties: {
         description: { type: 'string' },
+        description_en: { type: 'string' },
         release_date: { type: 'string' },
         features: { type: 'array', items: { type: 'object', properties: { dimension: { type: 'string' }, value: { type: 'string' } }, required: ['dimension', 'value'] } },
       },
-      required: ['description', 'features'],
+      required: ['description', 'description_en', 'features'],
     },
   }
   const dims = dimensions.map((d) => `- ${d}`).join('\n')
@@ -73,13 +78,14 @@ export async function researchProduct(
 ${evidence}
 
 Erstelle AUSSCHLIESSLICH auf Basis dieser Auszüge (erfinde NICHTS — keine Zahlen, Specs oder Eigenschaften, die nicht ausdrücklich in den Auszügen stehen):
-1. description: 2-4 nüchterne Sätze, was das Produkt laut den Auszügen ist und was es besonders macht. Kein Marketing-Sprech.
-2. release_date: nur wenn in den Auszügen genannt (z.B. "Juni 2026").
-3. features: konkrete Werte NUR für diese Dimensionen und NUR wenn in den Auszügen belegt (sonst weglassen):
+1. description: 2-4 nüchterne Sätze auf DEUTSCH, was das Produkt laut den Auszügen ist und was es besonders macht. Kein Marketing-Sprech.
+2. description_en: dieselbe Beschreibung auf ENGLISCH (gleiche Aussagen, natürliches Englisch).
+3. release_date: nur wenn in den Auszügen genannt (z.B. "Juni 2026").
+4. features: konkrete Werte NUR für diese Dimensionen und NUR wenn in den Auszügen belegt (sonst weglassen):
 ${dims}
    dimension EXAKT wie oben, value kurz + konkret.
 
-Wenn die Auszüge zu wenig hergeben, lass description leer und features weg. Lieber leer als erfunden.`
+Wenn die Auszüge zu wenig hergeben, lass description und description_en leer und features weg. Lieber leer als erfunden.`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {
@@ -92,7 +98,7 @@ Wenn die Auszüge zu wenig hergeben, lass description leer und features weg. Lie
     const block = resp.content.find((b) => b.type === 'tool_use' && b.name === 'report_research')
     return parseResearchResponse(block && 'input' in block ? block.input : null, new Set(dimensions))
   } catch {
-    return { description: null, releaseDate: null, features: [] }
+    return { description: null, descriptionEn: null, releaseDate: null, features: [] }
   } finally {
     clearTimeout(timer)
   }
@@ -122,9 +128,10 @@ export async function runProductResearch(opts: { limit?: number; minMentions?: n
 
     const { count: mc } = await supabase.from('product_mentions').select('id', { count: 'exact', head: true }).eq('product_id', m.product_id)
     if ((mc ?? 0) < minMentions) continue
-    // schon recherchiert? (description vorhanden)
+    // schon recherchiert? (englische Beschreibung vorhanden — dt. allein reicht nicht,
+    // damit bestehende Produkte mit nur dt. Beschreibung noch das en bekommen)
     const { data: existing } = await supabase.from('product_features_current')
-      .select('dimension_key').eq('product_id', m.product_id).eq('dimension_key', DESCRIPTION_DIM).maybeSingle()
+      .select('dimension_key').eq('product_id', m.product_id).eq('dimension_key', DESCRIPTION_EN_DIM).maybeSingle()
     if (existing) continue
 
     const dimensions = Array.isArray(cat.feature_dimensions) ? (cat.feature_dimensions as string[]) : []
@@ -154,6 +161,7 @@ export async function runProductResearch(opts: { limit?: number; minMentions?: n
       value_text: f.value, confidence: 0.85, evidence_count: 1, source_count: 1,
     }))
     if (res.description) rows.push({ product_id: m.product_id, category: m.category, dimension_key: DESCRIPTION_DIM, value_text: res.description, confidence: 0.85, evidence_count: 1, source_count: 1 })
+    if (res.descriptionEn) rows.push({ product_id: m.product_id, category: m.category, dimension_key: DESCRIPTION_EN_DIM, value_text: res.descriptionEn, confidence: 0.85, evidence_count: 1, source_count: 1 })
     if (res.releaseDate) rows.push({ product_id: m.product_id, category: m.category, dimension_key: RELEASED_DIM, value_text: res.releaseDate, confidence: 0.85, evidence_count: 1, source_count: 1 })
     const { error } = await supabase.from('product_features_current').upsert(rows, { onConflict: 'product_id,category,dimension_key' })
     if (error) throw new Error(`research upsert: ${error.message}`)
