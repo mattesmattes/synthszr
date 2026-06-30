@@ -323,10 +323,13 @@ function generateChartsBadgesHtml(products: ChartProductEntry[], baseUrl: string
   return `<br/><span style="display: inline-block; margin-top: 8px;">${items}</span>`
 }
 
-/** Produkt-Links im Absatz-HTML (zu /rankings/{slug}), je Produkt einmal, außerhalb von <a>. */
+/** Produkt-Links im Absatz-HTML (zu /rankings/{slug}), je Produkt einmal, außerhalb von <a>.
+ *  Sammelt pro Text-Segment alle Treffer (kein Overlap) und ersetzt EINMAL — verhindert,
+ *  dass ein kurzer Name in einen bereits eingefügten <a href>-Wert hineinmatcht. */
 function injectProductLinksIntoHtml(paraHtml: string, products: ChartProductEntry[], baseUrl: string, locale?: string, sidPlaceholder?: string): string {
   if (products.length === 0) return paraHtml
   const localePath = locale && locale !== 'de' ? `/${locale}` : ''
+  const sidSuffix = sidPlaceholder ? `?sid=${sidPlaceholder}` : ''
   const sorted = [...products].sort((a, b) => b.name.length - a.name.length)
   const linked = new Set<string>()
   const parts = paraHtml.split(/(<[^>]+>)/g)
@@ -335,17 +338,32 @@ function injectProductLinksIntoHtml(paraHtml: string, products: ChartProductEntr
     if (/^<a[\s>]/i.test(part)) { insideAnchor = true; return part }
     if (/^<\/a>/i.test(part)) { insideAnchor = false; return part }
     if (part.startsWith('<') || insideAnchor) return part
-    let text = part
+
+    const text = part
+    const matches: Array<{ start: number; end: number; slug: string }> = []
     for (const p of sorted) {
       if (linked.has(p.slug)) continue
       const escaped = p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      text = text.replace(new RegExp(`\\b${escaped}\\b`, 'i'), (match) => {
-        linked.add(p.slug)
-        const sidSuffix = sidPlaceholder ? `?sid=${sidPlaceholder}` : ''
-        return `<a href="${baseUrl}${localePath}/rankings/${p.slug}${sidSuffix}" style="color: inherit; text-decoration: underline;">${match}</a>`
-      })
+      const m = new RegExp(`\\b${escaped}\\b`, 'i').exec(text)
+      if (!m) continue
+      const overlap = matches.some((x) => x.start < m.index + m[0].length && x.end > m.index)
+      if (overlap) continue
+      matches.push({ start: m.index, end: m.index + m[0].length, slug: p.slug })
     }
-    return text
+    if (matches.length === 0) return text
+
+    matches.sort((a, b) => a.start - b.start)
+    let out = ''
+    let last = 0
+    for (const mt of matches) {
+      if (mt.start < last) continue
+      linked.add(mt.slug)
+      out += text.slice(last, mt.start)
+      out += `<a href="${baseUrl}${localePath}/rankings/${mt.slug}${sidSuffix}" style="color: inherit; text-decoration: underline;">${text.slice(mt.start, mt.end)}</a>`
+      last = mt.end
+    }
+    out += text.slice(last)
+    return out
   }).join('')
 }
 
