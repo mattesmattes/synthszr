@@ -55,28 +55,22 @@ const DEFAULT_SCHEDULE: ScheduleConfig = {
 
 // Helper to check if current time matches a schedule (within 10 min window)
 function isTimeMatch(hour: number, minute: number, currentHour: number, currentMinute: number): boolean {
-  // Check if we're within the 10-minute window starting at the scheduled time
-  if (hour === currentHour) {
-    return currentMinute >= minute && currentMinute < minute + 10
-  }
-  return false
+  // Catch-up statt 10-Min-Fenster: geplante Zeit heute erreicht/überschritten.
+  // Kombiniert mit hasRunToday läuft die Task einmal täglich beim ersten Tick
+  // nach der Zeit — robust gegen Vercel-Cron-Drift (das frühere Fenster verpasste
+  // gedriftete Ticks und übersprang die Task lautlos für den ganzen Tag).
+  return currentHour > hour || (currentHour === hour && currentMinute >= minute)
 }
 
-// Helper to check if we already ran this task today/this hour
-async function hasRunRecently(supabase: ReturnType<typeof createAdminClient>, taskKey: string, withinMinutes: number): Promise<boolean> {
-  const { data } = await supabase
-    .from('settings')
-    .select('value')
-    .eq('key', `last_run_${taskKey}`)
-    .single()
-
+/** Lief die Task heute schon (Berlin-Datum)? Verhindert Mehrfachläufe, obwohl
+ *  isTimeMatch nach der geplanten Zeit ganztägig true bleibt. */
+async function hasRunToday(supabase: ReturnType<typeof createAdminClient>, taskKey: string): Promise<boolean> {
+  const { data } = await supabase.from('settings').select('value').eq('key', `last_run_${taskKey}`).single()
   if (!data?.value?.timestamp) return false
-
-  const lastRun = new Date(data.value.timestamp)
-  const now = new Date()
-  const diffMinutes = (now.getTime() - lastRun.getTime()) / (1000 * 60)
-
-  return diffMinutes < withinMinutes
+  const tz = 'Europe/Berlin'
+  const lastRunDay = new Date(data.value.timestamp).toLocaleDateString('en-CA', { timeZone: tz })
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: tz })
+  return lastRunDay === today
 }
 
 async function markTaskRun(supabase: ReturnType<typeof createAdminClient>, taskKey: string) {
@@ -142,7 +136,7 @@ export async function GET(request: NextRequest) {
     const fetchHour = config.newsletterFetch.hour ?? config.newsletterFetch.hours?.[0] ?? 4
     const fetchMinute = config.newsletterFetch.minute ?? 0
     const shouldRun = runAll || isTimeMatch(fetchHour, fetchMinute, currentHour, currentMinute)
-    const recentlyRan = !forceRun && await hasRunRecently(supabase, 'newsletter_fetch', 60)
+    const recentlyRan = !forceRun && await hasRunToday(supabase, 'newsletter_fetch')
     if (shouldRun && !recentlyRan) {
       console.log('[Scheduler] Running newsletter fetch...')
       try {
@@ -166,7 +160,7 @@ export async function GET(request: NextRequest) {
   // WebCrawl Fetch
   if (config.webcrawlFetch.enabled) {
     const shouldRun = runAll || isTimeMatch(config.webcrawlFetch.hour, config.webcrawlFetch.minute, currentHour, currentMinute)
-    const recentlyRan = !forceRun && await hasRunRecently(supabase, 'webcrawl_fetch', 60)
+    const recentlyRan = !forceRun && await hasRunToday(supabase, 'webcrawl_fetch')
     if (shouldRun && !recentlyRan) {
       console.log('[Scheduler] Running webcrawl fetch...')
       try {
@@ -187,7 +181,7 @@ export async function GET(request: NextRequest) {
   // Daily Analysis + News-Synthese
   if (config.dailyAnalysis.enabled) {
     const shouldRun = runAll || isTimeMatch(config.dailyAnalysis.hour, config.dailyAnalysis.minute, currentHour, currentMinute)
-    const recentlyRan = !forceRun && await hasRunRecently(supabase, 'daily_analysis', 60)
+    const recentlyRan = !forceRun && await hasRunToday(supabase, 'daily_analysis')
     if (shouldRun && !recentlyRan) {
       console.log('[Scheduler] Triggering daily analysis and synthesis...')
       try {
@@ -208,7 +202,7 @@ export async function GET(request: NextRequest) {
   // Post Generation (requires daily analysis)
   if (config.postGeneration.enabled) {
     const shouldRun = runAll || isTimeMatch(config.postGeneration.hour, config.postGeneration.minute, currentHour, currentMinute)
-    const recentlyRan = !forceRun && await hasRunRecently(supabase, 'post_generation', 60)
+    const recentlyRan = !forceRun && await hasRunToday(supabase, 'post_generation')
     const analysisOk = ['completed', 'already_ran'].includes(results.dailyAnalysis || '')
     if (shouldRun && !recentlyRan) {
       if (!analysisOk && config.dailyAnalysis.enabled) {
@@ -291,7 +285,7 @@ export async function GET(request: NextRequest) {
   // Newsletter Send
   if (config.newsletterSend?.enabled) {
     const shouldRunSend = runAll || isTimeMatch(config.newsletterSend.hour, config.newsletterSend.minute, currentHour, currentMinute)
-    const sendRecentlyRan = !forceRun && await hasRunRecently(supabase, 'newsletter_send', 60)
+    const sendRecentlyRan = !forceRun && await hasRunToday(supabase, 'newsletter_send')
 
     if (shouldRunSend && !sendRecentlyRan) {
       console.log('[Scheduler] Triggering newsletter send...')
