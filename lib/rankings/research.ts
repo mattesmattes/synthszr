@@ -123,60 +123,63 @@ STRIKT — KEIN SPEKULIEREN:
   }
 }
 
+const META_DIMS = new Set<string>(['__sentiment', DESCRIPTION_DIM, DESCRIPTION_EN_DIM, RELEASED_DIM])
+
 /** Recherchiert sichtbare, kategorisierte Produkte (Top nach Mentions) und schreibt
- *  Beschreibung/Release/Specs nach product_features_current (source research). */
-export async function runProductResearch(opts: { limit?: number; minMentions?: number; force?: boolean } = {}): Promise<{ researched: number }> {
-  const { limit = 60, minMentions = 2, force = false } = opts
+ *  Beschreibung/Release/Specs nach product_features_current (source research).
+ *  `concurrency` > 1 verarbeitet Produkte parallel (Web-Research ist I/O-gebunden) —
+ *  default 1 hält das Cron-Verhalten unverändert. `onProgress` für Fortschritt. */
+export async function runProductResearch(
+  opts: { limit?: number; minMentions?: number; force?: boolean; concurrency?: number; onProgress?: (researched: number, attempted: number) => void } = {},
+): Promise<{ researched: number }> {
+  const { limit = 60, minMentions = 2, force = false, concurrency = 1, onProgress } = opts
   const supabase = createAdminClient()
 
   const { data: cats } = await supabase.from('product_categories').select('slug, name, feature_dimensions')
   const catBySlug = new Map((cats ?? []).map((c) => [c.slug as string, c]))
 
-  const { data: memberships } = await supabase
-    .from('product_category_membership')
-    .select('product_id, category, products:product_id(canonical_name, vendor_namespace, visibility_status)')
-    .eq('is_primary', true)
+  // Memberships paginiert laden — PostgREST cappt sonst still bei 1000 Zeilen.
+  type Membership = { product_id: string; category: string; products: unknown }
+  const memberships: Membership[] = []
+  for (let off = 0; ; off += 1000) {
+    const { data } = await supabase
+      .from('product_category_membership')
+      .select('product_id, category, products:product_id(canonical_name, vendor_namespace, visibility_status)')
+      .eq('is_primary', true).range(off, off + 999)
+    if (!data?.length) break
+    memberships.push(...(data as Membership[]))
+    if (data.length < 1000) break
+  }
 
-  let researched = 0
-  for (const m of memberships ?? []) {
-    if (researched >= limit) break
+  /** Recherchiert + schreibt EIN Produkt. Rückgabe: true bei geschriebenem Ergebnis. */
+  const researchOne = async (m: Membership): Promise<boolean> => {
     const prod = Array.isArray(m.products) ? m.products[0] : m.products
-    if (!prod || (prod as { visibility_status?: string }).visibility_status !== 'visible') continue
-    const cat = catBySlug.get(m.category as string)
-    if (!cat) continue
+    if (!prod || (prod as { visibility_status?: string }).visibility_status !== 'visible') return false
+    const cat = catBySlug.get(m.category)
+    if (!cat) return false
 
     const { count: mc } = await supabase.from('product_mentions').select('id', { count: 'exact', head: true }).eq('product_id', m.product_id)
-    if ((mc ?? 0) < minMentions) continue
+    if ((mc ?? 0) < minMentions) return false
     // schon mit echten FEATURES recherchiert? Nur dann skippen — Produkte mit bloßer
     // Beschreibung (ohne Feature-Tabelle) sollen die Web-Research nachträglich bekommen.
-    const META_DIMS = new Set<string>(['__sentiment', DESCRIPTION_DIM, DESCRIPTION_EN_DIM, RELEASED_DIM])
     if (!force) {
       const { data: existing } = await supabase.from('product_features_current')
         .select('dimension_key').eq('product_id', m.product_id)
-      if ((existing ?? []).some((f) => !META_DIMS.has(f.dimension_key as string))) continue
+      if ((existing ?? []).some((f) => !META_DIMS.has(f.dimension_key as string))) return false
     }
 
     const dimensions = Array.isArray(cat.feature_dimensions) ? (cat.feature_dimensions as string[]) : []
     // News-Auszüge als zusätzlicher Beleg (die eigentliche Quelle ist die Web-Suche)
     const { data: ments } = await supabase
-      .from('product_mentions')
-      .select('excerpt')
-      .eq('product_id', m.product_id)
-      .not('excerpt', 'is', null)
-      .order('mention_date', { ascending: false })
-      .limit(25)
+      .from('product_mentions').select('excerpt').eq('product_id', m.product_id)
+      .not('excerpt', 'is', null).order('mention_date', { ascending: false }).limit(25)
     const evidence = (ments ?? [])
-      .map((x) => (x.excerpt as string)?.trim())
-      .filter(Boolean)
-      .map((e) => `- ${e}`)
-      .join('\n')
-      .slice(0, 8000)
-    // evidence optional: die Web-Suche ist die Hauptquelle, Belege nur Kontext.
+      .map((x) => (x.excerpt as string)?.trim()).filter(Boolean).map((e) => `- ${e}`).join('\n').slice(0, 8000)
     const res = await researchProduct(
       (prod as { canonical_name: string }).canonical_name, (prod as { vendor_namespace: string }).vendor_namespace,
       cat.name as string, dimensions, evidence,
     )
-    if (!res.description && res.features.length === 0) continue
+    if (!res.description && res.features.length === 0) return false
 
     const rows: Array<Record<string, unknown>> = res.features.map((f) => ({
       product_id: m.product_id, category: m.category, dimension_key: f.dimension,
@@ -193,7 +196,26 @@ export async function runProductResearch(opts: { limit?: number; minMentions?: n
     }
     const { error } = await supabase.from('product_features_current').upsert(rows, { onConflict: 'product_id,category,dimension_key' })
     if (error) throw new Error(`research upsert: ${error.message}`)
-    researched++
+    return true
   }
+
+  // Bounded-Concurrency-Pool: Worker ziehen Kandidaten bis `limit` Erfolge oder erschöpft.
+  let researched = 0
+  let attempted = 0
+  let idx = 0
+  const worker = async () => {
+    while (researched < limit && idx < memberships.length) {
+      const my = idx++
+      attempted++
+      try {
+        if (await researchOne(memberships[my])) researched++
+      } catch (e) {
+        // Einzelne Fehler (z.B. transienter Upsert) dürfen den Batch nicht abbrechen.
+        console.error(`[research] Produkt ${memberships[my].product_id}:`, e instanceof Error ? e.message : e)
+      }
+      onProgress?.(researched, attempted)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.max(1, concurrency) }, () => worker()))
   return { researched }
 }
