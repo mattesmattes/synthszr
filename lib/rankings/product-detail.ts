@@ -36,7 +36,7 @@ export interface ProductDetail {
 }
 
 const SENTIMENT_DIM = '__sentiment'
-const META_DIMS = new Set([SENTIMENT_DIM, '__description', '__description_en', '__released'])
+const META_DIMS = new Set([SENTIMENT_DIM, '__description', '__description_en', '__released', '__researched_at'])
 
 /** Supabase typisiert den daily_repo-Join je nach FK-Erkennung als Objekt ODER
  *  Array — beide Formen auf den title herunterbrechen. */

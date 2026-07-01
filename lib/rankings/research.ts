@@ -12,6 +12,9 @@ export interface ResearchResult {
 export const DESCRIPTION_DIM = '__description'
 export const DESCRIPTION_EN_DIM = '__description_en'
 export const RELEASED_DIM = '__released'
+/** Marker: Produkt wurde per Web-Research angefragt (auch bei Leer-Ergebnis). Verhindert,
+ *  dass der tägliche Cron dieselben Produkte ohne auffindbare Web-Daten endlos neu anfragt. */
+export const RESEARCHED_AT_DIM = '__researched_at'
 
 const FeatureSchema = z.object({ dimension: z.string(), value: z.string().trim().min(1).max(200), source_url: z.string().trim().optional() })
 const ReportSchema = z.object({
@@ -123,7 +126,7 @@ STRIKT — KEIN SPEKULIEREN:
   }
 }
 
-const META_DIMS = new Set<string>(['__sentiment', DESCRIPTION_DIM, DESCRIPTION_EN_DIM, RELEASED_DIM])
+const META_DIMS = new Set<string>(['__sentiment', DESCRIPTION_DIM, DESCRIPTION_EN_DIM, RELEASED_DIM, RESEARCHED_AT_DIM])
 
 /** Recherchiert sichtbare, kategorisierte Produkte (Top nach Mentions) und schreibt
  *  Beschreibung/Release/Specs nach product_features_current (source research).
@@ -163,9 +166,12 @@ export async function runProductResearch(
     // schon mit echten FEATURES recherchiert? Nur dann skippen — Produkte mit bloßer
     // Beschreibung (ohne Feature-Tabelle) sollen die Web-Research nachträglich bekommen.
     if (!force) {
+      // Skip, wenn schon echte Features vorhanden ODER bereits angefragt (Marker) —
+      // verhindert tägliches Neu-Anfragen von Produkten ohne auffindbare Web-Daten.
       const { data: existing } = await supabase.from('product_features_current')
         .select('dimension_key').eq('product_id', m.product_id)
-      if ((existing ?? []).some((f) => !META_DIMS.has(f.dimension_key as string))) return false
+      const keys = (existing ?? []).map((f) => f.dimension_key as string)
+      if (keys.some((k) => !META_DIMS.has(k)) || keys.includes(RESEARCHED_AT_DIM)) return false
     }
 
     const dimensions = Array.isArray(cat.feature_dimensions) ? (cat.feature_dimensions as string[]) : []
@@ -179,7 +185,6 @@ export async function runProductResearch(
       (prod as { canonical_name: string }).canonical_name, (prod as { vendor_namespace: string }).vendor_namespace,
       cat.name as string, dimensions, evidence,
     )
-    if (!res.description && res.features.length === 0) return false
 
     const rows: Array<Record<string, unknown>> = res.features.map((f) => ({
       product_id: m.product_id, category: m.category, dimension_key: f.dimension,
@@ -188,6 +193,9 @@ export async function runProductResearch(
     if (res.description) rows.push({ product_id: m.product_id, category: m.category, dimension_key: DESCRIPTION_DIM, value_text: res.description, confidence: 0.85, evidence_count: 1, source_count: 1 })
     if (res.descriptionEn) rows.push({ product_id: m.product_id, category: m.category, dimension_key: DESCRIPTION_EN_DIM, value_text: res.descriptionEn, confidence: 0.85, evidence_count: 1, source_count: 1 })
     if (res.releaseDate) rows.push({ product_id: m.product_id, category: m.category, dimension_key: RELEASED_DIM, value_text: res.releaseDate, confidence: 0.85, evidence_count: 1, source_count: 1 })
+    // Marker IMMER schreiben (auch bei Leer-Ergebnis) → force=false fragt dieses Produkt
+    // nicht erneut an (keine täglichen Retry-Kosten für Produkte ohne Web-Daten).
+    rows.push({ product_id: m.product_id, category: m.category, dimension_key: RESEARCHED_AT_DIM, value_text: new Date().toISOString(), confidence: 1, evidence_count: 0, source_count: 0 })
     // Force: alte Dimensionswerte entfernen, damit nach einer Dimensions-Umstellung
     // keine verwaisten Features (nicht mehr in feature_dimensions) übrig bleiben.
     if (force) {
@@ -196,7 +204,7 @@ export async function runProductResearch(
     }
     const { error } = await supabase.from('product_features_current').upsert(rows, { onConflict: 'product_id,category,dimension_key' })
     if (error) throw new Error(`research upsert: ${error.message}`)
-    return true
+    return res.features.length > 0 || !!res.description
   }
 
   // Bounded-Concurrency-Pool: Worker ziehen Kandidaten bis `limit` Erfolge oder erschöpft.
