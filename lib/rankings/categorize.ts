@@ -5,6 +5,9 @@ export interface CategorizableProduct {
   id: string
   name: string
   vendor: string
+  /** Repräsentativer Mention-Excerpt — beschreibt, WAS das Produkt tut. Entscheidend,
+   *  weil das Klassifikationsmodell viele 2026er-Produkte nicht aus dem Namen kennt. */
+  context?: string
 }
 export interface CategoryDef {
   slug: string
@@ -19,14 +22,15 @@ const LLM_TIMEOUT_MS = 50_000
 /** Pure: baut den Klassifikations-Prompt (nummerierte Produkte, gültige Kategorien). */
 export function buildCategorizePrompt(products: CategorizableProduct[], categories: CategoryDef[]): string {
   const cats = categories.map((c) => `- ${c.slug}: ${c.name}${c.description ? ` — ${c.description}` : ''}`).join('\n')
-  const items = products.map((p, i) => `${i}. ${p.name} (${p.vendor})`).join('\n')
+  const items = products.map((p, i) => `${i}. ${p.name} (${p.vendor})${p.context ? ` — ${p.context}` : ''}`).join('\n')
   return `Ordne jedem AI-Produkt GENAU EINE primäre Kategorie zu.
 
 KATEGORIEN (nutze exakt den slug links):
 ${cats}
 
 REGELN:
-- Wähle die treffendste Kategorie per slug. Wenn nichts klar passt: "other".
+- Der Text nach dem "—" beim Produkt beschreibt, was es tut. Richte dich danach, nicht nur nach dem Namen.
+- Wähle die treffendste Kategorie per slug. Wenn wirklich nichts passt: "other".
 - Sprachmodelle/LLMs: proprietäre Top-Modelle (GPT, Claude Opus, Gemini Pro) → frontier-llms; offene Gewichte (Llama, Gemma, DeepSeek, Qwen) → open-source-llms; Reasoning/Thinking (o-Serie, R1, Thinking) → reasoning-models; klein/Edge (Phi, Nano) → small-language-models; multimodal (Omni, Vision, 4o) → multimodal-models.
 - Antworte für JEDES Produkt mit seinem Index.
 
@@ -142,7 +146,15 @@ export async function runCategorization(batchSize = 25): Promise<{ categorized: 
   let categorized = 0
   for (let i = 0; i < todo.length; i += batchSize) {
     const batch = todo.slice(i, i + batchSize)
-    const assignments = await classifyProducts(batch, cats)
+    // Repräsentativen Excerpt je Produkt als Kontext anhängen (parallel, 1 pro Produkt).
+    const withCtx = await Promise.all(batch.map(async (b) => {
+      const { data } = await supabase
+        .from('product_mentions').select('excerpt')
+        .eq('product_id', b.id).not('excerpt', 'is', null).limit(1)
+      const ex = data?.[0]?.excerpt as string | undefined
+      return { ...b, context: ex ? ex.trim().slice(0, 220) : undefined }
+    }))
+    const assignments = await classifyProducts(withCtx, cats)
     const rows = [...assignments].map(([product_id, category]) => ({ product_id, category, is_primary: true }))
     if (rows.length) {
       const { error } = await supabase
