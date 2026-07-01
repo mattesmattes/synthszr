@@ -94,7 +94,7 @@ export default async function WhyPage({ params }: PageProps) {
           </div>
         </article>
 
-        <AdPromo />
+        <AdPromo locale={locale} />
         <Newsletter locale={locale} />
       </main>
 

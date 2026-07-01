@@ -254,7 +254,7 @@ export default async function Page({ params }: PageProps) {
               appleEpisodeUrl={appleEpisodeUrl}
             />
 
-            <AdPromo />
+            <AdPromo locale={lang} />
 
             {/* Last 7 Days Headlines */}
             {recentPosts.length > 0 && (

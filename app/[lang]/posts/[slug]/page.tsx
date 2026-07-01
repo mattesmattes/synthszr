@@ -469,7 +469,7 @@ export default async function PostPage({ params }: PageProps) {
           </div>
         </nav>
 
-        <AdPromo />
+        <AdPromo locale={locale} />
         <Newsletter locale={locale} />
       </main>
 
