@@ -75,6 +75,18 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
       {label}
     </Link>
   )
+  // Ebene-2-Pills: visuell untergeordnet (kleiner, weiß auf grauem Panel).
+  const subtab = (href: string, label: string, active: boolean) => (
+    <Link
+      key={href}
+      href={href}
+      className={`px-2 py-0.5 rounded-full text-[11px] whitespace-nowrap border transition-colors ${
+        active ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-gray-600 hover:border-black'
+      }`}
+    >
+      {label}
+    </Link>
+  )
 
   return (
     <>
@@ -87,22 +99,27 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         <p className="text-gray-600 text-sm mt-1" dangerouslySetInnerHTML={{ __html: t('rankings.subtitle') }} />
       </header>
 
-      {/* Zwei-Ebenen-Navigation: Meta-Gruppen (Ebene 1) → Unterkategorien (Ebene 2) */}
-      <div className="mb-4">
-        <nav className="flex flex-wrap gap-1.5">
-          {tab(tabBase, t('rankings.all'), !category && !activeGroupSlug)}
-          {CATEGORY_GROUPS.map((g) => tab(`${tabBase}?group=${g.slug}`, groupName(g), activeGroupSlug === g.slug))}
-          {tab(`${tabBase}?category=other`, catName('other', 'Sonstige'), category === 'other')}
-        </nav>
-        {activeGroup && (
-          <nav className="flex flex-wrap gap-1.5 mt-2 pl-3 border-l-2 border-gray-200">
-            {tab(`${tabBase}?group=${activeGroup.slug}`, t('rankings.all'), !category)}
+      {/* Ebene 1: Meta-Gruppen — die primäre Navigation */}
+      <nav className="flex flex-wrap gap-1.5 mb-4">
+        {tab(tabBase, t('rankings.all'), !category && !activeGroupSlug)}
+        {CATEGORY_GROUPS.map((g) => tab(`${tabBase}?group=${g.slug}`, groupName(g), activeGroupSlug === g.slug))}
+        {tab(`${tabBase}?category=other`, catName('other', 'Sonstige'), category === 'other')}
+      </nav>
+
+      {/* Ebene 2: Unterkategorien der aktiven Gruppe — in eigenem Panel, klar abgesetzt */}
+      {activeGroup && (
+        <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5">
+          <div className="text-[10px] font-medium uppercase tracking-wider text-gray-400 mb-2">
+            {groupName(activeGroup)}
+          </div>
+          <nav className="flex flex-wrap gap-1.5">
+            {subtab(`${tabBase}?group=${activeGroup.slug}`, t('rankings.all'), !category)}
             {activeGroup.categories.map((slug) =>
-              tab(`${tabBase}?category=${slug}`, catName(slug, nameBySlug.get(slug) ?? slug), category === slug),
+              subtab(`${tabBase}?category=${slug}`, catName(slug, nameBySlug.get(slug) ?? slug), category === slug),
             )}
           </nav>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Vergleichs-Chart: bei gewählter Kategorie ODER Gruppe, Top-Produkte über der Liste */}
       {(category || activeGroup) && products.length > 0 && (
