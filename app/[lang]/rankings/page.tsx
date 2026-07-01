@@ -96,16 +96,15 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         {gtab(`${tabBase}?category=other`, catName('other', 'Sonstige'), category === 'other')}
       </nav>
 
-      {/* Ebene 2: Unterkategorien der aktiven Gruppe — kleine Text-Links, Mittelpunkt-getrennt */}
+      {/* Ebene 2: Unterkategorien der aktiven Gruppe — kleine Text-Links, Mittelpunkt-getrennt.
+          Kein „Alle": die aktive Gruppe in Ebene 1 ist bereits „alles in dieser Gruppe". */}
       {activeGroup && (
         <div className="mb-5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 border-t border-gray-100 pt-2.5">
-          {[{ href: `${tabBase}?group=${activeGroup.slug}`, label: t('rankings.all'), active: !category },
-            ...activeGroup.categories.map((slug) => ({ href: `${tabBase}?category=${slug}`, label: catName(slug, nameBySlug.get(slug) ?? slug), active: category === slug })),
-          ].map((it, i) => (
-            <span key={it.href} className="flex items-center gap-x-2.5">
+          {activeGroup.categories.map((slug, i) => (
+            <span key={slug} className="flex items-center gap-x-2.5">
               {i > 0 && <span className="text-gray-300 select-none">·</span>}
-              <Link href={it.href} className={`text-xs whitespace-nowrap transition-colors ${it.active ? 'text-black font-medium' : 'text-gray-500 hover:text-black'}`}>
-                {it.label}
+              <Link href={`${tabBase}?category=${slug}`} className={`text-xs whitespace-nowrap transition-colors ${category === slug ? 'text-black font-medium' : 'text-gray-500 hover:text-black'}`}>
+                {catName(slug, nameBySlug.get(slug) ?? slug)}
               </Link>
             </span>
           ))}
