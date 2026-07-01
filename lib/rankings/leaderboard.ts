@@ -28,20 +28,27 @@ export async function getRankedProducts(
   const { limit, category, categoryIn, minMentions = 1 } = opts
   const supabase = createAdminClient()
 
-  let q = supabase
-    .from('product_metrics')
-    .select('momentum, trend, mention_count, last_seen, history, products!inner(id, canonical_name, vendor_namespace, slug)')
-    .eq('chartable', true)
-    .gte('mention_count', Math.max(1, minMentions))
-    .order('momentum', { ascending: false })
-  // Einzel-Kategorie hat Vorrang; sonst optional eine Meta-Gruppe (mehrere Kategorien).
-  if (category) q = q.eq('primary_category', category)
-  else if (categoryIn && categoryIn.length) q = q.in('primary_category', categoryIn)
-  q = q.limit(limit ?? 1000)
-
-  const { data, error } = await q
-  if (error) throw new Error(`leaderboard: ${error.message}`)
-  const rows = data ?? []
+  // Paginiert laden — PostgREST cappt eine einzelne Antwort bei 1000 Zeilen, egal was
+  // `limit` sagt. Ohne Pagination fehlen Produkte jenseits Rang 1000 → falsche
+  // Kategorie-Ränge in der Pill-/Blog-Verlinkung (Leaderboard≠Produktseite).
+  const target = limit ?? 1000
+  const rows: Array<Record<string, unknown>> = []
+  for (let off = 0; off < target; off += 1000) {
+    let q = supabase
+      .from('product_metrics')
+      .select('momentum, trend, mention_count, last_seen, history, products!inner(id, canonical_name, vendor_namespace, slug)')
+      .eq('chartable', true)
+      .gte('mention_count', Math.max(1, minMentions))
+      .order('momentum', { ascending: false })
+      .order('product_id', { ascending: true }) // stabiler Tiebreaker für konsistente Pagination
+    if (category) q = q.eq('primary_category', category)
+    else if (categoryIn && categoryIn.length) q = q.in('primary_category', categoryIn)
+    const { data, error } = await q.range(off, Math.min(off + 1000, target) - 1)
+    if (error) throw new Error(`leaderboard: ${error.message}`)
+    if (!data?.length) break
+    rows.push(...data)
+    if (data.length < 1000) break
+  }
   const maxMomentum = (rows[0]?.momentum as number) ?? 0
 
   return rows.map((r, i) => {

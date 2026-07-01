@@ -18,10 +18,18 @@ const BRANDS = new Set([
 ])
 
 /** Normalisierte Modell-Identität: family+qualifier, führende Marken-/Vendor-Wörter
- *  entfernt (nur wenn ein Rest bleibt). Leerer String ⇒ reine Marke ohne Modell. */
-export function normModel(family: string, qualifier: string | null): string {
+ *  entfernt (nur wenn ein Rest bleibt). Strippt zusätzlich das führende Wort, das dem
+ *  eigenen vendor entspricht (fängt github/google/openai/… automatisch, ohne Pflege-
+ *  liste). Leerer String ⇒ reine Marke ohne Modell. */
+export function normModel(family: string, qualifier: string | null, vendor?: string | null): string {
   let toks = `${family || ''} ${qualifier || ''}`.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  while (toks.length > 1 && BRANDS.has(toks[0])) toks = toks.slice(1)
+  // Klammer-Zusätze ignorieren: "Agent Development Kit (ADK)" == "Agent Development Kit".
+  toks = toks.filter((t) => !t.startsWith('('))
+  const v = (vendor || '').trim().toLowerCase()
+  // Führende Marken-/Vendor-Wörter strippen (solange ein Rest bleibt).
+  while (toks.length > 1 && (BRANDS.has(toks[0]) || toks[0] === v)) toks = toks.slice(1)
+  // Trailing "AI" strippen: "Siri AI" == "Siri", "Kling AI" == "Kling".
+  if (toks.length > 1 && toks[toks.length - 1] === 'ai') toks = toks.slice(0, -1)
   return toks.join(' ')
 }
 
@@ -46,7 +54,7 @@ export async function runDefragmentation(): Promise<{ clusters: number; merged: 
 
   const clusters = new Map<string, P[]>()
   for (const p of products) {
-    const nm = normModel(p.family, p.qualifier)
+    const nm = normModel(p.family, p.qualifier, p.vendor_namespace)
     if (!nm) continue // reine Marke ohne Modell (Umbrella) — nicht mergen
     const key = `${p.vendor_namespace}|${nm}|${p.version ?? ''}`
     if (!clusters.has(key)) clusters.set(key, [])
