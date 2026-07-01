@@ -16,11 +16,18 @@ export const RELEASED_DIM = '__released'
  *  dass der tägliche Cron dieselben Produkte ohne auffindbare Web-Daten endlos neu anfragt. */
 export const RESEARCHED_AT_DIM = '__researched_at'
 
-const FeatureSchema = z.object({ dimension: z.string(), value: z.string().trim().min(1).max(200), source_url: z.string().trim().optional() })
+// KEINE .max()-Caps im Schema: ein überlanges Feld darf NICHT den ganzen Parse (bzw. beim
+// Feature das ganze Item) verwerfen. Überlängen werden beim Auslesen gekürzt (siehe unten).
+// Historie: release_date.max(40) ließ ReportSchema hart fehlschlagen → verwarf sämtliche
+// Features großer Produkte (komplexe Release-Historie "Preview … GA …" > 40 Zeichen).
+const MAX_VALUE = 500 // Spec-Werte: Preis-Staffeln/Benchmark-Details laufen bis ~450 Zeichen
+const MAX_DESC = 800
+const MAX_RELEASE = 120
+const FeatureSchema = z.object({ dimension: z.string(), value: z.string().trim().min(1), source_url: z.string().trim().optional() })
 const ReportSchema = z.object({
-  description: z.string().trim().max(800).optional(),
-  description_en: z.string().trim().max(800).optional(),
-  release_date: z.string().trim().max(40).optional(),
+  description: z.string().trim().optional(),
+  description_en: z.string().trim().optional(),
+  release_date: z.string().trim().optional(),
   features: z.array(z.unknown()).optional(),
 })
 const EMPTY = new Set(['unbekannt', 'unknown', 'n/a', 'na', '-', 'keine angabe'])
@@ -42,13 +49,15 @@ export function parseResearchResponse(raw: unknown, validDimensions: Set<string>
     if (EMPTY.has(p.data.value.toLowerCase())) continue
     // Citation-Pflicht: nur Werte mit echter Web-Quelle behalten (kein Spekulieren).
     if (!p.data.source_url || !/^https?:\/\//i.test(p.data.source_url)) continue
+    const value = stripCite(p.data.value).slice(0, MAX_VALUE)
+    if (!value) continue
     seen.add(p.data.dimension)
-    features.push({ dimension: p.data.dimension, value: stripCite(p.data.value) })
+    features.push({ dimension: p.data.dimension, value })
   }
   return {
-    description: outer.data.description ? stripCite(outer.data.description) || null : null,
-    descriptionEn: outer.data.description_en ? stripCite(outer.data.description_en) || null : null,
-    releaseDate: outer.data.release_date?.trim() || null,
+    description: outer.data.description ? stripCite(outer.data.description).slice(0, MAX_DESC) || null : null,
+    descriptionEn: outer.data.description_en ? stripCite(outer.data.description_en).slice(0, MAX_DESC) || null : null,
+    releaseDate: outer.data.release_date ? stripCite(outer.data.release_date).slice(0, MAX_RELEASE) || null : null,
     features,
   }
 }
@@ -101,7 +110,7 @@ VORGEHEN — ANBIETER-WEBSITE ZUERST: Finde zuerst die OFFIZIELLE Website des An
 1. description: 2-4 nüchterne Sätze DEUTSCH (kein Marketing).
 2. description_en: dieselbe Aussage ENGLISCH.
 3. release_date: Erscheinungsdatum, falls in einer Quelle belegt.
-4. features: für JEDE dieser Dimensionen (dimension EXAKT wie unten) den belegten Wert MIT source_url:
+4. features: für JEDE dieser Dimensionen (dimension EXAKT wie unten) den belegten Wert MIT source_url. Halte jeden value KNAPP und tabellentauglich (kein Fließtext, keine Aufzählung ganzer Historien — nur der aktuelle Kernwert, idealerweise < 200 Zeichen):
 ${dims}
 
 STRIKT — KEIN SPEKULIEREN:
@@ -119,7 +128,9 @@ STRIKT — KEIN SPEKULIEREN:
     }, { signal: controller.signal })
     const block = [...resp.content].reverse().find((b: { type: string; name?: string }) => b.type === 'tool_use' && b.name === 'report_research')
     return parseResearchResponse(block && 'input' in block ? block.input : null, new Set(dimensions))
-  } catch {
+  } catch (e) {
+    // Fehler NICHT verschlucken: Timeout/Overload sonst ununterscheidbar von "leer".
+    console.error(`[research-error] ${name}:`, e instanceof Error ? `${e.name}: ${e.message}` : e)
     return EMPTY_RESULT
   } finally {
     clearTimeout(timer)
