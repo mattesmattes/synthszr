@@ -27,7 +27,7 @@ ${cats}
 
 REGELN:
 - Wähle die treffendste Kategorie per slug. Wenn nichts klar passt: "other".
-- Sprachmodelle/LLMs (GPT, Claude, Gemini, Llama, Qwen, DeepSeek …) → language-models.
+- Sprachmodelle/LLMs: proprietäre Top-Modelle (GPT, Claude Opus, Gemini Pro) → frontier-llms; offene Gewichte (Llama, Gemma, DeepSeek, Qwen) → open-source-llms; Reasoning/Thinking (o-Serie, R1, Thinking) → reasoning-models; klein/Edge (Phi, Nano) → small-language-models; multimodal (Omni, Vision, 4o) → multimodal-models.
 - Antworte für JEDES Produkt mit seinem Index.
 
 PRODUKTE:
