@@ -58,30 +58,20 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
     : ranked
   const t = (key: string) => translations[key] ?? key
   const catName = (slug: string, fallback: string) => translations[`rankings.cat.${slug}`] ?? fallback
-  const groupName = (g: { slug: string; name: string }) => translations[`rankings.group.${g.slug}`] ?? g.name
   const nameBySlug = new Map(categories.map((c) => [c.slug, c.name]))
 
   const tabBase = `/${lang}/rankings`
   // Aktueller Filter-Kontext für die Sort-Links (Kategorie hat Vorrang vor Gruppe).
   const ctx = category ? `category=${category}` : (activeGroupSlug ? `group=${activeGroupSlug}` : '')
-  const tab = (href: string, label: string, active: boolean) => (
+  // Ebene-1-Tab: typografische Section-Navigation (kein Pill), aktiv fett + unterstrichen.
+  const gtab = (href: string, label: string, active: boolean) => (
     <Link
       key={href}
       href={href}
-      className={`px-2.5 py-1 rounded-full text-xs whitespace-nowrap border transition-colors ${
-        active ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'
-      }`}
-    >
-      {label}
-    </Link>
-  )
-  // Ebene-2-Pills: visuell untergeordnet (kleiner, weiß auf grauem Panel).
-  const subtab = (href: string, label: string, active: boolean) => (
-    <Link
-      key={href}
-      href={href}
-      className={`px-2 py-0.5 rounded-full text-[11px] whitespace-nowrap border transition-colors ${
-        active ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-gray-600 hover:border-black'
+      className={`text-sm whitespace-nowrap transition-colors ${
+        active
+          ? 'text-black font-semibold underline underline-offset-[6px] decoration-2 decoration-black'
+          : 'text-gray-500 hover:text-black'
       }`}
     >
       {label}
@@ -99,25 +89,26 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         <p className="text-gray-600 text-sm mt-1" dangerouslySetInnerHTML={{ __html: t('rankings.subtitle') }} />
       </header>
 
-      {/* Ebene 1: Meta-Gruppen — die primäre Navigation */}
-      <nav className="flex flex-wrap gap-1.5 mb-4">
-        {tab(tabBase, t('rankings.all'), !category && !activeGroupSlug)}
-        {CATEGORY_GROUPS.map((g) => tab(`${tabBase}?group=${g.slug}`, groupName(g), activeGroupSlug === g.slug))}
-        {tab(`${tabBase}?category=other`, catName('other', 'Sonstige'), category === 'other')}
+      {/* Ebene 1: Meta-Gruppen als typografische Section-Tabs (keine Pills) */}
+      <nav className="flex flex-wrap gap-x-5 gap-y-2 mb-3">
+        {gtab(tabBase, t('rankings.all'), !category && !activeGroupSlug)}
+        {CATEGORY_GROUPS.map((g) => gtab(`${tabBase}?group=${g.slug}`, g.short, activeGroupSlug === g.slug))}
+        {gtab(`${tabBase}?category=other`, catName('other', 'Sonstige'), category === 'other')}
       </nav>
 
-      {/* Ebene 2: Unterkategorien der aktiven Gruppe — in eigenem Panel, klar abgesetzt */}
+      {/* Ebene 2: Unterkategorien der aktiven Gruppe — kleine Text-Links, Mittelpunkt-getrennt */}
       {activeGroup && (
-        <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5">
-          <div className="text-[10px] font-medium uppercase tracking-wider text-gray-400 mb-2">
-            {groupName(activeGroup)}
-          </div>
-          <nav className="flex flex-wrap gap-1.5">
-            {subtab(`${tabBase}?group=${activeGroup.slug}`, t('rankings.all'), !category)}
-            {activeGroup.categories.map((slug) =>
-              subtab(`${tabBase}?category=${slug}`, catName(slug, nameBySlug.get(slug) ?? slug), category === slug),
-            )}
-          </nav>
+        <div className="mb-5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 border-t border-gray-100 pt-2.5">
+          {[{ href: `${tabBase}?group=${activeGroup.slug}`, label: t('rankings.all'), active: !category },
+            ...activeGroup.categories.map((slug) => ({ href: `${tabBase}?category=${slug}`, label: catName(slug, nameBySlug.get(slug) ?? slug), active: category === slug })),
+          ].map((it, i) => (
+            <span key={it.href} className="flex items-center gap-x-2.5">
+              {i > 0 && <span className="text-gray-300 select-none">·</span>}
+              <Link href={it.href} className={`text-xs whitespace-nowrap transition-colors ${it.active ? 'text-black font-medium' : 'text-gray-500 hover:text-black'}`}>
+                {it.label}
+              </Link>
+            </span>
+          ))}
         </div>
       )}
 
