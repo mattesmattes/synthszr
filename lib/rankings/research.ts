@@ -196,9 +196,10 @@ export async function runProductResearch(
     // Marker IMMER schreiben (auch bei Leer-Ergebnis) → force=false fragt dieses Produkt
     // nicht erneut an (keine täglichen Retry-Kosten für Produkte ohne Web-Daten).
     rows.push({ product_id: m.product_id, category: m.category, dimension_key: RESEARCHED_AT_DIM, value_text: new Date().toISOString(), confidence: 1, evidence_count: 0, source_count: 0 })
-    // Force: alte Dimensionswerte entfernen, damit nach einer Dimensions-Umstellung
-    // keine verwaisten Features (nicht mehr in feature_dimensions) übrig bleiben.
-    if (force) {
+    // Force: alte Dimensionswerte entfernen, damit nach einer Dimensions-Umstellung keine
+    // verwaisten Features übrig bleiben — ABER NUR wenn die Research neue Features lieferte.
+    // Sonst würde ein leeres Ergebnis (API-Fehler/Rate-Limit) die alten Specs zerstören.
+    if (force && res.features.length > 0) {
       await supabase.from('product_features_current').delete().eq('product_id', m.product_id)
         .not('dimension_key', 'in', `(${['__sentiment', DESCRIPTION_DIM, DESCRIPTION_EN_DIM, RELEASED_DIM].join(',')})`)
     }
