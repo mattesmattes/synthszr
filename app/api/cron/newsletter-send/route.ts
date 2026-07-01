@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
     const previewTextByLocale = new Map<string, string>()
 
     // Fetch active tip-promo once; same box for every locale of this send
-    const activeTipPromo = await getActiveTipPromo()
+    const activeTipPromo = await getActiveTipPromo({ context: 'newsletter' })
 
     for (const locale of subscribersByLocale.keys()) {
       let contentToUse = post.content

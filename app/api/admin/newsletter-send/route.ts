@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch active ad promo + tip promo (admin-managed)
     const activePromo = await getActiveAdPromo()
-    const activeTipPromo = await getActiveTipPromo()
+    const activeTipPromo = await getActiveTipPromo({ context: 'newsletter' })
 
     // If testEmail, send only to that address (default German locale for test)
     if (testEmail) {

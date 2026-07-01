@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       gradient_direction: body.gradient_direction ?? 'to bottom',
       text_color: body.text_color ?? '#1a1a0a',
       active: body.active ?? false,
+      newsletter_only: body.newsletter_only ?? false,
       sort_order: body.sort_order ?? 0,
       type,
     })

@@ -10,6 +10,7 @@ export interface TipPromo {
   gradient_direction: string
   text_color: string
   active: boolean
+  newsletter_only: boolean // nur im Newsletter ausspielen, nicht im Web-View
   sort_order: number
   type: 'static' | 'podcast'
   created_at: string

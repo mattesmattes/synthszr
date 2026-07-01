@@ -36,8 +36,14 @@ async function enrichPodcast(promo: TipPromo): Promise<TipPromo | null> {
 /**
  * Returns the tip-promo to display right now based on global config.
  * Same selection logic as ad-promos (constant pin or deterministic daily rotate).
+ *
+ * context 'web' (default) schließt newsletter_only-Promos aus: ist der gepinnte
+ * Promo newsletter_only, fällt die Auswahl auf die Rotation der übrigen zulässigen
+ * Promos zurück — gibt es keine, wird gar kein Promo gezeigt. context 'newsletter'
+ * berücksichtigt alle aktiven Promos.
  */
-export async function getActiveTipPromo(): Promise<TipPromo | null> {
+export async function getActiveTipPromo(opts: { context?: 'web' | 'newsletter' } = {}): Promise<TipPromo | null> {
+  const context = opts.context ?? 'web'
   const supabase = createAdminClient()
 
   const [{ data: configRow }, { data: promos }] = await Promise.all([
@@ -55,14 +61,20 @@ export async function getActiveTipPromo(): Promise<TipPromo | null> {
   if (config.mode === 'off') return null
   if (!promos || promos.length === 0) return null
 
+  const eligible = context === 'web'
+    ? (promos as TipPromo[]).filter((p) => !p.newsletter_only)
+    : (promos as TipPromo[])
+  if (eligible.length === 0) return null
+
   if (config.mode === 'constant' && config.constantId) {
-    const pinned = promos.find(p => p.id === config.constantId)
-    if (pinned) return enrichPodcast(pinned as TipPromo)
+    const pinned = eligible.find((p) => p.id === config.constantId)
+    if (pinned) return enrichPodcast(pinned)
+    // gepinnter Promo im Web nicht zulässig → auf Rotation der übrigen zurückfallen
   }
 
   const now = new Date()
   const startOfYear = Date.UTC(now.getUTCFullYear(), 0, 0)
   const dayOfYear = Math.floor((now.getTime() - startOfYear) / 86400000)
-  const idx = dayOfYear % promos.length
-  return enrichPodcast(promos[idx] as TipPromo)
+  const idx = dayOfYear % eligible.length
+  return enrichPodcast(eligible[idx])
 }

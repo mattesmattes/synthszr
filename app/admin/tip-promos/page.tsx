@@ -221,6 +221,8 @@ function TipEditor({ promo, podcastPreview, onUpdate, onDelete, onDuplicate }: {
           <div className="flex items-center gap-3">
             <Label className="text-xs">Aktiv</Label>
             <Switch checked={promo.active} onCheckedChange={v => onUpdate({ active: v })} />
+            <Label className="text-xs ml-3" title="Nur im Newsletter ausspielen, nicht im Web-View">Newsletter only</Label>
+            <Switch checked={promo.newsletter_only} onCheckedChange={v => onUpdate({ newsletter_only: v })} />
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="ghost" onClick={onDuplicate} title="Als Vorlage kopieren">
