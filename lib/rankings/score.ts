@@ -17,10 +17,17 @@ export function momentumScore(mentionDates: Array<string | Date>, now: Date): nu
   return m
 }
 
-/** Normalisiert ein rohes Momentum relativ zum Spitzenreiter auf 0–100 (Anzeige). */
+/**
+ * Normalisiert ein rohes Momentum relativ zum Spitzenreiter der aktuellen Ansicht
+ * (Kategorie/Gruppe) auf 0–100 (Anzeige). LOGARITHMISCH, nicht linear: ein einzelner
+ * Ausreißer (z.B. Cursor mit ~20× dem Momentum des Zweitplatzierten) drückt sonst das
+ * ganze Feld auf 0, wodurch der Score als Vergleich innerhalb der Kategorie unbrauchbar
+ * wird. log(m+1)/log(max+1) hält die Spitze bei 100, erzeugt darunter einen
+ * aussagekräftigen Spread und bewahrt die Reihenfolge.
+ */
 export function toDisplayScore(momentum: number, maxMomentum: number): number {
-  if (maxMomentum <= 0) return 0
-  return Math.round((momentum / maxMomentum) * 100)
+  if (maxMomentum <= 0 || momentum <= 0) return 0
+  return Math.round((Math.log(momentum + 1) / Math.log(maxMomentum + 1)) * 100)
 }
 
 /**

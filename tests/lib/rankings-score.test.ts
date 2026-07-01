@@ -50,10 +50,16 @@ describe('toDisplayScore', () => {
   it('Top-Produkt bekommt 100', () => {
     expect(toDisplayScore(8, 8)).toBe(100)
   })
-  it('halbes Momentum → 50', () => {
-    expect(toDisplayScore(4, 8)).toBe(50)
+  it('logarithmisch skaliert (nicht linear): 4 von 8 → 73', () => {
+    expect(toDisplayScore(4, 8)).toBe(73)
+  })
+  it('Ausreißer drückt das Feld NICHT auf 0: 10 von 200 → ~45 (linear wäre 5)', () => {
+    expect(toDisplayScore(10, 200)).toBe(45)
   })
   it('max=0 → 0 (kein Division-durch-Null)', () => {
     expect(toDisplayScore(0, 0)).toBe(0)
+  })
+  it('momentum=0 → 0', () => {
+    expect(toDisplayScore(0, 200)).toBe(0)
   })
 })
