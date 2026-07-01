@@ -5,8 +5,9 @@ export const runtime = 'nodejs'
 
 // Publicly returns the currently active tip-promo (rotating daily), so the
 // client-side article renderer can display it. Only non-secret fields.
-export async function GET() {
-  const promo = await getActiveTipPromo({ context: 'web' })
+export async function GET(request: Request) {
+  const locale = new URL(request.url).searchParams.get('locale') || 'de'
+  const promo = await getActiveTipPromo({ context: 'web', locale })
   if (!promo) return NextResponse.json({ promo: null })
   return NextResponse.json({
     promo: {

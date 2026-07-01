@@ -11,6 +11,7 @@ export interface TipPromo {
   text_color: string
   active: boolean
   newsletter_only: boolean // nur im Newsletter ausspielen, nicht im Web-View
+  translations?: Record<string, { headline?: string; body?: string; cta_label?: string }>
   sort_order: number
   type: 'static' | 'podcast'
   created_at: string

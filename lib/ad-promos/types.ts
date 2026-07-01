@@ -19,6 +19,7 @@ export interface AdPromo {
   cta_label: string
   link_url: string
   active: boolean
+  translations?: Record<string, { eyebrow?: string; title?: string; body?: string; cta_label?: string }>
   sort_order: number
   created_at: string
   updated_at: string

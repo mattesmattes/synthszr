@@ -79,7 +79,8 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/tip-promos/active')
+    const locale = typeof window !== 'undefined' ? (window.location.pathname.split('/')[1] || 'de') : 'de'
+    fetch(`/api/tip-promos/active?locale=${encodeURIComponent(['de', 'en', 'cs', 'nds'].includes(locale) ? locale : 'de')}`)
       .then(r => r.ok ? r.json() : { promo: null })
       .then(data => { if (!cancelled && data?.promo) setTipPromo(data.promo) })
       .catch(() => { /* silent — tip-promo is non-essential */ })

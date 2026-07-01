@@ -208,6 +208,8 @@ export async function POST(request: NextRequest) {
     const previewTextByLocale = new Map<string, string>()
 
     for (const locale of subscribersByLocale.keys()) {
+      // Tip-Promo je Locale in der Zielsprache (gleiche Auswahl, übersetzte Felder).
+      const localeTipPromo = await getActiveTipPromo({ context: 'newsletter', locale })
       let contentToUse = post.content
       let excerptToUse = post.excerpt
       let titleToUse = post.title
@@ -240,7 +242,7 @@ export async function POST(request: NextRequest) {
         articleThumbnails,
         locale,
         locale !== 'de' ? post.content : undefined, // Pass original content for non-German locales
-        activeTipPromo,
+        localeTipPromo,
         '{{SUBSCRIBER_ID}}',
       )
       contentByLocale.set(locale, emailContent)
@@ -276,6 +278,7 @@ export async function POST(request: NextRequest) {
     const MAX_RETRIES = 3
 
     for (const [locale, localeSubscribers] of subscribersByLocale) {
+      const localeAdPromo = await getActiveAdPromo({ locale }) // Ad-Promo je Locale in der Zielsprache
       const emailContent = contentByLocale.get(locale)!
       const localizedSubject = subjectByLocale.get(locale) || subject
       const localizedPreviewText = previewTextByLocale.get(locale) || previewText
@@ -300,7 +303,7 @@ export async function POST(request: NextRequest) {
           emailCoverImageUrl,
           postDate,
           baseUrl: BASE_URL,
-          promo: activePromo,
+          promo: localeAdPromo,
           locale: locale as LanguageCode,
         })
       )

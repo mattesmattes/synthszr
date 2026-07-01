@@ -33,6 +33,25 @@ async function enrichPodcast(promo: TipPromo): Promise<TipPromo | null> {
   return { ...promo, podcast }
 }
 
+/** Wendet die Übersetzung der Zielsprache an (DE = Original; fehlt eine Übersetzung, bleibt Original). */
+function applyLocale(promo: TipPromo, locale?: string): TipPromo {
+  if (!locale || locale === 'de') return promo
+  const t = promo.translations?.[locale]
+  if (!t) return promo
+  return {
+    ...promo,
+    headline: t.headline || promo.headline,
+    body: t.body || promo.body,
+    cta_label: t.cta_label || promo.cta_label,
+  }
+}
+
+/** enrichPodcast + Sprach-Anwendung in einem Schritt. */
+async function finalize(promo: TipPromo, locale?: string): Promise<TipPromo | null> {
+  const enriched = await enrichPodcast(promo)
+  return enriched ? applyLocale(enriched, locale) : null
+}
+
 /**
  * Returns the tip-promo to display right now based on global config.
  * Same selection logic as ad-promos (constant pin or deterministic daily rotate).
@@ -42,8 +61,9 @@ async function enrichPodcast(promo: TipPromo): Promise<TipPromo | null> {
  * Promos zurück — gibt es keine, wird gar kein Promo gezeigt. context 'newsletter'
  * berücksichtigt alle aktiven Promos.
  */
-export async function getActiveTipPromo(opts: { context?: 'web' | 'newsletter' } = {}): Promise<TipPromo | null> {
+export async function getActiveTipPromo(opts: { context?: 'web' | 'newsletter'; locale?: string } = {}): Promise<TipPromo | null> {
   const context = opts.context ?? 'web'
+  const locale = opts.locale
   const supabase = createAdminClient()
 
   const [{ data: configRow }, { data: promos }] = await Promise.all([
@@ -68,7 +88,7 @@ export async function getActiveTipPromo(opts: { context?: 'web' | 'newsletter' }
 
   if (config.mode === 'constant' && config.constantId) {
     const pinned = eligible.find((p) => p.id === config.constantId)
-    if (pinned) return enrichPodcast(pinned)
+    if (pinned) return finalize(pinned, locale)
     // gepinnter Promo im Web nicht zulässig → auf Rotation der übrigen zurückfallen
   }
 
@@ -76,5 +96,5 @@ export async function getActiveTipPromo(opts: { context?: 'web' | 'newsletter' }
   const startOfYear = Date.UTC(now.getUTCFullYear(), 0, 0)
   const dayOfYear = Math.floor((now.getTime() - startOfYear) / 86400000)
   const idx = dayOfYear % eligible.length
-  return enrichPodcast(eligible[idx])
+  return finalize(eligible[idx], locale)
 }

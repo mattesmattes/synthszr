@@ -10,7 +10,7 @@ const ALLOWED_FIELDS = [
   'image_right_url', 'image_right_bg', 'image_right_blend',
   'text_bg', 'text_color',
   'eyebrow', 'title', 'body', 'cta_label', 'link_url',
-  'active', 'sort_order',
+  'active', 'translations', 'sort_order',
 ] as const
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

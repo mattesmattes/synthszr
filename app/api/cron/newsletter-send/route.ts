@@ -180,10 +180,9 @@ export async function GET(request: NextRequest) {
     const subjectByLocale = new Map<string, string>()
     const previewTextByLocale = new Map<string, string>()
 
-    // Fetch active tip-promo once; same box for every locale of this send
-    const activeTipPromo = await getActiveTipPromo({ context: 'newsletter' })
-
     for (const locale of subscribersByLocale.keys()) {
+      // Tip-Promo je Locale in der Zielsprache (gleiche Auswahl, übersetzte Felder).
+      const activeTipPromo = await getActiveTipPromo({ context: 'newsletter', locale })
       let contentToUse = post.content
       let excerptToUse = post.excerpt
       let titleToUse = post.title
@@ -251,10 +250,9 @@ export async function GET(request: NextRequest) {
     const BATCH_DELAY_MS = 1500 // 1.5s between batches (only matters if >50 subscribers per locale)
     const MAX_RETRIES = 3
 
-    // Fetch active ad promo (admin-managed via /admin/ad-promos)
-    const activePromo = await getActiveAdPromo()
-
     for (const [locale, localeSubscribers] of subscribersByLocale) {
+      // Ad-Promo je Locale in der Zielsprache (admin-managed via /admin/ad-promos)
+      const activePromo = await getActiveAdPromo({ locale })
       const emailContent = contentByLocale.get(locale)!
       const localizedSubject = subjectByLocale.get(locale) || subject
       const localizedPreviewText = previewTextByLocale.get(locale) || previewText

@@ -7,7 +7,7 @@ export const runtime = 'nodejs'
 const ALLOWED_FIELDS = [
   'name', 'headline', 'body', 'link_url', 'cta_label',
   'gradient_from', 'gradient_to', 'gradient_direction', 'text_color',
-  'active', 'newsletter_only', 'sort_order',
+  'active', 'newsletter_only', 'translations', 'sort_order',
 ] as const
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

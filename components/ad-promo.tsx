@@ -3,8 +3,8 @@ import { getActiveAdPromo } from '@/lib/ad-promos/get-active'
 import type { AdPromo } from '@/lib/ad-promos/types'
 import { sanitizeAdminHtml } from '@/lib/security/sanitize-html'
 
-export async function AdPromo() {
-  const promo = await getActiveAdPromo()
+export async function AdPromo({ locale = 'de' }: { locale?: string } = {}) {
+  const promo = await getActiveAdPromo({ locale })
   if (!promo) return null
   return <AdPromoView promo={promo} />
 }
