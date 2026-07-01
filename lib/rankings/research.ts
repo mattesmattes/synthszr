@@ -53,7 +53,7 @@ export function parseResearchResponse(raw: unknown, validDimensions: Set<string>
   }
 }
 
-const RESEARCH_TIMEOUT_MS = 180_000
+const RESEARCH_TIMEOUT_MS = 240_000 // große Produkte (viel Web-Content) brauchen mehr web_search-Zeit
 const REPORT_TOOL = {
   name: 'report_research',
   description: 'Melde die recherchierten Produktdaten mit Quellen',
