@@ -45,7 +45,10 @@ export async function distillCategoryDimensions(categorySlug: string, categoryNa
 
 ${samples.join('\n').slice(0, 8000)}
 
-Leite die 5-8 wichtigsten VERGLEICHS-DIMENSIONEN ab, anhand derer man diese Produkte in EINER gemeinsamen Feature-Tabelle für die GESAMTE Kategorie sinnvoll vergleicht. Nur Dimensionen, die für die Kategorie klar relevant sind und in solchen News typischerweise vorkommen (z.B. Kontextfenster, Benchmark-Ergebnis, Latenz, Auflösung). "Preis-Tier" und – wo sinnvoll – ein Benchmark/Leistungswert sollten enthalten sein. Kurze, prägnante deutsche Dimensionsnamen, keine Erklärungen.`
+Leite die 5-7 wichtigsten, MESSBAREN VERGLEICHS-DIMENSIONEN ab, anhand derer man diese Produkte in EINER gemeinsamen Feature-Tabelle für die GESAMTE Kategorie vergleicht.
+NUR konkrete, produkt-UNTERSCHEIDENDE Specs (z.B. Kontextfenster, Preis pro Token, Benchmark-Score, Latenz, Auflösung, max. Videolänge, Sprachanzahl).
+KEINE generischen oder redundanten Dimensionen wie "Anbieter", "Hersteller", "Modelltyp", "Verfügbarkeit", "Kategorie", "Spezialfeatures" — die unterscheiden die Produkte nicht und stehen ohnehin im Profil.
+"Preis-Tier" und mindestens ein Benchmark/Leistungswert sollten enthalten sein. Kurze, prägnante deutsche Dimensionsnamen, keine Erklärungen.`
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)

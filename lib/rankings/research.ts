@@ -13,7 +13,7 @@ export const DESCRIPTION_DIM = '__description'
 export const DESCRIPTION_EN_DIM = '__description_en'
 export const RELEASED_DIM = '__released'
 
-const FeatureSchema = z.object({ dimension: z.string(), value: z.string().trim().min(1).max(200) })
+const FeatureSchema = z.object({ dimension: z.string(), value: z.string().trim().min(1).max(200), source_url: z.string().trim().optional() })
 const ReportSchema = z.object({
   description: z.string().trim().max(800).optional(),
   description_en: z.string().trim().max(800).optional(),
@@ -21,7 +21,6 @@ const ReportSchema = z.object({
   features: z.array(z.unknown()).optional(),
 })
 const EMPTY = new Set(['unbekannt', 'unknown', 'n/a', 'na', '-', 'keine angabe'])
-const LLM_TIMEOUT_MS = 90_000
 
 /** Entfernt web_search-Citation-Markup (<cite index="...">…</cite>) aus dem Text. */
 function stripCite(s: string): string {
@@ -38,6 +37,8 @@ export function parseResearchResponse(raw: unknown, validDimensions: Set<string>
     const p = FeatureSchema.safeParse(f)
     if (!p.success || !validDimensions.has(p.data.dimension) || seen.has(p.data.dimension)) continue
     if (EMPTY.has(p.data.value.toLowerCase())) continue
+    // Citation-Pflicht: nur Werte mit echter Web-Quelle behalten (kein Spekulieren).
+    if (!p.data.source_url || !/^https?:\/\//i.test(p.data.source_url)) continue
     seen.add(p.data.dimension)
     features.push({ dimension: p.data.dimension, value: stripCite(p.data.value) })
   }
@@ -49,16 +50,28 @@ export function parseResearchResponse(raw: unknown, validDimensions: Set<string>
   }
 }
 
+const RESEARCH_TIMEOUT_MS = 180_000
 const REPORT_TOOL = {
   name: 'report_research',
-  description: 'Melde die recherchierten Produktdaten',
+  description: 'Melde die recherchierten Produktdaten mit Quellen',
   input_schema: {
     type: 'object' as const,
     properties: {
       description: { type: 'string' },
       description_en: { type: 'string' },
       release_date: { type: 'string' },
-      features: { type: 'array', items: { type: 'object', properties: { dimension: { type: 'string' }, value: { type: 'string' } }, required: ['dimension', 'value'] } },
+      features: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            dimension: { type: 'string' },
+            value: { type: 'string' },
+            source_url: { type: 'string', description: 'URL der Web-Quelle, die diesen Wert belegt (Pflicht)' },
+          },
+          required: ['dimension', 'value', 'source_url'],
+        },
+      },
     },
     required: ['description', 'description_en', 'features'],
   },
@@ -66,11 +79,10 @@ const REPORT_TOOL = {
 const EMPTY_RESULT: ResearchResult = { description: null, descriptionEn: null, releaseDate: null, features: [] }
 
 /**
- * Recherchiert ein Produkt per WEB-SUCHE + Plausibilitätsgate:
- *  1. webResearch: web_search liefert Beschreibung + Spec-Werte (darf breit suchen).
- *  2. plausibilityGate: zweiter, skeptischer Call verwirft Specs ohne glaubwürdige
- *     Stützung — fängt Halluzinationen bei evtl. nicht existenten Produkten ab.
- *  Newsletter-Auszüge dienen als zusätzlicher Kontext/Beleg.
+ * Recherchiert ein Produkt per WEB-SUCHE (Sonnet 4.6). Jeder Spec-Wert MUSS eine
+ * source_url (echte Web-Quelle) tragen — parseResearchResponse verwirft Werte ohne
+ * Beleg. Kein Spekulieren, kein Schätzen: unbelegte Dimensionen bleiben leer.
+ * Die Newsletter-Auszüge dienen nur als Suchhilfe/Kontext, nicht als Beleg.
  */
 export async function researchProduct(
   name: string, vendor: string, categoryName: string, dimensions: string[], evidence: string,
@@ -79,82 +91,35 @@ export async function researchProduct(
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const client: any = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const validDims = new Set(dimensions)
-
-  // --- 1. Web-Recherche ---
   const dims = dimensions.map((d) => `- ${d}`).join('\n')
-  const webPrompt = `Recherchiere das AI-Produkt "${name}" von ${vendor} (Kategorie: ${categoryName}).
-
-QUELLEN (beide gleichwertig nutzen):
-1. WEB-SUCHE für verlässliche, aktuelle Daten.
-2. Diese AI-NEWSLETTER-BELEGE — bei neuen/unbekannten Produkten, die die Web-Suche nicht findet, sind sie die PRIMÄRE Quelle. Extrahiere konkrete Angaben (Preise, Benchmarks, Datum) auch direkt aus diesen Belegen:
-${evidence || '(keine)'}
-
-Rufe dann report_research:
-1. description: 2-4 nüchterne Sätze auf DEUTSCH (kein Marketing).
-2. description_en: dieselbe Aussage auf ENGLISCH.
-3. release_date: Erscheinungsdatum (z.B. "Juni 2026") — suche aktiv in Web UND Belegen danach.
-4. features: konkrete Werte für diese Dimensionen (dimension EXAKT wie unten):
+  const prompt = `Recherchiere per WEB-SUCHE die offiziellen, aktuellen Specs des AI-Produkts "${name}" von ${vendor} (Kategorie: ${categoryName}).
+${evidence ? `\nKontext aus AI-News (nur als Suchhilfe, KEIN Beleg):\n${evidence}\n` : ''}
+Nutze die Web-Suche AKTIV (Hersteller-Seiten, offizielle Doku, Benchmark-Listen, seriöse Tech-Quellen) und rufe dann report_research:
+1. description: 2-4 nüchterne Sätze DEUTSCH (kein Marketing).
+2. description_en: dieselbe Aussage ENGLISCH.
+3. release_date: Erscheinungsdatum, falls in einer Quelle belegt.
+4. features: für JEDE dieser Dimensionen (dimension EXAKT wie unten) den belegten Wert MIT source_url:
 ${dims}
-   WICHTIG, falls die Dimensionen das abdecken: Preise/Kosten, Benchmark-Ergebnisse (SWE-bench, MMLU, Terminal-Bench …) und Kontextfenster gehören in die jeweils passende Dimension — diese Angaben stehen oft in den Belegen, übernimm sie.
 
-Belege jeden Wert durch eine Web-Quelle ODER die Newsletter-Belege. Findest du gar nichts Verlässliches, gib KEINE erfundenen Werte an — lieber leer als halluziniert.`
-  let raw = EMPTY_RESULT
-  const c1 = new AbortController()
-  const t1 = setTimeout(() => c1.abort(), LLM_TIMEOUT_MS)
+STRIKT — KEIN SPEKULIEREN:
+- Gib einen feature-Wert NUR an, wenn du ihn in einer konkreten Web-Quelle gefunden hast, und trage die belegende source_url ein.
+- Findest du einen Wert nicht belegt, LASS die Dimension WEG. Niemals schätzen, raten oder aus Allgemeinwissen ergänzen.
+- Alle Daten existieren im Netz — suche gründlich (mehrere Suchanfragen), bevor du eine Dimension auslässt.`
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), RESEARCH_TIMEOUT_MS)
   try {
     const resp = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001', max_tokens: 2500,
-      tools: [REPORT_TOOL, { type: 'web_search_20250305', name: 'web_search', max_uses: 4 }],
-      messages: [{ role: 'user', content: webPrompt }],
-    }, { signal: c1.signal })
+      model: 'claude-sonnet-4-6', max_tokens: 4000,
+      tools: [REPORT_TOOL, { type: 'web_search_20250305', name: 'web_search', max_uses: 6 }],
+      messages: [{ role: 'user', content: prompt }],
+    }, { signal: controller.signal })
     const block = [...resp.content].reverse().find((b: { type: string; name?: string }) => b.type === 'tool_use' && b.name === 'report_research')
-    raw = parseResearchResponse(block && 'input' in block ? block.input : null, validDims)
+    return parseResearchResponse(block && 'input' in block ? block.input : null, new Set(dimensions))
   } catch {
     return EMPTY_RESULT
   } finally {
-    clearTimeout(t1)
-  }
-  if (raw.features.length === 0) return raw // nichts zu gaten
-
-  // --- 2. Plausibilitätsgate ---
-  const gateTool = {
-    name: 'report_gate',
-    description: 'Melde die geprüften, belegten Features',
-    input_schema: { type: 'object' as const, properties: { features: { type: 'array', items: { type: 'object', properties: { dimension: { type: 'string' }, value: { type: 'string' } }, required: ['dimension', 'value'] } } }, required: ['features'] },
-  }
-  const featList = raw.features.map((f) => `- ${f.dimension}: ${f.value}`).join('\n')
-  const gatePrompt = `Produkt "${name}" von ${vendor}. Recherchierte Feature-Werte:
-${featList}
-
-Newsletter-Belege als Kontext:
-${evidence || '(keine)'}
-
-Prüfe JEDES Feature streng und behalte NUR Werte, die plausibel und durch eine glaubwürdige Quelle oder die Belege gestützt sind. Verwirf erfundene, spekulative oder widersprüchliche Werte — insbesondere bei Produkten, deren Existenz nicht verifizierbar ist. Rufe report_gate ausschließlich mit den behaltenen Features.`
-  const c2 = new AbortController()
-  const t2 = setTimeout(() => c2.abort(), LLM_TIMEOUT_MS)
-  try {
-    const resp = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001', max_tokens: 1000,
-      tools: [gateTool], tool_choice: { type: 'tool', name: 'report_gate' },
-      messages: [{ role: 'user', content: gatePrompt }],
-    }, { signal: c2.signal })
-    const block = resp.content.find((b: { type: string; name?: string }) => b.type === 'tool_use' && b.name === 'report_gate')
-    const input = block && 'input' in block ? (block.input as { features?: unknown[] }) : null
-    const kept: ResearchedFeature[] = []
-    const seen = new Set<string>()
-    for (const f of input?.features ?? []) {
-      const p = FeatureSchema.safeParse(f)
-      if (!p.success || !validDims.has(p.data.dimension) || seen.has(p.data.dimension)) continue
-      if (EMPTY.has(p.data.value.toLowerCase())) continue
-      seen.add(p.data.dimension)
-      kept.push({ dimension: p.data.dimension, value: stripCite(p.data.value) })
-    }
-    return { ...raw, features: kept }
-  } catch {
-    return raw // Gate-Fehler → ungefilterte (lieber als gar nichts)
-  } finally {
-    clearTimeout(t2)
+    clearTimeout(timer)
   }
 }
 
