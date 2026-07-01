@@ -49,40 +49,43 @@ async function computeRankedProducts(
   const supabase = createAdminClient()
   const now = new Date()
 
-  let categoryIds: string[] | null = null
+  // Kategorie-Mitgliedschaft paginiert als Set — PostgREST cappt bei 1000, und große
+  // Kategorien (language-models: > 1100 Produkte) überschreiten das.
+  let catSet: Set<string> | null = null
   if (category) {
-    const { data: mem, error: memErr } = await supabase
-      .from('product_category_membership')
-      .select('product_id')
-      .eq('category', category)
-    if (memErr) throw new Error(`leaderboard membership: ${memErr.message}`)
-    categoryIds = (mem ?? []).map((m) => m.product_id as string)
-    if (!categoryIds.length) return []
+    catSet = new Set<string>()
+    for (let off = 0; ; off += 1000) {
+      const { data: mem, error: memErr } = await supabase
+        .from('product_category_membership').select('product_id').eq('category', category).range(off, off + 999)
+      if (memErr) throw new Error(`leaderboard membership: ${memErr.message}`)
+      if (!mem?.length) break
+      for (const m of mem) catSet.add(m.product_id as string)
+      if (mem.length < 1000) break
+    }
+    if (!catSet.size) return []
   }
 
-  // Produkte paginiert laden — sonst cappt PostgREST bei 1000 Zeilen, und seit der
-  // Backfill > 1000 sichtbare Produkte erzeugt hat, fielen Treffer (z.B. Cursor) raus.
+  // Alle sichtbaren Produkte paginiert laden. NICHT via .in(categoryIds) filtern —
+  // das sprengt bei > 1000 IDs das URL-/Bind-Limit (500). Kategorie-Filter in JS.
   const productsRaw: Array<{ id: string; canonical_name: string; vendor_namespace: string; slug: string; family: string; version: string | null; qualifier: string | null }> = []
   for (let off = 0; ; off += 1000) {
-    let q = supabase
+    const { data, error: pErr } = await supabase
       .from('products')
       .select('id, canonical_name, vendor_namespace, slug, family, version, qualifier')
       .eq('visibility_status', 'visible')
-    if (categoryIds) q = q.in('id', categoryIds)
-    const { data, error: pErr } = await q.range(off, off + 999)
+      .range(off, off + 999)
     if (pErr) throw new Error(`leaderboard products: ${pErr.message}`)
     if (!data?.length) break
     productsRaw.push(...(data as typeof productsRaw))
     if (data.length < 1000) break
   }
   if (!productsRaw.length) return []
-  // Nackte Herstellernamen (Anthropic, Mistral …) und Modell-Familien-Oberbegriffe
-  // (GPT, Claude, Gemini ohne Version) zur Laufzeit ausschließen — das sind keine
-  // Produkte. Robust gegen visibility_status-Races mit laufenden Extract-Jobs.
+  // Nackte Herstellernamen + Modell-Familien-Oberbegriffe ausschließen, Kategorie in JS filtern.
   const products = productsRaw.filter(
     (p) =>
       !(isExcludedProduct(p.family as string) && !p.version && !p.qualifier) &&
-      !isFamilyUmbrella(p.family as string, p.version, p.qualifier),
+      !isFamilyUmbrella(p.family as string, p.version, p.qualifier) &&
+      (!catSet || catSet.has(p.id)),
   )
   if (!products.length) return []
 
