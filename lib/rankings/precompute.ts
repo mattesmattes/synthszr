@@ -1,21 +1,30 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { momentumScore, momentumHistory, momentumTrend } from '@/lib/rankings/score'
+import { isExcludedProduct, isFamilyUmbrella } from '@/lib/rankings/product-exclusions'
 
 /**
- * Berechnet Ranking-Metriken (Momentum, Trend, Verlauf, Mention-Count, last_seen)
- * für alle sichtbaren Produkte EINMAL aus product_mentions und legt sie in
- * product_metrics ab. getRankedProducts liest danach diese Tabelle statt bei jedem
- * Seiten-Load ~43k Mentions zu aggregieren. Läuft periodisch (Cron) + nach Backfills.
+ * Berechnet Ranking-Metriken für alle sichtbaren Produkte EINMAL aus product_mentions
+ * und legt sie in product_metrics ab (inkl. chartable-Flag und primärer Kategorie),
+ * damit getRankedProducts EINEN indexierten Query mit Server-Limit fahren kann statt
+ * bei jedem Load ~43k Mentions zu aggregieren. Läuft periodisch (Cron) + nach Backfills.
  */
 export async function precomputeMetrics(): Promise<{ computed: number }> {
   const supabase = createAdminClient()
   const now = new Date()
 
-  const ids: string[] = []
+  const products: Array<{ id: string; family: string; version: string | null; qualifier: string | null }> = []
   for (let off = 0; ; off += 1000) {
-    const { data } = await supabase.from('products').select('id').eq('visibility_status', 'visible').range(off, off + 999)
+    const { data } = await supabase.from('products').select('id, family, version, qualifier').eq('visibility_status', 'visible').range(off, off + 999)
     if (!data?.length) break
-    ids.push(...data.map((p) => p.id as string))
+    products.push(...(data as typeof products))
+    if (data.length < 1000) break
+  }
+
+  const primaryCat = new Map<string, string>()
+  for (let off = 0; ; off += 1000) {
+    const { data } = await supabase.from('product_category_membership').select('product_id, category').eq('is_primary', true).range(off, off + 999)
+    if (!data?.length) break
+    for (const m of data) primaryCat.set(m.product_id as string, m.category as string)
     if (data.length < 1000) break
   }
 
@@ -32,15 +41,20 @@ export async function precomputeMetrics(): Promise<{ computed: number }> {
     if (data.length < 1000) break
   }
 
-  const rows = ids.map((id) => {
-    const dates = datesByProduct.get(id) ?? []
+  const rows = products.map((p) => {
+    const dates = datesByProduct.get(p.id) ?? []
+    const chartable =
+      !(isExcludedProduct(p.family) && !p.version && !p.qualifier) &&
+      !isFamilyUmbrella(p.family, p.version, p.qualifier)
     return {
-      product_id: id,
+      product_id: p.id,
       momentum: momentumScore(dates, now),
       trend: momentumTrend(dates, now),
       mention_count: dates.length,
       last_seen: dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null,
       history: momentumHistory(dates, now, 90, 90),
+      chartable,
+      primary_category: primaryCat.get(p.id) ?? null,
       computed_at: now.toISOString(),
     }
   })
