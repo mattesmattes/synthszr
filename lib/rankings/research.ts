@@ -97,7 +97,7 @@ export async function researchProduct(
   const dims = dimensions.map((d) => `- ${d}`).join('\n')
   const prompt = `Recherchiere per WEB-SUCHE die offiziellen, aktuellen Specs des AI-Produkts "${name}" von ${vendor} (Kategorie: ${categoryName}).
 ${evidence ? `\nKontext aus AI-News (nur als Suchhilfe, KEIN Beleg):\n${evidence}\n` : ''}
-Nutze die Web-Suche AKTIV (Hersteller-Seiten, offizielle Doku, Benchmark-Listen, seriöse Tech-Quellen) und rufe dann report_research:
+VORGEHEN — ANBIETER-WEBSITE ZUERST: Finde zuerst die OFFIZIELLE Website des Anbieters "${vendor}" bzw. die offizielle Produktseite von "${name}" (z.B. per Suche "${name} ${vendor} official site" / "${name} pricing" / "${name} docs"). Entnimm die Specs PRIMÄR von dort — Produkt-/Preis-Seite, Doku, Release-Notes, Modell-Karte, Blog-Announcement des Anbieters. Das ist die autoritative Quelle und liefert die meisten Werte. Nur wenn ein Wert dort fehlt, ergänze mit seriösen Tech-Quellen/Benchmark-Listen. Rufe dann report_research:
 1. description: 2-4 nüchterne Sätze DEUTSCH (kein Marketing).
 2. description_en: dieselbe Aussage ENGLISCH.
 3. release_date: Erscheinungsdatum, falls in einer Quelle belegt.
