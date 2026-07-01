@@ -1,6 +1,6 @@
 import { unstable_cache } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { momentumScore, toDisplayScore, momentumHistory, momentumTrend } from '@/lib/rankings/score'
+import { toDisplayScore } from '@/lib/rankings/score'
 import { isExcludedProduct, isFamilyUmbrella } from '@/lib/rankings/product-exclusions'
 
 export interface RankedProduct {
@@ -47,7 +47,6 @@ async function computeRankedProducts(
 ): Promise<RankedProduct[]> {
   const { category, minMentions = 1 } = opts
   const supabase = createAdminClient()
-  const now = new Date()
 
   // Kategorie-Mitgliedschaft paginiert als Set — PostgREST cappt bei 1000, und große
   // Kategorien (language-models: > 1100 Produkte) überschreiten das.
@@ -89,37 +88,43 @@ async function computeRankedProducts(
   )
   if (!products.length) return []
 
-  // Alle Mentions paginiert laden — PostgREST cappt sonst still bei 1000 Zeilen,
-  // wodurch (seit dem Backfill > 1000 Mentions) die Momentum-Scores aus einer
-  // willkürlichen Teilmenge berechnet würden und Produkte aus dem Ranking fielen.
-  const datesByProduct = new Map<string, string[]>()
+  // Vorberechnete Metriken laden (product_metrics) statt ~43k Mentions on-the-fly zu
+  // aggregieren — das war der eigentliche Flaschenhals (~12s/Load). Precompute-Job
+  // (lib/rankings/precompute.ts) hält product_metrics aktuell.
+  type Metric = { momentum: number; trend: 'up' | 'down' | 'flat'; mention_count: number; last_seen: string | null; history: Array<{ t: number; value: number }> }
+  const metricsById = new Map<string, Metric>()
   for (let off = 0; ; off += 1000) {
-    const { data: batch, error: mErr } = await supabase
-      .from('product_mentions')
-      .select('product_id, mention_date')
+    const { data, error: meErr } = await supabase
+      .from('product_metrics')
+      .select('product_id, momentum, trend, mention_count, last_seen, history')
       .range(off, off + 999)
-    if (mErr) throw new Error(`leaderboard mentions: ${mErr.message}`)
-    for (const m of batch ?? []) {
-      if (!m.mention_date) continue
-      const arr = datesByProduct.get(m.product_id) ?? []
-      arr.push(m.mention_date)
-      datesByProduct.set(m.product_id, arr)
+    if (meErr) throw new Error(`leaderboard metrics: ${meErr.message}`)
+    if (!data?.length) break
+    for (const m of data) {
+      metricsById.set(m.product_id as string, {
+        momentum: (m.momentum as number) ?? 0,
+        trend: ((m.trend as string) ?? 'flat') as Metric['trend'],
+        mention_count: (m.mention_count as number) ?? 0,
+        last_seen: (m.last_seen as string | null) ?? null,
+        history: ((m.history as Metric['history']) ?? []),
+      })
     }
-    if (!batch || batch.length < 1000) break
+    if (data.length < 1000) break
   }
 
   const scored = products
     .map((p) => {
-      const dates = datesByProduct.get(p.id) ?? []
+      const m = metricsById.get(p.id)
       return {
         id: p.id,
         canonicalName: p.canonical_name as string,
         vendor: p.vendor_namespace as string,
         slug: p.slug as string,
-        momentum: momentumScore(dates, now),
-        trend: momentumTrend(dates, now),
-        mentionCount: dates.length,
-        lastSeen: dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null,
+        momentum: m?.momentum ?? 0,
+        trend: m?.trend ?? 'flat',
+        mentionCount: m?.mention_count ?? 0,
+        lastSeen: m?.last_seen ?? null,
+        history: m?.history ?? [],
       }
     })
     .filter((p) => p.mentionCount >= Math.max(1, minMentions))
@@ -130,7 +135,6 @@ async function computeRankedProducts(
     ...p,
     rank: i + 1,
     score: toDisplayScore(p.momentum, maxMomentum),
-    history: momentumHistory(datesByProduct.get(p.id) ?? [], now, 90, 90),
   }))
 }
 
