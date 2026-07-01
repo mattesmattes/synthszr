@@ -220,6 +220,12 @@ export async function runProductResearch(opts: { limit?: number; minMentions?: n
     if (res.description) rows.push({ product_id: m.product_id, category: m.category, dimension_key: DESCRIPTION_DIM, value_text: res.description, confidence: 0.85, evidence_count: 1, source_count: 1 })
     if (res.descriptionEn) rows.push({ product_id: m.product_id, category: m.category, dimension_key: DESCRIPTION_EN_DIM, value_text: res.descriptionEn, confidence: 0.85, evidence_count: 1, source_count: 1 })
     if (res.releaseDate) rows.push({ product_id: m.product_id, category: m.category, dimension_key: RELEASED_DIM, value_text: res.releaseDate, confidence: 0.85, evidence_count: 1, source_count: 1 })
+    // Force: alte Dimensionswerte entfernen, damit nach einer Dimensions-Umstellung
+    // keine verwaisten Features (nicht mehr in feature_dimensions) übrig bleiben.
+    if (force) {
+      await supabase.from('product_features_current').delete().eq('product_id', m.product_id)
+        .not('dimension_key', 'in', `(${['__sentiment', DESCRIPTION_DIM, DESCRIPTION_EN_DIM, RELEASED_DIM].join(',')})`)
+    }
     const { error } = await supabase.from('product_features_current').upsert(rows, { onConflict: 'product_id,category,dimension_key' })
     if (error) throw new Error(`research upsert: ${error.message}`)
     researched++
