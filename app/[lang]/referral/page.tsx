@@ -15,8 +15,8 @@ const CC_URL = 'https://codecrash.ai/de'
 
 const TEXT = {
   de: {
-    title: 'Teile Synthszr',
-    sub: 'Du magst synthszr? Dann teil es mit den richtigen Freunden, Kolleg:innen und für wen es sonst noch interessant sein könnte. 1.000 Dank ❤️!',
+    title: 'Empfehle synthszr',
+    sub: 'Du magst synthszr? Dann empfehle den Newsletter Freunden, Kollegen und für wen es sonst noch interessant sein könnte. Würde mich sehr freuen ❤️!',
     count: 'Bestätigte Empfehlungen',
     remaining: (n: number) => `Nur noch ${n} bis zu deinem signierten CODE CRASH-Hardcover 🎁`,
     reward: 'Bei 10 bestätigten Empfehlungen schicke ich dir CODE CRASH als Hardcover zu — mit echter persönlicher Widmung, ganz ohne KI 😉',
@@ -37,8 +37,8 @@ const TEXT = {
     ccCta: 'Mehr zum Buch →',
   },
   en: {
-    title: 'Share Synthszr',
-    sub: 'Love synthszr? Then share it with the right friends, colleagues, and anyone else who might find it interesting. A thousand thanks ❤️!',
+    title: 'Recommend synthszr',
+    sub: 'Like synthszr? Then recommend the newsletter to friends, colleagues, and anyone else who might find it interesting. Would really appreciate it ❤️!',
     count: 'Confirmed referrals',
     remaining: (n: number) => `Just ${n} more to unlock your signed CODE CRASH hardcover 🎁`,
     reward: "Reach 10 confirmed referrals and I'll send you CODE CRASH as a hardcover — with a real personal dedication, no AI involved 😉",
