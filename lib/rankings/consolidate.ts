@@ -13,7 +13,10 @@ const CORES = [
 type Sb = ReturnType<typeof createAdminClient>
 
 /** Hängt alle Mentions von `fromIds` an `toId` um (dedupliziert pro daily_repo) und
- *  löscht die Quell-Produkte. */
+ *  löscht die Quell-Produkte. Exportiert für gezielte manuelle Merges (Fragmentierung). */
+export async function mergeProductsInto(supabase: Sb, toId: string, fromIds: string[]): Promise<void> {
+  return mergeInto(supabase, toId, fromIds)
+}
 async function mergeInto(supabase: Sb, toId: string, fromIds: string[]): Promise<void> {
   const { data: tm } = await supabase.from('product_mentions').select('daily_repo_id').eq('product_id', toId)
   const days = new Set((tm ?? []).map((m) => m.daily_repo_id))
