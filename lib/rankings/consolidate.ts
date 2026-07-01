@@ -26,6 +26,16 @@ async function mergeInto(supabase: Sb, toId: string, fromIds: string[]): Promise
       if (days.has(m.daily_repo_id)) await supabase.from('product_mentions').delete().eq('id', m.id)
       else { await supabase.from('product_mentions').update({ product_id: toId, excerpt_hash: mentionHash(toId) }).eq('id', m.id); days.add(m.daily_repo_id) }
     }
+    // Recherchierte Features des Quell-Produkts auf den Kanon übertragen (nur Dimensionen,
+    // die der Kanon noch nicht hat) — sonst gehen die Specs beim Löschen verloren.
+    const { data: ff } = await supabase.from('product_features_current')
+      .select('category, dimension_key, value_text, value_numeric, confidence, evidence_count, source_count')
+      .eq('product_id', fromId)
+    if (ff?.length) {
+      await supabase.from('product_features_current')
+        .upsert(ff.map((f) => ({ ...f, product_id: toId })), { onConflict: 'product_id,category,dimension_key', ignoreDuplicates: true })
+      await supabase.from('product_features_current').delete().eq('product_id', fromId)
+    }
     await supabase.from('products').delete().eq('id', fromId)
   }
 }
