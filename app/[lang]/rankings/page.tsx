@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboard'
+import { CATEGORY_GROUPS, groupForCategory, groupBySlug } from '@/lib/rankings/category-groups'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import type { LanguageCode } from '@/lib/types'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
@@ -16,7 +17,7 @@ export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: Promise<{ lang: string }>
-  searchParams: Promise<{ category?: string; sort?: string }>
+  searchParams: Promise<{ category?: string; group?: string; sort?: string }>
 }
 
 export const metadata = {
@@ -35,9 +36,19 @@ function fmtDate(d: string | null): string {
 
 export default async function RankingsPage({ params, searchParams }: PageProps) {
   const { lang } = await params
-  const { category, sort } = await searchParams
+  const { category, group, sort } = await searchParams
+
+  // Aktive Meta-Gruppe: explizit per ?group, sonst aus der gewählten Kategorie abgeleitet.
+  const activeGroupSlug = group ?? (category ? groupForCategory(category) : null)
+  const activeGroup = activeGroupSlug ? groupBySlug(activeGroupSlug) : undefined
+
   const [ranked, categories, translations] = await Promise.all([
-    getRankedProducts({ limit: category ? 50 : 100, minMentions: 2, category }),
+    getRankedProducts({
+      limit: category ? 50 : 100,
+      minMentions: 2,
+      category,
+      categoryIn: !category && activeGroup ? activeGroup.categories : undefined,
+    }),
     getActiveCategories(),
     getTranslations(lang as LanguageCode),
   ])
@@ -47,8 +58,12 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
     : ranked
   const t = (key: string) => translations[key] ?? key
   const catName = (slug: string, fallback: string) => translations[`rankings.cat.${slug}`] ?? fallback
+  const groupName = (g: { slug: string; name: string }) => translations[`rankings.group.${g.slug}`] ?? g.name
+  const nameBySlug = new Map(categories.map((c) => [c.slug, c.name]))
 
   const tabBase = `/${lang}/rankings`
+  // Aktueller Filter-Kontext für die Sort-Links (Kategorie hat Vorrang vor Gruppe).
+  const ctx = category ? `category=${category}` : (activeGroupSlug ? `group=${activeGroupSlug}` : '')
   const tab = (href: string, label: string, active: boolean) => (
     <Link
       key={href}
@@ -72,14 +87,25 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         <p className="text-gray-600 text-sm mt-1" dangerouslySetInnerHTML={{ __html: t('rankings.subtitle') }} />
       </header>
 
-      {/* Kategorie-Tabs — umbrechend, damit alle Pills sichtbar sind */}
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        {tab(tabBase, t('rankings.all'), !category)}
-        {categories.map((c) => tab(`${tabBase}?category=${c.slug}`, catName(c.slug, c.name), category === c.slug))}
+      {/* Zwei-Ebenen-Navigation: Meta-Gruppen (Ebene 1) → Unterkategorien (Ebene 2) */}
+      <div className="mb-4">
+        <nav className="flex flex-wrap gap-1.5">
+          {tab(tabBase, t('rankings.all'), !category && !activeGroupSlug)}
+          {CATEGORY_GROUPS.map((g) => tab(`${tabBase}?group=${g.slug}`, groupName(g), activeGroupSlug === g.slug))}
+          {tab(`${tabBase}?category=other`, catName('other', 'Sonstige'), category === 'other')}
+        </nav>
+        {activeGroup && (
+          <nav className="flex flex-wrap gap-1.5 mt-2 pl-3 border-l-2 border-gray-200">
+            {tab(`${tabBase}?group=${activeGroup.slug}`, t('rankings.all'), !category)}
+            {activeGroup.categories.map((slug) =>
+              tab(`${tabBase}?category=${slug}`, catName(slug, nameBySlug.get(slug) ?? slug), category === slug),
+            )}
+          </nav>
+        )}
       </div>
 
-      {/* Vergleichs-Chart: nur bei gewählter Kategorie, Top-Produkte über der Liste */}
-      {category && products.length > 0 && (
+      {/* Vergleichs-Chart: bei gewählter Kategorie ODER Gruppe, Top-Produkte über der Liste */}
+      {(category || activeGroup) && products.length > 0 && (
         <div className="mb-4">
           <MultiMomentumChart lang={lang} series={products.slice(0, 8).map((p) => ({ label: p.canonicalName, slug: p.slug, vendor: p.vendor, points: p.history }))} />
         </div>
@@ -89,13 +115,13 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         <div className="flex items-center gap-1.5 mb-2 text-xs">
           <span className="text-gray-400 mr-1">{lang === 'de' ? 'Sortieren:' : 'Sort:'}</span>
           <Link
-            href={category ? `${tabBase}?category=${category}` : tabBase}
+            href={ctx ? `${tabBase}?${ctx}` : tabBase}
             className={`px-2 py-0.5 rounded-full border transition-colors ${sort !== 'vendor' ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'}`}
           >
             Momentum
           </Link>
           <Link
-            href={`${tabBase}?${category ? `category=${category}&` : ''}sort=vendor`}
+            href={`${tabBase}?${ctx ? `${ctx}&` : ''}sort=vendor`}
             className={`px-2 py-0.5 rounded-full border transition-colors ${sort === 'vendor' ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'}`}
           >
             {lang === 'de' ? 'Unternehmen' : 'Company'}

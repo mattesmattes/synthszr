@@ -23,9 +23,9 @@ export interface RankedProduct {
  * Herstellernamen und Modell-Familien-Oberbegriffen.
  */
 export async function getRankedProducts(
-  opts: { limit?: number; category?: string; minMentions?: number } = {},
+  opts: { limit?: number; category?: string; categoryIn?: string[]; minMentions?: number } = {},
 ): Promise<RankedProduct[]> {
-  const { limit, category, minMentions = 1 } = opts
+  const { limit, category, categoryIn, minMentions = 1 } = opts
   const supabase = createAdminClient()
 
   let q = supabase
@@ -34,7 +34,9 @@ export async function getRankedProducts(
     .eq('chartable', true)
     .gte('mention_count', Math.max(1, minMentions))
     .order('momentum', { ascending: false })
+  // Einzel-Kategorie hat Vorrang; sonst optional eine Meta-Gruppe (mehrere Kategorien).
   if (category) q = q.eq('primary_category', category)
+  else if (categoryIn && categoryIn.length) q = q.in('primary_category', categoryIn)
   q = q.limit(limit ?? 1000)
 
   const { data, error } = await q
