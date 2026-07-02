@@ -86,9 +86,8 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>
       <RankingsBanner />
-      <header className="mb-4">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Synthszr Charts</h1>
-        <p className="text-gray-600 text-sm mt-1" dangerouslySetInnerHTML={{ __html: t('rankings.subtitle') }} />
+      <header className="mb-4 text-center">
+        <p className="text-gray-600 text-sm" dangerouslySetInnerHTML={{ __html: t('rankings.subtitle') }} />
       </header>
 
       {/* Ebene 1: Meta-Gruppen als typografische Section-Tabs (keine Pills) */}
