@@ -29,9 +29,13 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
   const products = productsRaw.filter((p): p is NonNullable<typeof p> => !!p)
   const t = (key: string) => translations[key] ?? key
 
+  // Synonyme Dimensionen kategorieübergreifend zusammenführen: "Preis pro 1M Token"
+  // (LLM-Kategorien) und "Preis" (übrige) landen in EINER Zeile statt nebeneinander.
+  const DIM_ALIAS: Record<string, string> = { 'Preis pro 1M Token': 'Preis' }
+  const canonDim = (d: string) => DIM_ALIAS[d] ?? d
   // Vereinigung aller Feature-Dimensionen (Zeilen der Tabelle)
   const dims: string[] = []
-  for (const p of products) for (const f of p.features) if (!dims.includes(f.dimension)) dims.push(f.dimension)
+  for (const p of products) for (const f of p.features) { const d = canonDim(f.dimension); if (!dims.includes(d)) dims.push(d) }
 
   return (
     <>
@@ -86,7 +90,7 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
                 <tr key={d} className="border-b border-gray-100">
                   <td className="p-2 text-gray-400">{d}</td>
                   {products.map((p) => {
-                    const f = p.features.find((x) => x.dimension === d)
+                    const f = p.features.find((x) => canonDim(x.dimension) === d)
                     return <td key={p.slug} className={`p-2 ${f ? 'font-medium' : 'text-gray-300'}`}>{f?.value ?? '—'}</td>
                   })}
                 </tr>
