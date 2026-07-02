@@ -23,13 +23,13 @@ export function RankingsBanner() {
         loading="eager"
         className="block w-full max-w-[880px] mx-auto h-auto"
       />
-      {/* Wortmark-Overlay: Marken-Wortmark aus ad-promo.svg, zentriert (wie im Vorbild). */}
-      <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+      {/* Wortmark-Overlay: Marken-Wortmark aus ad-promo.svg, obere Bannerhälfte (wie im Vorbild). */}
+      <div className="pointer-events-none absolute inset-x-0 top-[21%] z-10 flex justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={WORDMARK_URL}
           alt="synthszr charts"
-          className="w-[42%] max-w-[360px] h-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.25)]"
+          className="w-[32%] max-w-[280px] h-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.25)]"
         />
       </div>
     </div>
