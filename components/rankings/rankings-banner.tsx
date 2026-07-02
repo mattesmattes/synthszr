@@ -19,12 +19,12 @@ export function RankingsBanner() {
         loading="eager"
         className="block w-full max-w-[880px] mx-auto h-auto"
       />
-      {/* Wortmark-Overlay: synthszr-Logo + /charts, zentriert, kleiner als auf dem Post-Cover */}
+      {/* Wortmark-Overlay: gestapeltes zweifarbiges Lockup — "synthszr" (dunkles Teal,
+          kleiner) über "charts" (weiß, größer, leicht überlappend), fette Grotesk. */}
       <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-        <div className="flex items-end gap-1.5 drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/synthszr-logo.svg" alt="Synthszr" className="h-8 w-auto sm:h-12" />
-          <span className="font-bold leading-none text-white text-2xl sm:text-4xl">/charts</span>
+        <div className="flex flex-col items-center font-black leading-[0.8] tracking-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.3)]">
+          <span className="text-[#173d33] text-3xl sm:text-5xl">synthszr</span>
+          <span className="-mt-[0.1em] text-white text-5xl sm:text-7xl">charts</span>
         </div>
       </div>
     </div>

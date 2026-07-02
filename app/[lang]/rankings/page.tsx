@@ -64,15 +64,15 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
   const tabBase = `/${lang}/rankings`
   // Aktueller Filter-Kontext für die Sort-Links (Kategorie hat Vorrang vor Gruppe).
   const ctx = category ? `category=${category}` : (activeGroupSlug ? `group=${activeGroupSlug}` : '')
-  // Ebene-1-Tab: typografische Section-Navigation (kein Pill), aktiv fett + unterstrichen.
+  // Ebene-1-Tab als Pill: aktiv = dunkler Farbton (abgesetzt vom Nav-Panel), inaktiv grau.
   const gtab = (href: string, label: string, active: boolean) => (
     <Link
       key={href}
       href={href}
-      className={`text-sm whitespace-nowrap transition-colors ${
+      className={`rounded-md px-2.5 py-1 text-sm whitespace-nowrap transition-colors ${
         active
-          ? 'text-black font-semibold underline underline-offset-[6px] decoration-2 decoration-black'
-          : 'text-gray-500 hover:text-black'
+          ? 'bg-gray-900 text-white font-semibold'
+          : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
       }`}
     >
       {label}
@@ -86,31 +86,45 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>
       <RankingsBanner />
-      <header className="mb-4 text-center">
+      <header className="mb-7 text-center">
         <p className="text-gray-600 text-sm" dangerouslySetInnerHTML={{ __html: t('rankings.subtitle') }} />
       </header>
 
-      {/* Ebene 1: Meta-Gruppen als typografische Section-Tabs (keine Pills) */}
-      <nav className="flex flex-wrap gap-x-5 gap-y-2 mb-3">
-        {gtab(tabBase, t('rankings.all'), !category && !activeGroupSlug)}
-        {CATEGORY_GROUPS.map((g) => gtab(`${tabBase}?group=${g.slug}`, g.short, activeGroupSlug === g.slug))}
-        {gtab(`${tabBase}?category=other`, catName('other', 'Sonstige'), category === 'other')}
-      </nav>
-
-      {/* Ebene 2: Unterkategorien der aktiven Gruppe — kleine Text-Links, Mittelpunkt-getrennt.
-          Kein „Alle": die aktive Gruppe in Ebene 1 ist bereits „alles in dieser Gruppe". */}
-      {activeGroup && (
-        <div className="mb-5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 border-t border-gray-100 pt-2.5">
-          {activeGroup.categories.map((slug, i) => (
-            <span key={slug} className="flex items-center gap-x-2.5">
-              {i > 0 && <span className="text-gray-300 select-none">·</span>}
-              <Link href={`${tabBase}?category=${slug}`} className={`text-xs whitespace-nowrap transition-colors ${category === slug ? 'text-black font-medium' : 'text-gray-500 hover:text-black'}`}>
-                {catName(slug, nameBySlug.get(slug) ?? slug)}
-              </Link>
-            </span>
-          ))}
-        </div>
-      )}
+      {/* Nav Ebene 1+2 in abgesetztem Panel. Ist eine Gruppe aktiv, werden die übrigen
+          Ebene-1-Punkte ausgeblendet (nur „Alle" + aktive Gruppe bleiben); „Alle" zeigt
+          wieder alles ein. Aktive Tabs sind als dunkle Pill markiert. */}
+      {(() => {
+        const anyActive = !!activeGroupSlug || category === 'other'
+        return (
+          <div className="mb-5 rounded-xl bg-gray-100 p-2.5">
+            <nav className="flex flex-wrap gap-1.5">
+              {gtab(tabBase, t('rankings.all'), !anyActive)}
+              {CATEGORY_GROUPS.filter((g) => !anyActive || activeGroupSlug === g.slug).map((g) =>
+                gtab(`${tabBase}?group=${g.slug}`, g.short, activeGroupSlug === g.slug),
+              )}
+              {(!anyActive || category === 'other') &&
+                gtab(`${tabBase}?category=other`, catName('other', 'Sonstige'), category === 'other')}
+            </nav>
+            {activeGroup && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-gray-200 pt-2">
+                {activeGroup.categories.map((slug) => (
+                  <Link
+                    key={slug}
+                    href={`${tabBase}?category=${slug}`}
+                    className={`rounded px-2 py-0.5 text-xs whitespace-nowrap transition-colors ${
+                      category === slug
+                        ? 'bg-gray-900 text-white font-medium'
+                        : 'text-gray-500 hover:bg-gray-200 hover:text-gray-900'
+                    }`}
+                  >
+                    {catName(slug, nameBySlug.get(slug) ?? slug)}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Vergleichs-Chart: bei gewählter Kategorie ODER Gruppe, Top-Produkte über der Liste */}
       {(category || activeGroup) && products.length > 0 && (
