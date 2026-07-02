@@ -12,6 +12,7 @@ import { SingleMomentumChart } from '@/components/rankings/single-momentum-chart
 import { PremarketSynthesisBlock } from '@/components/rankings/premarket-synthesis-block'
 import { MentionList } from '@/components/rankings/mention-list'
 import { PinButton, PinBar } from '@/components/rankings/pin-controls'
+import { RankingsBanner } from '@/components/rankings/rankings-banner'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,6 +59,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
       <Suspense fallback={null}>
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>
+      <RankingsBanner />
       <nav className="flex items-center gap-1.5 text-sm text-gray-500 mb-4 flex-wrap">
         <Link href={`/${lang}/rankings`} className="hover:text-black">{t('rankings.breadcrumb_all')}</Link>
         {p.category && (

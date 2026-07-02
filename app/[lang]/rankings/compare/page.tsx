@@ -7,6 +7,7 @@ import type { LanguageCode } from '@/lib/types'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
 import { SiteFooter } from '@/components/site-footer'
+import { RankingsBanner } from '@/components/rankings/rankings-banner'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +39,7 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
       <Suspense fallback={null}>
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>
+      <RankingsBanner />
 
       <Link href={`/${lang}/rankings`} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-black mb-4">
         <ArrowLeft className="w-4 h-4" /> {t('rankings.breadcrumb_all')}

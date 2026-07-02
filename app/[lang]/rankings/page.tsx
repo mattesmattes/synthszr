@@ -10,6 +10,7 @@ import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { MomentumChart } from '@/components/rankings/momentum-chart'
 import { MultiMomentumChart } from '@/components/rankings/multi-momentum-chart'
 import { PinButton, PinBar } from '@/components/rankings/pin-controls'
+import { RankingsBanner } from '@/components/rankings/rankings-banner'
 
 // force-dynamic statt ISR: die Seite lädt zur Laufzeit aus der DB (kein Build-time-
 // Prerender pro Locale — sonst scheitert der Export). Konsistent mit /companies.
@@ -84,6 +85,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
       <Suspense fallback={null}>
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>
+      <RankingsBanner />
       <header className="mb-4">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Synthszr Charts</h1>
         <p className="text-gray-600 text-sm mt-1" dangerouslySetInnerHTML={{ __html: t('rankings.subtitle') }} />
