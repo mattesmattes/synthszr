@@ -100,7 +100,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
             <nav className="flex flex-wrap gap-1.5">
               {gtab(tabBase, t('rankings.all'), !anyActive)}
               {CATEGORY_GROUPS.filter((g) => !anyActive || activeGroupSlug === g.slug).map((g) =>
-                gtab(`${tabBase}?group=${g.slug}`, g.short, activeGroupSlug === g.slug),
+                gtab(`${tabBase}?group=${g.slug}`, translations[`rankings.group.${g.slug}`] ?? g.short, activeGroupSlug === g.slug),
               )}
               {(!anyActive || category === 'other') &&
                 gtab(`${tabBase}?category=other`, catName('other', 'Sonstige'), category === 'other')}
