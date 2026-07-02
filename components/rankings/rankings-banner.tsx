@@ -6,6 +6,10 @@
 // (analog zum Post-Cover, das das synthszr-Logo aufs Cover legt — hier kleiner).
 const BANNER_URL =
   'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/rankings/synthszr-charts-banner-2x.png'
+// Marken-Wortmark (aus ad-promo.svg extrahiert): "synthszr" dunkel-teal + "charts" weiß,
+// korrekte Marken-Schrift, transparent — wird zentriert aufs Cover gelegt (wie im Vorbild).
+const WORDMARK_URL =
+  'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/rankings/synthszr-charts-wordmark.png'
 
 export function RankingsBanner() {
   return (
@@ -19,16 +23,14 @@ export function RankingsBanner() {
         loading="eager"
         className="block w-full max-w-[880px] mx-auto h-auto"
       />
-      {/* Wortmark-Overlay: gestapeltes zweifarbiges Lockup — "synthszr" (dunkles Teal,
-          kleiner) über "charts" (weiß, größer, leicht überlappend), fette Grotesk. */}
+      {/* Wortmark-Overlay: Marken-Wortmark aus ad-promo.svg, zentriert (wie im Vorbild). */}
       <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-        <div
-          className="flex flex-col items-center font-black leading-[0.8] tracking-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.3)]"
-          style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
-        >
-          <span className="text-[#173d33] text-3xl sm:text-5xl">synthszr</span>
-          <span className="-mt-[0.1em] text-white text-5xl sm:text-7xl">charts</span>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={WORDMARK_URL}
+          alt="synthszr charts"
+          className="w-[60%] max-w-[520px] h-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.25)]"
+        />
       </div>
     </div>
   )
