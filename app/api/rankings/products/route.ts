@@ -20,11 +20,21 @@ export async function GET() {
 
     // primäre Kategorie je Produkt → Score/Rang relativ zum Kategorie-Spitzenreiter
     const supabase = createAdminClient()
-    const { data: memb } = await supabase
-      .from('product_category_membership')
-      .select('product_id, category')
-      .eq('is_primary', true)
-    const primaryCat = new Map((memb ?? []).map((m) => [m.product_id as string, m.category as string]))
+    // WICHTIG: paginieren — .eq() ohne range() cappt bei 1000 Zeilen (PostgREST) →
+    // sonst gelten ~3700 Produkte fälschlich als uncategorisiert → falsche Ränge.
+    const membRows: Array<{ product_id: string; category: string }> = []
+    for (let off = 0; ; off += 1000) {
+      const { data } = await supabase
+        .from('product_category_membership')
+        .select('product_id, category')
+        .eq('is_primary', true)
+        .order('product_id')
+        .range(off, off + 999)
+      if (!data?.length) break
+      membRows.push(...(data as Array<{ product_id: string; category: string }>))
+      if (data.length < 1000) break
+    }
+    const primaryCat = new Map(membRows.map((m) => [m.product_id, m.category]))
 
     // all ist global nach Momentum sortiert → die laufende Position innerhalb der
     // primären Kategorie ist der Kategorie-Rang (#1, #2, …), über den vollen Satz.
