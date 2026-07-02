@@ -31,7 +31,11 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
 
   // Synonyme Dimensionen kategorieübergreifend zusammenführen: "Preis pro 1M Token"
   // (LLM-Kategorien) und "Preis" (übrige) landen in EINER Zeile statt nebeneinander.
-  const DIM_ALIAS: Record<string, string> = { 'Preis pro 1M Token': 'Preis' }
+  // DE + EN: "Preis pro 1M Token(s)" / "Price per 1M Tokens" in die Preis-/Price-Zeile falten.
+  const DIM_ALIAS: Record<string, string> = {
+    'Preis pro 1M Token': 'Preis', 'Preis pro 1M Tokens': 'Preis',
+    'Price per 1M Tokens': 'Price', 'Price per 1M Token': 'Price',
+  }
   const canonDim = (d: string) => DIM_ALIAS[d] ?? d
   // Vereinigung aller Feature-Dimensionen (Zeilen der Tabelle)
   const dims: string[] = []

@@ -132,7 +132,7 @@ export async function getProductDetail(slug: string, locale = 'de'): Promise<Pro
   // Sentiment + Features (enrich, 1b-iii)
   const { data: feats } = await supabase
     .from('product_features_current')
-    .select('dimension_key, value_text, value_numeric')
+    .select('dimension_key, dimension_key_en, value_text, value_text_en, value_numeric')
     .eq('product_id', product.id)
   const sentimentRow = (feats ?? []).find((f) => f.dimension_key === SENTIMENT_DIM)
   const sentiment = sentimentRow
@@ -143,9 +143,14 @@ export async function getProductDetail(slug: string, locale = 'de'): Promise<Pro
   const descEn = (feats ?? []).find((f) => f.dimension_key === '__description_en')?.value_text as string | undefined
   const description = locale === 'de' ? descDe : (descEn ?? descDe)
   const releasedAt = (feats ?? []).find((f) => f.dimension_key === '__released')?.value_text as string | undefined
+  // Nicht-DE Locales → englische Dimension + Wert (Fallback: deutsch), analog description.
+  const en = locale !== 'de'
   const features = (feats ?? [])
     .filter((f) => !META_DIMS.has(f.dimension_key as string))
-    .map((f) => ({ dimension: f.dimension_key as string, value: f.value_text as string }))
+    .map((f) => ({
+      dimension: (en ? (f.dimension_key_en as string) : null) ?? (f.dimension_key as string),
+      value: (en ? (f.value_text_en as string) : null) ?? (f.value_text as string),
+    }))
 
   return {
     id: product.id,
