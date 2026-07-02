@@ -122,7 +122,11 @@ STRIKT — KEIN SPEKULIEREN:
   const timer = setTimeout(() => controller.abort(), RESEARCH_TIMEOUT_MS)
   try {
     const resp = await client.messages.create({
-      model: 'claude-sonnet-4-6', max_tokens: 4000,
+      // Sonnet 5: stärkeres Instruction-Following (hilft Citation-/Produkt-Domain-Prompt);
+      // thinking explizit AUS (auf Sonnet 5 sonst adaptiv default an) — reine Web-Extraktion
+      // braucht kein Reasoning, so bleiben Kosten/Latenz vorhersehbar.
+      model: 'claude-sonnet-5', max_tokens: 4000,
+      thinking: { type: 'disabled' },
       tools: [REPORT_TOOL, { type: 'web_search_20250305', name: 'web_search', max_uses: 6 }],
       messages: [{ role: 'user', content: prompt }],
     }, { signal: controller.signal })
