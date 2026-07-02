@@ -9,7 +9,7 @@ const BANNER_URL =
 
 export function RankingsBanner() {
   return (
-    <div className="relative mb-5 overflow-hidden rounded-xl bg-[#00ffff]">
+    <div className="relative mb-5 overflow-hidden rounded-xl bg-[#00ffb8]">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={BANNER_URL}
