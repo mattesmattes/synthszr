@@ -98,7 +98,7 @@ export const defaultTranslations: Record<string, string> = {
   'companies.detailed_analysis': 'Ausführliche Analyse hier →',
 
   // Rankings / Charts
-  'rankings.subtitle': 'Welche AI-Produkte gerade den <b>Takt vorgeben</b> — täglich aus tausenden News ausgewertet.',
+  'rankings.subtitle': 'Welche AI-Produkte gerade <b>rocken</b> — täglich aus tausenden News ausgewertet.',
   'rankings.all': 'Alle',
   'rankings.footer': 'Score = Momentum (Erwähnungen, recency-gewichtet, Halbwertszeit 14 Tage). Sparkline = Verlauf 90 Tage. Nur Produkte mit ≥2 Erwähnungen. Pinne Produkte (📌) für den Vergleich.',
   'rankings.empty': 'Noch keine Produkte mit genügend Erwähnungen.',

@@ -22,8 +22,8 @@ interface PageProps {
 }
 
 export const metadata = {
-  title: 'Synthszr Charts — welche AI-Produkte den Takt vorgeben',
-  description: 'Welche AI-Produkte gerade den Takt vorgeben — täglich aus tausenden News ausgewertet.',
+  title: 'Synthszr Charts — welche AI-Produkte rocken',
+  description: 'Welche AI-Produkte gerade rocken — täglich aus tausenden News ausgewertet.',
 }
 
 function fmtDate(d: string | null): string {
