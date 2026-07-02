@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { DIMENSION_EN } from '@/lib/rankings/dimension-i18n'
 
-export interface ResearchedFeature { dimension: string; value: string }
+export interface ResearchedFeature { dimension: string; value: string; valueEn?: string }
 export interface ResearchResult {
   description: string | null
   descriptionEn: string | null
@@ -23,7 +24,7 @@ export const RESEARCHED_AT_DIM = '__researched_at'
 const MAX_VALUE = 500 // Spec-Werte: Preis-Staffeln/Benchmark-Details laufen bis ~450 Zeichen
 const MAX_DESC = 800
 const MAX_RELEASE = 120
-const FeatureSchema = z.object({ dimension: z.string(), value: z.string().trim().min(1), source_url: z.string().trim().optional() })
+const FeatureSchema = z.object({ dimension: z.string(), value: z.string().trim().min(1), value_en: z.string().trim().optional(), source_url: z.string().trim().optional() })
 const ReportSchema = z.object({
   description: z.string().trim().optional(),
   description_en: z.string().trim().optional(),
@@ -51,8 +52,9 @@ export function parseResearchResponse(raw: unknown, validDimensions: Set<string>
     if (!p.data.source_url || !/^https?:\/\//i.test(p.data.source_url)) continue
     const value = stripCite(p.data.value).slice(0, MAX_VALUE)
     if (!value) continue
+    const valueEn = p.data.value_en ? stripCite(p.data.value_en).slice(0, MAX_VALUE) || undefined : undefined
     seen.add(p.data.dimension)
-    features.push({ dimension: p.data.dimension, value })
+    features.push({ dimension: p.data.dimension, value, valueEn })
   }
   return {
     description: outer.data.description ? stripCite(outer.data.description).slice(0, MAX_DESC) || null : null,
@@ -79,9 +81,10 @@ const REPORT_TOOL = {
           properties: {
             dimension: { type: 'string' },
             value: { type: 'string' },
+            value_en: { type: 'string', description: 'Derselbe Wert auf Englisch (knapp, tabellentauglich)' },
             source_url: { type: 'string', description: 'URL der Web-Quelle, die diesen Wert belegt (Pflicht)' },
           },
-          required: ['dimension', 'value', 'source_url'],
+          required: ['dimension', 'value', 'value_en', 'source_url'],
         },
       },
     },
@@ -110,7 +113,7 @@ VORGEHEN — OFFIZIELLE PRODUKTSEITE ZUERST: Finde zuerst die offizielle Website
 1. description: 2-4 nüchterne Sätze DEUTSCH (kein Marketing).
 2. description_en: dieselbe Aussage ENGLISCH.
 3. release_date: Erscheinungsdatum, falls in einer Quelle belegt.
-4. features: für JEDE dieser Dimensionen (dimension EXAKT wie unten) den belegten Wert MIT source_url. Halte jeden value KNAPP und tabellentauglich (kein Fließtext, keine Aufzählung ganzer Historien — nur der aktuelle Kernwert, idealerweise < 200 Zeichen):
+4. features: für JEDE dieser Dimensionen (dimension EXAKT wie unten) den belegten Wert MIT source_url. Gib value (Deutsch) UND value_en (dieselbe Info Englisch, gleiche Konvention: $1.25, 1,000, January 2025). Halte jeden Wert KNAPP und tabellentauglich (kein Fließtext, keine Aufzählung ganzer Historien — nur der aktuelle Kernwert, idealerweise < 200 Zeichen):
 ${dims}
 
 STRIKT — KEIN SPEKULIEREN:
@@ -203,7 +206,9 @@ export async function runProductResearch(
 
     const rows: Array<Record<string, unknown>> = res.features.map((f) => ({
       product_id: m.product_id, category: m.category, dimension_key: f.dimension,
-      value_text: f.value, confidence: 0.85, evidence_count: 1, source_count: 1,
+      dimension_key_en: DIMENSION_EN[f.dimension] ?? f.dimension,
+      value_text: f.value, value_text_en: f.valueEn ?? null,
+      confidence: 0.85, evidence_count: 1, source_count: 1,
     }))
     if (res.description) rows.push({ product_id: m.product_id, category: m.category, dimension_key: DESCRIPTION_DIM, value_text: res.description, confidence: 0.85, evidence_count: 1, source_count: 1 })
     if (res.descriptionEn) rows.push({ product_id: m.product_id, category: m.category, dimension_key: DESCRIPTION_EN_DIM, value_text: res.descriptionEn, confidence: 0.85, evidence_count: 1, source_count: 1 })
