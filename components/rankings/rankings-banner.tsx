@@ -23,8 +23,8 @@ export function RankingsBanner() {
         loading="eager"
         className="block w-full max-w-[880px] mx-auto h-auto"
       />
-      {/* Wortmark-Overlay: Marken-Wortmark aus ad-promo.svg, obere Bannerhälfte (wie im Vorbild). */}
-      <div className="pointer-events-none absolute inset-x-0 top-[21%] z-10 flex justify-center">
+      {/* Wortmark-Overlay: Marken-Wortmark aus ad-promo.svg, unten platziert. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-[8%] z-10 flex justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={WORDMARK_URL}
