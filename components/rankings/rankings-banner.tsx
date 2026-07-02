@@ -29,7 +29,7 @@ export function RankingsBanner() {
         <img
           src={WORDMARK_URL}
           alt="synthszr charts"
-          className="w-[60%] max-w-[520px] h-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.25)]"
+          className="w-[42%] max-w-[360px] h-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.25)]"
         />
       </div>
     </div>
