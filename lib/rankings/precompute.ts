@@ -14,7 +14,7 @@ export async function precomputeMetrics(): Promise<{ computed: number }> {
 
   const products: Array<{ id: string; family: string; version: string | null; qualifier: string | null }> = []
   for (let off = 0; ; off += 1000) {
-    const { data } = await supabase.from('products').select('id, family, version, qualifier').eq('visibility_status', 'visible').range(off, off + 999)
+    const { data } = await supabase.from('products').select('id, family, version, qualifier').eq('visibility_status', 'visible').order('id').range(off, off + 999)
     if (!data?.length) break
     products.push(...(data as typeof products))
     if (data.length < 1000) break
@@ -22,7 +22,7 @@ export async function precomputeMetrics(): Promise<{ computed: number }> {
 
   const primaryCat = new Map<string, string>()
   for (let off = 0; ; off += 1000) {
-    const { data } = await supabase.from('product_category_membership').select('product_id, category').eq('is_primary', true).range(off, off + 999)
+    const { data } = await supabase.from('product_category_membership').select('product_id, category').eq('is_primary', true).order('product_id').range(off, off + 999)
     if (!data?.length) break
     for (const m of data) primaryCat.set(m.product_id as string, m.category as string)
     if (data.length < 1000) break
@@ -30,7 +30,10 @@ export async function precomputeMetrics(): Promise<{ computed: number }> {
 
   const datesByProduct = new Map<string, string[]>()
   for (let off = 0; ; off += 1000) {
-    const { data } = await supabase.from('product_mentions').select('product_id, mention_date').range(off, off + 999)
+    // .order('id') ist PFLICHT: range-Pagination ohne stabile Sortierung liefert über
+    // Seiten hinweg doppelte/fehlende Zeilen → mention_count (dates.length) wird überzählt
+    // → falsche chartable-Flags + Phantom-Chart-Einträge, die der Cron nie füllt.
+    const { data } = await supabase.from('product_mentions').select('id, product_id, mention_date').order('id').range(off, off + 999)
     if (!data?.length) break
     for (const m of data) {
       if (!m.mention_date) continue
