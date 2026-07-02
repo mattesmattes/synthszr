@@ -9,7 +9,7 @@ const BANNER_URL =
 // Marken-Wortmark (aus ad-promo.svg extrahiert): "synthszr" dunkel-teal + "charts" weiß,
 // korrekte Marken-Schrift, transparent — wird zentriert aufs Cover gelegt (wie im Vorbild).
 const WORDMARK_URL =
-  'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/rankings/synthszr-charts-wordmark.png'
+  'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/rankings/synthszr-charts-wordmark-white.png'
 
 export function RankingsBanner() {
   return (
