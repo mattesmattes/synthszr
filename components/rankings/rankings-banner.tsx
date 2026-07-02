@@ -5,7 +5,7 @@
 // Asset nativ 880×400, durabel in Vercel Blob. Zentriert das "synthszr/charts"-Wortmark
 // (analog zum Post-Cover, das das synthszr-Logo aufs Cover legt — hier kleiner).
 const BANNER_URL =
-  'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/rankings/synthszr-charts-banner-marble-400.png'
+  'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/rankings/synthszr-charts-banner-2x.png'
 
 export function RankingsBanner() {
   return (
@@ -21,10 +21,10 @@ export function RankingsBanner() {
       />
       {/* Wortmark-Overlay: synthszr-Logo + /charts, zentriert, kleiner als auf dem Post-Cover */}
       <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-        <div className="flex items-end gap-1 drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]">
+        <div className="flex items-end gap-1.5 drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/synthszr-logo.svg" alt="Synthszr" className="h-6 w-auto sm:h-8" />
-          <span className="font-bold leading-none text-white text-xl sm:text-2xl">/charts</span>
+          <img src="/synthszr-logo.svg" alt="Synthszr" className="h-8 w-auto sm:h-12" />
+          <span className="font-bold leading-none text-white text-2xl sm:text-4xl">/charts</span>
         </div>
       </div>
     </div>
