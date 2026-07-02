@@ -9,7 +9,7 @@ export const ALL_LOCALES: LanguageCode[] = ['de', 'en', 'fr', 'es', 'it', 'pt', 
  * so advertising them in hreflang tells Google "reciprocal link missing" and gets
  * the whole cluster ignored.
  */
-export const PUBLIC_LOCALES: LanguageCode[] = ['de', 'en', 'cs', 'nds']
+export const PUBLIC_LOCALES: LanguageCode[] = ['de', 'en', 'cs', 'nds', 'fr']
 
 /** Default locale (fallback) */
 export const DEFAULT_LOCALE: LanguageCode = 'de'
