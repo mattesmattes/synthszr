@@ -24,7 +24,7 @@ export function RankingsBanner() {
       <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
         <div
           className="flex flex-col items-center font-black leading-[0.8] tracking-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.3)]"
-          style={{ fontFamily: 'var(--font-sf-pro)' }}
+          style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
         >
           <span className="text-[#173d33] text-3xl sm:text-5xl">synthszr</span>
           <span className="-mt-[0.1em] text-white text-5xl sm:text-7xl">charts</span>
