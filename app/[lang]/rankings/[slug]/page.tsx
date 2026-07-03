@@ -200,12 +200,6 @@ export default async function ProductDetailPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* Belege */}
-      <h2 className="text-lg font-semibold mb-3">{t('rankings.evidence')} ({p.mentions.length})</h2>
-      <MentionList mentions={p.mentions} />
-
-      {vendorSyn && <PremarketSynthesisBlock company={vendorSyn.company} synthesis={vendorSyn.synthesis} />}
-
       {p.category && (
         <RelatedProducts
           lang={lang}
@@ -215,6 +209,12 @@ export default async function ProductDetailPage({ params }: PageProps) {
           heading={t('rankings.related')}
         />
       )}
+
+      {/* Belege */}
+      <h2 className="text-lg font-semibold mb-3">{t('rankings.evidence')} ({p.mentions.length})</h2>
+      <MentionList mentions={p.mentions} />
+
+      {vendorSyn && <PremarketSynthesisBlock company={vendorSyn.company} synthesis={vendorSyn.synthesis} />}
 
       <footer className="mt-10 text-xs text-gray-400 border-t pt-4">
         {t('rankings.footer_product')}

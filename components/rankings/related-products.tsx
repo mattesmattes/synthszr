@@ -28,7 +28,7 @@ export async function RelatedProducts({
   if (related.length === 0) return null
 
   return (
-    <section className="mt-10">
+    <section className="mb-8">
       <h2 className="text-lg font-semibold mb-3">
         {heading}: {categoryName}
       </h2>
