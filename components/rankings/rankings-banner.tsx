@@ -34,7 +34,7 @@ export function RankingsBanner() {
       </picture>
       {/* Wortmark-Overlay: Marken-Wortmark aus ad-promo.svg, unten platziert. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-[8%] z-10 flex justify-center">
-        <picture>
+        <picture className="contents">
           <source srcSet={WORDMARK_WEBP} type="image/webp" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
