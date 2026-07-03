@@ -35,11 +35,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Synthszr — AI is about Synthesis not Efficiency.',
     description: 'Exploring the intersection of business, design and technology in the age of AI',
-    url: 'https://synthszr.com',
+    url: 'https://www.synthszr.com',
     siteName: 'Synthszr',
     images: [
       {
-        url: 'https://synthszr.com/og-image.jpg',
+        url: 'https://www.synthszr.com/og-image-v2.jpg',
         width: 1200,
         height: 630,
         alt: 'Synthszr — AI is about Synthesis not Efficiency.',
@@ -52,8 +52,19 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Synthszr — AI is about Synthesis not Efficiency.',
     description: 'Exploring the intersection of business, design and technology in the age of AI',
-    images: ['https://synthszr.com/og-image.jpg'],
+    images: ['https://www.synthszr.com/og-image-v2.jpg'],
   },
+}
+
+// Site-weite Organization-Entity — Grundlage für Publisher-Verknüpfung in
+// Article-/Breadcrumb-Schemas (Posts) und Brand-Erkennung.
+const orgLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'Synthszr',
+  url: 'https://www.synthszr.com',
+  logo: 'https://www.synthszr.com/apple-touch-icon.png',
+  sameAs: ['https://www.linkedin.com/in/mattes/'],
 }
 
 export default function RootLayout({
@@ -73,6 +84,10 @@ export default function RootLayout({
       </head>
       <body className={`${ibmPlexSerif.variable} ${spaceMono.variable} font-serif antialiased`}>
         {children}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(orgLd) }}
+        />
         <PageTracker />
         <Analytics />
         <ConsentBanner />
