@@ -100,3 +100,16 @@ export function getCanonicalUrl(locale: LanguageCode, path: string): string {
   const cleanPath = path === '/' ? '' : path
   return `${BASE_URL}/${locale}${cleanPath}`
 }
+
+/** Bereinigt einen Roh-Excerpt für Meta-/OG-Descriptions: Bullet-Zeichen und
+ *  Zeilenumbrüche raus, Whitespace kollabieren, an Wortgrenze auf ~155 Zeichen
+ *  kürzen (Google schneidet sonst mitten im ersten Bullet ab). */
+export function cleanMetaDescription(raw: string, maxLength = 155): string {
+  // Nur Bullet-Zeichen strippen — Gedankenstriche (–/—) sind legitimer Fließtext.
+  const cleaned = raw.replace(/[•·▪‣]\s*/g, '').replace(/\s+/g, ' ').trim()
+  if (cleaned.length <= maxLength) return cleaned
+  const cut = cleaned.slice(0, maxLength)
+  const lastSpace = cut.lastIndexOf(' ')
+  const base = lastSpace > maxLength * 0.6 ? cut.slice(0, lastSpace) : cut
+  return `${base.replace(/[,;:.]$/, '')}…`
+}

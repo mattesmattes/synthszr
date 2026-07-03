@@ -16,7 +16,7 @@ import { AudioPlayer } from "@/components/audio-player"
 import { PodcastBadges } from "@/components/podcast-badges"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import { getTranslations } from "@/lib/i18n/get-translations"
-import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
+import { generateLocalizedMetadata, cleanMetaDescription } from "@/lib/i18n/metadata"
 import { formatUpdateDate, LOCALE_STRINGS } from "@/lib/i18n/config"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
@@ -134,7 +134,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   return generateLocalizedMetadata({
     title: `${post.title} — Synthszr`,
-    description: post.excerpt || undefined,
+    description: post.excerpt ? cleanMetaDescription(post.excerpt) : undefined,
     path: `/posts/${slug}`,
     locale: locale,
     ogImage: post.cover_image_url || undefined,
