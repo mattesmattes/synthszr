@@ -52,7 +52,7 @@ export function FeaturedArticle({
     ? getImageProps({ alt: title, src: desktopCoverUrl, width: 1408, height: 768, sizes: coverSizes, quality: 80 })
     : null
   const mobileCover = coverImageUrl
-    ? getImageProps({ alt: title, src: coverImageUrl, width: 1408, height: 1408, sizes: coverSizes, quality: 80, priority: true })
+    ? getImageProps({ alt: title, src: coverImageUrl, width: 1408, height: 1408, sizes: coverSizes, quality: 80, priority: true, fetchPriority: 'high' })
     : null
 
   // Preload the LCP cover so the browser starts the image request before the

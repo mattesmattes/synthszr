@@ -364,7 +364,7 @@ export default async function PostPage({ params }: PageProps) {
     ? getImageProps({ alt: post.title, src: post.desktop_cover_url, width: 1408, height: 768, sizes: coverSizes, quality: 80 })
     : null
   const mobileCover = post.cover_image_url
-    ? getImageProps({ alt: post.title, src: post.cover_image_url, width: 1408, height: 1408, sizes: coverSizes, quality: 80, priority: true })
+    ? getImageProps({ alt: post.title, src: post.cover_image_url, width: 1408, height: 1408, sizes: coverSizes, quality: 80, priority: true, fetchPriority: 'high' })
     : null
 
   // Preload the LCP cover so the browser begins the image fetch in parallel
