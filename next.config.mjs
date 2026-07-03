@@ -2,7 +2,15 @@
 const nextConfig = {
   transpilePackages: ['@chenglou/pretext'],
   images: {
-    unoptimized: true,
+    // Next Image Optimization aktiv (AVIF/WebP on-the-fly statt 1408px-PNG).
+    // Einzige Remote-Quelle für Cover/Thumbnails ist Vercel Blob
+    // (post_images.image_url — per DB-Check der einzige Host). Der
+    // Google-Favicon-Service läuft über rohe <img>-Tags, nicht next/image.
+    formats: ['image/avif', 'image/webp'],
+    qualities: [80],
+    remotePatterns: [
+      { protocol: 'https', hostname: 'lbrzdn804nhy3kox.public.blob.vercel-storage.com' },
+    ],
   },
 
   // 301 redirects for deleted posts

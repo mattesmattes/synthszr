@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import ReactDOM from "react-dom"
 import { notFound } from "next/navigation"
 import Link from "next/link"
+import { getImageProps } from "next/image"
 import { createAnonClient, createAdminClient } from "@/lib/supabase/admin"
 import { PostContentView } from "@/components/post-content-view"
 import { PostProductLinks } from "@/components/post-product-links"
@@ -354,10 +355,27 @@ export default async function PostPage({ params }: PageProps) {
       }
     : null
 
+  // Cover über Next Image Optimization (AVIF/WebP via /_next/image) statt
+  // rohem 1408px-PNG. Art-Direction: mobiles 1:1-Cover + optionales
+  // Desktop-Cover (11:6) über <picture>/<source> — getImageProps ist der
+  // offizielle Next-Weg dafür.
+  const coverSizes = "(max-width: 704px) 100vw, 704px"
+  const desktopCover = post.desktop_cover_url
+    ? getImageProps({ alt: post.title, src: post.desktop_cover_url, width: 1408, height: 768, sizes: coverSizes, quality: 80 })
+    : null
+  const mobileCover = post.cover_image_url
+    ? getImageProps({ alt: post.title, src: post.cover_image_url, width: 1408, height: 1408, sizes: coverSizes, quality: 80, priority: true })
+    : null
+
   // Preload the LCP cover so the browser begins the image fetch in parallel
   // with HTML parsing — closes the "LCP request discovery" gap.
-  if (post.cover_image_url) {
-    ReactDOM.preload(post.cover_image_url, { as: "image", fetchPriority: "high" })
+  if (mobileCover) {
+    ReactDOM.preload(mobileCover.props.src, {
+      as: "image",
+      imageSrcSet: mobileCover.props.srcSet,
+      imageSizes: mobileCover.props.sizes,
+      fetchPriority: "high",
+    })
   }
 
   return (
@@ -395,25 +413,21 @@ export default async function PostPage({ params }: PageProps) {
           {/* Cover Image with centered Logo overlay - links to home */}
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
           {/* Mobile: 704x704 (1:1 square), Desktop: 704x384 (11:6) */}
-          {post.cover_image_url && (
+          {mobileCover && (
             <div className="relative mb-8 overflow-hidden -mx-6">
               <div className="relative flex flex-col items-center justify-center mx-auto w-[704px] max-w-full aspect-[16/9] md:aspect-[11/6] bg-neon-cyan">
                 {/* Clickable background to home */}
                 <Link href={`/${locale}`} className="absolute inset-0 z-0">
                   <picture className="block w-full h-full">
-                    {post.desktop_cover_url && (
-                      <source media="(min-width: 768px)" srcSet={post.desktop_cover_url} />
+                    {desktopCover && (
+                      <source media="(min-width: 768px)" srcSet={desktopCover.props.srcSet} sizes={desktopCover.props.sizes} />
                     )}
+                    {/* eslint-disable-next-line @next/next/no-img-element -- getImageProps-Pattern (Art-Direction) */}
                     <img
-                      src={post.cover_image_url}
-                      alt={post.title}
-                      width={1408}
-                      height={1408}
+                      {...mobileCover.props}
                       // .dithered-cover: pixelated above 500px viewport,
                       // bilinear below — see app/globals.css for rationale.
                       className="w-full h-full object-cover dithered-cover"
-                      fetchPriority="high"
-                      decoding="async"
                     />
                   </picture>
                 </Link>

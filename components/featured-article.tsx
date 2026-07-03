@@ -1,5 +1,6 @@
 import { Suspense } from "react"
 import ReactDOM from "react-dom"
+import { getImageProps } from "next/image"
 import { PostContentView } from "./post-content-view"
 import { AudioPlayer } from "./audio-player"
 import { PodcastBadges } from "./podcast-badges"
@@ -42,17 +43,34 @@ export function FeaturedArticle({
 }: FeaturedArticleProps) {
   const postUrl = `/${locale}/posts/${slug}`
 
+  // Cover über Next Image Optimization (AVIF/WebP via /_next/image) statt
+  // rohem 1408px-PNG. Art-Direction: mobiles 1:1-Cover + optionales
+  // Desktop-Cover (11:6) über <picture>/<source> — getImageProps ist der
+  // offizielle Next-Weg dafür.
+  const coverSizes = "(max-width: 704px) 100vw, 704px"
+  const desktopCover = desktopCoverUrl
+    ? getImageProps({ alt: title, src: desktopCoverUrl, width: 1408, height: 768, sizes: coverSizes, quality: 80 })
+    : null
+  const mobileCover = coverImageUrl
+    ? getImageProps({ alt: title, src: coverImageUrl, width: 1408, height: 1408, sizes: coverSizes, quality: 80, priority: true })
+    : null
+
   // Preload the LCP cover so the browser starts the image request before the
   // HTML parser reaches the <img>. Closes the "LCP request discovery" gap that
   // PageSpeed flagged. Mobile-first: mobile preload covers the most-tested
   // form factor; desktop falls back to the picture-source fetch.
-  if (coverImageUrl) {
-    ReactDOM.preload(coverImageUrl, { as: "image", fetchPriority: "high" })
+  if (mobileCover) {
+    ReactDOM.preload(mobileCover.props.src, {
+      as: "image",
+      imageSrcSet: mobileCover.props.srcSet,
+      imageSizes: mobileCover.props.sizes,
+      fetchPriority: "high",
+    })
   }
 
   return (
     <article className="mb-16 border-b border-border pb-16">
-      {coverImageUrl && (
+      {mobileCover && (
         <div className="relative mb-8 overflow-hidden -mx-6">
           {/* Fixed 704px width for moiré-free dithering (1:2 of 1408px) */}
           {/* -mx-6 compensates for parent padding to allow full 704px width */}
@@ -63,19 +81,15 @@ export function FeaturedArticle({
             {/* Clickable background */}
             <a href={postUrl} className="absolute inset-0 z-0">
               <picture className="block w-full h-full">
-                {desktopCoverUrl && (
-                  <source media="(min-width: 768px)" srcSet={desktopCoverUrl} />
+                {desktopCover && (
+                  <source media="(min-width: 768px)" srcSet={desktopCover.props.srcSet} sizes={desktopCover.props.sizes} />
                 )}
+                {/* eslint-disable-next-line @next/next/no-img-element -- getImageProps-Pattern (Art-Direction) */}
                 <img
-                  src={coverImageUrl}
-                  alt={title}
-                  width={1408}
-                  height={1408}
+                  {...mobileCover.props}
                   // .dithered-cover: pixelated above 500px viewport,
                   // bilinear below — see app/globals.css for rationale.
                   className="w-full h-full object-cover dithered-cover"
-                  fetchPriority="high"
-                  decoding="async"
                 />
               </picture>
             </a>
