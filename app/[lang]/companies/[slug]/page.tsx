@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { createAnonClient } from '@/lib/supabase/admin'
 import { CompanyDetailClient } from '@/app/companies/[slug]/company-detail-client'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
@@ -67,7 +67,13 @@ function extractArticlesFromContent(content: unknown): { headline: string; excer
   return articles.map((a) => ({ headline: a.headline, excerpt: extractExcerpt(a.text) }))
 }
 
-export const dynamic = 'force-dynamic'
+// On-demand ISR (siehe rankings/[slug]): Anon-Client + leeres
+// generateStaticParams → Vercel cached 1h am Edge statt no-store.
+export const revalidate = 3600
+
+export async function generateStaticParams() {
+  return []
+}
 
 interface PostInfo {
   id: string
@@ -100,8 +106,11 @@ interface PageProps {
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { lang, slug } = await params
-  const supabase = await createClient()
+  const { lang, slug: rawSlug } = await params
+  // Next liefert Dynamic-Params percent-encoded ("Hugging%20Face") — ohne
+  // Decode 404en alle Company-Slugs mit Leerzeichen (~105 Premarket-Firmen).
+  const slug = decodeURIComponent(rawSlug)
+  const supabase = createAnonClient()
 
   // Fetch company name from mentions (case-insensitive)
   const { data: mention } = await supabase
@@ -141,9 +150,12 @@ function resolveCompanyBySlug(slug: string): { name: string; slug: string; type:
 }
 
 export default async function CompanyDetailPage({ params }: PageProps) {
-  const { lang, slug } = await params
+  const { lang, slug: rawSlug } = await params
+  // Next liefert Dynamic-Params percent-encoded ("Hugging%20Face") — ohne
+  // Decode 404en alle Company-Slugs mit Leerzeichen (~105 Premarket-Firmen).
+  const slug = decodeURIComponent(rawSlug)
   const locale = lang as LanguageCode
-  const supabase = await createClient()
+  const supabase = createAnonClient()
   const t = await getTranslations(locale)
 
   // Resolve slug case-insensitively against known companies
