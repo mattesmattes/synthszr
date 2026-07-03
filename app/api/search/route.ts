@@ -272,12 +272,18 @@ export async function GET(request: NextRequest) {
       content = t.content
     }
     const fallbackPlain = tiptapToPlain(content)
+    // Snippet an der Fundstelle statt Artikel-Anfang: der LLM-Reranker sieht
+    // nur title+snippet — steht der Suchbegriff mitten im Body, aber nicht im
+    // Preview, verwirft er den Treffer als irrelevant ("Sonnet" fand nur noch
+    // 2 statt 9 Posts). buildSnippet liefert null, wenn die Query nicht
+    // wörtlich vorkommt (rein semantische Treffer) → dann Artikel-Anfang.
+    const matchSnippet = buildSnippet(fallbackPlain, rawQuery)
     hits.push({
       id: p.id,
       title,
       slug,
       excerpt,
-      snippet: fallbackPlain.slice(0, 200).trim() + (fallbackPlain.length > 200 ? ' …' : ''),
+      snippet: matchSnippet ?? (fallbackPlain.slice(0, 200).trim() + (fallbackPlain.length > 200 ? ' …' : '')),
       type: 'ai',
       created_at: p.created_at,
     })
