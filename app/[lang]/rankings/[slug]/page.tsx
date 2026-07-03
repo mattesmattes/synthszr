@@ -60,7 +60,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>
       <RankingsBanner />
-      <nav className="flex items-center gap-1.5 text-sm text-gray-600 mb-4 flex-wrap rounded-xl bg-[#75fbbd] px-3 py-2">
+      <nav className="flex items-center gap-1.5 text-sm text-gray-600 mb-8 flex-wrap rounded-xl bg-[#75fbbd] px-3 py-2">
         <Link href={`/${lang}/rankings`} className="hover:text-black">{t('rankings.breadcrumb_all')}</Link>
         {p.category && (
           <>
