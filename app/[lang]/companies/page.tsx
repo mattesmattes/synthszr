@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { createAnonClient } from '@/lib/supabase/admin'
+import { fetchAllCompanyMentions } from '@/lib/companies/mention-rows'
 import { CompaniesListClient } from '@/app/companies/companies-list-client'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
@@ -8,13 +9,6 @@ import type { LanguageCode } from '@/lib/types'
 import type { Metadata } from 'next'
 
 export const revalidate = 7200
-
-interface CompanyMention {
-  company_name: string
-  company_slug: string
-  company_type: 'public' | 'premarket'
-  created_at: string
-}
 
 interface CompanyAggregation {
   name: string
@@ -44,25 +38,17 @@ export default async function CompaniesPage({ params }: PageProps) {
   const t = await getTranslations(locale)
 
   // Fetch all company mentions from published posts
-  const { data: mentions, error } = await supabase
-    .from('post_company_mentions')
-    .select(`
-      company_name,
-      company_slug,
-      company_type,
-      created_at,
-      post:generated_posts!inner(status)
-    `)
-    .eq('post.status', 'published')
-
-  if (error) {
+  let mentions: Awaited<ReturnType<typeof fetchAllCompanyMentions>> = []
+  try {
+    mentions = await fetchAllCompanyMentions(supabase)
+  } catch (error) {
     console.error('[companies] Query error:', error)
   }
 
   // Aggregate by company (case-insensitive slug to merge duplicates like "Anthropic" and "anthropic")
   const companyMap = new Map<string, CompanyAggregation>()
 
-  for (const mention of (mentions || []) as unknown as CompanyMention[]) {
+  for (const mention of mentions) {
     const normalizedSlug = mention.company_slug.toLowerCase()
     const existing = companyMap.get(normalizedSlug)
     if (existing) {

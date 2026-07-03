@@ -2,6 +2,7 @@ import { MetadataRoute } from 'next'
 import { createAnonClient } from '@/lib/supabase/admin'
 import { DEFAULT_LOCALE, PUBLIC_LOCALES } from '@/lib/i18n/config'
 import { getRankedProducts } from '@/lib/rankings/leaderboard'
+import { fetchAllCompanyMentions } from '@/lib/companies/mention-rows'
 
 // ISR statt voll-dynamisch: der cookie-freie Anon-Client erlaubt Prerender +
 // stündliche Regenerierung. Wichtig für Googlebot: schlägt eine Regenerierung
@@ -157,12 +158,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Posts (gleiche Quelle wie der /companies-Index). Lowercase-normalisiert —
   // die Seite ist case-insensitiv (ilike), kanonisch ist die Kleinschreibung.
   try {
-    const { data: companyMentions } = await supabase
-      .from('post_company_mentions')
-      .select('company_slug, post:generated_posts!inner(status)')
-      .eq('post.status', 'published')
+    const companyMentions = await fetchAllCompanyMentions(supabase)
     const companySlugs = [...new Set(
-      (companyMentions ?? []).map((m) => (m.company_slug as string).toLowerCase())
+      companyMentions.map((m) => m.company_slug.toLowerCase())
     )]
     for (const slug of companySlugs) {
       const alternates: Record<string, string> = {
