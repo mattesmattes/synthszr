@@ -6,7 +6,11 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/admin/', '/api/', '/login', '/newsletter/', '/_next/static/', '/_next/image/'],
+        // Kein /_next/-Disallow: Googlebot braucht CSS/JS zum Rendern und
+        // /_next/image für Google Images. Kein /newsletter/-Disallow: die
+        // Seiten tragen noindex (Layout-Metadata) — das Signal wirkt nur,
+        // wenn Google die Seite crawlen darf.
+        disallow: ['/admin/', '/api/', '/login'],
       },
     ],
     sitemap: 'https://www.synthszr.com/sitemap.xml',
