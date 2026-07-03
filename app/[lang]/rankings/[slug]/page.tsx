@@ -16,6 +16,7 @@ import { RankingsBanner } from '@/components/rankings/rankings-banner'
 import type { Metadata } from 'next'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import { LOCALE_STRINGS } from '@/lib/i18n/config'
+import { SITE_URL } from '@/lib/seo/site'
 
 // ISR statt force-dynamic: Daten ändern sich nur per täglichem Cron. Kein
 // generateStaticParams → kein Build-time-Prerender (das war der Grund für das
@@ -73,9 +74,35 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const [vendorSyn, translations] = await Promise.all([getVendorSynthesis(p.vendor), getTranslations(lang as LanguageCode)])
   const t = (key: string) => translations[key] ?? key
 
+  // Kein aggregateRating/offers: Momentum-Score ist kein Review — erfundene
+  // Rating-Markups riskieren Manual Actions.
+  const productLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: p.canonicalName,
+    url: `${SITE_URL}/${lang}/rankings/${p.slug}`,
+    ...(p.description ? { description: p.description } : {}),
+    ...(p.category ? { applicationCategory: p.category.name } : {}),
+    publisher: { '@type': 'Organization', name: p.vendor },
+  }
+  const crumbs = [
+    { '@type': 'ListItem', position: 1, name: 'Synthszr', item: `${SITE_URL}/${lang}` },
+    { '@type': 'ListItem', position: 2, name: 'Synthszr Charts', item: `${SITE_URL}/${lang}/rankings` },
+    ...(p.category
+      ? [{ '@type': 'ListItem', position: 3, name: p.category.name, item: `${SITE_URL}/${lang}/rankings?category=${p.category.slug}` }]
+      : []),
+  ]
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [...crumbs, { '@type': 'ListItem', position: crumbs.length + 1, name: p.canonicalName }],
+  }
+
   return (
     <>
     <main className="max-w-3xl mx-auto px-4 py-10">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
       <Suspense fallback={null}>
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>

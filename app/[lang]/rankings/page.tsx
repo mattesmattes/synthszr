@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboard'
+import { SITE_URL } from '@/lib/seo/site'
 import { CATEGORY_GROUPS, groupForCategory, groupBySlug } from '@/lib/rankings/category-groups'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
@@ -90,6 +91,21 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
   const products = sort === 'vendor'
     ? [...ranked].sort((a, b) => a.vendor.localeCompare(b.vendor) || b.score - a.score)
     : ranked
+  // ItemList = Rich-Result-Chance für "AI Ranking"-Queries. Top 25 reicht —
+  // Google braucht die Struktur, nicht die volle Liste.
+  const itemListLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'Synthszr Charts',
+    itemListOrder: 'https://schema.org/ItemListOrderAscending',
+    numberOfItems: products.length,
+    itemListElement: products.slice(0, 25).map((p, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: p.canonicalName,
+      url: `${SITE_URL}/${lang}/rankings/${p.slug}`,
+    })),
+  }
   const t = (key: string) => translations[key] ?? key
   const catName = (slug: string, fallback: string) => translations[`rankings.cat.${slug}`] ?? fallback
   const nameBySlug = new Map(categories.map((c) => [c.slug, c.name]))
@@ -115,6 +131,10 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
   return (
     <>
     <main className="max-w-3xl mx-auto px-4 py-10">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListLd) }}
+      />
       <Suspense fallback={null}>
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>
