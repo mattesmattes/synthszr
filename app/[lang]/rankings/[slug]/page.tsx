@@ -18,7 +18,7 @@ import { RankingsBanner } from '@/components/rankings/rankings-banner'
 import type { Metadata } from 'next'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import { LOCALE_STRINGS } from '@/lib/i18n/config'
-import { SITE_URL } from '@/lib/seo/site'
+import { SITE_URL, safeJsonLd } from '@/lib/seo/site'
 
 // ISR statt force-dynamic: Daten ändern sich nur per täglichem Cron. Kein
 // generateStaticParams → kein Build-time-Prerender (das war der Grund für das
@@ -108,8 +108,8 @@ export default async function ProductDetailPage({ params }: PageProps) {
   return (
     <>
     <main className="max-w-3xl mx-auto px-4 py-10">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productLd) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(productLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(breadcrumbLd) }} />
       <Suspense fallback={null}>
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>

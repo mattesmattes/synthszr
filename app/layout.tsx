@@ -5,6 +5,7 @@ import { Analytics } from "@/components/analytics"
 import { ConsentBanner } from "@/components/consent-banner"
 import { NewsletterPopup } from "@/components/newsletter-popup"
 import { PageTracker } from "@/components/analytics/page-tracker"
+import { safeJsonLd } from "@/lib/seo/site"
 import "./globals.css"
 
 const ibmPlexSerif = IBM_Plex_Serif({
@@ -87,7 +88,7 @@ export default function RootLayout({
         {children}
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(orgLd) }}
+          dangerouslySetInnerHTML={{ __html: safeJsonLd(orgLd) }}
         />
         <PageTracker />
         <Analytics />

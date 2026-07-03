@@ -49,6 +49,14 @@ export function generateLocalizedMetadata({
 
   const url = `${BASE_URL}/${effectiveLocale}${cleanPath}`
 
+  // Liegt die effektive Locale außerhalb der availableLocales (z.B. cs zeigt
+  // EN-Fallback-Content, ist aber nicht im hreflang-Cluster), würde ein
+  // Self-Canonical eine indexierbare Thin-Duplicate-Seite außerhalb des
+  // Clusters erzeugen. In dem Fall zeigt canonical auf x-default statt auf sich selbst.
+  const canonicalUrl = availableLocales.includes(effectiveLocale)
+    ? url
+    : languages['x-default']
+
   const ogLocale = effectiveLocale === 'de' ? 'de_DE'
     : effectiveLocale === 'en' ? 'en_US'
     : effectiveLocale === 'cs' ? 'cs_CZ'
@@ -65,8 +73,9 @@ export function generateLocalizedMetadata({
     alternates: {
       // Self-referential canonical: each locale page points to itself, not the
       // default locale — otherwise Google treats non-default pages as duplicates
-      // of /de and never indexes them.
-      canonical: url,
+      // of /de and never indexes them. Exception: effectiveLocale outside
+      // availableLocales (see canonicalUrl above) falls back to x-default.
+      canonical: canonicalUrl,
       languages,
     },
     openGraph: {

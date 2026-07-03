@@ -12,6 +12,7 @@ import { createAnonClient, createAdminClient } from "@/lib/supabase/admin"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
 import { LOCALE_STRINGS } from "@/lib/i18n/config"
+import { safeJsonLd } from "@/lib/seo/site"
 import type { LanguageCode } from "@/lib/types"
 import type { CoverAnimationConfig } from "@/lib/types/cover-animation"
 import type { Metadata } from "next"
@@ -219,7 +220,7 @@ export default async function Page({ params }: PageProps) {
     <div className="min-h-screen bg-background text-foreground">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
       />
       {/* 704px max-width to match cover image and post pages */}
       <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">

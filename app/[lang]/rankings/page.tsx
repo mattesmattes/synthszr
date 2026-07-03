@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom'
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboard'
-import { SITE_URL } from '@/lib/seo/site'
+import { SITE_URL, safeJsonLd } from '@/lib/seo/site'
 import { CATEGORY_GROUPS, groupForCategory, groupBySlug } from '@/lib/rankings/category-groups'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
@@ -139,7 +139,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
     <main className="max-w-3xl mx-auto px-4 py-10">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(itemListLd) }}
       />
       <Suspense fallback={null}>
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />

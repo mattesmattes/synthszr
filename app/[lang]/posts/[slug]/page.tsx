@@ -19,7 +19,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata, cleanMetaDescription } from "@/lib/i18n/metadata"
 import { formatUpdateDate, LOCALE_STRINGS } from "@/lib/i18n/config"
-import { SITE_URL } from "@/lib/seo/site"
+import { SITE_URL, safeJsonLd } from "@/lib/seo/site"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
 
@@ -349,11 +349,11 @@ export default async function PostPage({ params }: PageProps) {
     <div className="min-h-screen bg-background text-foreground">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(breadcrumbLd) }}
       />
 
         <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
