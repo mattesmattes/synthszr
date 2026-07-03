@@ -33,9 +33,14 @@ const ReportSchema = z.object({
 })
 const EMPTY = new Set(['unbekannt', 'unknown', 'n/a', 'na', '-', 'keine angabe'])
 
-/** Entfernt web_search-Citation-Markup (<cite index="...">…</cite>) aus dem Text. */
+/** Entfernt web_search-Citation-Markup (<cite …>…</cite>) und kappt geleaktes
+ *  Tool-Call-Markup (</description>, <parameter …> …) — Claude schreibt bei
+ *  Tool-Fehlern gelegentlich das rohe Call-XML in die Feldwerte. */
 function stripCite(s: string): string {
-  return s.replace(/<\/?cite[^>]*>/g, '').trim()
+  return s
+    .replace(/<\/?cite[^>]*>/g, '')
+    .replace(/<\/?(?:description(?:_en)?|parameter)\b[^>]*>[\s\S]*/i, '')
+    .trim()
 }
 
 /** Pure: validiert die Research-Antwort gegen die gültigen Dimensionen. */
