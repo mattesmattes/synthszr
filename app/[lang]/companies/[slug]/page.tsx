@@ -7,6 +7,7 @@ import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { parseTipTapContent } from '@/lib/companies/extractor'
+import { VendorProducts } from '@/components/rankings/vendor-products'
 import type { LanguageCode } from '@/lib/types'
 import type { Metadata } from 'next'
 
@@ -241,6 +242,12 @@ export default async function CompanyDetailPage({ params }: PageProps) {
         </Link>
 
         <CompanyDetailClient company={company} articles={articles} locale={locale} translations={t} />
+
+        <VendorProducts
+          lang={locale}
+          vendor={slug}
+          heading={t['rankings.company_products'] ?? 'Produkte in den Synthszr Charts'}
+        />
       </main>
 
       <footer className="border-t border-border">
