@@ -155,7 +155,15 @@ export async function runCategorization(batchSize = 25): Promise<{ categorized: 
       return { ...b, context: ex ? ex.trim().slice(0, 220) : undefined }
     }))
     const assignments = await classifyProducts(withCtx, cats)
-    const rows = [...assignments].map(([product_id, category]) => ({ product_id, category, is_primary: true }))
+    // Fallback 'other': Produkte, die der Klassifikator NICHT (oder mit ungültigem Slug)
+    // zuordnet, würden sonst DAUERHAFT verwaist bleiben (keine primäre Kategorie → nie in
+    // Research/Kategorie-Charts, nur in "Alle", und jeder Lauf versucht sie erneut). Sie
+    // landen jetzt in 'other' → im Pipeline-Fluss, retry-frei.
+    const hasOther = cats.some((c) => c.slug === 'other')
+    const rows = batch
+      .map((b) => ({ product_id: b.id, category: assignments.get(b.id) ?? (hasOther ? 'other' : null) }))
+      .filter((r): r is { product_id: string; category: string } => !!r.category)
+      .map((r) => ({ ...r, is_primary: true }))
     if (rows.length) {
       const { error } = await supabase
         .from('product_category_membership')
