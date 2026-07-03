@@ -23,7 +23,7 @@ interface PageProps {
 
 export const metadata = {
   title: 'Synthszr Charts — welche AI-Produkte rocken',
-  description: 'Welche AI-Produkte gerade rocken — täglich aus tausenden News ausgewertet.',
+  description: 'Tägliches Momentum-Ranking der AI-Produkte, automatisch aus tausenden News- und Newsletter-Quellen ausgewertet — versions-granular und nach Kategorien.',
 }
 
 function fmtDate(d: string | null): string {
