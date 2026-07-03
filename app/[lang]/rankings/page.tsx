@@ -86,10 +86,6 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>
       <RankingsBanner />
-      <header className="mb-7 text-center">
-        <p className="text-gray-600 text-sm" dangerouslySetInnerHTML={{ __html: t('rankings.subtitle') }} />
-      </header>
-
       {/* Nav Ebene 1+2 in abgesetztem Panel. Ist eine Gruppe aktiv, werden die übrigen
           Ebene-1-Punkte ausgeblendet (nur „Alle" + aktive Gruppe bleiben); „Alle" zeigt
           wieder alles ein. Aktive Tabs sind als dunkle Pill markiert. */}
