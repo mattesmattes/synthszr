@@ -71,7 +71,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
       href={href}
       className={`rounded-md px-2.5 py-1 text-sm whitespace-nowrap transition-colors ${
         active
-          ? 'bg-gray-900 text-white font-semibold'
+          ? 'bg-[#00785a] text-white font-semibold'
           : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
       }`}
     >
@@ -113,7 +113,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
                     href={`${tabBase}?category=${slug}`}
                     className={`rounded px-2 py-0.5 text-xs whitespace-nowrap transition-colors ${
                       category === slug
-                        ? 'bg-gray-900 text-white font-medium'
+                        ? 'bg-[#00785a] text-white font-medium'
                         : 'text-gray-500 hover:bg-gray-200 hover:text-gray-900'
                     }`}
                   >
