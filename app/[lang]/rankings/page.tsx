@@ -96,7 +96,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
       {(() => {
         const anyActive = !!activeGroupSlug || category === 'other'
         return (
-          <div className="mb-5 rounded-xl bg-gray-100 p-2.5">
+          <div className="mb-5 rounded-xl bg-[#75fbbd] p-2.5">
             <nav className="flex flex-wrap gap-1.5">
               {gtab(tabBase, t('rankings.all'), !anyActive)}
               {CATEGORY_GROUPS.filter((g) => !anyActive || activeGroupSlug === g.slug).map((g) =>
