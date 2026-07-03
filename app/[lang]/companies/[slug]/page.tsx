@@ -125,7 +125,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return generateLocalizedMetadata({
     title: `${companyName} — Synthszr`,
     description: `Alle Artikel und Synthszr-Bewertungen zu ${companyName}`,
-    path: `/companies/${slug}`,
+    path: `/companies/${encodeURIComponent(slug)}`,
     locale: lang as LanguageCode,
   })
 }
