@@ -1,8 +1,11 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
+import type { Metadata } from 'next'
 import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboard'
 import { CATEGORY_GROUPS, groupForCategory, groupBySlug } from '@/lib/rankings/category-groups'
 import { getTranslations } from '@/lib/i18n/get-translations'
+import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
+import { LOCALE_STRINGS } from '@/lib/i18n/config'
 import type { LanguageCode } from '@/lib/types'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
 import { SiteFooter } from '@/components/site-footer'
@@ -18,18 +21,41 @@ export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: Promise<{ lang: string }>
-  searchParams: Promise<{ category?: string; group?: string; sort?: string }>
+  searchParams: Promise<{ category?: string; group?: string; sort?: string; all?: string }>
 }
 
-export const metadata = {
-  title: 'Synthszr Charts — welche AI-Produkte rocken',
-  description: 'Tägliches Momentum-Ranking der AI-Produkte, automatisch aus tausenden News- und Newsletter-Quellen ausgewertet — versions-granular und nach Kategorien.',
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
+  const { lang } = await params
+  const { category, group } = await searchParams
+  const locale = lang as LanguageCode
+  const translations = await getTranslations(locale)
+  const t = (key: string) => translations[key] ?? key
+
+  // Facetten (?category/?group) sind eigenständige Ansichten: eigener Title +
+  // self-canonical auf die Facetten-URL. ?sort und ?all sind reine Duplikat-/
+  // Vollansichten und tauchen bewusst NICHT im canonical auf.
+  let path = '/rankings'
+  let title = t('rankings.meta.title')
+  if (category) {
+    path = `/rankings?category=${category}`
+    title = `${translations[`rankings.cat.${category}`] ?? category} — Synthszr Charts`
+  } else if (group) {
+    path = `/rankings?group=${group}`
+    title = `${translations[`rankings.group.${group}`] ?? group} — Synthszr Charts`
+  }
+
+  return generateLocalizedMetadata({
+    title,
+    description: t('rankings.meta.description'),
+    path,
+    locale,
+  })
 }
 
-function fmtDate(d: string | null): string {
+function fmtDate(d: string | null, lang: string): string {
   if (!d) return '—'
   try {
-    return new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })
+    return new Date(d).toLocaleDateString(LOCALE_STRINGS[lang as LanguageCode] ?? 'de-DE', { day: '2-digit', month: 'short', year: 'numeric' })
   } catch {
     return '—'
   }
@@ -37,7 +63,7 @@ function fmtDate(d: string | null): string {
 
 export default async function RankingsPage({ params, searchParams }: PageProps) {
   const { lang } = await params
-  const { category, group, sort } = await searchParams
+  const { category, group, sort, all } = await searchParams
 
   // Aktive Meta-Gruppe: explizit per ?group, sonst aus der gewählten Kategorie abgeleitet.
   const activeGroupSlug = group ?? (category ? groupForCategory(category) : null)
@@ -45,7 +71,10 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
 
   const [ranked, categories, translations] = await Promise.all([
     getRankedProducts({
-      limit: category ? 50 : 100,
+      // Kategorie-Ansicht: 50 als Default, per ?all=1 die komplette Kategorie
+      // (crawlbarer Linkpfad zu allen chartbaren Produkten, canonical bleibt
+      // auf der 50er-Ansicht).
+      limit: category ? (all === '1' ? 1000 : 50) : 100,
       minMentions: 2,
       category,
       categoryIn: !category && activeGroup ? activeGroup.categories : undefined,
@@ -86,6 +115,14 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>
       <RankingsBanner />
+      <header className="mb-5">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+          {category
+            ? `${catName(category, nameBySlug.get(category) ?? category)} — Synthszr Charts`
+            : t('rankings.h1')}
+        </h1>
+        <p className="mt-1 text-sm text-gray-600 leading-relaxed">{t('rankings.intro')}</p>
+      </header>
       {/* Nav Ebene 1+2 in abgesetztem Panel. Ist eine Gruppe aktiv, werden die übrigen
           Ebene-1-Punkte ausgeblendet (nur „Alle" + aktive Gruppe bleiben); „Alle" zeigt
           wieder alles ein. Aktive Tabs sind als dunkle Pill markiert. */}
@@ -166,7 +203,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm truncate leading-tight">{p.canonicalName}</div>
                   <div className="text-[11px] text-gray-500 truncate leading-tight">
-                    {p.vendor} · {p.mentionCount}× · {fmtDate(p.lastSeen)}
+                    {p.vendor} · {p.mentionCount}× · {fmtDate(p.lastSeen, lang)}
                   </div>
                 </div>
 
@@ -177,6 +214,17 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
             </li>
           ))}
         </ol>
+      )}
+
+      {category && all !== '1' && products.length === 50 && (
+        <div className="mt-3">
+          <Link
+            href={`${tabBase}?category=${category}&all=1`}
+            className="inline-block rounded border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:border-black hover:text-black"
+          >
+            {t('rankings.show_all')} →
+          </Link>
+        </div>
       )}
 
       <footer className="mt-8 text-[11px] text-gray-400 border-t pt-3">
