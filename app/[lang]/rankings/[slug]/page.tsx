@@ -13,8 +13,15 @@ import { PremarketSynthesisBlock } from '@/components/rankings/premarket-synthes
 import { MentionList } from '@/components/rankings/mention-list'
 import { PinButton, PinBar } from '@/components/rankings/pin-controls'
 import { RankingsBanner } from '@/components/rankings/rankings-banner'
+import type { Metadata } from 'next'
+import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
+import { LOCALE_STRINGS } from '@/lib/i18n/config'
 
-export const dynamic = 'force-dynamic'
+// ISR statt force-dynamic: Daten ändern sich nur per täglichem Cron. Kein
+// generateStaticParams → kein Build-time-Prerender (das war der Grund für das
+// alte force-dynamic), Seiten rendern on-demand und cachen 5 min am Edge.
+// Bei ~5000 Produktseiten ist das der Unterschied zwischen crawlbar und nicht.
+export const revalidate = 300
 
 interface PageProps {
   params: Promise<{ lang: string; slug: string }>
@@ -27,23 +34,36 @@ function sentimentClass(score: number | null): string {
   return 'bg-gray-100 text-gray-700'
 }
 
-function fmtDate(d: string | null): string {
+function fmtDate(d: string | null, lang: string): string {
   if (!d) return '—'
   try {
-    return new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })
+    return new Date(d).toLocaleDateString(LOCALE_STRINGS[lang as LanguageCode] ?? 'de-DE', { day: '2-digit', month: 'short', year: 'numeric' })
   } catch {
     return '—'
   }
 }
 
-export async function generateMetadata({ params }: PageProps) {
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { lang, slug } = await params
+  const locale = lang as LanguageCode
   const p = await getProductDetail(slug, lang)
-  if (!p) return { title: 'Produkt nicht gefunden | Synthszr Rankings' }
-  return {
-    title: `${p.canonicalName} — Synthszr Ranking`,
-    description: `${p.canonicalName} (${p.vendor}): Momentum-Score, Belege und Erwähnungen aus der Tech-Berichterstattung.`,
-  }
+  if (!p) return { title: 'Produkt nicht gefunden | Synthszr Charts', robots: { index: false, follow: false } }
+
+  const description = locale === 'de'
+    ? `${p.canonicalName} (${p.vendor}): Momentum-Score, Belege und Erwähnungen aus der Tech-Berichterstattung — täglich aktualisiert in den Synthszr Charts.`
+    : `${p.canonicalName} (${p.vendor}): momentum score, evidence and mentions from tech coverage — updated daily in the Synthszr Charts.`
+
+  return generateLocalizedMetadata({
+    title: locale === 'de'
+      ? `${p.canonicalName} — AI-Produkt-Ranking | Synthszr Charts`
+      : `${p.canonicalName} — AI Product Ranking | Synthszr Charts`,
+    description,
+    path: `/rankings/${slug}`,
+    locale,
+    // Produkt-Content existiert nur de/en — cs/fr/nds zeigen EN-Fallback und
+    // gehören nicht in den hreflang-Cluster (sonst Thin-Duplicate-Signale).
+    availableLocales: ['de', 'en'],
+  })
 }
 
 export default async function ProductDetailPage({ params }: PageProps) {
@@ -88,8 +108,8 @@ export default async function ProductDetailPage({ params }: PageProps) {
             <Link href={`/${lang}/companies/${p.vendor}`} className="hover:underline">{p.vendor}</Link>
             {p.version && <> · v{p.version}</>}
             {p.qualifier && <> · {p.qualifier}</>}
-            {p.releasedAt && <> · seit {p.releasedAt}</>}
-            {' · '}{p.mentionCount}× · zuletzt {fmtDate(p.lastSeen)}
+            {p.releasedAt && <> · {t('rankings.since')} {p.releasedAt}</>}
+            {' · '}{p.mentionCount}× · {t('rankings.last_seen')} {fmtDate(p.lastSeen, lang)}
           </p>
         </div>
         <div className="ml-auto shrink-0 flex items-start gap-2">
