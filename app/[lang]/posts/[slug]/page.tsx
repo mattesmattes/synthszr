@@ -28,6 +28,13 @@ import type { Metadata } from "next"
 // revalidatePath() when a post is edited.
 export const revalidate = 60
 
+// Leeres generateStaticParams aktiviert on-demand ISR: ohne diese Funktion
+// behandelt Vercel Dynamic-Segment-Routen als voll-dynamisch und ignoriert
+// revalidate (gleicher Fix wie rankings/[slug], dort prod-verifiziert).
+export async function generateStaticParams() {
+  return []
+}
+
 interface PostData {
   id: string
   title: string
