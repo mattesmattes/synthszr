@@ -8,6 +8,9 @@ export interface TiptapRendererProps {
   postId?: string
   queueItemIds?: string[]
   originalContent?: Record<string, unknown>
+  /** ID des server-gerenderten statischen Fallback-DIVs (PostContentView);
+   *  wird nach Editor-Init aus dem DOM entfernt, sonst stünde der Artikel doppelt da. */
+  ssrFallbackId?: string
 }
 
 export interface SynthszrRatingLinkProps {

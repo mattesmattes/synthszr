@@ -1,9 +1,8 @@
 import { Metadata } from 'next'
-import { Suspense } from 'react'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { createAnonClient } from '@/lib/supabase/admin'
-import { TiptapRenderer } from '@/components/tiptap-renderer'
+import { PostContentView } from '@/components/post-content-view'
 import { ConsentSettingsButton } from '@/components/consent-banner'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { FooterBrands } from '@/components/footer-brands'
@@ -86,9 +85,7 @@ export default async function DatenschutzPage({ params }: PageProps) {
           </header>
 
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <Suspense fallback={null}>
-              <TiptapRenderer content={content} />
-            </Suspense>
+            <PostContentView content={content as Record<string, unknown>} />
           </div>
 
           {/* Consent Settings Button - not part of translated content */}

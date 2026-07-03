@@ -33,7 +33,7 @@ import { ArticleThumbnailPortal } from "./article-thumbnail"
 import type { TiptapRendererProps, PublicPortal, PremarketPortal } from "./types"
 import type { ArticleThumbnail, ThumbnailPortal } from "@/lib/tiptap/dom-processors/news-headings"
 
-export function TiptapRenderer({ content, postId, queueItemIds, originalContent }: TiptapRendererProps) {
+export function TiptapRenderer({ content, postId, queueItemIds, originalContent, ssrFallbackId }: TiptapRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const searchParams = useSearchParams()
   const [ratingPortals, setRatingPortals] = useState<PublicPortal[]>([])
@@ -178,6 +178,18 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent 
       }
     }
   }, [editor, content])
+
+  // SSR-Fallback (statisches Server-HTML aus PostContentView) entfernen,
+  // sobald der interaktive Editor mit Inhalt steht — sonst stünde der
+  // Artikel doppelt im DOM.
+  useEffect(() => {
+    if (!editorReady || !ssrFallbackId) return
+    // Nur entfernen, wenn der Editor wirklich Inhalt gerendert hat (der
+    // Processing-Effect unten togglet editorReady bei leerem DOM erneut).
+    const hasContent = containerRef.current?.querySelector('.ProseMirror')?.textContent?.trim()
+    if (!hasContent) return
+    document.getElementById(ssrFallbackId)?.remove()
+  }, [editorReady, ssrFallbackId])
 
   // Callback for rating-links processor to re-trigger processing after background generation
   const handleRefreshNeeded = useCallback(() => {

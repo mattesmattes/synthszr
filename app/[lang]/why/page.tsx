@@ -1,7 +1,6 @@
-import { Suspense } from "react"
 import Link from "next/link"
 import { createAnonClient } from "@/lib/supabase/admin"
-import { TiptapRenderer } from "@/components/tiptap-renderer"
+import { PostContentView } from "@/components/post-content-view"
 import { FooterBrands } from "@/components/footer-brands"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
@@ -93,9 +92,7 @@ export default async function WhyPage({ params }: PageProps) {
 
           <div className="prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-xl prose-h2:text-lg prose-h2:mt-8 prose-h2:mb-3 prose-p:mb-5 prose-blockquote:border-l-2 prose-blockquote:border-accent prose-blockquote:pl-6 prose-blockquote:italic">
             <div className="prose-article">
-              <Suspense fallback={null}>
-                <TiptapRenderer content={content} />
-              </Suspense>
+              <PostContentView content={content as Record<string, unknown>} />
             </div>
           </div>
         </article>

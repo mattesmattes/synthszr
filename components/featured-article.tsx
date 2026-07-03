@@ -132,9 +132,7 @@ export function FeaturedArticle({
       )}
 
       <div className="prose-article">
-        <Suspense fallback={null}>
-          <PostContentView content={content} postId={postId} queueItemIds={queueItemIds} />
-        </Suspense>
+        <PostContentView content={content} postId={postId} queueItemIds={queueItemIds} />
       </div>
 
     </article>
