@@ -10,7 +10,7 @@ import { DEFAULT_LOCALE } from './config'
  */
 export const defaultTranslations: Record<string, string> = {
   // Meta
-  'meta.description': 'Die Schnittstelle von Business, Design und Technologie im Zeitalter der KI.',
+  'meta.description': 'Synthszr ist die tägliche News-Synthese zu KI: Business, Design und Technologie — mit Newsletter, AI-Produkt-Charts und Company-Analysen.',
 
   // Navigation
   'nav.home': 'Home',
@@ -132,6 +132,16 @@ export const defaultTranslations: Record<string, string> = {
   'rankings.cat.agents-platforms': 'Agenten & Plattformen',
   'rankings.cat.search-research': 'Suche & Research',
   'rankings.cat.other': 'Sonstige',
+  'rankings.meta.title': 'Synthszr Charts — das tägliche AI-Produkt-Ranking',
+  'rankings.meta.description': 'Tägliches Momentum-Ranking der AI-Produkte, automatisch aus tausenden News- und Newsletter-Quellen ausgewertet — versions-granular und nach Kategorien.',
+  'rankings.h1': 'Synthszr Charts — das tägliche AI-Produkt-Ranking',
+  'rankings.intro': 'Die Synthszr Charts ranken AI-Produkte nach Momentum: Erwähnungen aus tausenden News- und Newsletter-Quellen, recency-gewichtet (Halbwertszeit 14 Tage), versions-granular und täglich aktualisiert.',
+  'rankings.related': 'Weitere Produkte in dieser Kategorie',
+  'rankings.show_all': 'Alle anzeigen',
+  'rankings.company_products': 'Produkte in den Synthszr Charts',
+  'rankings.since': 'seit',
+  'rankings.last_seen': 'zuletzt',
+  'post.mentioned_products': 'Im Artikel erwähnte Chart-Produkte',
 
   // Common
   'common.loading': 'Laden...',
