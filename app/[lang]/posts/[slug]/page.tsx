@@ -18,6 +18,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata, cleanMetaDescription } from "@/lib/i18n/metadata"
 import { formatUpdateDate, LOCALE_STRINGS } from "@/lib/i18n/config"
+import { SITE_URL } from "@/lib/seo/site"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
 
@@ -308,10 +309,16 @@ export default async function PostPage({ params }: PageProps) {
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: post.title,
+    mainEntityOfPage: `${SITE_URL}/${locale}/posts/${slug}`,
     datePublished: post.created_at,
     ...(post.updated_at && { dateModified: post.updated_at }),
-    author: { '@type': 'Organization', name: 'Synthszr' },
-    publisher: { '@type': 'Organization', name: 'Synthszr' },
+    author: { '@type': 'Organization', name: 'Synthszr', url: `${SITE_URL}/de` },
+    publisher: {
+      '@type': 'Organization',
+      name: 'Synthszr',
+      url: `${SITE_URL}/de`,
+      logo: { '@type': 'ImageObject', url: `${SITE_URL}/apple-touch-icon.png` },
+    },
     ...(post.excerpt && { description: post.excerpt }),
     ...(post.cover_image_url && { image: post.cover_image_url }),
   }
@@ -320,8 +327,8 @@ export default async function PostPage({ params }: PageProps) {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Home', item: `https://synthszr.com/${locale}` },
-      { '@type': 'ListItem', position: 2, name: 'Archive', item: `https://synthszr.com/${locale}/archive` },
+      { '@type': 'ListItem', position: 1, name: t['nav.home'] ?? 'Home', item: `${SITE_URL}/${locale}` },
+      { '@type': 'ListItem', position: 2, name: t['nav.archive'] ?? 'Archiv', item: `${SITE_URL}/${locale}/archive` },
       { '@type': 'ListItem', position: 3, name: post.title },
     ],
   }
