@@ -1,7 +1,8 @@
 import { Metadata } from 'next'
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { createAnonClient } from '@/lib/supabase/admin'
 import { TiptapRenderer } from '@/components/tiptap-renderer'
 import { ConsentSettingsButton } from '@/components/consent-banner'
 import { LanguageSwitcher } from '@/components/language-switcher'
@@ -10,7 +11,9 @@ import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import type { LanguageCode } from '@/lib/types'
 
-export const dynamic = 'force-dynamic'
+// ISR statt force-dynamic: Anon-Client (kein cookies()) erlaubt Prerender +
+// Edge-Cache. Inhalte ändern sich selten; Frische kommt über revalidate.
+export const revalidate = 86400
 
 interface PageProps {
   params: Promise<{ lang: string }>
@@ -32,7 +35,7 @@ export default async function DatenschutzPage({ params }: PageProps) {
   const { lang } = await params
   const locale = lang as LanguageCode
   const t = await getTranslations(locale)
-  const supabase = await createClient()
+  const supabase = createAnonClient()
 
   // Fetch original page
   const { data: page } = await supabase
@@ -83,7 +86,9 @@ export default async function DatenschutzPage({ params }: PageProps) {
           </header>
 
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <TiptapRenderer content={content} />
+            <Suspense fallback={null}>
+              <TiptapRenderer content={content} />
+            </Suspense>
           </div>
 
           {/* Consent Settings Button - not part of translated content */}

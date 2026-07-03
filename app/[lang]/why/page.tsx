@@ -1,5 +1,6 @@
+import { Suspense } from "react"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
+import { createAnonClient } from "@/lib/supabase/admin"
 import { TiptapRenderer } from "@/components/tiptap-renderer"
 import { FooterBrands } from "@/components/footer-brands"
 import { Newsletter } from "@/components/newsletter"
@@ -11,7 +12,9 @@ import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
 
-export const dynamic = 'force-dynamic'
+// ISR statt force-dynamic: Anon-Client (kein cookies()) erlaubt Prerender +
+// Edge-Cache. Inhalte ändern sich selten; Frische kommt über revalidate.
+export const revalidate = 3600
 
 interface PageProps {
   params: Promise<{ lang: string }>
@@ -33,7 +36,7 @@ export default async function WhyPage({ params }: PageProps) {
   const { lang } = await params
   const locale = lang as LanguageCode
   const t = await getTranslations(locale)
-  const supabase = await createClient()
+  const supabase = createAnonClient()
 
   // Fetch original page
   const { data: page } = await supabase
@@ -90,7 +93,9 @@ export default async function WhyPage({ params }: PageProps) {
 
           <div className="prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-xl prose-h2:text-lg prose-h2:mt-8 prose-h2:mb-3 prose-p:mb-5 prose-blockquote:border-l-2 prose-blockquote:border-accent prose-blockquote:pl-6 prose-blockquote:italic">
             <div className="prose-article">
-              <TiptapRenderer content={content} />
+              <Suspense fallback={null}>
+                <TiptapRenderer content={content} />
+              </Suspense>
             </div>
           </div>
         </article>

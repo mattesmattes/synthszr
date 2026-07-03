@@ -1,7 +1,9 @@
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
+import { createAnonClient } from "@/lib/supabase/admin"
 
-export const dynamic = 'force-dynamic'
+// ISR statt force-dynamic: Anon-Client (kein cookies()) erlaubt Prerender +
+// Edge-Cache. Inhalte ändern sich selten; Frische kommt über revalidate.
+export const revalidate = 300
 import { ArrowLeft } from "lucide-react"
 import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata } from "@/lib/i18n/metadata"
@@ -38,7 +40,7 @@ export default async function ArchivePage({ params }: PageProps) {
   const { lang } = await params
   const locale = lang as LanguageCode
   const t = await getTranslations(locale)
-  const supabase = await createClient()
+  const supabase = createAnonClient()
 
   // Fetch manual posts
   const { data: manualPosts } = await supabase

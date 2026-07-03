@@ -1,12 +1,14 @@
 import Link from 'next/link'
 import { ArrowLeft, Mail, ExternalLink } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { createAnonClient } from '@/lib/supabase/admin'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import type { LanguageCode } from '@/lib/types'
 import type { Metadata } from 'next'
 
-export const dynamic = 'force-dynamic'
+// ISR statt force-dynamic: Anon-Client (kein cookies()) erlaubt Prerender +
+// Edge-Cache. Inhalte ändern sich selten; Frische kommt über revalidate.
+export const revalidate = 3600
 
 interface NewsletterSource {
   id: string
@@ -58,7 +60,7 @@ function deriveWebsiteFromEmail(email: string): string | null {
 export default async function SourcesPage({ params }: PageProps) {
   const { lang } = await params
   const locale = lang as LanguageCode
-  const supabase = await createClient()
+  const supabase = createAnonClient()
   const t = await getTranslations(locale)
 
   // Fetch active newsletter sources

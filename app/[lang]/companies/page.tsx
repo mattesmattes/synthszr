@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { createAnonClient } from '@/lib/supabase/admin'
 import { CompaniesListClient } from '@/app/companies/companies-list-client'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
@@ -40,7 +40,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function CompaniesPage({ params }: PageProps) {
   const { lang } = await params
   const locale = lang as LanguageCode
-  const supabase = await createClient()
+  const supabase = createAnonClient()
   const t = await getTranslations(locale)
 
   // Fetch all company mentions from published posts
