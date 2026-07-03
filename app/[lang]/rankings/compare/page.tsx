@@ -1,8 +1,10 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { ArrowLeft } from 'lucide-react'
+import type { Metadata } from 'next'
 import { getProductDetail } from '@/lib/rankings/product-detail'
 import { getTranslations } from '@/lib/i18n/get-translations'
+import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import type { LanguageCode } from '@/lib/types'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
@@ -16,7 +18,19 @@ interface PageProps {
   searchParams: Promise<{ slugs?: string }>
 }
 
-export const metadata = { title: 'Vergleich — Synthszr Charts' }
+// Reine Tool-Seite: Pin-State liegt im localStorage, die nackte URL ist für
+// Crawler leer → noindex. Der Title bleibt für Tab/History nützlich.
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { lang } = await params
+  const locale = lang as LanguageCode
+  const translations = await getTranslations(locale)
+  return generateLocalizedMetadata({
+    title: `${translations['rankings.compare_title'] ?? 'Produktvergleich'} — Synthszr Charts`,
+    path: '/rankings/compare',
+    locale,
+    noIndex: true,
+  })
+}
 
 export default async function ComparePage({ params, searchParams }: PageProps) {
   const { lang } = await params
