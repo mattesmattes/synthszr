@@ -30,6 +30,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: `${t['archive.title'] || 'Archiv'} — Synthszr`,
     description: t['archive.description'] || 'Alle Artikel chronologisch sortiert',
     path: '/archive',
+    locale: lang as LanguageCode,
   })
 }
 

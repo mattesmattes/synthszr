@@ -24,6 +24,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: t['privacy.title'] || 'Datenschutz | Synthszr',
     description: t['privacy.description'] || 'Datenschutzerklärung und Informationen zur Datenverarbeitung',
     path: '/datenschutz',
+    locale: lang as LanguageCode,
   })
 }
 

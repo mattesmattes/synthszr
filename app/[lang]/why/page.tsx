@@ -25,6 +25,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: t['why.title'] || 'Feed the Soul. Run the System. | Synthszr',
     description: t['why.description'] || 'Die News Synthese zum Start in den Tag.',
     path: '/why',
+    locale: lang as LanguageCode,
   })
 }
 

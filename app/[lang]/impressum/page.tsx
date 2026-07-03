@@ -23,6 +23,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: t['imprint.title'] || 'Impressum | Synthszr',
     description: t['imprint.description'] || 'Impressum und rechtliche Informationen',
     path: '/impressum',
+    locale: lang as LanguageCode,
   })
 }
 
