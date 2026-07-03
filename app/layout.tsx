@@ -81,6 +81,7 @@ export default function RootLayout({
             DNS + TLS handshake (~200–500 ms) before the LCP fetch. */}
         <link rel="preconnect" href="https://lbrzdn804nhy3kox.public.blob.vercel-storage.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://lbrzdn804nhy3kox.public.blob.vercel-storage.com" />
+        <link rel="alternate" type="application/rss+xml" title="Synthszr RSS" href="https://www.synthszr.com/feed.xml" />
       </head>
       <body className={`${ibmPlexSerif.variable} ${spaceMono.variable} font-serif antialiased`}>
         {children}

@@ -1,0 +1,19 @@
+# Synthszr — https://www.synthszr.com
+
+> Synthszr ist die tägliche News-Synthese zu KI: Business, Design und Technologie.
+> AI-generierte Tagesposts, die Synthszr Charts (tägliches Momentum-Ranking von
+> AI-Produkten aus tausenden News-Quellen) und Company-Analysen.
+
+## Wichtige Seiten
+- Startseite (de): https://www.synthszr.com/de
+- Synthszr Charts (AI-Produkt-Ranking): https://www.synthszr.com/de/rankings
+- Archiv aller Posts: https://www.synthszr.com/de/archive
+- Companies: https://www.synthszr.com/de/companies
+
+## Feeds & Daten
+- RSS: https://www.synthszr.com/feed.xml
+- Sitemap: https://www.synthszr.com/sitemap.xml
+
+## Sprachen
+Deutsch (Original), Englisch, Tschechisch, Französisch, Plattdeutsch —
+unter /{de,en,cs,fr,nds}/.
