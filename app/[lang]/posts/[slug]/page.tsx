@@ -341,6 +341,19 @@ export default async function PostPage({ params }: PageProps) {
     ],
   }
 
+  // Podcast-Folge als strukturierte Daten — nur wenn eine Episode existiert.
+  const podcastLd = appleEpisodeUrl
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'PodcastEpisode',
+        name: post.title,
+        url: appleEpisodeUrl,
+        datePublished: post.created_at,
+        partOfSeries: { '@type': 'PodcastSeries', name: 'Synthszr' },
+        associatedMedia: { '@type': 'MediaObject', contentUrl: appleEpisodeUrl },
+      }
+    : null
+
   // Preload the LCP cover so the browser begins the image fetch in parallel
   // with HTML parsing — closes the "LCP request discovery" gap.
   if (post.cover_image_url) {
@@ -362,6 +375,9 @@ export default async function PostPage({ params }: PageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: safeJsonLd(breadcrumbLd) }}
       />
+      {podcastLd && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(podcastLd) }} />
+      )}
 
         <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
 
