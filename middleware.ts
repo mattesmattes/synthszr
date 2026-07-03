@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import type { NextRequest, NextFetchEvent } from 'next/server'
 import { jwtVerify } from 'jose'
 import { createClient } from '@supabase/supabase-js'
+import { PUBLIC_LOCALES } from '@/lib/i18n/config'
 
 const SESSION_COOKIE_NAME = 'synthszr_session'
 const LOCALE_COOKIE_NAME = 'synthszr_locale'
@@ -21,10 +22,13 @@ const authRoutes = ['/login']
 // Routes that should NOT have locale prefix (static, api, admin, etc.)
 const NON_LOCALIZED_PREFIXES = ['/api', '/admin', '/login', '/_next', '/favicon', '/docs', '/newsletter']
 
-// Cache for active languages (refreshed every 5 minutes)
-let activeLanguagesCache: Set<string> | null = null
+// Aktive Sprachen: nie den Request blockieren. Start-Wert = PUBLIC_LOCALES
+// (Code-Wahrheit, identisch zu Sitemap/hreflang); DB-Refresh läuft im
+// Hintergrund via event.waitUntil. Stale-Werte sind hier völlig ok —
+// Sprachaktivierungen passieren quasi nie.
+let activeLanguagesCache: Set<string> = new Set(PUBLIC_LOCALES)
 let cacheTimestamp = 0
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+const CACHE_TTL = 60 * 60 * 1000 // 1h
 
 function getSecretKey() {
   const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
@@ -44,23 +48,16 @@ async function verifyToken(token: string): Promise<boolean> {
 }
 
 /**
- * Fetches active languages from database
+ * Refreshes active languages from database in the background.
+ * Never throws — stale cache is kept on any failure.
  */
-async function getActiveLanguages(): Promise<Set<string>> {
-  const now = Date.now()
-
-  // Return cached if still valid
-  if (activeLanguagesCache && now - cacheTimestamp < CACHE_TTL) {
-    return activeLanguagesCache
-  }
-
+async function refreshActiveLanguages(): Promise<void> {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
     if (!supabaseUrl || !supabaseKey) {
-      // Fallback: only default locale
-      return new Set([DEFAULT_LOCALE])
+      return
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey)
@@ -72,16 +69,13 @@ async function getActiveLanguages(): Promise<Set<string>> {
 
     if (error || !data) {
       console.error('Error fetching active languages:', error)
-      return new Set([DEFAULT_LOCALE])
+      return
     }
 
     activeLanguagesCache = new Set(data.map(l => l.code))
-    cacheTimestamp = now
-
-    return activeLanguagesCache
+    cacheTimestamp = Date.now()
   } catch (error) {
-    console.error('Error in getActiveLanguages:', error)
-    return new Set([DEFAULT_LOCALE])
+    console.error('Error in refreshActiveLanguages:', error)
   }
 }
 
@@ -167,7 +161,7 @@ function shouldLocalize(pathname: string): boolean {
   return !NON_LOCALIZED_PREFIXES.some(prefix => pathname.startsWith(prefix))
 }
 
-export async function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest, event: NextFetchEvent) {
   const { pathname } = request.nextUrl
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
 
@@ -210,7 +204,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const activeLanguages = await getActiveLanguages()
+  if (Date.now() - cacheTimestamp > CACHE_TTL) {
+    event.waitUntil(refreshActiveLanguages())
+  }
+  const activeLanguages = activeLanguagesCache
   const urlLocale = getLocaleFromPathname(pathname)
 
   // Case 1: URL has a locale prefix
