@@ -72,6 +72,63 @@ export async function getRankedProducts(
   })
 }
 
+export interface CategoryCappedProduct extends RankedProduct {
+  /** Rang innerhalb der primären Kategorie (bzw. globaler Rang ohne Kategorie). */
+  catRank: number
+  primaryCategory: string | null
+  /** Momentum des Kategorie-Spitzenreiters (für kategorie-relative Scores). */
+  categoryMax: number
+}
+
+/**
+ * Chartbare Produkte mit hartem Cut bei `cap` pro primärer Kategorie —
+ * die kanonische Menge für alle Anzeigen außerhalb der Ranking-Listen
+ * (Artikel-Produktlinks, Vote-Blocks). Produkte ohne primäre Kategorie
+ * werden am globalen Rang gemessen. Ränge werden über den VOLLEN Satz
+ * berechnet (nicht über eine abgeschnittene Liste), damit sie mit den
+ * Produktseiten übereinstimmen.
+ */
+export async function getCategoryCappedProducts(cap = 50): Promise<CategoryCappedProduct[]> {
+  const all = await getRankedProducts({ limit: 10_000, minMentions: 2 })
+  const supabase = createAdminClient()
+  // Paginieren — PostgREST cappt bei 1000 Zeilen, sonst gelten tausende
+  // Produkte fälschlich als uncategorisiert.
+  const membRows: Array<{ product_id: string; category: string }> = []
+  for (let off = 0; ; off += 1000) {
+    const { data } = await supabase
+      .from('product_category_membership')
+      .select('product_id, category')
+      .eq('is_primary', true)
+      .order('product_id')
+      .range(off, off + 999)
+    if (!data?.length) break
+    membRows.push(...(data as Array<{ product_id: string; category: string }>))
+    if (data.length < 1000) break
+  }
+  const primaryCat = new Map(membRows.map((m) => [m.product_id, m.category]))
+
+  const globalMax = all.length ? all[0].momentum : 0
+  const maxByCat = new Map<string, number>()
+  const catCounter = new Map<string, number>()
+  const out: CategoryCappedProduct[] = []
+  all.forEach((p, i) => {
+    const cat = primaryCat.get(p.id) ?? null
+    let catRank: number
+    let categoryMax: number
+    if (cat) {
+      maxByCat.set(cat, Math.max(maxByCat.get(cat) ?? 0, p.momentum))
+      catRank = (catCounter.get(cat) ?? 0) + 1
+      catCounter.set(cat, catRank)
+      categoryMax = maxByCat.get(cat) ?? 0
+    } else {
+      catRank = i + 1 // globaler Rang als Fallback
+      categoryMax = globalMax
+    }
+    if (catRank <= cap) out.push({ ...p, catRank, primaryCategory: cat, categoryMax })
+  })
+  return out
+}
+
 /** Aktive Kategorien für die Ranking-Filter (nach Anzeigereihenfolge). */
 export async function getActiveCategories(): Promise<Array<{ slug: string; name: string }>> {
   const supabase = createAdminClient()

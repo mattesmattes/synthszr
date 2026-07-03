@@ -1,12 +1,13 @@
 import Link from 'next/link'
-import { getRankedProducts } from '@/lib/rankings/leaderboard'
+import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { findMentionedProducts, extractVisibleText } from '@/lib/posts/product-mentions'
 import type { LanguageCode } from '@/lib/types'
 
 /** Server-gerenderte, crawlbare Links auf Chart-Produkte, die im Post
  *  namentlich vorkommen — Ergänzung zu den client-seitigen Inline-Links des
- *  TiptapRenderers (die stehen nicht im initialen HTML). */
+ *  TiptapRenderers (die stehen nicht im initialen HTML). Harter Cut: nur
+ *  Produkte in den Top 50 ihrer Kategorie (konsistent zur Charts-Leiste). */
 export async function PostProductLinks({
   content,
   locale,
@@ -14,9 +15,9 @@ export async function PostProductLinks({
   content: Record<string, unknown>
   locale: LanguageCode
 }) {
-  let products: Awaited<ReturnType<typeof getRankedProducts>>
+  let products: Awaited<ReturnType<typeof getCategoryCappedProducts>>
   try {
-    products = await getRankedProducts({ limit: 1000, minMentions: 2 })
+    products = await getCategoryCappedProducts(50)
   } catch {
     return null
   }
@@ -37,7 +38,7 @@ export async function PostProductLinks({
               className="inline-flex items-center gap-1.5 rounded border border-border px-2 py-1 text-xs transition-colors hover:bg-secondary"
             >
               {p.canonicalName}
-              {p.rank && <span className="text-muted-foreground">#{p.rank}</span>}
+              {p.catRank && <span className="text-muted-foreground">#{p.catRank}</span>}
             </Link>
           </li>
         ))}

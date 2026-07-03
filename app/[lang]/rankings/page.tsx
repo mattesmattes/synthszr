@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: Promise<{ lang: string }>
-  searchParams: Promise<{ category?: string; group?: string; sort?: string; all?: string }>
+  searchParams: Promise<{ category?: string; group?: string; sort?: string }>
 }
 
 export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
@@ -38,8 +38,8 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   const nameBySlug = new Map(categories.map((c) => [c.slug, c.name]))
 
   // Facetten (?category/?group) sind eigenständige Ansichten: eigener Title +
-  // self-canonical auf die Facetten-URL. ?sort und ?all sind reine Duplikat-/
-  // Vollansichten und tauchen bewusst NICHT im canonical auf.
+  // self-canonical auf die Facetten-URL. ?sort ist eine reine Duplikat-Ansicht
+  // und taucht bewusst NICHT im canonical auf.
   let path = '/rankings'
   let title = t('rankings.meta.title')
   if (category) {
@@ -74,7 +74,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
   ReactDOM.preconnect('https://t1.gstatic.com')
 
   const { lang } = await params
-  const { category, group, sort, all } = await searchParams
+  const { category, group, sort } = await searchParams
 
   // Aktive Meta-Gruppe: explizit per ?group, sonst aus der gewählten Kategorie abgeleitet.
   const activeGroupSlug = group ?? (category ? groupForCategory(category) : null)
@@ -82,10 +82,10 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
 
   const [ranked, categories, translations] = await Promise.all([
     getRankedProducts({
-      // Kategorie-Ansicht: 50 als Default, per ?all=1 die komplette Kategorie
-      // (crawlbarer Linkpfad zu allen chartbaren Produkten, canonical bleibt
-      // auf der 50er-Ansicht).
-      limit: category ? (all === '1' ? 1000 : 50) : 100,
+      // Harter Cut: max. 50 pro Kategorie (kein Aufklappen), 100 in der
+      // Gesamtansicht. Long-Tail-Produktseiten bleiben über die Sitemap und
+      // Related-Products-Module erreichbar.
+      limit: category ? 50 : 100,
       minMentions: 2,
       category,
       categoryIn: !category && activeGroup ? activeGroup.categories : undefined,
@@ -244,17 +244,6 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
             </li>
           ))}
         </ol>
-      )}
-
-      {category && all !== '1' && products.length === 50 && (
-        <div className="mt-3">
-          <Link
-            href={`${tabBase}?category=${category}&all=1`}
-            className="inline-block rounded border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:border-black hover:text-black"
-          >
-            {t('rankings.show_all')} →
-          </Link>
-        </div>
       )}
 
       <footer className="mt-8 text-[11px] text-gray-400 border-t pt-3">
