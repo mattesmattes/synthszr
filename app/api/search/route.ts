@@ -78,6 +78,11 @@ function buildSnippet(plain: string, query: string): string | null {
   return (start > 0 ? '… ' : '') + plain.slice(start, end).trim() + (end < plain.length ? ' …' : '')
 }
 
+// LIKE-Wildcards im User-Query escapen, sonst matcht "100%" alles.
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`)
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const rawQuery = (searchParams.get('q') || '').trim()
@@ -143,7 +148,31 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
         .limit(FETCH_LIMIT)
 
-  const [manualResult, aiResult, embeddingHits] = await Promise.all([
+  // Wörtlicher Body-Recall direkt in Postgres (content ist eine Text-Spalte,
+  // ilike geht ohne Migration). Ohne diesen Pfad fanden Ein-Wort-Queries wie
+  // "Sonnet" nur 2/16 Posts: title/excerpt-Substring greift selten, und die
+  // Embeddings der Multi-Themen-Tagesdigests verwässern einzelne Erwähnungen.
+  // content wird nur für diese ≤30 Treffer geladen (Fundstellen-Snippet).
+  const likePattern = `%${escapeLike(rawQuery)}%`
+  const bodyPromise = isDefaultLocale
+    ? supabase
+        .from('generated_posts')
+        .select('id, title, slug, excerpt, content, created_at')
+        .eq('status', 'published')
+        .ilike('content', likePattern)
+        .order('created_at', { ascending: false })
+        .limit(EMBEDDING_TOP_K)
+    : supabase
+        .from('content_translations')
+        .select('generated_post_id, title, slug, excerpt, content, generated_posts!inner(id, status, created_at)')
+        .eq('language_code', locale)
+        .eq('translation_status', 'completed')
+        .eq('generated_posts.status', 'published')
+        .not('generated_post_id', 'is', null)
+        .ilike('content', likePattern)
+        .limit(EMBEDDING_TOP_K)
+
+  const [manualResult, aiResult, embeddingHits, bodyResult] = await Promise.all([
     isDefaultLocale
       ? supabase
           .from('posts')
@@ -154,6 +183,7 @@ export async function GET(request: NextRequest) {
       : Promise.resolve({ data: [] as never[] }),
     aiCorpusPromise,
     embeddingPromise,
+    bodyPromise,
   ])
 
   // Normalize translation rows to the same shape as generated_posts.
@@ -287,6 +317,46 @@ export async function GET(request: NextRequest) {
       type: 'ai',
       created_at: p.created_at,
     })
+  }
+
+  // Wörtliche Body-Treffer einmischen — mit Fundstellen-Snippet, damit UI
+  // und LLM-Reranker die relevante Stelle sehen (Slug-Dedupe folgt unten).
+  if (isDefaultLocale) {
+    type BodyRow = { id: string; title: string; slug: string; excerpt: string | null; content: unknown; created_at: string }
+    for (const p of (bodyResult.data || []) as BodyRow[]) {
+      hits.push({
+        id: p.id,
+        title: p.title,
+        slug: p.slug,
+        excerpt: p.excerpt ?? null,
+        snippet: buildSnippet(tiptapToPlain(p.content), rawQuery),
+        type: 'ai',
+        created_at: p.created_at,
+      })
+    }
+  } else {
+    type BodyTranslationRow = {
+      generated_post_id: string
+      title: string | null
+      slug: string | null
+      excerpt: string | null
+      content: unknown
+      generated_posts: { id: string; status: string; created_at: string } | { id: string; status: string; created_at: string }[] | null
+    }
+    for (const t of (bodyResult.data || []) as unknown as BodyTranslationRow[]) {
+      if (!t.generated_post_id || !t.title || !t.slug || !t.generated_posts) continue
+      const parent = Array.isArray(t.generated_posts) ? t.generated_posts[0] : t.generated_posts
+      if (!parent) continue
+      hits.push({
+        id: t.generated_post_id,
+        title: t.title,
+        slug: t.slug,
+        excerpt: t.excerpt ?? null,
+        snippet: buildSnippet(tiptapToPlain(t.content), rawQuery),
+        type: 'ai',
+        created_at: parent.created_at,
+      })
+    }
   }
 
   // De-dupe by slug, prefer manual, then by recency

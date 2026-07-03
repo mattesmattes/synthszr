@@ -44,10 +44,13 @@ export async function rerankPostHits<T extends RerankableHit>(
     .join('\n\n')
 
   const prompt = `Du bekommst eine Suchanfrage und eine Liste nummerierter Treffer.
-Wähle NUR die Treffer aus, die die Anfrage thematisch wirklich treffen, und
-sortiere sie nach Relevanz (relevantester zuerst). Lass Treffer weg, die nur
-oberflächlich passen (z.B. zufällige Wortteile, bloß dasselbe Themengebiet) oder
-gar nichts mit der Anfrage zu tun haben.
+Die Treffer sind tägliche News-Digests mit MEHREREN unabhängigen Themen pro
+Post — ein Treffer ist relevant, sobald EIN Abschnitt die Anfrage behandelt,
+auch wenn der Titel etwas anderes sagt. Der Vorschautext zeigt die Fundstelle:
+Kommt der Suchbegriff dort wörtlich und substanziell vor, behalte den Treffer.
+Wähle die relevanten Treffer aus und sortiere sie (relevantester zuerst). Lass
+nur Treffer weg, die die Anfrage gar nicht behandeln (z.B. zufällige Wortteile
+in anderem Kontext oder bloß entfernt verwandtes Themengebiet).
 
 Wenn KEIN Treffer die Anfrage wirklich trifft, antworte mit einem leeren Array: []
 
