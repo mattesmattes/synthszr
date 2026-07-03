@@ -10,6 +10,7 @@ import { getVendorSynthesis } from '@/lib/rankings/vendor-synthesis'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { SingleMomentumChart } from '@/components/rankings/single-momentum-chart'
 import { PremarketSynthesisBlock } from '@/components/rankings/premarket-synthesis-block'
+import { RelatedProducts } from '@/components/rankings/related-products'
 import { MentionList } from '@/components/rankings/mention-list'
 import { PinButton, PinBar } from '@/components/rankings/pin-controls'
 import { RankingsBanner } from '@/components/rankings/rankings-banner'
@@ -191,6 +192,16 @@ export default async function ProductDetailPage({ params }: PageProps) {
       <MentionList mentions={p.mentions} />
 
       {vendorSyn && <PremarketSynthesisBlock company={vendorSyn.company} synthesis={vendorSyn.synthesis} />}
+
+      {p.category && (
+        <RelatedProducts
+          lang={lang}
+          categorySlug={p.category.slug}
+          categoryName={translations[`rankings.cat.${p.category.slug}`] ?? p.category.name}
+          excludeSlug={p.slug}
+          heading={t('rankings.related')}
+        />
+      )}
 
       <footer className="mt-10 text-xs text-gray-400 border-t pt-4">
         {t('rankings.footer_product')}
