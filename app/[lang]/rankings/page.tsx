@@ -28,8 +28,12 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   const { lang } = await params
   const { category, group } = await searchParams
   const locale = lang as LanguageCode
-  const translations = await getTranslations(locale)
+  const [translations, categories] = await Promise.all([
+    getTranslations(locale),
+    getActiveCategories(),
+  ])
   const t = (key: string) => translations[key] ?? key
+  const nameBySlug = new Map(categories.map((c) => [c.slug, c.name]))
 
   // Facetten (?category/?group) sind eigenständige Ansichten: eigener Title +
   // self-canonical auf die Facetten-URL. ?sort und ?all sind reine Duplikat-/
@@ -38,10 +42,10 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   let title = t('rankings.meta.title')
   if (category) {
     path = `/rankings?category=${category}`
-    title = `${translations[`rankings.cat.${category}`] ?? category} — Synthszr Charts`
+    title = `${translations[`rankings.cat.${category}`] ?? nameBySlug.get(category) ?? category} — Synthszr Charts`
   } else if (group) {
     path = `/rankings?group=${group}`
-    title = `${translations[`rankings.group.${group}`] ?? group} — Synthszr Charts`
+    title = `${translations[`rankings.group.${group}`] ?? groupBySlug(group)?.name ?? group} — Synthszr Charts`
   }
 
   return generateLocalizedMetadata({
