@@ -211,12 +211,11 @@ export default async function Page({ params }: PageProps) {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: 'Synthszr',
-    url: 'https://synthszr.com',
+    url: 'https://www.synthszr.com',
     description: t['meta.description'] || 'Exploring the intersection of business, design and technology in the age of AI',
   }
 
   return (
-    <Suspense fallback={null}>
     <div className="min-h-screen bg-background text-foreground">
       <script
         type="application/ld+json"
@@ -329,6 +328,5 @@ export default async function Page({ params }: PageProps) {
       </footer>
       {/* <CalligramFooter /> */}
     </div>
-    </Suspense>
   )
 }
