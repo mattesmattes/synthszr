@@ -8,6 +8,7 @@ import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { parseTipTapContent } from '@/lib/companies/extractor'
 import { VendorProducts } from '@/components/rankings/vendor-products'
+import { SITE_URL, safeJsonLd } from '@/lib/seo/site'
 import type { LanguageCode } from '@/lib/types'
 import type { Metadata } from 'next'
 
@@ -242,9 +243,27 @@ export default async function CompanyDetailPage({ params }: PageProps) {
     })
     .sort((a, b) => new Date(b.postCreatedAt).getTime() - new Date(a.postCreatedAt).getTime())
 
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Synthszr', item: `${SITE_URL}/${locale}` },
+      { '@type': 'ListItem', position: 2, name: 'Companies', item: `${SITE_URL}/${locale}/companies` },
+      { '@type': 'ListItem', position: 3, name: company.name },
+    ],
+  }
+
+  const organizationLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: company.name,
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <main className="mx-auto max-w-3xl px-6 py-12 md:py-20">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(breadcrumbLd) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(organizationLd) }} />
         <Link
           href={`/${locale}/companies`}
           className="mb-8 inline-flex items-center gap-2 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
