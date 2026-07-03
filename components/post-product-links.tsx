@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { getRankedProducts } from '@/lib/rankings/leaderboard'
 import { getTranslations } from '@/lib/i18n/get-translations'
-import { findMentionedProducts } from '@/lib/posts/product-mentions'
+import { findMentionedProducts, extractVisibleText } from '@/lib/posts/product-mentions'
 import type { LanguageCode } from '@/lib/types'
 
 /** Server-gerenderte, crawlbare Links auf Chart-Produkte, die im Post
@@ -20,7 +20,7 @@ export async function PostProductLinks({
   } catch {
     return null
   }
-  const mentioned = findMentionedProducts(JSON.stringify(content), products, 8)
+  const mentioned = findMentionedProducts(extractVisibleText(content), products, 8)
   if (mentioned.length === 0) return null
 
   const t = await getTranslations(locale)
