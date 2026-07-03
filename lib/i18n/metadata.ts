@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import type { LanguageCode } from '@/lib/types'
 import { PUBLIC_LOCALES, DEFAULT_LOCALE } from './config'
+import { SITE_URL } from '@/lib/seo/site'
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
+const BASE_URL = SITE_URL
 // Versioned filename forces LinkedIn / X / Facebook to drop their
 // cached image. Bumping the suffix is the only reliable cache-buster
 // because the scrapers key on the exact URL, not on Last-Modified.
