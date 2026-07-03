@@ -153,5 +153,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.error('sitemap: rankings section failed', e)
   }
 
+  // Company-Detailseiten: distinct Slugs aus den Mentions veröffentlichter
+  // Posts (gleiche Quelle wie der /companies-Index). Lowercase-normalisiert —
+  // die Seite ist case-insensitiv (ilike), kanonisch ist die Kleinschreibung.
+  try {
+    const { data: companyMentions } = await supabase
+      .from('post_company_mentions')
+      .select('company_slug, post:generated_posts!inner(status)')
+      .eq('post.status', 'published')
+    const companySlugs = [...new Set(
+      (companyMentions ?? []).map((m) => (m.company_slug as string).toLowerCase())
+    )]
+    for (const slug of companySlugs) {
+      const alternates: Record<string, string> = {
+        'x-default': `${BASE_URL}/${DEFAULT_LOCALE}/companies/${encodeURIComponent(slug)}`,
+      }
+      for (const locale of activeLocales) {
+        alternates[locale] = `${BASE_URL}/${locale}/companies/${encodeURIComponent(slug)}`
+      }
+      for (const locale of activeLocales) {
+        sitemap.push({
+          url: `${BASE_URL}/${locale}/companies/${encodeURIComponent(slug)}`,
+          changeFrequency: 'weekly',
+          priority: locale === DEFAULT_LOCALE ? 0.6 : 0.4,
+          alternates: { languages: alternates },
+        })
+      }
+    }
+  } catch (e) {
+    console.error('sitemap: companies section failed', e)
+  }
+
   return sitemap
 }
