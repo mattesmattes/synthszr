@@ -1,6 +1,7 @@
 import { MetadataRoute } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import { DEFAULT_LOCALE, PUBLIC_LOCALES } from '@/lib/i18n/config'
+import { getRankedProducts } from '@/lib/rankings/leaderboard'
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
 
@@ -64,7 +65,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (const locale of activeLocales) {
       sitemap.push({
         url: `${BASE_URL}/${locale}${page}`,
-        lastModified: new Date(),
         changeFrequency: page === '' ? 'daily' : 'monthly',
         priority: page === '' ? 1 : (locale === DEFAULT_LOCALE ? 0.8 : 0.6),
         alternates: { languages: alternates },
@@ -102,6 +102,49 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         alternates: { languages: alternates },
       })
     }
+  }
+
+  // Rankings-Übersicht: alle Public-Locales (UI ist übersetzt).
+  const rankingsAlternates: Record<string, string> = {
+    'x-default': `${BASE_URL}/${DEFAULT_LOCALE}/rankings`,
+  }
+  for (const locale of activeLocales) {
+    rankingsAlternates[locale] = `${BASE_URL}/${locale}/rankings`
+  }
+  for (const locale of activeLocales) {
+    sitemap.push({
+      url: `${BASE_URL}/${locale}/rankings`,
+      changeFrequency: 'daily',
+      priority: locale === DEFAULT_LOCALE ? 0.9 : 0.7,
+      alternates: { languages: rankingsAlternates },
+    })
+  }
+
+  // Produkt-Detailseiten: nur chartbare Produkte mit ≥2 Mentions (gleiches
+  // Kriterium wie das Leaderboard) — dünnere Seiten bleiben draußen. Nur
+  // de/en: andere Locales liefern EN-Fallback-Content (kein hreflang-Cluster).
+  try {
+    const products = await getRankedProducts({ limit: 10_000, minMentions: 2 })
+    const PRODUCT_LOCALES = ['de', 'en'] as const
+    for (const p of products) {
+      const alternates: Record<string, string> = {
+        'x-default': `${BASE_URL}/de/rankings/${p.slug}`,
+        de: `${BASE_URL}/de/rankings/${p.slug}`,
+        en: `${BASE_URL}/en/rankings/${p.slug}`,
+      }
+      for (const loc of PRODUCT_LOCALES) {
+        sitemap.push({
+          url: `${BASE_URL}/${loc}/rankings/${p.slug}`,
+          ...(p.lastSeen ? { lastModified: new Date(p.lastSeen) } : {}),
+          changeFrequency: 'daily',
+          priority: loc === 'de' ? 0.7 : 0.5,
+          alternates: { languages: alternates },
+        })
+      }
+    }
+  } catch (e) {
+    // Sitemap darf bei DB-Hickup nicht komplett ausfallen — Posts/Static bleiben.
+    console.error('sitemap: rankings section failed', e)
   }
 
   return sitemap
