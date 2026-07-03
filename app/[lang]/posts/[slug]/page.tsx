@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { createAnonClient, createAdminClient } from "@/lib/supabase/admin"
 import { PostContentView } from "@/components/post-content-view"
+import { PostProductLinks } from "@/components/post-product-links"
 import { FooterBrands } from "@/components/footer-brands"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
@@ -444,6 +445,8 @@ export default async function PostPage({ params }: PageProps) {
             </Suspense>
           </div>
         </article>
+
+        <PostProductLinks content={post.content as Record<string, unknown>} locale={locale} />
 
         <nav className="mt-16 border-t border-border pt-8">
           <div className="flex justify-between items-center">
