@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import ReactDOM from 'react-dom'
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboard'
@@ -67,6 +68,11 @@ function fmtDate(d: string | null, lang: string): string {
 }
 
 export default async function RankingsPage({ params, searchParams }: PageProps) {
+  // 98 Vendor-Logos laden von google.com/s2/favicons (301 → t1.gstatic.com) —
+  // Preconnect spart DNS+TLS für beide Origins vor dem ersten Icon-Fetch.
+  ReactDOM.preconnect('https://www.google.com')
+  ReactDOM.preconnect('https://t1.gstatic.com')
+
   const { lang } = await params
   const { category, group, sort, all } = await searchParams
 

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import ReactDOM from 'react-dom'
 import { notFound } from 'next/navigation'
 import { getProductDetail } from '@/lib/rankings/product-detail'
 import { Suspense } from 'react'
@@ -69,6 +70,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function ProductDetailPage({ params }: PageProps) {
+  // 98 Vendor-Logos laden von google.com/s2/favicons (301 → t1.gstatic.com) —
+  // Preconnect spart DNS+TLS für beide Origins vor dem ersten Icon-Fetch.
+  ReactDOM.preconnect('https://www.google.com')
+  ReactDOM.preconnect('https://t1.gstatic.com')
+
   const { lang, slug } = await params
   const p = await getProductDetail(slug, lang)
   if (!p) notFound()
