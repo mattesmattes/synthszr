@@ -1,7 +1,13 @@
 import { MetadataRoute } from 'next'
-import { createClient } from '@/lib/supabase/server'
+import { createAnonClient } from '@/lib/supabase/admin'
 import { DEFAULT_LOCALE, PUBLIC_LOCALES } from '@/lib/i18n/config'
 import { getRankedProducts } from '@/lib/rankings/leaderboard'
+
+// ISR statt voll-dynamisch: der cookie-freie Anon-Client erlaubt Prerender +
+// stündliche Regenerierung. Wichtig für Googlebot: schlägt eine Regenerierung
+// fehl (DB-Hickup, Deploy), liefert Vercel die letzte gute XML-Version statt
+// einer HTML-Fehlerseite — genau das hatte GSC als "Sitemap ist HTML" moniert.
+export const revalidate = 3600
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
 
@@ -11,7 +17,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
 const FULL_CONTENT_LOCALES = PUBLIC_LOCALES
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const supabase = await createClient()
+  const supabase = createAnonClient()
 
   // Fetch active languages
   const { data: languages } = await supabase
