@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { ChevronUp, ChevronDown } from 'lucide-react'
-import { CompanyTableRow, CompanyCardData, CompanyTableSkeleton } from '@/components/company-table-row'
+import { CompanyTableRow, CompanyCardData } from '@/components/company-table-row'
 import { cn } from '@/lib/utils'
 
 interface CompanyData {
@@ -53,8 +53,11 @@ const ratingOrder: Record<string, number> = { BUY: 3, HOLD: 2, SELL: 1 }
  * with the enriched data.
  */
 export function CompaniesListClient({ companies, locale }: CompaniesListClientProps) {
-  const [enrichedCompanies, setEnrichedCompanies] = useState<CompanyCardData[]>([])
-  const [loading, setLoading] = useState(true)
+  // Basis-Rows sofort aus den Server-Props rendern (SSR-HTML enthält damit
+  // echte <a href>-Links für Crawler); Ratings/Ticker hydratisieren nachträglich.
+  const [enrichedCompanies, setEnrichedCompanies] = useState<CompanyCardData[]>(
+    () => companies.map((c) => ({ ...c }))
+  )
   const [sortColumn, setSortColumn] = useState<SortColumn>('name')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
@@ -194,7 +197,6 @@ export function CompaniesListClient({ companies, locale }: CompaniesListClientPr
         })
 
         setEnrichedCompanies(enriched)
-        setLoading(false)
 
         // After initial load, trigger generation for companies without ratings (in background)
         // This ensures all companies eventually have a Synthszr Vote
@@ -237,7 +239,6 @@ export function CompaniesListClient({ companies, locale }: CompaniesListClientPr
         console.error('[companies] Failed to fetch ratings:', error)
         // Still show companies without ratings
         setEnrichedCompanies(companies.map(c => ({ ...c, rating: null })))
-        setLoading(false)
       }
     }
 
@@ -245,28 +246,6 @@ export function CompaniesListClient({ companies, locale }: CompaniesListClientPr
   }, [companies])
 
   const t = headerTranslations[locale || 'de'] || headerTranslations.de
-
-  if (loading) {
-    return (
-      <div className="rounded-lg border border-border bg-background overflow-hidden">
-        <table className="w-full">
-          <thead className="sticky top-0 bg-muted/50 backdrop-blur-sm z-10">
-            <tr className="border-b border-border">
-              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.company}</th>
-              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.ticker}</th>
-              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.vote}</th>
-              <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.articles}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: 10 }).map((_, i) => (
-              <CompanyTableSkeleton key={i} />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )
-  }
 
   const headerClass = "text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground cursor-pointer hover:text-foreground transition-colors select-none"
 
