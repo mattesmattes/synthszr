@@ -20,7 +20,8 @@ export function HomeHero({ locale }: { locale?: string }) {
 
   if (searchOpen) return <HomeSearch locale={locale} />
 
-  const href = !locale || locale === 'de' ? '/rankings' : `/${locale}/rankings`
+  // Immer locale-präfixiert — /rankings ohne Präfix kostet einen 307-Hop.
+  const href = `/${locale || 'de'}/rankings`
   return (
     <div className="flex justify-center">
       <Link

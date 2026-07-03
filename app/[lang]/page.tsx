@@ -310,6 +310,12 @@ export default async function Page({ params }: PageProps) {
               <Suspense fallback={null}>
                 <LanguageSwitcher currentLocale={locale} />
               </Suspense>
+              <Link href={`/${locale}/rankings`} className="hover:text-accent transition-colors">
+                Charts
+              </Link>
+              <Link href={`/${locale}/companies`} className="hover:text-accent transition-colors">
+                Companies
+              </Link>
               <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
                 LinkedIn
               </a>
