@@ -126,7 +126,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return generateLocalizedMetadata({
     title: `${companyName} — Synthszr`,
     description: `Alle Artikel und Synthszr-Bewertungen zu ${companyName}`,
-    path: `/companies/${encodeURIComponent(slug)}`,
+    // Canonical = Sitemap-kanonische Kleinschreibung, egal welche Case-Variante aufgerufen wird.
+    path: `/companies/${encodeURIComponent(slug.toLowerCase())}`,
     locale: lang as LanguageCode,
   })
 }

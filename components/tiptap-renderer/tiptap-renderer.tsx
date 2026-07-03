@@ -138,6 +138,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
     extensions: [
       StarterKit.configure({
         heading: false,
+        link: false,
       }),
       HeadingWithQueueId.configure({
         levels: [1, 2, 3, 4, 5, 6],

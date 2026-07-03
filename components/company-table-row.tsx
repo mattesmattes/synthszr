@@ -76,9 +76,8 @@ export function CompanyTableRow({ company, locale = 'de' }: CompanyTableRowProps
     }
   }
 
-  const companyHref = locale === 'de'
-    ? `/companies/${company.slug}`
-    : `/${locale}/companies/${company.slug}`
+  // Immer locale-präfixiert — /companies/... ohne Präfix kostet einen 307-Hop.
+  const companyHref = `/${locale || 'de'}/companies/${company.slug}`
 
   return (
     <>

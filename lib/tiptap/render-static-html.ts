@@ -20,6 +20,7 @@ export function renderStaticArticleHtml(content: Record<string, unknown> | strin
     const html = generateHTML(json as Parameters<typeof generateHTML>[0], [
       StarterKit.configure({
         heading: false,
+        link: false,
       }),
       HeadingWithQueueId.configure({
         levels: [1, 2, 3, 4, 5, 6],
