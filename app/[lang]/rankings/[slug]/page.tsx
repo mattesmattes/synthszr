@@ -77,7 +77,12 @@ export default async function ProductDetailPage({ params }: PageProps) {
         <div className="min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{p.canonicalName}</h1>
-            {p.rank && <span className="text-xs font-semibold px-2 py-0.5 rounded bg-black text-white">#{p.rank}</span>}
+            {p.rank && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-black text-white whitespace-nowrap">
+                #{p.rank}
+                {p.category && <> {t('rankings.rank_in')} {translations[`rankings.cat.${p.category.slug}`] ?? p.category.name}</>}
+              </span>
+            )}
           </div>
           <p className="text-gray-500 text-xs mt-0.5">
             <Link href={`/${lang}/companies/${p.vendor}`} className="hover:underline">{p.vendor}</Link>

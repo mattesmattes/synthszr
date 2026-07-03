@@ -103,6 +103,7 @@ export const defaultTranslations: Record<string, string> = {
   'rankings.footer': 'Score = Momentum (Erwähnungen, recency-gewichtet, Halbwertszeit 14 Tage). Sparkline = Verlauf 90 Tage. Nur Produkte mit ≥2 Erwähnungen. Pinne Produkte (📌) für den Vergleich.',
   'rankings.empty': 'Noch keine Produkte mit genügend Erwähnungen.',
   'rankings.breadcrumb_all': 'Alle Rankings',
+  'rankings.rank_in': 'in',
   'rankings.momentum': 'Momentum',
   'rankings.momentum_history': 'Momentum-Verlauf',
   'rankings.features': 'Features',
