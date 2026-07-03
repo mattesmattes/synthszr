@@ -84,7 +84,7 @@ const REPORT_TOOL = {
             value_en: { type: 'string', description: 'Derselbe Wert auf Englisch (knapp, tabellentauglich)' },
             source_url: { type: 'string', description: 'URL der Web-Quelle, die diesen Wert belegt (Pflicht)' },
           },
-          required: ['dimension', 'value', 'value_en', 'source_url'],
+          required: ['dimension', 'value', 'source_url'],
         },
       },
     },
@@ -181,18 +181,20 @@ export async function runProductResearch(
 
     const { count: mc } = await supabase.from('product_mentions').select('id', { count: 'exact', head: true }).eq('product_id', m.product_id)
     if ((mc ?? 0) < minMentions) return false
-    // schon mit echten FEATURES recherchiert? Nur dann skippen — Produkte mit bloßer
-    // Beschreibung (ohne Feature-Tabelle) sollen die Web-Research nachträglich bekommen.
+
+    const dimensions = Array.isArray(cat.feature_dimensions) ? (cat.feature_dimensions as string[]) : []
     if (!force) {
-      // Skip, wenn schon echte Features vorhanden ODER bereits angefragt (Marker) —
-      // verhindert tägliches Neu-Anfragen von Produkten ohne auffindbare Web-Daten.
+      // Skip nur, wenn bereits per Web-Research ANGEFRAGT (Marker gesetzt) ODER AUSREICHEND
+      // gefüllt (≥ Hälfte der Kategorie-Dimensionen). Teilgefüllte Produkte OHNE Marker
+      // (Alt-Daten aus dem News-Enrich, das oft nur 1 Spec fand) bekommen EINEN Nachschlag —
+      // die Research schreibt den Marker danach IMMER, also kein tägliches Neu-Anfragen.
       const { data: existing } = await supabase.from('product_features_current')
         .select('dimension_key').eq('product_id', m.product_id)
       const keys = (existing ?? []).map((f) => f.dimension_key as string)
-      if (keys.some((k) => !META_DIMS.has(k)) || keys.includes(RESEARCHED_AT_DIM)) return false
+      const realCount = keys.filter((k) => !META_DIMS.has(k)).length
+      const enough = dimensions.length > 0 && realCount >= Math.ceil(dimensions.length / 2)
+      if (keys.includes(RESEARCHED_AT_DIM) || enough) return false
     }
-
-    const dimensions = Array.isArray(cat.feature_dimensions) ? (cat.feature_dimensions as string[]) : []
     // News-Auszüge als zusätzlicher Beleg (die eigentliche Quelle ist die Web-Suche)
     const { data: ments } = await supabase
       .from('product_mentions').select('excerpt').eq('product_id', m.product_id)
