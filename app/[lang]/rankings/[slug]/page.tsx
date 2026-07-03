@@ -26,6 +26,13 @@ import { SITE_URL, safeJsonLd } from '@/lib/seo/site'
 // Bei ~5000 Produktseiten ist das der Unterschied zwischen crawlbar und nicht.
 export const revalidate = 300
 
+// Leeres generateStaticParams aktiviert on-demand ISR: ohne diese Funktion
+// behandelt Vercel Dynamic-Segment-Routen als voll-dynamisch und ignoriert
+// revalidate (verifiziert in Prod: no-store trotz revalidate=300).
+export async function generateStaticParams() {
+  return []
+}
+
 interface PageProps {
   params: Promise<{ lang: string; slug: string }>
 }
