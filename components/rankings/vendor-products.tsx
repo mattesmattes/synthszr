@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { normalizeVendorNamespace } from '@/lib/rankings/resolve-product-payload'
 import { VendorAvatar } from './vendor-avatar'
 
 /** "Produkte in den Synthszr Charts" auf Company-Seiten — schließt das
@@ -13,12 +14,13 @@ export async function VendorProducts({
   vendor: string
   heading: string
 }) {
+  const ns = normalizeVendorNamespace(vendor)
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('product_metrics')
     .select('momentum, mention_count, products!inner(canonical_name, vendor_namespace, slug)')
     .eq('chartable', true)
-    .eq('products.vendor_namespace', vendor)
+    .eq('products.vendor_namespace', ns)
     .gte('mention_count', 2)
     .order('momentum', { ascending: false })
     .limit(12)
