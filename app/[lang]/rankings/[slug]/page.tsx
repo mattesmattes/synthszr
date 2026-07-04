@@ -8,9 +8,11 @@ import type { LanguageCode } from '@/lib/types'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
 import { SiteFooter } from '@/components/site-footer'
 import { getVendorSynthesis } from '@/lib/rankings/vendor-synthesis'
+import { getVendorStockSynthszr } from '@/lib/rankings/vendor-stock-synthesis'
 import { VendorAvatar } from '@/components/rankings/vendor-avatar'
 import { SingleMomentumChart } from '@/components/rankings/single-momentum-chart'
 import { PremarketSynthesisBlock } from '@/components/rankings/premarket-synthesis-block'
+import { StockSynthesisBlock } from '@/components/rankings/stock-synthesis-block'
 import { RelatedProducts } from '@/components/rankings/related-products'
 import { MentionList } from '@/components/rankings/mention-list'
 import { PinButton, PinBar } from '@/components/rankings/pin-controls'
@@ -86,6 +88,9 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const p = await getProductDetail(slug, lang)
   if (!p) notFound()
   const [vendorSyn, translations] = await Promise.all([getVendorSynthesis(p.vendor), getTranslations(lang as LanguageCode)])
+  // Börsennotierte Hersteller: Stock-Synthszr-Analyse (nur wenn KEINE Premarket-
+  // Synthese vorliegt — Premarket hat Vorrang, beide schließen sich aus).
+  const vendorStock = vendorSyn ? null : await getVendorStockSynthszr(p.vendor)
   const t = (key: string) => translations[key] ?? key
 
   // Kein aggregateRating/offers: Momentum-Score ist kein Review — erfundene
@@ -215,6 +220,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
       <MentionList mentions={p.mentions} />
 
       {vendorSyn && <PremarketSynthesisBlock company={vendorSyn.company} synthesis={vendorSyn.synthesis} />}
+      {vendorStock && <StockSynthesisBlock company={vendorStock.company} companyKey={vendorStock.companyKey} initial={vendorStock.data} createdAt={vendorStock.createdAt} />}
 
       <footer className="mt-10 text-xs text-gray-400 border-t pt-4">
         {t('rankings.footer_product')}
