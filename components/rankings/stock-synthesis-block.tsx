@@ -48,6 +48,17 @@ export function StockSynthesisBlock({
   const [stand, setStand] = useState<string | null>(createdAt)
   const [refreshing, setRefreshing] = useState(false)
   const triggered = useRef(false)
+  const [quote, setQuote] = useState<{ symbol: string; price: number; changePercent: number; direction: 'up' | 'down' | 'neutral'; currency: string } | null>(null)
+
+  // Aktienkurs des börsennotierten Herstellers (analog zu den Artikeln). 404 → kein Kurs.
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/stock-quote?company=${encodeURIComponent(companyKey)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((q) => { if (!cancelled && q?.price != null) setQuote(q) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [companyKey])
 
   // Bei stale (abgelaufen >14 Tage ODER kein Cache): einmalig neu generieren.
   // Vorhandene (veraltete) Analyse bleibt sichtbar, bis die frische ankommt.
@@ -75,9 +86,20 @@ export function StockSynthesisBlock({
 
   return (
     <section className="mt-8 border-t pt-6">
-      <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-lg font-semibold">{L.heading}: {company}</h2>
-        <span className="flex items-center gap-2 text-[11px] text-gray-400">
+      <div className="flex items-start justify-between mb-3 gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold">{L.heading}: {company}</h2>
+          {quote && (
+            <a href={`https://www.google.com/search?q=${quote.symbol}+stock`} target="_blank" rel="noopener noreferrer" className="inline-flex items-baseline gap-1.5 text-sm mt-0.5 hover:underline">
+              <span className="font-mono font-semibold">{quote.symbol}</span>
+              <span className="tabular-nums">{quote.price.toFixed(2)} {quote.currency}</span>
+              <span className={quote.direction === 'up' ? 'text-green-600' : quote.direction === 'down' ? 'text-orange-600' : 'text-gray-400'}>
+                {quote.changePercent >= 0 ? '+' : ''}{quote.changePercent.toFixed(2)}%
+              </span>
+            </a>
+          )}
+        </div>
+        <span className="flex items-center gap-2 text-[11px] text-gray-400 shrink-0">
           {refreshing && (
             <span className="flex items-center gap-1">
               <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-gray-500" />
