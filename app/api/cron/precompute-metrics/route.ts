@@ -5,6 +5,7 @@ import { translateStalePromos } from '@/lib/promos/auto-translate'
 import { runProductResearch } from '@/lib/rankings/research'
 import { runCategorization } from '@/lib/rankings/categorize'
 import { runDefragmentation } from '@/lib/rankings/defragment'
+import { runAttributionQA } from '@/lib/rankings/attribution-qa'
 import { revalidateTag } from 'next/cache'
 
 export const maxDuration = 300
@@ -33,6 +34,14 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       console.error('[cron] categorize:', e instanceof Error ? e.message : e)
     }
+    // Attribution-QS: unknown/Fragment-Produkte korrekt zuordnen (Merge in Kanon).
+    // Läuft VOR precompute, damit gemergte Fragmente aus den Metriken fallen.
+    let attribution = { merged: 0, flagged: 0, marked: 0 }
+    try {
+      attribution = await runAttributionQA({ limit: 15, minMentions: 2 })
+    } catch (e) {
+      console.error('[cron] attribution-qa:', e instanceof Error ? e.message : e)
+    }
     const { computed } = await precomputeMetrics()
     const promos = await translateStalePromos()
     // Tägliche Feature-Research: sichtbare, kategorisierte Produkte mit ≥2 Mentions (= das,
@@ -47,7 +56,7 @@ export async function GET(request: NextRequest) {
       console.error('[cron] research:', e instanceof Error ? e.message : e)
     }
     revalidateTag('rankings', 'max')
-    return NextResponse.json({ success: true, defrag, categorized, computed, promos, researched })
+    return NextResponse.json({ success: true, defrag, categorized, attribution, computed, promos, researched })
   } catch (e) {
     return NextResponse.json({ success: false, error: e instanceof Error ? e.message : String(e) }, { status: 200 })
   }
