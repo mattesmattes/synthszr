@@ -16,12 +16,13 @@ const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string }> = {
   'netflix': { symbol: 'NFLX', exchange: 'US' },
 
   // AI & Cloud
-  'openai': { symbol: 'MSFT', exchange: 'US' }, // Microsoft is major investor
-  'anthropic': { symbol: 'AMZN', exchange: 'US' }, // Amazon is major investor
+  // KEINE Investor-/Konkurrenz-Proxies für private Firmen (openai→MSFT,
+  // anthropic→AMZN, databricks→SNOW, stripe→PYPL entfernt): ein fremder
+  // Aktienkurs als „Kurs der Firma" ist irreführend. Private Firmen liefern
+  // hier bewusst 404 (kein Kurs) → kein Badge.
   'salesforce': { symbol: 'CRM', exchange: 'US' },
   'snowflake': { symbol: 'SNOW', exchange: 'US' },
   'palantir': { symbol: 'PLTR', exchange: 'US' },
-  'databricks': { symbol: 'SNOW', exchange: 'US' }, // Private, use Snowflake as proxy
   'crowdstrike': { symbol: 'CRWD', exchange: 'US' },
   'cloudflare': { symbol: 'NET', exchange: 'US' },
 
@@ -48,7 +49,6 @@ const COMPANY_TICKERS: Record<string, { symbol: string; exchange: string }> = {
   'paypal': { symbol: 'PYPL', exchange: 'US' },
   'square': { symbol: 'SQ', exchange: 'US' },
   'block': { symbol: 'SQ', exchange: 'US' },
-  'stripe': { symbol: 'PYPL', exchange: 'US' }, // Private, use PayPal as proxy
   'ebay': { symbol: 'EBAY', exchange: 'US' },
   'etsy': { symbol: 'ETSY', exchange: 'US' },
 
