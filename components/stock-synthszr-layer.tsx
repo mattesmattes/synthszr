@@ -97,7 +97,7 @@ export function StockSynthszrLayer({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             company,
-            currency,
+            currency: 'EUR', // Synthese-Cache IMMER EUR → gemeinsame Cache-Zeile mit der Produktseite (die auch EUR nutzt). Der `currency`-Prop bleibt nur für die Preis-Anzeige.
             price,
           }),
           signal: controller.signal,

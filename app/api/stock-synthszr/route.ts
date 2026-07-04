@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchStockSynthszr } from '@/lib/stock-synthszr/fetch-synthesis'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+import { namespacesForCompany } from '@/lib/rankings/vendor-canonical'
 import { STOCK_SYNTHSZR_CACHE_MS } from '@/lib/config/constants'
 
 // Allow longer timeout for AI generation
@@ -112,6 +114,24 @@ export async function POST(request: NextRequest) {
       console.warn('[stock-synthszr] Cache insert failed:', insertError.message)
     } else {
       console.log(`[stock-synthszr] Cached result for ${company}`)
+    }
+
+    // Frisch generiert → die Produktseiten dieser Firma revalidieren, damit die neue
+    // Analyse sofort erscheint (statt erst nach dem 5-min-ISR-Fenster). Nur im
+    // Nicht-Cache-Hit-Pfad (Cache-Hits kehren oben früh zurück).
+    try {
+      const namespaces = namespacesForCompany(company.toLowerCase())
+      const { data: prods } = await supabase
+        .from('products')
+        .select('slug')
+        .in('vendor_namespace', namespaces)
+        .eq('visibility_status', 'visible')
+      for (const p of prods ?? []) {
+        revalidatePath(`/de/rankings/${p.slug}`)
+        revalidatePath(`/en/rankings/${p.slug}`)
+      }
+    } catch (e) {
+      console.warn('[stock-synthszr] revalidate failed:', e instanceof Error ? e.message : e)
     }
 
     // Add created_at to result
