@@ -4,7 +4,7 @@ import { mergeProductsInto } from '@/lib/rankings/consolidate'
 
 /** Pseudo-Dimension als Verarbeitungs-Marker (analog __researched_at). */
 export const ATTRIBUTION_QA_AT_DIM = '__attribution_qa_at'
-const MARKER_CATEGORY = '__meta'
+const FALLBACK_CATEGORY = 'other'
 const LLM_TIMEOUT_MS = 50_000
 const MERGE_CONFIDENCE = 0.8
 
@@ -94,15 +94,20 @@ async function decideAttribution(c: QaCandidate): Promise<AttributionDecision | 
 
 type Sb = ReturnType<typeof createAdminClient>
 
-async function setMarker(sb: Sb, productId: string): Promise<void> {
-  await sb.from('product_features_current').upsert(
-    { product_id: productId, category: MARKER_CATEGORY, dimension_key: ATTRIBUTION_QA_AT_DIM, value_text: new Date().toISOString() },
+async function setMarker(sb: Sb, productId: string, category: string): Promise<void> {
+  // product_features_current.category hat NOT NULL FK auf product_categories.slug —
+  // daher die ECHTE Primärkategorie nutzen (Fallback 'other', ist geseedet). '__meta'
+  // gäbe eine FK-Violation → Marker würde nie persistiert (Endlos-Reprocessing).
+  const { error } = await sb.from('product_features_current').upsert(
+    { product_id: productId, category, dimension_key: ATTRIBUTION_QA_AT_DIM, value_text: new Date().toISOString() },
     { onConflict: 'product_id,category,dimension_key' },
   )
+  if (error) console.error('[attribution-qa] setMarker:', error.message, productId)
 }
 
 async function flag(sb: Sb, row: Record<string, unknown>): Promise<void> {
-  await sb.from('attribution_qa_flags').insert(row)
+  const { error } = await sb.from('attribution_qa_flags').insert(row)
+  if (error) console.error('[attribution-qa] flag:', error.message)
 }
 
 /**
@@ -118,7 +123,7 @@ export async function runAttributionQA(opts: { limit?: number; minMentions?: num
   // 1. Mention-Counts (chartable) aus product_metrics
   const mc = new Map<string, number>()
   for (let off = 0; ; off += 1000) {
-    const { data } = await sb.from('product_metrics').select('product_id, mention_count').gte('mention_count', minMentions).order('product_id').range(off, off + 999)
+    const { data } = await sb.from('product_metrics').select('product_id, mention_count').eq('chartable', true).gte('mention_count', minMentions).order('product_id').range(off, off + 999)
     if (!data?.length) break
     for (const m of data) mc.set(m.product_id as string, (m.mention_count as number) ?? 0)
     if (data.length < 1000) break
@@ -131,6 +136,15 @@ export async function runAttributionQA(opts: { limit?: number; minMentions?: num
     prods.push(...(data as typeof prods))
     if (data.length < 1000) break
   }
+  // Primärkategorie je Produkt — für den FK-sicheren Marker (s. setMarker).
+  const primaryCat = new Map<string, string>()
+  for (let off = 0; ; off += 1000) {
+    const { data } = await sb.from('product_category_membership').select('product_id, category').eq('is_primary', true).order('product_id').range(off, off + 999)
+    if (!data?.length) break
+    for (const r of data) primaryCat.set(r.product_id as string, r.category as string)
+    if (data.length < 1000) break
+  }
+  const catOf = (id: string) => primaryCat.get(id) ?? FALLBACK_CATEGORY
   // 3. bereits verarbeitete (Marker)
   const marked = new Set<string>()
   for (let off = 0; ; off += 1000) {
@@ -156,17 +170,22 @@ export async function runAttributionQA(opts: { limit?: number; minMentions?: num
     return !!dominant && mentionsOf(p.id) < 5
   }).sort((a, b) => mentionsOf(b.id) - mentionsOf(a.id)).slice(0, limit)
 
+  const consumed = new Set<string>() // in diesem Lauf bereits gemergte (gelöschte) Produkt-IDs
   let merged = 0, flagged = 0, markedCount = 0
 
   for (const c of candidates) {
-    const fam = (byFamily.get(c.family) ?? []).filter((q) => q.id !== c.id && q.vendor_namespace !== c.vendor_namespace)
-    // 5a. Deterministisch: unknown + genau EIN bekannter Vendor in der family
-    const knownVendors = new Set(fam.filter((q) => q.vendor_namespace !== 'unknown').map((q) => q.vendor_namespace))
-    if (c.vendor_namespace === 'unknown' && knownVendors.size === 1) {
-      const target = fam.filter((q) => q.vendor_namespace !== 'unknown').sort((a, b) => mentionsOf(b.id) - mentionsOf(a.id))[0]
-      await mergeProductsInto(sb, target.id, [c.id])
-      await flag(sb, { product_id: c.id, slug: c.slug, current_vendor: c.vendor_namespace, action: 'merged', merged_into_slug: target.slug, confidence: 1, reasoning: 'deterministisch: eindeutiges Vendor-Geschwister' })
-      merged++; continue // Quelle gelöscht → kein Marker nötig
+    if (consumed.has(c.id)) continue // wurde in diesem Lauf schon weggemergt
+    const fam = (byFamily.get(c.family) ?? []).filter((q) => q.id !== c.id && q.vendor_namespace !== c.vendor_namespace && !consumed.has(q.id))
+    // 5a. Deterministisch: unknown + genau EIN bekanntes Vendor-GESCHWISTER-PRODUKT
+    const knownSibs = fam.filter((q) => q.vendor_namespace !== 'unknown')
+    if (c.vendor_namespace === 'unknown' && knownSibs.length === 1) {
+      const target = knownSibs[0]
+      try {
+        await mergeProductsInto(sb, target.id, [c.id])
+        await flag(sb, { product_id: c.id, slug: c.slug, current_vendor: c.vendor_namespace, action: 'merged', merged_into_slug: target.slug, confidence: 1, reasoning: 'deterministisch: eindeutiges Vendor-Geschwister' })
+        consumed.add(c.id); merged++
+      } catch (e) { console.error('[attribution-qa] det-merge:', e instanceof Error ? e.message : e) }
+      continue // Quelle gelöscht → kein Marker nötig
     }
     // 5b. LLM: Kontext-Excerpt + Kandidaten-Geschwister
     const { data: ex } = await sb.from('product_mentions').select('excerpt').eq('product_id', c.id).not('excerpt', 'is', null).limit(1)
@@ -176,11 +195,15 @@ export async function runAttributionQA(opts: { limit?: number; minMentions?: num
       id: c.id, slug: c.slug, vendor: c.vendor_namespace, family: c.family, name: c.canonical_name,
       mentions: mentionsOf(c.id), context: (ex?.[0]?.excerpt as string | undefined)?.trim().slice(0, 220), siblings,
     })
-    const target = decision?.mergeIntoSlug ? siblings.find((s) => s.slug === decision.mergeIntoSlug) : undefined
+    // Merge nur in ein noch existierendes (nicht in diesem Lauf gelöschtes) Ziel.
+    const target = decision?.mergeIntoSlug ? siblings.find((s) => s.slug === decision.mergeIntoSlug && !consumed.has(s.id)) : undefined
     if (decision && target && decision.confidence >= MERGE_CONFIDENCE) {
-      await mergeProductsInto(sb, target.id, [c.id])
-      await flag(sb, { product_id: c.id, slug: c.slug, current_vendor: c.vendor_namespace, action: 'merged', merged_into_slug: target.slug, suggested_company: decision.company, confidence: decision.confidence, reasoning: decision.reasoning })
-      merged++; continue // gelöscht → kein Marker
+      try {
+        await mergeProductsInto(sb, target.id, [c.id])
+        await flag(sb, { product_id: c.id, slug: c.slug, current_vendor: c.vendor_namespace, action: 'merged', merged_into_slug: target.slug, suggested_company: decision.company, confidence: decision.confidence, reasoning: decision.reasoning })
+        consumed.add(c.id); merged++
+      } catch (e) { console.error('[attribution-qa] llm-merge:', e instanceof Error ? e.message : e) }
+      continue // gelöscht → kein Marker
     }
     // 5c. kein sicherer Merge → flaggen (falls Firma vorgeschlagen) bzw. „kept", dann Marker
     await flag(sb, {
@@ -189,7 +212,7 @@ export async function runAttributionQA(opts: { limit?: number; minMentions?: num
       suggested_company: decision?.company ?? null, confidence: decision?.confidence ?? null, reasoning: decision?.reasoning ?? 'kein LLM-Ergebnis',
     })
     if (decision?.company) flagged++
-    await setMarker(sb, c.id); markedCount++
+    await setMarker(sb, c.id, catOf(c.id)); markedCount++
   }
   return { merged, flagged, marked: markedCount }
 }
