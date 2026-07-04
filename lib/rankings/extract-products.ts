@@ -40,7 +40,7 @@ AUSSCHLIESSEN (NICHT extrahieren):
 REGELN:
 - Im Zweifel WEGLASSEN. Erfinde KEINE Produktnamen. Wenn nichts klar passt, gib eine LEERE Liste zurück.
 - name: das KERN-Produkt inkl. Version/Variante (z.B. "GPT-5.6 Terra", "Claude Opus 4.8"). NICHT einzelne Features/Modi/Editionen/Versions-Patches anhängen. KEINE Zusätze wie "model"/"Modell"/Versionsnummern wie "v2.1.190".
-- vendor: der ETABLIERTE Hersteller-Markenname, KONSISTENT über alle Nennungen (z.B. immer "OpenAI" für GPT/ChatGPT/Codex, "Anysphere" für Cursor, "Anthropic" für Claude, "Google" für Gemini, "xAI" für Grok). Nutze den allgemein bekannten Hersteller — verwende NICHT "unknown", wenn der Hersteller eines bekannten Produkts klar ist.
+- vendor: der ETABLIERTE Hersteller-Markenname, KONSISTENT über alle Nennungen (z.B. immer "OpenAI" für GPT/ChatGPT/Codex, "Anysphere" für Cursor, "Anthropic" für Claude, "Google" für Gemini, "xAI" für Grok). Nutze den allgemein bekannten Hersteller — verwende NICHT "unknown", wenn der Hersteller eines bekannten Produkts klar ist. Konzern-Kanon: nutze immer die Dachmarke — AWS/Amazon Web Services → "Amazon"; DeepMind/Google Cloud/Google Research → "Google"; GitHub/Azure → "Microsoft"; Instagram/WhatsApp → "Meta". Ordne ein etabliertes Produkt (Codex, Gemini, Claude, GPT, Copilot) NIEMALS einer Firma zu, die es nur erwähnt oder integriert — immer dem echten Hersteller (Codex → OpenAI).
 - excerpt: kurzer wörtlicher Beleg-Ausschnitt aus dem Text.`
 
 /** Variabler Teil (News) — nicht cachebar. */
