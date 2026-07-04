@@ -21,7 +21,7 @@ import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata, cleanMetaDescription } from "@/lib/i18n/metadata"
 import { formatUpdateDate, LOCALE_STRINGS } from "@/lib/i18n/config"
 import { SITE_URL, safeJsonLd } from "@/lib/seo/site"
-import { AUTHOR, EDITED_BY_LABEL } from "@/lib/data/author"
+import { AUTHOR } from "@/lib/data/author"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
 
@@ -459,14 +459,6 @@ export default async function PostPage({ params }: PageProps) {
               </span>
             </div>
             <h1 className="text-3xl font-bold tracking-tight md:text-2xl">{post.title}</h1>
-            {/* Sichtbare Autoren-Attribution (E-E-A-T) — ehrlich „herausgegeben
-                von", da die Posts KI-generiert und redaktionell kuratiert sind. */}
-            <p className="mt-3 text-sm text-muted-foreground">
-              {(EDITED_BY_LABEL[locale] ?? EDITED_BY_LABEL.de)}{' '}
-              <Link href={`/${locale}/author/${AUTHOR.slug}`} className="font-medium text-foreground hover:text-accent transition-colors">
-                {AUTHOR.name}
-              </Link>
-            </p>
             {post.excerpt && (
               post.excerpt.includes('•') ? (
                 <ul className="mt-4 space-y-1 text-lg text-muted-foreground md:text-sm list-none pl-0">

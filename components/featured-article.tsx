@@ -1,5 +1,4 @@
 import { Suspense } from "react"
-import Link from "next/link"
 import ReactDOM from "react-dom"
 import { getImageProps } from "next/image"
 import { PostContentView } from "./post-content-view"
@@ -7,7 +6,6 @@ import { AudioPlayer } from "./audio-player"
 import { PodcastBadges } from "./podcast-badges"
 import { CoverCalligram } from "./cover-calligram"
 import { formatUpdateDate } from "@/lib/i18n/config"
-import { AUTHOR, EDITED_BY_LABEL } from "@/lib/data/author"
 import type { LanguageCode } from "@/lib/types"
 import type { CoverAnimationConfig } from "@/lib/types/cover-animation"
 
@@ -132,15 +130,6 @@ export function FeaturedArticle({
           {title}
         </h2>
       </a>
-
-      {/* Sichtbare Autoren-Attribution (E-E-A-T). Ehrlich „herausgegeben von",
-          da die Posts KI-generiert und redaktionell kuratiert sind. */}
-      <p className="mb-4 text-sm text-muted-foreground">
-        {EDITED_BY_LABEL[locale] ?? EDITED_BY_LABEL.de}{' '}
-        <Link href={`/${locale}/author/${AUTHOR.slug}`} className="font-medium text-foreground hover:text-accent transition-colors">
-          {AUTHOR.name}
-        </Link>
-      </p>
 
       {excerpt && (
         excerpt.includes('•') ? (
