@@ -18,6 +18,7 @@ export type UseCase =
   | 'queue_ranking'
   | 'image_generation'
   | 'ranking_extract'
+  | 'ranking_attribution_qa'
 
 export interface UseCaseInfo {
   label: string
@@ -85,6 +86,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     label: 'Rankings — Produkt-Extraktion',
     description: 'AI-Produkte aus News-Items extrahieren (hochvolumig)',
     defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
+  },
+  ranking_attribution_qa: {
+    label: 'Rankings — Attribution-QS',
+    description: 'Company-Zuordnung von unknown/Fragment-Produkten verifizieren',
+    defaultModel: 'claude-sonnet-5',
     allowedProviders: ['anthropic'],
   },
 }
