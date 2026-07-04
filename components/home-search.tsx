@@ -45,6 +45,7 @@ const DEBOUNCE_MS = 250
 
 interface HomeSearchProps {
   locale?: string
+  autoFocus?: boolean
 }
 
 interface SearchStrings {
@@ -130,7 +131,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
   )
 }
 
-export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
+export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResults | null>(null)
   const [loading, setLoading] = useState(false)
@@ -291,6 +292,7 @@ export function HomeSearch({ locale = 'de' }: HomeSearchProps) {
             className="w-full rounded-full border border-border bg-background pl-11 pr-12 py-3 text-base focus:outline-none focus:ring-2 focus:ring-neon-cyan focus:border-neon-cyan transition-shadow"
             autoComplete="off"
             spellCheck={false}
+            autoFocus={autoFocus}
           />
           {loading && (
             <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />

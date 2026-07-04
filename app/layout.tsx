@@ -5,6 +5,7 @@ import { Analytics } from "@/components/analytics"
 import { ConsentBanner } from "@/components/consent-banner"
 import { NewsletterPopup } from "@/components/newsletter-popup"
 import { PageTracker } from "@/components/analytics/page-tracker"
+import { SearchOverlay } from "@/components/search-overlay"
 import { safeJsonLd } from "@/lib/seo/site"
 import "./globals.css"
 
@@ -90,6 +91,7 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: safeJsonLd(orgLd) }}
         />
+        <SearchOverlay />
         <PageTracker />
         <Analytics />
         <ConsentBanner />

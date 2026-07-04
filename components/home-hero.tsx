@@ -1,25 +1,10 @@
-'use client'
-
-import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { HomeSearch } from './home-search'
 
 /**
- * Hero-Bereich der Startseite: zeigt standardmäßig den Charts-Promo-Link.
- * Auf das 'synthszr-search-open'-Event (vom "Search"-Button in der Nav) wird
- * stattdessen das Such-Formular eingeblendet.
+ * Hero-Bereich der Startseite: Charts-Promo-Link. Die Suche öffnet global über
+ * das 'synthszr-search-open'-Event → components/search-overlay.tsx (Root-Layout).
  */
 export function HomeHero({ locale }: { locale?: string }) {
-  const [searchOpen, setSearchOpen] = useState(false)
-
-  useEffect(() => {
-    const open = () => setSearchOpen(true)
-    window.addEventListener('synthszr-search-open', open)
-    return () => window.removeEventListener('synthszr-search-open', open)
-  }, [])
-
-  if (searchOpen) return <HomeSearch locale={locale} />
-
   // Immer locale-präfixiert — /rankings ohne Präfix kostet einen 307-Hop.
   const href = `/${locale || 'de'}/rankings`
   return (
