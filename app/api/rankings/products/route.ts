@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
 import { toDisplayScore } from '@/lib/rankings/score'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,9 +17,29 @@ export async function GET() {
   try {
     const capped = await getCategoryCappedProducts(50)
 
+    // Nur recherchierte Produkte (mit Beschreibung) fürs Auto-Verlinken im Blog —
+    // keine leeren Stubs. DB-Fehler → ungefiltert (nicht schlechter als vorher).
+    let researched = capped
+    try {
+      const supabase = createAdminClient()
+      const ids = capped.map((p) => p.id)
+      const described = new Set<string>()
+      for (let i = 0; i < ids.length; i += 300) {
+        const { data } = await supabase
+          .from('product_features_current')
+          .select('product_id')
+          .eq('dimension_key', '__description')
+          .in('product_id', ids.slice(i, i + 300))
+        for (const r of data ?? []) described.add(r.product_id as string)
+      }
+      researched = capped.filter((p) => described.has(p.id))
+    } catch {
+      researched = capped
+    }
+
     return NextResponse.json(
       {
-        products: capped.map((p) => ({
+        products: researched.map((p) => ({
           name: p.canonicalName,
           slug: p.slug,
           score: toDisplayScore(p.momentum, p.categoryMax), // log-skaliert, konsistent zum Leaderboard

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { findMentionedProducts, extractVisibleText } from '@/lib/posts/product-mentions'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { LanguageCode } from '@/lib/types'
 
 /** Server-gerenderte, crawlbare Links auf Chart-Produkte, die im Post
@@ -21,7 +22,23 @@ export async function PostProductLinks({
   } catch {
     return null
   }
-  const mentioned = findMentionedProducts(extractVisibleText(content), products, 8)
+  // Erst großzügig matchen (bis 24), dann auf Produkte MIT Beschreibung filtern —
+  // referenziert werden nur recherchierte Produkte (keine leeren Stubs), Cut auf 8.
+  const matched = findMentionedProducts(extractVisibleText(content), products, 24)
+  if (matched.length === 0) return null
+  let mentioned = matched
+  try {
+    const supabase = createAdminClient()
+    const { data: descRows } = await supabase
+      .from('product_features_current')
+      .select('product_id')
+      .eq('dimension_key', '__description')
+      .in('product_id', matched.map((p) => p.id))
+    const described = new Set((descRows ?? []).map((r) => r.product_id as string))
+    mentioned = matched.filter((p) => described.has(p.id)).slice(0, 8)
+  } catch {
+    mentioned = matched.slice(0, 8) // DB-Fehler → nicht härter filtern als vorher
+  }
   if (mentioned.length === 0) return null
 
   const t = await getTranslations(locale)
