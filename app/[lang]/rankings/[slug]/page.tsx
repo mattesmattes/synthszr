@@ -219,8 +219,8 @@ export default async function ProductDetailPage({ params }: PageProps) {
       <h2 className="text-lg font-semibold mb-3">{t('rankings.evidence')} ({p.mentions.length})</h2>
       <MentionList mentions={p.mentions} />
 
-      {vendorSyn && <PremarketSynthesisBlock company={vendorSyn.company} synthesis={vendorSyn.synthesis} />}
-      {vendorStock && <StockSynthesisBlock company={vendorStock.company} companyKey={vendorStock.companyKey} initial={vendorStock.data} createdAt={vendorStock.createdAt} stale={vendorStock.stale} />}
+      {vendorSyn && <PremarketSynthesisBlock company={vendorSyn.company} synthesis={vendorSyn.synthesis} locale={lang} />}
+      {vendorStock && <StockSynthesisBlock company={vendorStock.company} companyKey={vendorStock.companyKey} initial={vendorStock.data} createdAt={vendorStock.createdAt} stale={vendorStock.stale} locale={lang} />}
 
       <footer className="mt-10 text-xs text-gray-400 border-t pt-4">
         {t('rankings.footer_product')}

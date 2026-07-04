@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { PremarketSynthesis, PremarketRating } from '@/lib/premarket/types'
+import { analysisLabels } from '@/lib/rankings/analysis-labels'
 
 /** Markdown-Links [text](url) → klickbare <a>, Rest als Text. */
 function mdLinks(text: string): ReactNode {
@@ -19,14 +20,13 @@ function ratingClass(r: PremarketRating | null): string {
   return 'bg-gray-200 text-gray-700'
 }
 
-const TREND_LABEL: Record<string, string> = { RISING: '↗ steigend', STABLE: '→ stabil', DECLINING: '↘ fallend' }
-
-export function PremarketSynthesisBlock({ company, synthesis: s }: { company: string; synthesis: PremarketSynthesis }) {
+export function PremarketSynthesisBlock({ company, synthesis: s, locale = 'de' }: { company: string; synthesis: PremarketSynthesis; locale?: string }) {
+  const L = analysisLabels(locale)
   return (
     <section className="mt-8 border-t pt-6">
       <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-lg font-semibold">Unternehmens-Analyse: {company}</h2>
-        {s.updatedAt && <span className="text-[11px] text-gray-400">Stand {new Date(s.updatedAt).toLocaleDateString('de-DE')}</span>}
+        <h2 className="text-lg font-semibold">{L.heading}: {company}</h2>
+        {s.updatedAt && <span className="text-[11px] text-gray-400">{L.asOf} {new Date(s.updatedAt).toLocaleDateString(L.dateLocale)}</span>}
       </div>
 
       {/* Synthszr Vote */}
@@ -53,13 +53,13 @@ export function PremarketSynthesisBlock({ company, synthesis: s }: { company: st
       {/* Action-Ideen */}
       {s.actionIdeas?.length > 0 && (
         <div className="mb-5">
-          <h3 className="text-sm font-semibold mb-2">Action-Ideen</h3>
+          <h3 className="text-sm font-semibold mb-2">{L.actionIdeas}</h3>
           <div className="grid sm:grid-cols-3 gap-2">
             {s.actionIdeas.map((a, i) => (
               <div key={i} className="rounded-lg border border-gray-200 p-3">
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${ratingClass(a.rating)}`}>{a.rating}</span>
                 <p className="text-xs text-gray-700 mt-1.5 leading-snug">{a.thesis}</p>
-                {a.time_horizon_months != null && <p className="text-[10px] text-gray-400 mt-1">Horizont: {a.time_horizon_months} Mon.</p>}
+                {a.time_horizon_months != null && <p className="text-[10px] text-gray-400 mt-1">{L.horizon}: {a.time_horizon_months} {L.months}</p>}
               </div>
             ))}
           </div>
@@ -69,7 +69,7 @@ export function PremarketSynthesisBlock({ company, synthesis: s }: { company: st
       {/* Google Trends */}
       {s.googleTrends && (
         <div className="mb-5">
-          <h3 className="text-sm font-semibold mb-1">Google Trends · {TREND_LABEL[s.googleTrends.trend_direction] ?? s.googleTrends.trend_direction}</h3>
+          <h3 className="text-sm font-semibold mb-1">Google Trends · {L.trend[s.googleTrends.trend_direction] ?? s.googleTrends.trend_direction}</h3>
           <p className="text-sm text-gray-800 leading-snug">{mdLinks(s.googleTrends.trend_summary)}</p>
         </div>
       )}
@@ -87,7 +87,7 @@ export function PremarketSynthesisBlock({ company, synthesis: s }: { company: st
       {/* Quellen */}
       {s.sources?.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold mb-1">Quellen ({s.sources.length})</h3>
+          <h3 className="text-sm font-semibold mb-1">{L.sources} ({s.sources.length})</h3>
           <ul className="text-xs text-gray-500 space-y-0.5">
             {s.sources.slice(0, 12).map((src, i) => (
               <li key={i} className="truncate">

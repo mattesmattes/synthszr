@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { StockSynthszrResult, StockRating } from '@/lib/stock-synthszr/types'
+import { analysisLabels } from '@/lib/rankings/analysis-labels'
 
 /** Markdown-Links [text](url) → klickbare <a>, Rest als Text. */
 function mdLinks(text: string): ReactNode {
@@ -33,13 +34,16 @@ export function StockSynthesisBlock({
   initial,
   createdAt,
   stale,
+  locale = 'de',
 }: {
   company: string
   companyKey: string
   initial: StockSynthszrResult | null
   createdAt: string | null
   stale: boolean
+  locale?: string
 }) {
+  const L = analysisLabels(locale)
   const [data, setData] = useState<StockSynthszrResult | null>(initial)
   const [stand, setStand] = useState<string | null>(createdAt)
   const [refreshing, setRefreshing] = useState(false)
@@ -72,15 +76,15 @@ export function StockSynthesisBlock({
   return (
     <section className="mt-8 border-t pt-6">
       <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-lg font-semibold">Unternehmens-Analyse: {company}</h2>
+        <h2 className="text-lg font-semibold">{L.heading}: {company}</h2>
         <span className="flex items-center gap-2 text-[11px] text-gray-400">
           {refreshing && (
             <span className="flex items-center gap-1">
               <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-gray-500" />
-              {data ? 'wird aktualisiert …' : 'wird erstellt …'}
+              {data ? L.updating : L.generating}
             </span>
           )}
-          {stand && <span>Stand {new Date(stand).toLocaleDateString('de-DE')}</span>}
+          {stand && <span>{L.asOf} {new Date(stand).toLocaleDateString(L.dateLocale)}</span>}
         </span>
       </div>
 
@@ -100,7 +104,7 @@ export function StockSynthesisBlock({
           {/* Executive Summary */}
           {data.executive_summary && (
             <div className="mb-5">
-              <h3 className="text-sm font-semibold mb-2">Zusammenfassung</h3>
+              <h3 className="text-sm font-semibold mb-2">{L.summary}</h3>
               <p className="text-sm text-gray-800 leading-snug">{mdLinks(data.executive_summary)}</p>
             </div>
           )}
@@ -118,13 +122,13 @@ export function StockSynthesisBlock({
           {/* Action-Ideen */}
           {data.action_ideas?.length > 0 && (
             <div className="mb-5">
-              <h3 className="text-sm font-semibold mb-2">Action-Ideen</h3>
+              <h3 className="text-sm font-semibold mb-2">{L.actionIdeas}</h3>
               <div className="grid sm:grid-cols-3 gap-2">
                 {data.action_ideas.map((a, i) => (
                   <div key={i} className="rounded-lg border border-gray-200 p-3">
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${ratingClass(a.rating)}`}>{a.rating}</span>
                     <p className="text-xs text-gray-700 mt-1.5 leading-snug">{a.thesis}</p>
-                    {a.time_horizon_months != null && <p className="text-[10px] text-gray-400 mt-1">Horizont: {a.time_horizon_months} Mon.</p>}
+                    {a.time_horizon_months != null && <p className="text-[10px] text-gray-400 mt-1">{L.horizon}: {a.time_horizon_months} {L.months}</p>}
                   </div>
                 ))}
               </div>
@@ -144,7 +148,7 @@ export function StockSynthesisBlock({
           {/* Quellen */}
           {data.sources?.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold mb-1">Quellen ({data.sources.length})</h3>
+              <h3 className="text-sm font-semibold mb-1">{L.sources} ({data.sources.length})</h3>
               <ul className="text-xs text-gray-500 space-y-0.5">
                 {data.sources.slice(0, 12).map((src, i) => (
                   <li key={i} className="truncate">
