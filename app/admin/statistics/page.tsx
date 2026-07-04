@@ -337,19 +337,38 @@ export default function StatisticsPage() {
                   <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
                   <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                   <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Line
                     type="monotone"
                     dataKey="page_views"
-                    name="Gesamt"
+                    name="Page Views"
                     stroke="#3B82F6"
                     dot={false}
                     strokeWidth={2}
                   />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Line Chart: Charts-Aufrufe (/rankings) — eigener Chart für Synthszr-Charts-Visits */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" style={{ color: '#00785a' }} />
+                Charts Views (/rankings)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip />
                   <Line
                     type="monotone"
                     dataKey="rankings_page_views"
-                    name="Charts (/rankings)"
+                    name="Charts Views"
                     stroke="#00785a"
                     dot={false}
                     strokeWidth={2}
