@@ -1,4 +1,5 @@
 import { parseProductName, canonicalKey, productSlug } from '@/lib/rankings/canonicalize'
+import { canonicalVendor } from '@/lib/rankings/vendor-canonical'
 
 export interface ProductInsert {
   vendor_namespace: string
@@ -18,7 +19,7 @@ export function normalizeVendorNamespace(raw: string): string {
 
 /** Reine, deterministische Payload-Bildung. Wirft bei leerem Vendor/Name/family. */
 export function buildProductInsert(vendor: string, detectedName: string): ProductInsert {
-  const vendor_namespace = normalizeVendorNamespace(vendor)
+  const vendor_namespace = canonicalVendor(normalizeVendorNamespace(vendor))
   if (!vendor_namespace) throw new Error('buildProductInsert: vendor_namespace leer')
   const name = detectedName.trim()
   if (!name) throw new Error('buildProductInsert: detectedName leer')

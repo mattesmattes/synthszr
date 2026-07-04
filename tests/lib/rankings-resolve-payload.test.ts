@@ -35,4 +35,9 @@ describe('buildProductInsert', () => {
     expect(() => buildProductInsert('openai', '')).toThrow()
     expect(() => buildProductInsert('openai', '   ')).toThrow()
   })
+  it('kanonisiert Konzern-Sub-Brand-Vendors (AWS → amazon)', () => {
+    const r = buildProductInsert('Amazon Web Services', 'Bedrock AgentCore')
+    expect(r.vendor_namespace).toBe('amazon')
+    expect(r.slug.startsWith('amazon-')).toBe(true)
+  })
 })
