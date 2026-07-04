@@ -28,6 +28,7 @@ export default function RankingsAdminPage() {
   const [lastResult, setLastResult] = useState<string>('')
   const [error, setError] = useState<string>('')
   const stopRef = useRef(false)
+  const [qa, setQa] = useState<{ counts: Record<string, number>; recent: Array<{ slug: string; current_vendor: string; action: string; merged_into_slug: string | null; suggested_company: string | null; confidence: number | null; reasoning: string }> } | null>(null)
 
   const loadStatus = useCallback(async () => {
     try {
@@ -40,6 +41,7 @@ export default function RankingsAdminPage() {
   }, [])
 
   useEffect(() => { loadStatus() }, [loadStatus])
+  useEffect(() => { fetch('/api/admin/attribution-qa').then((r) => r.json()).then(setQa).catch(() => {}) }, [])
 
   // Browser-getriebener Lauf: Job anlegen, dann Batch für Batch advancen bis fertig.
   const runOnce = async () => {
@@ -118,6 +120,20 @@ export default function RankingsAdminPage() {
         {s?.job?.error_message && <div className="text-red-600">Fehler: {s.job.error_message}</div>}
         {error && <div className="text-red-600">Fehler: {error}</div>}
       </div>
+
+      {qa && (
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold mb-2">Attribution-QS</h2>
+          <p className="text-xs text-gray-500 mb-2">Gemergt {qa.counts.merged ?? 0} · Geflaggt {qa.counts.flagged ?? 0} · Behalten {qa.counts.kept ?? 0}</p>
+          <ul className="text-xs space-y-1">
+            {qa.recent.filter((r) => r.action === 'flagged').map((r, i) => (
+              <li key={i} className="text-gray-700">
+                <span className="font-mono">{r.slug}</span> ({r.current_vendor}) → Vorschlag: <strong>{r.suggested_company}</strong> · {r.reasoning}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Aktionen */}
       <div className="flex gap-3">
