@@ -91,10 +91,11 @@ export default async function ProductDetailPage({ params }: PageProps) {
   if (!p) notFound()
   const companyVendor = canonicalVendor(p.vendor)          // aws/amazon-web-services → amazon
   const companyName = vendorDisplayName(p.vendor)          // → „Amazon"
-  const [vendorSyn, translations] = await Promise.all([getVendorSynthesis(companyVendor), getTranslations(lang as LanguageCode)])
-  // Börsennotierte Hersteller: Stock-Synthszr-Analyse (nur wenn KEINE Premarket-
-  // Synthese vorliegt — Premarket hat Vorrang, beide schließen sich aus).
-  const vendorStock = vendorSyn ? null : await getVendorStockSynthszr(companyVendor)
+  // Börsennotierte (Ticker) → Stock-Synthszr hat Vorrang; Premarket (glitch.green) NUR
+  // für nicht-börsennotierte (private) Vendors. Umgekehrt matchte die glitch-Volltext-
+  // suche kurze Namen falsch (z.B. 'meta' → 'KoBold Metals') und verfälschte die Firma.
+  const [translations, vendorStock] = await Promise.all([getTranslations(lang as LanguageCode), getVendorStockSynthszr(companyVendor)])
+  const vendorSyn = vendorStock ? null : await getVendorSynthesis(companyVendor)
   const t = (key: string) => translations[key] ?? key
 
   // Kein aggregateRating/offers: Momentum-Score ist kein Review — erfundene

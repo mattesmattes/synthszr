@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { StockSynthszrResult, StockRating } from '@/lib/stock-synthszr/types'
 import { analysisLabels } from '@/lib/rankings/analysis-labels'
+import { StockQuotePopover } from '@/components/stock-quote-popover'
 
 /** Markdown-Links [text](url) → klickbare <a>, Rest als Text. */
 function mdLinks(text: string): ReactNode {
@@ -49,6 +50,7 @@ export function StockSynthesisBlock({
   const [refreshing, setRefreshing] = useState(false)
   const triggered = useRef(false)
   const [quote, setQuote] = useState<{ symbol: string; price: number; changePercent: number; direction: 'up' | 'down' | 'neutral'; currency: string } | null>(null)
+  const [showQuote, setShowQuote] = useState(false)
 
   // Aktienkurs des börsennotierten Herstellers (analog zu den Artikeln). 404 → kein Kurs.
   useEffect(() => {
@@ -90,13 +92,13 @@ export function StockSynthesisBlock({
         <div className="min-w-0">
           <h2 className="text-lg font-semibold">{L.heading}: {company}</h2>
           {quote && (
-            <a href={`https://www.google.com/search?q=${quote.symbol}+stock`} target="_blank" rel="noopener noreferrer" className="inline-flex items-baseline gap-1.5 text-sm mt-0.5 hover:underline">
+            <button type="button" onClick={() => setShowQuote(true)} className="inline-flex items-baseline gap-1.5 text-sm mt-0.5 hover:underline cursor-pointer">
               <span className="font-mono font-semibold">{quote.symbol}</span>
               <span className="tabular-nums">{quote.price.toFixed(2)} {quote.currency}</span>
               <span className={quote.direction === 'up' ? 'text-green-600' : quote.direction === 'down' ? 'text-orange-600' : 'text-gray-400'}>
                 {quote.changePercent >= 0 ? '+' : ''}{quote.changePercent.toFixed(2)}%
               </span>
-            </a>
+            </button>
           )}
         </div>
         <span className="flex items-center gap-2 text-[11px] text-gray-400 shrink-0">
@@ -182,6 +184,7 @@ export function StockSynthesisBlock({
           )}
         </>
       )}
+      {showQuote && <StockQuotePopover company={companyKey} onClose={() => setShowQuote(false)} />}
     </section>
   )
 }
