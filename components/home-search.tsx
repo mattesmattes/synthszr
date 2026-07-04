@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Search, Loader2, Building2, FileText } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Search, Loader2, Building2, FileText, BarChart3 } from 'lucide-react'
 import { StockSynthszrLayer } from './stock-synthszr-layer'
 
 interface PostHit {
@@ -21,9 +22,17 @@ interface CompanyHit {
   type: 'public' | 'premarket'
 }
 
+interface ProductHit {
+  name: string
+  slug: string
+  category: string | null
+  catRank: number
+}
+
 interface SearchResults {
   posts: PostHit[]
   companies: CompanyHit[]
+  products: ProductHit[]
 }
 
 type Vote = 'BUY' | 'HOLD' | 'SELL' | null
@@ -52,32 +61,37 @@ interface SearchStrings {
   placeholder: string
   postsHeading: (n: number) => string
   companiesHeading: (n: number) => string
+  chartsHeading: (n: number) => string
   noResults: (q: string) => string
 }
 
 const STRINGS: Record<string, SearchStrings> = {
   de: {
-    placeholder: 'Suche im Blog Content oder nach Unternehmen…',
+    placeholder: 'Suche in Blog, Charts oder nach Unternehmen…',
     postsHeading: (n) => `Blogposts (${n})`,
     companiesHeading: (n) => `Unternehmen (${n}) — Synthszr-Analyse`,
+    chartsHeading: (n) => `Synthszr Charts (${n})`,
     noResults: (q) => `Keine Treffer für „${q}".`,
   },
   en: {
-    placeholder: 'Search blog content or companies…',
+    placeholder: 'Search blog, charts or companies…',
     postsHeading: (n) => `Blog posts (${n})`,
     companiesHeading: (n) => `Companies (${n}) — Synthszr analysis`,
+    chartsHeading: (n) => `Synthszr Charts (${n})`,
     noResults: (q) => `No results for "${q}".`,
   },
   cs: {
-    placeholder: 'Hledat v obsahu blogu nebo firmách…',
+    placeholder: 'Hledat v blogu, chartech nebo firmách…',
     postsHeading: (n) => `Blogové příspěvky (${n})`,
     companiesHeading: (n) => `Firmy (${n}) — Synthszr analýza`,
+    chartsHeading: (n) => `Synthszr Charts (${n})`,
     noResults: (q) => `Žádné výsledky pro „${q}".`,
   },
   nds: {
-    placeholder: 'Söök in’n Blog oder na Firmen…',
+    placeholder: 'Söök in’n Blog, Charts oder na Firmen…',
     postsHeading: (n) => `Blog-Bidrägen (${n})`,
     companiesHeading: (n) => `Firmen (${n}) — Synthszr-Analyse`,
+    chartsHeading: (n) => `Synthszr Charts (${n})`,
     noResults: (q) => `Keen Drepper för „${q}".`,
   },
 }
@@ -132,6 +146,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
 }
 
 export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps) {
+  const router = useRouter()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResults | null>(null)
   const [loading, setLoading] = useState(false)
@@ -276,13 +291,21 @@ export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps
     return () => aborter.abort()
   }, [results])
 
-  const hasResults = results && (results.posts.length > 0 || results.companies.length > 0)
+  const hasResults = results && (results.posts.length > 0 || results.companies.length > 0 || results.products.length > 0)
   const showEmpty = query.trim().length >= 2 && !loading && results && !hasResults
+
+  // Enter → Voll-Ergebnisseite (gruppiert: Posts / Charts / Stock).
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const q = query.trim()
+    if (q.length < 2) return
+    router.push(`/${locale}/search?q=${encodeURIComponent(q)}`)
+  }
 
   return (
     <>
       <div className="mb-8">
-        <div className="relative">
+        <form onSubmit={handleSubmit} className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <input
             type="search"
@@ -297,7 +320,7 @@ export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps
           {loading && (
             <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
           )}
-        </div>
+        </form>
 
         {hasResults && (
           <div className="mt-3 rounded-lg border border-border bg-background shadow-sm overflow-hidden">
@@ -360,6 +383,37 @@ export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps
                       </li>
                     )
                   })}
+                </ul>
+              </section>
+            )}
+
+            {results.products.length > 0 && (
+              <section>
+                <header className="px-4 py-2 bg-muted/40 border-b border-t border-border flex items-center gap-2">
+                  <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                    {strings.chartsHeading(results.products.length)}
+                  </span>
+                </header>
+                <ul className="divide-y divide-border">
+                  {results.products.map((p) => (
+                    <li key={p.slug}>
+                      <Link
+                        href={`/${locale}/rankings/${p.slug}`}
+                        className="block px-4 py-3 hover:bg-muted/30 transition-colors"
+                        onClick={() => setQuery('')}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="font-medium text-sm truncate min-w-0">
+                            <HighlightedText text={p.name} query={query} />
+                          </div>
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0">
+                            #{p.catRank}
+                          </span>
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
                 </ul>
               </section>
             )}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
+import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
 import { embedQuery } from '@/lib/search/embeddings'
 import { rerankPostHits } from '@/lib/search/rerank'
 
@@ -31,8 +32,16 @@ interface CompanyHit {
   type: 'public' | 'premarket'
 }
 
+interface ProductHit {
+  name: string
+  slug: string
+  category: string | null
+  catRank: number
+}
+
 const MAX_POSTS = 8
 const MAX_COMPANIES = 6
+const MAX_PRODUCTS = 6
 // How many recent posts to scan in Node for substring recall. 500
 // covers years of daily newsletters; raise if/when needed.
 const FETCH_LIMIT = 500
@@ -88,9 +97,14 @@ export async function GET(request: NextRequest) {
   const rawQuery = (searchParams.get('q') || '').trim()
   const locale = (searchParams.get('locale') || 'de').trim().toLowerCase()
   const isDefaultLocale = locale === 'de'
+  // Voll-Ansicht (Ergebnisseite /[lang]/search) → mehr Treffer pro Gruppe.
+  const full = searchParams.get('full') === '1'
+  const maxPosts = full ? 30 : MAX_POSTS
+  const maxCompanies = full ? 24 : MAX_COMPANIES
+  const maxProducts = full ? 24 : MAX_PRODUCTS
 
   if (rawQuery.length < 2) {
-    return NextResponse.json({ posts: [], companies: [] })
+    return NextResponse.json({ posts: [], companies: [], products: [] })
   }
 
   const lowerQuery = rawQuery.toLowerCase()
@@ -382,19 +396,19 @@ export async function GET(request: NextRequest) {
   const reranked = shouldRerank
     ? await rerankPostHits(rawQuery, dedupedPosts)
     : dedupedPosts
-  const finalPosts = reranked.slice(0, MAX_POSTS)
+  const finalPosts = reranked.slice(0, maxPosts)
 
   // 3. Company dictionary match — case-insensitive substring
   const companies: CompanyHit[] = []
 
   for (const [name, slug] of Object.entries(KNOWN_COMPANIES)) {
-    if (companies.length >= MAX_COMPANIES) break
+    if (companies.length >= maxCompanies) break
     if (name.toLowerCase().includes(lowerQuery)) {
       companies.push({ name, slug, type: 'public' })
     }
   }
   for (const [name, slug] of Object.entries(KNOWN_PREMARKET_COMPANIES)) {
-    if (companies.length >= MAX_COMPANIES) break
+    if (companies.length >= maxCompanies) break
     if (name.toLowerCase().includes(lowerQuery)) {
       companies.push({ name, slug, type: 'premarket' })
     }
@@ -408,5 +422,24 @@ export async function GET(request: NextRequest) {
     return a.name.localeCompare(b.name)
   })
 
-  return NextResponse.json({ posts: finalPosts, companies })
+  // 4. Synthszr-Charts-Produkte — Name-Match über die gelisteten Top-50/Kategorie
+  //    (getCategoryCappedProducts ist gecacht). Prefix-Treffer zuerst, dann Kat-Rang.
+  let products: ProductHit[] = []
+  try {
+    const capped = await getCategoryCappedProducts(50)
+    products = capped
+      .filter((p) => p.canonicalName.toLowerCase().includes(lowerQuery))
+      .sort((a, b) => {
+        const aPrefix = a.canonicalName.toLowerCase().startsWith(lowerQuery) ? 0 : 1
+        const bPrefix = b.canonicalName.toLowerCase().startsWith(lowerQuery) ? 0 : 1
+        if (aPrefix !== bPrefix) return aPrefix - bPrefix
+        return a.catRank - b.catRank
+      })
+      .slice(0, maxProducts)
+      .map((p) => ({ name: p.canonicalName, slug: p.slug, category: p.primaryCategory, catRank: p.catRank }))
+  } catch (err) {
+    console.warn('[Search] products lookup failed:', err)
+  }
+
+  return NextResponse.json({ posts: finalPosts, companies, products })
 }
