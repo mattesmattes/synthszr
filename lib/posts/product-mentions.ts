@@ -1,3 +1,5 @@
+import { isAutolinkStopword } from '@/lib/rankings/product-exclusions'
+
 /** Extrahiert nur den sichtbaren Text aus einem TipTap-JSON-Baum (text-Knoten), ohne
  *  Attribute/URLs — verhindert False-Positive-Matches über Quell-Links (vgl. tiptap-to-html.ts). */
 export function extractVisibleText(node: unknown): string {
@@ -12,7 +14,8 @@ export function extractVisibleText(node: unknown): string {
 
 /** Findet Chart-Produkte, deren Name im Text vorkommt — mit Wortgrenzen
  *  (Unicode-aware), case-insensitive. Namen < 4 Zeichen werden übersprungen
- *  (zu viele False Positives bei Kurznamen). */
+ *  (zu viele False Positives bei Kurznamen). Gängige Wort-Namen (Tempo, Vibe …)
+ *  werden per Stoppwortliste ausgeschlossen. */
 export function findMentionedProducts<T extends { canonicalName: string }>(
   contentText: string,
   products: T[],
@@ -24,6 +27,7 @@ export function findMentionedProducts<T extends { canonicalName: string }>(
     if (hits.length >= max) break
     const name = p.canonicalName.toLowerCase()
     if (name.length < 4) continue
+    if (isAutolinkStopword(name)) continue
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const re = new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, 'u')
     if (re.test(text)) hits.push(p)

@@ -18,6 +18,21 @@ export function isExcludedProduct(name: string | null | undefined): boolean {
   return EXCLUDED_PRODUCT_NAMES.has(name.trim().toLowerCase())
 }
 
+// Produktnamen, die zugleich GÄNGIGE Wörter sind (v.a. im deutschen Text): sie
+// dürfen NICHT automatisch aus News-Text heraus verlinkt werden, weil das Wort dort
+// fast immer die Alltagsbedeutung hat ("im Tempo", "Vibe Coding"), nicht das Produkt.
+// Das Produkt bleibt in den Charts sichtbar — nur das Auto-Matching überspringt es.
+// Konservativ halten (nur eindeutig mehrdeutige Wörter); bei Bedarf erweitern.
+export const AUTOLINK_STOPWORDS = new Set<string>([
+  'tempo', 'vibe',
+])
+
+/** Produktname ist ein gängiges Wort → nicht automatisch aus Fließtext verlinken. */
+export function isAutolinkStopword(name: string | null | undefined): boolean {
+  if (!name) return false
+  return AUTOLINK_STOPWORDS.has(name.trim().toLowerCase())
+}
+
 // Modell-FAMILIEN: der nackte Familienname (ohne Version/Variante) ist ein
 // Oberbegriff, KEIN Produkt. "GPT" / "Claude" / "Gemini" sind Familien — das
 // Produkt ist "GPT-5.6" / "Claude Opus 4.8" / "Gemini 2.5 Pro". Wird in den

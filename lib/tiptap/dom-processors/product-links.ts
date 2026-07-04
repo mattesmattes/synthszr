@@ -6,6 +6,8 @@
 //   (grün=steigend, rot=fallend, schwarz=stagnierend) + Score.
 // Ersetzt die frühere Company-Vote-Logik.
 
+import { isAutolinkStopword } from '@/lib/rankings/product-exclusions'
+
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const LOCALES = ['de', 'en', 'cs', 'nds']
 
@@ -66,7 +68,7 @@ function buildVotePill(entry: ProductLinkEntry, locale: string): HTMLElement {
 export function injectProductLinks(container: HTMLElement, products: ProductLinkData): void {
   if (products.size === 0) return
   const locale = localeFrom()
-  const entries = [...products.values()].sort((a, b) => b.displayName.length - a.displayName.length)
+  const entries = [...products.values()].filter((e) => !isAutolinkStopword(e.displayName)).sort((a, b) => b.displayName.length - a.displayName.length)
   const linked = new Set<string>()
 
   const paragraphs = container.querySelectorAll('p')
@@ -153,7 +155,7 @@ function mentionedProducts(text: string, entries: ProductLinkEntry[]): ProductLi
 export function appendProductVoteBlock(container: HTMLElement, products: ProductLinkData): void {
   if (products.size === 0) return
   const locale = localeFrom()
-  const entries = [...products.values()].sort((a, b) => b.displayName.length - a.displayName.length)
+  const entries = [...products.values()].filter((e) => !isAutolinkStopword(e.displayName)).sort((a, b) => b.displayName.length - a.displayName.length)
 
   const markers = container.querySelectorAll('.mattes-synthese, .mattes-synthese-heading')
   markers.forEach((marker) => {
