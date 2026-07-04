@@ -182,8 +182,8 @@ export async function runAttributionQA(opts: { limit?: number; minMentions?: num
       const target = knownSibs[0]
       try {
         await mergeProductsInto(sb, target.id, [c.id])
+        consumed.add(c.id); merged++ // Buchführung sofort nach dem physischen Merge — darf nicht von flag() abhängen
         await flag(sb, { product_id: c.id, slug: c.slug, current_vendor: c.vendor_namespace, action: 'merged', merged_into_slug: target.slug, confidence: 1, reasoning: 'deterministisch: eindeutiges Vendor-Geschwister' })
-        consumed.add(c.id); merged++
       } catch (e) { console.error('[attribution-qa] det-merge:', e instanceof Error ? e.message : e) }
       continue // Quelle gelöscht → kein Marker nötig
     }
@@ -200,19 +200,22 @@ export async function runAttributionQA(opts: { limit?: number; minMentions?: num
     if (decision && target && decision.confidence >= MERGE_CONFIDENCE) {
       try {
         await mergeProductsInto(sb, target.id, [c.id])
+        consumed.add(c.id); merged++ // Buchführung sofort nach dem physischen Merge — darf nicht von flag() abhängen
         await flag(sb, { product_id: c.id, slug: c.slug, current_vendor: c.vendor_namespace, action: 'merged', merged_into_slug: target.slug, suggested_company: decision.company, confidence: decision.confidence, reasoning: decision.reasoning })
-        consumed.add(c.id); merged++
       } catch (e) { console.error('[attribution-qa] llm-merge:', e instanceof Error ? e.message : e) }
       continue // gelöscht → kein Marker
     }
-    // 5c. kein sicherer Merge → flaggen (falls Firma vorgeschlagen) bzw. „kept", dann Marker
-    await flag(sb, {
-      product_id: c.id, slug: c.slug, current_vendor: c.vendor_namespace,
-      action: decision?.company ? 'flagged' : 'kept',
-      suggested_company: decision?.company ?? null, confidence: decision?.confidence ?? null, reasoning: decision?.reasoning ?? 'kein LLM-Ergebnis',
-    })
-    if (decision?.company) flagged++
-    await setMarker(sb, c.id, catOf(c.id)); markedCount++
+    // 5c. kein sicherer Merge → flaggen (falls Firma vorgeschlagen) bzw. „kept", dann Marker.
+    // Best-effort: ein Fehler hier bricht nicht den ganzen Lauf ab.
+    try {
+      await flag(sb, {
+        product_id: c.id, slug: c.slug, current_vendor: c.vendor_namespace,
+        action: decision?.company ? 'flagged' : 'kept',
+        suggested_company: decision?.company ?? null, confidence: decision?.confidence ?? null, reasoning: decision?.reasoning ?? 'kein LLM-Ergebnis',
+      })
+      if (decision?.company) flagged++
+      await setMarker(sb, c.id, catOf(c.id)); markedCount++
+    } catch (e) { console.error('[attribution-qa] flag/mark:', e instanceof Error ? e.message : e) }
   }
   return { merged, flagged, marked: markedCount }
 }
