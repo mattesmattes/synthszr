@@ -33,6 +33,19 @@ const nextConfig = {
   async headers() {
     return [
       {
+        // Nicht-Produktions-Hosts (*.vercel.app: Produktions-Alias UND alle
+        // Preview-Deployments) auf noindex — verhindert Duplicate-Content-
+        // Indexierung neben www.synthszr.com. Previews bleiben voll nutzbar.
+        source: '/:path*',
+        has: [{ type: 'host', value: '.*\\.vercel\\.app' }],
+        headers: [
+          {
+            key: 'X-Robots-Tag',
+            value: 'noindex, nofollow',
+          },
+        ],
+      },
+      {
         source: '/:path*',
         headers: [
           {
