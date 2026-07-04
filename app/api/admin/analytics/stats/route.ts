@@ -14,6 +14,12 @@ const PERIOD_CONFIG: Record<Period, { lookbackMs: number; granularity: Granulari
 
 const BERLIN_TZ = 'Europe/Berlin'
 
+// Page-View unter den Synthszr Charts (/[lang]/rankings…). Matcht /de/rankings,
+// /en/rankings/google-gemini-3-5 usw., aber nicht z.B. /de/xrankings.
+function isRankingsPath(path: string | null | undefined): boolean {
+  return !!path && /\/rankings(\/|$)/.test(path)
+}
+
 // Returns "YYYY-MM-DD" string in Europe/Berlin local time
 function toBerlinDateStr(d: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: BERLIN_TZ }).format(d)
@@ -117,10 +123,10 @@ export async function GET(request: NextRequest) {
     // Fetch current + previous period in parallel using pagination
     // PostgREST caps at 1000 rows per request regardless of .limit() — must paginate with .range()
     const [analyticsData, podcastData, prevAnalyticsData, prevPodcastData] = await Promise.all([
-      fetchAllRows<{ event_type: string; created_at: string }>(
+      fetchAllRows<{ event_type: string; created_at: string; path: string | null }>(
         supabase
           .from('analytics_events')
-          .select('event_type, created_at')
+          .select('event_type, created_at, path')
           .gte('created_at', currentStart)
           .order('created_at', { ascending: false })
       ),
@@ -131,10 +137,10 @@ export async function GET(request: NextRequest) {
           .gte('played_at', currentStart)
           .order('played_at', { ascending: false })
       ),
-      fetchAllRows<{ event_type: string; created_at: string }>(
+      fetchAllRows<{ event_type: string; created_at: string; path: string | null }>(
         supabase
           .from('analytics_events')
-          .select('event_type, created_at')
+          .select('event_type, created_at, path')
           .gte('created_at', previousStart)
           .lt('created_at', currentStart)
           .order('created_at', { ascending: false })
@@ -154,13 +160,14 @@ export async function GET(request: NextRequest) {
 
     type BucketData = {
       page_views: number
+      rankings_page_views: number
       stock_ticker_clicks: number
       synthszr_vote_clicks: number
       podcast_plays: number
     }
     const countsMap = new Map<string, BucketData>()
     for (const b of buckets) {
-      countsMap.set(b, { page_views: 0, stock_ticker_clicks: 0, synthszr_vote_clicks: 0, podcast_plays: 0 })
+      countsMap.set(b, { page_views: 0, rankings_page_views: 0, stock_ticker_clicks: 0, synthszr_vote_clicks: 0, podcast_plays: 0 })
     }
 
     // Aggregate analytics_events
@@ -168,7 +175,10 @@ export async function GET(request: NextRequest) {
       const key = truncateDateKey(event.created_at, granularity)
       const bucket = countsMap.get(key)
       if (!bucket) continue
-      if (event.event_type === 'page_view') bucket.page_views++
+      if (event.event_type === 'page_view') {
+        bucket.page_views++
+        if (isRankingsPath(event.path)) bucket.rankings_page_views++
+      }
       else if (event.event_type === 'stock_ticker_click') bucket.stock_ticker_clicks++
       else if (event.event_type === 'synthszr_vote_click') bucket.synthszr_vote_clicks++
       else if (event.event_type === 'podcast_play') bucket.podcast_plays++
@@ -188,16 +198,18 @@ export async function GET(request: NextRequest) {
     const totals = events.reduce(
       (acc, e) => ({
         page_views: acc.page_views + e.page_views,
+        rankings_page_views: acc.rankings_page_views + e.rankings_page_views,
         stock_ticker_clicks: acc.stock_ticker_clicks + e.stock_ticker_clicks,
         synthszr_vote_clicks: acc.synthszr_vote_clicks + e.synthszr_vote_clicks,
         podcast_plays: acc.podcast_plays + e.podcast_plays,
       }),
-      { page_views: 0, stock_ticker_clicks: 0, synthszr_vote_clicks: 0, podcast_plays: 0 }
+      { page_views: 0, rankings_page_views: 0, stock_ticker_clicks: 0, synthszr_vote_clicks: 0, podcast_plays: 0 }
     )
 
     // Previous period totals (for % comparison)
     const previous_totals = {
       page_views: prevAnalyticsData.filter(e => e.event_type === 'page_view').length,
+      rankings_page_views: prevAnalyticsData.filter(e => e.event_type === 'page_view' && isRankingsPath(e.path)).length,
       stock_ticker_clicks: prevAnalyticsData.filter(e => e.event_type === 'stock_ticker_click').length,
       synthszr_vote_clicks: prevAnalyticsData.filter(e => e.event_type === 'synthszr_vote_click').length,
       podcast_plays: prevPodcastData.length,
