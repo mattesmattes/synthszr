@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { StockSynthszrResult, StockRating } from '@/lib/stock-synthszr/types'
 
 /** Markdown-Links [text](url) → klickbare <a>, Rest als Text. */
@@ -32,21 +32,26 @@ export function StockSynthesisBlock({
   companyKey,
   initial,
   createdAt,
+  stale,
 }: {
   company: string
   companyKey: string
   initial: StockSynthszrResult | null
   createdAt: string | null
+  stale: boolean
 }) {
   const [data, setData] = useState<StockSynthszrResult | null>(initial)
   const [stand, setStand] = useState<string | null>(createdAt)
-  const [loading, setLoading] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const triggered = useRef(false)
 
+  // Bei stale (abgelaufen >14 Tage ODER kein Cache): einmalig neu generieren.
+  // Vorhandene (veraltete) Analyse bleibt sichtbar, bis die frische ankommt.
   useEffect(() => {
-    if (data || loading || failed) return
+    if (!stale || triggered.current) return
+    triggered.current = true
     let cancelled = false
-    setLoading(true)
+    setRefreshing(true)
     fetch('/api/stock-synthszr', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -56,28 +61,28 @@ export function StockSynthesisBlock({
       .then((json) => {
         if (cancelled) return
         if (json?.ok && json.data) { setData(json.data as StockSynthszrResult); setStand(json.data.created_at ?? null) }
-        else setFailed(true)
       })
-      .catch(() => { if (!cancelled) setFailed(true) })
-      .finally(() => { if (!cancelled) setLoading(false) })
+      .catch(() => { /* Netzfehler → veraltete Analyse bleibt stehen */ })
+      .finally(() => { if (!cancelled) setRefreshing(false) })
     return () => { cancelled = true }
-  }, [data, loading, failed, companyKey])
+  }, [stale, companyKey])
 
-  if (failed && !data) return null // Analyse nicht verfügbar → Sektion ausblenden
+  if (!data && !refreshing) return null // nichts da und nichts unterwegs → ausblenden
 
   return (
     <section className="mt-8 border-t pt-6">
       <div className="flex items-baseline justify-between mb-3">
         <h2 className="text-lg font-semibold">Unternehmens-Analyse: {company}</h2>
-        {stand && <span className="text-[11px] text-gray-400">Stand {new Date(stand).toLocaleDateString('de-DE')}</span>}
+        <span className="flex items-center gap-2 text-[11px] text-gray-400">
+          {refreshing && (
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-gray-500" />
+              {data ? 'wird aktualisiert …' : 'wird erstellt …'}
+            </span>
+          )}
+          {stand && <span>Stand {new Date(stand).toLocaleDateString('de-DE')}</span>}
+        </span>
       </div>
-
-      {!data && loading && (
-        <div className="flex items-center gap-2 text-sm text-gray-500 py-4">
-          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
-          Synthszr-Analyse wird erstellt …
-        </div>
-      )}
 
       {data && (
         <>

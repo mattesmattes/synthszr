@@ -220,7 +220,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
       <MentionList mentions={p.mentions} />
 
       {vendorSyn && <PremarketSynthesisBlock company={vendorSyn.company} synthesis={vendorSyn.synthesis} />}
-      {vendorStock && <StockSynthesisBlock company={vendorStock.company} companyKey={vendorStock.companyKey} initial={vendorStock.data} createdAt={vendorStock.createdAt} />}
+      {vendorStock && <StockSynthesisBlock company={vendorStock.company} companyKey={vendorStock.companyKey} initial={vendorStock.data} createdAt={vendorStock.createdAt} stale={vendorStock.stale} />}
 
       <footer className="mt-10 text-xs text-gray-400 border-t pt-4">
         {t('rankings.footer_product')}

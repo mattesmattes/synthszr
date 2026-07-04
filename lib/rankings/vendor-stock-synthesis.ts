@@ -11,6 +11,9 @@ export interface VendorStock {
   /** Gecachte Stock-Synthszr-Analyse; null wenn noch nicht generiert. */
   data: StockSynthszrResult | null
   createdAt: string | null
+  /** Cache abgelaufen (>14 Tage) oder gar nicht vorhanden → Client soll on-view
+   *  neu generieren. */
+  stale: boolean
 }
 
 /** Lesbaren Firmennamen aus dem KNOWN_COMPANIES-Dict (Name→Slug) ableiten,
@@ -36,19 +39,25 @@ export async function getVendorStockSynthszr(vendor: string): Promise<VendorStoc
 
   const supabase = createAdminClient()
   // Neuester Eintrag für die Firma (Währung egal — die Analyse ist im Kern
-  // währungsunabhängig); auch abgelaufene zeigen (stale > nichts).
+  // währungsunabhängig). Abgelaufene NICHT verwerfen (sofort anzeigen für UX/SEO),
+  // aber als stale markieren → der Client generiert on-view neu und tauscht aus.
   const { data: cached } = await supabase
     .from('stock_synthszr_cache')
-    .select('company, data, created_at')
+    .select('company, data, created_at, expires_at')
     .ilike('company', key)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
+  const data = (cached?.data as StockSynthszrResult | undefined) ?? null
+  const expiresAt = cached?.expires_at as string | undefined
+  const stale = !data || !expiresAt || new Date(expiresAt).getTime() < Date.now()
+
   return {
     company: displayName(key),
     companyKey: key,
-    data: (cached?.data as StockSynthszrResult | undefined) ?? null,
+    data,
     createdAt: (cached?.created_at as string | undefined) ?? null,
+    stale,
   }
 }
