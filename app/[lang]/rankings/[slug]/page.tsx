@@ -21,6 +21,7 @@ import type { Metadata } from 'next'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import { LOCALE_STRINGS } from '@/lib/i18n/config'
 import { SITE_URL, safeJsonLd } from '@/lib/seo/site'
+import { canonicalVendor, vendorDisplayName } from '@/lib/rankings/vendor-canonical'
 
 // ISR statt force-dynamic: Daten ändern sich nur per täglichem Cron. Kein
 // generateStaticParams → kein Build-time-Prerender (das war der Grund für das
@@ -87,10 +88,12 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const { lang, slug } = await params
   const p = await getProductDetail(slug, lang)
   if (!p) notFound()
-  const [vendorSyn, translations] = await Promise.all([getVendorSynthesis(p.vendor), getTranslations(lang as LanguageCode)])
+  const companyVendor = canonicalVendor(p.vendor)          // aws/amazon-web-services → amazon
+  const companyName = vendorDisplayName(p.vendor)          // → „Amazon"
+  const [vendorSyn, translations] = await Promise.all([getVendorSynthesis(companyVendor), getTranslations(lang as LanguageCode)])
   // Börsennotierte Hersteller: Stock-Synthszr-Analyse (nur wenn KEINE Premarket-
   // Synthese vorliegt — Premarket hat Vorrang, beide schließen sich aus).
-  const vendorStock = vendorSyn ? null : await getVendorStockSynthszr(p.vendor)
+  const vendorStock = vendorSyn ? null : await getVendorStockSynthszr(companyVendor)
   const t = (key: string) => translations[key] ?? key
 
   // Kein aggregateRating/offers: Momentum-Score ist kein Review — erfundene
@@ -102,7 +105,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
     url: `${SITE_URL}/${lang}/rankings/${p.slug}`,
     ...(p.description ? { description: p.description } : {}),
     ...(p.category ? { applicationCategory: p.category.name } : {}),
-    publisher: { '@type': 'Organization', name: p.vendor },
+    publisher: { '@type': 'Organization', name: companyName },
   }
   const crumbs = [
     { '@type': 'ListItem', position: 1, name: 'Synthszr', item: `${SITE_URL}/${lang}` },
@@ -139,7 +142,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
       </nav>
 
       <header className="mb-4 flex items-start gap-3">
-        <VendorAvatar vendor={p.vendor} size={44} />
+        <VendorAvatar vendor={companyVendor} size={44} />
         <div className="min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{p.canonicalName}</h1>
@@ -151,7 +154,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
             )}
           </div>
           <p className="text-gray-500 text-xs mt-0.5">
-            <Link href={`/${lang}/companies/${p.vendor}`} className="hover:underline">{p.vendor}</Link>
+            <Link href={`/${lang}/companies/${companyVendor}`} className="hover:underline">{companyName}</Link>
             {p.version && <> · v{p.version}</>}
             {p.qualifier && <> · {p.qualifier}</>}
             {p.releasedAt && <> · {t('rankings.since')} {p.releasedAt}</>}
