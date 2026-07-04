@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { PremarketSynthesis, PremarketRating } from '@/lib/premarket/types'
+import { VendorStockBadge } from './vendor-stock-badge'
 
 /** Markdown-Links [text](url) → klickbare <a>, Rest als Text. */
 function mdLinks(text: string): ReactNode {
@@ -25,7 +26,10 @@ export function PremarketSynthesisBlock({ company, synthesis: s }: { company: st
   return (
     <section className="mt-8 border-t pt-6">
       <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-lg font-semibold">Unternehmens-Analyse: {company}</h2>
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <h2 className="text-lg font-semibold">Unternehmens-Analyse: {company}</h2>
+          <VendorStockBadge company={company} />
+        </div>
         {s.updatedAt && <span className="text-[11px] text-gray-400">Stand {new Date(s.updatedAt).toLocaleDateString('de-DE')}</span>}
       </div>
 
