@@ -3,6 +3,8 @@ import { createAnonClient } from '@/lib/supabase/admin'
 import { DEFAULT_LOCALE, PUBLIC_LOCALES } from '@/lib/i18n/config'
 import { getRankedProducts } from '@/lib/rankings/leaderboard'
 import { fetchAllCompanyMentions } from '@/lib/companies/mention-rows'
+import { categorySlugsWithIntro } from '@/lib/rankings/category-intros'
+import { AUTHOR } from '@/lib/data/author'
 
 // ISR statt voll-dynamisch: der cookie-freie Anon-Client erlaubt Prerender +
 // stündliche Regenerierung. Wichtig für Googlebot: schlägt eine Regenerierung
@@ -180,6 +182,42 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   } catch (e) {
     console.error('sitemap: companies section failed', e)
+  }
+
+  // Kategorie-Landingpages (nur die mit gepflegtem Intro-Text — keine Thin
+  // Pages): /{locale}/rankings?category={slug}. Query-Param-URLs, aber
+  // self-canonical (siehe rankings/page.tsx) und mit echtem Content.
+  for (const slug of categorySlugsWithIntro()) {
+    const alternates: Record<string, string> = {
+      'x-default': `${BASE_URL}/${DEFAULT_LOCALE}/rankings?category=${slug}`,
+    }
+    for (const locale of activeLocales) {
+      alternates[locale] = `${BASE_URL}/${locale}/rankings?category=${slug}`
+    }
+    for (const locale of activeLocales) {
+      sitemap.push({
+        url: `${BASE_URL}/${locale}/rankings?category=${slug}`,
+        changeFrequency: 'daily',
+        priority: locale === DEFAULT_LOCALE ? 0.6 : 0.4,
+        alternates: { languages: alternates },
+      })
+    }
+  }
+
+  // Autorenseite (E-E-A-T).
+  const authorAlternates: Record<string, string> = {
+    'x-default': `${BASE_URL}/${DEFAULT_LOCALE}/author/${AUTHOR.slug}`,
+  }
+  for (const locale of activeLocales) {
+    authorAlternates[locale] = `${BASE_URL}/${locale}/author/${AUTHOR.slug}`
+  }
+  for (const locale of activeLocales) {
+    sitemap.push({
+      url: `${BASE_URL}/${locale}/author/${AUTHOR.slug}`,
+      changeFrequency: 'monthly',
+      priority: 0.4,
+      alternates: { languages: authorAlternates },
+    })
   }
 
   return sitemap

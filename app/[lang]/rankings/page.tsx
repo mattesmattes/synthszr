@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom'
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboard'
+import { getCategoryIntro } from '@/lib/rankings/category-intros'
 import { SITE_URL, safeJsonLd } from '@/lib/seo/site'
 import { CATEGORY_GROUPS, groupForCategory, groupBySlug } from '@/lib/rankings/category-groups'
 import { getTranslations } from '@/lib/i18n/get-translations'
@@ -42,9 +43,12 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   // und taucht bewusst NICHT im canonical auf.
   let path = '/rankings'
   let title = t('rankings.meta.title')
+  let description = t('rankings.meta.description')
   if (category) {
     path = `/rankings?category=${category}`
     title = `${translations[`rankings.cat.${category}`] ?? nameBySlug.get(category) ?? category} — Synthszr Charts`
+    // Kategorie-spezifische Meta-Description aus dem Landingpage-Intro.
+    description = getCategoryIntro(category, locale)?.summary ?? description
   } else if (group) {
     path = `/rankings?group=${group}`
     title = `${translations[`rankings.group.${group}`] ?? groupBySlug(group)?.name ?? group} — Synthszr Charts`
@@ -52,7 +56,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
 
   return generateLocalizedMetadata({
     title,
-    description: t('rankings.meta.description'),
+    description,
     path,
     locale,
   })
@@ -112,9 +116,23 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
       url: `${SITE_URL}/${lang}/rankings/${p.slug}`,
     })),
   }
+  // Dataset-Schema: macht die Charts als zitierfähige Datenquelle für Google
+  // und AI-Engines maschinenlesbar (täglich aktualisiertes, freies Ranking).
+  const datasetLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Dataset',
+    name: 'Synthszr Charts',
+    description: translations['rankings.meta.description'] ?? 'Tägliches Momentum-Ranking der AI-Produkte.',
+    url: `${SITE_URL}/${lang}/rankings`,
+    creator: { '@type': 'Organization', name: 'Synthszr', url: `${SITE_URL}/de` },
+    isAccessibleForFree: true,
+    keywords: ['AI products', 'AI ranking', 'LLM', 'AI tools', 'momentum'],
+  }
   const t = (key: string) => translations[key] ?? key
   const catName = (slug: string, fallback: string) => translations[`rankings.cat.${slug}`] ?? fallback
   const nameBySlug = new Map(categories.map((c) => [c.slug, c.name]))
+  // Kategorie-Landingpage: SEO-Fließtext statt generischem Intro.
+  const catIntro = category ? getCategoryIntro(category, lang) : null
 
   const tabBase = `/${lang}/rankings`
   // Aktueller Filter-Kontext für die Sort-Links (Kategorie hat Vorrang vor Gruppe).
@@ -141,6 +159,10 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: safeJsonLd(itemListLd) }}
       />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(datasetLd) }}
+      />
       <Suspense fallback={null}>
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>
@@ -151,7 +173,15 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
             ? `${catName(category, nameBySlug.get(category) ?? category)} — Synthszr Charts`
             : t('rankings.h1')}
         </h1>
-        <p className="mt-1 text-sm text-gray-600 leading-relaxed">{t('rankings.intro')}</p>
+        {catIntro ? (
+          <div className="mt-2 space-y-2 text-sm text-gray-600 leading-relaxed">
+            {catIntro.intro.map((p, i) => (
+              <p key={i}>{p}</p>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-1 text-sm text-gray-600 leading-relaxed">{t('rankings.intro')}</p>
+        )}
       </header>
       {/* Nav Ebene 1+2 in abgesetztem Panel. Ist eine Gruppe aktiv, werden die übrigen
           Ebene-1-Punkte ausgeblendet (nur „Alle" + aktive Gruppe bleiben); „Alle" zeigt
