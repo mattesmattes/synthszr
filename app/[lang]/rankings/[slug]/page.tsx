@@ -62,9 +62,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const p = await getProductDetail(slug, lang)
   if (!p) return { title: 'Produkt nicht gefunden | Synthszr Charts', robots: { index: false, follow: false } }
 
+  const vendorName = vendorDisplayName(p.vendor) // Kanon-Firmenname (aws → „Amazon"), konsistent zum Seiten-Body
   const description = locale === 'de'
-    ? `${p.canonicalName} (${p.vendor}): Momentum-Score, Belege und Erwähnungen aus der Tech-Berichterstattung — täglich aktualisiert in den Synthszr Charts.`
-    : `${p.canonicalName} (${p.vendor}): momentum score, evidence and mentions from tech coverage — updated daily in the Synthszr Charts.`
+    ? `${p.canonicalName} (${vendorName}): Momentum-Score, Belege und Erwähnungen aus der Tech-Berichterstattung — täglich aktualisiert in den Synthszr Charts.`
+    : `${p.canonicalName} (${vendorName}): momentum score, evidence and mentions from tech coverage — updated daily in the Synthszr Charts.`
 
   return generateLocalizedMetadata({
     title: locale === 'de'
