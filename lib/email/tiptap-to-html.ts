@@ -5,7 +5,8 @@
 
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { isExcludedCompanyName } from '@/lib/data/company-exclusions'
-import { getRankedProducts } from '@/lib/rankings/leaderboard'
+import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
+import { isAutolinkStopword } from '@/lib/rankings/product-exclusions'
 import { sanitizeUrl } from '@/lib/utils/url-sanitizer'
 import { PODCAST_APPLE, PODCAST_SPOTIFY } from '@/lib/podcast/platform-links'
 import { applyDateToHeadline } from '@/lib/tip-promos/headline'
@@ -279,20 +280,27 @@ const TREND_BG = { up: '#39FF14', down: '#FF4D00', flat: '#00FFFF' } as const
  *  Rang = Position in der primären Kategorie (products sind momentum-sortiert). */
 async function getChartProducts(): Promise<ChartProductEntry[]> {
   try {
-    const top = await getRankedProducts({ limit: 500, minMentions: 2 })
+    // EXAKT dieselbe Quelle wie das Web (/api/rankings/products + PostProductLinks):
+    // Top-50 pro Kategorie mit Kategorie-Rang, NUR recherchierte Produkte (mit
+    // Beschreibung), Stoppwörter (Tempo/Vibe) raus. Vorher rankte die E-Mail über
+    // getRankedProducts(500) = globaler Long-Tail → falsche Treffer/Ränge im Newsletter
+    // (z.B. „GitHub Copilot #202" statt „Copilot #1"), abweichend vom Web.
+    const capped = await getCategoryCappedProducts(50)
     const { createAdminClient } = await import('@/lib/supabase/admin')
     const supabase = createAdminClient()
-    const { data: memb } = await supabase.from('product_category_membership').select('product_id, category').eq('is_primary', true)
-    const primaryCat = new Map((memb ?? []).map((m) => [m.product_id as string, m.category as string]))
-    const catCounter = new Map<string, number>()
-    const rankById = new Map<string, number>()
-    for (const p of top) {
-      const cat = primaryCat.get(p.id) ?? '__none'
-      const n = (catCounter.get(cat) ?? 0) + 1
-      catCounter.set(cat, n)
-      rankById.set(p.id, n)
+    const ids = capped.map((p) => p.id)
+    const described = new Set<string>()
+    for (let i = 0; i < ids.length; i += 300) {
+      const { data } = await supabase
+        .from('product_features_current')
+        .select('product_id')
+        .eq('dimension_key', '__description')
+        .in('product_id', ids.slice(i, i + 300))
+      for (const r of data ?? []) described.add(r.product_id as string)
     }
-    return top.map((p) => ({ name: p.canonicalName, slug: p.slug, rank: rankById.get(p.id) ?? null, trend: p.trend }))
+    return capped
+      .filter((p) => described.has(p.id) && !isAutolinkStopword(p.canonicalName))
+      .map((p) => ({ name: p.canonicalName, slug: p.slug, rank: p.catRank, trend: p.trend }))
   } catch {
     return []
   }
