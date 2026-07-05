@@ -6,7 +6,6 @@ import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboa
 import { getCategoryIntro } from '@/lib/rankings/category-intros'
 import { SITE_URL, safeJsonLd } from '@/lib/seo/site'
 import { CATEGORY_GROUPS, groupForCategory, groupBySlug } from '@/lib/rankings/category-groups'
-import { CategoryPill } from '@/components/rankings/category-pill'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import { LOCALE_STRINGS } from '@/lib/i18n/config'
@@ -200,15 +199,19 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
                 gtab(`${tabBase}?category=other`, catName('other', 'Sonstige'), category === 'other')}
             </nav>
             {activeGroup && (
-              <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-gray-200 pt-2.5">
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-gray-200 pt-2.5">
                 {activeGroup.categories.map((slug) => (
-                  <CategoryPill
+                  <Link
                     key={slug}
                     href={`${tabBase}?category=${slug}`}
-                    slug={slug}
-                    label={catName(slug, nameBySlug.get(slug) ?? slug)}
-                    active={category === slug}
-                  />
+                    className={`rounded-full border px-3 py-1 text-xs whitespace-nowrap transition-colors ${
+                      category === slug
+                        ? 'bg-[#00785a] text-white border-[#00785a] font-medium'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400 hover:text-gray-900'
+                    }`}
+                  >
+                    {catName(slug, nameBySlug.get(slug) ?? slug)}
+                  </Link>
                 ))}
               </div>
             )}
