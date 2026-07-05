@@ -58,6 +58,72 @@ const TEXT = {
     ccDesc: "CODE CRASH (Summer Edition, 2nd edition) is Matthias Schrader's book on the upheaval agentic AI brings to business, software, and leadership. It spans product development, org design, and culture in the AI age — with a surprisingly optimistic outlook for Germany.",
     ccCta: 'More about the book →',
   },
+  fr: {
+    title: 'Recommande synthszr',
+    sub: 'Tu aimes synthszr ? Alors recommande la newsletter à tes amis, tes collègues et à toute personne que cela pourrait intéresser. Ça me ferait très plaisir ❤️ !',
+    count: 'Recommandations confirmées',
+    remaining: (n: number) => `Plus que ${n} avant ton exemplaire relié dédicacé de CODE CRASH 🎁`,
+    reward: 'À 10 recommandations confirmées, je t’envoie CODE CRASH en édition reliée — avec une vraie dédicace personnelle, sans IA 😉',
+    rewardDone: '🎉 C’est fait ! Ton exemplaire relié signé de CODE CRASH est débloqué — nous te contacterons pour l’envoi.',
+    confirmed: 'Confirmées',
+    pending: 'En attente',
+    empty: 'Encore aucune recommandation — partage ton lien !',
+    invalid: 'Tu trouves ton lien personnel tout en bas de chaque newsletter Synthszr.',
+    copy: 'Copier',
+    copied: 'Copié !',
+    shareText: 'Je commence chaque matin avec Synthszr — l’essentiel de l’actu IA en 5 minutes, intelligemment sélectionné plutôt que du bruit. 🧠 Jette un œil, je pense que c’est exactement ton truc :',
+    gatePrompt: 'Saisis ton e-mail — nous t’enverrons le lien vers ton aperçu personnel de recommandations.',
+    gatePlaceholder: 'toi@email.com',
+    gateCta: 'Envoyer le lien',
+    gateSending: 'Envoi…',
+    gateSent: 'Si cette adresse est abonnée, nous venons de t’envoyer le lien vers ton aperçu. Vérifie ta boîte mail.',
+    ccDesc: 'CODE CRASH (édition d’été, 2e édition) est le livre de Matthias Schrader sur le bouleversement que l’IA agentique apporte à l’économie, au logiciel et au management. Il couvre le développement produit, l’organisation des entreprises et la culture à l’ère de l’IA — avec une perspective étonnamment optimiste pour l’Allemagne.',
+    ccCta: 'En savoir plus sur le livre →',
+  },
+  cs: {
+    title: 'Doporuč synthszr',
+    sub: 'Máš rád synthszr? Doporuč newsletter přátelům, kolegům a všem, koho by mohl zajímat. Moc bych to ocenil ❤️!',
+    count: 'Potvrzená doporučení',
+    remaining: (n: number) => `Už jen ${n} do tvého podepsaného hardcoveru CODE CRASH 🎁`,
+    reward: 'Při 10 potvrzených doporučeních ti pošlu CODE CRASH v pevné vazbě — se skutečným osobním věnováním, bez AI 😉',
+    rewardDone: '🎉 Hotovo! Tvůj podepsaný hardcover CODE CRASH je odemčený — ozveme se ohledně zaslání.',
+    confirmed: 'Potvrzeno',
+    pending: 'Čeká na potvrzení',
+    empty: 'Zatím žádná doporučení — sdílej svůj odkaz!',
+    invalid: 'Svůj osobní odkaz najdeš dole v každém newsletteru Synthszr.',
+    copy: 'Kopírovat',
+    copied: 'Zkopírováno!',
+    shareText: 'Každé ráno začínám se Synthszr — nejdůležitější AI novinky za 5 minut, chytře vybrané místo hype šumu. 🧠 Mrkni na to, myslím, že je to přesně pro tebe:',
+    gatePrompt: 'Zadej svůj e-mail — pošleme ti odkaz na tvůj osobní přehled doporučení.',
+    gatePlaceholder: 'tvuj@email.com',
+    gateCta: 'Poslat odkaz',
+    gateSending: 'Odesílání…',
+    gateSent: 'Pokud je tato adresa přihlášená k odběru, právě jsme ti poslali odkaz na tvůj přehled. Zkontroluj schránku.',
+    ccDesc: 'CODE CRASH (letní edice, 2. vydání) je kniha Matthiase Schradera o zvratu, který agentní AI přináší do byznysu, softwaru a vedení. Klene oblouk od vývoje produktů přes uspořádání firem až po kulturu v době AI — s překvapivě optimistickým výhledem pro Německo.',
+    ccCta: 'Více o knize →',
+  },
+  nds: {
+    title: 'Empfehl synthszr',
+    sub: 'Du magst synthszr? Denn empfehl den Newsletter dien Frünnen, Kollegen un för wen dat sünst noch interessant wesen kunn. Wöör mi bannig freuen ❤️!',
+    count: 'Bestätigte Empfehlungen',
+    remaining: (n: number) => `Bloots noch ${n} bet to dien signeerte CODE CRASH-Hardcover 🎁`,
+    reward: 'Bi 10 bestätigte Empfehlungen schick ik di CODE CRASH as Hardcover to — mit en echte persöönliche Widmen, ganz ahn KI 😉',
+    rewardDone: '🎉 Schafft! Dien signeerte CODE CRASH-Hardcover is free — wi mellt uns för’n Versand.',
+    confirmed: 'Bestätigt',
+    pending: 'Noch nich bestätigt',
+    empty: 'Noch keen Empfehlungen — deel dien Link!',
+    invalid: 'Dien persöönlichen Link finnst du in elk Synthszr-Newsletter ganz nerrn.',
+    copy: 'Koperen',
+    copied: 'Kopeert!',
+    shareText: 'Ik fang elken Morgen mit Synthszr an — de wichtigsten AI-Narichten in 5 Minuten, klook utsöcht statt Hype-Krach. 🧠 Kiek mal rin, ik glööv, dat is akkerat dien Ding:',
+    gatePrompt: 'Giff dien E-Mail-Adress in — wi sendt di den Link to dien persöönliche Empfehlungs-Översicht.',
+    gatePlaceholder: 'dien@email.com',
+    gateCta: 'Link sennen',
+    gateSending: 'Warrt sendt…',
+    gateSent: 'Wenn disse Adress afonneert is, hebbt wi di jüst den Link to dien Översicht sendt. Kiek in dien Postfach.',
+    ccDesc: 'CODE CRASH (Sommer-Edition, 2. Uplaag) is Matthias Schrader sien Book över den Ümbruch, den agentische KI in Wirtschaft, Software un Föhren utlööst. Dat spannt den Bagen vun Produktentwicklung över Ünnernehmen-Opstellung bet to de Kultur in’t KI-Tietöller — mit en överraschend optimistischen Utblick op den Standoort Düütschland.',
+    ccCta: 'Mehr to’t Book →',
+  },
 }
 
 export default async function ReferralPage({
@@ -69,7 +135,7 @@ export default async function ReferralPage({
 }) {
   const { lang } = await params
   const { sid } = await searchParams
-  const L = lang === 'de' ? TEXT.de : TEXT.en
+  const L = TEXT[lang as keyof typeof TEXT] ?? TEXT.en
   const stats = sid ? await getReferralStats(sid) : null
 
   const pct = stats ? Math.min(100, Math.round((stats.confirmedCount / stats.threshold) * 100)) : 0
