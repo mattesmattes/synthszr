@@ -23,6 +23,7 @@ import {
 } from '@/lib/edit-learning/retrieval'
 import { type AIModel, resolveModel, findDuplicateMetaphors, streamMetaphorDeduplication } from './ghostwriter'
 import { isCreditBalanceError, recordCreditAlertIfApplicable } from '@/lib/alerts/system-alert'
+import { normalizeArticlePlan } from './normalize-plan'
 
 export class CreditBalanceExhaustedError extends Error {
   constructor(message: string) {
@@ -282,11 +283,11 @@ Erstelle folgenden JSON-Plan:
     )
   }
 
-  // Validate: ensure all items are in ordering
-  const presentSet = new Set(plan.ordering)
-  for (let i = 1; i <= items.length; i++) {
-    if (!presentSet.has(i)) plan.ordering.push(i)
-  }
+  // Normalize ordering + headings onto the contract (number[] + Record<...>).
+  // Also ensures every item index appears exactly once. Guards against Gemini
+  // emitting a drifted schema (e.g. ordering as {id, headings} objects with no
+  // top-level headings map) that otherwise crashes the writing phase.
+  plan = normalizeArticlePlan(plan, items.length)
 
   // Validate: ensure exactly 3 excerpt bullets
   while (plan.excerptBullets.length < 3) {
@@ -651,7 +652,7 @@ export async function writeSectionsBatch(
     const batch = orderedItems.slice(i, i + concurrency)
     const results = await Promise.all(batch.map(async (item, k) => {
       const itemIdx = plan.ordering[i + k]
-      const heading = plan.headings[String(itemIdx)] || item.title
+      const heading = (plan.headings ?? {})[String(itemIdx)] || item.title
       const itemCompanies = ctx.companiesPerItem.get(item.id) || { public: [], premarket: [] }
       // Hard per-section timeout: one slow/hung section must not drag the whole
       // batch past the function limit (Job stalled at cursor=0 otherwise).
@@ -792,7 +793,7 @@ export async function* runGhostwriterPipeline(
       const i = cursor++
       const item = orderedItems[i]
       const itemIdx = plan.ordering[i]
-      const heading = plan.headings[String(itemIdx)] || item.title
+      const heading = (plan.headings ?? {})[String(itemIdx)] || item.title
 
       if (creditExhausted) {
         results[i] = `## ${heading}\n\n*Abgebrochen: AI-Credit-Guthaben aufgebraucht.*\n`

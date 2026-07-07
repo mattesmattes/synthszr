@@ -26,6 +26,7 @@ import {
   type PipelineItem,
 } from '@/lib/claude/ghostwriter-pipeline'
 import { selectAndEnrichItems, buildVocabularyContext } from '@/lib/claude/queue-article'
+import { normalizeArticlePlan } from '@/lib/claude/normalize-plan'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -396,11 +397,13 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
     }
 
     if (job.phase === 'writing') {
-      const plan = job.plan
-      if (!plan) {
+      if (!job.plan) {
         await markJobError(job.id, 'writing phase without plan')
         return 'error_no_plan'
       }
+      // Heal a drifted/malformed plan (e.g. ordering as objects, missing
+      // headings map) that may already be persisted from the planning phase.
+      const plan = normalizeArticlePlan(job.plan, job.selected_items.length)
       const orderedItems = plan.ordering
         .map((idx: number) => job.selected_items[idx - 1])
         .filter(Boolean) as PipelineItem[]
@@ -441,11 +444,11 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
     }
 
     if (job.phase === 'finalizing') {
-      const plan = job.plan
-      if (!plan) {
+      if (!job.plan) {
         await markJobError(job.id, 'finalizing phase without plan')
         return 'error_no_plan'
       }
+      const plan = normalizeArticlePlan(job.plan, job.selected_items.length)
       const { vocabulary } = await buildVocabularyContext(job.vocabulary_intensity)
       // Only metadataBlock is needed here; vocabularyContext is irrelevant for finalize.
       const ctx = await buildSectionContext(job.selected_items, plan, undefined)
