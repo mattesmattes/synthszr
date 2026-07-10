@@ -77,6 +77,15 @@ export default function RootLayout({
   return (
     <html lang="de">
       <head>
+        {/* Korrigiert html lang pro Locale, ohne das Root-Layout dynamisch zu
+            machen (headers() würde ISR/Edge-Caching deaktivieren). Läuft vor
+            First Paint; Googlebot rendert JS und sieht den korrekten Wert. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){var l=location.pathname.split('/')[1];if(/^(de|en|fr|es|it|pt|nl|pl|cs|nds)$/.test(l))document.documentElement.lang=l})()",
+          }}
+        />
         <link rel="preconnect" href="https://zadrjbyszvsusukajsbp.supabase.co" />
         <link rel="dns-prefetch" href="https://zadrjbyszvsusukajsbp.supabase.co" />
         {/* Cover images live on Vercel Blob — preconnect saves the

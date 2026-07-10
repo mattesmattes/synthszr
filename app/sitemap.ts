@@ -1,6 +1,6 @@
 import { MetadataRoute } from 'next'
 import { createAnonClient } from '@/lib/supabase/admin'
-import { DEFAULT_LOCALE, PUBLIC_LOCALES } from '@/lib/i18n/config'
+import { DEFAULT_LOCALE, SEO_LOCALES } from '@/lib/i18n/config'
 import { getRankedProducts } from '@/lib/rankings/leaderboard'
 import { fetchAllCompanyMentions } from '@/lib/companies/mention-rows'
 import { categorySlugsWithIntro } from '@/lib/rankings/category-intros'
@@ -14,10 +14,10 @@ export const revalidate = 3600
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
 
-// Languages with fully built-out static page content.
-// Only these appear as <url> entries — the others redirect to /de and would
-// waste Google crawl budget.
-const FULL_CONTENT_LOCALES = PUBLIC_LOCALES
+// Only SEO locales (de/en) appear as <url> entries. cs/nds/fr stay reachable
+// for users but canonicalize to /de and are excluded here — listing them
+// wasted crawl budget and produced "Crawled – currently not indexed" in GSC.
+const FULL_CONTENT_LOCALES = SEO_LOCALES
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createAnonClient()
@@ -29,7 +29,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .eq('is_active', true)
 
   const activeLocales = (languages?.map(l => l.code) || [DEFAULT_LOCALE])
-    .filter(code => FULL_CONTENT_LOCALES.includes(code as typeof PUBLIC_LOCALES[number]))
+    .filter(code => FULL_CONTENT_LOCALES.includes(code as typeof SEO_LOCALES[number]))
 
   // Fetch all published posts (id needed to match translations)
   const { data: posts } = await supabase
@@ -44,16 +44,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .select('generated_post_id, language_code, slug')
     .eq('translation_status', 'completed')
 
-  // Map post ID → set of locales that have a completed translation.
-  // Previously keyed by slug, which never matched post rows — so no post got
-  // translation entries in the sitemap.
-  const postTranslations = new Map<string, Set<string>>()
+  // Map post ID → (locale → translated slug). The translated slug is what the
+  // page actually serves under /{locale}/posts/… — previously the German slug
+  // was written into every locale's <url>, producing duplicate/404 entries.
+  const postTranslations = new Map<string, Map<string, string>>()
   translations?.forEach(t => {
-    if (t.generated_post_id) {
+    if (t.generated_post_id && t.slug) {
       if (!postTranslations.has(t.generated_post_id)) {
-        postTranslations.set(t.generated_post_id, new Set())
+        postTranslations.set(t.generated_post_id, new Map())
       }
-      postTranslations.get(t.generated_post_id)?.add(t.language_code)
+      postTranslations.get(t.generated_post_id)?.set(t.language_code, t.slug)
     }
   })
 
@@ -81,15 +81,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
-  // Posts - each available locale gets its own <url> entry
+  // Posts - each available locale gets its own <url> entry with its own
+  // (translated) slug.
   for (const post of posts || []) {
-    const availableTranslations = postTranslations.get(post.id) || new Set()
+    const translationSlugs = postTranslations.get(post.id) || new Map<string, string>()
 
-    // Collect all available locales for this post
-    const availableLocales = [DEFAULT_LOCALE]
+    // Collect all available locales for this post with their locale-specific slug
+    const localeSlugs = new Map<string, string>([[DEFAULT_LOCALE, post.slug]])
     for (const locale of activeLocales) {
-      if (locale !== DEFAULT_LOCALE && availableTranslations.has(locale)) {
-        availableLocales.push(locale)
+      if (locale !== DEFAULT_LOCALE && translationSlugs.has(locale)) {
+        localeSlugs.set(locale, translationSlugs.get(locale)!)
       }
     }
 
@@ -97,14 +98,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const alternates: Record<string, string> = {
       'x-default': `${BASE_URL}/${DEFAULT_LOCALE}/posts/${post.slug}`,
     }
-    for (const locale of availableLocales) {
-      alternates[locale] = `${BASE_URL}/${locale}/posts/${post.slug}`
+    for (const [locale, slug] of localeSlugs) {
+      alternates[locale] = `${BASE_URL}/${locale}/posts/${slug}`
     }
 
     // Create a <url> entry for each available locale
-    for (const locale of availableLocales) {
+    for (const [locale, slug] of localeSlugs) {
       sitemap.push({
-        url: `${BASE_URL}/${locale}/posts/${post.slug}`,
+        url: `${BASE_URL}/${locale}/posts/${slug}`,
         lastModified: new Date(post.updated_at || post.created_at),
         changeFrequency: 'weekly',
         priority: locale === DEFAULT_LOCALE ? 0.9 : 0.7,

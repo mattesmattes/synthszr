@@ -143,10 +143,37 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return { title: 'Not Found' }
   }
 
+  // Per-locale paths: every locale has its own (translated) slug. Without
+  // this, hreflang pointed all locales at the requested slug — and the German
+  // slug under /en/ got a self-canonical, creating an indexable duplicate of
+  // the translated-slug URL.
+  let pathByLocale: Partial<Record<LanguageCode, string>> | undefined
+  if (postId) {
+    const [{ data: origPost }, { data: slugRows }] = await Promise.all([
+      supabase
+        .from('generated_posts')
+        .select('slug')
+        .eq('id', postId)
+        .single(),
+      supabase
+        .from('content_translations')
+        .select('language_code, slug')
+        .eq('generated_post_id', postId)
+        .eq('translation_status', 'completed'),
+    ])
+    pathByLocale = { de: `/posts/${origPost?.slug || slug}` }
+    for (const row of slugRows || []) {
+      if (row.slug) {
+        pathByLocale[row.language_code as LanguageCode] = `/posts/${row.slug}`
+      }
+    }
+  }
+
   return generateLocalizedMetadata({
     title: `${post.title} — Synthszr`,
     description: post.excerpt ? cleanMetaDescription(post.excerpt) : undefined,
     path: `/posts/${slug}`,
+    pathByLocale,
     locale: locale,
     ogImage: post.cover_image_url || undefined,
     ogType: 'article',

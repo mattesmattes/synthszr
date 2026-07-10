@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import type { LanguageCode } from '@/lib/types'
-import { PUBLIC_LOCALES, DEFAULT_LOCALE } from './config'
+import { SEO_LOCALES, DEFAULT_LOCALE } from './config'
 import { SITE_URL } from '@/lib/seo/site'
 
 const BASE_URL = SITE_URL
@@ -14,6 +14,10 @@ interface LocalizedMetadataOptions {
   description?: string
   path: string  // Path without locale prefix, e.g., '/posts/my-article'
   availableLocales?: LanguageCode[]  // Which locales have translations
+  // Per-locale path override for content with translated slugs, e.g.
+  // { de: '/posts/deutscher-slug', en: '/posts/english-slug' }.
+  // Locales without an override fall back to `path`.
+  pathByLocale?: Partial<Record<LanguageCode, string>>
   noIndex?: boolean
   locale?: LanguageCode
   ogImage?: string             // Absolute URL to OG image
@@ -27,35 +31,44 @@ export function generateLocalizedMetadata({
   title,
   description,
   path,
-  availableLocales = PUBLIC_LOCALES,
+  availableLocales = SEO_LOCALES,
   noIndex = false,
   locale,
   ogImage,
   ogType = 'website',
+  pathByLocale,
 }: LocalizedMetadataOptions): Metadata {
   const cleanPath = path === '/' ? '' : path
   const effectiveLocale = locale ?? DEFAULT_LOCALE
 
-  // Build language alternates — only include locales with real content so Google
+  // Resolve the path for a given locale (translated slugs via pathByLocale).
+  const pathFor = (loc: LanguageCode): string => {
+    const p = pathByLocale?.[loc] ?? path
+    return p === '/' ? '' : p
+  }
+
+  // Build language alternates — only SEO locales with real content so Google
   // can build a valid reciprocal hreflang cluster.
   const languages: Record<string, string> = {}
 
   for (const loc of availableLocales) {
-    languages[loc] = `${BASE_URL}/${loc}${cleanPath}`
+    if (!SEO_LOCALES.includes(loc)) continue
+    languages[loc] = `${BASE_URL}/${loc}${pathFor(loc)}`
   }
 
   // x-default points to the default locale
-  languages['x-default'] = `${BASE_URL}/${DEFAULT_LOCALE}${cleanPath}`
+  languages['x-default'] = `${BASE_URL}/${DEFAULT_LOCALE}${pathFor(DEFAULT_LOCALE)}`
 
-  const url = `${BASE_URL}/${effectiveLocale}${cleanPath}`
+  const url = `${BASE_URL}/${effectiveLocale}${pathFor(effectiveLocale)}`
 
-  // Liegt die effektive Locale außerhalb der availableLocales (z.B. cs zeigt
-  // EN-Fallback-Content, ist aber nicht im hreflang-Cluster), würde ein
-  // Self-Canonical eine indexierbare Thin-Duplicate-Seite außerhalb des
-  // Clusters erzeugen. In dem Fall zeigt canonical auf x-default statt auf sich selbst.
-  const canonicalUrl = availableLocales.includes(effectiveLocale)
-    ? url
-    : languages['x-default']
+  // Liegt die effektive Locale außerhalb des SEO-Clusters (cs/nds/fr) oder
+  // außerhalb der availableLocales, würde ein Self-Canonical eine indexierbare
+  // Thin-Duplicate-Seite außerhalb des Clusters erzeugen. In dem Fall zeigt
+  // canonical auf x-default (/de) statt auf sich selbst.
+  const canonicalUrl =
+    SEO_LOCALES.includes(effectiveLocale) && availableLocales.includes(effectiveLocale)
+      ? url
+      : languages['x-default']
 
   const ogLocale = effectiveLocale === 'de' ? 'de_DE'
     : effectiveLocale === 'en' ? 'en_US'

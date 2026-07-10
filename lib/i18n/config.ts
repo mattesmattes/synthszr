@@ -11,6 +11,16 @@ export const ALL_LOCALES: LanguageCode[] = ['de', 'en', 'fr', 'es', 'it', 'pt', 
  */
 export const PUBLIC_LOCALES: LanguageCode[] = ['de', 'en', 'cs', 'nds', 'fr']
 
+/**
+ * Locales exposed to search engines (sitemap + hreflang + self-canonical).
+ * de/en are the actively maintained languages. cs/nds/fr stay reachable for
+ * users (language switcher, geo detection), but are excluded from sitemap and
+ * hreflang and canonicalize to /de — GSC showed Google ignoring them as thin
+ * duplicates ("Crawled/Discovered – currently not indexed") anyway, and the
+ * conflicting signals (hreflang + cross-locale canonical) hurt the whole cluster.
+ */
+export const SEO_LOCALES: LanguageCode[] = ['de', 'en']
+
 /** Default locale (fallback) */
 export const DEFAULT_LOCALE: LanguageCode = 'de'
 
