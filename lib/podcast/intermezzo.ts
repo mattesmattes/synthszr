@@ -14,7 +14,7 @@
  *   1. Strip any [INTERMEZZO] line the main model put down on its
  *      own — placement is unreliable.
  *   2. Find [ARTICLE 5] (or the middle article if fewer than 5).
- *   3. Generate a fresh self-reflection block with Haiku, using the
+ *   3. Generate a fresh self-reflection block with the model, using the
  *      lines immediately before [ARTICLE 5] as context so the
  *      reflection grows out of what was just discussed.
  *   4. Splice in: [INTERMEZZO]\n<reflection lines>\n directly before
@@ -31,9 +31,12 @@ import Anthropic from '@anthropic-ai/sdk'
 /** TTS language of the podcast (LOCALE_TO_TTS_LANG collapses to 'de' | 'en'). */
 export type IntermezzoLanguage = 'de' | 'en'
 
-const HAIKU_MODEL = 'claude-haiku-4-5-20251001'
+// Sonnet 5 (not Haiku): the reflection block is short but needs genuine
+// creative/emotional nuance and reliable instruction-following (esp. the
+// language pin) — Haiku produced flatter, drift-prone dialog.
+const REFLECTION_MODEL = 'claude-sonnet-5'
 const ARTICLE_LINE_REGEX = /^\[\s*ARTICLE\s+(\d+)\s*\]\s*$/gim
-// How many lines before [ARTICLE 5] to feed Haiku as context.
+// How many lines before [ARTICLE 5] to feed the model as context.
 const CONTEXT_LINES_BEFORE = 16
 
 export async function ensureIntermezzoMarker(
@@ -87,7 +90,7 @@ export async function ensureIntermezzoMarker(
   const result = beforeArticle5 + insertion + afterArticle5
   console.log(
     `[Intermezzo] Inserted marker ${anchorReason}` +
-      (reflectionBlock ? ` + ${reflectionBlock.split('\n').length}-line reflection block` : ' (no reflection block — Haiku unavailable)')
+      (reflectionBlock ? ` + ${reflectionBlock.split('\n').length}-line reflection block` : ' (no reflection block — model unavailable)')
   )
   return result
 }
@@ -130,7 +133,7 @@ async function generateReflectionBlock(
     const anthropic = new Anthropic({ apiKey })
     const prompt = buildReflectionPrompt(trailingLines, leadingLines, language)
     const response = await anthropic.messages.create({
-      model: HAIKU_MODEL,
+      model: REFLECTION_MODEL,
       max_tokens: 1200,
       messages: [{ role: 'user', content: prompt }],
     })
@@ -144,14 +147,14 @@ async function generateReflectionBlock(
     if (!raw) return null
 
     // Keep only valid HOST/GUEST lines. Drops any stray prose or
-    // markers Haiku might invent.
+    // markers the model might invent.
     const cleanLines = raw
       .split('\n')
       .map((l) => l.replace(/^\s+/, ''))
       .filter((l) => /^(HOST|GUEST)\s*(?:\(overlapping\))?\s*:/i.test(l) || /^\[(beat|short pause|longer pause|paper rustle|sip)\]/i.test(l))
 
     if (cleanLines.length < 3) {
-      console.warn('[Intermezzo] Haiku reflection block too short, falling back to bare marker', {
+      console.warn('[Intermezzo] reflection block too short, falling back to bare marker', {
         rawPreview: raw.slice(0, 160),
         clean: cleanLines.length,
       })
