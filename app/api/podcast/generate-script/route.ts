@@ -597,7 +597,7 @@ export async function POST(request: NextRequest) {
     // (set an [INTERMEZZO] marker at the self-reflection beat) almost
     // every time. A second pass with Haiku locates the strongest
     // self-reflection line and splices the marker in. Fail-soft.
-    const scriptWithMarker = await ensureIntermezzoMarker(scriptContent)
+    const scriptWithMarker = await ensureIntermezzoMarker(scriptContent, ttsLang)
 
     // NOTE: Personality evolution (advanceState) happens in jobs/process/route.ts
     // AFTER the podcast audio is successfully generated — not here at script generation time.

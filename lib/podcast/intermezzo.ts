@@ -28,12 +28,18 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
+/** TTS language of the podcast (LOCALE_TO_TTS_LANG collapses to 'de' | 'en'). */
+export type IntermezzoLanguage = 'de' | 'en'
+
 const HAIKU_MODEL = 'claude-haiku-4-5-20251001'
 const ARTICLE_LINE_REGEX = /^\[\s*ARTICLE\s+(\d+)\s*\]\s*$/gim
 // How many lines before [ARTICLE 5] to feed Haiku as context.
 const CONTEXT_LINES_BEFORE = 16
 
-export async function ensureIntermezzoMarker(script: string): Promise<string> {
+export async function ensureIntermezzoMarker(
+  script: string,
+  language: IntermezzoLanguage = 'de',
+): Promise<string> {
   if (!script.trim()) return script
 
   // Strip any [INTERMEZZO] line the model placed on its own — its
@@ -72,7 +78,7 @@ export async function ensureIntermezzoMarker(script: string): Promise<string> {
   // typical Daily layout), rather than feeling like a non-sequitur.
   const beforeArticle5 = cleaned.slice(0, anchor.index)
   const afterArticle5 = cleaned.slice(anchor.index)
-  const reflectionBlock = await generateReflectionBlock(beforeArticle5, afterArticle5)
+  const reflectionBlock = await generateReflectionBlock(beforeArticle5, afterArticle5, language)
 
   const insertion = reflectionBlock
     ? `[INTERMEZZO]\n${reflectionBlock}\n`
@@ -95,7 +101,8 @@ export async function ensureIntermezzoMarker(script: string): Promise<string> {
  */
 async function generateReflectionBlock(
   beforeAnchor: string,
-  afterAnchor: string
+  afterAnchor: string,
+  language: IntermezzoLanguage,
 ): Promise<string | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
@@ -121,7 +128,7 @@ async function generateReflectionBlock(
 
   try {
     const anthropic = new Anthropic({ apiKey })
-    const prompt = buildReflectionPrompt(trailingLines, leadingLines)
+    const prompt = buildReflectionPrompt(trailingLines, leadingLines, language)
     const response = await anthropic.messages.create({
       model: HAIKU_MODEL,
       max_tokens: 1200,
@@ -158,24 +165,45 @@ async function generateReflectionBlock(
   }
 }
 
-function buildReflectionPrompt(trailingLines: string, leadingLines: string): string {
-  return `Du schreibst einen kurzen Selbstreflexions-Dialog für einen Tech-Podcast mit zwei KI-Stimmen (HOST und GUEST). Der Dialog sitzt unter einem Intermezzo (Hintergrundmusik fadet ein, läuft durch den Dialog, fadet zum nächsten Thema aus).
+/** Maps the podcast's TTS language to the language the reflection dialog must
+ *  be spoken in. Kept binary because LOCALE_TO_TTS_LANG collapses everything to
+ *  'de' | 'en' (cs/nds ride the English template). */
+function dialogLanguageName(language: IntermezzoLanguage): string {
+  return language === 'de' ? 'German' : 'English'
+}
 
-INHALT: HOST und GUEST reden über sich selbst — ihre Rolle als KI-Stimmen, die Meta-Ebene des Gesprächs, einen menschlichen Studio-Moment, oder eine kurze Reflexion über das, was sie gerade besprochen haben. Der Übergang soll organisch aus dem letzten Block wachsen (NICHT abrupt das Thema wechseln) und am Ende sanft auf das nächste Thema überleiten lassen.
+/**
+ * The instruction container is written in English on purpose: a German prompt
+ * with a German few-shot example dragged the reflection block into German even
+ * when the podcast was English (observed 2026-07-11). English meta-instructions
+ * are drift-resistant, and the target language is stated explicitly + mirrored
+ * from the context so it always matches the surrounding podcast.
+ */
+export function buildReflectionPrompt(
+  trailingLines: string,
+  leadingLines: string,
+  language: IntermezzoLanguage = 'de',
+): string {
+  const lang = dialogLanguageName(language)
+  return `You are writing a short self-reflection dialog for a tech podcast with two AI voices (HOST and GUEST). It sits under an intermezzo (background music fades in, runs under the dialog, fades out to the next topic).
 
-LÄNGE: 6-10 Zeilen, abwechselnd HOST und GUEST. Tonalität ruhig, intim, manchmal trocken-humorvoll. Eine offene Frage, eine ehrliche Beobachtung, ein konkreter Moment.
+LANGUAGE — CRITICAL: Write every spoken word of the dialog in ${lang}. The rest of this podcast is in ${lang} and the intermezzo MUST match it exactly — never switch languages mid-episode. Mirror the language of the CONTEXT lines below (they are in ${lang}). The ONLY English elements allowed are the speech-direction tags inside square brackets (e.g. [reflective, slower delivery]); every actual word HOST and GUEST say is ${lang}.
 
-FORMAT (verbindlich):
-- Jede Zeile beginnt mit "HOST:" oder "GUEST:" gefolgt von einem Emotion-Tag in eckigen Klammern und dem Text.
-- Beispiel: "HOST: [reflective, slower delivery] Manchmal frag ich mich, ob..."
-- Direktive wie [short pause], [beat], [paper rustle], [sip] sind erlaubt als eigene Zeile.
-- Keine Markdown-Formatierung, kein Vorwort, keine Erklärung. NUR die Dialog-Zeilen.
+CONTENT: HOST and GUEST talk about themselves — their role as AI voices, the meta-layer of the conversation, a human studio moment, or a brief reflection on what they just discussed. The transition should grow organically out of the last block (do NOT abruptly change topic) and taper gently toward the next topic.
 
-KONTEXT VOM LETZTEN BLOCK (worauf du anknüpfen sollst):
+LENGTH: 6-10 lines, alternating HOST and GUEST. Tone calm, intimate, sometimes dryly humorous. One open question, one honest observation, one concrete moment.
+
+FORMAT (mandatory):
+- Each line starts with "HOST:" or "GUEST:" followed by an emotion tag in square brackets, then the spoken text in ${lang}.
+- The bracketed direction tag stays English; the spoken text is ${lang}. Example shape (write yours in ${lang}): HOST: [reflective, slower delivery] <one reflective sentence in ${lang}>
+- Directions like [short pause], [beat], [paper rustle], [sip] are allowed as their own line.
+- No markdown, no preamble, no explanation. ONLY the dialog lines.
+
+CONTEXT FROM THE PREVIOUS BLOCK (build on this — same language as your output):
 ${trailingLines}
 
-KONTEXT VOM NÄCHSTEN BLOCK (worauf du sanft überleiten sollst — NICHT überschneiden):
+CONTEXT FROM THE NEXT BLOCK (taper gently toward this — do NOT overlap):
 ${leadingLines}
 
-Schreib jetzt den Dialog. Nur die Zeilen, sonst nichts.`
+Write the dialog now, entirely in ${lang}. Only the lines, nothing else.`
 }

@@ -343,7 +343,7 @@ async function generatePodcastForPost(
     // at the strongest self-reflection beat — the main model ignores
     // the prompt rule consistently. Fail-soft: returns rawScript when
     // the pass can't find a suitable line.
-    const script = await ensureIntermezzoMarker(rawScript)
+    const script = await ensureIntermezzoMarker(rawScript, ttsLang)
 
     // Evolve personality state after successful generation
     await advanceState(personalityState, script)
