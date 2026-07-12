@@ -169,8 +169,22 @@ SCHREIBSTIL:
 
 LÄNGE & TIEFE: Schreibe ausführlich und konkret, nicht telegrammartig. Führe ein Argument zu Ende, statt drei nur anzureißen. Keine Verknappung auf Stichworte oder Halbsätze — der Take ist ein durchdachter Absatz, kein Tweet. 5-7 vollständige Sätze, freier Fluss. Der letzte Satz zeigt eine prägnante Haltung, die für sich allein stehen kann.
 
+ÜBERSCHRIFT — INTELLEKTUELLER WORTWITZ (du schreibst sie SELBST, NICHT aus dem Themen-Hinweis übernehmen):
+Die Überschrift ist eine eigene, pointierte deutsche These — scharf gedacht, nicht aufmerksamkeitsheischend. Humor durch Präzision: unerwartet konkrete Details statt Pointen. Doppeldeutigkeiten, die erst beim zweiten Lesen landen. Lakonisches Understatement statt Dramatik. Max ~80 Zeichen.
+SO KLINGT ES RICHTIG (nur die Technik, NIE wörtlich übernehmen):
+- "Wenn der Compiler billiger wird als der Kaffee"
+- "Gemini kann jetzt Code schreiben. Die IDE hat das noch nicht mitbekommen."
+- "Der Praktikant heißt jetzt Claude und macht keine Pause"
+- "OpenAI verkauft Compliance. Anthropic auch. Die Frage ist nur: an wen zuerst"
+VERBOTEN IN DER ÜBERSCHRIFT:
+- Englische Überschrift (FATALER FEHLER).
+- Reine Nacherzählung ("X launcht Y") oder "Produktname: Erklärung"-Etikett — der Produktname gehört in den Satz, nicht als Label davor.
+- Das reflexhafte "Wenn X, aber Y" / "X kommt, aber Y nicht"-Antithese-Schema als bequemer Default. Nur erlaubt, wenn es eine WIRKLICH überraschende Pointe trägt — nie als LLM-Ausweichmuster.
+- Generische/tote Sprache ("Spannende Entwicklungen", "KI-Update: Die wichtigsten News").
+- Negations-Reframe ("nicht X, sondern Y") — dieselbe FATAL-Regel wie für den Take (siehe oben).
+
 OUTPUT-FORMAT — halte dich an diese Reihenfolge:
-1. Überschrift: "## [Überschrift]" — falls Englisch, übersetze in eine pointierte deutsche These.
+1. ÜBERSCHRIFT: "## [Überschrift]" — schreibe sie SELBST nach den ÜBERSCHRIFT-Regeln oben. Übernimm NICHT den Themen-Hinweis aus dem User-Prompt.
 2. NEWS-ZUSAMMENFASSUNG: 5-7 Sätze Fließtext (keine Bullet Points). Führe die wichtigsten Fakten, Zahlen und Namen aus, statt sie nur zu streifen.
 3. COMPANY TAGGING + QUELLE: Direkt nach Zusammenfassung (VOR Synthszr Take) genau eine Zeile:
    FORMAT: {Company1} {Company2} → [Quellenname](URL)
@@ -368,7 +382,7 @@ export async function writeSection(
 
   // Dynamic per-item prompt only — format template + checkliste are in SECTION_SYSTEM_PROMPT,
   // vocabulary + edit learning + thesis are in cacheableUserPrefix
-  const userPrompt = `ÜBERSCHRIFT: ## ${heading}
+  const userPrompt = `THEMEN-HINWEIS (nur grobe Orientierung — schreibe deine EIGENE Überschrift nach den ÜBERSCHRIFT-Regeln, übernimm diesen Hinweis NICHT wörtlich): ${heading}
 
 NEWS-INHALT${sourceName ? ` (Quelle: ${sourceName}` : ''}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''}${sourceName ? ')' : ''}:
 ${(item.content || 'Kein Inhalt verfügbar.').slice(0, 6000)}
@@ -460,12 +474,14 @@ async function callModelNonStreaming(
         : [{ type: 'text', text: prompt }]
 
     // Modell-Capabilities (Stand 2026): 2026er-Modelle nutzen adaptives Thinking
-    // (kein budget_tokens); Opus 4.7/4.8 lehnen temperature UND budget_tokens mit
-    // 400 ab. effort gibt es ab Opus 4.5 + Sonnet 4.6, NICHT auf Haiku/Sonnet 4.5.
+    // (kein budget_tokens). Opus 4.7/4.8, Sonnet 5 und Fable/Mythos 5 lehnen
+    // temperature/top_p/top_k UND budget_tokens mit 400 ab. effort gibt es ab
+    // Opus 4.5 + Sonnet 4.6 + Sonnet 5, NICHT auf Haiku/Sonnet 4.5.
     const id = resolved.modelId
-    const adaptiveThinking = /claude-opus-4-[678]\b/.test(id) || id.startsWith('claude-sonnet-4-6')
-    const supportsEffort = /claude-opus-4-[5678]\b/.test(id) || id.startsWith('claude-sonnet-4-6')
-    const rejectsSampling = /claude-opus-4-[78]\b/.test(id)
+    const is2026Frontier = id.startsWith('claude-sonnet-5') || id.startsWith('claude-fable-5') || id.startsWith('claude-mythos-5')
+    const adaptiveThinking = /claude-opus-4-[678]\b/.test(id) || id.startsWith('claude-sonnet-4-6') || is2026Frontier
+    const supportsEffort = /claude-opus-4-[5678]\b/.test(id) || id.startsWith('claude-sonnet-4-6') || is2026Frontier
+    const rejectsSampling = /claude-opus-4-[78]\b/.test(id) || is2026Frontier
 
     // SDK 0.71 typisiert adaptive/output_config noch nicht; die Felder werden zur
     // Laufzeit korrekt weitergereicht (gegen Production verifiziert), daher das `any`.
@@ -862,18 +878,26 @@ export async function* runGhostwriterPipeline(
 // German proofreading
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PROOFREADING_PROMPT = `Du bist ein professioneller deutscher Lektor. Korrigiere den folgenden Text.
+const PROOFREADING_PROMPT = `Du bist ein professioneller deutscher Lektor UND Anti-LLM-Stilwächter. Korrigiere Fehler und schreibe die unten gelisteten AI-Tells um — sonst nichts.
 
-REGELN:
-1. Korrigiere alle deutschen Rechtschreib- und Grammatikfehler.
-2. Korrigiere falsche Kommasetzung und Zeichensetzung.
-3. Englische Fachbegriffe (Token, Reasoning, API, Fine-Tuning, Open Source, Benchmark, Model, Inference, Training, Edge Computing, etc.) NICHT übersetzen oder eindeutschen, wenn es kein adäquates deutsches Wort gibt.
-4. Firmennamen, Produktnamen und Eigennamen NICHT verändern.
-5. Markdown-Formatierung (##, **, {Company}, →, Synthszr Take:) NICHT verändern.
-6. Stil, Ton und Inhalt NICHT verändern. Nur Fehler korrigieren.
-7. Gib NUR den korrigierten Text zurück, keine Erklärungen oder Kommentare.`
+KORRIGIEREN:
+1. Alle deutschen Rechtschreib- und Grammatikfehler.
+2. Falsche Kommasetzung und Zeichensetzung.
 
-async function proofreadText(text: string, model: AIModel): Promise<string> {
+AI-TELLS UMSCHREIBEN (nur diese, minimal-invasiv, Aussage erhalten — NICHT den ganzen Text neu schreiben):
+3. Kontrast-/Negations-Reframe: "Das ist kein X, sondern Y", "nicht X, sondern Y", "X ist nicht Y, sondern Z", "weniger X, mehr Y", "Was wie X aussieht, ist Y", "nicht mehr X, sondern Y". → Negation streichen, Y direkt als Aussage ausschreiben. Bsp.: "entscheidet sich nicht an der Spitze, sondern am unscheinbarsten Ende" → "entscheidet sich am unscheinbarsten Ende der Wertschöpfung."
+4. Em-Dashes (— oder –) als Satzteiler → Punkt, Komma, Doppelpunkt, Semikolon oder Klammer.
+5. Hohler Schluss-Aphorismus: ein letzter Satz, der wie ein tiefsinniges Motto klingt, aber nichts Konkretes sagt (z.B. "Die Resilienz einer Lieferkette misst man am schwächsten Molekül"). → Durch eine konkrete Aussage mit Fakt oder Konsequenz ersetzen, oder streichen, falls der vorletzte Satz stärker schließt.
+6. Rule-of-three-Aufzählungen und leere Verstärker-Adverbien ("exakt", "buchstäblich", "letztendlich", "tatsächlich") straffen, wenn sie nichts hinzufügen.
+
+NICHT VERÄNDERN:
+7. Englische Fachbegriffe (Token, Reasoning, API, Fine-Tuning, Open Source, Benchmark, Model, Inference, Training) NICHT eindeutschen. Firmen-, Produkt- und Eigennamen unverändert lassen.
+8. Markdown-Formatierung (##, **, {Company}, →, Synthszr Take:) unverändert lassen.
+9. Ansonsten Stil, Ton, Argument und Inhalt LASSEN — greife nur die oben gelisteten Tells an.
+
+Gib NUR den korrigierten Text zurück, keine Erklärungen oder Kommentare.`
+
+export async function proofreadText(text: string, model: AIModel): Promise<string> {
   const corrected = await callModelNonStreaming(
     text,
     PROOFREADING_PROMPT,
