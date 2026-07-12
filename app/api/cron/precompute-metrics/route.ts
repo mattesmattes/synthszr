@@ -16,6 +16,7 @@ export const maxDuration = 300
 export async function GET(request: NextRequest) {
   const authResult = verifyCronAuth(request)
   if (!authResult.authorized) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const cronStartedAt = Date.now()
   try {
     // Selbstheilende De-Fragmentierung VOR precompute (Metriken sollen den
     // konsolidierten Stand zeigen). Deterministisch, keine API-Kosten.
@@ -47,11 +48,13 @@ export async function GET(request: NextRequest) {
     // Tägliche Feature-Research: sichtbare, kategorisierte Produkte mit ≥2 Mentions (= das,
     // was auch in den Charts erscheint), die noch nicht angefragt/ausreichend gefüllt sind.
     // force=false → der __researched_at-Marker + die ≥Hälfte-Dims-Regel verhindern Neu-
-    // Anfragen. Hart gedeckelt (limit 12, ~$0-4/Tag) → arbeitet den Rückstand über Tage ab,
-    // pendelt sich dann bei ~0 ein (nur neue Produkte).
+    // Anfragen. Kandidaten sind nach Mentions sortiert (prominenteste zuerst). limit 40 als
+    // Obergrenze, effektiv durch budgetMs begrenzt: nur so viele, wie in die verbleibende
+    // Zeit bis zum 300s-Cap passen (20s Puffer für revalidate + Response) — verhindert 504.
     let researched = 0
     try {
-      researched = (await runProductResearch({ minMentions: 2, force: false, concurrency: 6, limit: 12 })).researched
+      const budgetMs = Math.max(20_000, 300_000 - (Date.now() - cronStartedAt) - 20_000)
+      researched = (await runProductResearch({ minMentions: 2, force: false, concurrency: 6, limit: 40, budgetMs })).researched
     } catch (e) {
       console.error('[cron] research:', e instanceof Error ? e.message : e)
     }

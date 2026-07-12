@@ -156,9 +156,10 @@ const META_DIMS = new Set<string>(['__sentiment', DESCRIPTION_DIM, DESCRIPTION_E
  *  `concurrency` > 1 verarbeitet Produkte parallel (Web-Research ist I/O-gebunden) —
  *  default 1 hält das Cron-Verhalten unverändert. `onProgress` für Fortschritt. */
 export async function runProductResearch(
-  opts: { limit?: number; minMentions?: number; force?: boolean; concurrency?: number; onProgress?: (researched: number, attempted: number) => void } = {},
+  opts: { limit?: number; minMentions?: number; force?: boolean; concurrency?: number; budgetMs?: number; onProgress?: (researched: number, attempted: number) => void } = {},
 ): Promise<{ researched: number }> {
-  const { limit = 60, minMentions = 2, force = false, concurrency = 1, onProgress } = opts
+  const { limit = 60, minMentions = 2, force = false, concurrency = 1, budgetMs, onProgress } = opts
+  const startedAt = Date.now()
   const supabase = createAdminClient()
 
   const { data: cats } = await supabase.from('product_categories').select('slug, name, feature_dimensions')
@@ -176,6 +177,19 @@ export async function runProductResearch(
     memberships.push(...(data as Membership[]))
     if (data.length < 1000) break
   }
+
+  // Prominenteste zuerst: nach precompute sind product_metrics.mention_count frisch.
+  // Ohne diese Sortierung liefe die Research in DB-Reihenfolge und ließe frisch
+  // aufgestiegene, hoch-erwähnte Produkte (neue Meta-/OpenAI-Modelle o.ä.) im
+  // Rückstand — genau die, deren fehlende Beschreibung am sichtbarsten ist.
+  const mentionByProduct = new Map<string, number>()
+  for (let off = 0; ; off += 1000) {
+    const { data } = await supabase.from('product_metrics').select('product_id, mention_count').range(off, off + 999)
+    if (!data?.length) break
+    for (const r of data) mentionByProduct.set(r.product_id as string, (r.mention_count as number) ?? 0)
+    if (data.length < 1000) break
+  }
+  memberships.sort((a, b) => (mentionByProduct.get(b.product_id) ?? 0) - (mentionByProduct.get(a.product_id) ?? 0))
 
   /** Recherchiert + schreibt EIN Produkt. Rückgabe: true bei geschriebenem Ergebnis. */
   const researchOne = async (m: Membership): Promise<boolean> => {
@@ -240,7 +254,7 @@ export async function runProductResearch(
   let attempted = 0
   let idx = 0
   const worker = async () => {
-    while (researched < limit && idx < memberships.length) {
+    while (researched < limit && idx < memberships.length && (!budgetMs || Date.now() - startedAt < budgetMs)) {
       const my = idx++
       attempted++
       try {
