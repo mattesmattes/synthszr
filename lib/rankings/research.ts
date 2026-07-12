@@ -98,6 +98,25 @@ const REPORT_TOOL = {
 }
 const EMPTY_RESULT: ResearchResult = { description: null, descriptionEn: null, releaseDate: null, features: [] }
 
+/** DE→EN-Fallback für die Produktbeschreibung. description_en ist im REPORT_TOOL zwar
+ *  required, aber ohne strict:true erzwingt die API das nicht — Sonnet lässt es
+ *  gelegentlich weg, dann zeigt /en den deutschen Text. Dieser deterministische
+ *  Haiku-Call garantiert eine englische Beschreibung. Best-effort (null bei Fehler). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function translateDescriptionToEnglish(client: any, textDe: string): Promise<string | null> {
+  try {
+    const resp = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001', max_tokens: 600,
+      messages: [{ role: 'user', content: `Translate this German AI-product description into natural, concise English. Keep technical terms (Token, Reasoning, Inference, Fine-Tuning, Open Source, Benchmark) and product/company names unchanged. Return ONLY the English translation, no preamble:\n\n${textDe}` }],
+    })
+    for (const b of resp.content) if (b.type === 'text') return (b.text as string).trim() || null
+    return null
+  } catch (e) {
+    console.error('[research-translate]', e instanceof Error ? e.message : e)
+    return null
+  }
+}
+
 /**
  * Recherchiert ein Produkt per WEB-SUCHE (Sonnet 4.6). Jeder Spec-Wert MUSS eine
  * source_url (echte Web-Quelle) tragen — parseResearchResponse verwirft Werte ohne
@@ -139,7 +158,13 @@ STRIKT — KEIN SPEKULIEREN:
       messages: [{ role: 'user', content: prompt }],
     }, { signal: controller.signal })
     const block = [...resp.content].reverse().find((b: { type: string; name?: string }) => b.type === 'tool_use' && b.name === 'report_research')
-    return parseResearchResponse(block && 'input' in block ? block.input : null, new Set(dimensions))
+    const result = parseResearchResponse(block && 'input' in block ? block.input : null, new Set(dimensions))
+    // description_en fehlt trotz required (ohne strict) gelegentlich → DE→EN-Fallback,
+    // damit /en nie den deutschen Beschreibungstext zeigt.
+    if (result.description && !result.descriptionEn) {
+      result.descriptionEn = await translateDescriptionToEnglish(client, result.description)
+    }
+    return result
   } catch (e) {
     // Fehler NICHT verschlucken: Timeout/Overload sonst ununterscheidbar von "leer".
     console.error(`[research-error] ${name}:`, e instanceof Error ? `${e.name}: ${e.message}` : e)
