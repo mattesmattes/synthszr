@@ -728,6 +728,7 @@ export async function writeSectionsBatch(
   startedAt: number,
   proofreadModel?: AIModel,
   onBatch?: (nextCursor: number, newSections: string[]) => Promise<void>,
+  repoIntensity?: number,
 ): Promise<WriteBatchResult> {
   const out: string[] = []
   let i = cursor
@@ -747,6 +748,7 @@ export async function writeSectionsBatch(
           cacheableUserPrefix: ctx.cacheableUserPrefix,
           effort,
           takeAngle,
+          repoIntensity,
         }),
         SECTION_WRITE_TIMEOUT_MS,
         `## ${heading}\n\n*Zeitüberschreitung beim Schreiben dieses Abschnitts.*\n`,
@@ -815,12 +817,12 @@ export async function finalizeArticle(
 export async function* runGhostwriterPipeline(
   items: PipelineItem[],
   model: AIModel,
-  options: { concurrency?: number; vocabularyContext?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' } = {},
+  options: { concurrency?: number; vocabularyContext?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; repoIntensity?: number } = {},
 ): AsyncGenerator<PipelineEvent | { type: 'section'; text: string } | { type: 'metadata'; text: string }> {
   // concurrency 6 (was 2): with up to 40 sections, Opus must finish within the
   // Vercel Pro 300s function limit (maxDuration=800 is capped to 300 by the plan).
   // 40 / 6 × ~30s ≈ 200s leaves headroom for planning + proofread before timeout.
-  const { concurrency = 6, vocabularyContext, effort } = options
+  const { concurrency = 6, vocabularyContext, effort, repoIntensity } = options
   // ── Pass 1: Plan ────────────────────────────────────────────────────────────
   yield { type: 'planning', message: `Struktur für ${items.length} Items planen...` }
 
@@ -897,6 +899,7 @@ export async function* runGhostwriterPipeline(
           cacheableUserPrefix,
           effort,
           takeAngle,
+          repoIntensity,
         })
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)

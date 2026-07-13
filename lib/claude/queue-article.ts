@@ -46,6 +46,7 @@ export interface QueueArticleParams {
                             // effort. The scheduled auto-post passes 'medium'
                             // (faster) so 40 items fit the 300s cron cap; the
                             // manual flow leaves it at the default ('high').
+  repoIntensity?: number    // 0–100; default 40. Steuert das Code-Crash-Korpus-Retrieval.
 }
 
 /** Loosely-typed event — all fields optional so both consumers read directly. */
@@ -331,6 +332,7 @@ export async function* generateQueueArticle(params: QueueArticleParams): AsyncGe
     vocabularyIntensity = 50,
     model: modelOverride,
     effort,
+    repoIntensity = 40,
   } = params
 
   // Model: explicit override (e.g. cron auto-post) wins; otherwise central
@@ -352,7 +354,7 @@ export async function* generateQueueArticle(params: QueueArticleParams): AsyncGe
 
   let fullText = ''
 
-  for await (const event of runGhostwriterPipeline(pipelineItems, model, { vocabularyContext, effort })) {
+  for await (const event of runGhostwriterPipeline(pipelineItems, model, { vocabularyContext, effort, repoIntensity })) {
     if (event.type === 'planning') {
       yield { phase: 'pipeline', message: event.message }
     } else if (event.type === 'planned') {
