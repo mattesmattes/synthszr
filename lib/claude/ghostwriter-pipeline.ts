@@ -15,6 +15,7 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import { enforceHeadingLength } from '@/lib/claude/heading-length'
+import { repoRetrievalParams } from '@/lib/mattes/repo-intensity'
 import {
   getActiveLearnedPatterns,
   findSimilarEditExamples,
@@ -362,6 +363,7 @@ export async function writeSection(
     cacheableUserPrefix: string
     effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
     takeAngle?: string
+    repoIntensity?: number
   },
 ): Promise<string> {
   const publicCompanyList = context.relevantCompanies.public.join(', ') || '(keine erkannt)'
@@ -385,6 +387,12 @@ export async function writeSection(
   // the Synthszr Take in the author's voice and argument patterns.
   // Non-fatal: if the RPC fails or the corpus is empty, the prompt
   // generation proceeds without the block.
+  // Mattes-Korpus KONZEPTUELL abfragen (heading + takeAngle, OHNE content): die
+  // lange faktenreiche content-Query drückt die Cosine-Similarity zu den
+  // konzeptuellen Code-Crash-Passagen unter den Threshold (verifiziert 2026-07-13).
+  // Der History-Retrieval nutzt weiter die VOLLE Query (mit content).
+  const repoParams = repoRetrievalParams(context.repoIntensity ?? 0)
+  const mattesQuery = [heading, context.takeAngle].filter(Boolean).join('\n\n')
   const retrievalQuery = [heading, context.takeAngle, (item.content || '').slice(0, 4000)]
     .filter(Boolean)
     .join('\n\n')
@@ -394,12 +402,13 @@ export async function writeSection(
   // posts) run in parallel — both are non-fatal and must not serialize latency.
   await Promise.all([
     (async () => {
+      if (!repoParams) return // Repo-Intensität 0 → kein Korpus-Retrieval
       try {
         const { findRelevantMattesPassages, formatPassagesForPrompt } = await import('@/lib/mattes/retrieval')
-        const passages = await findRelevantMattesPassages(retrievalQuery, { limit: 2 })
+        const passages = await findRelevantMattesPassages(mattesQuery, { limit: repoParams.limit, threshold: repoParams.threshold })
         mattesBlock = formatPassagesForPrompt(passages)
         if (passages.length > 0) {
-          console.log(`[Pipeline] Retrieved ${passages.length} Mattes passages for "${heading.slice(0, 40)}…"`)
+          console.log(`[Pipeline] Retrieved ${passages.length} Mattes passages (repo ${context.repoIntensity ?? 0}%) for "${heading.slice(0, 40)}…"`)
         }
       } catch (err) {
         console.warn('[Pipeline] Mattes retrieval failed (continuing):', err)
