@@ -867,6 +867,7 @@ export async function* runGhostwriterPipeline(
       const item = orderedItems[i]
       const itemIdx = plan.ordering[i]
       const heading = (plan.headings ?? {})[String(itemIdx)] || item.title
+      const takeAngle = (plan.takeAngles ?? {})[String(itemIdx)] || undefined
 
       if (creditExhausted) {
         results[i] = `## ${heading}\n\n*Abgebrochen: AI-Credit-Guthaben aufgebraucht.*\n`
@@ -881,6 +882,7 @@ export async function* runGhostwriterPipeline(
           relevantCompanies: itemCompanies,
           cacheableUserPrefix,
           effort,
+          takeAngle,
         })
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
