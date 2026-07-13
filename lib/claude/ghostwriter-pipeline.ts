@@ -212,7 +212,7 @@ SO JA (nüchtern, Kern zuerst, attribuiert):
    BEISPIEL: {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
    Max 3 Company-Tags. Falls KEINE Quelle: nur Tags, kein Pfeil/Quellenname.
    WICHTIG: Quelle NUR in dieser Zeile.
-4. SYNTHSZR TAKE: "Synthszr Take:" + 5-7 Sätze freier Fluss mit klarer Haltung.`
+4. SYNTHSZR TAKE: "Synthszr Take:" + 5-7 Sätze freier Fluss mit klarer Haltung. Wenn im User-Prompt ein BLICKWINKEL vorgegeben ist, führe den Take aus GENAU dieser Perspektive und wiederhole nicht die offensichtliche, naheliegende Kern-These der News.`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass 1: Article Planning
@@ -356,6 +356,7 @@ export async function writeSection(
     relevantCompanies: { public: string[]; premarket: string[] }
     cacheableUserPrefix: string
     effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+    takeAngle?: string
   },
 ): Promise<string> {
   const publicCompanyList = context.relevantCompanies.public.join(', ') || '(keine erkannt)'
@@ -379,7 +380,9 @@ export async function writeSection(
   // the Synthszr Take in the author's voice and argument patterns.
   // Non-fatal: if the RPC fails or the corpus is empty, the prompt
   // generation proceeds without the block.
-  const retrievalQuery = `${heading}\n\n${(item.content || '').slice(0, 4000)}`
+  const retrievalQuery = [heading, context.takeAngle, (item.content || '').slice(0, 4000)]
+    .filter(Boolean)
+    .join('\n\n')
   let mattesBlock = ''
   let historyBlock = ''
   // Voice grounding (Mattes corpus) and historical callbacks (past Synthszr
@@ -413,7 +416,10 @@ export async function writeSection(
 
   // Dynamic per-item prompt only — format template + checkliste are in SECTION_SYSTEM_PROMPT,
   // vocabulary + edit learning + thesis are in cacheableUserPrefix
-  const userPrompt = `THEMEN-HINWEIS (nur grobe Orientierung — schreibe deine EIGENE Überschrift nach den ÜBERSCHRIFT-Regeln, übernimm diesen Hinweis NICHT wörtlich): ${heading}
+  const angleBlock = context.takeAngle
+    ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung): ${context.takeAngle}`
+    : ''
+  const userPrompt = `THEMEN-HINWEIS (nur grobe Orientierung — schreibe deine EIGENE Überschrift nach den ÜBERSCHRIFT-Regeln, übernimm diesen Hinweis NICHT wörtlich): ${heading}${angleBlock}
 
 NEWS-INHALT${sourceName ? ` (Quelle: ${sourceName}` : ''}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''}${sourceName ? ')' : ''}:
 ${(item.content || 'Kein Inhalt verfügbar.').slice(0, 6000)}
@@ -717,6 +723,7 @@ export async function writeSectionsBatch(
     const results = await Promise.all(batch.map(async (item, k) => {
       const itemIdx = plan.ordering[i + k]
       const heading = (plan.headings ?? {})[String(itemIdx)] || item.title
+      const takeAngle = (plan.takeAngles ?? {})[String(itemIdx)] || undefined
       const itemCompanies = ctx.companiesPerItem.get(item.id) || { public: [], premarket: [] }
       // Hard per-section timeout: one slow/hung section must not drag the whole
       // batch past the function limit (Job stalled at cursor=0 otherwise).
@@ -725,6 +732,7 @@ export async function writeSectionsBatch(
           relevantCompanies: itemCompanies,
           cacheableUserPrefix: ctx.cacheableUserPrefix,
           effort,
+          takeAngle,
         }),
         SECTION_WRITE_TIMEOUT_MS,
         `## ${heading}\n\n*Zeitüberschreitung beim Schreiben dieses Abschnitts.*\n`,
