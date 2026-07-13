@@ -45,6 +45,7 @@ interface ArticleJob {
   effort: Effort
   max_items: number
   vocabulary_intensity: number
+  repo_intensity: number
   selected_items: PipelineItem[]
   used_item_ids: string[]
   plan: ArticlePlan | null
@@ -81,6 +82,7 @@ export async function createArticleJob(opts: {
   model: string
   effort: string
   vocabularyIntensity: number
+  repoIntensity: number
 }): Promise<{ created: boolean; reason?: string }> {
   const supabase = createAdminClient()
 
@@ -112,6 +114,7 @@ export async function createArticleJob(opts: {
     effort: opts.effort,
     max_items: opts.maxItems,
     vocabulary_intensity: opts.vocabularyIntensity,
+    repo_intensity: opts.repoIntensity,
     selected_items: pipelineItems,
     used_item_ids: usedItemIds,
   })
@@ -134,6 +137,7 @@ export async function createManualArticleJob(opts: {
   model: string
   effort: string
   vocabularyIntensity: number
+  repoIntensity: number
 }): Promise<{ jobId: string; itemCount: number } | { error: string }> {
   const supabase = createAdminClient()
 
@@ -155,6 +159,7 @@ export async function createManualArticleJob(opts: {
       effort: opts.effort,
       max_items: opts.maxItems,
       vocabulary_intensity: opts.vocabularyIntensity,
+      repo_intensity: opts.repoIntensity,
       selected_items: pipelineItems,
       used_item_ids: usedItemIds,
     })
@@ -430,6 +435,7 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
             .update({ written_sections: [...prevWritten, ...newSections], cursor: nextCursor })
             .eq('id', job.id)
         },
+        job.repo_intensity,
       )
       const written = [...prevWritten, ...res.sections]
       await supabase

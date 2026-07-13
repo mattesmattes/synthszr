@@ -231,6 +231,7 @@ export async function GET(request: NextRequest) {
               model,
               effort: config.postGeneration.effort ?? 'high',
               vocabularyIntensity: 50,
+              repoIntensity: 40,
             })
             results.postGeneration = r.created ? 'job_enqueued' : `skipped_${r.reason}`
           }
