@@ -369,6 +369,7 @@ export async function writeSection(
     cacheableUserPrefix: string
     effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
     takeAngle?: string
+    retrievalHint?: string
     repoIntensity?: number
   },
 ): Promise<string> {
@@ -398,7 +399,7 @@ export async function writeSection(
   // konzeptuellen Code-Crash-Passagen unter den Threshold (verifiziert 2026-07-13).
   // Der History-Retrieval nutzt weiter die VOLLE Query (mit content).
   const repoParams = repoRetrievalParams(context.repoIntensity ?? 0)
-  const mattesQuery = [heading, context.takeAngle].filter(Boolean).join('\n\n')
+  const mattesQuery = (context.retrievalHint ?? '').trim()
   const retrievalQuery = [heading, context.takeAngle, (item.content || '').slice(0, 4000)]
     .filter(Boolean)
     .join('\n\n')
@@ -408,7 +409,7 @@ export async function writeSection(
   // posts) run in parallel — both are non-fatal and must not serialize latency.
   await Promise.all([
     (async () => {
-      if (!repoParams) return // Repo-Intensität 0 → kein Korpus-Retrieval
+      if (!repoParams || !mattesQuery) return // Repo-Intensität 0 oder kein Hint → kein Korpus-Retrieval
       try {
         const { findRelevantMattesPassages, formatPassagesForPrompt } = await import('@/lib/mattes/retrieval')
         const passages = await findRelevantMattesPassages(mattesQuery, { limit: repoParams.limit, threshold: repoParams.threshold })
@@ -745,6 +746,7 @@ export async function writeSectionsBatch(
       const itemIdx = plan.ordering[i + k]
       const heading = (plan.headings ?? {})[String(itemIdx)] || item.title
       const takeAngle = (plan.takeAngles ?? {})[String(itemIdx)] || undefined
+      const retrievalHint = (plan.retrievalHints ?? {})[String(itemIdx)] || undefined
       const itemCompanies = ctx.companiesPerItem.get(item.id) || { public: [], premarket: [] }
       // Hard per-section timeout: one slow/hung section must not drag the whole
       // batch past the function limit (Job stalled at cursor=0 otherwise).
@@ -754,6 +756,7 @@ export async function writeSectionsBatch(
           cacheableUserPrefix: ctx.cacheableUserPrefix,
           effort,
           takeAngle,
+          retrievalHint,
           repoIntensity,
         }),
         SECTION_WRITE_TIMEOUT_MS,
@@ -891,6 +894,7 @@ export async function* runGhostwriterPipeline(
       const itemIdx = plan.ordering[i]
       const heading = (plan.headings ?? {})[String(itemIdx)] || item.title
       const takeAngle = (plan.takeAngles ?? {})[String(itemIdx)] || undefined
+      const retrievalHint = (plan.retrievalHints ?? {})[String(itemIdx)] || undefined
 
       if (creditExhausted) {
         results[i] = `## ${heading}\n\n*Abgebrochen: AI-Credit-Guthaben aufgebraucht.*\n`
@@ -906,6 +910,7 @@ export async function* runGhostwriterPipeline(
           cacheableUserPrefix,
           effort,
           takeAngle,
+          retrievalHint,
           repoIntensity,
         })
       } catch (err) {
