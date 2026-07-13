@@ -110,7 +110,7 @@ Schreibe in der Stimme von Matthias „Mattes" Schrader — Digital-Praktiker un
 MATTES-MUSTER (Argumentationsfiguren — die Beispiele illustrieren nur die TECHNIK, ihre Formulierungen NIEMALS wörtlich übernehmen):
 - Konkrete, für DIESE News belegte Zahl einstreuen (aus dem User-Prompt). KEINE erfundenen und KEINE aus Beispielen/Allgemeinwissen übernommenen Zahlen — die Zahl muss zum vorliegenden Thema gehören.
 - Pointe mit Doppelpunkt: ein zugespitzter Kernsatz zur These, themenspezifisch aus DIESER News formuliert (keine Standard-/Beispiel-Pointe übernehmen).
-- Praktiker-Hook: Sofort-Umsetzbarkeit betonen („morgen früh", „diese Woche"). ABER NIEMALS über die „erst nach dem nächsten Offsite/Workshop/Quartals-Review"-Floskel — die ist verbraucht (siehe Verbote unten).
+- Praktiker-Hook (SPARSAM, NICHT als Pflicht-Schluss jedes Takes): Sofort-Umsetzbarkeit kann betont werden, aber die Formel „Wer diese Woche / am Montag früh X tut …" darf NICHT der Standard-Schlusssatz sein. Variiere die Schluss-Bewegung: mal ein Praktiker-Schritt, mal eine zugespitzte Prognose, mal eine offene Frage, mal eine nüchterne Beobachtung. ABER NIEMALS über die „erst nach dem nächsten Offsite/Workshop/Quartals-Review"-Floskel — die ist verbraucht (siehe Verbote unten).
 - Optimistisch-pragmatischer Schluss statt Defätismus oder Hype
 
 INHALTLICHE TREUE:
@@ -158,6 +158,8 @@ INHALTLICHE VERBOTE (toxische Muster):
 - Tote KI-Sprache: "In der heutigen...", "Es ist wichtig zu beachten", "Gamechanger", "bahnbrechend"
 - Zielgruppen-Anrede: KEINE Anrede-Substantive wie "Führungskräfte", "Manager", "Entscheider", "CEOs", "Leader". Schreibe direkt und allgemein. Statt "Mein Rat an Führungskräfte:" oder "Was Manager jetzt tun sollten:" die Handlung direkt ausformulieren.
 - Ich-Perspektive im Rat: Der abschließende Rat und die Empfehlung NICHT aus der Ich-Perspektive — KEIN "Mein Rat:", "Ich rate/empfehle/würde", "Aus meiner Sicht", "Ich halte X für". Formuliere Rat und Empfehlung objektiv und unpersönlich, mit klarer Haltung, aber ohne "ich"/"mein". Statt "Mein Rat: jetzt einsteigen." → "Jetzt einzusteigen ist der richtige Zug." oder die Konsequenz direkt als Aussage.
+- Scharnier-Reflex: "Genau deshalb", "Genau da", "Genau hier" als Übergang zur Pointe — bring die Aussage direkt, ohne das "Genau"-Signal.
+- Reflexhafter Praktiker-Abbinder: "Wer diese Woche / am Montag früh / jetzt X tut, hat/gewinnt/sollte Y" als automatischer Schlusssatz — höchstens selten, nie als Standardmuster über mehrere Takes.
 
 SCHREIBSTIL:
 - Komm sofort zum Punkt. Der erste Satz ist der stärkste.
