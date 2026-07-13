@@ -278,11 +278,18 @@ REGELN PRO FELD:
 - excerptBullets: Eigenständige Mini-Headlines, je max 65 Zeichen. Jede soll für sich stehen und neugierig machen.
 - thesis: Der rote Faden. Nicht die offensichtliche Gemeinsamkeit ("alles über KI"), sondern die tiefere Verbindung.
 
+TAKE-WINKEL (gegen Monotonie der Meinung — HÖCHSTE PRIORITÄT):
+Jeder Synthszr Take braucht einen EIGENEN Blickwinkel. Bestimme pro Item einen "takeAngle": EIN kurzer Satz auf DEUTSCH, der vorgibt, aus welcher Perspektive der Take dieses Items argumentiert.
+- HART: Höchstens 1–2 Takes im GANZEN Artikel dürfen die übergreifende thesis direkt tragen. Alle anderen beleuchten je einen ANDEREN Aspekt: der Zweitrundeneffekt, der konkrete Verlierer, eine historische Parallele, die konträre Sicht, die unterschätzte Zahl, die betroffene Gruppe, das operative Detail.
+- Keine zwei Takes dürfen dieselbe Konklusion ziehen.
+- Der Winkel ist spezifisch für DIESES Item aus DIESER News — kein generisches "sei anders", sondern ein konkreter Denk-Ansatz.
+
 Erstelle folgenden JSON-Plan:
 {
   "thesis": "Ein Satz auf DEUTSCH — thematischer Kern als Leitfaden",
   "ordering": [1, 3, 7, 2],
   "headings": {"1": "Pointierte These auf DEUTSCH — kein 'X launcht Y'", "2": "..."},
+  "takeAngles": {"1": "Ein Satz DEUTSCH — der eigene Blickwinkel für den Take dieses Items", "2": "..."},
   "articleTitle": "Witzige, scharfe These auf DEUTSCH — Humor durch Präzision",
   "excerptBullets": ["Max 65 Zeichen, DEUTSCH, pointiert", "...", "..."],
   "category": "AI & Tech",
@@ -292,7 +299,10 @@ Erstelle folgenden JSON-Plan:
   // 16000 statt 6000: ein Plan über bis zu 40 Items (40 Headings als volle
   // deutsche Thesen-Sätze + ordering + bullets) übersteigt 6000 Tokens deutlich
   // und wurde sonst mitten im JSON abgeschnitten.
-  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model, { temperature: 0.3, maxTokens: 16000 })
+  // thinking:true — die Winkel-Zuweisung mit Anti-Redundanz über den ganzen
+  // Digest ist anspruchsvoller als reine Sortierung. temperature entfällt: mit
+  // thinking (und bei Sonnet 5 generell) wird es von callModelNonStreaming ohnehin ignoriert.
+  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model, { thinking: true, maxTokens: 16000 })
 
   // JSON aus möglichen Markdown-Fences extrahieren. Robust auch gegen einen
   // geöffneten, aber nicht geschlossenen ```json-Block (führende Fence strippen,
