@@ -297,8 +297,10 @@ Erstelle folgenden JSON-Plan:
 }`
 
   // maxTokens 32000 (war 16000): Der Plan über bis zu 40 Items enthält jetzt 40
-  // Headings UND 40 takeAngles (je ein voller deutscher Satz), und thinking:true
-  // zieht die Thinking-Tokens aus demselben Budget. Die alten 16000 waren für
+  // Headings UND 40 takeAngles (je ein voller deutscher Satz); bei einem Anthropic-
+  // Planning-Modell (prod: Sonnet 5 via settings.llm_model_config) zieht thinking:true
+  // zusätzlich Thinking-Tokens aus demselben Budget (beim Code-Default gemini-2.5-flash
+  // ist thinking ein No-op, dann geht das volle Budget an die Ausgabe). Die alten 16000 waren für
   // Headings allein OHNE Thinking dimensioniert; mit beiden neuen Kostentreibern
   // gibt 32000 sicheren Puffer. Verifiziert: 40 einzigartige Items → 40/40
   // Headings + 40/40 takeAngles, JSON vollständig geparst (kein Truncation).
