@@ -286,12 +286,17 @@ Jeder Synthszr Take braucht einen EIGENEN Blickwinkel. Bestimme pro Item einen "
 - Keine zwei Takes dürfen dieselbe Konklusion ziehen.
 - Der Winkel ist spezifisch für DIESES Item aus DIESER News — kein generisches "sei anders", sondern ein konkreter Denk-Ansatz.
 
+RETRIEVAL-HINT (Andockpunkt an Mattes' Schriften — separates Feld pro Item, NICHT mit dem Take-Winkel verwechseln):
+Formuliere pro Item einen "retrievalHint": EINE KURZE These, MAX ~20 Wörter, EIN Kernkonzept im Zentrum, in der Denksprache von Mattes/Code Crash. Nutze — NUR WO ES INHALTLICH PASST — seine Konzepte: Intent als knappe Ressource (wenn Bauen billig wird, zählt das Was/Warum), Jevons-Paradoxon (billiger → mehr Verbrauch), Modelle werden Commodity, Burggraben/eingebettetes Domänenwissen, Compute-Disziplin, Outcome statt Aufwand.
+HART: kurz und fokussiert. KEINE verschachtelten Sätze mit mehreren Konzepten (die verfehlen das Retrieval-Ziel). Eine klare These, ein Konzept.
+
 Erstelle folgenden JSON-Plan:
 {
   "thesis": "Ein Satz auf DEUTSCH — thematischer Kern als Leitfaden",
   "ordering": [1, 3, 7, 2],
   "headings": {"1": "Pointierte These auf DEUTSCH — kein 'X launcht Y'", "2": "..."},
   "takeAngles": {"1": "Ein Satz DEUTSCH — der eigene Blickwinkel für den Take dieses Items", "2": "..."},
+  "retrievalHints": {"1": "Kurze konzeptuelle These DEUTSCH, EIN Konzept, max ~20 Wörter", "2": "..."},
   "articleTitle": "Witzige, scharfe These auf DEUTSCH — Humor durch Präzision",
   "excerptBullets": ["Max 65 Zeichen, DEUTSCH, pointiert", "...", "..."],
   "category": "AI & Tech",
