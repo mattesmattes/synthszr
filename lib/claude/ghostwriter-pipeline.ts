@@ -169,19 +169,25 @@ SCHREIBSTIL:
 
 LÄNGE & TIEFE: Schreibe ausführlich und konkret, nicht telegrammartig. Führe ein Argument zu Ende, statt drei nur anzureißen. Keine Verknappung auf Stichworte oder Halbsätze — der Take ist ein durchdachter Absatz, kein Tweet. 5-7 vollständige Sätze, freier Fluss. Der letzte Satz zeigt eine prägnante Haltung, die für sich allein stehen kann.
 
-ÜBERSCHRIFT — INTELLEKTUELLER WORTWITZ (du schreibst sie SELBST, NICHT aus dem Themen-Hinweis übernehmen):
-Die Überschrift ist eine eigene, pointierte deutsche These — scharf gedacht, nicht aufmerksamkeitsheischend. Humor durch Präzision: unerwartet konkrete Details statt Pointen. Doppeldeutigkeiten, die erst beim zweiten Lesen landen. Lakonisches Understatement statt Dramatik. Max ~80 Zeichen.
-SO KLINGT ES RICHTIG (nur die Technik, NIE wörtlich übernehmen):
-- "Wenn der Compiler billiger wird als der Kaffee"
-- "Gemini kann jetzt Code schreiben. Die IDE hat das noch nicht mitbekommen."
-- "Der Praktikant heißt jetzt Claude und macht keine Pause"
-- "OpenAI verkauft Compliance. Anthropic auch. Die Frage ist nur: an wen zuerst"
+ÜBERSCHRIFT — JOURNALISTISCH UND POINTIERT (du schreibst sie SELBST, NICHT aus dem Themen-Hinweis übernehmen):
+Eine echte Artikel-Überschrift auf DEUTSCH. Sie benennt ZUERST die Kernaussage der News — wer tut was, oder was ist passiert — so klar, dass der Leser das Thema allein aus der Überschrift versteht, OHNE den Text zu lesen. Konkret statt kryptisch: Namen, Zahlen und das eigentliche Ereignis gehören hinein. Eine dezente Zuspitzung oder Pointe am Ende ist willkommen, aber NIE auf Kosten der Klarheit. Max ~90 Zeichen.
+SO KLINGT ES RICHTIG (Technik, nicht wörtlich übernehmen — informativ, dann evtl. Pointe):
+- "Anthropic macht Claudes internes Reasoning sichtbar"
+- "Ramp baut ein eigenes KI-Modell, statt weiter dafür zu zahlen"
+- "JPMorgan bewertet seine KI-Infrastruktur mit einer Milliarde"
+- "Cursor erweitert die IDE um Posteingang-Automatisierung"
+- "New York Times: OpenAI hat im Copyright-Prozess systematisch gelogen"
+SO NICHT (zu verschlüsselt — das Thema ist ohne den Text NICHT erkennbar):
+- "Anthropic liest jetzt das Schmierheft in Claudes Kopf"
+- "Neun Etagen KI, und die Mietgrenze verläuft im siebten Stock"
+- "Eine Milliarde, um zu beweisen, dass die Milliarden am Falschen hängen"
 VERBOTEN IN DER ÜBERSCHRIFT:
 - Englische Überschrift (FATALER FEHLER).
-- Reine Nacherzählung ("X launcht Y") oder "Produktname: Erklärung"-Etikett — der Produktname gehört in den Satz, nicht als Label davor.
-- Das reflexhafte "Wenn X, aber Y" / "X kommt, aber Y nicht"-Antithese-Schema als bequemer Default. Nur erlaubt, wenn es eine WIRKLICH überraschende Pointe trägt — nie als LLM-Ausweichmuster.
+- Kryptische Metaphern, bei denen man den Artikel lesen muss, um überhaupt das Thema zu erkennen (siehe SO NICHT). Die Nachricht muss aus der Überschrift selbst hervorgehen.
+- "Produktname: Erklärung"-Etikett (z.B. "Gemini 3.5: Google macht X") — den Produktnamen in den Satz einbauen.
+- Leere Nacherzählung OHNE Substanz ("X launcht Y") — nenne das Ereignis MIT seinem Kern: Grund, Konflikt, konkrete Zahl oder Konsequenz.
 - Generische/tote Sprache ("Spannende Entwicklungen", "KI-Update: Die wichtigsten News").
-- Negations-Reframe ("nicht X, sondern Y") — dieselbe FATAL-Regel wie für den Take (siehe oben).
+- Negations-Reframe ("nicht X, sondern Y") und das reflexhafte "Wenn X, aber Y"-Schema.
 
 OUTPUT-FORMAT — halte dich an diese Reihenfolge:
 1. ÜBERSCHRIFT: "## [Überschrift]" — schreibe sie SELBST nach den ÜBERSCHRIFT-Regeln oben. Übernimm NICHT den Themen-Hinweis aus dem User-Prompt.
