@@ -296,13 +296,16 @@ Erstelle folgenden JSON-Plan:
   "introParagraph": "2-3 Sätze auf DEUTSCH. Direkter Einstieg mit konkreter Beobachtung, kein LLM-Stil."
 }`
 
-  // 16000 statt 6000: ein Plan über bis zu 40 Items (40 Headings als volle
-  // deutsche Thesen-Sätze + ordering + bullets) übersteigt 6000 Tokens deutlich
-  // und wurde sonst mitten im JSON abgeschnitten.
+  // maxTokens 32000 (war 16000): Der Plan über bis zu 40 Items enthält jetzt 40
+  // Headings UND 40 takeAngles (je ein voller deutscher Satz), und thinking:true
+  // zieht die Thinking-Tokens aus demselben Budget. Die alten 16000 waren für
+  // Headings allein OHNE Thinking dimensioniert; mit beiden neuen Kostentreibern
+  // gibt 32000 sicheren Puffer. Verifiziert: 40 einzigartige Items → 40/40
+  // Headings + 40/40 takeAngles, JSON vollständig geparst (kein Truncation).
   // thinking:true — die Winkel-Zuweisung mit Anti-Redundanz über den ganzen
   // Digest ist anspruchsvoller als reine Sortierung. temperature entfällt: mit
   // thinking (und bei Sonnet 5 generell) wird es von callModelNonStreaming ohnehin ignoriert.
-  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model, { thinking: true, maxTokens: 16000 })
+  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model, { thinking: true, maxTokens: 32000 })
 
   // JSON aus möglichen Markdown-Fences extrahieren. Robust auch gegen einen
   // geöffneten, aber nicht geschlossenen ```json-Block (führende Fence strippen,
