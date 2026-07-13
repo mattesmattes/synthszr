@@ -15,6 +15,7 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import { enforceHeadingLength } from '@/lib/claude/heading-length'
+import { enforceTakeEnding } from '@/lib/claude/take-ending'
 import { repoRetrievalParams } from '@/lib/mattes/repo-intensity'
 import {
   getActiveLearnedPatterns,
@@ -113,7 +114,7 @@ Schreibe in der Stimme von Matthias „Mattes" Schrader — Digital-Praktiker un
 MATTES-MUSTER (Argumentationsfiguren — die Beispiele illustrieren nur die TECHNIK, ihre Formulierungen NIEMALS wörtlich übernehmen):
 - Konkrete, für DIESE News belegte Zahl einstreuen (aus dem User-Prompt). KEINE erfundenen und KEINE aus Beispielen/Allgemeinwissen übernommenen Zahlen — die Zahl muss zum vorliegenden Thema gehören.
 - Pointe mit Doppelpunkt: ein zugespitzter Kernsatz zur These, themenspezifisch aus DIESER News formuliert (keine Standard-/Beispiel-Pointe übernehmen).
-- Praktiker-Hook (SPARSAM, NICHT als Pflicht-Schluss jedes Takes): Sofort-Umsetzbarkeit kann betont werden, aber die Formel „Wer diese Woche / am Montag früh X tut …" darf NICHT der Standard-Schlusssatz sein. Variiere die Schluss-Bewegung: mal ein Praktiker-Schritt, mal eine zugespitzte Prognose, mal eine offene Frage, mal eine nüchterne Beobachtung. ABER NIEMALS über die „erst nach dem nächsten Offsite/Workshop/Quartals-Review"-Floskel — die ist verbraucht (siehe Verbote unten).
+- Praktiker-Hook (SPARSAM, NICHT als Pflicht-Schluss jedes Takes): Sofort-Umsetzbarkeit kann betont werden, aber NIE als „Wer …"-Schlusssatz (absolutes Verbot, siehe unten). Variiere die Schluss-Bewegung: mal ein Praktiker-Schritt, mal eine zugespitzte Prognose, mal eine offene Frage, mal eine nüchterne Beobachtung. ABER NIEMALS über die „erst nach dem nächsten Offsite/Workshop/Quartals-Review"-Floskel — die ist verbraucht (siehe Verbote unten).
 - Optimistisch-pragmatischer Schluss statt Defätismus oder Hype
 
 INHALTLICHE TREUE:
@@ -149,7 +150,7 @@ oder, wenn die Pointe ein Sarkasmus ist:
 > "Sie nennen es Venture Capital. Es ist vertikale Integration durch die Hintertür."
 
 SELF-CHECK VOR ABGABE:
-Lies deinen Take laut durch. Steht irgendwo "kein", "nicht", "vergiss", "weniger" als Auftakt zu einer Korrektur des nächsten Halbsatzes? Wenn ja: streichen, Y direkt positiv hinschreiben oder als zweiten Satz mit klarem Statement.
+Lies deinen Take laut durch. Steht irgendwo "kein", "nicht", "vergiss", "weniger" als Auftakt zu einer Korrektur des nächsten Halbsatzes? Wenn ja: streichen, Y direkt positiv hinschreiben oder als zweiten Satz mit klarem Statement. Und: Beginnt der letzte oder vorletzte Satz mit "Wer"? Wenn ja: umbauen — die Konsequenz als direkte Aussage formulieren (siehe Verbote unten).
 
 INHALTLICHE VERBOTE (toxische Muster):
 - Einstieg mit Bewertung: "Das ist wichtig/bedeutend/bemerkenswert/spannend"
@@ -162,7 +163,7 @@ INHALTLICHE VERBOTE (toxische Muster):
 - Zielgruppen-Anrede: KEINE Anrede-Substantive wie "Führungskräfte", "Manager", "Entscheider", "CEOs", "Leader". Schreibe direkt und allgemein. Statt "Mein Rat an Führungskräfte:" oder "Was Manager jetzt tun sollten:" die Handlung direkt ausformulieren.
 - Ich-Perspektive im Rat: Der abschließende Rat und die Empfehlung NICHT aus der Ich-Perspektive — KEIN "Mein Rat:", "Ich rate/empfehle/würde", "Aus meiner Sicht", "Ich halte X für". Formuliere Rat und Empfehlung objektiv und unpersönlich, mit klarer Haltung, aber ohne "ich"/"mein". Statt "Mein Rat: jetzt einsteigen." → "Jetzt einzusteigen ist der richtige Zug." oder die Konsequenz direkt als Aussage.
 - Scharnier-Reflex: "Genau deshalb", "Genau da", "Genau hier" als Übergang zur Pointe — bring die Aussage direkt, ohne das "Genau"-Signal.
-- Reflexhafter Praktiker-Abbinder: "Wer diese Woche / am Montag früh / jetzt X tut, hat/gewinnt/sollte Y" als automatischer Schlusssatz — höchstens selten, nie als Standardmuster über mehrere Takes.
+- "Wer …"-Schlussfigur — FATAL, KEINE EINZIGE ERLAUBT: Der letzte und der vorletzte Satz des Takes dürfen NICHT mit "Wer" beginnen. Die Konditional-Belehrung "Wer (jetzt/heute/noch) X tut/glaubt/hält/plant/baut, sollte/kann/verliert/gewinnt Y" ist als Schluss in JEDER Variante verboten ("Wer jetzt noch …", "Wer heute noch …", "Wer sein X für Y hält, …"). Sie war der Schlusssatz von über der Hälfte aller Takes und ist verbraucht. Du siehst die anderen Takes dieses Artikels nicht — darum gilt das Verbot absolut, nicht "sparsam". Ersatz-Bewegungen für den Schluss: die Konsequenz als schlichte Aussage ("Die Marge wandert zur Infrastruktur."), eine konkrete Prognose mit Zahl oder Frist, eine nüchterne Beobachtung, eine offene Frage, eine direkte Handlungsansage ohne "Wer"-Rahmen.
 
 SCHREIBSTIL:
 - Komm sofort zum Punkt. Der erste Satz ist der stärkste.
@@ -481,7 +482,20 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   // statt sie als eigenen Absatz stehen zu lassen.
   trimmed = joinCompanyTagToSummary(trimmed)
 
+  // "Wer …"-Schlussfigur deterministisch durchsetzen: Das FATAL-Verbot im
+  // Prompt allein ließ die Figur in 2 von 4 Test-Takes durch (2026-07-13).
+  // Analog zu enforceHeadingLength: nur angestoßen, wenn der Regex anschlägt.
+  trimmed = await enforceTakeEnding(trimmed, (take) => rewriteWerEnding(take, model))
+
   return trimmed
+}
+
+// Formt den Schluss eines Takes um, dessen letzter/vorletzter Satz mit der
+// verbrauchten "Wer X, Y"-Belehrung beginnt. Kleiner Call ohne Thinking —
+// läuft nur für die Takes, die das Prompt-Verbot gerissen haben.
+async function rewriteWerEnding(take: string, model: AIModel): Promise<string> {
+  const system = `Du überarbeitest den Schluss eines deutschen Kommentar-Absatzes. Sein letzter oder vorletzter Satz beginnt mit "Wer" — eine verbrauchte Belehr-Formel ("Wer X tut/glaubt/hält, sollte/verliert/gewinnt Y"). Forme NUR diesen einen Satz um: dieselbe Aussage als direkte Feststellung ohne "Wer"-Rahmen. Beispiel: aus "Wer heute noch auf reine Modelle setzt, verliert die Marge." wird "Die Marge liegt ab jetzt neben dem Modell, nicht darin." Alle anderen Sätze bleiben WÖRTLICH unverändert. Die letzten beiden Sätze dürfen danach NICHT mit "Wer" beginnen. Gib NUR den vollständigen überarbeiteten Absatz zurück — ohne Anführungszeichen, ohne "Synthszr Take:"-Präfix, ohne Erklärung.`
+  return callModelNonStreaming(take, system, model, { thinking: false, maxTokens: 2000 })
 }
 
 // Kürzt eine überlange Abschnitts-Überschrift auf ≤90 Zeichen, ohne die
@@ -978,11 +992,12 @@ AI-TELLS UMSCHREIBEN (nur diese, minimal-invasiv, Aussage erhalten — NICHT den
 4. Em-Dashes (— oder –) als Satzteiler → Punkt, Komma, Doppelpunkt, Semikolon oder Klammer.
 5. Hohler Schluss-Aphorismus: ein letzter Satz, der wie ein tiefsinniges Motto klingt, aber nichts Konkretes sagt (z.B. "Die Resilienz einer Lieferkette misst man am schwächsten Molekül"). → Durch eine konkrete Aussage mit Fakt oder Konsequenz ersetzen, oder streichen, falls der vorletzte Satz stärker schließt.
 6. Rule-of-three-Aufzählungen und leere Verstärker-Adverbien ("exakt", "buchstäblich", "letztendlich", "tatsächlich") straffen, wenn sie nichts hinzufügen.
+7. "Wer …"-Schlussfigur in Synthszr Takes: Beginnt der letzte oder vorletzte Satz eines Takes mit "Wer" ("Wer jetzt noch …", "Wer heute …", "Wer sein X für Y hält, …", "Wer X baut/plant, sollte …"), forme ihn in eine direkte Aussage um — die Konsequenz als Statement ohne "Wer"-Rahmen (aus "Wer heute noch auf X setzt, verliert Y" wird "X kostet ab jetzt Y."). Diese Belehr-Formel stand in über der Hälfte aller Takes am Schluss; pro Artikel darf sie höchstens EINMAL überleben, und nur wenn die Umformung die Aussage verfälschen würde.
 
 NICHT VERÄNDERN:
-7. Englische Fachbegriffe (Token, Reasoning, API, Fine-Tuning, Open Source, Benchmark, Model, Inference, Training) NICHT eindeutschen. Firmen-, Produkt- und Eigennamen unverändert lassen.
-8. Markdown-Formatierung (##, **, {Company}, →, Synthszr Take:) unverändert lassen.
-9. Ansonsten Stil, Ton, Argument und Inhalt LASSEN — greife nur die oben gelisteten Tells an.
+8. Englische Fachbegriffe (Token, Reasoning, API, Fine-Tuning, Open Source, Benchmark, Model, Inference, Training) NICHT eindeutschen. Firmen-, Produkt- und Eigennamen unverändert lassen.
+9. Markdown-Formatierung (##, **, {Company}, →, Synthszr Take:) unverändert lassen.
+10. Ansonsten Stil, Ton, Argument und Inhalt LASSEN — greife nur die oben gelisteten Tells an.
 
 Gib NUR den korrigierten Text zurück, keine Erklärungen oder Kommentare.`
 
