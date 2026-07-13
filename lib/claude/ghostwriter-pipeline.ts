@@ -14,6 +14,7 @@ import OpenAI from 'openai'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
+import { enforceHeadingLength } from '@/lib/claude/heading-length'
 import {
   getActiveLearnedPatterns,
   findSimilarEditExamples,
@@ -191,7 +192,18 @@ VERBOTEN IN DER ÜBERSCHRIFT:
 
 OUTPUT-FORMAT — halte dich an diese Reihenfolge:
 1. ÜBERSCHRIFT: "## [Überschrift]" — schreibe sie SELBST nach den ÜBERSCHRIFT-Regeln oben. Übernimm NICHT den Themen-Hinweis aus dem User-Prompt.
-2. NEWS-ZUSAMMENFASSUNG: 5-7 Sätze Fließtext (keine Bullet Points). Führe die wichtigsten Fakten, Zahlen und Namen aus, statt sie nur zu streifen.
+2. NEWS-ZUSAMMENFASSUNG — NÜCHTERNER BERICHT, KEINE MEINUNG:
+5-7 Sätze Fließtext (keine Bullet Points). Das ist der REFERIERENDE Teil: Er gibt die Nachricht wieder, er bewertet sie NICHT. Jede Wertung, Zuspitzung, Pointe und Haltung gehört AUSSCHLIESSLICH in den Synthszr Take darunter, niemals in die Zusammenfassung. Die Mattes-Stilmittel (Diagnose, Doppelpunkt-Pointe, Praktiker-Hook) sind Take-Werkzeug, nicht Bericht-Werkzeug.
+- EIN Thema. Nimm die EINE Kernnachricht der Quelle und führe sie aus. Weitere Nebenschauplätze aus derselben Quelle NICHT anhängen: lieber eine Sache vollständig als drei angerissen.
+- Nachrichtenkern ZUERST. Der erste Satz benennt, wer was tut oder was passiert ist. Kein Einstieg über Termindetails, Vorgeschichte oder eine These.
+- Quelle sauber attribuieren ("laut The Information", "berichtet The Verge"). Was eine Quelle behauptet, als Behauptung kennzeichnen, nicht als gesicherte Tatsache.
+- Fakten, Zahlen, Namen konkret ausführen (die bestehende Stärke, beibehalten).
+- KEINE Erzähler-Wertung: kein "Auffällig:", "bemerkenswert", "der eigentliche Wettbewerb", "X wird zur Ware". Solche Sätze sind Kommentar und gehören in den Take.
+SO NICHT (Bericht driftet in Kommentar):
+> "Die Modelle werden zur austauschbaren Ware, und die Woche liefert den Beleg gleich mit ..." (These statt Nachricht)
+> "Damit ist der Wettbewerb in der täglichen Toolchain angekommen ..." (Interpretation statt Fakt)
+SO JA (nüchtern, Kern zuerst, attribuiert):
+> "Cloudflare stellt AI-Crawlern künftig für jeden Abruf eine Rechnung, statt ihnen wie bisher gratis Zugriff über die robots.txt zu geben."
 3. COMPANY TAGGING + QUELLE: Direkt nach Zusammenfassung (VOR Synthszr Take) genau eine Zeile:
    FORMAT: {Company1} {Company2} → [Quellenname](URL)
    BEISPIEL: {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
@@ -419,11 +431,28 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
     trimmed = `## ${heading}\n\n${trimmed}`
   }
 
+  // Längen-Durchsetzung: Die ~90-Zeichen-Regel im Prompt ist weich; gelegentlich
+  // rutscht eine überlange Überschrift durch. Deterministisch angestoßen (nur wenn
+  // zu lang) kürzt Opus sie hier nach, ohne den Fließtext anzufassen. Non-fatal.
+  trimmed = await enforceHeadingLength(trimmed, (h) => shortenHeadingViaModel(h, model))
+
   // Company-Tag/Quelle-Zeile an den letzten Absatz der Zusammenfassung anhängen
   // statt sie als eigenen Absatz stehen zu lassen.
   trimmed = joinCompanyTagToSummary(trimmed)
 
   return trimmed
+}
+
+// Kürzt eine überlange Abschnitts-Überschrift auf ≤90 Zeichen, ohne die
+// journalistische Kernaussage zu verlieren. Kleiner, schneller Call (kein
+// Thinking, knappes Token-Budget) — läuft nur für die wenigen Überschriften,
+// die die weiche Prompt-Grenze reißen. Gibt nur die reine Überschrift zurück.
+async function shortenHeadingViaModel(heading: string, model: AIModel): Promise<string> {
+  const system = `Du kürzt deutsche Artikel-Überschriften auf MAXIMAL 90 Zeichen, ohne die journalistische Kernaussage zu verlieren. Die Überschrift muss weiterhin konkret benennen, wer was tut (Namen und tragende Zahlen bleiben). Packt sie zwei Themen, behalte das wichtigste. Kein Negations-Reframe ("nicht X, sondern Y"), keine kryptischen Metaphern, kein "Produktname: Erklärung"-Etikett. Gib NUR die gekürzte Überschrift zurück — kein Markdown, keine Anführungszeichen, keine Erklärung.`
+  return callModelNonStreaming(`Kürze diese Überschrift auf höchstens 90 Zeichen:\n${heading}`, system, model, {
+    thinking: false,
+    maxTokens: 200,
+  })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
