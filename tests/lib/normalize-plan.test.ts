@@ -125,4 +125,26 @@ describe('normalizeArticlePlan', () => {
     const out = normalizeArticlePlan(plan as any, 1)
     expect(out.takeAngles).toEqual({})
   })
+
+  it('übernimmt ein wohlgeformtes retrievalHints-Objekt', () => {
+    const plan = {
+      ordering: [1, 2],
+      headings: { '1': 'A', '2': 'B' },
+      retrievalHints: { '1': 'AI-Modell-Vergleich', '2': 'Regulatorische Auswirkungen' },
+    }
+    const out = normalizeArticlePlan(plan as any, 2)
+    expect(out.retrievalHints).toEqual({ '1': 'AI-Modell-Vergleich', '2': 'Regulatorische Auswirkungen' })
+  })
+
+  it('liefert leeres retrievalHints, wenn das Feld fehlt', () => {
+    const plan = { ordering: [1, 2], headings: { '1': 'A', '2': 'B' } }
+    const out = normalizeArticlePlan(plan as any, 2)
+    expect(out.retrievalHints).toEqual({})
+  })
+
+  it('liefert leeres retrievalHints, wenn das Feld gedriftet (Array) ist', () => {
+    const plan = { ordering: [1], headings: { '1': 'A' }, retrievalHints: ['x'] }
+    const out = normalizeArticlePlan(plan as any, 1)
+    expect(out.retrievalHints).toEqual({})
+  })
 })

@@ -59,6 +59,7 @@ function makePlan(n: number): ArticlePlan {
     ordering: Array.from({ length: n }, (_, i) => i + 1),
     headings: Object.fromEntries(Array.from({ length: n }, (_, i) => [String(i + 1), `Heading ${i + 1}`])),
     takeAngles: {},
+    retrievalHints: {},
     articleTitle: 'Title',
     excerptBullets: ['a', 'b', 'c'],
     category: 'AI & Tech',

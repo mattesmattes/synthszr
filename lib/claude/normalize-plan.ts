@@ -32,6 +32,12 @@ export function normalizeArticlePlan(plan: ArticlePlan, itemCount: number): Arti
       ? { ...(plan.takeAngles as Record<string, string>) }
       : {}
 
+  // Ensure retrievalHints is always a plain object (never undefined, never an array).
+  const retrievalHints: Record<string, string> =
+    plan?.retrievalHints && typeof plan.retrievalHints === 'object' && !Array.isArray(plan.retrievalHints)
+      ? { ...(plan.retrievalHints as Record<string, string>) }
+      : {}
+
   const ordering: number[] = []
   const seen = new Set<number>()
 
@@ -65,5 +71,5 @@ export function normalizeArticlePlan(plan: ArticlePlan, itemCount: number): Arti
     }
   }
 
-  return { ...plan, ordering, headings, takeAngles }
+  return { ...plan, ordering, headings, takeAngles, retrievalHints }
 }
