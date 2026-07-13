@@ -394,9 +394,10 @@ export async function writeSection(
   // the Synthszr Take in the author's voice and argument patterns.
   // Non-fatal: if the RPC fails or the corpus is empty, the prompt
   // generation proceeds without the block.
-  // Mattes-Korpus KONZEPTUELL abfragen (heading + takeAngle, OHNE content): die
-  // lange faktenreiche content-Query drückt die Cosine-Similarity zu den
-  // konzeptuellen Code-Crash-Passagen unter den Threshold (verifiziert 2026-07-13).
+  // Mattes-Korpus mit dem KONZEPTUELLEN retrievalHint abfragen (kurze These in
+  // Code-Crash-Sprache, aus planArticle) — NICHT mit heading/content: lange
+  // faktenreiche Queries drücken die Cosine-Similarity zu den konzeptuellen
+  // Passagen unter den Threshold (verifiziert 2026-07-13: Hint 0.66–0.71, content-Query <0.2).
   // Der History-Retrieval nutzt weiter die VOLLE Query (mit content).
   const repoParams = repoRetrievalParams(context.repoIntensity ?? 0)
   const mattesQuery = (context.retrievalHint ?? '').trim()
