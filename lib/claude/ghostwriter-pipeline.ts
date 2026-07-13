@@ -55,6 +55,7 @@ export interface ArticlePlan {
   thesis: string          // Leitfaden-Satz für den Ghostwriter
   ordering: number[]      // 1-basierte Item-Indizes in optimaler Reihenfolge
   headings: Record<string, string>  // item index → deutsche Überschrift
+  takeAngles: Record<string, string>  // item index → Blickwinkel-Satz für den Take
   articleTitle: string
   excerptBullets: string[]  // genau 3 Einträge
   category: string
@@ -807,6 +808,7 @@ export async function* runGhostwriterPipeline(
       thesis: 'Aktuelle Tech-News und Marktanalyse',
       ordering: items.map((_, i) => i + 1),
       headings: Object.fromEntries(items.map((item, i) => [String(i + 1), item.title])),
+      takeAngles: {},
       articleTitle: 'Tech-Digest',
       excerptBullets: items.slice(0, 3).map(i => i.title.slice(0, 65)),
       category: 'AI & Tech',

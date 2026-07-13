@@ -103,4 +103,26 @@ describe('normalizeArticlePlan', () => {
     expect(out.headings).toBeTypeOf('object')
     expect(out.headings).not.toBeNull()
   })
+
+  it('übernimmt ein wohlgeformtes takeAngles-Objekt', () => {
+    const plan = {
+      ordering: [1, 2],
+      headings: { '1': 'A', '2': 'B' },
+      takeAngles: { '1': 'Zweitrundeneffekt', '2': 'Historische Parallele' },
+    }
+    const out = normalizeArticlePlan(plan as any, 2)
+    expect(out.takeAngles).toEqual({ '1': 'Zweitrundeneffekt', '2': 'Historische Parallele' })
+  })
+
+  it('liefert leeres takeAngles, wenn das Feld fehlt', () => {
+    const plan = { ordering: [1, 2], headings: { '1': 'A', '2': 'B' } }
+    const out = normalizeArticlePlan(plan as any, 2)
+    expect(out.takeAngles).toEqual({})
+  })
+
+  it('liefert leeres takeAngles, wenn das Feld gedriftet (Array) ist', () => {
+    const plan = { ordering: [1], headings: { '1': 'A' }, takeAngles: ['x'] }
+    const out = normalizeArticlePlan(plan as any, 1)
+    expect(out.takeAngles).toEqual({})
+  })
 })

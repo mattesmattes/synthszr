@@ -26,6 +26,12 @@ export function normalizeArticlePlan(plan: ArticlePlan, itemCount: number): Arti
       ? { ...(plan.headings as Record<string, string>) }
       : {}
 
+  // Ensure takeAngles is always a plain object (never undefined, never an array).
+  const takeAngles: Record<string, string> =
+    plan?.takeAngles && typeof plan.takeAngles === 'object' && !Array.isArray(plan.takeAngles)
+      ? { ...(plan.takeAngles as Record<string, string>) }
+      : {}
+
   const ordering: number[] = []
   const seen = new Set<number>()
 
@@ -59,5 +65,5 @@ export function normalizeArticlePlan(plan: ArticlePlan, itemCount: number): Arti
     }
   }
 
-  return { ...plan, ordering, headings }
+  return { ...plan, ordering, headings, takeAngles }
 }
