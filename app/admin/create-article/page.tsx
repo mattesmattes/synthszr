@@ -123,6 +123,7 @@ export default function CreateArticlePage() {
   const [saving, setSaving] = useState(false)
   const [vocabOpen, setVocabOpen] = useState(false)
   const [vocabularyIntensity, setVocabularyIntensity] = useState(50)
+  const [repoIntensity, setRepoIntensity] = useState(40)
   // Manual-editor model tag; the job sets ai_model server-side, so this stays
   // null unless someone hand-edits in the editor (saveAsDraft / EIC button).
   const [usedModel] = useState<string | null>(null)
@@ -303,7 +304,7 @@ export default function CreateArticlePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ useSelected: true, maxItems: maxQueueItems, vocabularyIntensity }),
+        body: JSON.stringify({ useSelected: true, maxItems: maxQueueItems, vocabularyIntensity, repoIntensity }),
       })
       if (!createRes.ok) {
         const err = await createRes.json().catch(() => ({}))
@@ -423,7 +424,7 @@ export default function CreateArticlePage() {
       setPipelineProgress(null)
       alert(error instanceof Error ? error.message : 'Unbekannter Fehler bei der Generierung')
     }
-  }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity, router])
+  }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity, repoIntensity, router])
 
   // Thin wrapper around the shared helper so the rest of this file can
   // keep its existing call signature.
@@ -946,6 +947,52 @@ export default function CreateArticlePage() {
                     : vocabularyIntensity <= 75
                     ? 'Begriffe werden aktiv und bewusst eingebaut.'
                     : 'Maximale Nutzung - jeder Absatz enthält Vokabular.'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Repo Intensity Slider */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Gauge className="h-4 w-4" />
+                Repo-Intensität
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm text-muted-foreground">
+                    {repoIntensity === 0
+                      ? 'Aus'
+                      : repoIntensity <= 25
+                      ? 'Minimal'
+                      : repoIntensity <= 50
+                      ? 'Moderat'
+                      : repoIntensity <= 75
+                      ? 'Aktiv'
+                      : 'Intensiv'}
+                  </Label>
+                  <span className="text-sm font-medium">{repoIntensity}%</span>
+                </div>
+                <Slider
+                  value={[repoIntensity]}
+                  onValueChange={(value) => setRepoIntensity(value[0])}
+                  max={100}
+                  step={5}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {repoIntensity === 0
+                    ? 'Deine Schriften (Code Crash) fließen nicht ein.'
+                    : repoIntensity <= 25
+                    ? 'Ein Argument-Anker aus deinen Schriften pro Abschnitt.'
+                    : repoIntensity <= 50
+                    ? 'Moderater Rückgriff auf deine Schriften (2 Passagen).'
+                    : repoIntensity <= 75
+                    ? 'Deine Argumente werden aktiv eingebaut (3 Passagen).'
+                    : 'Starker Durchschlag deiner Schriften (4 Passagen).'}
                 </p>
               </div>
             </CardContent>

@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
     useSelected: body.useSelected ?? true,
     maxItems: body.maxItems ?? 25,
     vocabularyIntensity: body.vocabularyIntensity ?? 50,
+    repoIntensity: body.repoIntensity ?? 40,
     model,
     effort: body.effort ?? 'high',
   })
