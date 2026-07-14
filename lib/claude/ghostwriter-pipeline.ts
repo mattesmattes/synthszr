@@ -16,6 +16,7 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import { enforceHeadingLength } from '@/lib/claude/heading-length'
 import { enforceTakeEnding } from '@/lib/claude/take-ending'
+import { stripLoneSurrogates } from '@/lib/claude/sanitize'
 import { repoRetrievalParams } from '@/lib/mattes/repo-intensity'
 import {
   getActiveLearnedPatterns,
@@ -225,7 +226,7 @@ export async function planArticle(items: PipelineItem[], model: AIModel): Promis
   const itemList = items
     .map(
       (item, i) =>
-        `${i + 1}. TITEL: ${item.title}\n   QUELLE: ${item.source_display_name || item.source_identifier}\n   INHALT: ${(item.content || '').slice(0, 600).replace(/\n/g, ' ')}`
+        `${i + 1}. TITEL: ${item.title}\n   QUELLE: ${item.source_display_name || item.source_identifier}\n   INHALT: ${stripLoneSurrogates((item.content || '').slice(0, 600)).replace(/\n/g, ' ')}`
     )
     .join('\n\n')
 
@@ -402,7 +403,7 @@ export async function writeSection(
   // Der History-Retrieval nutzt weiter die VOLLE Query (mit content).
   const repoParams = repoRetrievalParams(context.repoIntensity ?? 0)
   const mattesQuery = (context.retrievalHint ?? '').trim()
-  const retrievalQuery = [heading, context.takeAngle, (item.content || '').slice(0, 4000)]
+  const retrievalQuery = [heading, context.takeAngle, stripLoneSurrogates((item.content || '').slice(0, 4000))]
     .filter(Boolean)
     .join('\n\n')
   let mattesBlock = ''
@@ -445,7 +446,7 @@ export async function writeSection(
   const userPrompt = `THEMEN-HINWEIS (nur grobe Orientierung — schreibe deine EIGENE Überschrift nach den ÜBERSCHRIFT-Regeln, übernimm diesen Hinweis NICHT wörtlich): ${heading}${angleBlock}
 
 NEWS-INHALT${sourceName ? ` (Quelle: ${sourceName}` : ''}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''}${sourceName ? ')' : ''}:
-${(item.content || 'Kein Inhalt verfügbar.').slice(0, 6000)}
+${stripLoneSurrogates((item.content || 'Kein Inhalt verfügbar.').slice(0, 6000))}
 
 COMPANY-TAGS:${tagSourcePart ? `
 QUELLFORMAT: → ${tagSourcePart}` : `
