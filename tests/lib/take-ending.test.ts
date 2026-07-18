@@ -1,11 +1,65 @@
 import { describe, expect, it, vi } from 'vitest'
-import { enforceTakeEnding, hasWerEnding } from '@/lib/claude/take-ending'
+import { enforceTakeEnding, hasWerEnding, splitSentences } from '@/lib/claude/take-ending'
 
 const SUMMARY = `## OpenAI senkt die Preise\n\nOpenAI hat die API-Preise um 40 Prozent gesenkt. {OpenAI} → [The Information](https://example.com)`
 
 function section(take: string, marker = 'Synthszr Take:'): string {
   return `${SUMMARY}\n\n${marker} ${take}`
 }
+
+describe('splitSentences (deutsche Abkürzungen & Ordinalzahlen)', () => {
+  it('splittet "z. B." nicht in Fragmente', () => {
+    expect(splitSentences('Das gilt z. B. für Aktien. Auch für Anleihen.')).toEqual([
+      'Das gilt z. B. für Aktien.',
+      'Auch für Anleihen.',
+    ])
+  })
+
+  it('behandelt "d. h." als Satzbestandteil', () => {
+    expect(splitSentences('Der Markt kippt, d. h. die Zinsen steigen. Ende.')).toEqual([
+      'Der Markt kippt, d. h. die Zinsen steigen.',
+      'Ende.',
+    ])
+  })
+
+  it('splittet Größenkürzel wie "Mio." nicht', () => {
+    expect(splitSentences('Der Umsatz stieg auf 500 Mio. Euro. Das ist Rekord.')).toEqual([
+      'Der Umsatz stieg auf 500 Mio. Euro.',
+      'Das ist Rekord.',
+    ])
+  })
+
+  it('splittet Ordinalzahl-Datum wie "15. Januar" nicht', () => {
+    expect(splitSentences('Am 15. Januar meldet Apple. Danach folgt Microsoft.')).toEqual([
+      'Am 15. Januar meldet Apple.',
+      'Danach folgt Microsoft.',
+    ])
+  })
+
+  it('splittet echte Satzenden weiterhin', () => {
+    expect(splitSentences('Satz eins. Satz zwei. Satz drei.')).toEqual([
+      'Satz eins.',
+      'Satz zwei.',
+      'Satz drei.',
+    ])
+  })
+})
+
+describe('hasWerEnding (Regression: unverändert nach splitSentences-Fix)', () => {
+  it('erkennt "Wer …" auch wenn der Take Abkürzungen enthält', () => {
+    const s = section(
+      'Die Preise fallen, d. h. z. B. bei GPUs. Wer jetzt noch selbst trainiert, zahlt drauf.',
+    )
+    expect(hasWerEnding(s)).toBe(true)
+  })
+
+  it('schlägt weiterhin nicht an, wenn "Wer" nur mitten im Take steht (mit Abkürzungen)', () => {
+    const s = section(
+      'Wer die Zahlen liest, ahnt es. Der Umsatz stieg auf 500 Mio. Euro. Die Marge wandert zur Infrastruktur.',
+    )
+    expect(hasWerEnding(s)).toBe(false)
+  })
+})
 
 describe('hasWerEnding', () => {
   it('erkennt die "Wer …"-Figur im letzten Satz des Takes', () => {

@@ -13,6 +13,19 @@
 
 import { splitAtTake, splitSentences, TAKE_MARKER_RE } from './take-ending'
 
+// splitSentences kollabiert Whitespace zu einem Space. Eine führende
+// Markdown-Heading-Zeile ("## …") würde dabei mit dem ersten Satz verschmelzen
+// und das ganze `##`-Heading den Text verschlucken. Wir ziehen die Heading-Zeile
+// deshalb VOR dem Satz-Splitting ab und stellen sie danach wieder voran.
+function splitHeading(text: string): { heading: string; body: string } {
+  const match = text.match(/^\s*(#{1,6}[^\n]*)\n+([\s\S]*)$/)
+  if (match) return { heading: match[1].trim(), body: match[2].trim() }
+  return { heading: '', body: text.trim() }
+}
+
+const withHeading = (heading: string, body: string): string =>
+  heading ? `${heading}\n\n${body}` : body
+
 /** Trennt eine Section in Zusammenfassung (vor dem Marker) und Take (danach). */
 export function splitSummaryAndTake(section: string): { summary: string; take: string } {
   const parts = splitAtTake(section)
@@ -27,33 +40,36 @@ export function splitSummaryAndTake(section: string): { summary: string; take: s
 export function capSummarySentences(section: string, maxSentences: number): string {
   const parts = splitAtTake(section)
   if (!parts) {
-    const sentences = splitSentences(section)
-    return sentences.length <= maxSentences ? section : sentences.slice(0, maxSentences).join(' ')
+    const { heading, body } = splitHeading(section)
+    const sentences = splitSentences(body)
+    if (sentences.length <= maxSentences) return section
+    return withHeading(heading, sentences.slice(0, maxSentences).join(' '))
   }
 
-  const summary = parts.prefix.replace(TAKE_MARKER_RE, '').trim()
-  const sentences = splitSentences(summary)
+  const { heading, body } = splitHeading(parts.prefix.replace(TAKE_MARKER_RE, ''))
+  const sentences = splitSentences(body)
   if (sentences.length <= maxSentences) return section
 
   const marker = parts.prefix.match(TAKE_MARKER_RE)![0]
   const capped = sentences.slice(0, maxSentences).join(' ')
-  return `${capped}\n\n${marker}${parts.take}`
+  return `${withHeading(heading, capped)}\n\n${marker}${parts.take}`
 }
 
 /** Entfernt je den letzten Satz aus Zusammenfassung UND Take. */
 export function shortenByOneSentence(section: string): string {
+  const dropLast = (sentences: string[]): string =>
+    (sentences.length > 1 ? sentences.slice(0, -1) : sentences).join(' ')
+
   const parts = splitAtTake(section)
   if (!parts) {
-    const sentences = splitSentences(section)
-    return sentences.length <= 1 ? section : sentences.slice(0, -1).join(' ')
+    const { heading, body } = splitHeading(section)
+    return withHeading(heading, dropLast(splitSentences(body)))
   }
 
   const marker = parts.prefix.match(TAKE_MARKER_RE)![0]
-  const summarySentences = splitSentences(parts.prefix.replace(TAKE_MARKER_RE, '').trim())
-  const takeSentences = splitSentences(parts.take)
+  const { heading, body } = splitHeading(parts.prefix.replace(TAKE_MARKER_RE, ''))
+  const summary = dropLast(splitSentences(body))
+  const take = dropLast(splitSentences(parts.take))
 
-  const summary = (summarySentences.length > 1 ? summarySentences.slice(0, -1) : summarySentences).join(' ')
-  const take = (takeSentences.length > 1 ? takeSentences.slice(0, -1) : takeSentences).join(' ')
-
-  return `${summary}\n\n${marker} ${take}`
+  return `${withHeading(heading, summary)}\n\n${marker} ${take}`
 }

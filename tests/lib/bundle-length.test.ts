@@ -15,6 +15,14 @@ describe('capSummarySentences', () => {
     const summary = 'Ein Satz. Zwei Sätze.'
     expect(capSummarySentences(S(summary, 'T.'), 18)).toContain('Zwei Sätze.')
   })
+  it('lässt die Heading-Zeile beim getriggerten Cut als eigene Zeile intakt', () => {
+    const summary = Array.from({ length: 22 }, (_, i) => `Satz ${i + 1}.`).join(' ')
+    const out = capSummarySentences(S(summary, 'Take eins. Take zwei.'), 18)
+    expect(out).toMatch(/^## H\n\n/) // Heading bleibt eigene Zeile
+    expect(out).not.toContain('## H Satz 1.') // nicht in den Text gemerged
+    expect(out).toContain('Satz 18.')
+    expect(out).not.toContain('Satz 19.')
+  })
 })
 
 describe('shortenByOneSentence', () => {

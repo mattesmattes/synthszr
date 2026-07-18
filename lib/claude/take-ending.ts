@@ -13,12 +13,38 @@ export const TAKE_MARKER_RE = /\*{0,2}Synthszr Take:\*{0,2}/
 
 const WER_SENTENCE_RE = /^[^\p{L}]*Wer\b/u
 
+// Gängige deutsche Abkürzungen, deren Punkt KEIN Satzende ist. Einzelbuchstaben
+// (z, d, u, o, s) decken "z. B.", "d. h.", "u. a.", "o. ä." etc. ab.
+const SENTENCE_ABBREVIATIONS = [
+  'z', 'd', 'u', 'o', 's', 'ff', 'vgl', 'ca', 'bzw', 'ggf', 'Nr',
+  'Mio', 'Mrd', 'Tsd', 'inkl', 'exkl', 'etc', 'usw', 'sog', 'evtl',
+  'Abs', 'Art', 'Bd', 'Kap', 'Abb', 'Tab', 'Aufl',
+]
+
+const MONTHS =
+  'Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember'
+
+// Platzhalter für einen geschützten Punkt (kein Satzende) — ein Steuerzeichen,
+// das in echtem Text nicht vorkommt.
+const PROTECTED_DOT = '\u0001'
+
+const ABBREV_RE = new RegExp(`\\b(${SENTENCE_ABBREVIATIONS.join('|')})\\.`, 'gi')
+const ORDINAL_MONTH_RE = new RegExp(`(\\d)\\.(?=\\s(?:${MONTHS})\\b)`, 'g')
+// Ein Punkt, dem ein kleingeschriebenes Wort folgt, ist kein Satzende —
+// deutsche Sätze beginnen groß. Deckt u. a. das zweite Kürzel in "z. B. …" ab.
+const DOT_BEFORE_LOWERCASE_RE = /\.(?=\s[a-zäöüß])/g
+
 export function splitSentences(text: string): string[] {
-  return text
+  const protectedText = text
     .replace(/\s+/g, ' ')
     .trim()
+    .replace(ABBREV_RE, `$1${PROTECTED_DOT}`)
+    .replace(ORDINAL_MONTH_RE, `$1${PROTECTED_DOT}`)
+    .replace(DOT_BEFORE_LOWERCASE_RE, PROTECTED_DOT)
+
+  return protectedText
     .split(/(?<=[.!?…])\s+/)
-    .map((s) => s.trim())
+    .map((s) => s.split(PROTECTED_DOT).join('.').trim())
     .filter(Boolean)
 }
 
