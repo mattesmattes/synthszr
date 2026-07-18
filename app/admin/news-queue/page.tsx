@@ -85,6 +85,7 @@ interface QueueItem {
   email_received_at: string | null
   skip_reason: string | null
   via_ranking?: boolean // true when this selected item came from accepting an AI suggestion
+  bundle_type?: 'topic' | 'recap' | null
 }
 
 interface BalancedSelection {
@@ -580,6 +581,33 @@ export default function NewsQueuePage() {
     } catch (error) {
       console.error('Unselect failed:', error)
       alert('Netzwerkfehler beim Zurücksetzen')
+    }
+    setActionLoading(null)
+  }
+
+  // Toggle a bundle tag ("Thema des Tages" / "Nachlese") on a selected item.
+  // Exclusive: clicking the active tag clears it, clicking the other tag switches.
+  const handleBundleType = async (itemId: string, tag: 'topic' | 'recap') => {
+    const current = items.find(item => item.id === itemId)?.bundle_type ?? null
+    const nextValue = current === tag ? null : tag
+    setActionLoading(`bundle-${itemId}`)
+    setItems(prev => prev.map(item => item.id === itemId ? { ...item, bundle_type: nextValue } : item))
+    try {
+      const res = await fetch('/api/admin/news-queue/bundle-type', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: itemId, bundle_type: nextValue })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        // Revert optimistic update on failure
+        setItems(prev => prev.map(item => item.id === itemId ? { ...item, bundle_type: current } : item))
+        alert(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
+      }
+    } catch (error) {
+      console.error('Bundle type update failed:', error)
+      setItems(prev => prev.map(item => item.id === itemId ? { ...item, bundle_type: current } : item))
+      alert('Netzwerkfehler beim Setzen des Tags')
     }
     setActionLoading(null)
   }
@@ -1258,6 +1286,36 @@ export default function NewsQueuePage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
+                              {statusFilter === 'selected' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleBundleType(item.id, 'topic')}
+                                    disabled={actionLoading === `bundle-${item.id}`}
+                                    title="Thema des Tages"
+                                    className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap transition-colors ${
+                                      item.bundle_type === 'topic'
+                                        ? 'bg-lime-400 text-black border-lime-500'
+                                        : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-lime-500 hover:text-lime-600'
+                                    }`}
+                                  >
+                                    Thema des Tages
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleBundleType(item.id, 'recap')}
+                                    disabled={actionLoading === `bundle-${item.id}`}
+                                    title="Nachlese"
+                                    className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap transition-colors ${
+                                      item.bundle_type === 'recap'
+                                        ? 'bg-cyan-400 text-black border-cyan-500'
+                                        : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-cyan-500 hover:text-cyan-600'
+                                    }`}
+                                  >
+                                    Nachlese
+                                  </button>
+                                </>
+                              )}
                               <Badge
                                 variant="outline"
                                 className="text-[10px] px-1.5 py-0 h-[18px] font-mono font-bold border-0"
