@@ -505,6 +505,7 @@ export default async function PostPage({ params }: PageProps) {
               postId={post.id}
               queueItemIds={post.pending_queue_item_ids || undefined}
               originalContent={post.originalContent}
+              locale={locale}
             />
           </div>
         </article>

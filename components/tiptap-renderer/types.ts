@@ -11,6 +11,9 @@ export interface TiptapRendererProps {
   /** ID des server-gerenderten statischen Fallback-DIVs (PostContentView);
    *  wird nach Editor-Init aus dem DOM entfernt, sonst stünde der Artikel doppelt da. */
   ssrFallbackId?: string
+  /** Route-Locale für sprachabhängige Bündel-Labels ("Thema des Tages" / "Nachlese").
+   *  Default 'de' für Aufrufer ohne Locale-Kontext (z.B. Admin-Vorschau). */
+  locale?: string
 }
 
 export interface SynthszrRatingLinkProps {

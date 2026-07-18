@@ -10,6 +10,7 @@ import { isAutolinkStopword } from '@/lib/rankings/product-exclusions'
 import { sanitizeUrl } from '@/lib/utils/url-sanitizer'
 import { PODCAST_APPLE, PODCAST_SPOTIFY } from '@/lib/podcast/platform-links'
 import { applyDateToHeadline } from '@/lib/tip-promos/headline'
+import { bundleLabel, type BundleType } from '@/lib/i18n/bundle-labels'
 
 export interface TiptapNode {
   type: string
@@ -800,7 +801,7 @@ export async function generateEmailContentWithVotes(
       }
     }
 
-    let baseHtml = convertNodeToHtml(node)
+    let baseHtml = convertNodeToHtml(node, locale ?? 'de')
 
     // Produkt-Links in den Absatztext injizieren (statt Company-Links)
     if (node.type === 'paragraph' && chartProducts.length > 0) {
@@ -1165,7 +1166,7 @@ function applyMarks(text: string, marks?: Array<{ type: string; attrs?: Record<s
 /**
  * Convert a single TipTap node to HTML
  */
-function convertNodeToHtml(node: TiptapNode): string {
+function convertNodeToHtml(node: TiptapNode, locale: string = 'de'): string {
   switch (node.type) {
     case 'paragraph': {
       const textContent = extractTextFromNode(node)
@@ -1198,7 +1199,14 @@ function convertNodeToHtml(node: TiptapNode): string {
         headingHtml = `${favicon}<a href="${srcUrl}" style="color: inherit; text-decoration: none;">${headingHtml}</a>`
       }
 
-      return `<h${level} style="font-size: ${fontSize}; margin: 16px 0 8px 0;">${headingHtml}</h${level}>`
+      // Bundle-Label ("Thema des Tages" / "Nachlese") — vom Assembly (Task 5/7)
+      // als bundleType-Attribut auf das Abschnitts-H2 geschrieben.
+      const bundleType = node.attrs?.bundleType as string | undefined
+      const badgeHtml = (bundleType === 'topic' || bundleType === 'recap')
+        ? `<div style="display:inline-block;background:#000;color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin:0 0 6px 0;">${escapeHtml(bundleLabel(bundleType as BundleType, locale))}</div><br/>`
+        : ''
+
+      return `${badgeHtml}<h${level} style="font-size: ${fontSize}; margin: 16px 0 8px 0;">${headingHtml}</h${level}>`
     }
     case 'bulletList':
       return `<ul>${node.content?.map(li => `<li>${renderContent(li.content?.[0]?.content)}</li>`).join('')}</ul>`
@@ -1216,9 +1224,9 @@ function convertNodeToHtml(node: TiptapNode): string {
 /**
  * Convert TipTap document to HTML (sync version)
  */
-export function convertTiptapToHtml(doc: TiptapDoc): string {
+export function convertTiptapToHtml(doc: TiptapDoc, locale: string = 'de'): string {
   if (!doc.content) return ''
-  return doc.content.map(convertNodeToHtml).join('\n')
+  return doc.content.map(node => convertNodeToHtml(node, locale)).join('\n')
 }
 
 /**

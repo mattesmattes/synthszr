@@ -18,6 +18,7 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies
 import { processMattesSyntheseText } from "@/lib/tiptap/dom-processors/synthese-text"
 import { injectProductLinks, appendProductVoteBlock, type ProductLinkData } from "@/lib/tiptap/dom-processors/product-links"
 import { processNewsHeadings } from "@/lib/tiptap/dom-processors/news-headings"
+import { processBundleLabels } from "@/lib/tiptap/dom-processors/bundle-label"
 import { hideExplicitCompanyTags } from "@/lib/tiptap/dom-processors/company-tags"
 import { sanitizeAllLinks } from "@/lib/tiptap/dom-processors/link-sanitizer"
 import { insertTipPromoSlot } from "@/lib/tiptap/dom-processors/tip-promo-slot"
@@ -33,7 +34,7 @@ import { ArticleThumbnailPortal } from "./article-thumbnail"
 import type { TiptapRendererProps, PublicPortal, PremarketPortal } from "./types"
 import type { ArticleThumbnail, ThumbnailPortal } from "@/lib/tiptap/dom-processors/news-headings"
 
-export function TiptapRenderer({ content, postId, queueItemIds, originalContent, ssrFallbackId }: TiptapRendererProps) {
+export function TiptapRenderer({ content, postId, queueItemIds, originalContent, ssrFallbackId, locale = 'de' }: TiptapRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const searchParams = useSearchParams()
   const [ratingPortals, setRatingPortals] = useState<PublicPortal[]>([])
@@ -227,6 +228,12 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
       // 1. Sanitize all outbound link hrefs
       sanitizeAllLinks(container)
 
+      // 1b. Bundle labels ("Thema des Tages" / "Nachlese") — MUST run before
+      // processNewsHeadings, which derives its own thumbnail idempotency from
+      // h2.previousElementSibling; inserting the badge afterwards would sit
+      // between the thumbnail and the heading and break that check.
+      processBundleLabels(container, locale)
+
       // 2. Process news headings (adds favicons, removes source links, inserts thumbnails)
       const newThumbnailPortals = processNewsHeadings(container, articleThumbnails, queueItemIds)
       if (newThumbnailPortals.length > 0) {
@@ -260,7 +267,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
     }
 
     processContent()
-  }, [editorReady, content, articleThumbnails, queueItemIds, originalContent, handleRefreshNeeded, productLinks])
+  }, [editorReady, content, articleThumbnails, queueItemIds, originalContent, handleRefreshNeeded, productLinks, locale])
 
   if (!editor) {
     return null

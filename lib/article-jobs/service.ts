@@ -261,6 +261,13 @@ export async function markJobError(id: string, message: string): Promise<void> {
  * with marked, parse it with a jsdom DOM + prosemirror's DOMParser, using the
  * SAME extension schema (via getSchema) as markdownToTiptap. getSchema and
  * prosemirror DOMParser don't touch `window`, so this works in the cron.
+ *
+ * Marker handling mirrors markdownToTiptap (lib/utils/markdown-to-tiptap.ts):
+ * `<!-- data-bundle-type:X -->` on a heading line is stripped before marked()
+ * runs (HTML comments don't survive DOM parsing) and re-applied as a
+ * `bundleType` attr on the matching heading node afterwards — reusing the
+ * same extract/apply helpers since both paths produce an equivalent TipTap
+ * JSON tree, just via different parsers.
  */
 async function markdownToTiptapServer(markdown: string): Promise<Record<string, unknown>> {
   const { marked } = await import('marked')
@@ -271,15 +278,19 @@ async function markdownToTiptapServer(markdown: string): Promise<Record<string, 
   const { HeadingWithQueueId } = await import('@/lib/tiptap/heading-with-queue-id')
   const { normalizeQuotes } = await import('@/lib/utils/typography')
   const { JSDOM } = await import('jsdom')
+  const { extractBundleMarkers, applyBundleMarkers } = await import('@/lib/utils/markdown-to-tiptap')
 
-  const html = marked.parse(normalizeQuotes(markdown, 'de'), { async: false }) as string
+  const { cleaned, markers } = extractBundleMarkers(normalizeQuotes(markdown, 'de'))
+  const html = marked.parse(cleaned, { async: false }) as string
   const schema = getSchema([
     StarterKit.configure({ heading: false }),
     HeadingWithQueueId.configure({ levels: [1, 2, 3, 4, 5, 6] }),
     Link.configure({ openOnClick: false }),
   ])
   const dom = new JSDOM(`<body>${html}</body>`)
-  return PMDOMParser.fromSchema(schema).parse(dom.window.document.body).toJSON() as Record<string, unknown>
+  const json = PMDOMParser.fromSchema(schema).parse(dom.window.document.body).toJSON() as Record<string, unknown>
+  applyBundleMarkers(json, markers)
+  return json
 }
 
 /**
