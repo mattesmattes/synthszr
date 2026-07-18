@@ -16,7 +16,7 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import { enforceHeadingLength } from '@/lib/claude/heading-length'
 import { enforceTakeEnding, TAKE_MARKER_RE } from '@/lib/claude/take-ending'
-import { capSummarySentences } from '@/lib/claude/bundle-length'
+import { capSummarySentences, shortenByOneSentence } from '@/lib/claude/bundle-length'
 import { stripLoneSurrogates } from '@/lib/claude/sanitize'
 import { repoRetrievalParams } from '@/lib/mattes/repo-intensity'
 import {
@@ -94,6 +94,17 @@ export function enforceBundleOrdering(
   const bundled = new Set([...groups.topic, ...groups.recap])
   const normal = ordering.filter((idx) => !bundled.has(idx))
   return [...groups.topic, ...groups.recap, ...normal]
+}
+
+/**
+ * True wenn mindestens ein Bündel-Item existiert (topic oder recap). Steuert die
+ * Kompensation: bei aktiven Bündeln wird jeder NORMALE Abschnitt (nicht die
+ * Bündel-Section) um genau einen Satz gekürzt (Zusammenfassung + Take), damit der
+ * Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird — siehe
+ * writeSectionsBatch / runGhostwriterPipeline.
+ */
+export function hasBundles(groups: { topic: number[]; recap: number[] }): boolean {
+  return groups.topic.length + groups.recap.length > 0
 }
 
 export type PipelineEvent =
@@ -1155,6 +1166,12 @@ export async function writeSectionsBatch(
         section = await withTimeout(proofreadText(section, proofreadModel), SECTION_PROOFREAD_TIMEOUT_MS, section)
           .catch(() => section)
       }
+      // Kompensation: bei aktiven Bündeln wird jeder NORMALE Abschnitt (nicht die
+      // Bündel-Section selbst) um genau einen Satz gekürzt (Zusammenfassung + Take),
+      // damit der Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird.
+      if (unit.kind === 'single' && hasBundles(plan.bundleGroups ?? { topic: [], recap: [] })) {
+        section = shortenByOneSentence(section)
+      }
       return section
     }))
     out.push(...results.map(r => r + '\n\n'))
@@ -1293,6 +1310,12 @@ export async function* runGhostwriterPipeline(
 
       try {
         results[i] = await writeUnit(unit, model, companiesPerItem, { cacheableUserPrefix, effort, repoIntensity })
+        // Kompensation: bei aktiven Bündeln wird jeder NORMALE Abschnitt (nicht die
+        // Bündel-Section selbst) um genau einen Satz gekürzt (Zusammenfassung + Take),
+        // damit der Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird.
+        if (unit.kind === 'single' && hasBundles(plan.bundleGroups ?? { topic: [], recap: [] })) {
+          results[i] = shortenByOneSentence(results[i]!)
+        }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
         console.error(`[Pipeline] writeSection ${i + 1} failed:`, errMsg)
