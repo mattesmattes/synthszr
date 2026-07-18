@@ -6,6 +6,8 @@ import {
   pickPrimaryAndSecondarySources,
   buildBundleWriteUnits,
   extractBundleTagLine,
+  ensureBundleMarker,
+  reinjectBundleMarkers,
 } from '@/lib/claude/ghostwriter-pipeline'
 
 describe('pickPrimaryAndSecondarySources', () => {
@@ -77,5 +79,38 @@ describe('extractBundleTagLine', () => {
     expect(tags).toEqual(['{Google}'])
     expect(rest).not.toContain('The Verge') // ganze Quellen-Zeile entfernt
     expect(rest).toContain('Prosa.')
+  })
+})
+
+describe('ensureBundleMarker', () => {
+  it('injiziert die Markierung, wenn sie fehlt (z.B. vom Proofread entfernt)', () => {
+    const section = '## Thema des Tages\n\nInhalt.'
+    const out = ensureBundleMarker(section, 'topic')
+    expect(out).toBe('## Thema des Tages <!-- data-bundle-type:topic -->\n\nInhalt.')
+  })
+
+  it('lässt eine bereits vorhandene Markierung unverändert (idempotent)', () => {
+    const section = '## Thema des Tages <!-- data-bundle-type:topic -->\n\nInhalt.'
+    expect(ensureBundleMarker(section, 'topic')).toBe(section)
+  })
+})
+
+describe('reinjectBundleMarkers (Whole-Text-Proofread-Backstop)', () => {
+  it('setzt die Markierung auf den ersten N Headings wieder ein (Ordinal-Match, Bündel stehen immer zuerst)', () => {
+    const fullText = [
+      '## Thema des Tages\n\nInhalt eins.',
+      '## Nachlese\n\nInhalt zwei.',
+      '## Normale Section\n\nInhalt drei.',
+    ].join('\n\n')
+    const out = reinjectBundleMarkers(fullText, [{ bundleType: 'topic' }, { bundleType: 'recap' }])
+    expect(out).toContain('## Thema des Tages <!-- data-bundle-type:topic -->')
+    expect(out).toContain('## Nachlese <!-- data-bundle-type:recap -->')
+    expect(out).not.toContain('## Normale Section <!-- data-bundle-type') // Einzel-Section bleibt unangetastet
+  })
+
+  it('lässt bereits vorhandene Markierungen unverändert und ist ein No-Op ohne Bündel-Units', () => {
+    const withMarker = '## Thema des Tages <!-- data-bundle-type:topic -->\n\nInhalt.'
+    expect(reinjectBundleMarkers(withMarker, [{ bundleType: 'topic' }])).toBe(withMarker)
+    expect(reinjectBundleMarkers(withMarker, [])).toBe(withMarker)
   })
 })

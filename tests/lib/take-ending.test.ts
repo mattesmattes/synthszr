@@ -82,6 +82,20 @@ describe('hasWerEnding', () => {
   it('ignoriert Sections ohne Take-Marker', () => {
     expect(hasWerEnding(SUMMARY)).toBe(false)
   })
+
+  it('verschmilzt "…auf diese Art." NICHT mit dem folgenden Satz (Regression: "Art" war fälschlich als Abkürzung gelistet)', () => {
+    // "Art" ist ein normales, satzendendes Wort ("...auf diese Art."), keine
+    // Abkürzung — vorher landete es case-insensitiv in ABBREV_RE und
+    // verschluckte den Punkt, wodurch der folgende "Wer …"-Satz mit dem
+    // vorherigen zu einem einzigen Satz verschmolz und hasWerEnding ihn
+    // übersah.
+    expect(splitSentences('Man löst das nicht auf diese Art. Wer jetzt X tut, verliert.')).toEqual([
+      'Man löst das nicht auf diese Art.',
+      'Wer jetzt X tut, verliert.',
+    ])
+    const s = section('Man löst das nicht auf diese Art. Wer jetzt X tut, verliert.')
+    expect(hasWerEnding(s)).toBe(true)
+  })
 })
 
 describe('enforceTakeEnding', () => {

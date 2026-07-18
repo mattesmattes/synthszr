@@ -16,7 +16,7 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import { enforceHeadingLength } from '@/lib/claude/heading-length'
 import { enforceTakeEnding, TAKE_MARKER_RE } from '@/lib/claude/take-ending'
-import { capSummarySentences, shortenByOneSentence } from '@/lib/claude/bundle-length'
+import { capSummarySentences, shortenByOneSentence, BUNDLE_TAG_LINE_RE } from '@/lib/claude/bundle-length'
 import { stripLoneSurrogates } from '@/lib/claude/sanitize'
 import { repoRetrievalParams } from '@/lib/mattes/repo-intensity'
 import {
@@ -630,11 +630,12 @@ function bundleSourceLink(item: PipelineItem): string | null {
   return name || null
 }
 
-// Ein Absatz, der AUSSCHLIESSLICH aus {Company}-Tags besteht — optional gefolgt
-// von einer Quellen-Pfeil-Zeile "→ [Name](URL)", falls das Modell die (trotz
-// Anweisung) doch mitliefert. Ein Prosa-Absatz mit eingebettetem Tag matcht NICHT
-// (nach den Tags stünde dort Prosa, kein `$`).
-const BUNDLE_TAG_LINE_RE = /^\s*(?:\{[^}\n]+\}\s*)+(?:→\s*\[[^\]\n]*\]\([^)\n]*\)\s*)?$/
+// BUNDLE_TAG_LINE_RE: ein Absatz, der AUSSCHLIESSLICH aus {Company}-Tags besteht
+// — optional gefolgt von einer Quellen-Pfeil-Zeile "→ [Name](URL)", falls das
+// Modell die (trotz Anweisung) doch mitliefert. Ein Prosa-Absatz mit
+// eingebettetem Tag matcht NICHT (nach den Tags stünde dort Prosa, kein `$`).
+// In bundle-length.ts definiert (shortenByOneSentence braucht dieselbe
+// Erkennung) und von dort importiert, statt hier dupliziert zu werden.
 
 // Extrahiert die vom Modell erzeugte {Company}-Tag-Zeile aus der Zusammenfassung
 // und entfernt sie. So zählt der spätere 18-Satz-Cap NUR den Bericht-Fließtext,
@@ -688,14 +689,49 @@ function insertBeforeTake(section: string, block: string): string {
   return `${before}\n\n${block}\n\n${rest}`
 }
 
-// Schreibt die strukturelle data-bundle-type-Markierung in die H2-Zeile. Der
-// HTML-Kommentar bleibt im gerenderten Output unsichtbar, überlebt splitHeading
-// (`#{1,6}[^\n]*`) und die startsWith('##')-Prüfung; die Assembly (Task 7) liest
-// ihn aus und schreibt daraus das TipTap-Heading-Attribut `data-bundle-type`.
-function injectBundleMarker(section: string, bundleType: 'topic' | 'recap'): string {
+// Schreibt die strukturelle data-bundle-type-Markierung in die H2-Zeile, falls
+// sie fehlt (Idempotent: eine bereits vorhandene Markierung bleibt unangetastet).
+// Der HTML-Kommentar bleibt im gerenderten Output unsichtbar, überlebt
+// splitHeading (`#{1,6}[^\n]*`) und die startsWith('##')-Prüfung; die Assembly
+// (Task 7) liest ihn aus und schreibt daraus das TipTap-Heading-Attribut
+// `data-bundle-type`. Zweifach genutzt: einmal deterministisch direkt nach der
+// Generierung (writeBundleSection), einmal als Backstop NACH dem Proofread —
+// PROOFREADING_PROMPT Regel 9 bittet das Modell, den Kommentar zu erhalten,
+// das ist aber nur eine Prompt-Bitte, keine Code-Garantie (analog zu
+// reapplyBundleTypeAttrs in lib/i18n/translation-service.ts für die
+// Übersetzung).
+export function ensureBundleMarker(section: string, bundleType: 'topic' | 'recap'): string {
   return section.replace(/^(\s*#{1,6}[^\n]*)/, (line) =>
     line.includes('data-bundle-type') ? line : `${line} <!-- data-bundle-type:${bundleType} -->`,
   )
+}
+
+// Backstop für den Whole-Text-Proofread in runGhostwriterPipeline (im Gegensatz
+// zum Per-Section-Proofread in writeSectionsBatch gibt es dort keine einzelne
+// `section`-Variable mehr, auf die ensureBundleMarker direkt angewendet werden
+// könnte). buildBundleWriteUnits ordnet Bündel-Units IMMER zuerst ein (topic,
+// dann recap, vor allen Einzel-Sections — siehe dortiger Kommentar), und
+// `results`/`fullText` werden in exakt dieser Unit-Reihenfolge zusammengesetzt.
+// Der proofreadete Volltext wird deshalb an den `## `-Heading-Grenzen in
+// Chunks zerlegt und positionsgenau (Ordinal) den ersten `bundleUnits.length`
+// Chunks zugeordnet — dieselbe Ordinal-Matching-Idiomatik wie
+// reapplyBundleTypeAttrs (translation-service.ts) und applyBundleMarkers
+// (markdown-to-tiptap.ts).
+export function reinjectBundleMarkers(
+  fullText: string,
+  bundleUnits: Array<{ bundleType: 'topic' | 'recap' }>,
+): string {
+  if (bundleUnits.length === 0) return fullText
+  const chunks = fullText.split(/(?=^## )/m)
+  let bundleIdx = 0
+  return chunks
+    .map((chunk) => {
+      if (bundleIdx < bundleUnits.length && /^## /.test(chunk)) {
+        return ensureBundleMarker(chunk, bundleUnits[bundleIdx++].bundleType)
+      }
+      return chunk
+    })
+    .join('')
 }
 
 export async function writeBundleSection(
@@ -805,7 +841,7 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   // "Wer …"-Schlussfigur deterministisch durchsetzen (wie writeSection).
   withSources = await enforceTakeEnding(withSources, (take) => rewriteWerEnding(take, model))
 
-  return injectBundleMarker(withSources, bundleType)
+  return ensureBundleMarker(withSources, bundleType)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1172,6 +1208,12 @@ export async function writeSectionsBatch(
         section = await withTimeout(proofreadText(section, proofreadModel), SECTION_PROOFREAD_TIMEOUT_MS, section)
           .catch(() => section)
       }
+      // Deterministischer Backstop: falls der Proofread den data-bundle-type-
+      // Kommentar entgegen PROOFREADING_PROMPT Regel 9 doch entfernt hat,
+      // hier erzwungen wieder einsetzen (idempotent, no-op wenn er noch da ist).
+      if (unit.kind === 'bundle') {
+        section = ensureBundleMarker(section, unit.bundleType)
+      }
       // Kompensation: bei aktiven Bündeln wird jeder NORMALE Abschnitt (nicht die
       // Bündel-Section selbst) um genau einen Satz gekürzt (Zusammenfassung + Take),
       // damit der Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird.
@@ -1369,7 +1411,14 @@ export async function* runGhostwriterPipeline(
   try {
     const proofreadingModel = await getModelForUseCase('proofreading') as AIModel
     console.log(`[Pipeline] Proofreading model: ${proofreadingModel}`)
-    const corrected = await proofreadText(fullText, proofreadingModel)
+    let corrected = await proofreadText(fullText, proofreadingModel)
+    // Deterministischer Backstop (wie im writeSectionsBatch-Pfad oben): dieser
+    // Proofread läuft als EIN Whole-Text-Call statt pro Section, kann den
+    // data-bundle-type-Kommentar also ebenso verlieren.
+    const bundleUnits = units.filter(
+      (u): u is Extract<BundleWriteUnit, { kind: 'bundle' }> => u.kind === 'bundle',
+    )
+    if (bundleUnits.length > 0) corrected = reinjectBundleMarkers(corrected, bundleUnits)
     yield { type: 'proofread', text: corrected }
   } catch (err) {
     console.error('[Pipeline] Proofreading failed:', err)

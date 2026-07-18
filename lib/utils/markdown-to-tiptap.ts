@@ -16,7 +16,7 @@ const BUNDLE_MARKER_RE = /\s*<!--\s*data-bundle-type:(topic|recap)\s*-->\s*$/
 
 /**
  * Scans markdown for `<!-- data-bundle-type:topic|recap -->` markers appended
- * to H1-H6 heading lines (written by writeBundleSection/injectBundleMarker in
+ * to H1-H6 heading lines (written by writeBundleSection/ensureBundleMarker in
  * ghostwriter-pipeline.ts), strips them from the visible heading text, and
  * records which heading (by 0-based ordinal among all headings) carried which
  * bundleType. The ordinal is later matched against the heading nodes produced

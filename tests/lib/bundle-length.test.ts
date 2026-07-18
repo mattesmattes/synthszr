@@ -31,4 +31,18 @@ describe('shortenByOneSentence', () => {
     expect(out).toContain('A. B.'); expect(out).not.toMatch(/\bC\.\B/)
     expect(out).toContain('X.'); expect(out).not.toContain('Y.')
   })
+
+  it('droppt einen echten Satz statt der Company-Tag-/Quellen-Zeile (joinCompanyTagToSummary-Fall)', () => {
+    // So sieht eine NORMALE Section aus, NACHDEM joinCompanyTagToSummary die
+    // Tag-/Quellen-Zeile an den letzten Satz angehängt hat. splitSentences
+    // isoliert diese Zeile als letztes "Satz"-Element (Punkt vor "{" ist ein
+    // Satzende) — dropLast darf sie NICHT löschen, sonst verschwinden
+    // {Company}-Vote-Direktiven + Quelle aus jedem normalen Artikel.
+    const summary = 'Erster Satz. Zweiter Satz. Letzter echter Satz. {Anthropic} {OpenAI} → [Quelle](https://example.com)'
+    const out = shortenByOneSentence(S(summary, 'X. Y.'))
+    expect(out).toContain('{Anthropic} {OpenAI} → [Quelle](https://example.com)') // Attribution überlebt
+    expect(out).toContain('Erster Satz.')
+    expect(out).toContain('Zweiter Satz.')
+    expect(out).not.toContain('Letzter echter Satz.') // ein ECHTER Satz wurde gekürzt
+  })
 })

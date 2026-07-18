@@ -18,7 +18,7 @@ const WER_SENTENCE_RE = /^[^\p{L}]*Wer\b/u
 const SENTENCE_ABBREVIATIONS = [
   'z', 'd', 'u', 'o', 's', 'ff', 'vgl', 'ca', 'bzw', 'ggf', 'Nr',
   'Mio', 'Mrd', 'Tsd', 'inkl', 'exkl', 'etc', 'usw', 'sog', 'evtl',
-  'Abs', 'Art', 'Bd', 'Kap', 'Abb', 'Tab', 'Aufl',
+  'Abs', 'Bd', 'Kap', 'Abb', 'Aufl',
 ]
 
 const MONTHS =
@@ -28,7 +28,7 @@ const MONTHS =
 // das in echtem Text nicht vorkommt.
 const PROTECTED_DOT = '\u0001'
 
-const ABBREV_RE = new RegExp(`\\b(${SENTENCE_ABBREVIATIONS.join('|')})\\.`, 'gi')
+const ABBREV_RE = new RegExp(`\\b(${SENTENCE_ABBREVIATIONS.join('|')})\\.`, 'g')
 const ORDINAL_MONTH_RE = new RegExp(`(\\d)\\.(?=\\s(?:${MONTHS})\\b)`, 'g')
 // Ein Punkt, dem ein kleingeschriebenes Wort folgt, ist kein Satzende —
 // deutsche Sätze beginnen groß. Deckt u. a. das zweite Kürzel in "z. B. …" ab.
