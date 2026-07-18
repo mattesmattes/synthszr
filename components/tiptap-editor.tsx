@@ -156,6 +156,57 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
         >
           <Heading2 className="h-4 w-4" />
         </Button>
+        {/* Bündel-Tags: nur bei aktivem H2. Setzen das bundleType-Attribut direkt
+            am Heading-Node (überlebt Reorder + Headline-Edit, robust). */}
+        {editor.isActive("heading", { level: 2 }) && (
+          <>
+            <div className="mx-1 w-px bg-border" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              title="Als 'Thema des Tages' markieren (Bündel)"
+              onClick={() =>
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("heading", {
+                    bundleType: editor.getAttributes("heading").bundleType === "topic" ? null : "topic",
+                  })
+                  .run()
+              }
+              className={cn(
+                "h-7 px-2 text-[11px]",
+                editor.getAttributes("heading").bundleType === "topic" &&
+                  "bg-lime-100 text-lime-800 hover:bg-lime-200 dark:bg-lime-900/30 dark:text-lime-300",
+              )}
+            >
+              Thema des Tages
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              title="Als 'Nachlese' markieren (Bündel)"
+              onClick={() =>
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("heading", {
+                    bundleType: editor.getAttributes("heading").bundleType === "recap" ? null : "recap",
+                  })
+                  .run()
+              }
+              className={cn(
+                "h-7 px-2 text-[11px]",
+                editor.getAttributes("heading").bundleType === "recap" &&
+                  "bg-cyan-100 text-cyan-800 hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300",
+              )}
+            >
+              Nachlese
+            </Button>
+          </>
+        )}
         <div className="mx-1 w-px bg-border" />
         <Button
           type="button"

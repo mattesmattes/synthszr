@@ -239,6 +239,32 @@
   margin-bottom: 0.5rem;
 }
 
+/* Bündel-Marker (Thema des Tages / Nachlese) im Editor sichtbar machen:
+   ein kleines Badge vor der H2, gespeist aus dem data-bundle-type-Attribut
+   (gesetzt durch die Toolbar-Toggles bzw. die markdown→TipTap-Konvertierung). */
+.ProseMirror h2[data-bundle-type]::before {
+  display: inline-block;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+.ProseMirror h2[data-bundle-type="topic"]::before {
+  content: "Thema des Tages";
+  background: #d9f99d;
+  color: #3f6212;
+}
+.ProseMirror h2[data-bundle-type="recap"]::before {
+  content: "Nachlese";
+  background: #cffafe;
+  color: #155e75;
+}
+
 
 .ProseMirror ul,
 .ProseMirror ol {
