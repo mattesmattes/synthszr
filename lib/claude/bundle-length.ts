@@ -44,23 +44,48 @@ export function splitSummaryAndTake(section: string): { summary: string; take: s
   }
 }
 
+/** Zerlegt einen Body an Leerzeilen in Absätze (leere gefiltert). */
+function splitParagraphs(body: string): string[] {
+  return body.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
+}
+
+/** Gesamtzahl der Sätze über alle Absätze. */
+function countBodySentences(body: string): number {
+  return splitParagraphs(body).reduce((n, p) => n + splitSentences(p).length, 0)
+}
+
+// Cappt den Body auf maxSentences GESAMT (über alle Absätze gezählt), erhält
+// dabei aber die Absatzgrenzen: innerhalb eines Absatzes werden die Sätze mit
+// ' ' verbunden, zwischen Absätzen bleibt die Leerzeile. So bleibt ein
+// gegliederter Bündel-Leitartikel auch nach dem Cap in Absätzen lesbar. Ein
+// Absatz, der das verbleibende Budget überschreitet, wird mittendrin
+// geschnitten; alle weiteren Absätze entfallen.
+function capBody(body: string, maxSentences: number): string {
+  const kept: string[] = []
+  let budget = maxSentences
+  for (const para of splitParagraphs(body)) {
+    if (budget <= 0) break
+    const take = splitSentences(para).slice(0, budget)
+    kept.push(take.join(' '))
+    budget -= take.length
+  }
+  return kept.join('\n\n')
+}
+
 /** Kürzt NUR die Zusammenfassung auf ≤ maxSentences Sätze; der Take bleibt vollständig. */
 export function capSummarySentences(section: string, maxSentences: number): string {
   const parts = splitAtTake(section)
   if (!parts) {
     const { heading, body } = splitHeading(section)
-    const sentences = splitSentences(body)
-    if (sentences.length <= maxSentences) return section
-    return withHeading(heading, sentences.slice(0, maxSentences).join(' '))
+    if (countBodySentences(body) <= maxSentences) return section
+    return withHeading(heading, capBody(body, maxSentences))
   }
 
   const { heading, body } = splitHeading(parts.prefix.replace(TAKE_MARKER_RE, ''))
-  const sentences = splitSentences(body)
-  if (sentences.length <= maxSentences) return section
+  if (countBodySentences(body) <= maxSentences) return section
 
   const marker = parts.prefix.match(TAKE_MARKER_RE)![0]
-  const capped = sentences.slice(0, maxSentences).join(' ')
-  return `${withHeading(heading, capped)}\n\n${marker}${parts.take}`
+  return `${withHeading(heading, capBody(body, maxSentences))}\n\n${marker}${parts.take}`
 }
 
 /** Entfernt je die letzten `count` Sätze aus Zusammenfassung UND Take (Default 1). */

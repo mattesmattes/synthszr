@@ -585,6 +585,7 @@ const BUNDLE_SYSTEM_ADDENDUM = `
 BÜNDEL-MODUS (überschreibt die EIN-Thema-Regel oben):
 - Dieser Abschnitt ist ein ausführlicher Leitartikel, der MEHRERE Quellen zusammenfasst. Anders als bei einer Einzelmeldung führst du hier ALLE Quellen redundanzfrei zusammen: decke JEDEN unterschiedlichen Aspekt ab, wiederhole Redundantes NICHT.
 - Die Zusammenfassung darf ausführlicher sein (bis zu ~25 Sätze), bleibt aber ein NÜCHTERNER Bericht ohne Wertung. Jede Wertung gehört in den Synthszr Take.
+- Gliedere diese längere Zusammenfassung in MEHRERE Absätze, getrennt durch eine Leerzeile: pro thematischem Block bzw. Aspekt/Quelle ein eigener Absatz (Richtwert 3-6 Sätze je Absatz). KEIN einziger Textblock über viele Sätze — der Leitartikel muss durch Absätze gegliedert und lesbar sein. Nur die Zusammenfassung wird so gegliedert; der Synthszr Take bleibt EIN Absatz.
 - Der Synthszr Take bleibt NORMALE Länge (5-7 Sätze) und wächst NICHT durch die Bündelung. Genau EIN gebündelter Take mit EINEM Blickwinkel, nicht mehrere aneinandergereihte Takes.
 - Company-Tags wie gewohnt (max 3 relevanteste über alle Quellen), ABER gib KEINE Quellen-Pfeil-Zeile aus (kein "→ [Quelle](URL)"): die Quellenangaben (Haupt- und Nebenquellen) werden deterministisch nach der Generierung ergänzt.`
 
@@ -1445,7 +1446,7 @@ AI-TELLS UMSCHREIBEN (nur diese, minimal-invasiv, Aussage erhalten — NICHT den
 
 NICHT VERÄNDERN:
 8. Englische Fachbegriffe (Token, Reasoning, API, Fine-Tuning, Open Source, Benchmark, Model, Inference, Training) NICHT eindeutschen. Firmen-, Produkt- und Eigennamen unverändert lassen.
-9. Markdown-Formatierung (##, **, {Company}, →, Synthszr Take:) unverändert lassen. HTML-Kommentare — insbesondere "<!-- data-bundle-type:topic -->" bzw. "<!-- data-bundle-type:recap -->" in einer Überschriftszeile — WÖRTLICH und an exakt derselben Stelle belassen: niemals löschen, verschieben, umbrechen oder verändern. Sie tragen ein strukturelles Signal und dürfen nicht verloren gehen.
+9. Markdown-Formatierung (##, **, {Company}, →, Synthszr Take:) unverändert lassen. Auch die Absatzstruktur — die Leerzeilen zwischen Absätzen — WÖRTLICH belassen: mehrere Absätze NICHT zu einem Block zusammenziehen und keine neuen Absätze einfügen. HTML-Kommentare — insbesondere "<!-- data-bundle-type:topic -->" bzw. "<!-- data-bundle-type:recap -->" in einer Überschriftszeile — WÖRTLICH und an exakt derselben Stelle belassen: niemals löschen, verschieben, umbrechen oder verändern. Sie tragen ein strukturelles Signal und dürfen nicht verloren gehen.
 10. Ansonsten Stil, Ton, Argument und Inhalt LASSEN — greife nur die oben gelisteten Tells an.
 
 Gib NUR den korrigierten Text zurück, keine Erklärungen oder Kommentare.`

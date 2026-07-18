@@ -23,6 +23,23 @@ describe('capSummarySentences', () => {
     expect(out).toContain('Satz 18.')
     expect(out).not.toContain('Satz 19.')
   })
+
+  it('bewahrt Absatzgrenzen in der Zusammenfassung, wenn unter dem Cap', () => {
+    const summary = 'A1. A2.\n\nB1. B2.'
+    const out = capSummarySentences(S(summary, 'T.'), 25)
+    expect(out).toContain('A2.\n\nB1.') // Leerzeile zwischen den Absätzen bleibt
+  })
+
+  it('bewahrt Absatzgrenzen beim Cappen (global über alle Absätze gezählt)', () => {
+    // 3 Absätze à 5 Sätze = 15 Sätze; Cap 10 → Absatz 1+2 vollständig, Absatz 3 weg.
+    const p1 = Array.from({ length: 5 }, (_, i) => `A${i + 1}.`).join(' ')
+    const p2 = Array.from({ length: 5 }, (_, i) => `B${i + 1}.`).join(' ')
+    const p3 = Array.from({ length: 5 }, (_, i) => `C${i + 1}.`).join(' ')
+    const out = capSummarySentences(S(`${p1}\n\n${p2}\n\n${p3}`, 'T.'), 10)
+    expect(out).toContain('A5.\n\nB1.') // Absatzgrenze zwischen A und B erhalten
+    expect(out).toContain('B5.')
+    expect(out).not.toContain('C1.') // über dem Cap → geschnitten
+  })
 })
 
 describe('shortenBySentences', () => {
