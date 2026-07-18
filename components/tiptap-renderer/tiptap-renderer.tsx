@@ -228,14 +228,15 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
       // 1. Sanitize all outbound link hrefs
       sanitizeAllLinks(container)
 
-      // 1b. Bundle labels ("Thema des Tages" / "Nachlese") — MUST run before
-      // processNewsHeadings, which derives its own thumbnail idempotency from
-      // h2.previousElementSibling; inserting the badge afterwards would sit
-      // between the thumbnail and the heading and break that check.
-      processBundleLabels(container, locale)
-
-      // 2. Process news headings (adds favicons, removes source links, inserts thumbnails)
+      // 1b. Process news headings first (favicons, source links, thumbnails).
+      // Thumbnail-Idempotenz läuft jetzt über ein dataset-Flag am H2, nicht über
+      // previousElementSibling — deshalb darf das Bündel-Badge (nächster Schritt)
+      // zwischen Thumbnail und Überschrift sitzen.
       const newThumbnailPortals = processNewsHeadings(container, articleThumbnails, queueItemIds)
+
+      // 2. Bundle labels ("Thema des Tages" / "Nachlese") — NACH den Thumbnails,
+      // damit das Badge direkt über der Headline und unter dem Thumbnail landet.
+      processBundleLabels(container, locale)
       if (newThumbnailPortals.length > 0) {
         setThumbnailPortals(newThumbnailPortals)
       }

@@ -49,9 +49,11 @@ export function processNewsHeadings(
     const arrayQueueItemId = queueItemIds?.[articleIndex]
     const expectedQueueItemId = domQueueItemId || arrayQueueItemId
 
-    // THUMBNAIL INSERTION: Check separately from main processing
-    const prevSibling = h2.previousElementSibling
-    const hasThumbnailAlready = prevSibling?.classList.contains('article-thumbnail-container')
+    // THUMBNAIL INSERTION: Check separately from main processing.
+    // Idempotenz über ein dataset-Flag am H2 statt über previousElementSibling —
+    // so darf processBundleLabels sein Badge NACH diesem Prozessor zwischen
+    // Thumbnail und H2 einfügen, ohne die Duplikat-Erkennung zu brechen.
+    const hasThumbnailAlready = h2.dataset.thumbnailInserted === 'true'
     if (!hasThumbnailAlready) {
       const thumbnail = thumbnails.find(t => {
         if (t.generation_status !== 'completed') return false
@@ -71,6 +73,7 @@ export function processNewsHeadings(
         thumbnailContainer.className = 'article-thumbnail-container flex justify-center my-4'
         h2.parentNode?.insertBefore(thumbnailContainer, h2)
         newThumbnailPortals.push({ element: thumbnailContainer, thumbnail, h2Element: h2 as HTMLElement })
+        h2.dataset.thumbnailInserted = 'true'
       }
     }
 

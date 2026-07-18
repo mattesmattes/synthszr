@@ -8,13 +8,13 @@ import { bundleLabel, type BundleType } from '@/lib/i18n/bundle-labels'
 const BUNDLE_LABEL_CLASS = 'bundle-label-badge'
 
 /**
- * Must run BEFORE processNewsHeadings(): that processor inserts a thumbnail
- * container immediately before the H2 and re-derives its own idempotency
- * from `h2.previousElementSibling` on every reprocessing pass. Inserting our
- * badge between the thumbnail and the heading would break that check and
- * cause duplicate thumbnails on re-render — so the badge goes in front of
- * the whole thumbnail block instead, and idempotency is tracked on the
- * heading itself (a dataset flag), not via sibling inspection.
+ * Runs AFTER processNewsHeadings(): the badge is inserted directly before the
+ * H2 — i.e. between the already-inserted thumbnail and the heading — so it
+ * renders directly above the headline and below the thumbnail. That processor
+ * now tracks thumbnail idempotency via a dataset flag on the H2 (not via
+ * previousElementSibling), so the badge sitting between thumbnail and heading
+ * no longer causes duplicate thumbnails on re-render. This processor's own
+ * idempotency is the `bundleLabelProcessed` dataset flag below.
  */
 export function processBundleLabels(container: HTMLElement, locale: string): void {
   const headings = container.querySelectorAll<HTMLElement>('h2[data-bundle-type]')
