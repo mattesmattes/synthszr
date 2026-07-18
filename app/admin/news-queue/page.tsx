@@ -1218,23 +1218,48 @@ export default function NewsQueuePage() {
                               </Button>
                             )}
                             {statusFilter === 'selected' && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-6 text-[10px] px-2 shrink-0 text-muted-foreground hover:text-destructive hover:border-destructive"
-                                onClick={() => handleUnselect(item.id)}
-                                disabled={actionLoading === `unselect-${item.id}`}
-                                title="Zurück zu Pending"
-                              >
-                                {actionLoading === `unselect-${item.id}` ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <>
-                                    <X className="h-3 w-3 mr-1" />
-                                    Remove
-                                  </>
-                                )}
-                              </Button>
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  onClick={() => handleUnselect(item.id)}
+                                  disabled={actionLoading === `unselect-${item.id}`}
+                                  title="Aus Auswahl entfernen"
+                                >
+                                  {actionLoading === `unselect-${item.id}` ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  )}
+                                </Button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleBundleType(item.id, 'topic')}
+                                  disabled={actionLoading === `bundle-${item.id}`}
+                                  title="Thema des Tages"
+                                  className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap shrink-0 transition-colors ${
+                                    item.bundle_type === 'topic'
+                                      ? 'bg-lime-400 text-black border-lime-500'
+                                      : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-lime-500 hover:text-lime-600'
+                                  }`}
+                                >
+                                  Thema des Tages
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleBundleType(item.id, 'recap')}
+                                  disabled={actionLoading === `bundle-${item.id}`}
+                                  title="Nachlese"
+                                  className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap shrink-0 transition-colors ${
+                                    item.bundle_type === 'recap'
+                                      ? 'bg-cyan-400 text-black border-cyan-500'
+                                      : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-cyan-500 hover:text-cyan-600'
+                                  }`}
+                                >
+                                  Nachlese
+                                </button>
+                              </>
                             )}
                             <div
                               className="min-w-0 flex-1 cursor-pointer"
@@ -1286,36 +1311,6 @@ export default function NewsQueuePage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
-                              {statusFilter === 'selected' && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleBundleType(item.id, 'topic')}
-                                    disabled={actionLoading === `bundle-${item.id}`}
-                                    title="Thema des Tages"
-                                    className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap transition-colors ${
-                                      item.bundle_type === 'topic'
-                                        ? 'bg-lime-400 text-black border-lime-500'
-                                        : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-lime-500 hover:text-lime-600'
-                                    }`}
-                                  >
-                                    Thema des Tages
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleBundleType(item.id, 'recap')}
-                                    disabled={actionLoading === `bundle-${item.id}`}
-                                    title="Nachlese"
-                                    className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap transition-colors ${
-                                      item.bundle_type === 'recap'
-                                        ? 'bg-cyan-400 text-black border-cyan-500'
-                                        : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-cyan-500 hover:text-cyan-600'
-                                    }`}
-                                  >
-                                    Nachlese
-                                  </button>
-                                </>
-                              )}
                               <Badge
                                 variant="outline"
                                 className="text-[10px] px-1.5 py-0 h-[18px] font-mono font-bold border-0"
