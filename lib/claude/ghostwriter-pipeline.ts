@@ -619,17 +619,27 @@ function bundleSourceLink(item: PipelineItem): string | null {
   return name || null
 }
 
+// Ein Absatz, der AUSSCHLIESSLICH aus {Company}-Tags besteht — optional gefolgt
+// von einer Quellen-Pfeil-Zeile "→ [Name](URL)", falls das Modell die (trotz
+// Anweisung) doch mitliefert. Ein Prosa-Absatz mit eingebettetem Tag matcht NICHT
+// (nach den Tags stünde dort Prosa, kein `$`).
+const BUNDLE_TAG_LINE_RE = /^\s*(?:\{[^}\n]+\}\s*)+(?:→\s*\[[^\]\n]*\]\([^)\n]*\)\s*)?$/
+
 // Extrahiert die vom Modell erzeugte {Company}-Tag-Zeile aus der Zusammenfassung
 // und entfernt sie. So zählt der spätere 18-Satz-Cap NUR den Bericht-Fließtext,
-// nicht die Tag-/Quellen-Zeile — die deterministisch neu gesetzt wird.
-function extractBundleTagLine(section: string): { tags: string[]; rest: string } {
+// nicht die Tag-/Quellen-Zeile — die deterministisch neu gesetzt wird. Entfernt
+// NUR einen tag-only-Absatz (nie einen Prosa-Absatz mit Inline-Tag) und bevorzugt
+// den LETZTEN Treffer (die Tag-Zeile steht per Format direkt vor dem Take).
+export function extractBundleTagLine(section: string): { tags: string[]; rest: string } {
   const marker = section.match(TAKE_MARKER_RE)
   const summaryEnd = marker && marker.index !== undefined ? marker.index : section.length
   const summary = section.slice(0, summaryEnd)
   const tail = section.slice(summaryEnd) // Marker + Take (oder leer)
   const paras = summary.split(/\n{2,}/)
-  // Die Heading-Zeile ("## …") enthält kein {…}; nur die Tag-Zeile trifft.
-  const idx = paras.findIndex((p) => /\{[^}\n]+\}/.test(p))
+  let idx = -1
+  for (let i = paras.length - 1; i >= 0; i--) {
+    if (BUNDLE_TAG_LINE_RE.test(paras[i])) { idx = i; break }
+  }
   if (idx === -1) return { tags: [], rest: section }
   const tags = (paras[idx].match(/\{[^}\n]+\}/g) ?? []).slice(0, 3)
   paras.splice(idx, 1)
@@ -1353,7 +1363,7 @@ AI-TELLS UMSCHREIBEN (nur diese, minimal-invasiv, Aussage erhalten — NICHT den
 
 NICHT VERÄNDERN:
 8. Englische Fachbegriffe (Token, Reasoning, API, Fine-Tuning, Open Source, Benchmark, Model, Inference, Training) NICHT eindeutschen. Firmen-, Produkt- und Eigennamen unverändert lassen.
-9. Markdown-Formatierung (##, **, {Company}, →, Synthszr Take:) unverändert lassen.
+9. Markdown-Formatierung (##, **, {Company}, →, Synthszr Take:) unverändert lassen. HTML-Kommentare — insbesondere "<!-- data-bundle-type:topic -->" bzw. "<!-- data-bundle-type:recap -->" in einer Überschriftszeile — WÖRTLICH und an exakt derselben Stelle belassen: niemals löschen, verschieben, umbrechen oder verändern. Sie tragen ein strukturelles Signal und dürfen nicht verloren gehen.
 10. Ansonsten Stil, Ton, Argument und Inhalt LASSEN — greife nur die oben gelisteten Tells an.
 
 Gib NUR den korrigierten Text zurück, keine Erklärungen oder Kommentare.`

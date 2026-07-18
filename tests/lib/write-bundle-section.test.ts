@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   pickPrimaryAndSecondarySources,
   buildBundleWriteUnits,
+  extractBundleTagLine,
 } from '@/lib/claude/ghostwriter-pipeline'
 
 describe('pickPrimaryAndSecondarySources', () => {
@@ -47,5 +48,34 @@ describe('buildBundleWriteUnits', () => {
     const plan = { ordering: [1, 2], headings: {}, takeAngles: {}, retrievalHints: {} } as any
     const units = buildBundleWriteUnits(orderedItems, plan)
     expect(units.map((u) => u.kind)).toEqual(['single', 'single'])
+  })
+})
+
+describe('extractBundleTagLine', () => {
+  it('entfernt eine tag-only-Zeile, behält Heading/Prosa/Take', () => {
+    const section = '## H\n\nErster Satz. Zweiter Satz.\n\n{Google} {OpenAI}\n\nSynthszr Take: Take eins.'
+    const { tags, rest } = extractBundleTagLine(section)
+    expect(tags).toEqual(['{Google}', '{OpenAI}'])
+    expect(rest).toContain('## H')
+    expect(rest).toContain('Erster Satz. Zweiter Satz.')
+    expect(rest).toContain('Synthszr Take: Take eins.')
+    expect(rest).not.toContain('{Google}') // Tag-Zeile entfernt
+  })
+
+  it('verschluckt KEINEN Prosa-Absatz mit eingebettetem {Company}-Tag', () => {
+    // Modell emittiert den Tag entgegen der Anweisung inline in der Prosa.
+    const section = '## H\n\n{Google} kündigte an, dass das neue Modell ab sofort verfügbar ist.\n\nSynthszr Take: Take eins.'
+    const { tags, rest } = extractBundleTagLine(section)
+    expect(tags).toEqual([]) // kein tag-only-Absatz → nichts extrahiert
+    expect(rest).toBe(section) // Prosa-Absatz bleibt vollständig erhalten
+    expect(rest).toContain('kündigte an, dass das neue Modell ab sofort verfügbar ist.')
+  })
+
+  it('extrahiert die Tag-Zeile auch mit Quellen-Pfeil (Modell ignoriert Anweisung)', () => {
+    const section = '## H\n\nProsa.\n\n{Google} → [The Verge](https://a.com)\n\nSynthszr Take: T.'
+    const { tags, rest } = extractBundleTagLine(section)
+    expect(tags).toEqual(['{Google}'])
+    expect(rest).not.toContain('The Verge') // ganze Quellen-Zeile entfernt
+    expect(rest).toContain('Prosa.')
   })
 })
