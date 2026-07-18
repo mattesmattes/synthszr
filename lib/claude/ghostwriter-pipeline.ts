@@ -15,7 +15,8 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import { enforceHeadingLength } from '@/lib/claude/heading-length'
-import { enforceTakeEnding } from '@/lib/claude/take-ending'
+import { enforceTakeEnding, TAKE_MARKER_RE } from '@/lib/claude/take-ending'
+import { capSummarySentences } from '@/lib/claude/bundle-length'
 import { stripLoneSurrogates } from '@/lib/claude/sanitize'
 import { repoRetrievalParams } from '@/lib/mattes/repo-intensity'
 import {
@@ -562,6 +563,231 @@ async function shortenHeadingViaModel(heading: string, model: AIModel): Promise<
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Pass 2b: Bundle section — führt N Quellen einer Bündel-Gruppe redundanzfrei
+// zu EINEM Abschnitt zusammen (Thema-des-Tages / Nachlese).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Der Bündel-Modus überschreibt gezielt die EIN-Thema-Regel des Section-Prompts:
+// hier werden mehrere Quellen zusammengeführt, statt eine Meldung zu fokussieren.
+const BUNDLE_SYSTEM_ADDENDUM = `
+
+BÜNDEL-MODUS (überschreibt die EIN-Thema-Regel oben):
+- Dieser Abschnitt ist ein ausführlicher Leitartikel, der MEHRERE Quellen zusammenfasst. Anders als bei einer Einzelmeldung führst du hier ALLE Quellen redundanzfrei zusammen: decke JEDEN unterschiedlichen Aspekt ab, wiederhole Redundantes NICHT.
+- Die Zusammenfassung darf ausführlicher sein (bis zu ~18 Sätze), bleibt aber ein NÜCHTERNER Bericht ohne Wertung. Jede Wertung gehört in den Synthszr Take.
+- Der Synthszr Take bleibt NORMALE Länge (5-7 Sätze) und wächst NICHT durch die Bündelung. Genau EIN gebündelter Take mit EINEM Blickwinkel, nicht mehrere aneinandergereihte Takes.
+- Company-Tags wie gewohnt (max 3 relevanteste über alle Quellen), ABER gib KEINE Quellen-Pfeil-Zeile aus (kein "→ [Quelle](URL)"): die Quellenangaben (Haupt- und Nebenquellen) werden deterministisch nach der Generierung ergänzt.`
+
+const BUNDLE_SYSTEM_PROMPT = SECTION_SYSTEM_PROMPT + BUNDLE_SYSTEM_ADDENDUM
+
+/**
+ * Haupt-Quelle = Quelle mit dem größten übernommenen Inhaltsanteil (primärer
+ * Link); alle übrigen bleiben in Original-Reihenfolge Nebenquellen. Exportiert
+ * für den Task-5-Test und den Quellen-Block von `writeBundleSection`.
+ */
+export function pickPrimaryAndSecondarySources(
+  items: PipelineItem[],
+): { primary: PipelineItem; secondary: PipelineItem[] } {
+  let primaryIdx = 0
+  let maxLen = -1
+  items.forEach((it, i) => {
+    const len = (it.content ?? '').length
+    if (len > maxLen) {
+      maxLen = len
+      primaryIdx = i
+    }
+  })
+  return {
+    primary: items[primaryIdx],
+    secondary: items.filter((_, i) => i !== primaryIdx),
+  }
+}
+
+// Baut den Markdown-Link "[Name](URL)" (oder nur den Namen) einer Quelle —
+// dieselbe Ableitung wie in writeSection (Tracking-Redirects vermeiden,
+// Domain als Fallback-Name).
+function bundleSourceLink(item: PipelineItem): string | null {
+  const rawName = item.source_display_name || item.source_identifier
+  const hasValidName = rawName && rawName !== 'unknown'
+  const name = hasValidName
+    ? rawName
+    : (item.source_url ? domainFromUrl(item.source_url) : null)
+  const rawUrl = item.source_url
+  const url = (rawUrl && !isTrackingRedirectUrl(rawUrl))
+    ? rawUrl
+    : deriveSourceUrl(null, item.source_identifier)
+  if (url && name) return `[${name}](${url})`
+  return name || null
+}
+
+// Extrahiert die vom Modell erzeugte {Company}-Tag-Zeile aus der Zusammenfassung
+// und entfernt sie. So zählt der spätere 18-Satz-Cap NUR den Bericht-Fließtext,
+// nicht die Tag-/Quellen-Zeile — die deterministisch neu gesetzt wird.
+function extractBundleTagLine(section: string): { tags: string[]; rest: string } {
+  const marker = section.match(TAKE_MARKER_RE)
+  const summaryEnd = marker && marker.index !== undefined ? marker.index : section.length
+  const summary = section.slice(0, summaryEnd)
+  const tail = section.slice(summaryEnd) // Marker + Take (oder leer)
+  const paras = summary.split(/\n{2,}/)
+  // Die Heading-Zeile ("## …") enthält kein {…}; nur die Tag-Zeile trifft.
+  const idx = paras.findIndex((p) => /\{[^}\n]+\}/.test(p))
+  if (idx === -1) return { tags: [], rest: section }
+  const tags = (paras[idx].match(/\{[^}\n]+\}/g) ?? []).slice(0, 3)
+  paras.splice(idx, 1)
+  const restSummary = paras.join('\n\n').trimEnd()
+  const rest = tail ? `${restSummary}\n\n${tail.trimStart()}` : restSummary
+  return { tags, rest }
+}
+
+// Deterministischer Quellen-Block: Haupt-Quelle prominent hinter den Tags,
+// Nebenquellen als "Auch: …". Der Renderer (Task 7) labelt das sprachabhängig.
+function buildBundleSourceBlock(
+  tags: string[],
+  primary: PipelineItem,
+  secondary: PipelineItem[],
+): string {
+  const primaryLink = bundleSourceLink(primary)
+  const tagsStr = tags.join(' ')
+  const sourceLine = [tagsStr, primaryLink ? `→ ${primaryLink}` : '']
+    .filter(Boolean)
+    .join(' ')
+  const secLinks = secondary.map(bundleSourceLink).filter(Boolean) as string[]
+  const auch = secLinks.length ? `Auch: ${secLinks.join(', ')}` : ''
+  return [sourceLine, auch].filter(Boolean).join('\n\n')
+}
+
+// Fügt einen Block direkt VOR dem Synthszr-Take-Marker ein (bzw. am Ende, wenn
+// kein Marker existiert). Damit landet der Quellen-Block hinter der (bereits
+// gedeckelten) Zusammenfassung, aber vor dem Take.
+function insertBeforeTake(section: string, block: string): string {
+  if (!block) return section
+  const marker = section.match(TAKE_MARKER_RE)
+  if (!marker || marker.index === undefined) return `${section.trimEnd()}\n\n${block}`
+  const before = section.slice(0, marker.index).trimEnd()
+  const rest = section.slice(marker.index)
+  return `${before}\n\n${block}\n\n${rest}`
+}
+
+// Schreibt die strukturelle data-bundle-type-Markierung in die H2-Zeile. Der
+// HTML-Kommentar bleibt im gerenderten Output unsichtbar, überlebt splitHeading
+// (`#{1,6}[^\n]*`) und die startsWith('##')-Prüfung; die Assembly (Task 7) liest
+// ihn aus und schreibt daraus das TipTap-Heading-Attribut `data-bundle-type`.
+function injectBundleMarker(section: string, bundleType: 'topic' | 'recap'): string {
+  return section.replace(/^(\s*#{1,6}[^\n]*)/, (line) =>
+    line.includes('data-bundle-type') ? line : `${line} <!-- data-bundle-type:${bundleType} -->`,
+  )
+}
+
+export async function writeBundleSection(
+  items: PipelineItem[],
+  bundleType: 'topic' | 'recap',
+  heading: string,
+  model: AIModel,
+  context: {
+    relevantCompanies: { public: string[]; premarket: string[] }
+    cacheableUserPrefix: string
+    effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+    takeAngle?: string
+    retrievalHint?: string
+    repoIntensity?: number
+  },
+): Promise<string> {
+  const { primary, secondary } = pickPrimaryAndSecondarySources(items)
+  const publicCompanyList = context.relevantCompanies.public.join(', ') || '(keine erkannt)'
+  const premarketCompanyList = context.relevantCompanies.premarket.join(', ') || '(keine erkannt)'
+
+  // Quellen-Blöcke fürs Prompt. Haupt-Quelle bekommt mehr Kontext-Budget als die
+  // Nebenquellen. JEDER content-Slice MUSS durch stripLoneSurrogates, sonst macht
+  // ein an der Grenze zerschnittenes Surrogate den Anthropic-Body zu 400-Invalid-JSON.
+  const sourceBlocks: string[] = []
+  const primaryName = primary.source_display_name || primary.source_identifier
+  sourceBlocks.push(
+    `[HAUPTQUELLE] ${primaryName}${primary.source_url ? ` | URL: ${primary.source_url}` : ''}\n${stripLoneSurrogates((primary.content || 'Kein Inhalt verfügbar.').slice(0, 5000))}`,
+  )
+  secondary.forEach((it, i) => {
+    const name = it.source_display_name || it.source_identifier
+    sourceBlocks.push(
+      `[QUELLE ${i + 2}] ${name}${it.source_url ? ` | URL: ${it.source_url}` : ''}\n${stripLoneSurrogates((it.content || 'Kein Inhalt verfügbar.').slice(0, 3000))}`,
+    )
+  })
+
+  // Voice-Grounding (Mattes-Korpus) + historische Callbacks — non-fatal, parallel,
+  // exakt wie in writeSection. mattesQuery nutzt den konzeptuellen retrievalHint.
+  const repoParams = repoRetrievalParams(context.repoIntensity ?? 0)
+  const mattesQuery = (context.retrievalHint ?? '').trim()
+  const retrievalQuery = [heading, context.takeAngle, stripLoneSurrogates((primary.content || '').slice(0, 4000))]
+    .filter(Boolean)
+    .join('\n\n')
+  let mattesBlock = ''
+  let historyBlock = ''
+  await Promise.all([
+    (async () => {
+      if (!repoParams || !mattesQuery) return
+      try {
+        const { findRelevantMattesPassages, formatPassagesForPrompt } = await import('@/lib/mattes/retrieval')
+        const passages = await findRelevantMattesPassages(mattesQuery, { limit: repoParams.limit, threshold: repoParams.threshold })
+        mattesBlock = formatPassagesForPrompt(passages)
+      } catch (err) {
+        console.warn('[Pipeline] Mattes retrieval failed (bundle, continuing):', err)
+      }
+    })(),
+    (async () => {
+      try {
+        const { findRelevantPastPosts, formatPastPostsForPrompt } = await import('@/lib/posts/historical-retrieval')
+        const past = await findRelevantPastPosts(retrievalQuery, { limit: 3 })
+        historyBlock = formatPastPostsForPrompt(past)
+      } catch (err) {
+        console.warn('[Pipeline] History retrieval failed (bundle, continuing):', err)
+      }
+    })(),
+  ])
+
+  const angleBlock = context.takeAngle
+    ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung): ${context.takeAngle}`
+    : ''
+  const bundleLabel = bundleType === 'topic' ? 'Thema des Tages' : 'Nachlese'
+
+  const userPrompt = `BÜNDEL-LEITARTIKEL — ${bundleLabel}: Führe die folgenden ${items.length} Quellen zu EINEM zusammenhängenden Abschnitt zusammen (redundanzfrei, alle unterschiedlichen Aspekte abdecken, Redundantes NICHT wiederholen).
+
+THEMEN-HINWEIS (nur grobe Orientierung — schreibe deine EIGENE Überschrift nach den ÜBERSCHRIFT-Regeln, übernimm diesen Hinweis NICHT wörtlich): ${heading}${angleBlock}
+
+QUELLEN:
+${sourceBlocks.join('\n\n')}
+
+COMPANY-TAGS (nur {Company}-Tags, KEINE Quellen-Pfeil-Zeile — Quellen werden separat ergänzt):
+PUBLIC: ${publicCompanyList}
+PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${historyBlock ? `\n\n${historyBlock}` : ''}`
+
+  const text = await callModelNonStreaming(userPrompt, BUNDLE_SYSTEM_PROMPT, model, {
+    cacheableUserPrefix: context.cacheableUserPrefix,
+    thinking: true,
+    effort: context.effort ?? 'high',
+    maxTokens: 16000,
+  })
+
+  // Heading sicherstellen + Längen-Durchsetzung (vor der Marker-Injektion, damit
+  // die ≤90-Zeichen-Prüfung nicht den HTML-Kommentar mitzählt).
+  let trimmed = text.trim()
+  if (!trimmed.startsWith('##')) {
+    trimmed = `## ${heading}\n\n${trimmed}`
+  }
+  trimmed = await enforceHeadingLength(trimmed, (h) => shortenHeadingViaModel(h, model))
+
+  // Quellen-Block deterministisch neu setzen: Tag-Zeile des Modells extrahieren
+  // (damit der Cap nur den Bericht zählt), Zusammenfassung hart auf 18 Sätze
+  // deckeln (Take bleibt unangetastet), dann Haupt-+Nebenquellen vor den Take
+  // einfügen.
+  const { tags, rest } = extractBundleTagLine(trimmed)
+  const capped = capSummarySentences(rest, 18)
+  const sourceBlock = buildBundleSourceBlock(tags, primary, secondary)
+  let withSources = insertBeforeTake(capped, sourceBlock)
+
+  // "Wer …"-Schlussfigur deterministisch durchsetzen (wie writeSection).
+  withSources = await enforceTakeEnding(withSources, (take) => rewriteWerEnding(take, model))
+
+  return injectBundleMarker(withSources, bundleType)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Non-streaming model call
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -760,6 +986,98 @@ export async function buildSectionContext(
   return { cacheableUserPrefix, companiesPerItem, metadataBlock, loadedPatterns }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Bundle dispatch: collapse each bundle_type group (topic/recap) into ONE write
+// unit; every other item stays its own unit. Shared by both call sites so the
+// streaming runner and the resumable job pipeline dispatch identically.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type BundleWriteUnit =
+  | { kind: 'bundle'; bundleType: 'topic' | 'recap'; items: PipelineItem[]; heading: string; takeAngle?: string; retrievalHint?: string }
+  | { kind: 'single'; item: PipelineItem; heading: string; takeAngle?: string; retrievalHint?: string }
+
+/**
+ * Groups `orderedItems` into write units by each item's `bundle_type`: all
+ * `topic` items collapse into one bundle unit, all `recap` items into another,
+ * and every untagged item becomes its own single unit. Order is always
+ * topic-bundle → recap-bundle → normal singles (matches enforceBundleOrdering and
+ * is robust even against a fallback plan that never ran the ordering enforcement).
+ *
+ * Heading/takeAngle/retrievalHint are resolved positionally against
+ * `plan.ordering` (the existing invariant both call sites already rely on:
+ * `orderedItems[pos]` corresponds to `plan.ordering[pos]`). Grouping keys off the
+ * already-dereferenced `PipelineItem.bundle_type`, so it never indexes into
+ * `items` and can't go out of bounds.
+ */
+export function buildBundleWriteUnits(orderedItems: PipelineItem[], plan: ArticlePlan): BundleWriteUnit[] {
+  const positioned = orderedItems.map((item, pos) => {
+    const key = String(plan.ordering?.[pos])
+    return {
+      item,
+      heading: (plan.headings ?? {})[key] || item.title,
+      takeAngle: (plan.takeAngles ?? {})[key] || undefined,
+      retrievalHint: (plan.retrievalHints ?? {})[key] || undefined,
+    }
+  })
+  const topic = positioned.filter((p) => p.item.bundle_type === 'topic')
+  const recap = positioned.filter((p) => p.item.bundle_type === 'recap')
+  const normal = positioned.filter((p) => p.item.bundle_type !== 'topic' && p.item.bundle_type !== 'recap')
+
+  const units: BundleWriteUnit[] = []
+  if (topic.length > 0) {
+    units.push({ kind: 'bundle', bundleType: 'topic', items: topic.map((p) => p.item), heading: topic[0].heading, takeAngle: topic[0].takeAngle, retrievalHint: topic[0].retrievalHint })
+  }
+  if (recap.length > 0) {
+    units.push({ kind: 'bundle', bundleType: 'recap', items: recap.map((p) => p.item), heading: recap[0].heading, takeAngle: recap[0].takeAngle, retrievalHint: recap[0].retrievalHint })
+  }
+  for (const p of normal) {
+    units.push({ kind: 'single', item: p.item, heading: p.heading, takeAngle: p.takeAngle, retrievalHint: p.retrievalHint })
+  }
+  return units
+}
+
+/** Union of relevant companies across a bundle unit's items. */
+function unionRelevantCompanies(
+  items: PipelineItem[],
+  companiesPerItem: Map<string, { public: string[]; premarket: string[] }>,
+): { public: string[]; premarket: string[] } {
+  const pub = new Set<string>()
+  const pre = new Set<string>()
+  for (const it of items) {
+    const c = companiesPerItem.get(it.id) || { public: [], premarket: [] }
+    c.public.forEach((x) => pub.add(x))
+    c.premarket.forEach((x) => pre.add(x))
+  }
+  return { public: [...pub], premarket: [...pre] }
+}
+
+/** Writes one write unit — a bundle group (N sources → 1 section) or a single item. */
+function writeUnit(
+  unit: BundleWriteUnit,
+  model: AIModel,
+  companiesPerItem: Map<string, { public: string[]; premarket: string[] }>,
+  shared: { cacheableUserPrefix: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; repoIntensity?: number },
+): Promise<string> {
+  if (unit.kind === 'bundle') {
+    return writeBundleSection(unit.items, unit.bundleType, unit.heading, model, {
+      relevantCompanies: unionRelevantCompanies(unit.items, companiesPerItem),
+      cacheableUserPrefix: shared.cacheableUserPrefix,
+      effort: shared.effort,
+      takeAngle: unit.takeAngle,
+      retrievalHint: unit.retrievalHint,
+      repoIntensity: shared.repoIntensity,
+    })
+  }
+  return writeSection(unit.item, unit.heading, model, {
+    relevantCompanies: companiesPerItem.get(unit.item.id) || { public: [], premarket: [] },
+    cacheableUserPrefix: shared.cacheableUserPrefix,
+    effort: shared.effort,
+    takeAngle: unit.takeAngle,
+    retrievalHint: unit.retrievalHint,
+    repoIntensity: shared.repoIntensity,
+  })
+}
+
 export interface WriteBatchResult {
   sections: string[]   // NUR die in DIESEM Aufruf geschriebenen, in Reihenfolge
   nextCursor: number
@@ -803,28 +1121,21 @@ export async function writeSectionsBatch(
   onBatch?: (nextCursor: number, newSections: string[]) => Promise<void>,
   repoIntensity?: number,
 ): Promise<WriteBatchResult> {
+  // Bundle groups collapse N items → 1 section, so we iterate WRITE UNITS, not
+  // raw items. `cursor`/`nextCursor` are write-unit indices; units are rebuilt
+  // deterministically from plan+items each tick, so resume stays consistent.
+  const units = buildBundleWriteUnits(orderedItems, plan)
   const out: string[] = []
   let i = cursor
   const concurrency = 6
-  while (i < orderedItems.length) {
-    const batch = orderedItems.slice(i, i + concurrency)
-    const results = await Promise.all(batch.map(async (item, k) => {
-      const itemIdx = plan.ordering[i + k]
-      const heading = (plan.headings ?? {})[String(itemIdx)] || item.title
-      const takeAngle = (plan.takeAngles ?? {})[String(itemIdx)] || undefined
-      const retrievalHint = (plan.retrievalHints ?? {})[String(itemIdx)] || undefined
-      const itemCompanies = ctx.companiesPerItem.get(item.id) || { public: [], premarket: [] }
+  while (i < units.length) {
+    const batch = units.slice(i, i + concurrency)
+    const results = await Promise.all(batch.map(async (unit) => {
+      const heading = unit.heading
       // Hard per-section timeout: one slow/hung section must not drag the whole
       // batch past the function limit (Job stalled at cursor=0 otherwise).
       let section = await withTimeout(
-        writeSection(item, heading, model, {
-          relevantCompanies: itemCompanies,
-          cacheableUserPrefix: ctx.cacheableUserPrefix,
-          effort,
-          takeAngle,
-          retrievalHint,
-          repoIntensity,
-        }),
+        writeUnit(unit, model, ctx.companiesPerItem, { cacheableUserPrefix: ctx.cacheableUserPrefix, effort, repoIntensity }),
         SECTION_WRITE_TIMEOUT_MS,
         `## ${heading}\n\n*Zeitüberschreitung beim Schreiben dieses Abschnitts.*\n`,
       ).catch(err => `## ${heading}\n\n*Fehler: ${err instanceof Error ? err.message : String(err)}*\n`)
@@ -843,7 +1154,7 @@ export async function writeSectionsBatch(
     if (onBatch) { try { await onBatch(i, [...out]) } catch (err) { console.warn('[Pipeline] onBatch persist failed:', err) } }
     if (Date.now() - startedAt > budgetMs) break   // Budget erschöpft -> Rest im nächsten Tick
   }
-  return { sections: out, nextCursor: i, done: i >= orderedItems.length }
+  return { sections: out, nextCursor: i, done: i >= units.length }
 }
 
 /**
@@ -937,11 +1248,15 @@ export async function* runGhostwriterPipeline(
 
   // ── Pass 2: Write sections in parallel ──────────────────────────────────────
   const orderedItems = plan.ordering.map(idx => items[idx - 1]).filter(Boolean)
+  // Bundle groups collapse N items → 1 section, so we schedule WRITE UNITS: the
+  // topic group and the recap group each become one writeBundleSection call, every
+  // untagged item stays a normal writeSection.
+  const units = buildBundleWriteUnits(orderedItems, plan)
   let writtenCount = 0
 
   // Use a results array and a "notify" mechanism so we can yield sections as
   // soon as they arrive in order (real progressive streaming)
-  const results: Array<string | undefined> = new Array(orderedItems.length)
+  const results: Array<string | undefined> = new Array(units.length)
   const resolvers: Array<() => void> = []
   const waitFor = (i: number) =>
     results[i] !== undefined
@@ -953,14 +1268,11 @@ export async function* runGhostwriterPipeline(
   // Start bounded-parallel tasks
   let cursor = 0
   let creditExhausted = false
-  const workers = Array.from({ length: Math.min(concurrency, orderedItems.length) }, async () => {
-    while (cursor < orderedItems.length) {
+  const workers = Array.from({ length: Math.min(concurrency, units.length) }, async () => {
+    while (cursor < units.length) {
       const i = cursor++
-      const item = orderedItems[i]
-      const itemIdx = plan.ordering[i]
-      const heading = (plan.headings ?? {})[String(itemIdx)] || item.title
-      const takeAngle = (plan.takeAngles ?? {})[String(itemIdx)] || undefined
-      const retrievalHint = (plan.retrievalHints ?? {})[String(itemIdx)] || undefined
+      const unit = units[i]
+      const heading = unit.heading
 
       if (creditExhausted) {
         results[i] = `## ${heading}\n\n*Abgebrochen: AI-Credit-Guthaben aufgebraucht.*\n`
@@ -970,21 +1282,13 @@ export async function* runGhostwriterPipeline(
       }
 
       try {
-        const itemCompanies = companiesPerItem.get(item.id) || { public: [], premarket: [] }
-        results[i] = await writeSection(item, heading, model, {
-          relevantCompanies: itemCompanies,
-          cacheableUserPrefix,
-          effort,
-          takeAngle,
-          retrievalHint,
-          repoIntensity,
-        })
+        results[i] = await writeUnit(unit, model, companiesPerItem, { cacheableUserPrefix, effort, repoIntensity })
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
         console.error(`[Pipeline] writeSection ${i + 1} failed:`, errMsg)
         if (isCreditBalanceError(err) && !creditExhausted) {
           creditExhausted = true
-          cursor = orderedItems.length // stop scheduling
+          cursor = units.length // stop scheduling
           await recordCreditAlertIfApplicable(err)
         }
         results[i] = `## ${heading}\n\n*Fehler: ${errMsg}*\n`
@@ -996,11 +1300,13 @@ export async function* runGhostwriterPipeline(
 
   // Yield sections in order as they become available
   const workersPromise = Promise.all(workers)
-  for (let i = 0; i < orderedItems.length; i++) {
+  for (let i = 0; i < units.length; i++) {
     await waitFor(i)
-    yield { type: 'writing', current: i + 1, total: orderedItems.length, title: orderedItems[i].title }
+    const unit = units[i]
+    const title = unit.kind === 'single' ? unit.item.title : unit.heading
+    yield { type: 'writing', current: i + 1, total: units.length, title }
     yield { type: 'section', text: results[i]! + '\n\n' }
-    yield { type: 'written', current: i + 1, total: orderedItems.length }
+    yield { type: 'written', current: i + 1, total: units.length }
   }
   await workersPromise
 
