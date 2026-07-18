@@ -25,9 +25,13 @@ import {
   type ArticlePlan,
   type PipelineItem,
 } from '@/lib/claude/ghostwriter-pipeline'
-import { selectAndEnrichItems, buildVocabularyContext } from '@/lib/claude/queue-article'
+import { selectAndEnrichItems, buildVocabularyContext, toPipelineItem } from '@/lib/claude/queue-article'
 import { normalizeArticlePlan } from '@/lib/claude/normalize-plan'
 import { getModelForUseCase } from '@/lib/ai/model-config'
+
+// Re-exported so both job-creation paths below (and their tests) reach the
+// ONE NewsQueueItem→PipelineItem conversion via lib/claude/queue-article.ts.
+export { toPipelineItem }
 
 type AdminClient = ReturnType<typeof createAdminClient>
 

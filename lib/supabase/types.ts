@@ -106,6 +106,7 @@ export interface NewsQueueItem {
   expires_at: string
   email_received_at: string | null
   metadata: Record<string, unknown>
+  bundle_type?: 'topic' | 'recap' | null
 }
 
 export interface NewsQueueSourceDistribution {

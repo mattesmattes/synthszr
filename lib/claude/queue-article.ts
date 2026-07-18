@@ -66,6 +66,32 @@ export interface QueueArticleEvent {
 }
 
 /**
+ * Maps a raw news_queue row to the PipelineItem shape the ghostwriter pipeline
+ * consumes. The ONE conversion site — also re-exported from
+ * lib/article-jobs/service.ts so both job-creation paths (auto + manual) go
+ * through the same mapping (no drift).
+ */
+export function toPipelineItem(item: {
+  id: string
+  title: string
+  content: string | null
+  source_display_name: string | null
+  source_url: string | null
+  source_identifier: string
+  bundle_type?: 'topic' | 'recap' | null
+}): PipelineItem {
+  return {
+    id: item.id,
+    title: item.title,
+    content: item.content ? sanitizeContentUrls(item.content) : null,
+    source_display_name: item.source_display_name,
+    source_url: sanitizeUrl(item.source_url) || deriveSourceUrl(null, item.source_identifier),
+    source_identifier: item.source_identifier,
+    bundle_type: item.bundle_type ?? null,
+  }
+}
+
+/**
  * Selects news-queue items (specific IDs → manually-selected → balanced fill),
  * enriches them with full daily_repo content, and maps them to PipelineItems.
  *
@@ -100,6 +126,7 @@ export async function selectAndEnrichItems(opts: {
     source_display_name: string | null
     source_url: string | null
     source_identifier: string
+    bundle_type?: 'topic' | 'recap' | null
   }>
 
   if (queueItemIds && queueItemIds.length > 0) {
@@ -284,14 +311,7 @@ export async function selectAndEnrichItems(opts: {
   // Track item IDs for marking as used
   const usedItemIds = selectedItems.map(i => i.id)
 
-  const pipelineItems: PipelineItem[] = selectedItems.map(item => ({
-    id: item.id,
-    title: item.title,
-    content: item.content ? sanitizeContentUrls(item.content) : null,
-    source_display_name: item.source_display_name,
-    source_url: sanitizeUrl(item.source_url) || deriveSourceUrl(null, item.source_identifier),
-    source_identifier: item.source_identifier,
-  }))
+  const pipelineItems: PipelineItem[] = selectedItems.map(toPipelineItem)
 
   return { pipelineItems, usedItemIds, sourceDistribution }
 }

@@ -52,6 +52,7 @@ export interface PipelineItem {
   source_display_name: string | null
   source_url: string | null
   source_identifier: string
+  bundle_type?: 'topic' | 'recap' | null
 }
 
 export interface ArticlePlan {
