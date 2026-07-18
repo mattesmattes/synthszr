@@ -16,7 +16,7 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import { enforceHeadingLength } from '@/lib/claude/heading-length'
 import { enforceTakeEnding, TAKE_MARKER_RE } from '@/lib/claude/take-ending'
-import { capSummarySentences, shortenByOneSentence, BUNDLE_TAG_LINE_RE } from '@/lib/claude/bundle-length'
+import { capSummarySentences, shortenBySentences, BUNDLE_TAG_LINE_RE } from '@/lib/claude/bundle-length'
 import { stripLoneSurrogates } from '@/lib/claude/sanitize'
 import { repoRetrievalParams } from '@/lib/mattes/repo-intensity'
 import {
@@ -634,7 +634,7 @@ function bundleSourceLink(item: PipelineItem): string | null {
 // — optional gefolgt von einer Quellen-Pfeil-Zeile "→ [Name](URL)", falls das
 // Modell die (trotz Anweisung) doch mitliefert. Ein Prosa-Absatz mit
 // eingebettetem Tag matcht NICHT (nach den Tags stünde dort Prosa, kein `$`).
-// In bundle-length.ts definiert (shortenByOneSentence braucht dieselbe
+// In bundle-length.ts definiert (shortenBySentences braucht dieselbe
 // Erkennung) und von dort importiert, statt hier dupliziert zu werden.
 
 // Extrahiert die vom Modell erzeugte {Company}-Tag-Zeile aus der Zusammenfassung
@@ -1218,7 +1218,7 @@ export async function writeSectionsBatch(
       // Bündel-Section selbst) um genau einen Satz gekürzt (Zusammenfassung + Take),
       // damit der Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird.
       if (unit.kind === 'single' && bundlesActive) {
-        section = shortenByOneSentence(section)
+        section = shortenBySentences(section, 2)
       }
       return section
     }))
@@ -1366,7 +1366,7 @@ export async function* runGhostwriterPipeline(
         // Bündel-Section selbst) um genau einen Satz gekürzt (Zusammenfassung + Take),
         // damit der Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird.
         if (unit.kind === 'single' && bundlesActive) {
-          results[i] = shortenByOneSentence(results[i]!)
+          results[i] = shortenBySentences(results[i]!, 2)
         }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)

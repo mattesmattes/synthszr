@@ -16,7 +16,7 @@ import { splitAtTake, splitSentences, TAKE_MARKER_RE } from './take-ending'
 // Ein Absatz/Satz, der AUSSCHLIESSLICH aus {Company}-Tags besteht — optional
 // gefolgt von einer Quellen-Pfeil-Zeile "→ [Name](URL)". Hier hochgezogen
 // (statt in ghostwriter-pipeline.ts dupliziert) und von dort re-exportiert,
-// damit shortenByOneSentence unten dieselbe Definition nutzt wie
+// damit shortenBySentences unten dieselbe Definition nutzt wie
 // extractBundleTagLine — ein zirkulärer Import (ghostwriter-pipeline.ts
 // importiert bereits aus diesem Modul) wäre sonst die Alternative.
 export const BUNDLE_TAG_LINE_RE = /^\s*(?:\{[^}\n]+\}\s*)+(?:→\s*\[[^\]\n]*\]\([^)\n]*\)\s*)?$/
@@ -63,8 +63,8 @@ export function capSummarySentences(section: string, maxSentences: number): stri
   return `${withHeading(heading, capped)}\n\n${marker}${parts.take}`
 }
 
-/** Entfernt je den letzten Satz aus Zusammenfassung UND Take. */
-export function shortenByOneSentence(section: string): string {
+/** Entfernt je die letzten `count` Sätze aus Zusammenfassung UND Take (Default 1). */
+export function shortenBySentences(section: string, count = 1): string {
   // Bei einer NORMALEN Section hat joinCompanyTagToSummary die {Company}-Tag-/
   // Quellen-Zeile bereits an den letzten Satz der Zusammenfassung angehängt
   // ("…letzter echter Satz. {Anthropic} {OpenAI} → [Quelle](https://…)").
@@ -72,28 +72,29 @@ export function shortenByOneSentence(section: string): string {
   // Tag-/Quellen-Zeile dadurch als eigenes, LETZTES Element. Ein simples
   // dropLast würde also die Attribution statt eines echten Satzes löschen —
   // Company-Vote-Direktiven + Quelle verschwänden aus jedem normalen Artikel,
-  // sobald ein Bündel aktiv ist. Tag-Zeile deshalb beiseite legen, einen
-  // echten Satz droppen, Tag-Zeile wieder anhängen.
-  const dropLast = (sentences: string[]): string => {
+  // sobald ein Bündel aktiv ist. Tag-Zeile deshalb beiseite legen, echte
+  // Sätze droppen (mindestens einen behalten), Tag-Zeile wieder anhängen.
+  const drop = (sentences: string[]): string => {
     const last = sentences[sentences.length - 1]
     if (sentences.length > 1 && last !== undefined && BUNDLE_TAG_LINE_RE.test(last)) {
       const withoutTagLine = sentences.slice(0, -1)
-      const dropped = withoutTagLine.length > 1 ? withoutTagLine.slice(0, -1) : withoutTagLine
-      return [...dropped, last].join(' ')
+      const keep = Math.max(1, withoutTagLine.length - count)
+      return [...withoutTagLine.slice(0, keep), last].join(' ')
     }
-    return (sentences.length > 1 ? sentences.slice(0, -1) : sentences).join(' ')
+    const keep = Math.max(1, sentences.length - count)
+    return sentences.slice(0, keep).join(' ')
   }
 
   const parts = splitAtTake(section)
   if (!parts) {
     const { heading, body } = splitHeading(section)
-    return withHeading(heading, dropLast(splitSentences(body)))
+    return withHeading(heading, drop(splitSentences(body)))
   }
 
   const marker = parts.prefix.match(TAKE_MARKER_RE)![0]
   const { heading, body } = splitHeading(parts.prefix.replace(TAKE_MARKER_RE, ''))
-  const summary = dropLast(splitSentences(body))
-  const take = dropLast(splitSentences(parts.take))
+  const summary = drop(splitSentences(body))
+  const take = drop(splitSentences(parts.take))
 
   return `${withHeading(heading, summary)}\n\n${marker} ${take}`
 }
