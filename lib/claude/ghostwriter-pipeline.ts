@@ -584,7 +584,7 @@ const BUNDLE_SYSTEM_ADDENDUM = `
 
 BÜNDEL-MODUS (überschreibt die EIN-Thema-Regel oben):
 - Dieser Abschnitt ist ein ausführlicher Leitartikel, der MEHRERE Quellen zusammenfasst. Anders als bei einer Einzelmeldung führst du hier ALLE Quellen redundanzfrei zusammen: decke JEDEN unterschiedlichen Aspekt ab, wiederhole Redundantes NICHT.
-- Die Zusammenfassung darf ausführlicher sein (bis zu ~18 Sätze), bleibt aber ein NÜCHTERNER Bericht ohne Wertung. Jede Wertung gehört in den Synthszr Take.
+- Die Zusammenfassung darf ausführlicher sein (bis zu ~25 Sätze), bleibt aber ein NÜCHTERNER Bericht ohne Wertung. Jede Wertung gehört in den Synthszr Take.
 - Der Synthszr Take bleibt NORMALE Länge (5-7 Sätze) und wächst NICHT durch die Bündelung. Genau EIN gebündelter Take mit EINEM Blickwinkel, nicht mehrere aneinandergereihte Takes.
 - Company-Tags wie gewohnt (max 3 relevanteste über alle Quellen), ABER gib KEINE Quellen-Pfeil-Zeile aus (kein "→ [Quelle](URL)"): die Quellenangaben (Haupt- und Nebenquellen) werden deterministisch nach der Generierung ergänzt.`
 
@@ -830,11 +830,11 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   trimmed = await enforceHeadingLength(trimmed, (h) => shortenHeadingViaModel(h, model))
 
   // Quellen-Block deterministisch neu setzen: Tag-Zeile des Modells extrahieren
-  // (damit der Cap nur den Bericht zählt), Zusammenfassung hart auf 18 Sätze
+  // (damit der Cap nur den Bericht zählt), Zusammenfassung hart auf 25 Sätze
   // deckeln (Take bleibt unangetastet), dann Haupt-+Nebenquellen vor den Take
   // einfügen.
   const { tags, rest } = extractBundleTagLine(trimmed)
-  const capped = capSummarySentences(rest, 18)
+  const capped = capSummarySentences(rest, 25)
   const sourceBlock = buildBundleSourceBlock(tags, primary, secondary)
   let withSources = insertBeforeTake(capped, sourceBlock)
 
