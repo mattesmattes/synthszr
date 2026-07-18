@@ -147,4 +147,26 @@ describe('normalizeArticlePlan', () => {
     const out = normalizeArticlePlan(plan as any, 1)
     expect(out.retrievalHints).toEqual({})
   })
+
+  it('übernimmt ein wohlgeformtes bundleGroups-Objekt', () => {
+    const plan = {
+      ordering: [1, 2, 3],
+      headings: { '1': 'A', '2': 'B', '3': 'C' },
+      bundleGroups: { topic: [1], recap: [3] },
+    }
+    const out = normalizeArticlePlan(plan as any, 3)
+    expect(out.bundleGroups).toEqual({ topic: [1], recap: [3] })
+  })
+
+  it('liefert {topic:[],recap:[]}, wenn bundleGroups fehlt', () => {
+    const plan = { ordering: [1, 2], headings: { '1': 'A', '2': 'B' } }
+    const out = normalizeArticlePlan(plan as any, 2)
+    expect(out.bundleGroups).toEqual({ topic: [], recap: [] })
+  })
+
+  it('liefert {topic:[],recap:[]}, wenn bundleGroups gedriftet (Array) ist', () => {
+    const plan = { ordering: [1], headings: { '1': 'A' }, bundleGroups: ['x'] }
+    const out = normalizeArticlePlan(plan as any, 1)
+    expect(out.bundleGroups).toEqual({ topic: [], recap: [] })
+  })
 })

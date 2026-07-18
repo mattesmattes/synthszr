@@ -65,6 +65,34 @@ export interface ArticlePlan {
   excerptBullets: string[]  // genau 3 Einträge
   category: string
   introParagraph: string
+  bundleGroups?: { topic: number[]; recap: number[] }  // 1-basierte Item-Indizes je Bündel-Typ
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bundle grouping: items tagged with bundle_type ('topic'/'recap') form a
+// group that must be planned/ordered together. computeBundleGroups derives
+// the groups deterministically from the items (not the model); enforceBundleOrdering
+// forces the ordering array so topic-group items come first, then recap-group
+// items, then everything else in its existing relative order.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function computeBundleGroups(items: PipelineItem[]): { topic: number[]; recap: number[] } {
+  const topic: number[] = []
+  const recap: number[] = []
+  items.forEach((item, i) => {
+    if (item.bundle_type === 'topic') topic.push(i + 1)
+    else if (item.bundle_type === 'recap') recap.push(i + 1)
+  })
+  return { topic, recap }
+}
+
+export function enforceBundleOrdering(
+  ordering: number[],
+  groups: { topic: number[]; recap: number[] },
+): number[] {
+  const bundled = new Set([...groups.topic, ...groups.recap])
+  const normal = ordering.filter((idx) => !bundled.has(idx))
+  return [...groups.topic, ...groups.recap, ...normal]
 }
 
 export type PipelineEvent =
@@ -228,16 +256,27 @@ SO JA (nüchtern, Kern zuerst, attribuiert):
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function planArticle(items: PipelineItem[], model: AIModel): Promise<ArticlePlan> {
+  const bundleGroups = computeBundleGroups(items)
+  const hasBundles = bundleGroups.topic.length > 0 || bundleGroups.recap.length > 0
+
   const itemList = items
-    .map(
-      (item, i) =>
-        `${i + 1}. TITEL: ${item.title}\n   QUELLE: ${item.source_display_name || item.source_identifier}\n   INHALT: ${stripLoneSurrogates((item.content || '').slice(0, 600)).replace(/\n/g, ' ')}`
-    )
+    .map((item, i) => {
+      const bundleTag = item.bundle_type === 'topic'
+        ? '\n   BÜNDEL: Themen-Schwerpunkt (gehört mit anderen "BÜNDEL: Themen-Schwerpunkt"-Items zusammen)'
+        : item.bundle_type === 'recap'
+          ? '\n   BÜNDEL: Rückblick (gehört mit anderen "BÜNDEL: Rückblick"-Items zusammen)'
+          : ''
+      return `${i + 1}. TITEL: ${item.title}\n   QUELLE: ${item.source_display_name || item.source_identifier}\n   INHALT: ${stripLoneSurrogates((item.content || '').slice(0, 600)).replace(/\n/g, ' ')}${bundleTag}`
+    })
     .join('\n\n')
 
   const planSystemPrompt = `Du bist Chef-Redakteur des Synthszr Newsletters. Dein Output ist ausschließlich valides JSON — keine Erklärungen, kein Markdown.`
 
-  const planPrompt = `Analysiere diese ${items.length} News-Items und erstelle einen Artikel-Plan für den Synthszr Newsletter.
+  const bundleHint = hasBundles
+    ? `\n\nBÜNDEL-HINWEIS: Als "BÜNDEL" markierte Items gehören inhaltlich zusammen und werden im Artikel als Gruppe direkt hintereinander stehen (die exakte Reihenfolge wird unabhängig von deiner "ordering"-Antwort erzwungen). Plane headings und takeAngles für Items derselben Bündel-Gruppe so, dass sie sich als zusammenhängender Block lesen statt sich zu wiederholen.`
+    : ''
+
+  const planPrompt = `Analysiere diese ${items.length} News-Items und erstelle einen Artikel-Plan für den Synthszr Newsletter.${bundleHint}
 
 ITEMS:
 ${itemList}
@@ -352,6 +391,12 @@ Erstelle folgenden JSON-Plan:
   // emitting a drifted schema (e.g. ordering as {id, headings} objects with no
   // top-level headings map) that otherwise crashes the writing phase.
   plan = normalizeArticlePlan(plan, items.length)
+
+  // Bundle grouping is deterministic from the items (not model-produced):
+  // write it onto the plan and force topic-group → recap-group → normal
+  // ordering, overriding whatever order the model chose for those items.
+  plan.bundleGroups = bundleGroups
+  plan.ordering = enforceBundleOrdering(plan.ordering, bundleGroups)
 
   // Validate: ensure exactly 3 excerpt bullets
   while (plan.excerptBullets.length < 3) {

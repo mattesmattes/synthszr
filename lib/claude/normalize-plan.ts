@@ -38,6 +38,23 @@ export function normalizeArticlePlan(plan: ArticlePlan, itemCount: number): Arti
       ? { ...(plan.retrievalHints as Record<string, string>) }
       : {}
 
+  // Ensure bundleGroups is always { topic: number[]; recap: number[] } (never
+  // undefined, never a drifted shape). bundleGroups is computed deterministically
+  // from items in planArticle (not model-produced), but a persisted plan re-read
+  // by the resumable job pipeline must survive a malformed/missing value too.
+  const rawBundleGroups = plan?.bundleGroups
+  const bundleGroups: { topic: number[]; recap: number[] } =
+    rawBundleGroups && typeof rawBundleGroups === 'object' && !Array.isArray(rawBundleGroups)
+      ? {
+          topic: Array.isArray((rawBundleGroups as { topic?: unknown }).topic)
+            ? ((rawBundleGroups as { topic: unknown[] }).topic.filter((n) => Number.isInteger(n)) as number[])
+            : [],
+          recap: Array.isArray((rawBundleGroups as { recap?: unknown }).recap)
+            ? ((rawBundleGroups as { recap: unknown[] }).recap.filter((n) => Number.isInteger(n)) as number[])
+            : [],
+        }
+      : { topic: [], recap: [] }
+
   const ordering: number[] = []
   const seen = new Set<number>()
 
@@ -71,5 +88,5 @@ export function normalizeArticlePlan(plan: ArticlePlan, itemCount: number): Arti
     }
   }
 
-  return { ...plan, ordering, headings, takeAngles, retrievalHints }
+  return { ...plan, ordering, headings, takeAngles, retrievalHints, bundleGroups }
 }
