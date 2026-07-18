@@ -63,15 +63,25 @@ export function processNewsHeadings(
         return t.article_index === articleIndex
       })
       if (thumbnail) {
+        // Ein Bündel-Badge (processBundleLabels) kann bereits direkt vor der H2
+        // sitzen, wenn es in einem früheren, thumbnaillosen Render-Durchgang
+        // eingefügt wurde (Thumbnails werden asynchron nachgeladen). Thumbnail +
+        // Separator müssen DAVOR landen, damit die Reihenfolge
+        // [Thumbnail][Badge][Headline] bleibt — unabhängig davon, welcher
+        // Prozessor zuerst lief.
+        const precedingBadge = h2.previousElementSibling?.classList.contains('bundle-label-badge')
+          ? h2.previousElementSibling
+          : null
+        const insertionPoint = precedingBadge || h2
         // Add separator before thumbnail (except for first article)
         if (articleIndex > 0) {
           const separator = document.createElement('div')
           separator.className = 'article-separator h-8 my-8'
-          h2.parentNode?.insertBefore(separator, h2)
+          h2.parentNode?.insertBefore(separator, insertionPoint)
         }
         const thumbnailContainer = document.createElement('div')
         thumbnailContainer.className = 'article-thumbnail-container flex justify-center my-4'
-        h2.parentNode?.insertBefore(thumbnailContainer, h2)
+        h2.parentNode?.insertBefore(thumbnailContainer, insertionPoint)
         newThumbnailPortals.push({ element: thumbnailContainer, thumbnail, h2Element: h2 as HTMLElement })
         h2.dataset.thumbnailInserted = 'true'
       }

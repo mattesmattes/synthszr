@@ -239,10 +239,14 @@
   margin-bottom: 0.5rem;
 }
 
-/* Bündel-Marker (Thema des Tages / Nachlese) im Editor sichtbar machen:
+/* Bündel-Marker (Thema des Tages / Nachlese) NUR im Editor sichtbar machen:
    ein kleines Badge vor der H2, gespeist aus dem data-bundle-type-Attribut
-   (gesetzt durch die Toolbar-Toggles bzw. die markdown→TipTap-Konvertierung). */
-.ProseMirror h2[data-bundle-type]::before {
+   (gesetzt durch die Toolbar-Toggles bzw. die markdown→TipTap-Konvertierung).
+   Der Reader nutzt denselben ProseMirror, trägt aber zusätzlich .tiptap-content
+   und rendert das Badge über den DOM-Prozessor processBundleLabels() (schwarz,
+   mehrsprachig) — deshalb hier per :not(.tiptap-content) auf den Editor scopen,
+   sonst erschiene das Badge im Reader doppelt (und in fester deutscher Sprache). */
+.ProseMirror:not(.tiptap-content) h2[data-bundle-type]::before {
   display: inline-block;
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 0.6rem;
@@ -254,12 +258,12 @@
   margin-right: 8px;
   vertical-align: middle;
 }
-.ProseMirror h2[data-bundle-type="topic"]::before {
+.ProseMirror:not(.tiptap-content) h2[data-bundle-type="topic"]::before {
   content: "Thema des Tages";
   background: #d9f99d;
   color: #3f6212;
 }
-.ProseMirror h2[data-bundle-type="recap"]::before {
+.ProseMirror:not(.tiptap-content) h2[data-bundle-type="recap"]::before {
   content: "Nachlese";
   background: #cffafe;
   color: #155e75;
