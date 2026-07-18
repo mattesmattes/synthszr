@@ -210,6 +210,10 @@ ${contentJson}`
     // Normalize quotes to the correct typographic style for the target language
     const normalizedTitle = fixQuotes(title, targetLanguage)
     const normalizedExcerpt = excerpt ? fixQuotes(excerpt, targetLanguage) : undefined
+    // The system prompt only asks the LLM to preserve the exact JSON
+    // structure/attrs — that's a request, not a guarantee. Restore custom
+    // attrs like bundleType deterministically in case the LLM dropped them.
+    reapplyBundleTypeAttrs(source.content, content)
     const normalizedContent = normalizeQuotesInTipTap(content, targetLanguage)
 
     return {
@@ -310,6 +314,7 @@ ${JSON.stringify(chunk)}`
   const title = (meta.title as string) || source.title
   const normalizedTitle = fixQuotes(title, targetLanguage)
   const normalizedExcerpt = meta.excerpt ? fixQuotes(meta.excerpt as string, targetLanguage) : undefined
+  reapplyBundleTypeAttrs(source.content, translatedContent)
   const normalizedContent = normalizeQuotesInTipTap(translatedContent, targetLanguage)
 
   return {
@@ -445,6 +450,45 @@ function parseJsonResponse(text: string): Record<string, unknown> {
     console.error('[Translation] JSON parse error:', error)
     console.error('[Translation] Raw response:', text.slice(0, 500))
     throw new Error('Failed to parse translation response as JSON')
+  }
+}
+
+/**
+ * Restores `bundleType` attrs (renders as `data-bundle-type`, see
+ * lib/tiptap/heading-with-queue-id.ts) on the translated doc's top-level
+ * heading nodes, matched by ordinal position against the source doc's
+ * headings — same matching idiom as applyBundleMarkers in
+ * lib/utils/markdown-to-tiptap.ts. The translation LLM is only
+ * prompt-instructed to preserve the exact JSON structure/attrs (see
+ * systemPrompt above); that's not a code-level guarantee, so this mutates
+ * `translated` in place as a deterministic backstop against the LLM
+ * dropping a custom, non-standard attribute while "cleaning up" the JSON.
+ */
+function reapplyBundleTypeAttrs(
+  source: Record<string, unknown>,
+  translated: Record<string, unknown>
+): void {
+  const sourceNodes = source.content
+  const translatedNodes = translated.content
+  if (!Array.isArray(sourceNodes) || !Array.isArray(translatedNodes)) return
+
+  const sourceBundleTypes = sourceNodes
+    .filter((n): n is { type: string; attrs?: Record<string, unknown> } =>
+      !!n && typeof n === 'object' && (n as { type?: unknown }).type === 'heading'
+    )
+    .map((n) => (typeof n.attrs?.bundleType === 'string' ? n.attrs.bundleType : undefined))
+
+  if (sourceBundleTypes.every((t) => !t)) return // nothing to restore
+
+  let i = 0
+  for (const node of translatedNodes) {
+    if (!node || typeof node !== 'object' || (node as { type?: unknown }).type !== 'heading') continue
+    const bundleType = sourceBundleTypes[i]
+    if (bundleType) {
+      const n = node as { attrs?: Record<string, unknown> }
+      n.attrs = { ...(n.attrs || {}), bundleType }
+    }
+    i++
   }
 }
 
