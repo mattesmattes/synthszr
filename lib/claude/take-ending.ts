@@ -9,11 +9,11 @@
 // und dependency-frei, damit sie ohne API-Zugriff testbar ist; der
 // eigentliche Modell-Aufruf wird in ghostwriter-pipeline.ts gebunden.
 
-const TAKE_MARKER_RE = /\*{0,2}Synthszr Take:\*{0,2}/
+export const TAKE_MARKER_RE = /\*{0,2}Synthszr Take:\*{0,2}/
 
 const WER_SENTENCE_RE = /^[^\p{L}]*Wer\b/u
 
-function splitSentences(text: string): string[] {
+export function splitSentences(text: string): string[] {
   return text
     .replace(/\s+/g, ' ')
     .trim()
@@ -29,7 +29,7 @@ function werEndingInTake(take: string): boolean {
 }
 
 /** Zerlegt eine Section am (letzten) Take-Marker; null ohne Marker. */
-function splitAtTake(section: string): { prefix: string; take: string } | null {
+export function splitAtTake(section: string): { prefix: string; take: string } | null {
   const match = section.match(TAKE_MARKER_RE)
   if (!match || match.index === undefined) return null
   const markerEnd = match.index + match[0].length
