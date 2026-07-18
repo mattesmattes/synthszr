@@ -269,7 +269,7 @@ SO JA (nüchtern, Kern zuerst, attribuiert):
 
 export async function planArticle(items: PipelineItem[], model: AIModel): Promise<ArticlePlan> {
   const bundleGroups = computeBundleGroups(items)
-  const hasBundles = bundleGroups.topic.length > 0 || bundleGroups.recap.length > 0
+  const bundlesActive = hasBundles(bundleGroups)
 
   const itemList = items
     .map((item, i) => {
@@ -284,7 +284,7 @@ export async function planArticle(items: PipelineItem[], model: AIModel): Promis
 
   const planSystemPrompt = `Du bist Chef-Redakteur des Synthszr Newsletters. Dein Output ist ausschließlich valides JSON — keine Erklärungen, kein Markdown.`
 
-  const bundleHint = hasBundles
+  const bundleHint = bundlesActive
     ? `\n\nBÜNDEL-HINWEIS: Als "BÜNDEL" markierte Items gehören inhaltlich zusammen und werden im Artikel als Gruppe direkt hintereinander stehen (die exakte Reihenfolge wird unabhängig von deiner "ordering"-Antwort erzwungen). Plane headings und takeAngles für Items derselben Bündel-Gruppe so, dass sie sich als zusammenhängender Block lesen statt sich zu wiederholen.`
     : ''
 
@@ -1146,6 +1146,12 @@ export async function writeSectionsBatch(
   // raw items. `cursor`/`nextCursor` are write-unit indices; units are rebuilt
   // deterministically from plan+items each tick, so resume stays consistent.
   const units = buildBundleWriteUnits(orderedItems, plan)
+  // Kompensations-Gate aus den TATSÄCHLICHEN Items ableiten (item.bundle_type),
+  // NICHT aus plan.bundleGroups: buildBundleWriteUnits gruppiert ebenfalls über
+  // item.bundle_type, während plan.bundleGroups im planArticle-Fallback (LLM-Fehler
+  // → Fallback-Plan ohne normalizeArticlePlan) fehlt. computeBundleGroups hält beide
+  // Pfade konsistent → normale Sektionen werden auch bei aktivem Bündel gekürzt.
+  const bundlesActive = hasBundles(computeBundleGroups(orderedItems))
   const out: string[] = []
   let i = cursor
   const concurrency = 6
@@ -1169,7 +1175,7 @@ export async function writeSectionsBatch(
       // Kompensation: bei aktiven Bündeln wird jeder NORMALE Abschnitt (nicht die
       // Bündel-Section selbst) um genau einen Satz gekürzt (Zusammenfassung + Take),
       // damit der Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird.
-      if (unit.kind === 'single' && hasBundles(plan.bundleGroups ?? { topic: [], recap: [] })) {
+      if (unit.kind === 'single' && bundlesActive) {
         section = shortenByOneSentence(section)
       }
       return section
@@ -1279,6 +1285,10 @@ export async function* runGhostwriterPipeline(
   // topic group and the recap group each become one writeBundleSection call, every
   // untagged item stays a normal writeSection.
   const units = buildBundleWriteUnits(orderedItems, plan)
+  // Kompensations-Gate aus item.bundle_type ableiten (wie writeSectionsBatch),
+  // damit auch der planArticle-Fallback-Plan (ohne bundleGroups) die normalen
+  // Sektionen korrekt kürzt, wenn echte Bündel-Units gebaut wurden.
+  const bundlesActive = hasBundles(computeBundleGroups(orderedItems))
   let writtenCount = 0
 
   // Use a results array and a "notify" mechanism so we can yield sections as
@@ -1313,7 +1323,7 @@ export async function* runGhostwriterPipeline(
         // Kompensation: bei aktiven Bündeln wird jeder NORMALE Abschnitt (nicht die
         // Bündel-Section selbst) um genau einen Satz gekürzt (Zusammenfassung + Take),
         // damit der Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird.
-        if (unit.kind === 'single' && hasBundles(plan.bundleGroups ?? { topic: [], recap: [] })) {
+        if (unit.kind === 'single' && bundlesActive) {
           results[i] = shortenByOneSentence(results[i]!)
         }
       } catch (err) {
