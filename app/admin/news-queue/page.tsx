@@ -146,7 +146,7 @@ export default function NewsQueuePage() {
   const [candidateItems, setCandidateItems] = useState<SynthesisCandidateItem[]>([])
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set())
   const [loadingCandidates, setLoadingCandidates] = useState(false)
-  const [minContentLength, setMinContentLength] = useState(2500)
+  const [minContentLength, setMinContentLength] = useState(1000)
 
   // Manual add dialog
   const [showManualAddDialog, setShowManualAddDialog] = useState(false)
