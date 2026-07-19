@@ -22,6 +22,7 @@ import {
   ChevronRight,
   ExternalLink,
   Link,
+  Sparkles,
   X
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -134,6 +135,9 @@ export default function NewsQueuePage() {
   const [viewingItem, setViewingItem] = useState<QueueItem | null>(null)
   const [loadingContent, setLoadingContent] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
+  // Assistiertes-Ranking-Vorschläge sind standardmäßig ausgeblendet; per
+  // Toggle in der Top-Leiste (neben "Quellen & Embeddings") einblendbar.
+  const [showRankingSuggestions, setShowRankingSuggestions] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showDeselectConfirm, setShowDeselectConfirm] = useState(false)
   const [showBalancedDialog, setShowBalancedDialog] = useState(false)
@@ -855,6 +859,16 @@ export default function NewsQueuePage() {
               <ChevronDown className={`h-3 w-3 ml-1 transition-transform ${showSidebar ? 'rotate-180' : ''}`} />
             </Button>
           </CollapsibleTrigger>
+          <Button
+            variant="outline"
+            size="sm"
+            className={`text-xs ${showRankingSuggestions ? 'bg-secondary' : ''}`}
+            onClick={() => setShowRankingSuggestions((v) => !v)}
+            title="Assistiertes-Ranking-Vorschläge ein-/ausblenden"
+          >
+            <Sparkles className="h-3 w-3 mr-1" />
+            Ranking-Vorschläge
+          </Button>
         </div>
       </div>
 
@@ -1149,9 +1163,11 @@ export default function NewsQueuePage() {
         </div>
       )}
 
-      <div className="mb-6">
-        <RankingSuggestionsPanel onAccepted={handleSuggestionAccepted} />
-      </div>
+      {showRankingSuggestions && (
+        <div className="mb-6">
+          <RankingSuggestionsPanel onAccepted={handleSuggestionAccepted} />
+        </div>
+      )}
 
       {/* Queue Items - Full Width */}
       <div>
