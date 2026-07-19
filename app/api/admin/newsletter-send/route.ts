@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
 
     const templates = templateSettings?.value as { subjectTemplate?: string; footerText?: string } || {}
     const subjectTemplate = templates.subjectTemplate || '{{title}}'
-    const footerText = templates.footerText || 'Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.'
+    const footerText = templates.footerText || 'Du erhältst diese E-Mail, weil du den Synthszr abonniert hast.'
 
     // Apply template variables
     const subject = subjectTemplate.replace(/\{\{title\}\}/g, post.title)

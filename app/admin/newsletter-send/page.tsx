@@ -54,7 +54,7 @@ interface EmailTemplateSettings {
 
 const DEFAULT_TEMPLATE: EmailTemplateSettings = {
   subjectTemplate: '{{title}}',
-  footerText: 'Du erhältst diese E-Mail, weil du den Synthszr Newsletter abonniert hast.',
+  footerText: 'Du erhältst diese E-Mail, weil du den Synthszr abonniert hast.',
 }
 
 export default function NewsletterSendPage() {
