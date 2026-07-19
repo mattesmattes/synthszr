@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
                 .order('total_score', { ascending: false })
                 .order('queued_at', { ascending: false })
             } else {
-              const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+              const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()
               q = q
                 .gt('expires_at', new Date().toISOString())
                 .gte('queued_at', cutoff)
@@ -218,8 +218,8 @@ export async function GET(request: NextRequest) {
         // Supabase / PostgREST caps any single response at 1000 rows
         // regardless of .range() width. When the requested window
         // exceeds 1000 we page through it server-side and concatenate.
-        // Without this, today + yesterday (≥1000 items) silently
-        // truncates and the UI looks empty for one of the two days.
+        // Without this, the rolling 3-day window (≥1000 items) silently
+        // truncates and the UI looks empty for one of the days.
         const PAGE = 1000
         const upper = offset + limit - 1
         type Row = Awaited<ReturnType<typeof buildQuery>>['data'] extends (infer R)[] | null ? R : never

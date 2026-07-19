@@ -128,7 +128,7 @@ export default function NewsQueuePage() {
   const [loading, setLoading] = useState(true)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [statusFilter, setStatusFilter] = useState<string>('pending')
-  // Day pager for pending: null = live (rolling 48h, today + yesterday),
+  // Day pager for pending: null = live (rolling 72h, last three days),
   // otherwise a YYYY-MM-DD string for a single calendar day in the past.
   const [viewDay, setViewDay] = useState<string | null>(null)
   const [viewingItem, setViewingItem] = useState<QueueItem | null>(null)
@@ -178,14 +178,15 @@ export default function NewsQueuePage() {
   const fetchData = useCallback(async (page = currentPage) => {
     setLoading(true)
     try {
-      // For pending: fetch all items (48h window or single-day pager
+      // For pending: fetch all items (72h window or single-day pager
       // keeps the count manageable). For other statuses: paginate normally.
-      // Raised the pending cap from 500 → 1500: a single Cron run can
-      // queue ~530 items per day (article + newsletter + webcrawl),
-      // and the 48h window covers two of those — webcrawl was
-      // silently dropped at the 500 cap.
+      // Cap sized for the rolling 3-day window: a single Cron run can
+      // queue ~530 items per day (article + newsletter + webcrawl), so
+      // three days ≈ 1600 items at peak (measured ~1324 for 72h). 2000
+      // (the server's limit ceiling in route.ts) leaves headroom above
+      // that so no day is silently dropped.
       const isPending = statusFilter === 'pending'
-      const fetchLimit = isPending ? 1500 : PAGE_SIZE
+      const fetchLimit = isPending ? 2000 : PAGE_SIZE
       const offset = isPending ? 0 : page * PAGE_SIZE
       // Day pager → compute from/to as ISO timestamps in the browser's
       // local timezone. Sending UTC dates would mis-align with the
@@ -789,8 +790,8 @@ export default function NewsQueuePage() {
             <Link className="h-3 w-3 mr-1" />
             Artikel hinzufügen
           </Button>
-          {/* Tagespager — Pending-Modus erlaubt bis zu 3 Tage zurück
-              (zusätzlich zur Live-Sicht "heute + gestern"). Bei anderen
+          {/* Tagespager — Pending-Modus erlaubt einzelne ältere Tage
+              (zusätzlich zur Live-Sicht "letzte 3 Tage"). Bei anderen
               Status-Filtern ist der Datums-Begriff irrelevant, da blenden
               wir das Dropdown aus. */}
           {statusFilter === 'pending' && (
@@ -802,8 +803,8 @@ export default function NewsQueuePage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="current">Aktuell (heute + gestern)</SelectItem>
-                {[2, 3, 4].map((daysAgo) => {
+                <SelectItem value="current">Aktuell (letzte 3 Tage)</SelectItem>
+                {[3, 4, 5].map((daysAgo) => {
                   // Local-time arithmetic so the value (YYYY-MM-DD) and
                   // the German label both refer to the same calendar day
                   // in the user's timezone. UTC-based arithmetic would
@@ -1341,7 +1342,7 @@ export default function NewsQueuePage() {
             </Card>
           )}
 
-          {/* Pagination - only for non-pending statuses (pending uses 48h fetch-all) */}
+          {/* Pagination - only for non-pending statuses (pending uses 72h fetch-all) */}
           {totalItems > 0 && statusFilter !== 'pending' && (
             <div className="flex items-center justify-between mt-3 text-xs">
               <div className="text-muted-foreground">
@@ -1382,8 +1383,8 @@ export default function NewsQueuePage() {
           {totalItems > 0 && statusFilter === 'pending' && (
             <div className="mt-3 text-xs text-muted-foreground">
               {filteredItems.length !== items.length
-                ? `${filteredItems.length} von ${totalItems} Items (letzte 48h, ≥${minContentLength.toLocaleString('de-DE')} Zeichen)`
-                : `${totalItems} Items (letzte 48h)`}
+                ? `${filteredItems.length} von ${totalItems} Items (letzte 3 Tage, ≥${minContentLength.toLocaleString('de-DE')} Zeichen)`
+                : `${totalItems} Items (letzte 3 Tage)`}
             </div>
           )}
         </div>
