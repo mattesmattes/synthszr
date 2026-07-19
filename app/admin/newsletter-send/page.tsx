@@ -54,7 +54,9 @@ interface EmailTemplateSettings {
 
 const DEFAULT_TEMPLATE: EmailTemplateSettings = {
   subjectTemplate: '{{title}}',
-  footerText: 'Du erhältst diese E-Mail, weil du den Synthszr abonniert hast.',
+  // Leer = pro Sprache lokalisierter Standard-Footer (strings.footer[locale] in
+  // newsletter.tsx). Nur ein hier gesetzter Custom-Text überschreibt global.
+  footerText: '',
 }
 
 export default function NewsletterSendPage() {
@@ -1309,10 +1311,12 @@ function TemplateEditorModal({
               }
               rows={3}
               className="w-full rounded border px-3 py-2 text-sm resize-none"
-              placeholder="Footer-Text..."
+              placeholder="Leer lassen für lokalisierten Standard-Footer je Sprache"
             />
             <div className="text-xs text-muted-foreground">
-              Dieser Text erscheint am Ende jeder Newsletter-E-Mail.
+              Erscheint am Ende jeder Newsletter-E-Mail. Leer lassen für den pro
+              Sprache lokalisierten Standard-Footer; ein Custom-Text hier gilt
+              global für alle Sprachen.
             </div>
           </div>
         </div>

@@ -144,7 +144,11 @@ export async function GET(request: NextRequest) {
 
     const templates = templateSettings?.value as { subjectTemplate?: string; footerText?: string } || {}
     const subjectTemplate = templates.subjectTemplate || '{{title}}'
-    const footerText = templates.footerText || 'Du erhältst diese E-Mail, weil du den Synthszr abonniert hast.'
+    // Kein hartkodierter deutscher Default: bleibt der Footer leer, nutzt
+    // NewsletterEmail den pro Sprache lokalisierten Standard-Footer
+    // (strings.footer[locale]). Nur ein in der Admin-UI gesetzter Custom-Text
+    // überschreibt ihn dann global über alle Sprachen.
+    const footerText = templates.footerText || undefined
 
     const subject = subjectTemplate.replace(/\{\{title\}\}/g, post.title)
     const previewText = post.excerpt || ''
