@@ -6,6 +6,7 @@ import { runProductResearch } from '@/lib/rankings/research'
 import { runCategorization } from '@/lib/rankings/categorize'
 import { runDefragmentation } from '@/lib/rankings/defragment'
 import { runAttributionQA } from '@/lib/rankings/attribution-qa'
+import { runProductValidityQA } from '@/lib/rankings/product-validity-qa'
 import { revalidateTag } from 'next/cache'
 
 export const maxDuration = 300
@@ -43,6 +44,15 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       console.error('[cron] attribution-qa:', e instanceof Error ? e.message : e)
     }
+    // Validitäts-QS: chartable Single-Word-Produkte kontextbasiert prüfen und
+    // Alltagswörter (z.B. „Vision"/„Norm" in normaler Bedeutung) ausblenden.
+    // Läuft VOR precompute, damit ausgeblendete Einträge aus den Metriken fallen.
+    let validity = { excluded: 0, kept: 0, checked: 0 }
+    try {
+      validity = await runProductValidityQA({ limit: 15 })
+    } catch (e) {
+      console.error('[cron] validity-qa:', e instanceof Error ? e.message : e)
+    }
     const { computed } = await precomputeMetrics()
     const promos = await translateStalePromos()
     // Tägliche Feature-Research: sichtbare, kategorisierte Produkte mit ≥2 Mentions (= das,
@@ -59,7 +69,7 @@ export async function GET(request: NextRequest) {
       console.error('[cron] research:', e instanceof Error ? e.message : e)
     }
     revalidateTag('rankings', 'max')
-    return NextResponse.json({ success: true, defrag, categorized, attribution, computed, promos, researched })
+    return NextResponse.json({ success: true, defrag, categorized, attribution, validity, computed, promos, researched })
   } catch (e) {
     return NextResponse.json({ success: false, error: e instanceof Error ? e.message : String(e) }, { status: 200 })
   }

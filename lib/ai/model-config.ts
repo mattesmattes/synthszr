@@ -19,6 +19,7 @@ export type UseCase =
   | 'image_generation'
   | 'ranking_extract'
   | 'ranking_attribution_qa'
+  | 'ranking_validity_qa'
 
 export interface UseCaseInfo {
   label: string
@@ -91,6 +92,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
   ranking_attribution_qa: {
     label: 'Rankings — Attribution-QS',
     description: 'Company-Zuordnung von unknown/Fragment-Produkten verifizieren',
+    defaultModel: 'claude-sonnet-5',
+    allowedProviders: ['anthropic'],
+  },
+  ranking_validity_qa: {
+    label: 'Rankings — Produkt-Validität-QS',
+    description: 'Kontextbasiert prüfen, ob ein Chart-Produkt wirklich ein Produkt ist (nicht ein gleichnamiges Alltagswort)',
     defaultModel: 'claude-sonnet-5',
     allowedProviders: ['anthropic'],
   },
