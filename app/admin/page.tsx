@@ -156,6 +156,7 @@ function countWords(content: Record<string, unknown>): number {
 export default function AdminPage() {
   const [posts, setPosts] = useState<CombinedPost[]>([])
   const [loading, setLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(0)
   const [viewingPost, setViewingPost] = useState<CombinedPost | null>(null)
   const [editingPost, setEditingPost] = useState<CombinedPost | null>(null)
   const [deletingPost, setDeletingPost] = useState<CombinedPost | null>(null)
@@ -717,6 +718,13 @@ export default function AdminPage() {
     archived: 'Archiviert',
   }
 
+  // Pagination: nur die neuesten 10 Posts pro Seite (Liste ist created_at DESC sortiert).
+  const POSTS_PER_PAGE = 10
+  const totalPages = Math.max(1, Math.ceil(posts.length / POSTS_PER_PAGE))
+  const safePage = Math.min(currentPage, totalPages - 1)
+  const pageStart = safePage * POSTS_PER_PAGE
+  const paginatedPosts = posts.slice(pageStart, pageStart + POSTS_PER_PAGE)
+
   return (
     <div className="p-4 md:p-8 max-w-full overflow-x-hidden">
       <GmailCountdown />
@@ -774,7 +782,7 @@ export default function AdminPage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {posts.map((post) => (
+          {paginatedPosts.map((post) => (
             <Card key={`${post.source}-${post.id}`}>
               <CardContent className="py-4">
                 <div className="flex items-start justify-between gap-4">
@@ -924,6 +932,30 @@ export default function AdminPage() {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {!loading && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 mt-6">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+            disabled={safePage === 0}
+          >
+            Zurück
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Seite {safePage + 1} von {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={safePage >= totalPages - 1}
+          >
+            Weiter
+          </Button>
         </div>
       )}
 
