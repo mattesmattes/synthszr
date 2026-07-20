@@ -36,7 +36,6 @@ export interface ProductDetail {
 }
 
 const SENTIMENT_DIM = '__sentiment'
-const META_DIMS = new Set([SENTIMENT_DIM, '__description', '__description_en', '__released', '__researched_at'])
 
 /** Supabase typisiert den daily_repo-Join je nach FK-Erkennung als Objekt ODER
  *  Array — beide Formen auf den title herunterbrechen. */
@@ -132,21 +131,39 @@ export async function getProductDetail(slug: string, locale = 'de'): Promise<Pro
   // Sentiment + Features (enrich, 1b-iii)
   const { data: feats } = await supabase
     .from('product_features_current')
-    .select('dimension_key, dimension_key_en, value_text, value_text_en, value_numeric')
+    .select('category, dimension_key, dimension_key_en, value_text, value_text_en, value_numeric')
     .eq('product_id', product.id)
-  const sentimentRow = (feats ?? []).find((f) => f.dimension_key === SENTIMENT_DIM)
+  // Meta-/Marker-Werte (Beschreibung, Sentiment, Release) aus der Primär-Kategorie
+  // bevorzugen — nach einem Produkt-Merge liegen sie mehrfach vor (je gemergtem
+  // Fragment-Kategorie), sonst wählt .find() nichtdeterministisch eine Variante.
+  const primaryCat = category?.slug
+  const pickMeta = (dim: string): string | undefined => {
+    const list = (feats ?? []).filter((f) => f.dimension_key === dim)
+    const inPrimary = list.find((f) => f.category === primaryCat)
+    return ((inPrimary ?? list[0])?.value_text as string | undefined)
+  }
+  const sentimentRow = (feats ?? []).find((f) => f.dimension_key === SENTIMENT_DIM && f.category === primaryCat)
+    ?? (feats ?? []).find((f) => f.dimension_key === SENTIMENT_DIM)
   const sentiment = sentimentRow
     ? { label: (sentimentRow.value_text as string) ?? 'neutral', score: sentimentRow.value_numeric as number | null }
     : null
   // Deutsch nur für 'de', alle anderen Sprachen → englische Beschreibung (Fallback: dt.)
-  const descDe = (feats ?? []).find((f) => f.dimension_key === '__description')?.value_text as string | undefined
-  const descEn = (feats ?? []).find((f) => f.dimension_key === '__description_en')?.value_text as string | undefined
+  const descDe = pickMeta('__description')
+  const descEn = pickMeta('__description_en')
   const description = locale === 'de' ? descDe : (descEn ?? descDe)
-  const releasedAt = (feats ?? []).find((f) => f.dimension_key === '__released')?.value_text as string | undefined
+  const releasedAt = pickMeta('__released')
   // Nicht-DE Locales → englische Dimension + Wert (Fallback: deutsch), analog description.
   const en = locale !== 'de'
+  // Nur Features der PRIMÄR-Kategorie zeigen und ALLE internen __-Marker ausblenden.
+  // Nach einem Merge trägt ein Produkt noch Feature-Zeilen aus den (Fragment-)Kategorien,
+  // in denen es nicht mehr Mitglied ist — die erzeugten die Duplikate (Lizenz/Plattform/
+  // Preis/Release mehrfach). Der __-Präfix-Filter blendet ALLE internen Dimensionen aus,
+  // sodass auch neue Marker (__attribution_qa_at, __validity_qa_at …) nie durchrutschen.
   const features = (feats ?? [])
-    .filter((f) => !META_DIMS.has(f.dimension_key as string))
+    .filter((f) => {
+      const dk = f.dimension_key as string
+      return dk && !dk.startsWith('__') && (!primaryCat || f.category === primaryCat)
+    })
     .map((f) => ({
       dimension: (en ? (f.dimension_key_en as string) : null) ?? (f.dimension_key as string),
       value: (en ? (f.value_text_en as string) : null) ?? (f.value_text as string),
