@@ -68,7 +68,9 @@ function buildVotePill(entry: ProductLinkEntry, locale: string): HTMLElement {
 export function injectProductLinks(container: HTMLElement, products: ProductLinkData): void {
   if (products.size === 0) return
   const locale = localeFrom()
-  const entries = [...products.values()].filter((e) => !isAutolinkStopword(e.displayName)).sort((a, b) => b.displayName.length - a.displayName.length)
+  // Mindestlänge 4 (wie der Server-Pfad findMentionedProducts): 2-3-Zeichen-Namen
+  // wie "LLM" sind fast immer generische Begriffe, keine Produkt-Erwähnungen.
+  const entries = [...products.values()].filter((e) => e.displayName.trim().length >= 4 && !isAutolinkStopword(e.displayName)).sort((a, b) => b.displayName.length - a.displayName.length)
   const linked = new Set<string>()
 
   const paragraphs = container.querySelectorAll('p')
@@ -155,7 +157,9 @@ function mentionedProducts(text: string, entries: ProductLinkEntry[]): ProductLi
 export function appendProductVoteBlock(container: HTMLElement, products: ProductLinkData): void {
   if (products.size === 0) return
   const locale = localeFrom()
-  const entries = [...products.values()].filter((e) => !isAutolinkStopword(e.displayName)).sort((a, b) => b.displayName.length - a.displayName.length)
+  // Mindestlänge 4 (wie der Server-Pfad findMentionedProducts): 2-3-Zeichen-Namen
+  // wie "LLM" sind fast immer generische Begriffe, keine Produkt-Erwähnungen.
+  const entries = [...products.values()].filter((e) => e.displayName.trim().length >= 4 && !isAutolinkStopword(e.displayName)).sort((a, b) => b.displayName.length - a.displayName.length)
 
   const markers = container.querySelectorAll('.mattes-synthese, .mattes-synthese-heading')
   markers.forEach((marker) => {

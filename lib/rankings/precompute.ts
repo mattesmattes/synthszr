@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { momentumScore, momentumHistory, momentumTrend } from '@/lib/rankings/score'
-import { isExcludedProduct, isFamilyUmbrella } from '@/lib/rankings/product-exclusions'
+import { isExcludedProduct, isFamilyUmbrella, isCommonWordNonProduct } from '@/lib/rankings/product-exclusions'
 
 /**
  * Berechnet Ranking-Metriken für alle sichtbaren Produkte EINMAL aus product_mentions
@@ -48,7 +48,8 @@ export async function precomputeMetrics(): Promise<{ computed: number }> {
     const dates = datesByProduct.get(p.id) ?? []
     const chartable =
       !(isExcludedProduct(p.family) && !p.version && !p.qualifier) &&
-      !isFamilyUmbrella(p.family, p.version, p.qualifier)
+      !isFamilyUmbrella(p.family, p.version, p.qualifier) &&
+      !isCommonWordNonProduct(p.family)
     return {
       product_id: p.id,
       momentum: momentumScore(dates, now),
