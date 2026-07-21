@@ -176,7 +176,10 @@ export async function runProductValidityQA(opts: { limit?: number; dryRun?: bool
 
   let excluded = 0, kept = 0, checked = 0
   const decisions: ValidityOutcome[] = []
-  for (const c of candidates) {
+  // Parallel in Batches — die LLM-Calls dominieren die Laufzeit; sequenziell wäre
+  // ein Backlog-Abbau unzumutbar langsam. CONCURRENCY moderat gegen Rate-Limits.
+  const CONCURRENCY = 6
+  const processOne = async (c: { id: string; canonical_name: string }) => {
     const { data: ex } = await sb.from('product_mentions').select('excerpt').eq('product_id', c.id).not('excerpt', 'is', null).limit(MAX_EXCERPTS)
     const excerpts = (ex ?? []).map((r) => (r.excerpt as string | null)?.trim().slice(0, 240) ?? '').filter(Boolean)
     const decision = await decideValidity({ id: c.id, name: c.canonical_name, excerpts })
@@ -191,7 +194,7 @@ export async function runProductValidityQA(opts: { limit?: number; dryRun?: bool
       if (doExclude) {
         if (!dryRun) {
           const { error } = await sb.from('products').update({ visibility_status: 'excluded' }).eq('id', c.id)
-          if (error) { console.error('[validity-qa] exclude:', error.message, c.id); continue }
+          if (error) { console.error('[validity-qa] exclude:', error.message, c.id); return }
           await setMarker(sb, c.id, catOf(c.id), `excluded: ${decision!.reasoning}`.slice(0, 400))
         }
         excluded++
@@ -202,6 +205,9 @@ export async function runProductValidityQA(opts: { limit?: number; dryRun?: bool
     } catch (e) {
       console.error('[validity-qa] apply:', e instanceof Error ? e.message : e)
     }
+  }
+  for (let i = 0; i < candidates.length; i += CONCURRENCY) {
+    await Promise.all(candidates.slice(i, i + CONCURRENCY).map(processOne))
   }
   return { excluded, kept, checked, decisions }
 }
