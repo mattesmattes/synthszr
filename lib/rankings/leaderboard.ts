@@ -38,6 +38,10 @@ export async function getRankedProducts(
       .from('product_metrics')
       .select('momentum, trend, mention_count, last_seen, history, products!inner(id, canonical_name, vendor_namespace, slug)')
       .eq('chartable', true)
+      // visibility explizit prüfen: precompute lädt nur 'visible' und aktualisiert
+      // daher das chartable-Flag ausgeblendeter Produkte nicht — deren metrics
+      // bleiben stale chartable=true. Der Join-Filter hält sie zuverlässig draußen.
+      .eq('products.visibility_status', 'visible')
       .gte('mention_count', Math.max(1, minMentions))
       .order('momentum', { ascending: false })
       .order('product_id', { ascending: true }) // stabiler Tiebreaker für konsistente Pagination
