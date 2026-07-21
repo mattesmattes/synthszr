@@ -193,7 +193,7 @@ export async function runProductValidityQA(opts: { limit?: number; dryRun?: bool
     try {
       if (doExclude) {
         if (!dryRun) {
-          const { error } = await sb.from('products').update({ visibility_status: 'excluded' }).eq('id', c.id)
+          const { error } = await sb.from('products').update({ visibility_status: 'hidden' }).eq('id', c.id)
           if (error) { console.error('[validity-qa] exclude:', error.message, c.id); return }
           await setMarker(sb, c.id, catOf(c.id), `excluded: ${decision!.reasoning}`.slice(0, 400))
         }

@@ -39,21 +39,23 @@ export async function resolveProduct(opts: {
   // Mit Modell-Zusatz (Version/Qualifier, z.B. "Mistral Large 3") bleibt es ein Produkt.
   // Reine Konzept-/Allerweltswörter ("Agents", "Reasoning", "Benchmark") ebenfalls raus,
   // hier unabhängig von Version/Qualifier — sie sind nie ein Produkt.
+  // 'hidden' = aus den Charts genommen (der CHECK-Constraint products_visibility_status_chk
+  // erlaubt nur 'visible'/'hidden', NICHT 'excluded' — precompute lädt ohnehin nur 'visible').
   const visibility =
     (isExcludedProduct(p.family) && !p.version && !p.qualifier) || isCommonWordNonProduct(p.family)
-      ? 'excluded'
+      ? 'hidden'
       : 'visible'
 
   // 1) Exakter Lookup → Heilung + last_seen
   const { data: existing } = await supabase
     .from('products').select('id').eq('canonical_key', p.canonical_key).maybeSingle()
   if (existing) {
-    // Heilung: last_seen immer; visibility nur VERSCHÄRFEN (auf 'excluded'). Ein
-    // bereits excludiertes Produkt NICHT zurück auf 'visible' heben — sonst würde
-    // eine neue Alltagswort-Erwähnung das kontextbasierte validity-QA-Urteil (oder
-    // einen manuellen Exclude) aufheben.
+    // Heilung: last_seen immer; visibility nur VERSCHÄRFEN (auf 'hidden'). Ein bereits
+    // ausgeblendetes Produkt NICHT zurück auf 'visible' heben — sonst würde eine neue
+    // Alltagswort-Erwähnung das kontextbasierte validity-QA-Urteil (oder einen
+    // manuellen Hide) aufheben.
     const patch: Record<string, unknown> = { last_seen: new Date().toISOString() }
-    if (visibility === 'excluded') patch.visibility_status = 'excluded'
+    if (visibility === 'hidden') patch.visibility_status = 'hidden'
     await supabase.from('products').update(patch).eq('id', existing.id)
     await ensureCreatedEvent(supabase, existing.id, p.canonical_key, opts.evidence)
     await ensureAlias(supabase, existing.id, p.vendor_namespace, opts.detectedName)
