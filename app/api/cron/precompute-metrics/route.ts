@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     // Läuft VOR precompute, damit ausgeblendete Einträge aus den Metriken fallen.
     let validity = { excluded: 0, kept: 0, checked: 0 }
     try {
-      validity = await runProductValidityQA({ limit: 15 })
+      validity = await runProductValidityQA({ limit: 40 })
     } catch (e) {
       console.error('[cron] validity-qa:', e instanceof Error ? e.message : e)
     }

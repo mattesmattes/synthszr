@@ -117,9 +117,14 @@ async function setMarker(sb: Sb, productId: string, category: string, verdict: s
  */
 export interface ValidityOutcome { name: string; mentions: number; isProduct: boolean | null; confidence: number | null; action: 'excluded' | 'kept'; reasoning: string }
 
-export async function runProductValidityQA(opts: { limit?: number; dryRun?: boolean } = {}): Promise<{ excluded: number; kept: number; checked: number; decisions: ValidityOutcome[] }> {
+export async function runProductValidityQA(opts: { limit?: number; dryRun?: boolean; nameFilter?: Set<string> } = {}): Promise<{ excluded: number; kept: number; checked: number; decisions: ValidityOutcome[] }> {
   const limit = opts.limit ?? 15
   const dryRun = opts.dryRun ?? false
+  // Optionaler Wörterbuch-Vorfilter (lowercase Namen): nur Produkte prüfen, deren
+  // Name ein gängiges Wort ist — echte Produkt-Eigennamen (Nemotron, Codex …) sind
+  // keine Alltagswörter und müssen nicht per LLM geprüft werden. Ohne Filter werden
+  // alle Single-Word-Kandidaten geprüft.
+  const nameFilter = opts.nameFilter
   const sb = createAdminClient()
 
   // 1. chartable Mention-Counts (nur wenige Erwähnungen sind verdächtig)
@@ -164,7 +169,9 @@ export async function runProductValidityQA(opts: { limit?: number; dryRun?: bool
     if (m === undefined || m > MAX_MENTIONS) return false
     if (p.version || p.qualifier) return false
     const name = (p.canonical_name || '').trim()
-    return name.length >= 2 && !/\s/.test(name) // Single-Word (Multi-Word ist eindeutiger)
+    if (name.length < 2 || /\s/.test(name)) return false // Single-Word (Multi-Word ist eindeutiger)
+    if (nameFilter && !nameFilter.has(name.toLowerCase())) return false
+    return true
   }).sort((a, b) => (mc.get(b.id) ?? 0) - (mc.get(a.id) ?? 0)).slice(0, limit)
 
   let excluded = 0, kept = 0, checked = 0
