@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mergeProductsInto } from '@/lib/rankings/consolidate'
+import { canonicalVendor } from '@/lib/rankings/vendor-canonical'
 
 // Selbstheilende De-Fragmentierung: bündelt Produkte, die dasselbe Modell mit
 // abweichender Benennung sind (Marken-/Vendor-Präfix, family-vs-qualifier-Inkonsistenz
@@ -56,7 +57,10 @@ export async function runDefragmentation(): Promise<{ clusters: number; merged: 
   for (const p of products) {
     const nm = normModel(p.family, p.qualifier, p.vendor_namespace)
     if (!nm) continue // reine Marke ohne Modell (Umbrella) — nicht mergen
-    const key = `${p.vendor_namespace}|${nm}|${p.version ?? ''}`
+    // KANONISCHER Vendor: sonst clustern Namespace-Varianten desselben Herstellers
+    // (moonshot vs moonshot-ai, google vs google-deepmind) getrennt und bleiben als
+    // Duplikate im Chart stehen (z.B. "Kimi K3" mehrfach).
+    const key = `${canonicalVendor(p.vendor_namespace)}|${nm}|${p.version ?? ''}`
     if (!clusters.has(key)) clusters.set(key, [])
     clusters.get(key)!.push(p)
   }

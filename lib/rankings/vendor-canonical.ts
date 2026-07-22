@@ -17,6 +17,9 @@ export const VENDOR_ALIASES: Record<string, string> = {
   'instagram': 'meta', 'whatsapp': 'meta', 'facebook': 'meta', 'fair': 'meta', 'meta-ai': 'meta',
   // Mistral
   'mistral-ai': 'mistral',
+  // Moonshot AI (Kimi) — häufige Namespace-Varianten desselben Herstellers
+  'moonshot-ai': 'moonshot', 'moonshots': 'moonshot', 'beijing-moonshot-ai-technology': 'moonshot',
+  'moonshotai': 'moonshot',
   // IBM
   'ibm-research': 'ibm',
   // ByteDance
@@ -30,6 +33,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   ibm: 'IBM', bytedance: 'ByteDance', deepseek: 'DeepSeek', alibaba: 'Alibaba', adobe: 'Adobe',
   perplexity: 'Perplexity', cohere: 'Cohere', huggingface: 'Hugging Face', salesforce: 'Salesforce',
   tencent: 'Tencent', anysphere: 'Anysphere', elevenlabs: 'ElevenLabs', runway: 'Runway',
+  moonshot: 'Moonshot AI',
 }
 
 /** Vendor-Namespace → kanonischer Vendor-Namespace (Casing/Whitespace-normalisiert). */
