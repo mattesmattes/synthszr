@@ -14,12 +14,13 @@
 import { splitAtTake, splitSentences, TAKE_MARKER_RE } from './take-ending'
 
 // Ein Absatz/Satz, der AUSSCHLIESSLICH aus {Company}-Tags besteht — optional
-// gefolgt von einer Quellen-Pfeil-Zeile "→ [Name](URL)". Hier hochgezogen
-// (statt in ghostwriter-pipeline.ts dupliziert) und von dort re-exportiert,
-// damit shortenBySentences unten dieselbe Definition nutzt wie
-// extractBundleTagLine — ein zirkulärer Import (ghostwriter-pipeline.ts
-// importiert bereits aus diesem Modul) wäre sonst die Alternative.
-export const BUNDLE_TAG_LINE_RE = /^\s*(?:\{[^}\n]+\}\s*)+(?:→\s*\[[^\]\n]*\]\([^)\n]*\)\s*)?$/
+// gefolgt von einer Quellen-Pfeil-Zeile "→ [Name](URL)" bzw. bei Bündeln mehreren
+// kommagetrennten Quellen "→ [a](u), [b](u), [c](u)". Hier hochgezogen (statt in
+// ghostwriter-pipeline.ts dupliziert) und von dort re-exportiert, damit
+// shortenBySentences unten dieselbe Definition nutzt wie extractBundleTagLine —
+// ein zirkulärer Import (ghostwriter-pipeline.ts importiert bereits aus diesem
+// Modul) wäre sonst die Alternative.
+export const BUNDLE_TAG_LINE_RE = /^\s*(?:\{[^}\n]+\}\s*)+(?:→\s*\[[^\]\n]*\]\([^)\n]*\)(?:\s*,\s*\[[^\]\n]*\]\([^)\n]*\))*\s*)?$/
 
 // splitSentences kollabiert Whitespace zu einem Space. Eine führende
 // Markdown-Heading-Zeile ("## …") würde dabei mit dem ersten Satz verschmelzen

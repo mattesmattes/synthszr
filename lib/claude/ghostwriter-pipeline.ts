@@ -617,12 +617,25 @@ export function pickPrimaryAndSecondarySources(
 // Baut den Markdown-Link "[Name](URL)" (oder nur den Namen) einer Quelle —
 // dieselbe Ableitung wie in writeSection (Tracking-Redirects vermeiden,
 // Domain als Fallback-Name).
+/** Kompakter Quellen-Kurzname für Bündel: Domain-artige Namen auf den Second-Level
+ *  ohne www./TLD kürzen ("www.reuters.com" → "reuters", "news.ycombinator.com" →
+ *  "ycombinator"); echte Anzeigenamen ("The Information") bleiben unverändert. */
+export function sourceShortName(item: PipelineItem): string | null {
+  const rawName = item.source_display_name && item.source_display_name !== 'unknown'
+    ? item.source_display_name
+    : (item.source_url ? domainFromUrl(item.source_url) : item.source_identifier)
+  if (!rawName) return null
+  const s = rawName.trim().replace(/^www\./i, '')
+  // Domain-artig (endet auf .tld) → Second-Level-Domain, kleingeschrieben.
+  if (/\.[a-z]{2,}$/i.test(s)) {
+    const parts = s.split('.').filter(Boolean)
+    if (parts.length >= 2) return parts[parts.length - 2].toLowerCase()
+  }
+  return s || null
+}
+
 function bundleSourceLink(item: PipelineItem): string | null {
-  const rawName = item.source_display_name || item.source_identifier
-  const hasValidName = rawName && rawName !== 'unknown'
-  const name = hasValidName
-    ? rawName
-    : (item.source_url ? domainFromUrl(item.source_url) : null)
+  const name = sourceShortName(item)
   const rawUrl = item.source_url
   const url = (rawUrl && !isTrackingRedirectUrl(rawUrl))
     ? rawUrl
@@ -663,19 +676,18 @@ export function extractBundleTagLine(section: string): { tags: string[]; rest: s
 
 // Deterministischer Quellen-Block: Haupt-Quelle prominent hinter den Tags,
 // Nebenquellen als "Auch: …". Der Renderer (Task 7) labelt das sprachabhängig.
-function buildBundleSourceBlock(
+export function buildBundleSourceBlock(
   tags: string[],
   primary: PipelineItem,
   secondary: PipelineItem[],
 ): string {
-  const primaryLink = bundleSourceLink(primary)
+  // Alle Quellen (Haupt + Neben) als kompakte Kurznamen in EINER Zeile, kommagetrennt:
+  // "{Company-Tags} → reuters, businessinsider, techcrunch". Kein separates "Auch:".
   const tagsStr = tags.join(' ')
-  const sourceLine = [tagsStr, primaryLink ? `→ ${primaryLink}` : '']
+  const links = [primary, ...secondary].map(bundleSourceLink).filter(Boolean) as string[]
+  return [tagsStr, links.length ? `→ ${links.join(', ')}` : '']
     .filter(Boolean)
     .join(' ')
-  const secLinks = secondary.map(bundleSourceLink).filter(Boolean) as string[]
-  const auch = secLinks.length ? `Auch: ${secLinks.join(', ')}` : ''
-  return [sourceLine, auch].filter(Boolean).join('\n\n')
 }
 
 // Fügt einen Block direkt VOR dem Synthszr-Take-Marker ein (bzw. am Ende, wenn
