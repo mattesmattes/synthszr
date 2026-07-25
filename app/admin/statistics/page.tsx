@@ -140,7 +140,7 @@ const SUMMARY_CARDS = [
 
 export default function StatisticsPage() {
   const router = useRouter()
-  const [period, setPeriod] = useState<Period>('7d')
+  const [period, setPeriod] = useState<Period>('90d')
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [podigee, setPodigee] = useState<PodigeeStats | null>(null)
