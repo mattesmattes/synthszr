@@ -27,6 +27,9 @@ export const defaultTranslations: Record<string, string> = {
   'home.last_7_days': 'Letzte 7 Tage',
   'home.all_articles': 'Alle Artikel',
   'home.no_posts': 'Noch keine Artikel veröffentlicht.',
+  // Charts-Teaser (HomeHero) — "SYNTHSZR CHARTS" bleibt Eigenname, "Beta" universell
+  'home.charts_new': 'Neu: SYNTHSZR CHARTS',
+  'home.charts_tagline': '— welche Produkte gerade rocken',
 
   // Why page
   'why.title': 'Feed the Soul. Run the System. | Synthszr',
