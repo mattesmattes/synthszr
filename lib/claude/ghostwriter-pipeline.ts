@@ -305,26 +305,25 @@ SPRACHE — ABSOLUT VERBINDLICH:
 - NIEMALS englische Überschriften — auch nicht bei englischsprachigen Quellen.
 - Fachbegriffe (Token, Reasoning, API, Fine-Tuning) dürfen Englisch bleiben, eingebettet in deutsche Sätze.
 
-HEADLINE-STIL — INTELLEKTUELLER WORTWITZ (HÖCHSTE PRIORITÄT):
-Headlines sollen scharf denken, nicht aufmerksamkeitsheischend sein.
-Humor durch Präzision: unerwartet konkrete Details statt Pointen.
-Doppeldeutigkeiten, die erst beim zweiten Lesen landen.
-Lakonisches Understatement statt Dramatik.
+HEADLINE-STIL — JOURNALISTISCH UND PRÄZISE (HÖCHSTE PRIORITÄT):
+Jede Headline benennt ZUERST die Kernaussage der News — wer tut was, oder was ist passiert — so klar, dass man das Thema allein aus der Headline versteht, OHNE den Text zu lesen. Namen, Zahlen und das eigentliche Ereignis gehören hinein: konkret statt kryptisch. Eine dezente Zuspitzung oder Pointe am Ende ist willkommen, aber NIE auf Kosten der Klarheit. Prüfung: Wenn man den Artikel lesen muss, um das Thema überhaupt zu erkennen, ist die Headline durchgefallen.
 
-GUTE HEADLINES (SO SOLL ES KLINGEN):
-- "Wenn der Compiler billiger wird als der Kaffee"
-- "Drei Unterschriften, zwei Committees, sechs Wochen: Agentic AI trifft Enterprise-Beschaffung"
-- "Gemini kann jetzt Code schreiben. Die IDE hat das noch nicht mitbekommen."
-- "OpenAI verkauft Compliance. Anthropic auch. Die Frage ist nur: an wen zuerst"
-- "Der Praktikant heißt jetzt Claude und macht keine Pause"
+GUTE HEADLINES (SO SOLL ES KLINGEN — informativ, Kern zuerst, evtl. leichte Pointe):
+- "Anthropic macht Claudes internes Reasoning sichtbar"
+- "Ramp baut ein eigenes KI-Modell, statt weiter dafür zu zahlen"
+- "JPMorgan bewertet seine KI-Infrastruktur mit einer Milliarde"
+- "Cursor erweitert die IDE um Posteingang-Automatisierung"
+- "New York Times: OpenAI hat im Copyright-Prozess systematisch gelogen"
 
 SCHLECHTE HEADLINES (VERBOTEN):
 - "OpenAI Launches New Model" ← Englisch (FATALER FEHLER)
 - "New AI Tools and Updates" ← Englisch + generisch
 - "KI-Update: Die wichtigsten News" ← generisch, hohl
 - "Spannende Entwicklungen in der KI-Welt" ← tote Sprache
-- "OpenAI launcht GPT-5.2" ← reine Nacherzählung, keine These
-- "Gemini 3.5 Flash: Google integriert Computersteuerung ins Modell" ← Schema "Produktname: Erklärung", reine Nacherzählung mit Doppelpunkt-Etikett
+- "OpenAI launcht GPT-5.2" ← leere Nacherzählung OHNE Substanz; nenne Grund, Konflikt, Zahl oder Konsequenz
+- "Gemini 3.5 Flash: Google integriert Computersteuerung ins Modell" ← Schema "Produktname: Erklärung"; Produktname in den Satz einbauen
+- "Wenn der Compiler billiger wird als der Kaffee" ← kryptische Metapher, das Thema ist ohne den Text NICHT erkennbar
+- "Die Velocity verschiebt das Nadelöhr nach oben" ← verschlüsselt, benennt keine konkrete News
 
 STRUKTUR-VARIANZ (HÖCHSTE PRIORITÄT — gegen Monotonie):
 - VERMEIDE das Muster "Eigenname/Produkt: Beschreibung" (z.B. "Gemini 3.5: Google macht X"). Es darf NICHT die Standardform sein.
@@ -334,7 +333,7 @@ STRUKTUR-VARIANZ (HÖCHSTE PRIORITÄT — gegen Monotonie):
 
 REGELN PRO FELD:
 - articleTitle: Übergreifende These oder pointierter Gedanke aus ALLEN Items zusammen. Was ist die tiefere Erkenntnis?
-- headings: KEINE Nacherzählung ("X launcht Y") und KEIN "Produkt: Erklärung"-Etikett. Eine These, Implikation oder pointierte Beobachtung — als echter Satz, mit wechselnder Struktur (siehe STRUKTUR-VARIANZ).
+- headings: Journalistisch und präzise nach dem HEADLINE-STIL oben — der Nachrichtenkern (wer tut was / was ist passiert) zuerst, konkret mit Namen und Zahlen. KEINE leere Nacherzählung OHNE Substanz ("X launcht Y" ohne Grund/Konflikt/Zahl) und KEIN "Produkt: Erklärung"-Etikett. Wechselnde Struktur (siehe STRUKTUR-VARIANZ), aber die News muss immer aus der Headline selbst hervorgehen — keine These oder Metapher, bei der man den Text lesen muss, um das Thema zu erkennen.
 - excerptBullets: Eigenständige Mini-Headlines, je max 65 Zeichen. Jede soll für sich stehen und neugierig machen.
 - thesis: Der rote Faden. Nicht die offensichtliche Gemeinsamkeit ("alles über KI"), sondern die tiefere Verbindung.
 
@@ -352,7 +351,7 @@ Erstelle folgenden JSON-Plan:
 {
   "thesis": "Ein Satz auf DEUTSCH — thematischer Kern als Leitfaden",
   "ordering": [1, 3, 7, 2],
-  "headings": {"1": "Pointierte These auf DEUTSCH — kein 'X launcht Y'", "2": "..."},
+  "headings": {"1": "Journalistisch präzise auf DEUTSCH — Nachrichtenkern zuerst, kein 'X launcht Y'-Etikett, keine kryptische These", "2": "..."},
   "takeAngles": {"1": "Ein Satz DEUTSCH — der eigene Blickwinkel für den Take dieses Items", "2": "..."},
   "retrievalHints": {"1": "Kurze konzeptuelle These DEUTSCH, EIN Konzept, max ~20 Wörter", "2": "..."},
   "articleTitle": "Witzige, scharfe These auf DEUTSCH — Humor durch Präzision",
@@ -505,7 +504,7 @@ export async function writeSection(
   const angleBlock = context.takeAngle
     ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung): ${context.takeAngle}`
     : ''
-  const userPrompt = `THEMEN-HINWEIS (nur grobe Orientierung — schreibe deine EIGENE Überschrift nach den ÜBERSCHRIFT-Regeln, übernimm diesen Hinweis NICHT wörtlich): ${heading}${angleBlock}
+  const userPrompt = `NACHRICHTENKERN (Original-Schlagzeile der Quelle — nüchterne Faktengrundlage, oft englisch; forme daraus deine EIGENE journalistisch präzise deutsche Überschrift nach den ÜBERSCHRIFT-Regeln, KEINE Formulierung wörtlich übernehmen und NICHT ins Kryptische zuspitzen): ${item.title}${angleBlock}
 
 NEWS-INHALT${sourceName ? ` (Quelle: ${sourceName}` : ''}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''}${sourceName ? ')' : ''}:
 ${stripLoneSurrogates((item.content || 'Kein Inhalt verfügbar.').slice(0, 6000))}
@@ -818,7 +817,7 @@ export async function writeBundleSection(
 
   const userPrompt = `BÜNDEL-LEITARTIKEL — ${bundleLabel}: Führe die folgenden ${items.length} Quellen zu EINEM zusammenhängenden Abschnitt zusammen (redundanzfrei, alle unterschiedlichen Aspekte abdecken, Redundantes NICHT wiederholen).
 
-THEMEN-HINWEIS (nur grobe Orientierung — schreibe deine EIGENE Überschrift nach den ÜBERSCHRIFT-Regeln, übernimm diesen Hinweis NICHT wörtlich): ${heading}${angleBlock}
+THEMEN-HINWEIS (übergreifende Klammer für alle Quellen — schreibe deine EIGENE journalistisch präzise Überschrift nach den ÜBERSCHRIFT-Regeln, die den gemeinsamen Nachrichtenkern benennt; NICHT wörtlich übernehmen und NICHT ins Kryptische zuspitzen): ${heading}${angleBlock}
 
 QUELLEN:
 ${sourceBlocks.join('\n\n')}
