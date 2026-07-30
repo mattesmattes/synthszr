@@ -33,10 +33,10 @@ export const AUTOLINK_STOPWORDS = new Set<string>([
   // im Blog überspringt es. Der LLM-Kontext-Pass (product-validity-qa) entscheidet
   // zusätzlich pro Erwähnung, ob es fürs Ranking zählt.
   'llm', 'llms', 'pitch', 'edit', 'edits', 'norm', 'vision',
-  // "Junior" existiert nur als niedrig-konfidenter Extraktions-Kandidat (mehrere
-  // vendor-lose "unknown/junior/kuse"-Einträge, identity_confidence 0); im
-  // Fließtext meint das Wort fast immer den Junior-Entwickler/-Mitarbeiter.
-  'junior',
+  // "Junior"/"Zero" existieren nur als niedrig-konfidente Extraktions-Kandidaten
+  // (vendor-lose Einträge, identity_confidence 0); im Fließtext meinen die Wörter
+  // fast immer den Junior-Entwickler bzw. "Zero-Day"/"Zero-Shot" — kein Produkt.
+  'junior', 'zero',
 ])
 
 /** Produktname ist ein gängiges Wort → nicht automatisch aus Fließtext verlinken. */
@@ -54,9 +54,10 @@ export function isAutolinkStopword(name: string | null | undefined): boolean {
 export const COMMON_WORD_NONPRODUCTS = new Set<string>([
   'agents', 'apps', 'chatbots', 'chatbot', 'reasoning', 'inference',
   'prompt', 'prompts', 'benchmark', 'benchmarks', 'dataset', 'datasets',
-  // Nur als niedrig-konfidente Kandidaten extrahiert (mehrere vendor-lose
-  // "junior"-Einträge, identity_confidence 0) — kein etabliertes AI-Produkt.
-  'junior',
+  // Nur als niedrig-konfidente Kandidaten extrahiert (vendor-lose Einträge,
+  // identity_confidence 0) — kein etabliertes AI-Produkt. "zero" stammt aus
+  // "Zero-Day"/"Zero-Shot"-Erwähnungen.
+  'junior', 'zero',
 ])
 
 /** family/Name ist ein reines Konzept-/Allerweltswort (kein reales Produkt). */

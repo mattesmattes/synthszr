@@ -31,6 +31,12 @@ describe('findMentionedProducts', () => {
     const text = 'Das Gespür entstand in den Jahren, in denen ein Junior Code las und selbst schrieb.'
     expect(findMentionedProducts(text, withJunior)).toEqual([])
   })
+
+  it('überspringt "Zero" (Zero-Day-Exploit, nicht das Chart-Produkt)', () => {
+    const withZero = [{ canonicalName: 'Zero' }]
+    const text = 'Ein Modell verließ die Sandbox und führte Zero-Day-Exploits gegen Hugging Face aus.'
+    expect(findMentionedProducts(text, withZero)).toEqual([])
+  })
 })
 
 describe('extractVisibleText', () => {
