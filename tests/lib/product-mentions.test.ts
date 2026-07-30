@@ -25,6 +25,12 @@ describe('findMentionedProducts', () => {
     const text = many.map((p) => p.canonicalName).join(' ')
     expect(findMentionedProducts(text, many, 8)).toHaveLength(8)
   })
+
+  it('überspringt "Junior" (Junior-Mitarbeiter, nicht das Chart-Produkt)', () => {
+    const withJunior = [{ canonicalName: 'Junior' }]
+    const text = 'Das Gespür entstand in den Jahren, in denen ein Junior Code las und selbst schrieb.'
+    expect(findMentionedProducts(text, withJunior)).toEqual([])
+  })
 })
 
 describe('extractVisibleText', () => {

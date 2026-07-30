@@ -7,7 +7,7 @@ import {
 
 describe('isCommonWordNonProduct (harte Charts-Exclusion)', () => {
   it('blockt reine Konzept-/Allerweltswörter', () => {
-    for (const w of ['Agents', 'apps', 'ChatBots', 'reasoning', 'Benchmark', 'Dataset']) {
+    for (const w of ['Agents', 'apps', 'ChatBots', 'reasoning', 'Benchmark', 'Dataset', 'Junior']) {
       expect(isCommonWordNonProduct(w)).toBe(true)
     }
   })
@@ -20,7 +20,7 @@ describe('isCommonWordNonProduct (harte Charts-Exclusion)', () => {
 
 describe('isAutolinkStopword (Blog-Anzeige unterdrücken, Produkt bleibt in Charts)', () => {
   it('unterdrückt mehrdeutige Wörter mit gleichnamigem echten Produkt', () => {
-    for (const w of ['LLM', 'Pitch', 'Edits', 'Norm', 'Vision', 'tempo', 'vibe']) {
+    for (const w of ['LLM', 'Pitch', 'Edits', 'Norm', 'Vision', 'tempo', 'vibe', 'Junior']) {
       expect(isAutolinkStopword(w)).toBe(true)
     }
   })
