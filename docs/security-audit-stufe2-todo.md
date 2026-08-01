@@ -12,7 +12,8 @@
 - **newsletters-Seite** (`8a4d4b9`): war die 11., übersehene Browser-Schreibseite (`newsletter_sources`-CRUD) → authentifizierte Route `/api/admin/newsletter-sources`.
 - **Klasse-A-RLS** (`712fca0`, SQL im Supabase-Editor ausgeführt): 9 ADMIN-ONLY anon-deny + 7 PUBLIC-READ anon-SELECT-Policies.
 - **Verifikation** (`scripts/_sec_klasse_a_verify.ts`): ADMIN-ONLY alle `anon=0`; PUBLIC-READ zeigen nur published-Teilmenge (generated_posts −26 Drafts, languages −5 inaktiv, newsletter_sources −7 disabled; `posts anon=0` korrekt = nur Halde-Drafts). Öffentliche Seiten DE+EN Artikel/Home/sources/sitemap/feed alle **200**. Cron-/Pipeline-Schreibpfade komplett service_role.
-- **Einziger offener Punkt:** Gmail-Token rotieren (User).
+- **Sweep-Runde 2** (`f43be06` + Code `cd76aa7`): Vollständiger anon-Sweep über ALLE 67 Code-Tabellen (`scripts/_sec_full_sweep.ts`) fand 10 weitere anon-lesbare (paywall_credentials, subscriber_preference_tokens, podcast_jobs, ranking_suggestions, stock_synthszr_cache, stylistic_rules, analysis_prompts, editor_in_chief_prompts, image_prompts, edit_diffs) → 7 anon→admin-Fixes + RLS-deny. Sweep meldet jetzt 0 Lücken; öffentliche Vote-Badges (batch-ratings) live verifiziert.
+- **Einziger offener Punkt:** Gmail-Token rotieren (User). Für 100%: Supabase-Dashboard → Advisors → Security final prüfen (DB-Tabellen ohne Code-Referenz + WARN-Level).
 
 ---
 
