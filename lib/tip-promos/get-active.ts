@@ -68,9 +68,12 @@ export async function getActiveTipPromo(opts: { context?: 'web' | 'newsletter'; 
 
   const [{ data: configRow }, { data: promos }] = await Promise.all([
     supabase.from('settings').select('value').eq('key', 'tip_promo_config').maybeSingle(),
+    // Nur die Spalten, die getActiveTipPromo intern (Filter/Sortierung) und
+    // die Konsumenten (Web-Route, Newsletter-Versand, TipPromoBox) tatsächlich
+    // nutzen — nicht die komplette Zeile inkl. name/active/updated_at.
     supabase
       .from('tip_promos')
-      .select('*')
+      .select('id, type, headline, body, link_url, cta_label, gradient_from, gradient_to, gradient_direction, text_color, newsletter_only, translations, sort_order, created_at')
       .eq('active', true)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true }),

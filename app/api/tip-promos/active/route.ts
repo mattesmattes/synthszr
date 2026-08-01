@@ -8,7 +8,10 @@ export const runtime = 'nodejs'
 export async function GET(request: Request) {
   const locale = new URL(request.url).searchParams.get('locale') || 'de'
   const promo = await getActiveTipPromo({ context: 'web', locale })
-  if (!promo) return NextResponse.json({ promo: null })
+  // Rotation wechselt nur einmal täglich → kurzes Edge-Caching mit SWR
+  // reduziert DB-Treffer pro Artikel-Pageview.
+  const headers = { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=600' }
+  if (!promo) return NextResponse.json({ promo: null }, { headers })
   return NextResponse.json({
     promo: {
       id: promo.id,
@@ -23,5 +26,5 @@ export async function GET(request: Request) {
       text_color: promo.text_color,
       podcast: promo.podcast,
     },
-  })
+  }, { headers })
 }
