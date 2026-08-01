@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveProviderKey, normalizeMonthly, classifyUnsubscribe } from '@/lib/subscriptions/detector'
+import { deriveProviderKey, normalizeMonthly, classifyUnsubscribe, buildDetectPrompt, parseDetectResponse } from '@/lib/subscriptions/detector'
 
 describe('deriveProviderKey', () => {
   it('normalisiert auf lowercase + trim', () => {
@@ -50,5 +50,31 @@ describe('classifyUnsubscribe', () => {
     const r = classifyUnsubscribe(null, null, 'randomblog.example')
     expect(r.type).toBe('unknown')
     expect(r.target).toBeNull()
+  })
+})
+
+describe('buildDetectPrompt', () => {
+  it('nummeriert die Mails und nennt Absender + Betreff', () => {
+    const prompt = buildDetectPrompt([{ from: 'Stratechery <a@stratechery.com>', subject: 'Receipt', snippet: '$12' }])
+    expect(prompt).toContain('0.')
+    expect(prompt).toContain('stratechery.com')
+    expect(prompt).toContain('Receipt')
+  })
+})
+
+describe('parseDetectResponse', () => {
+  it('nimmt nur gültige Indizes mit isPaid=true', () => {
+    const raw = { results: [
+      { index: 0, is_paid: true, provider_name: 'Stratechery', amount: 12, currency: 'USD', interval: 'monthly', confidence: 0.9 },
+      { index: 5, is_paid: true, provider_name: 'X', amount: 1, currency: 'USD', interval: 'monthly', confidence: 0.9 }, // out of range
+    ] }
+    const m = parseDetectResponse(raw, 1)
+    expect(m.size).toBe(1)
+    expect(m.get(0)?.providerName).toBe('Stratechery')
+  })
+  it('ignoriert ungültige interval-Werte → unknown', () => {
+    const raw = { results: [{ index: 0, is_paid: true, provider_name: 'X', amount: 5, currency: 'EUR', interval: 'bogus', confidence: 0.5 }] }
+    const m = parseDetectResponse(raw, 1)
+    expect(m.get(0)?.interval).toBe('unknown')
   })
 })
