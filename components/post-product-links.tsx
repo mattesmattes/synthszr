@@ -18,7 +18,7 @@ export async function PostProductLinks({
 }) {
   let products: Awaited<ReturnType<typeof getCategoryCappedProducts>>
   try {
-    products = await getCategoryCappedProducts(50)
+    products = await getCategoryCappedProducts(50, false) // keine Sparkline hier → kein history-Egress
   } catch {
     return null
   }

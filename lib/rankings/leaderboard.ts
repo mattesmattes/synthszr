@@ -23,9 +23,9 @@ export interface RankedProduct {
  * Herstellernamen und Modell-Familien-Oberbegriffen.
  */
 export async function getRankedProducts(
-  opts: { limit?: number; category?: string; categoryIn?: string[]; minMentions?: number } = {},
+  opts: { limit?: number; category?: string; categoryIn?: string[]; minMentions?: number; includeHistory?: boolean } = {},
 ): Promise<RankedProduct[]> {
-  const { limit, category, categoryIn, minMentions = 1 } = opts
+  const { limit, category, categoryIn, minMentions = 1, includeHistory = true } = opts
   const supabase = createAdminClient()
 
   // Paginiert laden — PostgREST cappt eine einzelne Antwort bei 1000 Zeilen, egal was
@@ -33,10 +33,15 @@ export async function getRankedProducts(
   // Kategorie-Ränge in der Pill-/Blog-Verlinkung (Leaderboard≠Produktseite).
   const target = limit ?? 1000
   const rows: Array<Record<string, unknown>> = []
+  // history (JSONB, ~2 KB/Zeile) nur laden, wenn der Aufrufer die Sparkline
+  // wirklich rendert — spart Egress in Verlinkungs-/Such-/Sitemap-Pfaden.
+  // Explizit als string typisiert, sonst versucht der PostgREST-Typ-Parser den
+  // dynamischen Select als Literal-Union zu parsen (Compile-Fehler).
+  const selectCols: string = `momentum, trend, mention_count, last_seen${includeHistory ? ', history' : ''}, products!inner(id, canonical_name, vendor_namespace, slug)`
   for (let off = 0; off < target; off += 1000) {
     let q = supabase
       .from('product_metrics')
-      .select('momentum, trend, mention_count, last_seen, history, products!inner(id, canonical_name, vendor_namespace, slug)')
+      .select(selectCols)
       .eq('chartable', true)
       // visibility explizit prüfen: precompute lädt nur 'visible' und aktualisiert
       // daher das chartable-Flag ausgeblendeter Produkte nicht — deren metrics
@@ -50,7 +55,9 @@ export async function getRankedProducts(
     const { data, error } = await q.range(off, Math.min(off + 1000, target) - 1)
     if (error) throw new Error(`leaderboard: ${error.message}`)
     if (!data?.length) break
-    rows.push(...data)
+    // dynamischer Select → supabase-js liefert GenericStringError-Typ; Laufzeitwert
+    // ist korrekt, daher Cast auf die schon vorhandene Row-Form.
+    rows.push(...(data as unknown as Array<Record<string, unknown>>))
     if (data.length < 1000) break
   }
   const maxMomentum = (rows[0]?.momentum as number) ?? 0
@@ -70,7 +77,7 @@ export async function getRankedProducts(
       momentum,
       mentionCount: (r.mention_count as number) ?? 0,
       lastSeen: (r.last_seen as string | null) ?? null,
-      history: ((r.history as Array<{ t: number; value: number }>) ?? []),
+      history: includeHistory ? ((r.history as Array<{ t: number; value: number }>) ?? []) : [],
       trend: ((r.trend as string) ?? 'flat') as 'up' | 'down' | 'flat',
     }
   })
@@ -92,8 +99,8 @@ export interface CategoryCappedProduct extends RankedProduct {
  * berechnet (nicht über eine abgeschnittene Liste), damit sie mit den
  * Produktseiten übereinstimmen.
  */
-export async function getCategoryCappedProducts(cap = 50): Promise<CategoryCappedProduct[]> {
-  const all = await getRankedProducts({ limit: 10_000, minMentions: 2 })
+export async function getCategoryCappedProducts(cap = 50, includeHistory = true): Promise<CategoryCappedProduct[]> {
+  const all = await getRankedProducts({ limit: 10_000, minMentions: 2, includeHistory })
   const supabase = createAdminClient()
   // Paginieren — PostgREST cappt bei 1000 Zeilen, sonst gelten tausende
   // Produkte fälschlich als uncategorisiert.

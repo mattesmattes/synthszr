@@ -134,7 +134,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Kriterium wie das Leaderboard) — dünnere Seiten bleiben draußen. Nur
   // de/en: andere Locales liefern EN-Fallback-Content (kein hreflang-Cluster).
   try {
-    const products = await getRankedProducts({ limit: 10_000, minMentions: 2 })
+    const products = await getRankedProducts({ limit: 10_000, minMentions: 2, includeHistory: false }) // nur URLs
     const PRODUCT_LOCALES = ['de', 'en'] as const
     for (const p of products) {
       const alternates: Record<string, string> = {

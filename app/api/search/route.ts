@@ -426,7 +426,7 @@ export async function GET(request: NextRequest) {
   //    (getCategoryCappedProducts ist gecacht). Prefix-Treffer zuerst, dann Kat-Rang.
   let products: ProductHit[] = []
   try {
-    const capped = await getCategoryCappedProducts(50)
+    const capped = await getCategoryCappedProducts(50, false) // Suche zeigt nur Name/Rang → kein history-Egress
     products = capped
       .filter((p) => p.canonicalName.toLowerCase().includes(lowerQuery))
       .sort((a, b) => {
