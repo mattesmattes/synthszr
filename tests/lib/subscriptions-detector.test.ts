@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveProviderKey, normalizeMonthly, classifyUnsubscribe, buildDetectPrompt, parseDetectResponse } from '@/lib/subscriptions/detector'
+import { deriveProviderKey, normalizeMonthly, classifyUnsubscribe, buildDetectPrompt, parseDetectResponse, pickBetterUnsubscribe } from '@/lib/subscriptions/detector'
 
 describe('deriveProviderKey', () => {
   it('normalisiert auf lowercase + trim', () => {
@@ -59,6 +59,20 @@ describe('buildDetectPrompt', () => {
     expect(prompt).toContain('0.')
     expect(prompt).toContain('stratechery.com')
     expect(prompt).toContain('Receipt')
+  })
+})
+
+describe('pickBetterUnsubscribe', () => {
+  it('behält den auto-kündbarsten Weg, unabhängig von der Reihenfolge', () => {
+    // jüngere header-lose Quittung darf älteren One-Click NICHT maskieren
+    expect(pickBetterUnsubscribe({ type: 'oneclick', target: 'https://x/u' }, { type: 'unknown', target: null }))
+      .toEqual({ type: 'oneclick', target: 'https://x/u' })
+    // besserer Weg gewinnt (login_portal → oneclick)
+    expect(pickBetterUnsubscribe({ type: 'login_portal', target: null }, { type: 'oneclick', target: 'https://x/u' }))
+      .toEqual({ type: 'oneclick', target: 'https://x/u' })
+    // unknown wird durch echten Weg ersetzt
+    expect(pickBetterUnsubscribe({ type: 'unknown', target: null }, { type: 'mailto', target: 'mailto:a@x' }).type)
+      .toBe('mailto')
   })
 })
 

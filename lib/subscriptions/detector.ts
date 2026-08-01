@@ -179,13 +179,27 @@ function domainOf(email: string): string {
   return at >= 0 ? email.slice(at + 1) : ''
 }
 
+/** Auto-Kündbarkeit als Rangordnung (höher = besser serverseitig kündbar). */
+const UNSUB_PRIORITY: Record<UnsubscribeType, number> = {
+  oneclick: 4, http: 3, mailto: 2, login_portal: 1, unknown: 0,
+}
+
+/** Wählt den auto-kündbarsten Unsubscribe-Weg — unabhängig von der Zahlungs-Recency,
+ *  damit ein älterer funktionierender Link nicht von einer jüngeren header-losen
+ *  Quittung maskiert wird. */
+export function pickBetterUnsubscribe(
+  current: { type: UnsubscribeType; target: string | null },
+  incoming: { type: UnsubscribeType; target: string | null },
+): { type: UnsubscribeType; target: string | null } {
+  return UNSUB_PRIORITY[incoming.type] > UNSUB_PRIORITY[current.type] ? incoming : current
+}
+
 /**
  * Hybrid-Scan: Gmail-Query holt Kandidaten (letzte 12 Monate), LLM klassifiziert
  * batchweise, Ergebnisse werden pro Anbieter (providerKey) zusammengeführt.
  */
 export async function scanSubscriptions(
   refreshToken: string,
-  contentSourceDomains: Set<string>,
 ): Promise<DetectedSubscription[]> {
   const { GmailClient } = await import('@/lib/gmail/client')
   const gmail = new GmailClient(refreshToken)
@@ -231,13 +245,20 @@ export async function scanSubscriptions(
           existing.amountMonthly = det.amount != null ? Math.round(normalizeMonthly(det.amount, det.interval) * 100) / 100 : null
           existing.senderEmail = senderEmail
           existing.senderDomain = senderDomain
-          if (type !== 'unknown') { existing.unsubscribeType = type; existing.unsubscribeTarget = target }
         }
+        // Kündigungsweg unabhängig von der Zahlungs-Recency wählen (bester über
+        // ALLE Belege) — sonst maskiert eine jüngere header-lose Quittung einen
+        // älteren funktionierenden One-Click-Link (Review-Finding Task 5).
+        const better = pickBetterUnsubscribe(
+          { type: existing.unsubscribeType, target: existing.unsubscribeTarget },
+          { type, target },
+        )
+        existing.unsubscribeType = better.type
+        existing.unsubscribeTarget = better.target
       }
     }
   }
 
-  // Content-Quellen markieren erfolgt beim Upsert (Route), da is_content_source dort gesetzt wird.
-  void contentSourceDomains
+  // Content-Quellen-Markierung (is_content_source) erfolgt beim Upsert in der Route.
   return Array.from(byProvider.values())
 }
