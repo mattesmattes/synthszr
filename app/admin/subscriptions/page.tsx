@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
 
 interface Subscription {
@@ -105,6 +106,29 @@ export default function SubscriptionsPage() {
     .filter((s) => s.status !== 'cancelled')
     .reduce((sum, s) => sum + (s.amount_monthly || 0), 0)
 
+  const [addOpen, setAddOpen] = useState(false)
+  const [addName, setAddName] = useState('')
+  const [addAmount, setAddAmount] = useState('')
+  const [addInterval, setAddInterval] = useState('monthly')
+  const [addSaving, setAddSaving] = useState(false)
+
+  async function addManual() {
+    if (!addName.trim()) return
+    setAddSaving(true)
+    const amount = addAmount ? parseFloat(addAmount.replace(',', '.')) : null
+    const factor: Record<string, number> = { monthly: 1, yearly: 1 / 12, quarterly: 1 / 3, weekly: 52 / 12, one_time: 0, unknown: 0 }
+    const amountMonthly = amount != null ? Math.round(amount * (factor[addInterval] ?? 0) * 100) / 100 : null
+    const { error } = await supabase.from('paid_subscriptions').insert({
+      provider_name: addName.trim(),
+      provider_key: addName.trim().toLowerCase(),
+      amount, currency: '€', interval: addInterval, amount_monthly: amountMonthly,
+      status: 'active', manually_added: true, unsubscribe_type: 'unknown',
+    })
+    if (error) alert('Fehler: ' + error.message)
+    else { setAddName(''); setAddAmount(''); setAddInterval('monthly'); setAddOpen(false); fetchSubs() }
+    setAddSaving(false)
+  }
+
   return (
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
@@ -115,10 +139,13 @@ export default function SubscriptionsPage() {
             {scanMsg && <span className="ml-3 text-xs">· {scanMsg}</span>}
           </p>
         </div>
-        <Button variant="outline" className="gap-2" onClick={rescan} disabled={scanning}>
-          {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          Neu scannen
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={rescan} disabled={scanning}>
+            {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Neu scannen
+          </Button>
+          <Button variant="outline" onClick={() => setAddOpen(true)}>Manuell hinzufügen</Button>
+        </div>
       </div>
 
       <Card>
@@ -214,6 +241,32 @@ export default function SubscriptionsPage() {
             <Button onClick={confirmCancel} disabled={cancelling}>
               {cancelling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {cancelTarget && isAutoCancellable(cancelTarget) ? 'Jetzt kündigen' : 'Seite öffnen'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Abo manuell hinzufügen</DialogTitle>
+            <DialogDescription>Für Abos, die der Scan nicht erkannt hat.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Input placeholder="Anbieter (z. B. Stratechery)" value={addName} onChange={(e) => setAddName(e.target.value)} />
+            <Input placeholder="Betrag (z. B. 12.00)" value={addAmount} onChange={(e) => setAddAmount(e.target.value)} />
+            <select className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+              value={addInterval} onChange={(e) => setAddInterval(e.target.value)}>
+              <option value="monthly">monatlich</option>
+              <option value="yearly">jährlich</option>
+              <option value="quarterly">quartalsweise</option>
+              <option value="weekly">wöchentlich</option>
+            </select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>Abbrechen</Button>
+            <Button onClick={addManual} disabled={addSaving || !addName.trim()}>
+              {addSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Hinzufügen
             </Button>
           </DialogFooter>
         </DialogContent>
