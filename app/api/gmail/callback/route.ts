@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTokensFromCode } from '@/lib/gmail/oauth'
+import { cookies } from 'next/headers'
+import { getTokensFromCode, GMAIL_OAUTH_STATE_COOKIE } from '@/lib/gmail/oauth'
 import { GmailClient } from '@/lib/gmail/client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
@@ -17,6 +18,20 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const code = searchParams.get('code')
   const error = searchParams.get('error')
+  const state = searchParams.get('state')
+
+  // CSRF-Schutz: state aus der Query gegen das beim Initiieren gesetzte
+  // Cookie prüfen. Bei Fehlen/Mismatch keine Token-Verarbeitung.
+  const cookieStore = await cookies()
+  const storedState = cookieStore.get(GMAIL_OAUTH_STATE_COOKIE)?.value
+  cookieStore.delete(GMAIL_OAUTH_STATE_COOKIE)
+
+  if (!state || !storedState || state !== storedState) {
+    console.error('Gmail OAuth state mismatch')
+    return NextResponse.redirect(
+      new URL('/admin/settings?error=invalid_state', request.url)
+    )
+  }
 
   // Handle error from Google
   if (error) {

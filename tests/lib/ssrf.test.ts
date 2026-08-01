@@ -62,13 +62,33 @@ describe('Security: SSRF isPrivateIPv6', () => {
     expect(isPrivateIPv6('fd00::1')).toBe(true)
   })
 
-  it('blocks IPv4-mapped private addresses', () => {
+  it('blocks IPv4-mapped private addresses (decimal form)', () => {
     expect(isPrivateIPv6('::ffff:127.0.0.1')).toBe(true)
     expect(isPrivateIPv6('::ffff:10.0.0.1')).toBe(true)
   })
 
+  it('blocks IPv4-mapped private addresses (hex form)', () => {
+    // ::ffff:7f00:1 = 127.0.0.1 (loopback)
+    expect(isPrivateIPv6('::ffff:7f00:1')).toBe(true)
+    // ::ffff:a00:1 = 10.0.0.1 (private)
+    expect(isPrivateIPv6('::ffff:a00:1')).toBe(true)
+    // ::ffff:c0a8:1 = 192.168.0.1 (private)
+    expect(isPrivateIPv6('::ffff:c0a8:1')).toBe(true)
+    // ::ffff:a9fe:a9fe = 169.254.169.254 (cloud metadata / link-local)
+    expect(isPrivateIPv6('::ffff:a9fe:a9fe')).toBe(true)
+    // fully expanded, uncompressed form of ::ffff:7f00:1
+    expect(isPrivateIPv6('0:0:0:0:0:ffff:7f00:1')).toBe(true)
+    // uppercase hex should be treated the same
+    expect(isPrivateIPv6('::FFFF:7F00:1')).toBe(true)
+  })
+
   it('allows public IPv6 addresses', () => {
     expect(isPrivateIPv6('2606:4700:4700::1111')).toBe(false)
+  })
+
+  it('does not misclassify a public address that merely contains "ffff" as IPv4-mapped', () => {
+    // ffff sits in the wrong position (not hextet 6) - not an IPv4-mapped address
+    expect(isPrivateIPv6('2001:ffff::1')).toBe(false)
   })
 })
 
@@ -109,7 +129,17 @@ describe('Security: SSRF assertPublicUrl', () => {
     await expect(assertPublicUrl('http://[::1]/')).rejects.toThrow('SSRF blocked')
   })
 
-  it('does not block a normal public domain', async () => {
-    await expect(assertPublicUrl('https://example.com')).resolves.toBeInstanceOf(URL)
+  it('blocks IPv4-mapped loopback literal in hex form', async () => {
+    await expect(assertPublicUrl('http://[::ffff:7f00:1]/')).rejects.toThrow('SSRF blocked')
+  })
+
+  it('blocks IPv4-mapped cloud-metadata literal in hex form', async () => {
+    await expect(assertPublicUrl('http://[::ffff:a9fe:a9fe]/')).rejects.toThrow('SSRF blocked')
+  })
+
+  it('does not block a normal public domain, and returns the resolved IP(s)', async () => {
+    const result = await assertPublicUrl('https://example.com')
+    expect(result.url).toBeInstanceOf(URL)
+    expect(result.ips).toEqual(['93.184.216.34'])
   })
 })

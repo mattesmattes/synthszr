@@ -61,10 +61,11 @@ export function verifyCronAuth(request: NextRequest): CronAuthResult {
     return { authorized: true, method: 'bearer' }
   }
 
-  // Method 2: Vercel cron header (trusted infrastructure header)
-  if (request.headers.get('x-vercel-cron') === '1') {
-    return { authorized: true, method: 'vercel-cron' }
-  }
+  // Method 2 (x-vercel-cron-Header) ENTFERNT: der Header ist von außen
+  // spoofbar und laut Vercel keine sichere Auth-Methode. Vercel-Crons senden
+  // automatisch `Authorization: Bearer $CRON_SECRET` (CRON_SECRET ist gesetzt),
+  // was oben von Method 1 (timing-safe) geprüft wird. Damit ist die einzige
+  // akzeptierte Cron-Auth der Bearer-Token.
 
   // Method 3: Development bypass (REMOVED for security)
   // Previously allowed bypass in development - now require CRON_SECRET in all environments

@@ -160,6 +160,11 @@ export async function PUT(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate-Limit gegen Token-Mint-Missbrauch (Defense-in-Depth; die sid ist
+    // seit dem subscribe-Fix nicht mehr aus fremden E-Mails ableitbar).
+    const rl = await checkRateLimit(`preferences-post:${getClientIP(request)}`, standardLimiter ?? undefined)
+    if (!rl.success) return rateLimitResponse(rl)
+
     const body = await request.json()
     const { subscriberId } = body
 

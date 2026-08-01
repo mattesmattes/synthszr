@@ -5,6 +5,9 @@ const ADMIN_AUTH_SCOPES = [
   'https://www.googleapis.com/auth/userinfo.profile',
 ]
 
+// CSRF-Schutz: state-Cookie-Name für den Admin-Login-OAuth-Flow (google → callback)
+export const ADMIN_OAUTH_STATE_COOKIE = 'admin_oauth_state'
+
 // Whitelist of allowed admin emails (comma-separated in env var)
 const ALLOWED_ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
   .split(',')
@@ -19,13 +22,14 @@ export function getAdminOAuth2Client() {
   )
 }
 
-export function getAdminAuthUrl(): string {
+export function getAdminAuthUrl(state: string): string {
   const oauth2Client = getAdminOAuth2Client()
 
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: ADMIN_AUTH_SCOPES,
     prompt: 'select_account', // Allow account selection
+    state,
   })
 }
 

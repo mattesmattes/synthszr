@@ -5,6 +5,9 @@ const SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
 ]
 
+// CSRF-Schutz: state-Cookie-Name für den Gmail-OAuth-Flow (authorize → callback)
+export const GMAIL_OAUTH_STATE_COOKIE = 'gmail_oauth_state'
+
 export function getOAuth2Client() {
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -13,13 +16,14 @@ export function getOAuth2Client() {
   )
 }
 
-export function getAuthUrl(): string {
+export function getAuthUrl(state: string): string {
   const oauth2Client = getOAuth2Client()
 
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: SCOPES,
     prompt: 'consent', // Force consent to get refresh token
+    state,
   })
 }
 

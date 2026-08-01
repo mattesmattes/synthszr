@@ -53,6 +53,57 @@ export function isPrivateIPv4(ip: string): boolean {
 }
 
 /**
+ * Fully expand an IPv6 literal into its 8 hextets (as numbers 0-65535).
+ * Handles "::" zero-run compression and a trailing embedded IPv4 dotted-quad
+ * (e.g. "::ffff:127.0.0.1"). Returns null if the input isn't well-formed.
+ *
+ * This is what lets isPrivateIPv6 recognize IPv4-mapped addresses in BOTH
+ * the decimal form (::ffff:127.0.0.1) and the hex form (::ffff:7f00:1,
+ * ::ffff:a9fe:a9fe, etc.) - a plain regex only catches the decimal form.
+ */
+function expandIPv6(ip: string): number[] | null {
+  const withoutZone = ip.split('%')[0] // strip a scope id like "fe80::1%eth0"
+
+  // A trailing "a.b.c.d" segment (e.g. "::ffff:127.0.0.1") - convert it to
+  // two hextets up front, then expand the remaining hex portion normally.
+  let head = withoutZone
+  let ipv4Tail: number[] | null = null
+  const lastColon = withoutZone.lastIndexOf(':')
+  if (lastColon !== -1) {
+    const tail = withoutZone.slice(lastColon + 1)
+    if (tail.includes('.')) {
+      const octets = tail.split('.').map(Number)
+      if (octets.length !== 4 || octets.some(o => Number.isNaN(o) || o < 0 || o > 255)) {
+        return null
+      }
+      ipv4Tail = [(octets[0] << 8) | octets[1], (octets[2] << 8) | octets[3]]
+      head = withoutZone.slice(0, lastColon)
+    }
+  }
+
+  const compressedParts = head.split('::')
+  if (compressedParts.length > 2) return null // more than one "::" - malformed
+
+  let groups: string[]
+  if (compressedParts.length === 2) {
+    const left = compressedParts[0] === '' ? [] : compressedParts[0].split(':')
+    const right = compressedParts[1] === '' ? [] : compressedParts[1].split(':')
+    const knownCount = left.length + right.length + (ipv4Tail ? 2 : 0)
+    const missing = 8 - knownCount
+    if (missing < 1) return null // "::" must stand in for at least one group
+    groups = [...left, ...Array(missing).fill('0'), ...right]
+  } else {
+    groups = head === '' ? [] : head.split(':')
+  }
+
+  const hextets = groups.map(g => (/^[0-9a-f]{1,4}$/i.test(g) ? parseInt(g, 16) : NaN))
+  const full = ipv4Tail ? [...hextets, ...ipv4Tail] : hextets
+  if (full.length !== 8 || full.some(n => Number.isNaN(n))) return null
+
+  return full
+}
+
+/**
  * Check if an IPv6 address falls into a private/reserved/loopback range.
  */
 export function isPrivateIPv6(ip: string): boolean {
@@ -63,10 +114,21 @@ export function isPrivateIPv6(ip: string): boolean {
   // :: - unspecified
   if (normalized === '::') return true
 
-  // IPv4-mapped IPv6 (::ffff:a.b.c.d) - check the embedded IPv4 address
-  const mappedMatch = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
-  if (mappedMatch) {
-    return isPrivateIPv4(mappedMatch[1])
+  // IPv4-mapped IPv6 (::ffff:0:0/96) - covers the decimal form
+  // (::ffff:127.0.0.1) and the hex form (::ffff:7f00:1, ::ffff:a9fe:a9fe,
+  // ...) alike: expand to 8 hextets, check hextets 1-5 are 0 and hextet 6 is
+  // ffff, then treat hextets 7+8 as the embedded IPv4 address.
+  const hextets = expandIPv6(normalized)
+  if (
+    hextets &&
+    hextets[0] === 0 && hextets[1] === 0 && hextets[2] === 0 &&
+    hextets[3] === 0 && hextets[4] === 0 && hextets[5] === 0xffff
+  ) {
+    const embeddedIPv4 = [
+      (hextets[6] >> 8) & 0xff, hextets[6] & 0xff,
+      (hextets[7] >> 8) & 0xff, hextets[7] & 0xff,
+    ].join('.')
+    return isPrivateIPv4(embeddedIPv4)
   }
 
   // fe80::/10 - link-local
@@ -93,9 +155,12 @@ export function isPrivateIP(ip: string): boolean {
 /**
  * Validate that a URL is http(s) and resolves only to public, non-reserved
  * addresses. Throws an Error (without leaking the offending internal IP) if
- * the URL is unsafe. Returns the parsed URL on success.
+ * the URL is unsafe. Returns the parsed URL plus the IP address(es) it
+ * resolved to at validation time (a direct IP-literal hostname resolves to
+ * itself) - see the DNS-rebinding note on safeFetch for why callers get the
+ * IPs back.
  */
-export async function assertPublicUrl(rawUrl: string): Promise<URL> {
+export async function assertPublicUrl(rawUrl: string): Promise<{ url: URL; ips: string[] }> {
   let url: URL
   try {
     url = new URL(rawUrl)
@@ -119,7 +184,7 @@ export async function assertPublicUrl(rawUrl: string): Promise<URL> {
     if (isPrivateIP(hostname)) {
       throw new Error('SSRF blocked: target resolves to a reserved address')
     }
-    return url
+    return { url, ips: [hostname] }
   }
 
   // localhost and friends never hit DNS resolution the same way in all
@@ -145,16 +210,47 @@ export async function assertPublicUrl(rawUrl: string): Promise<URL> {
     }
   }
 
-  return url
+  return { url, ips: resolved.map(r => r.address) }
 }
 
 /**
  * SSRF-safe fetch wrapper. Validates the URL (and every redirect hop) via
- * assertPublicUrl before it is fetched, following up to MAX_REDIRECTS
- * redirects manually.
+ * assertPublicUrl immediately before it is fetched, following up to
+ * MAX_REDIRECTS redirects manually.
+ *
+ * DNS-rebinding (TOCTOU) note: assertPublicUrl resolves `hostname` and
+ * checks the resulting IP(s), but the subsequent `fetch()` call below
+ * performs its OWN, independent DNS resolution for the same hostname when it
+ * actually opens the connection - so there is an inherent gap between "the
+ * name we checked" and "the name fetch() connects to". Fully closing that
+ * gap means pinning the outgoing connection to the IP(s) validated here
+ * (e.g. a low-level dispatcher/socket `lookup` override that keeps the
+ * original hostname for the Host header and TLS SNI but forces the actual
+ * connection to the pinned IP). That's not done here because it isn't
+ * cleanly achievable on top of the global `fetch()` API in this runtime:
+ * it would require either adding `undici` as a direct dependency to build a
+ * custom Agent/dispatcher (today it's only a transitive dependency of
+ * Next.js, so importing its internals directly is fragile across upgrades),
+ * or rewriting this function on raw `http(s).request`, which would lose
+ * fetch()'s automatic gzip/br decompression, streaming Response shape, and
+ * built-in redirect/abort handling that all current callers (image/audio
+ * proxying in the podcast + ad-promo routes, article scraping) depend on.
+ *
+ * Given that, this is the pragmatic minimal hardening: re-resolve and
+ * re-validate the hostname immediately before every single connection
+ * attempt - the initial request AND every redirect hop - with no other
+ * async work in between, minimizing the window an attacker's DNS answer
+ * could flip in. This defeats the common rebinding pattern (serve a public
+ * IP, then flip the record to a private one after a delay/TTL expiry), but
+ * NOT a maximally adversarial authoritative DNS server that deliberately
+ * answers differently on every individual query regardless of timing -
+ * that could in theory still slip a private IP past this check into the
+ * actual fetch. Residual risk is bounded by the fact all current callers
+ * only reach admin/DB-authored URLs or links embedded in crawled
+ * newsletters, not fully free-form third-party input.
  */
 export async function safeFetch(rawUrl: string, init?: RequestInit): Promise<Response> {
-  let currentUrl = (await assertPublicUrl(rawUrl)).toString()
+  let currentUrl = (await assertPublicUrl(rawUrl)).url.toString()
 
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
     const response = await fetch(currentUrl, {
@@ -177,7 +273,7 @@ export async function safeFetch(rawUrl: string, init?: RequestInit): Promise<Res
     }
 
     const nextUrl = new URL(location, currentUrl)
-    currentUrl = (await assertPublicUrl(nextUrl.toString())).toString()
+    currentUrl = (await assertPublicUrl(nextUrl.toString())).url.toString()
   }
 
   throw new Error('SSRF blocked: too many redirects')

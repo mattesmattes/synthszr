@@ -57,8 +57,11 @@ export async function POST(request: NextRequest) {
 
     if (existing) {
       if (existing.status === 'active') {
+        // KEINE sid zurückgeben: sonst kann jeder mit einer bekannten fremden
+        // E-Mail die interne subscriber-UUID abgreifen (→ Preference-Token →
+        // Account-Übernahme). Die sid ist ein Geheimnis (nur im Newsletter-Footer).
         return NextResponse.json(
-          { error: 'This email is already subscribed', sid: existing.id },
+          { error: 'This email is already subscribed' },
           { status: 409 }
         )
       }
@@ -81,10 +84,10 @@ export async function POST(request: NextRequest) {
 
         await sendConfirmationEmail(email, confirmationToken, language)
 
+        // KEINE sid für existierende E-Mails (verhindert E-Mail→UUID-Leak).
         return NextResponse.json({
           success: true,
           message: 'Confirmation email has been resent',
-          sid: existing.id,
         })
       }
 
@@ -103,10 +106,10 @@ export async function POST(request: NextRequest) {
 
         await sendConfirmationEmail(email, confirmationToken, language)
 
+        // KEINE sid für existierende E-Mails (verhindert E-Mail→UUID-Leak).
         return NextResponse.json({
           success: true,
           message: 'Confirmation email has been resent',
-          sid: existing.id,
         })
       }
     }
