@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 import { createClient } from '@/lib/supabase/client'
 
 interface Subscription {
@@ -67,6 +70,35 @@ export default function SubscriptionsPage() {
       .eq('id', id)
     if (error) alert('Fehler: ' + error.message)
     else fetchSubs()
+  }
+
+  const [cancelTarget, setCancelTarget] = useState<Subscription | null>(null)
+  const [cancelling, setCancelling] = useState(false)
+
+  const isAutoCancellable = (s: Subscription) => s.unsubscribe_type === 'oneclick' || s.unsubscribe_type === 'http'
+
+  async function confirmCancel() {
+    if (!cancelTarget) return
+    setCancelling(true)
+    try {
+      if (isAutoCancellable(cancelTarget)) {
+        const res = await fetch('/api/admin/subscriptions/cancel', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: cancelTarget.id }),
+        })
+        const data = await res.json()
+        if (!res.ok || !data.ok) alert('Kündigung fehlgeschlagen: ' + (data.detail || data.error || 'unbekannt'))
+      } else {
+        // Fall B: Ziel im Browser des Nutzers öffnen (mailto/login_portal/unknown)
+        const url = cancelTarget.unsubscribe_target
+          || `https://www.google.com/search?q=${encodeURIComponent(cancelTarget.provider_name + ' Abo kündigen')}`
+        window.open(url, '_blank', 'noopener,noreferrer')
+      }
+      await fetchSubs()
+    } finally {
+      setCancelling(false)
+      setCancelTarget(null)
+    }
   }
 
   const totalMonthly = subs
@@ -143,9 +175,15 @@ export default function SubscriptionsPage() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="icon" title="Kündigen"
-                          onClick={() => alert('Kündigung folgt in Task 10')}>
+                          onClick={() => setCancelTarget(s)}>
                           <Ban className="h-4 w-4 text-red-600" />
                         </Button>
+                        {!isAutoCancellable(s) && s.status === 'active' && (
+                          <Button variant="ghost" size="sm" title="Als gekündigt markieren"
+                            onClick={() => setStatus(s.id, 'cancelled')}>
+                            ✓ erledigt
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" title="Ausblenden / Kein Abo"
                           onClick={() => setStatus(s.id, 'ignored')}>
                           <EyeOff className="h-4 w-4 text-muted-foreground" />
@@ -159,6 +197,27 @@ export default function SubscriptionsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!cancelTarget} onOpenChange={(o) => !o && setCancelTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{cancelTarget?.provider_name} kündigen?</DialogTitle>
+            <DialogDescription>
+              {cancelTarget && isAutoCancellable(cancelTarget)
+                ? `Führt einen Unsubscribe-Request an ${cancelTarget.provider_name} aus.`
+                : 'Erfordert Login/Bestätigung — die Seite wird in einem neuen Tab geöffnet, du schließt die Kündigung manuell ab.'}
+              {cancelTarget?.is_content_source && ' Achtung: Damit fällt auch eine redaktionelle Content-Quelle weg.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelTarget(null)}>Abbrechen</Button>
+            <Button onClick={confirmCancel} disabled={cancelling}>
+              {cancelling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {cancelTarget && isAutoCancellable(cancelTarget) ? 'Jetzt kündigen' : 'Seite öffnen'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
