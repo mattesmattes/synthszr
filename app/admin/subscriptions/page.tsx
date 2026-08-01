@@ -88,7 +88,12 @@ export default function SubscriptionsPage() {
           body: JSON.stringify({ id: cancelTarget.id }),
         })
         const data = await res.json()
-        if (!res.ok || !data.ok) alert('Kündigung fehlgeschlagen: ' + (data.detail || data.error || 'unbekannt'))
+        if (!res.ok || !data.ok) {
+          const url = cancelTarget.unsubscribe_target
+            || `https://www.google.com/search?q=${encodeURIComponent(cancelTarget.provider_name + ' Abo kündigen')}`
+          window.open(url, '_blank', 'noopener,noreferrer')
+          alert('Automatische Kündigung fehlgeschlagen (' + (data.detail || data.error || 'unbekannt') + ') — die Seite wurde geöffnet, bitte manuell abschließen.')
+        }
       } else {
         // Fall B: Ziel im Browser des Nutzers öffnen (mailto/login_portal/unknown)
         const url = cancelTarget.unsubscribe_target
@@ -205,9 +210,16 @@ export default function SubscriptionsPage() {
                           onClick={() => setCancelTarget(s)}>
                           <Ban className="h-4 w-4 text-red-600" />
                         </Button>
-                        {!isAutoCancellable(s) && s.status === 'active' && (
+                        {s.status === 'active' && (
                           <Button variant="ghost" size="sm" title="Als gekündigt markieren"
-                            onClick={() => setStatus(s.id, 'cancelled')}>
+                            onClick={async () => {
+                              const res = await fetch('/api/admin/subscriptions/cancel', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ id: s.id, manual: true }),
+                              })
+                              if (!res.ok) alert('Fehler beim Markieren als gekündigt')
+                              await fetchSubs()
+                            }}>
                             ✓ erledigt
                           </Button>
                         )}
