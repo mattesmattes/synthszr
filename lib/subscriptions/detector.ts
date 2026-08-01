@@ -53,7 +53,9 @@ export function classifyUnsubscribe(
   if (mailto) return { type: 'mailto', target: mailto }
 
   const domainLower = (senderDomain || '').toLowerCase()
-  if (BILLING_PORTAL_DOMAINS.some((d) => domainLower.endsWith(d))) {
+  // Label-Grenze beachten: exakte Domain ODER echte Subdomain — sonst matchte
+  // "evilstripe.com" auf "stripe.com" (endsWith allein ist grenzenlos).
+  if (BILLING_PORTAL_DOMAINS.some((d) => domainLower === d || domainLower.endsWith('.' + d))) {
     return { type: 'login_portal', target: null }
   }
   return { type: 'unknown', target: null }

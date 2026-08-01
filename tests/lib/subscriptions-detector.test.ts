@@ -41,6 +41,11 @@ describe('classifyUnsubscribe', () => {
     const r = classifyUnsubscribe(null, null, 'stripe.com')
     expect(r.type).toBe('login_portal')
   })
+  it('login_portal auch für echte Subdomain, NICHT für Namens-Suffix', () => {
+    expect(classifyUnsubscribe(null, null, 'billing.stripe.com').type).toBe('login_portal')
+    expect(classifyUnsubscribe(null, null, 'evilstripe.com').type).toBe('unknown')
+    expect(classifyUnsubscribe(null, null, 'mygoogle.com').type).toBe('unknown')
+  })
   it('unknown, wenn kein Header und keine bekannte Portal-Domain', () => {
     const r = classifyUnsubscribe(null, null, 'randomblog.example')
     expect(r.type).toBe('unknown')
