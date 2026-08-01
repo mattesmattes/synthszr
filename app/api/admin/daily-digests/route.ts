@@ -12,17 +12,40 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { parseIntParam } from '@/lib/validation/query-params'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
+  const { searchParams } = new URL(request.url)
   const supabase = createAdminClient()
+
+  // Security-Stufe 2 (Welle 1c): Einzel-Digest per id (+ optionalem select) für
+  // app/admin/generated-articles/edit/[id]/page.tsx (ersetzt direkten Browser-Query
+  // `.select('analysis_content').eq('id', digestId).single()`).
+  const id = searchParams.get('id')
+  if (id) {
+    const select = searchParams.get('select')
+    const { data, error } = await supabase
+      .from('daily_digests')
+      .select(select || '*')
+      .eq('id', id)
+      .single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data)
+  }
+
+  // Security-Stufe 2 (Welle 1c): optionaler ?limit= für
+  // app/admin/create-article/page.tsx (bisher `.limit(5)` im Browser-Query).
+  // Default bleibt 20 — unverändert für app/admin/digests/page.tsx.
+  const limit = parseIntParam(searchParams.get('limit'), 20, 1, 100)
+
   const { data, error } = await supabase
     .from('daily_digests')
     .select('*')
     .order('digest_date', { ascending: false })
-    .limit(20)
+    .limit(limit)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ digests: data ?? [] })

@@ -39,7 +39,6 @@ import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
@@ -49,6 +48,18 @@ import { runEditorInChiefOnMarkdown } from '@/lib/editor-in-chief/run-stream'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { ensureInitialEditHistory } from '@/lib/edit-learning/history'
 import { sanitizeTiptapUrls } from '@/lib/utils/url-verifier'
+
+// Fetch helper for the news-queue "by-ids" action (Security-Stufe 2, Welle 1c) —
+// ersetzt direkte Browser-Queries `.from('news_queue').select(...).in('id', ids)[.limit(n)]`.
+async function fetchQueueItemsByIds<T>(ids: string[], select: string, limit?: number): Promise<T[]> {
+  if (ids.length === 0) return []
+  const params = new URLSearchParams({ action: 'by-ids', select, ids: ids.join(',') })
+  if (limit) params.set('limit', String(limit))
+  const res = await fetch(`/api/admin/news-queue?${params.toString()}`, { credentials: 'include' })
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.items ?? []) as T[]
+}
 
 interface Digest {
   id: string
@@ -174,8 +185,6 @@ export default function CreateArticlePage() {
     }
   }, [parsedContent])
 
-  const supabase = createClient()
-
   useEffect(() => {
     loadData()
   }, [])
@@ -241,39 +250,32 @@ export default function CreateArticlePage() {
       }
 
       // Load digests (still needed for image generation reference)
-      const { data: digestsData } = await supabase
-        .from('daily_digests')
-        .select('id, digest_date, analysis_content, word_count')
-        .order('digest_date', { ascending: false })
-        .limit(5)
-
-      if (digestsData) {
-        setDigests(digestsData)
-        if (digestsData.length > 0) {
-          setSelectedDigestId(digestsData[0].id)
+      const digestsRes = await fetch('/api/admin/daily-digests', { credentials: 'include' })
+      if (digestsRes.ok) {
+        const { digests: digestsData } = await digestsRes.json()
+        const trimmed = (digestsData ?? []).slice(0, 5)
+        if (trimmed.length > 0) {
+          setDigests(trimmed)
+          setSelectedDigestId(trimmed[0].id)
         }
       }
 
       // Load active ghostwriter prompt
-      const { data: promptData } = await supabase
-        .from('ghostwriter_prompts')
-        .select('*')
-        .eq('is_active', true)
-        .single()
-
-      if (promptData) {
-        setActivePrompt(promptData)
+      const promptRes = await fetch('/api/admin/ghostwriter-prompts?active=true', { credentials: 'include' })
+      if (promptRes.ok) {
+        const promptData = await promptRes.json()
+        if (promptData && !promptData.error) {
+          setActivePrompt(promptData)
+        }
       }
 
       // Load vocabulary
-      const { data: vocabData } = await supabase
-        .from('vocabulary_dictionary')
-        .select('id, term, preferred_usage, category')
-        .order('category')
-        .order('term')
-
-      if (vocabData) {
-        setVocabulary(vocabData)
+      const vocabRes = await fetch('/api/admin/vocabulary', { credentials: 'include' })
+      if (vocabRes.ok) {
+        const vocabData = await vocabRes.json()
+        if (vocabData) {
+          setVocabulary(vocabData)
+        }
       }
     } catch (error) {
       console.error('Error loading data:', error)
@@ -393,21 +395,21 @@ export default function CreateArticlePage() {
             : ''
           return `${self} ${kids}`
         }
-        const { data: post } = await supabase
-          .from('generated_posts')
-          .select('content, pending_queue_item_ids')
-          .eq('id', postId)
-          .single()
+        const postRes = await fetch(
+          `/api/admin/generated-posts?id=${postId}&select=${encodeURIComponent('content, pending_queue_item_ids')}`,
+          { credentials: 'include' }
+        )
+        const post = postRes.ok ? await postRes.json() : null
         if (post?.content) {
           triggerSynthszrRatings(collectText(JSON.parse(post.content)))
         }
         const qids: string[] = post?.pending_queue_item_ids ?? []
         if (qids.length > 0) {
-          const { data: qi } = await supabase
-            .from('news_queue')
-            .select('content, title')
-            .in('id', qids)
-            .limit(1)
+          const qi = await fetchQueueItemsByIds<{ content: string | null; title: string }>(
+            qids,
+            'content, title',
+            1
+          )
           const newsContent = qi?.[0]?.content || qi?.[0]?.title
           if (newsContent) triggerImageGeneration(postId, newsContent)
         }
@@ -650,12 +652,12 @@ export default function CreateArticlePage() {
       // This allows thumbnails to follow H2s when users reorder articles in the editor
       if (usedQueueItemIds.length > 0) {
         // Fetch queue item titles for matching
-        const { data: queueItemsData } = await supabase
-          .from('news_queue')
-          .select('id, title, content')
-          .in('id', usedQueueItemIds)
+        const queueItemsData = await fetchQueueItemsByIds<{ id: string; title: string; content: string | null }>(
+          usedQueueItemIds,
+          'id, title, content'
+        )
 
-        if (queueItemsData && queueItemsData.length > 0) {
+        if (queueItemsData.length > 0) {
           tiptapContent = embedQueueItemIds(tiptapContent, queueItemsData)
         }
       }
@@ -667,23 +669,32 @@ export default function CreateArticlePage() {
         tiptapContent = sanitizedContent
       }
 
-      const { data: newPost, error } = await supabase.from('generated_posts').insert({
-        digest_id: selectedDigestId || null,
-        prompt_id: activePrompt?.id,
-        title,
-        slug,
-        excerpt: metadata.excerpt || null,
-        category: metadata.category || 'AI & Tech',
-        content: JSON.stringify(tiptapContent),
-        word_count: bodyContent.split(/\s+/).length,
-        status: 'draft',
-        created_at: `${publishDate}T07:00:00.000+01:00`, // 7 Uhr MEZ als fester Zeitstempel
-        ai_model: usedModel || null, // Model comes from settings, stored after generation
-        // Store queue item IDs - will be marked as "used" when post is published
-        pending_queue_item_ids: usedQueueItemIds.length > 0 ? usedQueueItemIds : [],
-      }).select('id').single()
+      const savePostRes = await fetch('/api/admin/generated-posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          digest_id: selectedDigestId || null,
+          prompt_id: activePrompt?.id,
+          title,
+          slug,
+          excerpt: metadata.excerpt || null,
+          category: metadata.category || 'AI & Tech',
+          content: JSON.stringify(tiptapContent),
+          word_count: bodyContent.split(/\s+/).length,
+          status: 'draft',
+          created_at: `${publishDate}T07:00:00.000+01:00`, // 7 Uhr MEZ als fester Zeitstempel
+          ai_model: usedModel || null, // Model comes from settings, stored after generation
+          // Store queue item IDs - will be marked as "used" when post is published
+          pending_queue_item_ids: usedQueueItemIds.length > 0 ? usedQueueItemIds : [],
+        }),
+      })
 
-      if (error) throw error
+      if (!savePostRes.ok) {
+        const errBody = await savePostRes.json().catch(() => ({}))
+        throw new Error(errBody.error || 'Fehler beim Speichern des Entwurfs')
+      }
+      const newPost = await savePostRes.json()
 
       // Note: Queue items stay as "selected" until post is published
       // They will be marked as "used" in the edit page when status changes to "published"
@@ -697,11 +708,11 @@ export default function CreateArticlePage() {
       if (newPost?.id) {
         // Fetch queue items for image generation if we have IDs
         if (usedQueueItemIds.length > 0) {
-          const { data: queueItems } = await supabase
-            .from('news_queue')
-            .select('content, title')
-            .in('id', usedQueueItemIds)
-            .limit(1)
+          const queueItems = await fetchQueueItemsByIds<{ content: string | null; title: string }>(
+            usedQueueItemIds,
+            'content, title',
+            1
+          )
 
           if (queueItems && queueItems[0]) {
             // Use content if available, fallback to title
@@ -731,7 +742,7 @@ export default function CreateArticlePage() {
 
       // Initialize edit history with original AI content (for learning from edits)
       if (newPost?.id) {
-        ensureInitialEditHistory(newPost.id, tiptapContent, usedModel || 'unknown', supabase)
+        ensureInitialEditHistory(newPost.id, tiptapContent, usedModel || 'unknown')
           .then(() => console.log('[EditLearning] Initialized edit history for new post'))
           .catch(err => console.error('[EditLearning] Failed to init history:', err))
 

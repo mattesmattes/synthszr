@@ -24,7 +24,6 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { Badge } from '@/components/ui/badge'
-import { createClient } from '@/lib/supabase/client'
 import { use } from 'react'
 import { ensureInitialEditHistory, recordEditVersion } from '@/lib/edit-learning/history'
 import { sanitizeTiptapUrls } from '@/lib/utils/url-verifier'
@@ -32,6 +31,18 @@ import { convertTiptapToMarkdown, parseTiptapContent } from '@/lib/utils/tiptap-
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
 import { runEditorInChiefOnMarkdown } from '@/lib/editor-in-chief/run-stream'
 import type { LearnedPattern } from '@/lib/edit-learning/retrieval'
+
+// Fetch helper for die news-queue "by-ids" Action (Security-Stufe 2, Welle 1c) —
+// ersetzt direkte Browser-Queries `.from('news_queue').select(...).in('id', ids)[.limit(n)]`.
+async function fetchQueueItemsByIds<T>(ids: string[], select: string, limit?: number): Promise<T[]> {
+  if (ids.length === 0) return []
+  const params = new URLSearchParams({ action: 'by-ids', select, ids: ids.join(',') })
+  if (limit) params.set('limit', String(limit))
+  const res = await fetch(`/api/admin/news-queue?${params.toString()}`, { credentials: 'include' })
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.items ?? []) as T[]
+}
 
 interface QueueItem {
   id: string
@@ -87,7 +98,6 @@ interface GeneratedPost {
 export default function EditGeneratedArticlePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const supabase = createClient()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -257,11 +267,11 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
       // Priority 1: Use queue item content (new flow)
       if (queueIds && queueIds.length > 0) {
-        const { data: queueItems } = await supabase
-          .from('news_queue')
-          .select('content, title')
-          .in('id', queueIds)
-          .limit(1)
+        const queueItems = await fetchQueueItemsByIds<{ content: string | null; title: string }>(
+          queueIds,
+          'content, title',
+          1
+        )
 
         if (queueItems && queueItems[0]) {
           newsContent = queueItems[0].content || queueItems[0].title
@@ -271,11 +281,11 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
       // Priority 2: Fallback to digest content (legacy)
       if (!newsContent && digestId) {
-        const { data: digest } = await supabase
-          .from('daily_digests')
-          .select('analysis_content')
-          .eq('id', digestId)
-          .single()
+        const digestRes = await fetch(
+          `/api/admin/daily-digests?id=${digestId}&select=${encodeURIComponent('analysis_content')}`,
+          { credentials: 'include' }
+        )
+        const digest = digestRes.ok ? await digestRes.json() : null
 
         if (digest?.analysis_content) {
           const lines = digest.analysis_content.split('\n').filter((l: string) => l.trim())
@@ -311,7 +321,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     } catch (err) {
       console.error('[CoverImages] Error triggering generation:', err)
     }
-  }, [id, supabase])
+  }, [id])
 
   // Fetch applied patterns for highlighting
   const fetchAppliedPatterns = useCallback(async (postContent?: Record<string, unknown>, aiModel?: string | null) => {
@@ -415,15 +425,12 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       return
     }
 
-    const { data } = await supabase
-      .from('news_queue')
-      .select('id, title, source_display_name, source_identifier')
-      .in('id', itemIds)
+    const data = await fetchQueueItemsByIds<QueueItem>(itemIds, 'id, title, source_display_name, source_identifier')
 
     if (data) {
       setQueueItems(data)
     }
-  }, [supabase])
+  }, [])
 
   // Remove a queue item (reset to pending) and its associated thumbnail
   const removeQueueItem = async (itemId: string) => {
@@ -464,10 +471,12 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         setArticleThumbnails(prev => prev.filter(t => t.article_queue_item_id !== itemId))
 
         // Update the post's pending_queue_item_ids in database
-        await supabase
-          .from('generated_posts')
-          .update({ pending_queue_item_ids: newIds })
-          .eq('id', id)
+        await fetch('/api/admin/generated-posts', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ id, pending_queue_item_ids: newIds }),
+        })
 
         console.log(`[Queue] Item ${itemId} removed and reset to pending`)
       } else {
@@ -482,11 +491,8 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
   useEffect(() => {
     async function loadPost() {
-      const { data } = await supabase
-        .from('generated_posts')
-        .select('*')
-        .eq('id', id)
-        .single()
+      const res = await fetch(`/api/admin/generated-posts?id=${id}`, { credentials: 'include' })
+      const data = res.ok ? await res.json() : null
 
       if (data) {
         const parsedContent = typeof data.content === 'string'
@@ -520,7 +526,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
         // Initialize edit history if this is the first edit
         // This preserves the original AI-generated content for learning
-        ensureInitialEditHistory(id, parsedContent, data.ai_model, supabase)
+        ensureInitialEditHistory(id, parsedContent, data.ai_model)
           .then(({ version, isNew }) => {
             if (isNew) {
               console.log('[EditLearning] Initialized edit history, version:', version)
@@ -533,7 +539,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     }
 
     loadPost()
-  }, [id, supabase, fetchQueueItems, fetchAppliedPatterns, fetchArticleThumbnails, fetchCoverImages, countArticles])
+  }, [id, fetchQueueItems, fetchAppliedPatterns, fetchArticleThumbnails, fetchCoverImages, countArticles])
 
   const handleTitleChange = (value: string) => {
     setTitle(value)
@@ -568,7 +574,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     // Record edit version for learning (before saving)
     // This captures the before/after diff for pattern extraction
     try {
-      const result = await recordEditVersion(id, contentToSave, supabase)
+      const result = await recordEditVersion(id, contentToSave)
       if (result?.hasChanges) {
         console.log('[EditLearning] Recorded edit version:', result.version)
       }
@@ -589,13 +595,16 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       pending_queue_item_ids: isNowPublished ? [] : currentQueueItems,
     }
 
-    const { error } = await supabase
-      .from('generated_posts')
-      .update(updateData)
-      .eq('id', id)
+    const updateRes = await fetch('/api/admin/generated-posts', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ id, ...updateData }),
+    })
 
-    if (error) {
-      alert(`Fehler beim Speichern: ${error.message}`)
+    if (!updateRes.ok) {
+      const errBody = await updateRes.json().catch(() => ({}))
+      alert(`Fehler beim Speichern: ${errBody.error || 'Unbekannter Fehler'}`)
       setSaving(false)
       return
     }
@@ -736,18 +745,22 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
           console.log(`[Podcast] Script generated: ${data.lineCount} lines, ~${data.estimatedDuration} min`)
 
           // Store the script in post_podcasts table for later TTS generation
-          const { error: saveError } = await supabase
-            .from('post_podcasts')
-            .upsert({
+          const saveRes = await fetch('/api/admin/post-podcasts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
               post_id: id,
               locale: 'en',
               script_content: data.script,
               status: 'pending', // Ready for TTS generation
               duration_seconds: data.estimatedDuration * 60,
-            }, { onConflict: 'post_id,locale' })
+            }),
+          })
 
-          if (saveError) {
-            console.error(`[Podcast] Failed to save script:`, saveError)
+          if (!saveRes.ok) {
+            const saveError = await saveRes.json().catch(() => ({}))
+            console.error(`[Podcast] Failed to save script:`, saveError.error)
             setPodcastStatus('error')
             setPodcastMessage('Script-Speicherung fehlgeschlagen')
             return

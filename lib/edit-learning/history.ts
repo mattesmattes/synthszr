@@ -1,5 +1,10 @@
-import { createClient } from '@/lib/supabase/client'
 import { SupabaseClient } from '@supabase/supabase-js'
+
+// Security-Stufe 2 (Welle 1c): DB-Zugriff läuft jetzt über die authentifizierte
+// Server-Route /api/admin/edit-history (service_role) statt über den direkten
+// Browser-anon-Client. Der `supabase`-Parameter bleibt in der Signatur, damit
+// bestehende Aufrufer (create-article/page.tsx, edit/[id]/page.tsx) unverändert
+// weiter kompilieren — er wird intern nicht mehr für DB-Zugriffe genutzt.
 
 /**
  * Create the initial edit history entry when a post is first opened for editing.
@@ -11,22 +16,19 @@ export async function ensureInitialEditHistory(
   aiModel?: string | null,
   supabase?: SupabaseClient
 ): Promise<{ version: number; isNew: boolean }> {
-  const client = supabase || createClient()
+  void supabase
 
   // Check if there's already an edit history for this post
-  const { data: existing, error: existingError } = await client
-    .from('edit_history')
-    .select('version')
-    .eq('post_id', postId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single()
+  const existingRes = await fetch(`/api/admin/edit-history?postId=${postId}&select=version`, {
+    credentials: 'include',
+  })
+  const existingJson = existingRes.ok ? await existingRes.json() : { data: null, error: 'request failed' }
 
-  // PGRST116 = no rows found (expected for new posts)
-  if (existingError && existingError.code !== 'PGRST116') {
-    console.error('[EditHistory] Error checking existing history:', existingError)
+  if (!existingRes.ok) {
+    console.error('[EditHistory] Error checking existing history:', existingJson.error)
   }
 
+  const existing = existingJson.data as { version: number } | null
   if (existing) {
     return { version: existing.version, isNew: false }
   }
@@ -34,18 +36,24 @@ export async function ensureInitialEditHistory(
   // Create initial history entry (version 1 = original AI output)
   const wordCount = countWordsInContent(content)
 
-  const { error } = await client.from('edit_history').insert({
-    post_id: postId,
-    version: 1,
-    content_before: content,
-    content_after: content,  // Same initially
-    ai_model: aiModel,
-    word_count_before: wordCount,
-    word_count_after: wordCount,
+  const res = await fetch('/api/admin/edit-history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      post_id: postId,
+      version: 1,
+      content_before: content,
+      content_after: content, // Same initially
+      ai_model: aiModel,
+      word_count_before: wordCount,
+      word_count_after: wordCount,
+    }),
   })
 
-  if (error) {
-    console.error('[EditHistory] Failed to create initial entry:', error)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    console.error('[EditHistory] Failed to create initial entry:', err.error)
   } else {
     console.log('[EditHistory] Created initial version for post:', postId)
   }
@@ -62,31 +70,27 @@ export async function recordEditVersion(
   newContent: Record<string, unknown>,
   supabase?: SupabaseClient
 ): Promise<{ version: number; hasChanges: boolean } | null> {
-  const client = supabase || createClient()
+  void supabase
 
   // Get the latest version
-  const { data: latest, error: latestError } = await client
-    .from('edit_history')
-    .select('version, content_after')
-    .eq('post_id', postId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single()
+  const latestRes = await fetch(
+    `/api/admin/edit-history?postId=${postId}&select=${encodeURIComponent('version, content_after')}`,
+    { credentials: 'include' }
+  )
+  const latestJson = latestRes.ok ? await latestRes.json() : { data: null, error: 'request failed' }
 
-  if (latestError) {
-    // PGRST116 = no rows found, which we handle below
-    if (latestError.code !== 'PGRST116') {
-      console.error('[EditHistory] Error fetching latest version:', latestError)
-    }
+  if (!latestRes.ok) {
+    console.error('[EditHistory] Error fetching latest version:', latestJson.error)
   }
 
+  const latest = latestJson.data as { version: number; content_after: Record<string, unknown> } | null
   if (!latest) {
     console.warn('[EditHistory] No existing history found for post:', postId)
     return null
   }
 
   // Compare content to check if there are actual changes
-  const previousContent = latest.content_after as Record<string, unknown>
+  const previousContent = latest.content_after
   const hasChanges = !deepEqual(previousContent, newContent)
 
   if (!hasChanges) {
@@ -99,17 +103,23 @@ export async function recordEditVersion(
   const wordCountBefore = countWordsInContent(previousContent)
   const wordCountAfter = countWordsInContent(newContent)
 
-  const { error } = await client.from('edit_history').insert({
-    post_id: postId,
-    version: newVersion,
-    content_before: previousContent,
-    content_after: newContent,
-    word_count_before: wordCountBefore,
-    word_count_after: wordCountAfter,
+  const res = await fetch('/api/admin/edit-history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      post_id: postId,
+      version: newVersion,
+      content_before: previousContent,
+      content_after: newContent,
+      word_count_before: wordCountBefore,
+      word_count_after: wordCountAfter,
+    }),
   })
 
-  if (error) {
-    console.error('[EditHistory] Failed to create version:', error)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    console.error('[EditHistory] Failed to create version:', err.error)
     return null
   }
 

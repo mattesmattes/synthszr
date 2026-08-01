@@ -2,13 +2,31 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
   const supabase = await createClient()
+
+  // Security-Stufe 2 (Welle 1c): einzelnen aktiven Prompt abfragen für
+  // app/admin/create-article/page.tsx (ersetzt direkten Browser-Query
+  // `.eq('is_active', true).single()`).
+  const { searchParams } = new URL(request.url)
+  if (searchParams.get('active') === 'true') {
+    const { data, error } = await supabase
+      .from('ghostwriter_prompts')
+      .select('*')
+      .eq('is_active', true)
+      .single()
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    return NextResponse.json(data)
+  }
+
   const { data, error } = await supabase
     .from('ghostwriter_prompts')
     .select('*')

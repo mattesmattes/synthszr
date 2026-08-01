@@ -97,6 +97,10 @@ export async function GET(request: NextRequest) {
 
 // Security-Stufe 2 (Welle 1b): Insert für app/admin/digests/page.tsx
 // (savePostAsDraft — legt den Ghostwriter-Entwurf als generated_posts-Zeile an).
+// Security-Stufe 2 (Welle 1c): um die zusätzlichen Felder aus
+// app/admin/create-article/page.tsx (saveAsDraft) erweitert — alle optional,
+// damit der bestehende Aufrufer (nur digest_id/title/content/word_count/status)
+// unverändert weiterläuft.
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) {
@@ -104,26 +108,94 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { digest_id, title, content, word_count, status } = await request.json()
+    const body = await request.json()
+    const {
+      digest_id,
+      prompt_id,
+      title,
+      slug,
+      excerpt,
+      category,
+      content,
+      word_count,
+      status,
+      created_at,
+      ai_model,
+      pending_queue_item_ids,
+    } = body
     if (!title || !content) {
       return NextResponse.json({ error: 'title und content erforderlich' }, { status: 400 })
     }
 
+    const insertData: Record<string, unknown> = {
+      digest_id,
+      title,
+      content,
+      word_count,
+      status: status || 'draft',
+    }
+    if (prompt_id !== undefined) insertData.prompt_id = prompt_id
+    if (slug !== undefined) insertData.slug = slug
+    if (excerpt !== undefined) insertData.excerpt = excerpt
+    if (category !== undefined) insertData.category = category
+    if (created_at !== undefined) insertData.created_at = created_at
+    if (ai_model !== undefined) insertData.ai_model = ai_model
+    if (pending_queue_item_ids !== undefined) insertData.pending_queue_item_ids = pending_queue_item_ids
+
     const supabase = createAdminClient()
     const { data, error } = await supabase
       .from('generated_posts')
-      .insert({
-        digest_id,
-        title,
-        content,
-        word_count,
-        status: status || 'draft',
-      })
+      .insert(insertData)
       .select()
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json(data)
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unbekannter Fehler' },
+      { status: 500 }
+    )
+  }
+}
+
+// Security-Stufe 2 (Welle 1c): PATCH für app/admin/generated-articles/edit/[id]/page.tsx.
+// Reine State-Updates ohne Nebeneffekte (Embedding-Refresh, Pregenerate,
+// Translations-Queue laufen weiterhin nur über die bestehende PUT-Route).
+// Übernimmt exakt die Felder, die die Seite bisher direkt per Browser-Client
+// geschrieben hat (Titel/Slug/Metadaten-Update und das schlanke
+// pending_queue_item_ids-Update beim Entfernen einzelner Queue-Items).
+export async function PATCH(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
+  try {
+    const body = await request.json()
+    const { id } = body
+    if (!id) {
+      return NextResponse.json({ error: 'id erforderlich' }, { status: 400 })
+    }
+
+    const updateData: Record<string, unknown> = {}
+    if (body.title !== undefined) updateData.title = body.title
+    if (body.slug !== undefined) updateData.slug = body.slug
+    if (body.excerpt !== undefined) updateData.excerpt = body.excerpt
+    if (body.category !== undefined) updateData.category = body.category
+    if (body.content !== undefined) updateData.content = body.content
+    if (body.status !== undefined) updateData.status = body.status
+    if (body.updated_at !== undefined) updateData.updated_at = body.updated_at
+    if (body.pending_queue_item_ids !== undefined) updateData.pending_queue_item_ids = body.pending_queue_item_ids
+
+    const supabase = createAdminClient()
+    const { error } = await supabase
+      .from('generated_posts')
+      .update(updateData)
+      .eq('id', id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unbekannter Fehler' },

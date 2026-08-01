@@ -162,6 +162,30 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ content: repoItem?.content || null })
       }
 
+      case 'by-ids': {
+        // Security-Stufe 2 (Welle 1c): generische Mehrfach-Abfrage per IDs für
+        // app/admin/create-article/page.tsx und app/admin/generated-articles/edit/[id]/page.tsx
+        // (ersetzt direkte Browser-Queries `select(...).in('id', ids)[.limit(n)]`).
+        const idsParam = searchParams.get('ids')
+        if (!idsParam) {
+          return NextResponse.json({ error: 'ids required' }, { status: 400 })
+        }
+        const ids = idsParam.split(',').filter(Boolean)
+        const selectParam = searchParams.get('select') || '*'
+        const limitParam = searchParams.get('limit')
+
+        const supabaseByIds = await createClient()
+        let byIdsQuery = supabaseByIds.from('news_queue').select(selectParam).in('id', ids)
+        if (limitParam) {
+          byIdsQuery = byIdsQuery.limit(parseIntParam(limitParam, ids.length, 1, ids.length))
+        }
+        const { data, error } = await byIdsQuery
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 })
+        }
+        return NextResponse.json({ items: data })
+      }
+
       case 'list':
       default: {
         const supabase = await createClient()
