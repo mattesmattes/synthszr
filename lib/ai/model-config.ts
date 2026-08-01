@@ -20,6 +20,7 @@ export type UseCase =
   | 'ranking_extract'
   | 'ranking_attribution_qa'
   | 'ranking_validity_qa'
+  | 'subscription_detect'
 
 export interface UseCaseInfo {
   label: string
@@ -99,6 +100,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     label: 'Rankings — Produkt-Validität-QS',
     description: 'Kontextbasiert prüfen, ob ein Chart-Produkt wirklich ein Produkt ist (nicht ein gleichnamiges Alltagswort)',
     defaultModel: 'claude-sonnet-5',
+    allowedProviders: ['anthropic'],
+  },
+  subscription_detect: {
+    label: 'Abo-Erkennung',
+    description: 'Kostenpflichtige Newsletter-Abos aus Gmail-Mails klassifizieren',
+    defaultModel: 'claude-haiku-4-5-20251001',
     allowedProviders: ['anthropic'],
   },
 }
