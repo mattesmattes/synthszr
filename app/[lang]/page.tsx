@@ -75,20 +75,25 @@ export default async function Page({ params }: PageProps) {
     .order("created_at", { ascending: false })
 
   // Fetch AI-generated posts that are published with cover images
+  // HINWEIS: "content" (TipTap-JSONB, teils sehr groß) bewusst NICHT hier laden —
+  // wird nur für den einen Featured-Artikel gebraucht und dafür weiter unten
+  // gezielt per ID nachgeladen (statt Volltext des gesamten Archivs zu ziehen).
   const { data: aiPosts } = await supabase
     .from("generated_posts")
-    .select("id, title, slug, excerpt, content, category, created_at, cover_image_id, pending_queue_item_ids")
+    .select("id, title, slug, excerpt, category, created_at, cover_image_id, pending_queue_item_ids")
     .eq("status", "published")
     .order("created_at", { ascending: false })
 
-  // Fetch translations if not default locale
-  let translationsMap = new Map<string, { title: string; slug: string | null; excerpt: string | null; content: Record<string, unknown> }>()
+  const aiPostIds = new Set((aiPosts || []).map(p => p.id))
+
+  // Fetch translations if not default locale (auch hier ohne "content" — siehe oben)
+  let translationsMap = new Map<string, { title: string; slug: string | null; excerpt: string | null }>()
 
   if (locale !== 'de' && aiPosts && aiPosts.length > 0) {
     const postIds = aiPosts.map(p => p.id)
     const { data: translations, error: translationError } = await supabase
       .from('content_translations')
-      .select('generated_post_id, title, slug, excerpt, content')
+      .select('generated_post_id, title, slug, excerpt')
       .eq('language_code', locale)
       .eq('translation_status', 'completed')
       .in('generated_post_id', postIds)
@@ -102,7 +107,6 @@ export default async function Page({ params }: PageProps) {
             title: t.title || '',
             slug: t.slug,
             excerpt: t.excerpt,
-            content: t.content as Record<string, unknown>
           })
         }
       }
@@ -140,16 +144,16 @@ export default async function Page({ params }: PageProps) {
     (desktopCovers || []).map(img => [img.post_id, img.image_url])
   )
 
-  // Parse AI posts content from JSON string if needed, apply translations
+  // Apply translations; "content" bleibt hier ein Platzhalter — der volle
+  // Body wird unten NUR für den tatsächlich featured post nachgeladen.
   const parsedAiPosts: CombinedPost[] = (aiPosts || []).map(post => {
     const translation = translationsMap.get(post.id)
-    const originalContent = typeof post.content === 'string' ? JSON.parse(post.content) : post.content
 
     return {
       ...post,
       title: translation?.title || post.title,
       excerpt: translation?.excerpt ?? post.excerpt,
-      content: translation?.content || originalContent,
+      content: {},
       slug: translation?.slug || post.slug || post.id,
       category: post.category || 'AI & Tech',
       cover_image_url: post.cover_image_id ? coverImageMap.get(post.cover_image_id) : null,
@@ -193,6 +197,43 @@ export default async function Page({ params }: PageProps) {
   const recentPosts = posts
     .slice(1)
     .filter(post => new Date(post.created_at) >= sevenDaysAgo)
+
+  // Der Featured-Artikel braucht seinen Volltext für den Teaser (PostContentView)
+  // und die Lesezeit — bei manuellen Posts ("posts"-Tabelle) ist er über das
+  // obige select("*") bereits vorhanden; bei AI-Posts wurde "content" oben
+  // bewusst nicht mitgeladen und wird hier gezielt für genau diese eine ID
+  // nachgeladen (übersetzte Fassung zuerst, sonst das Original).
+  if (featuredPost && aiPostIds.has(featuredPost.id)) {
+    let featuredContent: Record<string, unknown> | null = null
+
+    if (locale !== 'de') {
+      const { data: translatedContent } = await supabase
+        .from('content_translations')
+        .select('content')
+        .eq('generated_post_id', featuredPost.id)
+        .eq('language_code', locale)
+        .eq('translation_status', 'completed')
+        .maybeSingle()
+      if (translatedContent?.content) {
+        featuredContent = translatedContent.content as Record<string, unknown>
+      }
+    }
+
+    if (!featuredContent) {
+      const { data: originalPost } = await supabase
+        .from('generated_posts')
+        .select('content')
+        .eq('id', featuredPost.id)
+        .maybeSingle()
+      if (originalPost?.content) {
+        featuredContent = typeof originalPost.content === 'string'
+          ? JSON.parse(originalPost.content)
+          : originalPost.content as Record<string, unknown>
+      }
+    }
+
+    featuredPost.content = featuredContent || {}
+  }
 
   // Load the featured post's Apple episode URL for the cover podcast badge
   let appleEpisodeUrl: string | null = null
