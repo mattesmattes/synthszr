@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAvailableModels } from '@/lib/i18n/translation-service'
+import { getSession } from '@/lib/auth/session'
 
 /**
  * GET /api/admin/languages
  * Returns all languages with their configuration
  */
 export async function GET() {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+
   try {
     const supabase = createAdminClient()
 
@@ -41,6 +45,9 @@ export async function GET() {
  * Updates a language's configuration
  */
 export async function PUT(request: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+
   try {
     const body = await request.json()
     const { code, is_active, llm_model, backfill_from_date } = body
@@ -96,6 +103,9 @@ export async function PUT(request: NextRequest) {
  * Triggers backfill translations for a language (posts + static pages)
  */
 export async function POST(request: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+
   try {
     const body = await request.json()
     const { code, from_date } = body

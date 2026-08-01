@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSession } from '@/lib/auth/session'
 
 export async function GET(request: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+
   const { searchParams } = new URL(request.url)
   const locale = searchParams.get('locale')
 
@@ -40,6 +44,9 @@ const VALID_MOODS = ['euphoric', 'optimistic', 'neutral', 'negative'] as const
 const ALLOWED_FIELDS = ['relationship_paused', 'mutual_comfort', 'flirtation_tendency', 'current_mood'] as const
 
 export async function PATCH(request: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+
   const body = await request.json()
   const { locale, updates } = body as { locale?: string; updates?: Record<string, unknown> }
 

@@ -2,8 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTokensFromCode } from '@/lib/gmail/oauth'
 import { GmailClient } from '@/lib/gmail/client'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSession } from '@/lib/auth/session'
 
 export async function GET(request: NextRequest) {
+  // Auth-Gate: Nur ein eingeloggter Admin darf den OAuth-Callback verarbeiten.
+  // Ohne diesen Check könnte ein Fremder mit eigenem OAuth-code das
+  // gespeicherte Gmail-Token überschreiben (Account-Injection/DoS). Der
+  // legitime Flow läuft im eingeloggten Admin-Browser, das Cookie ist da.
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.redirect(new URL('/login?redirect=/admin/settings', request.url))
+  }
+
   const searchParams = request.nextUrl.searchParams
   const code = searchParams.get('code')
   const error = searchParams.get('error')

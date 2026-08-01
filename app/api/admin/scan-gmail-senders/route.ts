@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GmailClient } from '@/lib/gmail/client'
+import { getSession } from '@/lib/auth/session'
 
 // Domains/patterns that are typically ads or transactional emails, not newsletters
 const AD_PATTERNS = [
@@ -114,6 +115,9 @@ function isLikelyNewsletter(email: string, subjects: string[]): boolean {
 }
 
 export async function GET() {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+
   try {
     // gmail_tokens ist RLS-gesperrt → service_role statt anon
     const supabase = createAdminClient()

@@ -179,9 +179,14 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
       if (pathname.startsWith('/api/')) {
         const authHeader = request.headers.get('authorization')
         const cronSecret = process.env.CRON_SECRET
-        const isCronAuth =
-          (cronSecret && authHeader === `Bearer ${cronSecret}`) ||
-          request.headers.get('x-vercel-cron') === '1'
+        // Nur CRON_SECRET (Bearer) als Cron-Auth für den geschützten
+        // /api/admin-Namespace akzeptieren. Der zuvor ebenfalls akzeptierte
+        // `x-vercel-cron`-Header ist von außen spoofbar und laut Vercel keine
+        // sichere Auth-Methode — er erlaubte einen Bypass sämtlicher
+        // /api/admin-Routen. Vercel-Crons senden automatisch den Bearer-Token
+        // (CRON_SECRET ist gesetzt); der einzige interne /api/admin-Cron-Call
+        // (scheduled-tasks → newsletter-send) nutzt ebenfalls Bearer.
+        const isCronAuth = !!cronSecret && authHeader === `Bearer ${cronSecret}`
         if (isCronAuth) return NextResponse.next()
         return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
       }

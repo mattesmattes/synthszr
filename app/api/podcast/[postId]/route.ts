@@ -217,6 +217,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  * POST - Generate podcast
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  // Auth-Gate: Podcast-Generierung ist teuer (LLM + TTS) und darf nicht
+  // öffentlich triggerbar sein (Kosten-DoS). Wird nur intern/Admin genutzt.
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+
   const { postId } = await params
   const body = await request.json().catch(() => ({}))
   const locale = (body.locale as string) || 'de'
