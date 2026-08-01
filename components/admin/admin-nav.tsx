@@ -25,7 +25,8 @@ import {
   Globe,
   Headphones,
   Megaphone,
-  ClipboardEdit
+  ClipboardEdit,
+  Wallet
 } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
@@ -173,6 +174,11 @@ const navGroups: NavGroup[] = [
         label: 'Newsletter-Quellen',
         href: '/admin/newsletters',
         icon: Mail
+      },
+      {
+        label: 'Abo-Kosten',
+        href: '/admin/subscriptions',
+        icon: Wallet
       },
       {
         label: 'Paywall-Credentials',
