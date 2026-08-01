@@ -125,7 +125,9 @@ export async function getProductDetail(slug: string, locale = 'de'): Promise<Pro
   }
 
   // Rang/Score relativ zur KATEGORIE (Position innerhalb der Kategorie, nicht über alle).
-  const ranked = await getRankedProducts({ limit: 10_000, minMentions: 2, category: category?.slug })
+  // includeHistory:false — hier wird nur rank/score von entry gebraucht; der
+  // Verlaufs-Chart der Seite kommt aus `dates` (oben), nicht aus ranked[].history.
+  const ranked = await getRankedProducts({ limit: 10_000, minMentions: 2, category: category?.slug, includeHistory: false })
   const entry = ranked.find((r) => r.slug === slug)
 
   // Sentiment + Features (enrich, 1b-iii)
