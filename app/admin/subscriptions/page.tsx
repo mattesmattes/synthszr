@@ -10,7 +10,6 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { createClient } from '@/lib/supabase/client'
 
 interface Subscription {
   id: string
@@ -32,19 +31,19 @@ export default function SubscriptionsPage() {
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState<string | null>(null)
-  const supabase = createClient()
 
   useEffect(() => { fetchSubs() }, [])
 
   async function fetchSubs() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('paid_subscriptions')
-      .select('*')
-      .neq('status', 'ignored')
-      .order('amount_monthly', { ascending: false })
-    if (error) console.error('Error fetching subscriptions:', error)
-    else setSubs(data || [])
+    try {
+      const res = await fetch('/api/admin/subscriptions')
+      const data = await res.json()
+      if (res.ok) setSubs(data.subscriptions || [])
+      else console.error('Error fetching subscriptions:', data.error)
+    } catch (e) {
+      console.error('Error fetching subscriptions:', e)
+    }
     setLoading(false)
   }
 
@@ -65,11 +64,11 @@ export default function SubscriptionsPage() {
   }
 
   async function setStatus(id: string, status: string) {
-    const { error } = await supabase
-      .from('paid_subscriptions')
-      .update({ status, updated_at: new Date().toISOString() })
-      .eq('id', id)
-    if (error) alert('Fehler: ' + error.message)
+    const res = await fetch('/api/admin/subscriptions', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status }),
+    })
+    if (!res.ok) { const d = await res.json(); alert('Fehler: ' + (d.error || 'unbekannt')) }
     else fetchSubs()
   }
 
@@ -121,15 +120,11 @@ export default function SubscriptionsPage() {
     if (!addName.trim()) return
     setAddSaving(true)
     const amount = addAmount ? parseFloat(addAmount.replace(',', '.')) : null
-    const factor: Record<string, number> = { monthly: 1, yearly: 1 / 12, quarterly: 1 / 3, weekly: 52 / 12, one_time: 0, unknown: 0 }
-    const amountMonthly = amount != null ? Math.round(amount * (factor[addInterval] ?? 0) * 100) / 100 : null
-    const { error } = await supabase.from('paid_subscriptions').insert({
-      provider_name: addName.trim(),
-      provider_key: addName.trim().toLowerCase(),
-      amount, currency: '€', interval: addInterval, amount_monthly: amountMonthly,
-      status: 'active', manually_added: true, unsubscribe_type: 'unknown',
+    const res = await fetch('/api/admin/subscriptions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ providerName: addName, amount, interval: addInterval }),
     })
-    if (error) alert('Fehler: ' + error.message)
+    if (!res.ok) { const d = await res.json(); alert('Fehler: ' + (d.error || 'unbekannt')) }
     else { setAddName(''); setAddAmount(''); setAddInterval('monthly'); setAddOpen(false); fetchSubs() }
     setAddSaving(false)
   }
