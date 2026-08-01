@@ -7,7 +7,16 @@
 - **Stufe 2 Browser (9 Seiten)**: subscriptions, daily-repo, why, post-form, digests, admin/page, create-article, edit/[id], newsletter-send → alle Browser-Writes auf `/api/admin/*`-Routes (getSession + createAdminClient). Muster: `app/api/admin/subscriptions/route.ts`. Neue Routes: subscriptions, daily-repo, static-pages, posts, generated-posts, daily-digests, post-images, news-queue, post-podcasts, ghostwriter-prompts, vocabulary, edit-history, content-translations, languages-admin, translation-queue, newsletter-settings.
 - paid_subscriptions cancel-Route Regression (anon→service_role) gefixt.
 
-## ⏳ OFFEN 1 — anon-Server-Pfade auf service_role umstellen (VOR Klasse-A-RLS!)
+## ✅ ABGESCHLOSSEN (2026-08-01) — alle Stufen live & prod-verifiziert
+- **anon-Server-Fix** (`1e9f544`): 16 Content-/Bild-/Übersetzungs-Routes → service_role.
+- **newsletters-Seite** (`8a4d4b9`): war die 11., übersehene Browser-Schreibseite (`newsletter_sources`-CRUD) → authentifizierte Route `/api/admin/newsletter-sources`.
+- **Klasse-A-RLS** (`712fca0`, SQL im Supabase-Editor ausgeführt): 9 ADMIN-ONLY anon-deny + 7 PUBLIC-READ anon-SELECT-Policies.
+- **Verifikation** (`scripts/_sec_klasse_a_verify.ts`): ADMIN-ONLY alle `anon=0`; PUBLIC-READ zeigen nur published-Teilmenge (generated_posts −26 Drafts, languages −5 inaktiv, newsletter_sources −7 disabled; `posts anon=0` korrekt = nur Halde-Drafts). Öffentliche Seiten DE+EN Artikel/Home/sources/sitemap/feed alle **200**. Cron-/Pipeline-Schreibpfade komplett service_role.
+- **Einziger offener Punkt:** Gmail-Token rotieren (User).
+
+---
+
+## ⏳ ~~OFFEN 1~~ (ERLEDIGT) — anon-Server-Pfade auf service_role umstellen (VOR Klasse-A-RLS!)
 `createClient` aus `@/lib/supabase/server` und `createAnonClient` aus `@/lib/supabase/admin` laufen als **anon** → brechen bei RLS. Ersetzen durch `createAdminClient` (service_role; NICHT async — `await` entfernen). **Regel:** ADMIN-ONLY-Tabelle → jeder anon-Zugriff FIX. PUBLIC-READ → nur Writes + SELECTs ohne öffentlichen Filter FIX; öffentliche `.eq(<public-filter>)`-Reads BLEIBEN anon.
 
 **FIX-Dateien (aus vollständigem Audit; Zeilen re-grep, Dropbox-Drift ±4):**
