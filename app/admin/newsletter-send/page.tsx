@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { createClient } from '@/lib/supabase/client'
 
 interface Post {
   id: string
@@ -123,8 +122,6 @@ export default function NewsletterSendPage() {
   const [unlockedPostId, setUnlockedPostId] = useState<string | null>(null)
   const [showUnlockDialog, setShowUnlockDialog] = useState(false)
 
-  const supabase = createClient()
-
   useEffect(() => {
     fetchData()
     if (typeof window !== 'undefined') {
@@ -142,17 +139,14 @@ export default function NewsletterSendPage() {
     setLoading(true)
 
     // Fetch published posts
-    const { data: postsData } = await supabase
-      .from('generated_posts')
-      .select('id, title, slug, status, created_at')
-      .eq('status', 'published')
-      .order('created_at', { ascending: false })
-      .limit(20)
-
-    if (postsData) {
-      setPosts(postsData)
-      if (postsData.length > 0 && !selectedPostId) {
-        setSelectedPostId(postsData[0].id)
+    const postsRes = await fetch('/api/admin/generated-posts?status=published&select=id,title,slug,status,created_at&limit=20')
+    if (postsRes.ok) {
+      const postsData = await postsRes.json()
+      if (postsData) {
+        setPosts(postsData)
+        if (postsData.length > 0 && !selectedPostId) {
+          setSelectedPostId(postsData[0].id)
+        }
       }
     }
 
@@ -171,36 +165,30 @@ export default function NewsletterSendPage() {
     }
 
     // Fetch cron settings
-    const { data: settingsData } = await supabase
-      .from('newsletter_settings')
-      .select('value')
-      .eq('key', 'cron_schedule')
-      .single()
-
-    if (settingsData?.value) {
-      setCronSettings(settingsData.value as CronSettings)
+    const settingsRes = await fetch('/api/admin/newsletter-settings?key=cron_schedule')
+    if (settingsRes.ok) {
+      const { setting: settingsData } = await settingsRes.json()
+      if (settingsData?.value) {
+        setCronSettings(settingsData.value as CronSettings)
+      }
     }
 
     // Fetch template settings
-    const { data: templateData } = await supabase
-      .from('newsletter_settings')
-      .select('value')
-      .eq('key', 'email_template')
-      .single()
-
-    if (templateData?.value) {
-      setTemplateSettings(templateData.value as EmailTemplateSettings)
+    const templateRes = await fetch('/api/admin/newsletter-settings?key=email_template')
+    if (templateRes.ok) {
+      const { setting: templateData } = await templateRes.json()
+      if (templateData?.value) {
+        setTemplateSettings(templateData.value as EmailTemplateSettings)
+      }
     }
 
     // Fetch promotion config
-    const { data: promotionData } = await supabase
-      .from('newsletter_settings')
-      .select('value')
-      .eq('key', 'promotion_config')
-      .single()
-
-    if (promotionData?.value) {
-      setPromotionConfig(promotionData.value as PromotionConfig)
+    const promotionRes = await fetch('/api/admin/newsletter-settings?key=promotion_config')
+    if (promotionRes.ok) {
+      const { setting: promotionData } = await promotionRes.json()
+      if (promotionData?.value) {
+        setPromotionConfig(promotionData.value as PromotionConfig)
+      }
     }
 
     setLoading(false)
@@ -281,11 +269,8 @@ export default function NewsletterSendPage() {
     setCheckingThumbnails(true)
     try {
       // Get post content
-      const { data: post } = await supabase
-        .from('generated_posts')
-        .select('content')
-        .eq('id', postId)
-        .single()
+      const postRes = await fetch(`/api/admin/generated-posts?id=${encodeURIComponent(postId)}&select=content`)
+      const post = postRes.ok ? await postRes.json() : null
 
       if (!post?.content) {
         setThumbnailStatus({ articlesInContent: 0, thumbnailsFound: 0, matched: 0, mismatched: 0, orphaned: 0, missing: 0, valid: true })
@@ -325,11 +310,9 @@ export default function NewsletterSendPage() {
       traverse(content)
 
       // Get thumbnails
-      const { data: thumbnails } = await supabase
-        .from('post_images')
-        .select('id, article_index, article_queue_item_id')
-        .eq('post_id', postId)
-        .eq('image_type', 'article_thumbnail')
+      const thumbRes = await fetch(`/api/admin/post-images?postId=${encodeURIComponent(postId)}`)
+      const thumbData = thumbRes.ok ? await thumbRes.json() : null
+      const thumbnails = thumbData?.images ?? null
 
       if (!thumbnails || thumbnails.length === 0) {
         setThumbnailStatus({
@@ -386,18 +369,16 @@ export default function NewsletterSendPage() {
     } finally {
       setCheckingThumbnails(false)
     }
-  }, [supabase])
+  }, [])
 
   // Check translation status for selected post
   const checkTranslationStatus = useCallback(async (postId: string) => {
     setCheckingTranslations(true)
     try {
       // Get all active languages
-      const { data: languages } = await supabase
-        .from('languages')
-        .select('code, name')
-        .eq('is_active', true)
-        .eq('is_default', false)
+      const languagesRes = await fetch('/api/admin/languages-admin')
+      const languagesData = languagesRes.ok ? await languagesRes.json() : null
+      const languages = (languagesData?.languages ?? null) as { code: string; name: string }[] | null
 
       if (!languages || languages.length === 0) {
         setTranslationStatus({ pending: 0, completed: 0, total: 0, languages: [] })
@@ -405,18 +386,14 @@ export default function NewsletterSendPage() {
       }
 
       // Get existing translations for this post
-      const { data: translations } = await supabase
-        .from('content_translations')
-        .select('language_code, translation_status')
-        .eq('generated_post_id', postId)
+      const translationsRes = await fetch(`/api/admin/content-translations?postId=${encodeURIComponent(postId)}`)
+      const translationsData = translationsRes.ok ? await translationsRes.json() : null
+      const translations = (translationsData?.translations ?? null) as { language_code: string; translation_status: string }[] | null
 
       // Get pending queue items for this post
-      const { data: queueItems } = await supabase
-        .from('translation_queue')
-        .select('target_language, status')
-        .eq('content_type', 'generated_post')
-        .eq('content_id', postId)
-        .in('status', ['pending', 'processing'])
+      const queueRes = await fetch(`/api/admin/translation-queue?postId=${encodeURIComponent(postId)}`)
+      const queueData = queueRes.ok ? await queueRes.json() : null
+      const queueItems = queueData?.items ?? null
 
       const completedLanguages = new Set(
         translations?.filter(t => t.translation_status === 'completed').map(t => t.language_code) || []
@@ -434,7 +411,7 @@ export default function NewsletterSendPage() {
     } finally {
       setCheckingTranslations(false)
     }
-  }, [supabase])
+  }, [])
 
   // Check Podigee publication status for selected post
   const checkPodigeeStatus = useCallback(async (postId: string) => {

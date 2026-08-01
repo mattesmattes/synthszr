@@ -18,12 +18,15 @@ export async function GET(request: NextRequest) {
   const id = searchParams.get('id')
   const status = searchParams.get('status')
   const select = searchParams.get('select')
+  const limit = searchParams.get('limit')
 
   // Security-Stufe 2 (Welle 1b): gezielte Abfragen für app/admin/page.tsx —
   // Einzel-Post per id, bzw. Liste mit custom select (optional nach status
   // gefiltert). Getriggert über die Query-Params, damit das bestehende
   // Verhalten ohne Params (voller Join, s.u. — für generated-articles/page.tsx)
   // unverändert bleibt.
+  // Security-Stufe 2 (Welle 1d): optionaler ?limit-Param für
+  // app/admin/newsletter-send/page.tsx (bisher .limit(20) im Browser-Query).
   if (id || select || status) {
     try {
       const supabase = createAdminClient()
@@ -43,6 +46,7 @@ export async function GET(request: NextRequest) {
         .select(select || '*')
         .order('created_at', { ascending: false })
       if (status) query = query.eq('status', status)
+      if (limit) query = query.limit(parseInt(limit, 10))
       const { data, error } = await query
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json(data)
