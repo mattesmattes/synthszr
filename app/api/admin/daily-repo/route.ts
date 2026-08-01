@@ -1,119 +1,82 @@
 /**
- * Daily Repo API
- * GET: Fetch daily_repo items by date
- * DELETE: Remove items (re-fetch happens automatically via 48h window + gmail_message_id dedup)
+ * Daily Repo API — Security-Stufe 2
+ *
+ * Serverseitige, authentifizierte CRUD für daily_repo — ersetzt den
+ * direkten Browser-anon-Zugriff aus app/admin/daily-repo/page.tsx
+ * (Tabelle ist admin-only, RLS folgt).
+ *
+ * GET:
+ * - ohne ?date: Summary über alle Einträge (newsletter_date, source_type, content)
+ *   für die Datums-Übersicht in der Sidebar
+ * - mit ?date=YYYY-MM-DD: Alle Items für dieses Datum (select *)
+ * DELETE: Alle Items eines Datums löschen ({ date })
+ * POST: Manuellen Artikel einfügen ({ sourceUrl, title, content, newsletterDate })
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
-  if (!session) {
-    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
-  }
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
   const { searchParams } = new URL(request.url)
   const date = searchParams.get('date')
+  const supabase = createAdminClient()
 
-  if (!date) {
-    return NextResponse.json({ error: 'Date parameter required' }, { status: 400 })
-  }
-
-  try {
-    const supabase = await createClient()
-
+  if (date) {
     const { data, error } = await supabase
       .from('daily_repo')
-      .select('id, title, source_email, source_url, newsletter_date, collected_at')
+      .select('*')
       .eq('newsletter_date', date)
       .order('collected_at', { ascending: false })
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ items: data || [] })
-  } catch (error) {
-    console.error('[DailyRepo API] Error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    )
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ items: data ?? [] })
   }
+
+  const { data, error } = await supabase
+    .from('daily_repo')
+    .select('newsletter_date, source_type, content')
+    .order('newsletter_date', { ascending: false })
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ items: data ?? [] })
 }
 
-/**
- * DELETE: Remove items from daily_repo and recalculate fetch timestamp
- *
- * Body options:
- * - { ids: string[] } - Delete specific items by ID
- * - { date: string } - Delete all items for a specific date
- *
- * After deletion, the last_newsletter_fetch timestamp is automatically
- * recalculated based on the remaining data in daily_repo.
- */
 export async function DELETE(request: NextRequest) {
   const session = await getSession()
-  if (!session) {
-    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
-  }
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
-  try {
-    const body = await request.json()
-    const { ids, date } = body as { ids?: string[]; date?: string }
+  const { date } = await request.json()
+  if (!date) return NextResponse.json({ error: 'date erforderlich' }, { status: 400 })
 
-    if (!ids && !date) {
-      return NextResponse.json(
-        { error: 'Either ids or date parameter required' },
-        { status: 400 }
-      )
-    }
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('daily_repo').delete().eq('newsletter_date', date)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
 
-    const supabase = await createClient()
-    let deletedCount = 0
+export async function POST(request: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
-    if (ids && ids.length > 0) {
-      // Delete by specific IDs
-      const { error, count } = await supabase
-        .from('daily_repo')
-        .delete()
-        .in('id', ids)
+  const { sourceUrl, title, content, newsletterDate } = await request.json()
+  if (!content?.trim()) return NextResponse.json({ error: 'content erforderlich' }, { status: 400 })
+  if (!newsletterDate) return NextResponse.json({ error: 'newsletterDate erforderlich' }, { status: 400 })
 
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
-      }
-      deletedCount = count || ids.length
-      console.log(`[DailyRepo API] Deleted ${deletedCount} items by ID`)
-    } else if (date) {
-      // Delete all items for a specific date
-      const { error, count } = await supabase
-        .from('daily_repo')
-        .delete()
-        .eq('newsletter_date', date)
-
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
-      }
-      deletedCount = count || 0
-      console.log(`[DailyRepo API] Deleted ${deletedCount} items for date ${date}`)
-    }
-
-    // BULLETPROOF: No timestamp recalculation needed!
-    // We always fetch last 48h and deduplicate by gmail_message_id
-    // Deleted items will be re-fetched if still in 48h window, or use historical import
-
-    return NextResponse.json({
-      success: true,
-      deleted: deletedCount,
-      message: 'Items deleted successfully'
-    })
-  } catch (error) {
-    console.error('[DailyRepo API] DELETE error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    )
-  }
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('daily_repo').insert({
+    source_type: 'article',
+    source_url: sourceUrl?.trim() || null,
+    title,
+    content: content.trim(),
+    newsletter_date: newsletterDate,
+    source_email: null,
+    newsletter_source_id: null,
+    source_language: 'de',
+  })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
 }

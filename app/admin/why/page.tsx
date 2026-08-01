@@ -52,7 +52,6 @@ export default function AdminWhyPage() {
 
   const handleSave = async () => {
     setSaving(true)
-    const supabase = createClient()
 
     console.log('[Why Save] Starting save...')
     console.log('[Why Save] Title:', title)
@@ -66,29 +65,22 @@ export default function AdminWhyPage() {
       return
     }
 
-    // Use upsert with slug as the unique key
-    const { data, error } = await supabase
-      .from('static_pages')
-      .upsert(
-        {
-          slug: 'why',
-          title: title || 'Why',
-          content: content,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'slug' }
-      )
-      .select()
+    // Use upsert with slug as the unique key (serverseitig, Security-Stufe 2)
+    const res = await fetch('/api/admin/static-pages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'why', title, content }),
+    })
+    const { page: savedPage, error } = await res.json()
 
     console.log('[Why Save] Upsert result:', error ? 'FAILED' : 'OK')
-    console.log('[Why Save] Returned data:', data)
-    if (error) console.log('[Why Save] Error:', error.message)
+    if (error) console.log('[Why Save] Error:', error)
 
-    if (error) {
-      alert(`Fehler beim Speichern: ${error.message}`)
+    if (!res.ok) {
+      alert(`Fehler beim Speichern: ${error}`)
     } else {
-      if (data && data[0]) {
-        setPage(data[0])
+      if (savedPage) {
+        setPage(savedPage)
       }
       alert('Gespeichert!')
     }

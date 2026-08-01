@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { createClient } from '@/lib/supabase/client'
 import { FetchProgress } from '@/components/admin/fetch-progress'
 import { SystemAlertBanner } from '@/components/admin/system-alert-banner'
 
@@ -63,8 +62,6 @@ export default function DailyRepoPage() {
   const [webCrawlPhase, setWebCrawlPhase] = useState<string>('idle')
   const [webCrawlTargetDate, setWebCrawlTargetDate] = useState<string>('')
 
-  const supabase = createClient()
-
   // Dates that have repos
   const repoDates = useMemo(() => new Set(repoSummaries.map(r => r.date)), [repoSummaries])
 
@@ -82,12 +79,10 @@ export default function DailyRepoPage() {
     setLoading(true)
 
     // Get all unique newsletter_dates with counts
-    const { data, error } = await supabase
-      .from('daily_repo')
-      .select('newsletter_date, source_type, content')
-      .order('newsletter_date', { ascending: false })
+    const res = await fetch('/api/admin/daily-repo')
+    const { items: data } = await res.json()
 
-    if (!error && data) {
+    if (res.ok && data) {
       // Group by date
       const summaryMap = new Map<string, RepoSummary>()
 
@@ -121,13 +116,10 @@ export default function DailyRepoPage() {
   async function fetchItemsForDate(date: string) {
     setLoadingItems(true)
 
-    const { data, error } = await supabase
-      .from('daily_repo')
-      .select('*')
-      .eq('newsletter_date', date)
-      .order('collected_at', { ascending: false })
+    const res = await fetch(`/api/admin/daily-repo?date=${encodeURIComponent(date)}`)
+    const { items: data } = await res.json()
 
-    if (!error && data) {
+    if (res.ok && data) {
       setItems(data)
     } else {
       setItems([])
@@ -139,8 +131,12 @@ export default function DailyRepoPage() {
     if (!confirm(`Alle Einträge für ${new Date(date).toLocaleDateString('de-DE')} wirklich löschen?`)) return
     setDeletingId(date)
     try {
-      const { error } = await supabase.from('daily_repo').delete().eq('newsletter_date', date)
-      if (error) throw error
+      const res = await fetch('/api/admin/daily-repo', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date }),
+      })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Delete failed') }
       await fetchRepoSummaries()
       if (selectedDate === date) {
         setItems([])
@@ -190,20 +186,18 @@ export default function DailyRepoPage() {
         ? `${manualSource.trim()} — Manueller Artikel`
         : 'Manueller Artikel'
 
-      const { error: insertError } = await supabase
-        .from('daily_repo')
-        .insert({
-          source_type: 'article',
-          source_url: manualUrl.trim() || null,
+      const res = await fetch('/api/admin/daily-repo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceUrl: manualUrl.trim() || null,
           title,
           content: manualContent.trim(),
-          newsletter_date: targetDate,
-          source_email: null,
-          newsletter_source_id: null,
-          source_language: 'de',
-        })
+          newsletterDate: targetDate,
+        }),
+      })
 
-      if (insertError) throw insertError
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Insert failed') }
 
       // Reset form and close
       setManualFetchUrl('')

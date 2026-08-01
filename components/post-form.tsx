@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { TiptapEditor } from "@/components/tiptap-editor"
-import { createClient } from "@/lib/supabase/client"
 import type { Post } from "@/lib/types"
 import { ArrowLeft, Loader2 } from "lucide-react"
 
@@ -46,8 +45,7 @@ export function PostForm({ post }: PostFormProps) {
     e.preventDefault()
     setLoading(true)
 
-    const supabase = createClient()
-
+    // Security-Stufe 2: Write läuft serverseitig über service_role, nicht mehr über den Browser-anon-Client
     const postData = {
       title,
       slug,
@@ -55,23 +53,24 @@ export function PostForm({ post }: PostFormProps) {
       content,
       category,
       published,
-      updated_at: new Date().toISOString(),
     }
 
-    let error = null
-    if (post) {
-      const result = await supabase.from("posts").update(postData).eq("id", post.id)
-      error = result.error
-      console.log("[v0] Update result:", result)
-    } else {
-      const result = await supabase.from("posts").insert(postData)
-      error = result.error
-      console.log("[v0] Insert result:", result)
-    }
+    const res = post
+      ? await fetch("/api/admin/posts", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: post.id, ...postData }),
+        })
+      : await fetch("/api/admin/posts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(postData),
+        })
 
-    if (error) {
+    if (!res.ok) {
+      const { error } = await res.json()
       console.log("[v0] Error:", error)
-      alert(`Error saving post: ${error.message}`)
+      alert(`Error saving post: ${error}`)
       setLoading(false)
       return
     }
