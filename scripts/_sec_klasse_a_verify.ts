@@ -17,7 +17,7 @@ const PUBLIC_READ = [
   'static_pages', 'languages', 'newsletter_sources',
 ]
 
-async function count(sb: ReturnType<typeof createClient>, t: string) {
+async function count(sb: any, t: string) {
   const { error, count } = await sb.from(t).select('*', { count: 'exact', head: true })
   if (error) return { err: `${error.code ?? ''} ${error.message.slice(0, 40)}` }
   return { n: count ?? 0 }
