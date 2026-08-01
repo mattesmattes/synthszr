@@ -13,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { createClient } from '@/lib/supabase/client'
 import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -108,8 +107,6 @@ export default function DigestsPage() {
   const [savingBlog, setSavingBlog] = useState(false)
   const [deletingDigestId, setDeletingDigestId] = useState<string | null>(null)
 
-  const supabase = createClient()
-
   // Set of dates that have repos
   const repoDateSet = useMemo(() => new Set(repoDates.map(r => r.date)), [repoDates])
   const hasRepoForSelectedDate = repoDateSet.has(selectedDate)
@@ -124,14 +121,12 @@ export default function DigestsPage() {
   }, [selectedDate])
 
   async function fetchRepoDates() {
-    const { data } = await supabase
-      .from('daily_repo')
-      .select('newsletter_date')
-      .order('newsletter_date', { ascending: false })
+    const res = await fetch('/api/admin/daily-repo')
+    const data = await res.json()
 
-    if (data) {
+    if (res.ok && data.items) {
       const dateMap = new Map<string, number>()
-      for (const item of data) {
+      for (const item of data.items as { newsletter_date: string }[]) {
         if (item.newsletter_date) {
           dateMap.set(item.newsletter_date, (dateMap.get(item.newsletter_date) || 0) + 1)
         }
@@ -143,14 +138,11 @@ export default function DigestsPage() {
   async function loadSourceSummary() {
     setSourceSummary(prev => ({ ...prev, loading: true }))
 
-    const { data, error } = await supabase
-      .from('daily_repo')
-      .select('id, title, source_type, source_email, source_url, content')
-      .eq('newsletter_date', selectedDate)
-      .order('collected_at', { ascending: false })
+    const res = await fetch(`/api/admin/daily-repo?date=${encodeURIComponent(selectedDate)}`)
+    const data = await res.json()
 
-    if (!error && data) {
-      const items = data as SourceItem[]
+    if (res.ok && data.items) {
+      const items = data.items as SourceItem[]
       setSourceSummary({
         items,
         newsletterCount: items.filter(i => i.source_type === 'newsletter').length,
@@ -165,14 +157,11 @@ export default function DigestsPage() {
 
   async function fetchDigests() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('daily_digests')
-      .select('*')
-      .order('digest_date', { ascending: false })
-      .limit(20)
+    const res = await fetch('/api/admin/daily-digests')
+    const data = await res.json()
 
-    if (!error && data) {
-      setDigests(data)
+    if (res.ok && data.digests) {
+      setDigests(data.digests)
     }
     setLoading(false)
   }
@@ -246,13 +235,18 @@ export default function DigestsPage() {
 
       console.log(`[Digest] Using ${analyzedItemIds.length} analyzed item IDs as sources_used`)
 
-      const { data, error } = await supabase.from('daily_digests').insert({
-        digest_date: selectedDate,
-        analysis_content: streamedContent,
-        word_count: streamedContent.split(/\s+/).length,
-        sources_used: sourcesUsed,
-      }).select('id').single()
-      if (error) throw error
+      const res = await fetch('/api/admin/daily-digests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          digestDate: selectedDate,
+          analysisContent: streamedContent,
+          wordCount: streamedContent.split(/\s+/).length,
+          sourcesUsed,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Fehler beim Speichern')
 
       await fetchDigests()
       setStreamedContent('')
@@ -366,13 +360,10 @@ export default function DigestsPage() {
     setLoadingDigestSources(true)
     setDigestSources([])
 
-    const { data } = await supabase
-      .from('daily_repo')
-      .select('id, title, source_type, source_email, source_url, content')
-      .eq('newsletter_date', digest.digest_date)
-      .order('collected_at', { ascending: true })
+    const res = await fetch(`/api/admin/daily-repo?date=${encodeURIComponent(digest.digest_date)}&sort=asc`)
+    const data = await res.json()
 
-    if (data) setDigestSources(data as SourceItem[])
+    if (res.ok && data.items) setDigestSources(data.items as SourceItem[])
     setLoadingDigestSources(false)
   }
 
@@ -397,8 +388,12 @@ export default function DigestsPage() {
     if (!confirm('Digest wirklich löschen?')) return
     setDeletingDigestId(digestId)
     try {
-      const { error } = await supabase.from('daily_digests').delete().eq('id', digestId)
-      if (error) throw error
+      const res = await fetch('/api/admin/daily-digests', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: digestId }),
+      })
+      if (!res.ok) throw new Error('Fehler beim Löschen')
       await fetchDigests()
     } catch (error) {
       console.error('Delete error:', error)
@@ -417,15 +412,20 @@ export default function DigestsPage() {
         : `Artikel vom ${new Date(digest.digest_date).toLocaleDateString('de-DE')}`
 
       const tiptapContent = markdownToTiptap(content)
-      const { data: newPost, error } = await supabase.from('generated_posts').insert({
-        digest_id: digest.id,
-        title,
-        content: JSON.stringify(tiptapContent),
-        word_count: content.split(/\s+/).length,
-        status: 'draft',
-      }).select().single()
+      const res = await fetch('/api/admin/generated-posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          digest_id: digest.id,
+          title,
+          content: JSON.stringify(tiptapContent),
+          word_count: content.split(/\s+/).length,
+          status: 'draft',
+        }),
+      })
+      const newPost = await res.json()
 
-      if (error) throw error
+      if (!res.ok) throw new Error(newPost.error || 'Fehler beim Speichern')
 
       // Trigger background image generation from blog content sections
       if (newPost && content) {
@@ -490,7 +490,7 @@ export default function DigestsPage() {
       }
       return false
     }
-  }, [supabase])
+  }, [])
 
   // Manual save button handler
   async function saveBlogAsDraft() {

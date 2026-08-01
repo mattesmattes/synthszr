@@ -67,7 +67,6 @@ import { TiptapEditor } from '@/components/tiptap-editor'
 import { TiptapRenderer } from '@/components/tiptap-renderer'
 import { PostImageGallery } from '@/components/post-image-gallery'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { createClient } from '@/lib/supabase/client'
 import { verifyContentUrls } from '@/lib/utils/url-verifier'
 import { convertTiptapToMarkdown, parseTiptapContent } from '@/lib/utils/tiptap-to-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
@@ -202,8 +201,6 @@ export default function AdminPage() {
   // the banner is never empty even when the /api/admin/available-models
   // request hasn't returned yet (or fails silently).
   const [currentImageModel, setCurrentImageModel] = useState<string | null>('google/gemini-3-pro-image')
-
-  const supabase = createClient()
 
   // Extract H2 headings (articles) from TipTap content
   function getArticleHeadlines(content: Record<string, unknown>): string[] {
@@ -435,16 +432,25 @@ export default function AdminPage() {
     setLoading(true)
 
     // Fetch manual posts
-    const { data: manualPosts } = await supabase
-      .from('posts')
-      .select('id, title, slug, excerpt, content, category, status, created_at')
-      .order('created_at', { ascending: false })
+    const manualPostsRes = await fetch(
+      `/api/admin/posts?select=${encodeURIComponent('id, title, slug, excerpt, content, category, status, created_at')}`,
+      { credentials: 'include' }
+    )
+    const manualPosts: Array<{
+      id: string; title: string; slug: string; excerpt: string | null
+      content: string | Record<string, unknown>; category: string | null; status: string | null; created_at: string
+    }> = manualPostsRes.ok ? await manualPostsRes.json() : []
 
     // Fetch AI-generated posts
-    const { data: aiPosts } = await supabase
-      .from('generated_posts')
-      .select('id, title, slug, excerpt, content, category, status, created_at, word_count, ai_model')
-      .order('created_at', { ascending: false })
+    const aiPostsRes = await fetch(
+      `/api/admin/generated-posts?select=${encodeURIComponent('id, title, slug, excerpt, content, category, status, created_at, word_count, ai_model')}`,
+      { credentials: 'include' }
+    )
+    const aiPosts: Array<{
+      id: string; title: string; slug: string | null; excerpt: string | null
+      content: string | Record<string, unknown>; category: string | null; status: string; created_at: string
+      word_count: number | null; ai_model: string | null
+    }> = aiPostsRes.ok ? await aiPostsRes.json() : []
 
     // Combine and normalize
     const combined: CombinedPost[] = [
@@ -599,11 +605,16 @@ export default function AdminPage() {
     setChangingStatus(post.id)
     try {
       if (post.source === 'manual') {
-        const { error } = await supabase
-          .from('posts')
-          .update({ status: newStatus, updated_at: new Date().toISOString() })
-          .eq('id', post.id)
-        if (error) throw error
+        const res = await fetch('/api/admin/posts', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: post.id, status: newStatus }),
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const error = await res.json()
+          throw new Error(error.error || 'Fehler beim Statuswechsel')
+        }
       } else {
         const res = await fetch('/api/admin/generated-posts', {
           method: 'PUT',
@@ -631,19 +642,24 @@ export default function AdminPage() {
     setSaving(true)
     try {
       if (editingPost.source === 'manual') {
-        const { error } = await supabase
-          .from('posts')
-          .update({
+        const res = await fetch('/api/admin/posts', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingPost.id,
             title: editForm.title,
             slug: editForm.slug,
             excerpt: editForm.excerpt || null,
             category: editForm.category,
             status: editForm.status,
             content: editForm.content,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', editingPost.id)
-        if (error) throw error
+          }),
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const error = await res.json()
+          throw new Error(error.error || 'Fehler beim Speichern')
+        }
       } else {
         const res = await fetch('/api/admin/generated-posts', {
           method: 'PUT',
@@ -684,8 +700,14 @@ export default function AdminPage() {
     setIsDeleting(true)
     try {
       if (deletingPost.source === 'manual') {
-        const { error } = await supabase.from('posts').delete().eq('id', deletingPost.id)
-        if (error) throw error
+        const res = await fetch(`/api/admin/posts?id=${deletingPost.id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const error = await res.json()
+          throw new Error(error.error || 'Fehler beim Löschen')
+        }
       } else {
         const res = await fetch(`/api/admin/generated-posts?id=${deletingPost.id}`, {
           method: 'DELETE',
@@ -1478,17 +1500,16 @@ export default function AdminPage() {
 // Component to manually trigger image generation for a post
 function GenerateImagesButton({ postId, currentImageModel }: { postId: string; currentImageModel: string | null }) {
   const [generating, setGenerating] = useState(false)
-  const supabase = createClient()
 
   async function generateImages() {
     setGenerating(true)
     try {
       // Get the post content
-      const { data: post } = await supabase
-        .from('generated_posts')
-        .select('content')
-        .eq('id', postId)
-        .single()
+      const postRes = await fetch(
+        `/api/admin/generated-posts?id=${postId}&select=${encodeURIComponent('content')}`,
+        { credentials: 'include' }
+      )
+      const post = postRes.ok ? await postRes.json() : null
 
       if (!post?.content) {
         alert('Kein Post-Inhalt gefunden.')
@@ -1565,11 +1586,12 @@ function GenerateImagesButton({ postId, currentImageModel }: { postId: string; c
       console.log(`[ImageGen] Found ${sectionsToProcess.length} sections for image generation`)
 
       // Delete any existing failed/generating images for this post
-      await supabase
-        .from('post_images')
-        .delete()
-        .eq('post_id', postId)
-        .in('generation_status', ['pending', 'generating', 'failed'])
+      await fetch('/api/admin/post-images', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ postId, statuses: ['pending', 'generating', 'failed'] }),
+      })
 
       // Trigger image generation from post content sections
       const response = await fetch('/api/generate-image', {

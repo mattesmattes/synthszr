@@ -1,16 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { pregenerateStockSynthszr } from '@/lib/stock-synthszr/pregenerate'
 import { syncPostCompanyMentions } from '@/lib/companies/sync'
 import { queueTranslations } from '@/lib/translations/queue'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
 import { embedPostContent, upsertPostEmbedding } from '@/lib/search/embeddings'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get('id')
+  const status = searchParams.get('status')
+  const select = searchParams.get('select')
+
+  // Security-Stufe 2 (Welle 1b): gezielte Abfragen für app/admin/page.tsx —
+  // Einzel-Post per id, bzw. Liste mit custom select (optional nach status
+  // gefiltert). Getriggert über die Query-Params, damit das bestehende
+  // Verhalten ohne Params (voller Join, s.u. — für generated-articles/page.tsx)
+  // unverändert bleibt.
+  if (id || select || status) {
+    try {
+      const supabase = createAdminClient()
+
+      if (id) {
+        const { data, error } = await supabase
+          .from('generated_posts')
+          .select(select || '*')
+          .eq('id', id)
+          .single()
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json(data)
+      }
+
+      let query = supabase
+        .from('generated_posts')
+        .select(select || '*')
+        .order('created_at', { ascending: false })
+      if (status) query = query.eq('status', status)
+      const { data, error } = await query
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json(data)
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Unbekannter Fehler' },
+        { status: 500 }
+      )
+    }
   }
 
   try {
@@ -45,6 +86,43 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    return NextResponse.json(data)
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unbekannter Fehler' },
+      { status: 500 }
+    )
+  }
+}
+
+// Security-Stufe 2 (Welle 1b): Insert für app/admin/digests/page.tsx
+// (savePostAsDraft — legt den Ghostwriter-Entwurf als generated_posts-Zeile an).
+export async function POST(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+
+  try {
+    const { digest_id, title, content, word_count, status } = await request.json()
+    if (!title || !content) {
+      return NextResponse.json({ error: 'title und content erforderlich' }, { status: 400 })
+    }
+
+    const supabase = createAdminClient()
+    const { data, error } = await supabase
+      .from('generated_posts')
+      .insert({
+        digest_id,
+        title,
+        content,
+        word_count,
+        status: status || 'draft',
+      })
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json(data)
   } catch (error) {
     return NextResponse.json(

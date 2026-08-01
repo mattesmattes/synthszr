@@ -23,8 +23,31 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
+  const { searchParams } = new URL(request.url)
+  const select = searchParams.get('select')
+
+  // Security-Stufe 2 (Welle 1b): `posts`-Tabelle (manuelle Posts, alle
+  // Status) für app/admin/page.tsx — getriggert über ?select=..., damit das
+  // bestehende Verhalten unten (generated_posts mit limit/published) für
+  // app/admin/audio/page.tsx unverändert bleibt.
+  if (select) {
+    try {
+      const supabase = createAdminClient()
+      const { data, error } = await supabase
+        .from('posts')
+        .select(select)
+        .order('created_at', { ascending: false })
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json(data)
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Unbekannter Fehler' },
+        { status: 500 }
+      )
+    }
+  }
+
   try {
-    const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '20', 10)
     const publishedOnly = searchParams.get('published') !== 'false'
 
@@ -86,10 +109,14 @@ export async function PATCH(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
-  const { id, title, slug, excerpt, content, category, published } = await request.json()
+  const { id, title, slug, excerpt, content, category, published, status } = await request.json()
   if (!id) return NextResponse.json({ error: 'id erforderlich' }, { status: 400 })
 
   const supabase = createAdminClient()
+  // `status` optional: app/admin/page.tsx schreibt den Drei-Zustand-Status
+  // (draft/published/archived) direkt; components/post-form.tsx nutzt weiterhin
+  // nur `published` (Switch). Ein DB-Trigger hält `published` bei status-Schreiben
+  // in Sync, s. supabase/migrations/20260516_posts_status_column.sql.
   const { error } = await supabase
     .from('posts')
     .update({
@@ -99,9 +126,24 @@ export async function PATCH(request: NextRequest) {
       content,
       category,
       published,
+      ...(status !== undefined ? { status } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
+export async function DELETE(request: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id erforderlich' }, { status: 400 })
+
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('posts').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

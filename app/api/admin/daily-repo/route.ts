@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const date = searchParams.get('date')
+  const sort = searchParams.get('sort') // optional: 'asc' — default bleibt 'desc' (bestehendes Verhalten)
   const supabase = createAdminClient()
 
   if (date) {
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
       .from('daily_repo')
       .select('*')
       .eq('newsletter_date', date)
-      .order('collected_at', { ascending: false })
+      .order('collected_at', { ascending: sort === 'asc' })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ items: data ?? [] })
