@@ -66,7 +66,7 @@ export function classifyUnsubscribe(
 const VALID_INTERVALS: Interval[] = ['monthly', 'yearly', 'quarterly', 'weekly', 'one_time', 'unknown']
 const LLM_TIMEOUT_MS = 50_000
 const LLM_BATCH_SIZE = 12
-const MAX_CANDIDATES = 300
+const MAX_CANDIDATES = 200
 
 const ResponseSchema = z.object({ results: z.array(z.unknown()) })
 const ResultSchema = z.object({

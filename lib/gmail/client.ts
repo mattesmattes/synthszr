@@ -659,18 +659,25 @@ export class GmailClient {
     })
     const messages = listResponse.data.messages || []
     const emails: EmailMessage[] = []
-    for (const msg of messages) {
-      if (!msg.id) continue
-      try {
-        const full = await this.gmail.users.messages.get({
-          userId: 'me',
-          id: msg.id,
-          format: 'full',
-        })
-        const email = this.parseMessage(full.data)
+    const CONCURRENCY = 5
+    for (let i = 0; i < messages.length; i += CONCURRENCY) {
+      const chunk = messages.slice(i, i + CONCURRENCY)
+      const results = await Promise.all(chunk.map(async (msg) => {
+        if (!msg.id) return null
+        try {
+          const full = await this.gmail.users.messages.get({
+            userId: 'me',
+            id: msg.id,
+            format: 'full',
+          })
+          return this.parseMessage(full.data)
+        } catch (error) {
+          console.error('[Gmail] searchEmails: error fetching', msg.id, error)
+          return null
+        }
+      }))
+      for (const email of results) {
         if (email) emails.push(email)
-      } catch (error) {
-        console.error('[Gmail] searchEmails: error fetching', msg.id, error)
       }
     }
     return emails
