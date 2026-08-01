@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 
 const DEFAULT_PROMPT = `Create a black and white satirical illustration of the following news in the style of Mort Drucker, without any references to "Mort Drucker" or "MAD" in the image.
@@ -26,7 +26,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('image_prompts')
     .select('*')
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // If setting as active, deactivate all others first
     if (is_active) {
@@ -115,7 +115,7 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // If setting as active, deactivate all others first
     if (is_active) {
@@ -167,7 +167,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'ID erforderlich' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Archive instead of delete
   const { error } = await supabase
@@ -197,7 +197,7 @@ export async function getActiveImagePrompt(): Promise<string> {
 }
 
 export async function getActiveImagePromptSettings(): Promise<ActiveImagePromptSettings> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('image_prompts')
     .select('prompt_text, enable_dithering, dithering_gain, dithering_coarseness, image_scale')

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAnonClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 import { getCompanyTicker } from '@/lib/data/company-tickers'
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = createAnonClient()
+    const supabase = createAdminClient()
     const apiKey = process.env.EODHD_API_KEY
 
     // Process all companies in parallel with error isolation

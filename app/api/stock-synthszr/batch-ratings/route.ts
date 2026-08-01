@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAnonClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 import { MAX_BATCH_SIZE } from '@/lib/constants/thresholds'
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = createAnonClient()
+    const supabase = createAdminClient()
     const results: StockRatingResult[] = []
 
     // Query cache for each company (any currency - rating is the same)

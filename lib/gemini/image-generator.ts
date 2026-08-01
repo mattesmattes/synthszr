@@ -1,7 +1,7 @@
 import sharp from 'sharp'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 
@@ -40,7 +40,7 @@ interface ActiveImagePromptSettings {
  */
 async function getActiveImagePromptSettings(): Promise<ActiveImagePromptSettings> {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data } = await supabase
       .from('image_prompts')
       .select('prompt_text, enable_dithering, dithering_gain, dithering_coarseness, image_scale')

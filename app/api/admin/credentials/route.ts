@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { encrypt, decrypt } from '@/lib/crypto'
 
@@ -9,7 +9,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('paywall_credentials')
     .select('id, domain, username, notes, last_used_at, created_at')
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     // Encrypt password
     const encryptedPassword = encrypt(password)
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data, error } = await supabase
       .from('paywall_credentials')
       .insert({
@@ -86,7 +86,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'ID erforderlich' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { error } = await supabase
     .from('paywall_credentials')
     .delete()
@@ -127,7 +127,7 @@ export async function PUT(request: NextRequest) {
       updateData.password_encrypted = encrypt(password)
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data, error } = await supabase
       .from('paywall_credentials')
       .update(updateData)
