@@ -9,7 +9,7 @@
  */
 
 import OpenAI from 'openai'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 // OpenAI TTS voices
 export type TTSVoice = 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer'
@@ -123,7 +123,8 @@ export async function generateSpeech(
  * Get TTS settings from database
  */
 export async function getTTSSettings(): Promise<TTSSettings> {
-  const supabase = await createClient()
+  // settings ist RLS-gesperrt → service_role statt anon
+  const supabase = createAdminClient()
 
   const { data: settings } = await supabase
     .from('settings')

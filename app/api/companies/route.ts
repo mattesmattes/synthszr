@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAnonClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 
 // Relaxed rate limiter: 100 requests per minute per IP (public read endpoint)
@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = createAnonClient()
+    // post_company_mentions ist RLS-gesperrt → service_role statt anon
+    const supabase = createAdminClient()
 
     // Fetch all company mentions with post status filter
     // We need to join with generated_posts to check status

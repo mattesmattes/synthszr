@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth/session'
 import { parseScriptText, type PodcastLine } from '@/lib/tts/elevenlabs-tts'
 
@@ -52,7 +52,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    // podcast_jobs ist RLS-gesperrt → service_role statt anon
+    const supabase = createAdminClient()
 
     // Create job
     const { data: job, error } = await supabase
@@ -100,7 +101,8 @@ export async function GET(request: NextRequest) {
   const authError = await requireAdmin(request)
   if (authError) return authError
 
-  const supabase = await createClient()
+  // podcast_jobs ist RLS-gesperrt → service_role statt anon
+  const supabase = createAdminClient()
 
   const { data: jobs, error } = await supabase
     .from('podcast_jobs')

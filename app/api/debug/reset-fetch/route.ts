@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 
 export async function POST() {
@@ -9,7 +9,8 @@ export async function POST() {
   }
 
   try {
-    const supabase = await createClient()
+    // settings ist RLS-gesperrt → service_role statt anon
+    const supabase = createAdminClient()
 
     const { error } = await supabase
       .from('settings')

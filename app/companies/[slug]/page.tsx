@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { CompanyDetailClient } from './company-detail-client'
 
 export const dynamic = 'force-dynamic'
@@ -38,7 +38,8 @@ export default async function CompanyDetailPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const supabase = await createClient()
+  // post_company_mentions ist RLS-gesperrt → service_role statt anon
+  const supabase = createAdminClient()
 
   // Fetch company mentions with article-level detail
   const { data: mentions, error } = await supabase

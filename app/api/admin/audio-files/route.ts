@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { del } from '@vercel/blob'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 
 // List all audio files
@@ -10,7 +10,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
-  const supabase = await createClient()
+  // podcast_audio_files ist RLS-gesperrt → service_role statt anon
+  const supabase = createAdminClient()
 
   const { data: files, error } = await supabase
     .from('podcast_audio_files')
@@ -49,7 +50,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    // podcast_audio_files ist RLS-gesperrt → service_role statt anon
+    const supabase = createAdminClient()
 
     const { data: record, error } = await supabase
       .from('podcast_audio_files')
@@ -93,7 +95,8 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    // podcast_audio_files ist RLS-gesperrt → service_role statt anon
+    const supabase = createAdminClient()
 
     if (name !== undefined) {
       const { data: record, error } = await supabase
@@ -183,7 +186,8 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'id is required' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  // podcast_audio_files ist RLS-gesperrt → service_role statt anon
+  const supabase = createAdminClient()
 
   // Get file details
   const { data: file, error: fetchError } = await supabase

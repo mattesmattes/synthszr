@@ -59,8 +59,9 @@ export default async function Page({ params }: PageProps) {
   const t = await getTranslations(locale)
   const supabase = createAnonClient()
 
-  // Fetch cover animation config
-  const { data: coverAnimSetting } = await supabase
+  // settings ist RLS-gesperrt → separater service_role-Client nur für diese Query
+  const settingsDb = createAdminClient()
+  const { data: coverAnimSetting } = await settingsDb
     .from('settings')
     .select('value')
     .eq('key', 'cover_animation_config')

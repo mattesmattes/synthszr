@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { isAdminRequest } from '@/lib/auth/session'
 import { GmailClient } from '@/lib/gmail/client'
 
@@ -15,7 +15,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
-  const supabase = await createClient()
+  // gmail_tokens und excluded_senders sind RLS-gesperrt → service_role statt anon
+  const supabase = createAdminClient()
 
   try {
     // Get Gmail token

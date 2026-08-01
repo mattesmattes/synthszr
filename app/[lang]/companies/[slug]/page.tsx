@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { createAnonClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { CompanyDetailClient } from '@/app/companies/[slug]/company-detail-client'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
@@ -111,7 +111,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   // Next liefert Dynamic-Params percent-encoded ("Hugging%20Face") — ohne
   // Decode 404en alle Company-Slugs mit Leerzeichen (~105 Premarket-Firmen).
   const slug = decodeURIComponent(rawSlug)
-  const supabase = createAnonClient()
+  // post_company_mentions ist RLS-gesperrt → service_role statt anon
+  const supabase = createAdminClient()
 
   // Fetch company name from mentions (case-insensitive)
   const { data: mention } = await supabase
@@ -157,7 +158,8 @@ export default async function CompanyDetailPage({ params }: PageProps) {
   // Decode 404en alle Company-Slugs mit Leerzeichen (~105 Premarket-Firmen).
   const slug = decodeURIComponent(rawSlug)
   const locale = lang as LanguageCode
-  const supabase = createAnonClient()
+  // post_company_mentions ist RLS-gesperrt → service_role statt anon
+  const supabase = createAdminClient()
   const t = await getTranslations(locale)
 
   // Resolve slug case-insensitively against known companies

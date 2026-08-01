@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { scanSubscriptions } from '@/lib/subscriptions/detector'
 
@@ -10,7 +10,8 @@ export async function POST() {
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
   try {
-    const supabase = await createClient()
+    // gmail_tokens ist RLS-gesperrt → service_role statt anon
+    const supabase = createAdminClient()
 
     const { data: tokenData } = await supabase.from('gmail_tokens').select('refresh_token').single()
     if (!tokenData?.refresh_token) {

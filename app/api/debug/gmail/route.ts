@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { GmailClient } from '@/lib/gmail/client'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 
 export async function GET() {
@@ -14,7 +14,8 @@ export async function GET() {
   const debug: Record<string, unknown> = {}
 
   try {
-    const supabase = await createClient()
+    // gmail_tokens und settings sind RLS-gesperrt → service_role statt anon
+    const supabase = createAdminClient()
 
     // 1. Check gmail_tokens
     const { data: tokenData, error: tokenError } = await supabase

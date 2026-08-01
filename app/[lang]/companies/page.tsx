@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { createAnonClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchAllCompanyMentions } from '@/lib/companies/mention-rows'
 import { CompaniesListClient } from '@/app/companies/companies-list-client'
 import { getTranslations } from '@/lib/i18n/get-translations'
@@ -35,7 +35,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function CompaniesPage({ params }: PageProps) {
   const { lang } = await params
   const locale = lang as LanguageCode
-  const supabase = createAnonClient()
+  // post_company_mentions (via fetchAllCompanyMentions) ist RLS-gesperrt → service_role statt anon
+  const supabase = createAdminClient()
   const t = await getTranslations(locale)
 
   // Fetch all company mentions from published posts

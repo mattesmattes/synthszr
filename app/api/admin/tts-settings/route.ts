@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { getTTSSettings, generatePreviewAudio, TTSVoice, TTSModel } from '@/lib/tts/openai-tts'
 
@@ -63,7 +63,8 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body: UpdateSettingsRequest = await request.json()
-    const supabase = await createClient()
+    // settings ist RLS-gesperrt → service_role statt anon
+    const supabase = createAdminClient()
 
     // Validate and update each setting
     const updates: Array<{ key: string; value: unknown }> = []

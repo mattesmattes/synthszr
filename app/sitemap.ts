@@ -1,5 +1,5 @@
 import { MetadataRoute } from 'next'
-import { createAnonClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { DEFAULT_LOCALE, SEO_LOCALES } from '@/lib/i18n/config'
 import { getRankedProducts } from '@/lib/rankings/leaderboard'
 import { fetchAllCompanyMentions } from '@/lib/companies/mention-rows'
@@ -20,7 +20,8 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.synthszr.com'
 const FULL_CONTENT_LOCALES = SEO_LOCALES
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const supabase = createAnonClient()
+  // post_company_mentions (via fetchAllCompanyMentions) ist RLS-gesperrt → service_role statt anon
+  const supabase = createAdminClient()
 
   // Fetch active languages
   const { data: languages } = await supabase

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { GmailClient } from '@/lib/gmail/client'
 
 // Domains/patterns that are typically ads or transactional emails, not newsletters
@@ -115,7 +115,8 @@ function isLikelyNewsletter(email: string, subjects: string[]): boolean {
 
 export async function GET() {
   try {
-    const supabase = await createClient()
+    // gmail_tokens ist RLS-gesperrt → service_role statt anon
+    const supabase = createAdminClient()
 
     // Get Gmail refresh token from gmail_tokens table
     const { data: tokenData, error: tokenError } = await supabase

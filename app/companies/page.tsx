@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { CompaniesListClient } from './companies-list-client'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +21,8 @@ interface CompanyAggregation {
 }
 
 export default async function CompaniesPage() {
-  const supabase = await createClient()
+  // post_company_mentions ist RLS-gesperrt → service_role statt anon
+  const supabase = createAdminClient()
 
   // Fetch all company mentions from published posts
   const { data: mentions, error } = await supabase

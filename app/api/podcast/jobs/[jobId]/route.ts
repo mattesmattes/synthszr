@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth/session'
 
 export async function GET(
@@ -15,7 +15,8 @@ export async function GET(
   if (authError) return authError
 
   const { jobId } = await params
-  const supabase = await createClient()
+  // podcast_jobs ist RLS-gesperrt → service_role statt anon
+  const supabase = createAdminClient()
 
   const { data: job, error } = await supabase
     .from('podcast_jobs')

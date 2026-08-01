@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTokensFromCode } from '@/lib/gmail/oauth'
 import { GmailClient } from '@/lib/gmail/client'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -38,7 +38,8 @@ export async function GET(request: NextRequest) {
     const profile = await gmailClient.getProfile()
 
     // Store tokens in database
-    const supabase = await createClient()
+    // gmail_tokens ist RLS-gesperrt → service_role statt anon
+    const supabase = createAdminClient()
 
     // Check if we already have a token entry
     const { data: existingToken } = await supabase
