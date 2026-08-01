@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { executeAutoUnsubscribe } from '@/lib/subscriptions/cancel'
 
@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   const { id, manual } = await request.json()
   if (!id) return NextResponse.json({ error: 'id fehlt' }, { status: 400 })
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { data: sub } = await supabase
     .from('paid_subscriptions')
     .select('id, unsubscribe_type, unsubscribe_target, cancel_log')
