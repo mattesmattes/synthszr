@@ -25,7 +25,6 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { createClient } from '@/lib/supabase/client'
 
 interface NewsletterSource {
   id: string
@@ -60,23 +59,22 @@ export default function NewslettersPage() {
   const [importing, setImporting] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
 
-  const supabase = createClient()
-
   useEffect(() => {
     fetchSources()
   }, [])
 
   async function fetchSources() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('newsletter_sources')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (error) {
+    try {
+      const res = await fetch('/api/admin/newsletter-sources')
+      const data = await res.json()
+      if (res.ok) {
+        setSources(data.sources || [])
+      } else {
+        console.error('Error fetching sources:', data.error)
+      }
+    } catch (error) {
       console.error('Error fetching sources:', error)
-    } else {
-      setSources(data || [])
     }
     setLoading(false)
   }
@@ -85,17 +83,20 @@ export default function NewslettersPage() {
     if (!newEmail.trim()) return
 
     setSaving(true)
-    const { error } = await supabase
-      .from('newsletter_sources')
-      .insert({
+    const res = await fetch('/api/admin/newsletter-sources', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         email: newEmail.trim().toLowerCase(),
         name: newName.trim() || null,
         enabled: true,
-      })
+      }),
+    })
 
-    if (error) {
-      console.error('Error adding source:', error)
-      alert('Fehler: ' + (error.message || 'Quelle konnte nicht hinzugefügt werden'))
+    if (!res.ok) {
+      const data = await res.json()
+      console.error('Error adding source:', data.error)
+      alert('Fehler: ' + (data.error || 'Quelle konnte nicht hinzugefügt werden'))
     } else {
       setNewEmail('')
       setNewName('')
@@ -106,13 +107,15 @@ export default function NewslettersPage() {
   }
 
   async function toggleSource(id: string, currentEnabled: boolean) {
-    const { error } = await supabase
-      .from('newsletter_sources')
-      .update({ enabled: !currentEnabled })
-      .eq('id', id)
+    const res = await fetch('/api/admin/newsletter-sources', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, enabled: !currentEnabled }),
+    })
 
-    if (error) {
-      console.error('Error toggling source:', error)
+    if (!res.ok) {
+      const data = await res.json()
+      console.error('Error toggling source:', data.error)
     } else {
       setSources(sources.map(s =>
         s.id === id ? { ...s, enabled: !currentEnabled } : s
@@ -123,13 +126,11 @@ export default function NewslettersPage() {
   async function deleteSource(id: string) {
     if (!confirm('Diese Newsletter-Quelle wirklich löschen?')) return
 
-    const { error } = await supabase
-      .from('newsletter_sources')
-      .delete()
-      .eq('id', id)
+    const res = await fetch(`/api/admin/newsletter-sources?id=${id}`, { method: 'DELETE' })
 
-    if (error) {
-      console.error('Error deleting source:', error)
+    if (!res.ok) {
+      const data = await res.json()
+      console.error('Error deleting source:', data.error)
     } else {
       setSources(sources.filter(s => s.id !== id))
     }
@@ -192,18 +193,21 @@ export default function NewslettersPage() {
     const sendersToImport = scannedSenders.filter(s => selectedSenders.has(s.email))
 
     try {
-      const { error } = await supabase
-        .from('newsletter_sources')
-        .insert(
-          sendersToImport.map(s => ({
+      const res = await fetch('/api/admin/newsletter-sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sources: sendersToImport.map(s => ({
             email: s.email.toLowerCase(),
             name: s.name || null,
             enabled: true,
-          }))
-        )
+          })),
+        }),
+      })
 
-      if (error) {
-        throw error
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Import fehlgeschlagen')
       }
 
       setScanDialogOpen(false)
