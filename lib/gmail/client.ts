@@ -10,6 +10,8 @@ export interface EmailMessage {
   snippet: string
   htmlBody: string | null
   textBody: string | null
+  listUnsubscribe: string | null      // Header "List-Unsubscribe"
+  listUnsubscribePost: string | null  // Header "List-Unsubscribe-Post" (RFC 8058 One-Click)
 }
 
 export class GmailClient {
@@ -248,6 +250,8 @@ export class GmailClient {
       snippet: message.snippet || '',
       htmlBody,
       textBody,
+      listUnsubscribe: getHeader('List-Unsubscribe') || null,
+      listUnsubscribePost: getHeader('List-Unsubscribe-Post') || null,
     }
   }
 
@@ -640,5 +644,35 @@ export class GmailClient {
       console.error('Error scanning senders:', error)
       throw error
     }
+  }
+
+  /**
+   * Führt eine beliebige Gmail-Suchquery aus und liefert vollständige EmailMessages
+   * (inkl. List-Unsubscribe-Header). Genutzt vom Abo-Scan.
+   */
+  async searchEmails(query: string, maxResults: number = 300): Promise<EmailMessage[]> {
+    const listResponse = await this.gmail.users.messages.list({
+      userId: 'me',
+      q: query,
+      maxResults,
+      includeSpamTrash: false,
+    })
+    const messages = listResponse.data.messages || []
+    const emails: EmailMessage[] = []
+    for (const msg of messages) {
+      if (!msg.id) continue
+      try {
+        const full = await this.gmail.users.messages.get({
+          userId: 'me',
+          id: msg.id,
+          format: 'full',
+        })
+        const email = this.parseMessage(full.data)
+        if (email) emails.push(email)
+      } catch (error) {
+        console.error('[Gmail] searchEmails: error fetching', msg.id, error)
+      }
+    }
+    return emails
   }
 }
