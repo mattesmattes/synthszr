@@ -25,6 +25,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Claude Code local settings (enthält API-Keys — nie committen)
+.claude/settings.local.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -6,6 +6,7 @@ import { summarizeShowNotes } from '@/lib/podcast/show-notes'
 import { fetchAppleEpisodeUrl } from '@/lib/podcast/apple-lookup'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { safeFetch } from '@/lib/security/ssrf'
 
 export const runtime = 'nodejs'
 // Podigee publishing can take a while (cover generation + upload + API calls)
@@ -93,7 +94,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Kein Cover-Bild für diesen Post' }, { status: 404 })
     }
 
-    const imgResponse = await fetch(imageUrl)
+    // imageUrl/audioUrl below are external (DB-stored cover / client-supplied
+    // audio) - route through safeFetch to guard against SSRF (see lib/security/ssrf.ts)
+    const imgResponse = await safeFetch(imageUrl)
     if (!imgResponse.ok) {
       return NextResponse.json({ error: 'Cover-Bild konnte nicht geladen werden' }, { status: 502 })
     }
@@ -222,7 +225,7 @@ export async function POST(request: NextRequest) {
     const { upload_url: uploadUrl } = upload
 
     // ─── Step 5: Fetch MP3 and PUT to S3 ─────────────────────────────────────
-    const mp3Response = await fetch(audioUrl)
+    const mp3Response = await safeFetch(audioUrl)
     if (!mp3Response.ok) {
       return NextResponse.json(
         { error: 'MP3 konnte nicht heruntergeladen werden' },

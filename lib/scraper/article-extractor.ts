@@ -1,6 +1,7 @@
 import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
 import { isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
+import { assertPublicUrl, safeFetch } from '@/lib/security/ssrf'
 
 /**
  * Decode tracking redirect URLs to get the actual target URL.
@@ -192,9 +193,10 @@ export async function extractArticleContent(url: string, attempt = 1): Promise<E
       try {
         const headController = new AbortController()
         const headTimeout = setTimeout(() => headController.abort(), 8000)
-        const headResponse = await fetch(url, {
+        // safeFetch validates the URL (and every redirect hop) against the
+        // SSRF blocklist before following it - see lib/security/ssrf.ts
+        const headResponse = await safeFetch(url, {
           method: 'HEAD',
-          redirect: 'follow',
           signal: headController.signal,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -206,17 +208,23 @@ export async function extractArticleContent(url: string, attempt = 1): Promise<E
           console.log(`[ArticleExtractor] Resolved tracking redirect via HEAD: ${url.slice(0, 50)}... → ${urlToFetch.slice(0, 50)}...`)
         }
       } catch {
-        // HEAD failed, continue with original URL
+        // HEAD failed (or was blocked by the SSRF guard), continue with original URL
       }
     }
+
+    // Final safety net: validate the URL we're about to fetch even if it came
+    // from the HEAD-redirect resolution above (belt-and-suspenders alongside
+    // the assertPublicUrl check inside safeFetch below).
+    await assertPublicUrl(urlToFetch)
 
     // Fetch the page (25s timeout, extended from 15s for slow news sites)
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 25000)
 
-    const response = await fetch(urlToFetch, {
+    // safeFetch validates urlToFetch and every redirect hop against the SSRF
+    // blocklist (private/reserved/loopback/link-local targets) before fetching.
+    const response = await safeFetch(urlToFetch, {
       signal: controller.signal,
-      redirect: 'follow',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',

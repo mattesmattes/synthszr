@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import sharp from 'sharp'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { safeFetch } from '@/lib/security/ssrf'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -72,7 +73,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const res = await fetch(imageUrl)
+    // imageUrl is DB-authored (admin-controlled) - route through safeFetch to
+    // guard against SSRF, same rationale as the animated-GIF branch above.
+    const res = await safeFetch(imageUrl)
     if (!res.ok) throw new Error(`Source fetch failed: ${res.status}`)
     const srcBuffer = Buffer.from(await res.arrayBuffer())
 

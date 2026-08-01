@@ -1085,6 +1085,7 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string 
 
     let text = node.text || ''
     text = stripExplicitCompanyTags(text)
+    text = escapeHtml(text)
 
     // Determine which part of this node falls within the last sentence
     const nodeInHighlight = seg.charEnd > lastSentenceStart && seg.charStart < charPos
@@ -1105,8 +1106,8 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string 
     } else if (nodeInHighlight && highlightStartInNode > 0) {
       // Node is split: beginning is normal, rest is highlighted
       const rawText = node.text || ''
-      const beforeText = stripExplicitCompanyTags(rawText.slice(0, highlightStartInNode))
-      const afterText = stripExplicitCompanyTags(rawText.slice(highlightStartInNode))
+      const beforeText = escapeHtml(stripExplicitCompanyTags(rawText.slice(0, highlightStartInNode)))
+      const afterText = escapeHtml(stripExplicitCompanyTags(rawText.slice(highlightStartInNode)))
 
       // Re-apply Synthszr label styling on the before part
       let styledBefore = beforeText
@@ -1250,6 +1251,10 @@ function renderContent(content?: TiptapNode[]): string {
 
       // Remove {Company} explicit tags from display
       text = stripExplicitCompanyTags(text)
+
+      // Escape raw text (untrusted LLM/crawled content) BEFORE any HTML is built
+      // around it (Synthszr-Take styling, marks below).
+      text = escapeHtml(text)
 
       // Check if text contains "Synthszr Take:" or "Synthszr Contra:" and style it
       const synthszrPattern = /(Synthszr (?:Take|Contra):?)/gi

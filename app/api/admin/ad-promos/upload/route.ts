@@ -14,7 +14,9 @@ export async function POST(request: NextRequest) {
         const session = await getSession()
         if (!session) throw new Error('Nicht autorisiert')
         return {
-          allowedContentTypes: ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp', 'image/gif'],
+          // image/svg+xml bewusst NICHT erlaubt: SVG kann eingebettetes
+          // JavaScript enthalten → Stored-XSS bei direkter Blob-Navigation.
+          allowedContentTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
           maximumSizeInBytes: 8 * 1024 * 1024,
         }
       },

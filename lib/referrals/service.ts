@@ -43,10 +43,14 @@ export async function trackReferral(refCode: string, referredEmail: string, refe
  *  (robust statt blindem ++) und ab der Schwelle die Belohnung auslösen. */
 export async function confirmReferral(subscriberId: string, email: string): Promise<void> {
   const supabase = createAdminClient()
+  // email von PostgREST-Filter-Sonderzeichen befreien, damit sie nicht aus
+  // dem .or()-Ausdruck ausbrechen kann (Komma/Klammer/Quote/Backslash).
+  // subscriberId ist eine UUID und wird von PostgREST typgecastet.
+  const safeEmail = email.toLowerCase().replace(/[,"'()\\]/g, '')
   const { data: ref } = await supabase
     .from('referrals')
     .select('id, referrer_id')
-    .or(`referred_subscriber_id.eq.${subscriberId},referred_email.eq.${email.toLowerCase()}`)
+    .or(`referred_subscriber_id.eq.${subscriberId},referred_email.eq.${safeEmail}`)
     .eq('status', 'pending')
     .maybeSingle()
   if (!ref) return

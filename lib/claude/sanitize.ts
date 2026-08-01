@@ -16,3 +16,16 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 export function stripLoneSurrogates(text: string): string {
   return text.replace(LONE_SURROGATE, '')
 }
+
+/**
+ * Prompt-Injection-Härtung: Untrusted Newsletter-Content wird in Ghostwriter-
+ * Prompts in <newsletter_quellmaterial>-Delimiter gesetzt (siehe ghostwriter.ts
+ * / ghostwriter-pipeline.ts). Damit gecrawlter Text nicht durch einen
+ * eingebetteten schließenden (oder öffnenden) Tag aus dem Block ausbrechen
+ * kann, werden spitze Klammern eines solchen Tags im Content selbst entfernt.
+ */
+const QUELLMATERIAL_TAG = /<\/?newsletter_quellmaterial>/gi
+
+export function escapeQuellmaterialTag(text: string): string {
+  return text.replace(QUELLMATERIAL_TAG, (match) => match.replace(/[<>]/g, ''))
+}

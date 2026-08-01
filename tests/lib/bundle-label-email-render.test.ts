@@ -27,4 +27,18 @@ describe('convertTiptapToHtml — bundle label badge', () => {
     const html = convertTiptapToHtml(doc)
     expect(html).not.toContain('border-radius:999px')
   })
+
+  it('escapes raw text content to prevent HTML/content injection', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'A < B & <script>alert(1)</script>' }] },
+      ],
+    }
+    const html = convertTiptapToHtml(doc)
+    expect(html).toContain('&lt;')
+    expect(html).toContain('&amp;')
+    expect(html).toContain('&lt;script&gt;')
+    expect(html).not.toContain('<script>')
+  })
 })

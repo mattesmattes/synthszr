@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // X-Powered-By: Next.js nicht verraten (Info-Disclosure)
+  poweredByHeader: false,
   transpilePackages: ['@chenglou/pretext'],
   images: {
     // Next Image Optimization aktiv (AVIF/WebP on-the-fly statt 1408px-PNG).
@@ -48,6 +50,12 @@ const nextConfig = {
       {
         source: '/:path*',
         headers: [
+          {
+            // HSTS: erzwingt HTTPS für 2 Jahre inkl. Subdomains (Preload-fähig).
+            // Schützt vor Protocol-Downgrade / SSL-Stripping.
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload',
+          },
           {
             key: 'X-Content-Type-Options',
             value: 'nosniff',
