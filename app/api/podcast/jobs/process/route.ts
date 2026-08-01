@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSession } from '@/lib/auth/session'
 import { put } from '@vercel/blob'
 import {
   parseScriptText,
@@ -184,8 +185,10 @@ async function generateSegmentOpenAI(
 }
 
 export async function POST(request: NextRequest) {
-  // Note: This endpoint should be protected in production
-  // For now, we allow it to be called internally
+  // Nur Admin (einziger Aufrufer: Podcast-Studio /admin/audio). Verhindert, dass
+  // Fremde den teuren 800s-Worker triggern oder Jobstatus manipulieren.
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
   const body = await request.json().catch(() => ({}))
   const requestedJobId = body.jobId as string | undefined

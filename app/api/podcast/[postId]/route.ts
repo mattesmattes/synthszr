@@ -12,6 +12,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSession } from '@/lib/auth/session'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 import { put } from '@vercel/blob'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
 import {
@@ -120,6 +122,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const locale = searchParams.get('locale') || 'de'
   const shouldGenerate = searchParams.get('generate') === 'true'
   const forceRegenerate = searchParams.get('force') === 'true'
+
+  // force=true (löscht + regeneriert) → nur Admin.
+  if (forceRegenerate) {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  }
+  // generate=true (öffentliche On-Demand-Generierung via Reader-Player) → Rate-Limit
+  // gegen Massen-Missbrauch (teure KI-Generierung).
+  if (shouldGenerate) {
+    const rl = await checkRateLimit(`podcast-generate:${getClientIP(request)}`, rateLimiters.strict() ?? undefined)
+    if (!rl.success) return rateLimitResponse(rl)
+  }
 
   const supabase = createAdminClient()
 
