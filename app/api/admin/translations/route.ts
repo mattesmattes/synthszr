@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { queueTranslations } from '@/lib/translations/queue'
 import { parseIntParam } from '@/lib/validation/query-params'
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const limit = parseIntParam(searchParams.get('limit'), 50, 1, 500)
     const offset = parseIntParam(searchParams.get('offset'), 0, 0)
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Get queue statistics
     const { data: allQueueItems } = await supabase
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { action, queue_item_id, translation_id } = body
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     if (action === 'retry' && queue_item_id) {
       // Reset failed or cancelled item to pending

@@ -13,7 +13,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -51,7 +50,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20', 10)
     const publishedOnly = searchParams.get('published') !== 'false'
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Fetch from generated_posts (AI-generated posts)
     let query = supabase

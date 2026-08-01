@@ -1,6 +1,6 @@
 import { verifyBearerToken } from '@/lib/security/cron-auth'
 import { NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { streamGhostwriter, findDuplicateMetaphors, streamMetaphorDeduplication, getDefaultGhostwriterPrompt, type AIModel } from '@/lib/claude/ghostwriter'
 // getSynthesesForDigest removed — synthesis-development pipeline retired.
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
     const model: AIModel = VALID_MODELS.includes(requestedModel) ? requestedModel : 'gemini-2.5-pro'
     console.log(`[Ghostwriter] Requested model: ${requestedModel}, using: ${model}`)
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Get the digest content
     const { data: digest, error: digestError } = await supabase

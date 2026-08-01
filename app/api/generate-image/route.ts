@@ -1,7 +1,7 @@
 import { verifyBearerToken } from '@/lib/security/cron-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { generateAndProcessImage, generateEmailCover, generateDesktopCover, generateSatiricalImage, ImageProcessingOptions, CoverImageNews } from '@/lib/gemini/image-generator'
 import { getSession } from '@/lib/auth/session'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Create pending image record
     const { data: imageRecord, error: insertError } = await supabase
@@ -315,7 +315,7 @@ export async function PUT(request: NextRequest) {
       targetHeight: 792,
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const results: Array<{ success: boolean; error?: string; imageId?: string; model?: string }> = []
 
     // Cover mode: Generate ONE combined image from up to 3 news items

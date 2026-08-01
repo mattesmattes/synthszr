@@ -2,7 +2,7 @@ import { verifyBearerToken } from '@/lib/security/cron-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { generateSatiricalImage, applyDithering, whiteToTransparent } from '@/lib/gemini/image-generator'
 import { getSession } from '@/lib/auth/session'
 
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const results: Array<{
       index: number
       success: boolean
@@ -278,7 +278,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'postId is required' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Nur die vom Client (tiptap-renderer/news-headings) tatsächlich genutzten
   // Spalten laden statt der kompletten Zeile (spart Egress bei jedem Pageview).
@@ -321,7 +321,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'postId is required' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Build query - optionally filter by queueItemId (stable) or article_index (legacy)
   let query = supabase

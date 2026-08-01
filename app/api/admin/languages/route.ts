@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getAvailableModels } from '@/lib/i18n/translation-service'
 
 /**
@@ -8,7 +8,7 @@ import { getAvailableModels } from '@/lib/i18n/translation-service'
  */
 export async function GET() {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { data: languages, error } = await supabase
       .from('languages')
@@ -49,7 +49,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Language code is required' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Build update object
     const updates: Record<string, unknown> = {}
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Language code is required' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const queueEntries: Array<{
       content_type: string
       content_id: string

@@ -22,7 +22,6 @@ import {
   clearPendingQueue,
   resetSelectedToPending
 } from '@/lib/news-queue/service'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { parseIntParam } from '@/lib/validation/query-params'
 
@@ -61,7 +60,7 @@ export async function GET(request: NextRequest) {
 
       case 'debug': {
         // Full diagnostic info for debugging queue issues
-        const supabase = await createClient()
+        const supabase = createAdminClient()
 
         // Count by status
         const { data: statusCounts } = await supabase
@@ -130,7 +129,7 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ error: 'Missing id parameter' }, { status: 400 })
         }
 
-        const supabaseContent = await createClient()
+        const supabaseContent = createAdminClient()
 
         // Get the queue item's daily_repo_id
         const { data: queueItem } = await supabaseContent
@@ -174,7 +173,7 @@ export async function GET(request: NextRequest) {
         const selectParam = searchParams.get('select') || '*'
         const limitParam = searchParams.get('limit')
 
-        const supabaseByIds = await createClient()
+        const supabaseByIds = createAdminClient()
         let byIdsQuery = supabaseByIds.from('news_queue').select(selectParam).in('id', ids)
         if (limitParam) {
           byIdsQuery = byIdsQuery.limit(parseIntParam(limitParam, ids.length, 1, ids.length))
@@ -188,7 +187,7 @@ export async function GET(request: NextRequest) {
 
       case 'list':
       default: {
-        const supabase = await createClient()
+        const supabase = createAdminClient()
         const adminClient = createAdminClient()
         const status = searchParams.get('status') || 'pending'
         // LIMIT cap raised to 2000 because a single Cron run can now
@@ -365,7 +364,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Fetch content, email_received_at, and source_type from daily_repo
-        const supabase = await createClient()
+        const supabase = createAdminClient()
         const sourceItemIds = candidates.map(c => c.source_item_id).filter(Boolean)
         const { data: repoItems } = await supabase
           .from('daily_repo')

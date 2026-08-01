@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 
 export async function GET(request: NextRequest) {
@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Security-Stufe 2 (Welle 1c): einzelnen aktiven Prompt abfragen für
   // app/admin/create-article/page.tsx (ersetzt direkten Browser-Query
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // If setting as active, deactivate all others first
     if (is_active) {
@@ -107,7 +107,7 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // If setting as active, deactivate all others first
     if (is_active) {
@@ -155,7 +155,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'ID erforderlich' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Archive instead of delete
   const { error } = await supabase

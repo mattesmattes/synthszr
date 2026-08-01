@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { pregenerateStockSynthszr } from '@/lib/stock-synthszr/pregenerate'
@@ -59,7 +58,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data, error } = await supabase
       .from('generated_posts')
       .select(`
@@ -222,7 +221,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'ID erforderlich' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const updateData: Record<string, unknown> = {}
     if (title !== undefined) updateData.title = title
@@ -362,7 +361,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'ID erforderlich' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { error } = await supabase
       .from('generated_posts')
       .delete()

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { del, put } from '@vercel/blob'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { generateAndProcessImage, generateEmailCover, generateDesktopCover, generateSatiricalImage } from '@/lib/gemini/image-generator'
 
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'postId is required' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Only return cover images, not article thumbnails
   const { data: images, error } = await supabase
@@ -54,7 +54,7 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Remove existing cover
     await supabase
@@ -185,7 +185,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'imageId is required' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Get image details first
   const { data: image } = await supabase
@@ -241,7 +241,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'imageId is required' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Get existing image record
     const { data: image, error: fetchError } = await supabase
