@@ -159,3 +159,47 @@ describe('consuming', () => {
     expect(state.chains.every(c => c.update.mock.calls.length === 0)).toBe(true)
   })
 })
+
+describe('newsletter batch minting', () => {
+  it('mints one token per purpose for every recipient', async () => {
+    const { mintNewsletterLinkTokens } = await import('@/lib/newsletter/access-tokens')
+    const recipients = ['sub-1', 'sub-2', 'sub-3']
+
+    const { bySubscriber, rows } = mintNewsletterLinkTokens(recipients)
+
+    // three purposes per recipient, all in one insert payload
+    expect(rows).toHaveLength(recipients.length * 3)
+    expect(bySubscriber.size).toBe(3)
+
+    const first = bySubscriber.get('sub-1')!
+    expect(first.preferences.row.purpose).toBe('preferences')
+    expect(first.unsubscribe.row.purpose).toBe('unsubscribe')
+    expect(first.referral.row.purpose).toBe('referral')
+  })
+
+  it('gives every recipient distinct tokens', async () => {
+    const { mintNewsletterLinkTokens } = await import('@/lib/newsletter/access-tokens')
+    const { rows } = mintNewsletterLinkTokens(['a', 'b', 'c'])
+    expect(new Set(rows.map(r => r.token_hash)).size).toBe(rows.length)
+  })
+
+  it('uses the documented lifetimes per purpose', async () => {
+    const { mintNewsletterLinkTokens } = await import('@/lib/newsletter/access-tokens')
+    const { bySubscriber } = mintNewsletterLinkTokens(['sub-1'])
+    const t = bySubscriber.get('sub-1')!
+
+    const days = (iso: string) => Math.round((Date.parse(iso) - Date.now()) / 86400000)
+    expect(days(t.preferences.row.expires_at)).toBe(7)
+    expect(days(t.referral.row.expires_at)).toBe(30)
+    expect(days(t.unsubscribe.row.expires_at)).toBe(90)
+  })
+
+  it('persists no raw token in the insert payload', async () => {
+    const { mintNewsletterLinkTokens } = await import('@/lib/newsletter/access-tokens')
+    const { bySubscriber, rows } = mintNewsletterLinkTokens(['sub-1'])
+    const raws = Object.values(bySubscriber.get('sub-1')!).map(t => t.rawToken)
+
+    const serialized = JSON.stringify(rows)
+    for (const raw of raws) expect(serialized).not.toContain(raw)
+  })
+})

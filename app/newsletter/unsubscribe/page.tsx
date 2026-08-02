@@ -6,29 +6,29 @@ import { CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react'
 import { Suspense, useState } from 'react'
 
 type ViewState =
-  | { kind: 'confirm'; id: string }
+  | { kind: 'confirm'; token: string }
   | { kind: 'loading' }
   | { kind: 'status'; status: string | null; error: string | null }
 
 function UnsubscribeContent() {
   const searchParams = useSearchParams()
-  const initialId = searchParams.get('id')
+  const initialToken = searchParams.get('token')
   const initialConfirm = searchParams.get('confirm') === '1'
   const initialStatus = searchParams.get('status')
   const initialError = searchParams.get('error')
 
   const [view, setView] = useState<ViewState>(() => {
-    if (initialConfirm && initialId) return { kind: 'confirm', id: initialId }
+    if (initialConfirm && initialToken) return { kind: 'confirm', token: initialToken }
     return { kind: 'status', status: initialStatus, error: initialError }
   })
 
-  async function handleConfirm(id: string) {
+  async function handleConfirm(token: string) {
     setView({ kind: 'loading' })
     try {
       const res = await fetch('/api/newsletter/unsubscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ token }),
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok && data.status) {
@@ -62,7 +62,7 @@ function UnsubscribeContent() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button
-              onClick={() => handleConfirm(view.id)}
+              onClick={() => handleConfirm(view.token)}
               className="px-6 py-3 bg-primary text-primary-foreground rounded-sm font-medium hover:bg-primary/90 transition-colors"
             >
               Yes, unsubscribe me
@@ -102,7 +102,7 @@ function UnsubscribeContent() {
         message: 'We could not find your email address. You may have already been unsubscribed.',
       }
     }
-    if (error === 'missing_id') {
+    if (error === 'missing_token') {
       return {
         icon: <XCircle className="h-16 w-16 text-red-500" />,
         title: 'Invalid link',

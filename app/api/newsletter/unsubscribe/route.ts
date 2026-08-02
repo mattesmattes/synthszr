@@ -1,37 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { BASE_URL } from '@/lib/resend/client'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 import { requireValidOrigin } from '@/lib/security/origin-check'
+import { resolveSubscriberToken } from '@/lib/newsletter/access-tokens'
 
 const standardLimiter = rateLimiters.standard()
 
-/**
- * GET /api/newsletter/unsubscribe?id=<uuid>
- *
- * Previously GET performed the actual unsubscribe, which caused automatic
- * unsubscribes whenever Outlook Safe Links, Microsoft ATP, or other mail
- * security gateways prefetched the link during inbox scanning.
- *
- * GET now just redirects to the confirmation landing page — no side-effect.
- * The landing page shows a single "Yes, unsubscribe me" button that POSTs
- * back to this route.
- */
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const id = searchParams.get('id')
-  const target = id
-    ? `${BASE_URL}/newsletter/unsubscribe?confirm=1&id=${encodeURIComponent(id)}`
-    : `${BASE_URL}/newsletter/unsubscribe?error=missing_id`
-  return NextResponse.redirect(target, 302)
-}
+const NO_STORE = { 'Cache-Control': 'no-store' }
 
 /**
  * POST /api/newsletter/unsubscribe
- * Body: { id: string }
+ * Body: { token: string }
  *
- * Performs the actual unsubscribe. Protected by Origin check to block
- * cross-site POSTs. Rate-limited per IP.
+ * There is no GET handler. Mail security gateways (Outlook Safe Links,
+ * Microsoft ATP) prefetch links while scanning an inbox, which previously
+ * unsubscribed people who never clicked anything. The mail link now points
+ * straight at the confirmation page, which POSTs back here.
+ *
+ * The credential is a purpose-scoped token rather than `subscribers.id`
+ * (SEC-001): the id could be replayed forever and worked for every other
+ * action too. The token is consumed on success, so one link unsubscribes at
+ * most once.
  */
 export async function POST(request: NextRequest) {
   const originError = requireValidOrigin(request)
@@ -43,23 +32,30 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}))
-    const id = (body.id ?? '').toString().trim()
-    if (!id) return NextResponse.json({ error: 'id erforderlich' }, { status: 400 })
+    const token = typeof body.token === 'string' ? body.token.trim() : ''
+    if (!token) {
+      return NextResponse.json({ error: 'token erforderlich' }, { status: 400, headers: NO_STORE })
+    }
+
+    const resolved = await resolveSubscriberToken(token, 'unsubscribe', { consume: true })
+    if (!resolved) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404, headers: NO_STORE })
+    }
 
     const supabase = createAdminClient()
 
     const { data: subscriber, error: findError } = await supabase
       .from('subscribers')
       .select('id, status')
-      .eq('id', id)
+      .eq('id', resolved.subscriberId)
       .maybeSingle()
 
     if (findError || !subscriber) {
-      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+      return NextResponse.json({ error: 'not_found' }, { status: 404, headers: NO_STORE })
     }
 
     if (subscriber.status === 'unsubscribed') {
-      return NextResponse.json({ status: 'already_unsubscribed' })
+      return NextResponse.json({ status: 'already_unsubscribed' }, { headers: NO_STORE })
     }
 
     const { error: updateError } = await supabase
@@ -73,12 +69,12 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error('Unsubscribe update error:', updateError)
-      return NextResponse.json({ error: 'update_failed' }, { status: 500 })
+      return NextResponse.json({ error: 'update_failed' }, { status: 500, headers: NO_STORE })
     }
 
-    return NextResponse.json({ status: 'success' })
+    return NextResponse.json({ status: 'success' }, { headers: NO_STORE })
   } catch (error) {
     console.error('Unsubscribe error:', error)
-    return NextResponse.json({ error: 'server_error' }, { status: 500 })
+    return NextResponse.json({ error: 'server_error' }, { status: 500, headers: NO_STORE })
   }
 }

@@ -25,7 +25,6 @@ interface NewsletterEmailProps {
   postUrl: string
   unsubscribeUrl: string
   preferencesUrl?: string
-  subscriberId?: string
   footerText?: string
   coverImageUrl?: string | null
   emailCoverImageUrl?: string | null
@@ -144,7 +143,6 @@ export function NewsletterEmail({
   postUrl,
   unsubscribeUrl,
   preferencesUrl,
-  subscriberId,
   footerText,
   coverImageUrl,
   emailCoverImageUrl,
@@ -156,14 +154,6 @@ export function NewsletterEmail({
   const formattedDate = postDate ? formatUpdateDate(postDate, locale) : null
   const strings = UI_STRINGS[locale] || UI_STRINGS.de
   const actualFooterText = footerText || strings.footer
-
-  // Helper: append sid= to internal links so the website can identify the subscriber
-  const sidSuffix = subscriberId ? `sid=${subscriberId}` : ''
-  const withSid = (url: string) => {
-    if (!sidSuffix || !url.startsWith(baseUrl) && !url.startsWith('/')) return url
-    const sep = url.includes('?') ? '&' : '?'
-    return `${url}${sep}${sidSuffix}`
-  }
 
   return (
     <Html>
@@ -240,7 +230,7 @@ export function NewsletterEmail({
           {/* Cover Image with Logo - clicks to article with autoplay */}
           {coverImageUrl && (
             <Section style={coverSection}>
-              <Link href={withSid(`${postUrl}?autoplay=true`)} style={{ textDecoration: 'none' }}>
+              <Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
                 <Img
                   src={emailCoverImageUrl || `${baseUrl}/api/newsletter/cover-image?url=${encodeURIComponent(coverImageUrl)}&size=900&logo=true`}
                   alt={subject}
@@ -254,7 +244,7 @@ export function NewsletterEmail({
 
           {/* Podcast Promo Section */}
           <Section style={{ padding: '0', backgroundColor: '#ffffff' }}>
-<Link href={withSid(`${postUrl}?autoplay=true`)} style={{ textDecoration: 'none' }}>
+<Link href={`${postUrl}?autoplay=true`} style={{ textDecoration: 'none' }}>
               <Img
                 src={`${baseUrl}/api/newsletter/promo-block?v=4`}
                 alt="Listen on Apple Podcasts and Spotify"
@@ -427,11 +417,11 @@ export function NewsletterEmail({
                 {strings.unsubscribe}
               </Link>
               <span style={linkSeparator}>•</span>
-              <Link href={withSid(`${baseUrl}/${locale === 'de' ? 'impressum' : `${locale}/impressum`}`)} style={unsubscribeLink}>
+              <Link href={`${baseUrl}/${locale === 'de' ? 'impressum' : `${locale}/impressum`}`} style={unsubscribeLink}>
                 {strings.imprint}
               </Link>
               <span style={linkSeparator}>•</span>
-              <Link href={withSid(`${baseUrl}/${locale === 'de' ? 'datenschutz' : `${locale}/datenschutz`}`)} style={unsubscribeLink}>
+              <Link href={`${baseUrl}/${locale === 'de' ? 'datenschutz' : `${locale}/datenschutz`}`} style={unsubscribeLink}>
                 {strings.privacy}
               </Link>
             </Text>

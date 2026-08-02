@@ -1,9 +1,8 @@
 import { Suspense } from 'react'
-import { getReferralStats } from '@/lib/referrals/service'
+import { getReferralStatsByToken } from '@/lib/referrals/service'
 import { ReferralShare } from '@/components/referral-share'
 import { SiteFooter } from '@/components/site-footer'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
-import { ReferralSidFallback } from '@/components/referral-sid-fallback'
 import { ReferralEmailGate } from '@/components/referral-email-gate'
 import type { LanguageCode } from '@/lib/types'
 
@@ -131,12 +130,12 @@ export default async function ReferralPage({
   searchParams,
 }: {
   params: Promise<{ lang: string }>
-  searchParams: Promise<{ sid?: string }>
+  searchParams: Promise<{ token?: string }>
 }) {
   const { lang } = await params
-  const { sid } = await searchParams
+  const { token } = await searchParams
   const L = TEXT[lang as keyof typeof TEXT] ?? TEXT.en
-  const stats = sid ? await getReferralStats(sid) : null
+  const stats = token ? await getReferralStatsByToken(token) : null
 
   const pct = stats ? Math.min(100, Math.round((stats.confirmedCount / stats.threshold) * 100)) : 0
   const remaining = stats ? Math.max(0, stats.threshold - stats.confirmedCount) : 0
@@ -153,7 +152,6 @@ export default async function ReferralPage({
 
         {!stats ? (
           <>
-            <ReferralSidFallback />
             <ReferralEmailGate
               lang={lang}
               labels={{ prompt: L.gatePrompt, placeholder: L.gatePlaceholder, cta: L.gateCta, sending: L.gateSending, sent: L.gateSent }}

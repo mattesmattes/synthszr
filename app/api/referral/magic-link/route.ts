@@ -4,8 +4,11 @@ import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 import { ensureReferralCode } from '@/lib/referrals/service'
 import { checkRateLimit, getClientIP, rateLimiters } from '@/lib/rate-limit'
 import { requireValidOrigin } from '@/lib/security/origin-check'
+import { mintSubscriberToken } from '@/lib/newsletter/access-tokens'
 
 const standardLimiter = rateLimiters.standard()
+
+const REFERRAL_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 /** Schickt dem Inhaber einer (aktiven) Abo-Adresse einen Link zu seiner persönlichen
  *  Empfehlungs-Übersicht. Antwortet immer mit success (gegen E-Mail-Enumeration). */
@@ -38,7 +41,21 @@ export async function POST(request: NextRequest) {
 
   if (sub && sub.status === 'active') {
     await ensureReferralCode(sub.id)
-    const url = `${BASE_URL}/${lang}/referral?sid=${sub.id}`
+
+    // Scoped token instead of the subscriber UUID (SEC-001): this link is
+    // mailed out, so it ends up in inboxes, logs and Referer headers - it
+    // must not also authorise unsubscribing or changing preferences.
+    const referral = mintSubscriberToken(sub.id, 'referral', new Date(Date.now() + REFERRAL_TTL_MS))
+    const { error: tokenError } = await supabase
+      .from('subscriber_action_tokens')
+      .insert(referral.row)
+
+    if (tokenError) {
+      console.error('[referral magic-link] token insert failed:', tokenError)
+      return NextResponse.json({ success: true })
+    }
+
+    const url = `${BASE_URL}/${lang}/referral?token=${referral.rawToken}`
     try {
       await getResend().emails.send({
         from: FROM_EMAIL,

@@ -9,6 +9,7 @@ import { generateEmailContentWithVotes, ArticleThumbnail } from '@/lib/email/tip
 import type { LanguageCode } from '@/lib/types'
 import { getActiveAdPromo } from '@/lib/ad-promos/get-active'
 import { getActiveTipPromo } from '@/lib/tip-promos/get-active'
+import { mintNewsletterLinkTokens } from '@/lib/newsletter/access-tokens'
 
 // Allow up to 2 minutes for large subscriber lists
 export const maxDuration = 120
@@ -157,8 +158,8 @@ export async function POST(request: NextRequest) {
           previewText,
           content: emailContent,
           postUrl: testPostUrl,
-          unsubscribeUrl: `${BASE_URL}/newsletter/unsubscribe?id=test`,
-          preferencesUrl: `${BASE_URL}/?openLangSwitch=1`,
+          unsubscribeUrl: `${BASE_URL}/newsletter/unsubscribe?confirm=1&token=test-preview`,
+          preferencesUrl: `${BASE_URL}/newsletter/preferences?token=test-preview`,
           footerText,
           coverImageUrl,
           emailCoverImageUrl,
@@ -247,7 +248,7 @@ export async function POST(request: NextRequest) {
         locale,
         locale !== 'de' ? post.content : undefined, // Pass original content for non-German locales
         localeTipPromo,
-        '{{SUBSCRIBER_ID}}',
+        '{{REFERRAL_TOKEN}}',
       )
       contentByLocale.set(locale, emailContent)
 
@@ -301,7 +302,6 @@ export async function POST(request: NextRequest) {
           postUrl: localizedPostUrl,
           unsubscribeUrl: '{{UNSUBSCRIBE_URL}}',
           preferencesUrl: '{{PREFERENCES_URL}}',
-          subscriberId: '{{SUBSCRIBER_ID}}',
           footerText,
           coverImageUrl,
           emailCoverImageUrl,
@@ -317,15 +317,33 @@ export async function POST(request: NextRequest) {
         const batch = localeSubscribers.slice(i, i + BATCH_SIZE)
 
         // Build batch email requests
-        const batchEmails = batch.map(subscriber => {
-          const unsubscribeUrl = `${BASE_URL}/api/newsletter/unsubscribe?id=${subscriber.id}`
-          const preferencesUrl = `${BASE_URL}/?openLangSwitch=1&sid=${subscriber.id}`
+        // One insert for the whole batch (3 rows per recipient). If it fails
+        // the batch is skipped rather than sent: mails whose links resolve to
+        // nothing are worse than a delayed send, and the retry loop below
+        // would otherwise duplicate them.
+        const { bySubscriber, rows: tokenRows } = mintNewsletterLinkTokens(batch.map(s => s.id))
+        const { error: tokenError } = await supabase
+          .from('subscriber_action_tokens')
+          .insert(tokenRows)
 
-          // Replace placeholders with subscriber-specific URLs
+        if (tokenError) {
+          console.error('[Newsletter] token insert failed, skipping batch:', tokenError)
+          failCount += batch.length
+          continue
+        }
+
+        const batchEmails = batch.map(subscriber => {
+          const tokens = bySubscriber.get(subscriber.id)!
+          const localePath = locale === 'de' ? '' : `/${locale}`
+          const unsubscribeUrl = `${BASE_URL}/newsletter/unsubscribe?confirm=1&token=${tokens.unsubscribe.rawToken}`
+          const preferencesUrl = `${BASE_URL}${localePath}/newsletter/preferences?token=${tokens.preferences.rawToken}`
+
+          // Replace placeholders with subscriber-specific URLs. No subscriber
+          // id appears in any link any more (SEC-001).
           const html = baseHtml
             .replace('{{UNSUBSCRIBE_URL}}', unsubscribeUrl)
             .replace('{{PREFERENCES_URL}}', preferencesUrl)
-            .replaceAll('{{SUBSCRIBER_ID}}', subscriber.id)
+            .replaceAll('{{REFERRAL_TOKEN}}', tokens.referral.rawToken)
 
           return {
             from: FROM_EMAIL,

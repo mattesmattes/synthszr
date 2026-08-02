@@ -59,6 +59,53 @@ export function mintSubscriberToken(
 }
 
 /**
+ * Lifetimes per purpose. Preferences and referral links stay usable while the
+ * issue is current; unsubscribe stays valid far longer, because someone may
+ * dig out an old newsletter to get off the list and must not be stranded.
+ */
+const NEWSLETTER_TOKEN_TTL_DAYS = {
+  preferences: 7,
+  referral: 30,
+  unsubscribe: 90,
+} as const
+
+export interface RecipientLinkTokens {
+  preferences: MintedSubscriberToken
+  unsubscribe: MintedSubscriberToken
+  referral: MintedSubscriberToken
+}
+
+/**
+ * Mint the per-recipient link tokens for one send batch.
+ *
+ * Returns the raw tokens keyed by subscriber (for building the URLs) plus a
+ * flat list of rows, so the whole batch is a single insert: three round trips
+ * per recipient would dominate send time, and a partial write would leave
+ * recipients with links that resolve to nothing.
+ */
+export function mintNewsletterLinkTokens(subscriberIds: string[]): {
+  bySubscriber: Map<string, RecipientLinkTokens>
+  rows: SubscriberTokenRow[]
+} {
+  const bySubscriber = new Map<string, RecipientLinkTokens>()
+  const rows: SubscriberTokenRow[] = []
+  const now = Date.now()
+  const expiry = (days: number) => new Date(now + days * 24 * 60 * 60 * 1000)
+
+  for (const subscriberId of subscriberIds) {
+    const tokens: RecipientLinkTokens = {
+      preferences: mintSubscriberToken(subscriberId, 'preferences', expiry(NEWSLETTER_TOKEN_TTL_DAYS.preferences)),
+      unsubscribe: mintSubscriberToken(subscriberId, 'unsubscribe', expiry(NEWSLETTER_TOKEN_TTL_DAYS.unsubscribe)),
+      referral: mintSubscriberToken(subscriberId, 'referral', expiry(NEWSLETTER_TOKEN_TTL_DAYS.referral)),
+    }
+    bySubscriber.set(subscriberId, tokens)
+    rows.push(tokens.preferences.row, tokens.unsubscribe.row, tokens.referral.row)
+  }
+
+  return { bySubscriber, rows }
+}
+
+/**
  * Resolve a raw token to its subscriber, or null. Fails closed on every
  * unexpected condition (unknown token, wrong purpose, expired, already
  * consumed, database error).

@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
+import { resolveSubscriberToken } from '@/lib/newsletter/access-tokens'
 
 export const REFERRAL_THRESHOLD = 10
 const ADMIN_EMAIL = 'mattes.schrader@oh-so.com'
@@ -123,6 +124,16 @@ function maskEmail(email: string): string {
 }
 
 /** Statistik für die Empfehlungs-Übersichtsseite. Stellt fehlenden Code sicher. */
+/**
+ * Token-based entry point for the public referral page (SEC-001). The page
+ * must never accept a subscriber id from the URL - it resolves a scoped
+ * `referral` token instead, and only then looks up the stats internally.
+ */
+export async function getReferralStatsByToken(rawToken: string): Promise<ReferralStats | null> {
+  const resolved = await resolveSubscriberToken(rawToken, 'referral')
+  return resolved ? getReferralStats(resolved.subscriberId) : null
+}
+
 export async function getReferralStats(subscriberId: string): Promise<ReferralStats | null> {
   const supabase = createAdminClient()
   const { data: sub } = await supabase

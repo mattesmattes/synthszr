@@ -19,6 +19,7 @@ const db = vi.hoisted(() => ({
   // Rows that resolveSubscriberToken should find, keyed by hash.
   actionTokens: [] as any[],
   sentMails: [] as any[],
+  languages: [{ code: 'de', is_active: true }, { code: 'en', is_active: true }],
 }))
 
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
@@ -73,6 +74,10 @@ vi.mock('@/lib/supabase/admin', () => ({
           if (pending === 'update') { db.subscriberUpdates.push({ filters, payload }); return { data: null, error: null } }
           return { data: db.existingSubscriber, error: db.existingSubscriber ? null : { code: 'PGRST116' } }
         }
+        if (table === 'languages') {
+          return { data: db.languages.find(l => l.code === filters.code) ?? null, error: null }
+        }
+        if (table === 'subscriber_language_changes') return { data: null, error: null }
         if (table === 'subscriber_action_tokens') {
           if (pending === 'insert') { db.tokenInserts.push(payload); return { data: payload, error: null } }
           if (pending === 'delete') { db.tokenDeletes.push(filters); return { data: null, error: null } }
@@ -100,6 +105,8 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 import { POST as subscribe } from '@/app/api/newsletter/subscribe/route'
 import { GET as confirm } from '@/app/api/newsletter/confirm/route'
+import * as preferencesRoute from '@/app/api/newsletter/preferences/route'
+import * as unsubscribeRoute from '@/app/api/newsletter/unsubscribe/route'
 import { hashSubscriberToken } from '@/lib/newsletter/access-tokens'
 
 function signup(email: string) {
@@ -242,5 +249,117 @@ describe('GET /api/newsletter/confirm', () => {
   it('does not leak the subscriber id in the redirect', async () => {
     const response = await confirmWith(RAW)
     expect(response.headers.get('location')).not.toContain('subscriber-1')
+  })
+})
+
+// --- Task 5: preferences, unsubscribe and cross-purpose isolation ----------
+
+function seedToken(purpose: string, raw: string, extra: Record<string, unknown> = {}) {
+  db.actionTokens.push({
+    id: `row-${purpose}-${raw}`,
+    subscriber_id: 'subscriber-1',
+    purpose,
+    token_hash: hashSubscriberToken(raw),
+    consumed_at: null,
+    ...extra,
+  })
+}
+
+describe('/api/newsletter/preferences', () => {
+  const PREF = 'preferences-raw-token'
+
+  beforeEach(() => {
+    seedToken('preferences', PREF)
+    db.existingSubscriber = { id: 'subscriber-1', status: 'active' } as any
+  })
+
+  function get(token: string) {
+    return preferencesRoute.GET(
+      new NextRequest(`https://www.synthszr.com/api/newsletter/preferences?token=${encodeURIComponent(token)}`)
+    )
+  }
+
+  function put(body: unknown) {
+    return preferencesRoute.PUT(new NextRequest('https://www.synthszr.com/api/newsletter/preferences', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', origin: 'https://www.synthszr.com' },
+      body: JSON.stringify(body),
+    }))
+  }
+
+  it('reads preferences for a valid token', async () => {
+    const response = await get(PREF)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toContain('no-store')
+  })
+
+  it('rejects an unknown token', async () => {
+    expect((await get('nope')).status).toBe(404)
+  })
+
+  it('does not accept a token minted for another purpose', async () => {
+    seedToken('unsubscribe', 'unsub-token')
+    expect((await get('unsub-token')).status).toBe(404)
+  })
+
+  it('does not accept the subscriber id as a token', async () => {
+    expect((await get('subscriber-1')).status).toBe(404)
+  })
+
+  it('updates the language for a valid token', async () => {
+    expect((await put({ token: PREF, language: 'en' })).status).toBe(200)
+  })
+
+  it('rejects a language that is not an active locale', async () => {
+    expect((await put({ token: PREF, language: 'xx' })).status).toBe(400)
+    expect((await put({ token: PREF, language: '../../etc' })).status).toBe(400)
+  })
+
+  it('no longer exposes a way to mint a token from a subscriber id', () => {
+    // The old POST handler took { subscriberId } and returned a working
+    // preference token - anyone holding a leaked UUID could mint one.
+    expect((preferencesRoute as Record<string, unknown>).POST).toBeUndefined()
+  })
+})
+
+describe('/api/newsletter/unsubscribe', () => {
+  const UNSUB = 'unsubscribe-raw-token'
+
+  beforeEach(() => {
+    seedToken('unsubscribe', UNSUB)
+    db.existingSubscriber = { id: 'subscriber-1', status: 'active' } as any
+  })
+
+  function post(body: unknown) {
+    return unsubscribeRoute.POST(new NextRequest('https://www.synthszr.com/api/newsletter/unsubscribe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://www.synthszr.com' },
+      body: JSON.stringify(body),
+    }))
+  }
+
+  it('unsubscribes for a valid token', async () => {
+    const response = await post({ token: UNSUB })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'success' })
+  })
+
+  it('accepts an unsubscribe token only once', async () => {
+    await post({ token: UNSUB })
+    expect((await post({ token: UNSUB })).status).toBe(404)
+  })
+
+  it('does not accept a preferences token', async () => {
+    seedToken('preferences', 'pref-for-unsub')
+    expect((await post({ token: 'pref-for-unsub' })).status).toBe(404)
+  })
+
+  it('no longer unsubscribes by raw subscriber id', async () => {
+    expect((await post({ id: 'subscriber-1' })).status).toBe(400)
+    expect((await post({ token: 'subscriber-1' })).status).toBe(404)
+  })
+
+  it('has no GET handler that could be triggered by link prefetching', () => {
+    expect((unsubscribeRoute as Record<string, unknown>).GET).toBeUndefined()
   })
 })

@@ -42,11 +42,16 @@ function PreferencesContent({ params }: PageProps) {
       // Fetch subscriber data if token is provided
       if (token) {
         try {
-          const res = await fetch(`/api/newsletter/preferences?token=${token}`)
+          const res = await fetch(`/api/newsletter/preferences?token=${encodeURIComponent(token)}`)
           if (res.ok) {
             const data = await res.json()
             setEmail(data.email || '')
             setSelectedLanguage(data.language || 'de')
+            // Take the credential out of the visible URL once it has been
+            // used. It stays in component state for the save request, but no
+            // longer leaks through screenshots, shared links, the browser
+            // history or a Referer header to third-party assets.
+            window.history.replaceState(null, '', window.location.pathname)
           } else {
             const data = await res.json()
             setError(data.error || 'Ungültiger oder abgelaufener Link')

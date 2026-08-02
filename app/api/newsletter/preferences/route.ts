@@ -1,206 +1,137 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+import { resolveSubscriberToken } from '@/lib/newsletter/access-tokens'
 
 // Standard rate limiter: 30 requests per minute per IP
 const standardLimiter = rateLimiters.standard()
 
+const NO_STORE = { 'Cache-Control': 'no-store' }
+
+/**
+ * Preferences are addressed by a purpose-scoped token (SEC-001), never by
+ * subscriber id. There is deliberately no POST handler any more: the previous
+ * one accepted `{ subscriberId }` and returned a working preference token, so
+ * anyone holding a leaked UUID - and until the signup fix, that was anyone
+ * who could guess an email address - could mint themselves access. Tokens are
+ * now only ever minted server-side while sending mail.
+ */
+
 /**
  * GET /api/newsletter/preferences?token=xxx
- * Returns subscriber preferences for the given token
  */
 export async function GET(request: NextRequest) {
-  // Rate limit check
   const clientIP = getClientIP(request)
   const rateLimitResult = await checkRateLimit(`preferences:${clientIP}`, standardLimiter ?? undefined)
-
-  if (!rateLimitResult.success) {
-    return rateLimitResponse(rateLimitResult)
-  }
+  if (!rateLimitResult.success) return rateLimitResponse(rateLimitResult)
 
   try {
-    const { searchParams } = new URL(request.url)
-    const token = searchParams.get('token')
-
+    const token = new URL(request.url).searchParams.get('token')
     if (!token) {
-      return NextResponse.json({ error: 'Token erforderlich' }, { status: 400 })
+      return NextResponse.json({ error: 'Token erforderlich' }, { status: 400, headers: NO_STORE })
+    }
+
+    const resolved = await resolveSubscriberToken(token, 'preferences')
+    if (!resolved) {
+      // One answer for unknown, expired and wrong-purpose alike.
+      return NextResponse.json({ error: 'Ungültiger Token' }, { status: 404, headers: NO_STORE })
     }
 
     const supabase = createAdminClient()
-
-    // Find subscriber preference token
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('subscriber_preference_tokens')
-      .select('subscriber_id, expires_at')
-      .eq('token', token)
-      .single()
-
-    if (tokenError || !tokenData) {
-      return NextResponse.json({ error: 'Ungültiger Token' }, { status: 404 })
-    }
-
-    // Check if token is expired
-    if (new Date(tokenData.expires_at) < new Date()) {
-      return NextResponse.json({ error: 'Token abgelaufen' }, { status: 410 })
-    }
-
-    // Get subscriber data
     const { data: subscriber, error: subError } = await supabase
       .from('subscribers')
       .select('email, preferences')
-      .eq('id', tokenData.subscriber_id)
+      .eq('id', resolved.subscriberId)
       .single()
 
     if (subError || !subscriber) {
-      return NextResponse.json({ error: 'Subscriber nicht gefunden' }, { status: 404 })
+      return NextResponse.json({ error: 'Ungültiger Token' }, { status: 404, headers: NO_STORE })
     }
 
     const preferences = subscriber.preferences as { language?: string } | null
 
-    return NextResponse.json({
-      email: subscriber.email,
-      language: preferences?.language || 'de',
-    })
+    return NextResponse.json(
+      { email: subscriber.email, language: preferences?.language || 'de' },
+      { headers: NO_STORE },
+    )
   } catch (error) {
     console.error('Preferences GET error:', error)
-    return NextResponse.json({ error: 'Interner Fehler' }, { status: 500 })
+    return NextResponse.json({ error: 'Interner Fehler' }, { status: 500, headers: NO_STORE })
   }
 }
 
 /**
  * PUT /api/newsletter/preferences
- * Updates subscriber preferences
+ * Body: { token: string, language: string }
  */
 export async function PUT(request: NextRequest) {
-  // Rate limit check
   const clientIP = getClientIP(request)
   const rateLimitResult = await checkRateLimit(`preferences:${clientIP}`, standardLimiter ?? undefined)
-
-  if (!rateLimitResult.success) {
-    return rateLimitResponse(rateLimitResult)
-  }
+  if (!rateLimitResult.success) return rateLimitResponse(rateLimitResult)
 
   try {
-    const body = await request.json()
-    const { token, language } = body
+    const body = await request.json().catch(() => ({}))
+    const token = typeof body.token === 'string' ? body.token : ''
+    const language = typeof body.language === 'string' ? body.language : ''
 
     if (!token) {
-      return NextResponse.json({ error: 'Token erforderlich' }, { status: 400 })
+      return NextResponse.json({ error: 'Token erforderlich' }, { status: 400, headers: NO_STORE })
     }
 
     const supabase = createAdminClient()
 
-    // Find subscriber preference token
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('subscriber_preference_tokens')
-      .select('subscriber_id, expires_at')
-      .eq('token', token)
-      .single()
+    // Validate against the locales that actually exist, so the stored value
+    // cannot be arbitrary caller-controlled text.
+    const { data: locale } = await supabase
+      .from('languages')
+      .select('code')
+      .eq('code', language)
+      .eq('is_active', true)
+      .maybeSingle()
 
-    if (tokenError || !tokenData) {
-      return NextResponse.json({ error: 'Ungültiger Token' }, { status: 404 })
+    if (!locale) {
+      return NextResponse.json({ error: 'Ungültige Sprache' }, { status: 400, headers: NO_STORE })
     }
 
-    // Check if token is expired
-    if (new Date(tokenData.expires_at) < new Date()) {
-      return NextResponse.json({ error: 'Token abgelaufen' }, { status: 410 })
+    const resolved = await resolveSubscriberToken(token, 'preferences')
+    if (!resolved) {
+      return NextResponse.json({ error: 'Ungültiger Token' }, { status: 404, headers: NO_STORE })
     }
 
-    // Get current preferences
     const { data: subscriber } = await supabase
       .from('subscribers')
-      .select('preferences')
-      .eq('id', tokenData.subscriber_id)
+      .select('preferences, email')
+      .eq('id', resolved.subscriberId)
       .single()
 
     const currentPrefs = (subscriber?.preferences as Record<string, unknown>) || {}
     const oldLanguage = (currentPrefs.language as string) || 'de'
 
-    // Update preferences
     const { error: updateError } = await supabase
       .from('subscribers')
       .update({
         preferences: { ...currentPrefs, language },
         updated_at: new Date().toISOString(),
       })
-      .eq('id', tokenData.subscriber_id)
+      .eq('id', resolved.subscriberId)
 
     if (updateError) {
       console.error('Preferences update error:', updateError)
-      return NextResponse.json({ error: 'Fehler beim Speichern' }, { status: 500 })
+      return NextResponse.json({ error: 'Fehler beim Speichern' }, { status: 500, headers: NO_STORE })
     }
 
-    // Log language change if actually changed
-    if (language && oldLanguage !== language) {
-      const { data: sub } = await supabase
-        .from('subscribers')
-        .select('email')
-        .eq('id', tokenData.subscriber_id)
-        .maybeSingle()
-
+    if (oldLanguage !== language) {
       await supabase.from('subscriber_language_changes').insert({
-        subscriber_id: tokenData.subscriber_id,
-        email: sub?.email ?? null,
+        subscriber_id: resolved.subscriberId,
+        email: subscriber?.email ?? null,
         old_language: oldLanguage,
         new_language: language,
       })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true }, { headers: NO_STORE })
   } catch (error) {
     console.error('Preferences PUT error:', error)
-    return NextResponse.json({ error: 'Interner Fehler' }, { status: 500 })
-  }
-}
-
-/**
- * POST /api/newsletter/preferences
- * Creates a new preference token and returns the preferences URL
- * (Called when sending newsletter to include in footer)
- */
-export async function POST(request: NextRequest) {
-  try {
-    // Rate-Limit gegen Token-Mint-Missbrauch (Defense-in-Depth; die sid ist
-    // seit dem subscribe-Fix nicht mehr aus fremden E-Mails ableitbar).
-    const rl = await checkRateLimit(`preferences-post:${getClientIP(request)}`, standardLimiter ?? undefined)
-    if (!rl.success) return rateLimitResponse(rl)
-
-    const body = await request.json()
-    const { subscriberId } = body
-
-    if (!subscriberId) {
-      return NextResponse.json({ error: 'Subscriber ID erforderlich' }, { status: 400 })
-    }
-
-    const supabase = createAdminClient()
-
-    // Generate token
-    const token = crypto.randomUUID()
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-
-    // Clean up old tokens for this subscriber
-    await supabase
-      .from('subscriber_preference_tokens')
-      .delete()
-      .eq('subscriber_id', subscriberId)
-
-    // Create new token
-    const { error: insertError } = await supabase
-      .from('subscriber_preference_tokens')
-      .insert({
-        subscriber_id: subscriberId,
-        token,
-        expires_at: expiresAt.toISOString(),
-      })
-
-    if (insertError) {
-      console.error('Token insert error:', insertError)
-      return NextResponse.json({ error: 'Fehler beim Erstellen des Tokens' }, { status: 500 })
-    }
-
-    return NextResponse.json({ token })
-  } catch (error) {
-    console.error('Preferences POST error:', error)
-    return NextResponse.json({ error: 'Interner Fehler' }, { status: 500 })
+    return NextResponse.json({ error: 'Interner Fehler' }, { status: 500, headers: NO_STORE })
   }
 }

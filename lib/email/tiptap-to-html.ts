@@ -179,7 +179,7 @@ function stripExplicitCompanyTags(text: string): string {
  * Format: "Synthszr Vote: Nvidia (NVDA) ↑5.2% Buy, Tesla (TSLA) ↓2.1% Hold"
  * Premarket: "Synthszr Vote: OpenAI Buy" (no ticker/percent)
  */
-function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug?: string, locale?: string, sidPlaceholder?: string): string {
+function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug?: string, locale?: string, ): string {
   if (ratings.length === 0) return ''
 
   const badges = ratings.map((r, idx) => {
@@ -189,9 +189,8 @@ function generateVoteBadgesHtml(ratings: RatingData[], baseUrl: string, postSlug
 
     // Link to analysis dialog on the blog post (with locale prefix if not German)
     const localePath = locale && locale !== 'de' ? `/${locale}` : ''
-    const sidSuffix = sidPlaceholder ? `&sid=${sidPlaceholder}` : ''
     const href = postSlug
-      ? `${baseUrl}${localePath}/posts/${postSlug}?${r.type === 'premarket' ? 'premarket' : 'stock'}=${encodeURIComponent(r.displayName)}${sidSuffix}`
+      ? `${baseUrl}${localePath}/posts/${postSlug}?${r.type === 'premarket' ? 'premarket' : 'stock'}=${encodeURIComponent(r.displayName)}`
       : '#'
 
     // Build company info: "Nvidia (NVDA) ↑5.2%" for public, "OpenAI" for premarket
@@ -228,7 +227,7 @@ function injectCompanyLinksIntoHtml(
   companies: Array<{ displayName: string; apiName: string }>,
   baseUrl: string,
   locale?: string,
-  sidPlaceholder?: string
+  referralTokenPlaceholder?: string
 ): string {
   if (companies.length === 0) return paraHtml
 
@@ -254,8 +253,7 @@ function injectCompanyLinksIntoHtml(
       const escaped = company.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       text = text.replace(new RegExp(`\\b${escaped}\\b`, 'i'), match => {
         linked.add(company.apiName)
-        const sidSuffix = sidPlaceholder ? `?sid=${sidPlaceholder}` : ''
-        const href = `${baseUrl}${localePath}/companies/${company.apiName}${sidSuffix}`
+        const href = `${baseUrl}${localePath}/companies/${company.apiName}`
         return `<a href="${href}" style="color: inherit; text-decoration: underline;">${match}</a>`
       })
     }
@@ -325,14 +323,13 @@ function findProductsInText(text: string, products: ChartProductEntry[]): ChartP
 }
 
 /** "Synthszr Charts: Claude ↑100, ChatGPT →5 …" — farbcodierter Trend + Score, email-safe. */
-function generateChartsBadgesHtml(products: ChartProductEntry[], baseUrl: string, locale?: string, sidPlaceholder?: string): string {
+function generateChartsBadgesHtml(products: ChartProductEntry[], baseUrl: string, locale?: string, ): string {
   if (products.length === 0) return ''
   const localePath = locale && locale !== 'de' ? `/${locale}` : ''
-  const sidSuffix = sidPlaceholder ? `?sid=${sidPlaceholder}` : ''
   const items = products.map((p, idx) => {
     const prefix = idx === 0 ? '<span style="font-weight: bold; text-transform: uppercase; font-size: 13px;">Synthszr Charts:</span> ' : ', '
     const tr = EMAIL_TREND[p.trend ?? 'flat']
-    const href = `${baseUrl}${localePath}/rankings/${p.slug}${sidSuffix}`
+    const href = `${baseUrl}${localePath}/rankings/${p.slug}`
     const pos = p.rank ? `#${p.rank}` : ''
     return `${prefix}<a href="${href}" style="color: inherit; text-decoration: none;">${p.name}</a> <a href="${href}" style="color: ${tr.color}; font-weight: bold; font-size: 12px; text-decoration: none;">${tr.arrow}${pos}</a>`
   }).join('')
@@ -342,10 +339,9 @@ function generateChartsBadgesHtml(products: ChartProductEntry[], baseUrl: string
 /** Produkt-Links im Absatz-HTML (zu /rankings/{slug}), je Produkt einmal, außerhalb von <a>.
  *  Sammelt pro Text-Segment alle Treffer (kein Overlap) und ersetzt EINMAL — verhindert,
  *  dass ein kurzer Name in einen bereits eingefügten <a href>-Wert hineinmatcht. */
-function injectProductLinksIntoHtml(paraHtml: string, products: ChartProductEntry[], baseUrl: string, locale?: string, sidPlaceholder?: string): string {
+function injectProductLinksIntoHtml(paraHtml: string, products: ChartProductEntry[], baseUrl: string, locale?: string, ): string {
   if (products.length === 0) return paraHtml
   const localePath = locale && locale !== 'de' ? `/${locale}` : ''
-  const sidSuffix = sidPlaceholder ? `?sid=${sidPlaceholder}` : ''
   const sorted = [...products].sort((a, b) => b.name.length - a.name.length)
   const linked = new Set<string>()
   const parts = paraHtml.split(/(<[^>]+>)/g)
@@ -375,7 +371,7 @@ function injectProductLinksIntoHtml(paraHtml: string, products: ChartProductEntr
       if (mt.start < last) continue
       linked.add(mt.slug)
       out += text.slice(last, mt.start)
-      out += `<a href="${baseUrl}${localePath}/rankings/${mt.slug}${sidSuffix}" style="color: inherit; text-decoration: underline;">${text.slice(mt.start, mt.end)}</a>`
+      out += `<a href="${baseUrl}${localePath}/rankings/${mt.slug}" style="color: inherit; text-decoration: underline;">${text.slice(mt.start, mt.end)}</a>`
       last = mt.end
     }
     out += text.slice(last)
@@ -543,7 +539,7 @@ export async function generateEmailContentWithVotes(
   locale?: string,
   originalContent?: unknown,
   tipPromo?: TipPromoEmailInput | null,
-  sidPlaceholder?: string,
+  referralTokenPlaceholder?: string,
 ): Promise<string> {
   const rawContent = post.content
   let doc: TiptapDoc | null = null
@@ -805,13 +801,13 @@ export async function generateEmailContentWithVotes(
 
     // Produkt-Links in den Absatztext injizieren (statt Company-Links)
     if (node.type === 'paragraph' && chartProducts.length > 0) {
-      baseHtml = injectProductLinksIntoHtml(baseHtml, chartProducts, baseUrl, locale, sidPlaceholder)
+      baseHtml = injectProductLinksIntoHtml(baseHtml, chartProducts, baseUrl, locale)
     }
 
     // Synthszr-Charts-Badges an Synthszr-Take-Absätze anhängen (statt Vote-Badges)
     const prods = paragraphProducts.get(index)
     if (prods && prods.length > 0) {
-      const chartsBadges = generateChartsBadgesHtml(prods, baseUrl, locale, sidPlaceholder)
+      const chartsBadges = generateChartsBadgesHtml(prods, baseUrl, locale)
       return prefix + baseHtml.replace(/<\/p>$/, `${chartsBadges}</p>`)
     }
 
@@ -851,11 +847,14 @@ export async function generateEmailContentWithVotes(
       </tr></table>`
     } else {
       const bodyHtml = sanitizeHtmlForEmail(tipPromo.body)
-      // Interne Links (z.B. /de/referral) absolut machen und ?sid des Empfängers
-      // anhängen, damit der Referral-Tip-Promo den persönlichen Link öffnet.
+      // Interne Links absolut machen. Referral-Links bekommen zusätzlich den
+      // empfängerbezogenen Platzhalter, den der Versand pro Empfänger durch
+      // einen `referral`-Token ersetzt (SEC-001) — die Subscriber-UUID wird
+      // nirgends mehr angehängt.
       const rawHref = tipPromo.link_url
+      const isReferralLink = rawHref.startsWith('/') && rawHref.includes('/referral')
       const promoHref = rawHref.startsWith('/')
-        ? `${baseUrl}${rawHref}${sidPlaceholder ? `${rawHref.includes('?') ? '&' : '?'}sid=${sidPlaceholder}` : ''}`
+        ? `${baseUrl}${rawHref}${isReferralLink && referralTokenPlaceholder ? `${rawHref.includes('?') ? '&' : '?'}token=${referralTokenPlaceholder}` : ''}`
         : rawHref
       const ctaHtml = tipPromo.link_url && tipPromo.cta_label
         ? `<div style="margin-top:8px;"><a href="${escapeAttr(promoHref)}" style="color:${escapeAttr(tipPromo.text_color)};font-weight:600;text-decoration:underline;">${escapeHtml(tipPromo.cta_label)}</a></div>`

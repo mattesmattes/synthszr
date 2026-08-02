@@ -66,34 +66,13 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Persist sid from newsletter links to localStorage for future visits
-  useEffect(() => {
-    const urlSid = searchParams.get('sid')
-    if (urlSid) {
-      try { localStorage.setItem('synthszr_sid', urlSid) } catch {}
-    }
-  }, [searchParams])
-
   const handleLanguageSelect = async (langCode: string) => {
     setIsOpen(false)
 
-    // Resolve subscriber ID from URL param or localStorage
-    const sid = searchParams.get('sid') || (() => {
-      try { return localStorage.getItem('synthszr_sid') } catch { return null }
-    })()
-
-    if (sid) {
-      // Use sendBeacon so the request survives the page navigation
-      try {
-        navigator.sendBeacon(
-          '/api/newsletter/set-language',
-          new Blob([JSON.stringify({ sid, language: langCode })], { type: 'application/json' })
-        )
-      } catch (error) {
-        console.error('Failed to save subscriber language preference:', error)
-      }
-    }
-
+    // Switches the UI language only. The newsletter language lives on the
+    // preferences page, reached with a scoped token from the mail footer
+    // (SEC-001) - it is no longer changed from a subscriber id carried in the
+    // URL or localStorage.
     const newPath = addLocaleToPathname(pathname, langCode as LanguageCode)
     window.location.href = newPath
   }
