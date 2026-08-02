@@ -11,7 +11,7 @@
 > | High | 0 | – |
 > | Medium | 1 (teilweise) | SEC-009 — `unsafe-eval` entfernt, `unsafe-inline` ist accepted risk |
 > | Medium | 1 (ausgeschlossen) | SEC-010 — Gmail-Verschlüsselung per Auftraggeber-Entscheid nicht umgesetzt |
-> | Low | 1 (neu) | SEC-016 — neu gefunden, siehe unten |
+> | Low | 3 (neu) | SEC-016, SEC-017, SEC-018 — bei der Abnahme gefunden, siehe unten |
 > | **geschlossen** | **13** | SEC-001 bis -008, -011 bis -015 |
 >
 > ### Evidenz pro Finding
@@ -57,6 +57,42 @@
 > API-Route umstellen, danach `revoke all … from anon` auf
 > `newsletter_sources`. Alle übrigen Zugriffe auf die Tabelle sind bereits
 > serverseitig und admin-authentifiziert.
+>
+> ### SEC-017 (neu, Low) — `search_path` von 20 Funktionen nicht fixiert
+>
+> Der Supabase Security Advisor meldet 20 Funktionen im `public`-Schema mit
+> „role mutable search_path". Ohne festen Suchpfad bestimmt der Aufrufer, in
+> welchem Schema unqualifizierte Namen aufgelöst werden.
+>
+> **Risiko: Low.** Keine der 20 ist `SECURITY DEFINER` — geprüft über alle 101
+> Migrationen; die einzige DEFINER-Funktion (`claim_ranking_job`) steht nicht
+> auf der Liste und hat ihren `search_path` bereits. Bei `SECURITY INVOKER`
+> läuft die Funktion mit den Rechten des Aufrufers, ein manipulierter Suchpfad
+> eskaliert also nichts. `anon` und `authenticated` haben seit dem RLS-Umbau
+> zudem keine CREATE-Rechte auf `public`. Die drei in dieser Remediation neu
+> angelegten Cleanup-Funktionen tauchen nicht auf — sie setzen `search_path`
+> von Anfang an.
+>
+> **Fix bereitgestellt:** `supabase/migrations/20260802180000_function_search_path.sql`
+> setzt `pg_catalog, public` für alle betroffenen Funktionen (mit Diagnose- und
+> Verifikationsquery). `public` muss im Pfad bleiben, weil `vector` und
+> `pg_trgm` dort installiert sind.
+>
+> ### SEC-018 (neu, Low, accepted risk) — Extensions im `public`-Schema
+>
+> `vector` und `pg_trgm` sind im `public`-Schema installiert, statt in einem
+> separaten `extensions`-Schema. Ihre Funktionen teilen damit den Namensraum
+> mit Anwendungstabellen.
+>
+> **Risiko: Low. Nicht behoben, bewusst.** Ein Verschieben von `vector` ist
+> hier nicht praktikabel: Mehrere Tabellen (`mattes_corpus_chunks`,
+> `generated_posts`, `edit_diffs`, `learned_patterns`,
+> `podcast_episode_memory`) haben Spalten vom Typ `public.vector`. Ein
+> Schemawechsel müsste alle abhängigen Spalten, Indizes und Funktionen
+> mitziehen — mit realem Ausfallrisiko für Suche, Ghostwriter-Retrieval und
+> Podcast-Memory, gegen einen Härtungsgewinn, der ohne CREATE-Rechte für
+> `anon`/`authenticated` kaum greift. Owner: Mattes. Neu bewerten, falls die
+> pgvector-Nutzung ohnehin umgebaut wird.
 >
 > ### Weitere Beobachtungen ohne Security-Bezug
 >
