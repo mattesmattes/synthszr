@@ -413,6 +413,30 @@ export async function GET(request: NextRequest) {
     results.analyticsRetention = 'error'
   }
 
+  // Subscriber token cleanup (SEC-001): every newsletter mints three tokens
+  // per recipient, so the table grows by ~3x the list size per send. Expired
+  // rows and rows consumed more than a week ago carry no value - the hash
+  // cannot be reversed, but there is no reason to keep them either. Daily,
+  // gated like the tasks above.
+  try {
+    const tokenCleanupRan = !forceRun && await hasRunToday(supabase, 'subscriber_token_cleanup')
+    if (!tokenCleanupRan) {
+      const { error: tokenError } = await supabase.rpc('cleanup_expired_subscriber_action_tokens')
+      if (tokenError) {
+        console.error('[Scheduler] Subscriber token cleanup error:', tokenError)
+        results.subscriberTokenCleanup = 'error'
+      } else {
+        await markTaskRun(supabase, 'subscriber_token_cleanup')
+        results.subscriberTokenCleanup = 'completed'
+      }
+    } else {
+      results.subscriberTokenCleanup = 'already_ran'
+    }
+  } catch (error) {
+    console.error('[Scheduler] Subscriber token cleanup error:', error)
+    results.subscriberTokenCleanup = 'error'
+  }
+
   // Cron heartbeat: unconditional record of every completed invocation so the
   // tick cadence is observable (Vercel retains runtime logs only briefly). The
   // gap between consecutive heartbeats = the real cron interval; the articleJob

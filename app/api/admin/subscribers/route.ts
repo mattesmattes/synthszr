@@ -174,10 +174,17 @@ export async function PATCH(request: NextRequest) {
         .update({
           status: 'active',
           confirmed_at: new Date().toISOString(),
-          confirmation_token: null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
+
+      // Any outstanding confirm token is now moot - drop it so the mailed
+      // link stops working once an admin activated the subscriber by hand.
+      await supabase
+        .from('subscriber_action_tokens')
+        .delete()
+        .eq('subscriber_id', id)
+        .eq('purpose', 'confirm')
 
       if (updateError) {
         console.error('Activate subscriber error:', updateError)
