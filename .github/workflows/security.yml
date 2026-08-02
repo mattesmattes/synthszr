@@ -120,6 +120,21 @@ jobs:
       - name: Run Semgrep
         run: semgrep scan --error --severity ERROR --metrics=off --config .semgrep.yml --json -o semgrep-results.json
 
+      # A rule whose pattern does not parse is reported inside the JSON and
+      # otherwise ignored - the scan still exits 0, so a broken rule looks
+      # exactly like a passing one. Fail explicitly instead.
+      - name: Fail on rules that could not be loaded
+        run: |
+          python3 -c "
+          import json, sys
+          data = json.load(open('semgrep-results.json'))
+          broken = [e for e in data.get('errors', []) if e.get('type') == 'Rule parse error']
+          for e in broken:
+              print('Unloadable rule:', e.get('rule_id'))
+              print(e.get('message', '')[:400])
+          sys.exit(1 if broken else 0)
+          "
+
       - name: Upload Semgrep results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

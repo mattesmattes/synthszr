@@ -102,10 +102,13 @@ rules:
   # Detect potential SQL injection (even though Supabase parameterizes)
   - id: potential-sql-injection
     pattern-either:
+      # Must be a complete expression - a pattern starting with "." is not
+      # parseable TypeScript, and Semgrep skips such a rule with only a
+      # "Rule parse error" in its JSON output.
       - pattern: |
-          .rpc($FUNC, { ..., $KEY: `...${$VAR}...`, ... })
+          $OBJ.rpc($FUNC, { ..., $KEY: `...${$VAR}...`, ... })
       - pattern: |
-          .rpc($FUNC, { ..., $KEY: "..." + $VAR, ... })
+          $OBJ.rpc($FUNC, { ..., $KEY: "..." + $VAR, ... })
     paths:
       exclude:
         - node_modules/**
