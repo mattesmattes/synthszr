@@ -2,10 +2,10 @@
  * Cron Authentication
  *
  * Secure authentication for cron job endpoints.
- * Supports:
- * - Bearer token with CRON_SECRET
- * - Vercel cron header (x-vercel-cron)
- * - Optional dev bypass via ALLOW_DEV_CRON_BYPASS env var
+ *
+ * The ONLY accepted method is `Authorization: Bearer $CRON_SECRET`. The
+ * x-vercel-cron header is spoofable by any client and is not trusted, and
+ * there is no development bypass - see verifyCronAuth below.
  */
 
 import { NextRequest } from 'next/server'

@@ -117,26 +117,50 @@ describe('Security: Startup Checks', () => {
     Object.assign(process.env, originalEnv)
   })
 
-  it('validates production config with all secrets', async () => {
+  // Tests run with .env.local injected, so every variable under test has to be
+  // cleared explicitly - otherwise a real local value silently satisfies a
+  // check the test means to fail.
+  const SECURITY_ENV_KEYS = [
+    'JWT_SECRET', 'CRON_SECRET', 'SUPABASE_SERVICE_ROLE_KEY', 'ADMIN_PASSWORD', 'REVALIDATE_SECRET',
+    'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN',
+    'VERCEL_ENV',
+  ]
+
+  /** Builds a fully-configured production env, then applies the overrides. */
+  function productionEnv(overrides: Record<string, string | undefined> = {}) {
+    for (const key of SECURITY_ENV_KEYS) delete process.env[key]
     vi.stubEnv('NODE_ENV', 'production')
-    process.env.JWT_SECRET = 'jwt-secret'
-    process.env.CRON_SECRET = 'cron-secret'
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key'
-    process.env.UPSTASH_REDIS_REST_URL = 'https://redis.upstash.io'
-    process.env.UPSTASH_REDIS_REST_TOKEN = 'token'
+
+    const values: Record<string, string | undefined> = {
+      VERCEL_ENV: 'production',
+      JWT_SECRET: 'jwt-secret',
+      CRON_SECRET: 'cron-secret',
+      SUPABASE_SERVICE_ROLE_KEY: 'service-key',
+      ADMIN_PASSWORD: 'admin-password',
+      REVALIDATE_SECRET: 'revalidate-secret',
+      KV_REST_API_URL: 'https://kv.vercel-storage.com',
+      KV_REST_API_TOKEN: 'kv-token',
+      ...overrides,
+    }
+
+    for (const [key, value] of Object.entries(values)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
+
+  it('validates production config with all secrets', async () => {
+    productionEnv()
 
     const { validateSecurityConfig } = await import('@/lib/security/startup-checks')
     const result = validateSecurityConfig()
 
-    expect(result.valid).toBe(true)
     expect(result.errors).toHaveLength(0)
+    expect(result.valid).toBe(true)
   })
 
   it('reports missing JWT_SECRET in production', async () => {
-    vi.stubEnv('NODE_ENV', 'production')
-    delete process.env.JWT_SECRET
-    delete process.env.CRON_SECRET
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key'
+    productionEnv({ JWT_SECRET: undefined })
 
     const { validateSecurityConfig } = await import('@/lib/security/startup-checks')
     const result = validateSecurityConfig()
@@ -146,10 +170,7 @@ describe('Security: Startup Checks', () => {
   })
 
   it('reports missing CRON_SECRET in production', async () => {
-    vi.stubEnv('NODE_ENV', 'production')
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key'
-    process.env.JWT_SECRET = 'jwt-secret'
-    delete process.env.CRON_SECRET
+    productionEnv({ CRON_SECRET: undefined })
 
     const { validateSecurityConfig } = await import('@/lib/security/startup-checks')
     const result = validateSecurityConfig()
@@ -158,17 +179,117 @@ describe('Security: Startup Checks', () => {
     expect(result.errors.some(e => e.includes('CRON_SECRET'))).toBe(true)
   })
 
-  it('warns about missing rate limiting', async () => {
-    vi.stubEnv('NODE_ENV', 'production')
-    process.env.JWT_SECRET = 'jwt-secret'
-    process.env.CRON_SECRET = 'cron-secret'
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key'
-    delete process.env.UPSTASH_REDIS_REST_URL
-    delete process.env.UPSTASH_REDIS_REST_TOKEN
+  it('reports missing ADMIN_PASSWORD in production', async () => {
+    productionEnv({ ADMIN_PASSWORD: undefined })
 
     const { validateSecurityConfig } = await import('@/lib/security/startup-checks')
     const result = validateSecurityConfig()
 
-    expect(result.warnings.some(w => w.includes('Rate limiting'))).toBe(true)
+    expect(result.valid).toBe(false)
+    expect(result.errors.some(e => e.includes('ADMIN_PASSWORD'))).toBe(true)
+  })
+
+  it('reports missing REVALIDATE_SECRET in production', async () => {
+    productionEnv({ REVALIDATE_SECRET: undefined })
+
+    const { validateSecurityConfig } = await import('@/lib/security/startup-checks')
+    const result = validateSecurityConfig()
+
+    expect(result.valid).toBe(false)
+    expect(result.errors.some(e => e.includes('REVALIDATE_SECRET'))).toBe(true)
+  })
+
+  it('accepts the KV_REST_API_* pair this deployment actually uses', async () => {
+    productionEnv()
+
+    const { validateSecurityConfig } = await import('@/lib/security/startup-checks')
+    const result = validateSecurityConfig()
+
+    expect(result.errors.some(e => e.includes('Rate limit'))).toBe(false)
+    expect(result.warnings.some(w => w.includes('Rate limit'))).toBe(false)
+  })
+
+  it('accepts the UPSTASH_REDIS_REST_* pair as an equivalent alternative', async () => {
+    productionEnv({
+      KV_REST_API_URL: undefined,
+      KV_REST_API_TOKEN: undefined,
+      UPSTASH_REDIS_REST_URL: 'https://redis.upstash.io',
+      UPSTASH_REDIS_REST_TOKEN: 'token',
+    })
+
+    const { validateSecurityConfig } = await import('@/lib/security/startup-checks')
+    const result = validateSecurityConfig()
+
+    expect(result.valid).toBe(true)
+  })
+
+  it('treats a half-configured credential pair as an error', async () => {
+    productionEnv({ KV_REST_API_TOKEN: undefined })
+
+    const { validateSecurityConfig } = await import('@/lib/security/startup-checks')
+    const result = validateSecurityConfig()
+
+    expect(result.valid).toBe(false)
+    expect(result.errors.some(e => e.includes('Rate limit'))).toBe(true)
+  })
+
+  it('fails, not warns, when production has no rate limiting at all', async () => {
+    productionEnv({ KV_REST_API_URL: undefined, KV_REST_API_TOKEN: undefined })
+
+    const { validateSecurityConfig } = await import('@/lib/security/startup-checks')
+    const result = validateSecurityConfig()
+
+    // Without a limiter every rate-limited security route collectively fails
+    // closed to 429 - that is an outage, not a warning.
+    expect(result.valid).toBe(false)
+    expect(result.errors.some(e => e.includes('Rate limit'))).toBe(true)
+  })
+
+  it('never advertises a development cron bypass', async () => {
+    productionEnv({ CRON_SECRET: undefined })
+    const { validateSecurityConfig } = await import('@/lib/security/startup-checks')
+    expect(JSON.stringify(validateSecurityConfig())).not.toMatch(/bypass/i)
+
+    vi.stubEnv('NODE_ENV', 'development')
+    delete process.env.CRON_SECRET
+    vi.resetModules()
+    const dev = await import('@/lib/security/startup-checks')
+    expect(JSON.stringify(dev.validateSecurityConfig())).not.toMatch(/bypass/i)
+  })
+})
+
+describe('Security: Startup Enforcement', () => {
+  let originalEnv: NodeJS.ProcessEnv
+
+  beforeEach(() => {
+    vi.resetModules()
+    originalEnv = { ...process.env }
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    Object.keys(process.env).forEach(key => {
+      if (!(key in originalEnv)) delete process.env[key]
+    })
+    Object.assign(process.env, originalEnv)
+  })
+
+  it('throws in a real production deployment when a secret is missing', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    process.env.VERCEL_ENV = 'production'
+    delete process.env.CRON_SECRET
+
+    const { enforceSecurityConfig } = await import('@/lib/security/startup-checks')
+    expect(() => enforceSecurityConfig()).toThrow(/CRON_SECRET/)
+  })
+
+  it('does not take down preview deployments, which run NODE_ENV=production without the production secrets', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    process.env.VERCEL_ENV = 'preview'
+    delete process.env.CRON_SECRET
+    delete process.env.ADMIN_PASSWORD
+
+    const { enforceSecurityConfig } = await import('@/lib/security/startup-checks')
+    expect(() => enforceSecurityConfig()).not.toThrow()
   })
 })
