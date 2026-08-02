@@ -1,5 +1,15 @@
 name: Security Scan
 
+# SEC-012: every job installs from the same pnpm graph (one lockfile, pinned
+# package manager, Node 24 to match engines.node), and every gate below is
+# blocking. Only the artifact-producing report steps may fail softly - the
+# step that decides pass/fail never does.
+#
+# All third-party actions are pinned to a full commit SHA rather than a
+# mutable tag: a tag can be repointed at new code by whoever owns the action,
+# which makes `@v4`/`@main` an unreviewed dependency running with repo
+# credentials. Dependabot keeps the pins current.
+
 on:
   push:
     branches: [main]
@@ -11,38 +21,42 @@ on:
 
 jobs:
   # Dependency vulnerability scanning
-  npm-audit:
-    name: NPM Audit
+  audit:
+    name: Dependency Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
-          version: 10
+          version: 10.20.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run pnpm audit
+      # Blocking. Documented exceptions live in package.json under
+      # pnpm.auditConfig.ignoreGhsas with a written rationale next to them;
+      # the audit level itself is never lowered.
+      - name: Block Critical and High advisories
         run: pnpm audit --audit-level=high
-        continue-on-error: true
 
       - name: Run pnpm audit (report)
-        run: pnpm audit --json > npm-audit-report.json || true
+        if: always()
+        run: pnpm audit --json > pnpm-audit-report.json || true
 
       - name: Upload audit report
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: npm-audit-report
-          path: npm-audit-report.json
+          name: pnpm-audit-report
+          path: pnpm-audit-report.json
           retention-days: 30
 
   # Secret scanning with TruffleHog
@@ -50,12 +64,12 @@ jobs:
     name: Secret Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11 # v3.96.0
         with:
           extra_args: --only-verified
 
@@ -69,19 +83,19 @@ jobs:
       security-events: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@a2983b8bed1923f44751c5c43237f479442827b3 # v3
         with:
           languages: javascript-typescript
           queries: security-extended
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@a2983b8bed1923f44751c5c43237f479442827b3 # v3
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@a2983b8bed1923f44751c5c43237f479442827b3 # v3
         with:
           category: "/language:javascript-typescript"
 
@@ -90,15 +104,18 @@ jobs:
     name: Semgrep Scan
     runs-on: ubuntu-latest
     container:
-      image: semgrep/semgrep
+      # semgrep/semgrep:1.172.0 resolved to its manifest digest
+      image: semgrep/semgrep@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      # Blocking on ERROR-severity findings only, so the gate stays actionable.
       - name: Run Semgrep
-        run: semgrep scan --config auto --config .semgrep.yml --json -o semgrep-results.json || true
+        run: semgrep scan --error --severity ERROR --config auto --config .semgrep.yml --json -o semgrep-results.json
 
       - name: Upload Semgrep results
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: semgrep-results
           path: semgrep-results.json
@@ -109,37 +126,47 @@ jobs:
     name: TypeScript Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.20.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '24'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Run TypeScript check
-        run: npx tsc --noEmit
+        run: pnpm typecheck
 
   # Unit tests
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.20.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '24'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Run tests
-        run: npx vitest run tests/lib/
+        run: pnpm exec vitest run tests/lib/
         env:
           NODE_ENV: test
