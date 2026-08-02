@@ -9,6 +9,11 @@
  * This is a BLOCKLIST, not an allowlist — the crawler must be able to reach
  * any public URL. We only reject requests that resolve to non-public
  * (private/reserved/loopback/link-local) addresses.
+ *
+ * Callers with a small, fixed set of trusted hosts (e.g. the newsletter
+ * image proxy, SEC-007) can additionally opt into an exact-hostname
+ * allowlist via the `allowedHostname` option — checked on every hop
+ * alongside, not instead of, the blocklist above.
  */
 
 import { lookup } from 'dns/promises'
@@ -16,6 +21,35 @@ import net from 'net'
 
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:'])
 const MAX_REDIRECTS = 5
+
+/**
+ * Thrown by assertPublicUrl/safeFetch for every blocking reason (bad
+ * protocol, private/reserved IP, hostname not in an allowlist, too many
+ * redirects). A dedicated subclass lets callers distinguish "blocked by this
+ * guard" from unrelated network errors (DNS failure inside fetch(), abort/
+ * timeout) without parsing message strings.
+ */
+export class SsrfBlockedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SsrfBlockedError'
+  }
+}
+
+export interface AssertPublicUrlOptions {
+  /**
+   * If set, the hostname must exactly match one of these values
+   * (case-insensitive, no subdomain/wildcard matching). Applied in addition
+   * to the private-IP blocklist below, not instead of it.
+   */
+  allowedHostname?: string | readonly string[]
+}
+
+function isHostnameAllowed(hostname: string, allowed: string | readonly string[]): boolean {
+  const list = Array.isArray(allowed) ? allowed : [allowed]
+  const lowerHostname = hostname.toLowerCase()
+  return list.some(h => h.toLowerCase() === lowerHostname)
+}
 
 /**
  * Check if an IPv4 address (dotted-quad string) falls into a private/reserved range.
@@ -160,16 +194,19 @@ export function isPrivateIP(ip: string): boolean {
  * itself) - see the DNS-rebinding note on safeFetch for why callers get the
  * IPs back.
  */
-export async function assertPublicUrl(rawUrl: string): Promise<{ url: URL; ips: string[] }> {
+export async function assertPublicUrl(
+  rawUrl: string,
+  options?: AssertPublicUrlOptions
+): Promise<{ url: URL; ips: string[] }> {
   let url: URL
   try {
     url = new URL(rawUrl)
   } catch {
-    throw new Error('SSRF blocked: invalid URL')
+    throw new SsrfBlockedError('SSRF blocked: invalid URL')
   }
 
   if (!ALLOWED_PROTOCOLS.has(url.protocol)) {
-    throw new Error(`SSRF blocked: protocol not allowed (${url.protocol})`)
+    throw new SsrfBlockedError(`SSRF blocked: protocol not allowed (${url.protocol})`)
   }
 
   // WHATWG URL keeps brackets around IPv6 hostnames (e.g. "[::1]") - strip
@@ -178,11 +215,15 @@ export async function assertPublicUrl(rawUrl: string): Promise<{ url: URL; ips: 
     ? url.hostname.slice(1, -1)
     : url.hostname
 
+  if (options?.allowedHostname && !isHostnameAllowed(hostname, options.allowedHostname)) {
+    throw new SsrfBlockedError('SSRF blocked: host not in allowlist')
+  }
+
   // Direct IP literal in the hostname (e.g. http://169.254.169.254/)
   const literalVersion = net.isIP(hostname)
   if (literalVersion !== 0) {
     if (isPrivateIP(hostname)) {
-      throw new Error('SSRF blocked: target resolves to a reserved address')
+      throw new SsrfBlockedError('SSRF blocked: target resolves to a reserved address')
     }
     return { url, ips: [hostname] }
   }
@@ -190,23 +231,23 @@ export async function assertPublicUrl(rawUrl: string): Promise<{ url: URL; ips: 
   // localhost and friends never hit DNS resolution the same way in all
   // environments - block by name explicitly as a belt-and-suspenders check.
   if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
-    throw new Error('SSRF blocked: target resolves to a reserved address')
+    throw new SsrfBlockedError('SSRF blocked: target resolves to a reserved address')
   }
 
   let resolved: Array<{ address: string; family: number }>
   try {
     resolved = await lookup(hostname, { all: true })
   } catch {
-    throw new Error('SSRF blocked: could not resolve host')
+    throw new SsrfBlockedError('SSRF blocked: could not resolve host')
   }
 
   if (resolved.length === 0) {
-    throw new Error('SSRF blocked: could not resolve host')
+    throw new SsrfBlockedError('SSRF blocked: could not resolve host')
   }
 
   for (const { address } of resolved) {
     if (isPrivateIP(address)) {
-      throw new Error('SSRF blocked: target resolves to a reserved address')
+      throw new SsrfBlockedError('SSRF blocked: target resolves to a reserved address')
     }
   }
 
@@ -249,12 +290,22 @@ export async function assertPublicUrl(rawUrl: string): Promise<{ url: URL; ips: 
  * only reach admin/DB-authored URLs or links embedded in crawled
  * newsletters, not fully free-form third-party input.
  */
-export async function safeFetch(rawUrl: string, init?: RequestInit): Promise<Response> {
-  let currentUrl = (await assertPublicUrl(rawUrl)).url.toString()
+export interface SafeFetchInit extends RequestInit {
+  /** Restricts every hop (initial URL + every redirect target) to this hostname allowlist — see AssertPublicUrlOptions. */
+  allowedHostname?: string | readonly string[]
+  /** Overrides the default redirect cap (MAX_REDIRECTS) for this call. */
+  maxRedirects?: number
+}
 
-  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+export async function safeFetch(rawUrl: string, init?: SafeFetchInit): Promise<Response> {
+  const { allowedHostname, maxRedirects, ...fetchInit } = init ?? {}
+  const redirectLimit = maxRedirects ?? MAX_REDIRECTS
+
+  let currentUrl = (await assertPublicUrl(rawUrl, { allowedHostname })).url.toString()
+
+  for (let redirectCount = 0; redirectCount <= redirectLimit; redirectCount++) {
     const response = await fetch(currentUrl, {
-      ...init,
+      ...fetchInit,
       redirect: 'manual',
     })
 
@@ -268,13 +319,13 @@ export async function safeFetch(rawUrl: string, init?: RequestInit): Promise<Res
       return response
     }
 
-    if (redirectCount === MAX_REDIRECTS) {
-      throw new Error('SSRF blocked: too many redirects')
+    if (redirectCount === redirectLimit) {
+      throw new SsrfBlockedError('SSRF blocked: too many redirects')
     }
 
     const nextUrl = new URL(location, currentUrl)
-    currentUrl = (await assertPublicUrl(nextUrl.toString())).url.toString()
+    currentUrl = (await assertPublicUrl(nextUrl.toString(), { allowedHostname })).url.toString()
   }
 
-  throw new Error('SSRF blocked: too many redirects')
+  throw new SsrfBlockedError('SSRF blocked: too many redirects')
 }

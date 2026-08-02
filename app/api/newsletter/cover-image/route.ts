@@ -3,9 +3,21 @@ import sharp from 'sharp'
 import { parseIntParam } from '@/lib/validation/query-params'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { fetchNewsletterImage, ImageFetchError } from '@/lib/security/safe-image-fetch'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 
 // Neon yellow RGB values
 const NEON_YELLOW = { r: 204, g: 255, b: 0 }
+
+// SEC-007: input decode limit for sharp — matches the 16 MP cap enforced on
+// every sharp() instantiation that decodes the untrusted fetched bytes.
+const MAX_INPUT_PIXELS = 16_000_000
+
+const relaxedLimiter = rateLimiters.relaxed()
+
+function errorResponse(body: Record<string, unknown>, status: number): NextResponse {
+  return NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
+}
 
 /**
  * GET /api/newsletter/cover-image
@@ -21,6 +33,15 @@ const NEON_YELLOW = { r: 204, g: 255, b: 0 }
  */
 export async function GET(request: NextRequest) {
   try {
+    // Rate limit first — a blocked request never fetches or processes anything.
+    const ip = getClientIP(request)
+    const rateLimit = await checkRateLimit(`newsletter-image:${ip}`, relaxedLimiter ?? undefined)
+    if (!rateLimit.success) {
+      const res = rateLimitResponse(rateLimit)
+      res.headers.set('Cache-Control', 'no-store')
+      return res
+    }
+
     const { searchParams } = new URL(request.url)
     const imageUrl = searchParams.get('url')
     const size = parseIntParam(searchParams.get('size'), 1104, 100, 4000)
@@ -29,56 +50,39 @@ export async function GET(request: NextRequest) {
     const skipTransform = searchParams.get('skipTransform') === 'true'
 
     if (!imageUrl) {
-      return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 })
+      return errorResponse({ error: 'Missing url parameter' }, 400)
     }
 
-    // SSRF protection: only allow HTTPS URLs from trusted image hosts
-    let parsedUrl: URL
+    // SEC-007: bounded, SSRF-safe fetch — exact hostname allowlist (incl.
+    // redirects), 10s timeout, 3 redirects, 8 MiB download cap, MIME +
+    // magic-byte check restricted to PNG/JPEG/WebP.
+    let imageBuffer: Buffer
     try {
-      parsedUrl = new URL(imageUrl)
+      imageBuffer = await fetchNewsletterImage(imageUrl)
+    } catch (err) {
+      if (err instanceof ImageFetchError) {
+        return errorResponse({ error: err.message }, err.status)
+      }
+      throw err
+    }
+
+    // Get image metadata — bounded to 16 MP; sharp throws before decoding
+    // pixel data if the input exceeds this, which we map to 422 below.
+    let width: number | undefined
+    let height: number | undefined
+    try {
+      const metadata = await sharp(imageBuffer, {
+        failOn: 'warning',
+        limitInputPixels: MAX_INPUT_PIXELS,
+        sequentialRead: true,
+      }).metadata()
+      ;({ width, height } = metadata)
     } catch {
-      return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
+      return errorResponse({ error: 'Image exceeds processing limits' }, 422)
     }
-
-    if (parsedUrl.protocol !== 'https:') {
-      return NextResponse.json({ error: 'Only HTTPS URLs allowed' }, { status: 400 })
-    }
-
-    const allowedHosts = [
-      'supabase.co',
-      'supabase.com',
-      'githubusercontent.com',
-      'unsplash.com',
-      'images.unsplash.com',
-      'synthszr.com',
-      'vercel.app',
-      'vercel-storage.com',
-    ]
-    // Strict hostname match: exact domain OR subdomain (must be preceded by a dot).
-    // Prevents "evilsupabase.co" matching "supabase.co" via naive endsWith().
-    const hostname = parsedUrl.hostname.toLowerCase()
-    const isAllowedHost = allowedHosts.some(host => {
-      const h = host.toLowerCase()
-      return hostname === h || hostname.endsWith('.' + h)
-    })
-    if (!isAllowedHost) {
-      return NextResponse.json({ error: 'Image host not allowed' }, { status: 403 })
-    }
-
-    // Fetch the original image
-    const response = await fetch(imageUrl)
-    if (!response.ok) {
-      return NextResponse.json({ error: 'Failed to fetch image' }, { status: 502 })
-    }
-
-    const imageBuffer = Buffer.from(await response.arrayBuffer())
-
-    // Get image metadata
-    const metadata = await sharp(imageBuffer).metadata()
-    const { width, height } = metadata
 
     if (!width || !height) {
-      return NextResponse.json({ error: 'Invalid image' }, { status: 400 })
+      return errorResponse({ error: 'Invalid image' }, 400)
     }
 
     // Calculate center crop for 1:1 aspect ratio
@@ -88,65 +92,77 @@ export async function GET(request: NextRequest) {
 
     let finalImage: Buffer
 
-    if (skipTransform) {
-      // Skip color transformation - just crop and resize (for already-processed images)
-      finalImage = await sharp(imageBuffer)
-        .extract({ left, top, width: cropSize, height: cropSize })
-        .resize(size, size, { fit: 'fill', kernel: sharp.kernel.nearest })
-        .png()
-        .toBuffer()
-    } else {
-      // Full processing with color transformation
-      // Use nearest-neighbor to preserve dithered B&W dots (lanczos3 creates gray values)
-      const croppedBuffer = await sharp(imageBuffer)
-        .extract({ left, top, width: cropSize, height: cropSize })
-        .resize(size, size, { fit: 'fill', kernel: sharp.kernel.nearest })
-        .ensureAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true })
+    try {
+      if (skipTransform) {
+        // Skip color transformation - just crop and resize (for already-processed images)
+        finalImage = await sharp(imageBuffer, {
+          failOn: 'warning',
+          limitInputPixels: MAX_INPUT_PIXELS,
+          sequentialRead: true,
+        })
+          .extract({ left, top, width: cropSize, height: cropSize })
+          .resize(size, size, { fit: 'fill', kernel: sharp.kernel.nearest })
+          .png()
+          .toBuffer()
+      } else {
+        // Full processing with color transformation
+        // Use nearest-neighbor to preserve dithered B&W dots (lanczos3 creates gray values)
+        const croppedBuffer = await sharp(imageBuffer, {
+          failOn: 'warning',
+          limitInputPixels: MAX_INPUT_PIXELS,
+          sequentialRead: true,
+        })
+          .extract({ left, top, width: cropSize, height: cropSize })
+          .resize(size, size, { fit: 'fill', kernel: sharp.kernel.nearest })
+          .ensureAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true })
 
-      const { data, info } = croppedBuffer
+        const { data, info } = croppedBuffer
 
-      // Process pixels: white/transparent → neon yellow, dark → black
-      // This recreates the frontend effect (yellow BG + transparent PNG overlay)
-      const pixels = new Uint8Array(data)
-      for (let i = 0; i < pixels.length; i += 4) {
-        const r = pixels[i]
-        const g = pixels[i + 1]
-        const b = pixels[i + 2]
-        const a = pixels[i + 3]
+        // Process pixels: white/transparent → neon yellow, dark → black
+        // This recreates the frontend effect (yellow BG + transparent PNG overlay)
+        const pixels = new Uint8Array(data)
+        for (let i = 0; i < pixels.length; i += 4) {
+          const r = pixels[i]
+          const g = pixels[i + 1]
+          const b = pixels[i + 2]
+          const a = pixels[i + 3]
 
-        // Calculate luminance
-        const luminance = (r + g + b) / 3
+          // Calculate luminance
+          const luminance = (r + g + b) / 3
 
-        // If pixel is transparent OR bright (white in dithered image) → neon yellow
-        // If pixel is dark (black in dithered image) → pure black
-        const threshold = 128
-        if (a < 128 || luminance >= threshold) {
-          // White/transparent → neon yellow
-          pixels[i] = NEON_YELLOW.r
-          pixels[i + 1] = NEON_YELLOW.g
-          pixels[i + 2] = NEON_YELLOW.b
-          pixels[i + 3] = 255
-        } else {
-          // Dark → pure black
-          pixels[i] = 0
-          pixels[i + 1] = 0
-          pixels[i + 2] = 0
-          pixels[i + 3] = 255
+          // If pixel is transparent OR bright (white in dithered image) → neon yellow
+          // If pixel is dark (black in dithered image) → pure black
+          const threshold = 128
+          if (a < 128 || luminance >= threshold) {
+            // White/transparent → neon yellow
+            pixels[i] = NEON_YELLOW.r
+            pixels[i + 1] = NEON_YELLOW.g
+            pixels[i + 2] = NEON_YELLOW.b
+            pixels[i + 3] = 255
+          } else {
+            // Dark → pure black
+            pixels[i] = 0
+            pixels[i + 1] = 0
+            pixels[i + 2] = 0
+            pixels[i + 3] = 255
+          }
         }
-      }
 
-      // Create base image from processed pixels
-      finalImage = await sharp(Buffer.from(pixels), {
-        raw: {
-          width: info.width,
-          height: info.height,
-          channels: 4,
-        },
-      })
-        .png()
-        .toBuffer()
+        // Create base image from processed pixels
+        finalImage = await sharp(Buffer.from(pixels), {
+          raw: {
+            width: info.width,
+            height: info.height,
+            channels: 4,
+          },
+        })
+          .png()
+          .toBuffer()
+      }
+    } catch {
+      return errorResponse({ error: 'Image exceeds processing limits' }, 422)
     }
 
     // Add logo overlay if requested
@@ -215,9 +231,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[Cover Image] Error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    )
+    return errorResponse({ error: error instanceof Error ? error.message : 'Unknown error' }, 500)
   }
 }
