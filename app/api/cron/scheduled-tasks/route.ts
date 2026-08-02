@@ -388,6 +388,31 @@ export async function GET(request: NextRequest) {
     results.appleEpisodeLinks = 'error'
   }
 
+  // Analytics Retention (SEC-008): purges analytics_events (>180d) and
+  // podcast_plays (>400d) via the cleanup_analytics_retention() RPC. No fixed
+  // time slot — runs once per day on the first tick, gated by hasRunToday like
+  // the other daily tasks above (not every tick, unlike the maintenance blocks
+  // below this comment, since it's a DB-wide DELETE and doesn't need to run
+  // more than once a day).
+  try {
+    const retentionRecentlyRan = !forceRun && await hasRunToday(supabase, 'analytics_retention')
+    if (!retentionRecentlyRan) {
+      const { error: retentionError } = await supabase.rpc('cleanup_analytics_retention')
+      if (retentionError) {
+        console.error('[Scheduler] Analytics retention cleanup error:', retentionError)
+        results.analyticsRetention = 'error'
+      } else {
+        await markTaskRun(supabase, 'analytics_retention')
+        results.analyticsRetention = 'completed'
+      }
+    } else {
+      results.analyticsRetention = 'already_ran'
+    }
+  } catch (error) {
+    console.error('[Scheduler] Analytics retention cleanup error:', error)
+    results.analyticsRetention = 'error'
+  }
+
   // Cron heartbeat: unconditional record of every completed invocation so the
   // tick cadence is observable (Vercel retains runtime logs only briefly). The
   // gap between consecutive heartbeats = the real cron interval; the articleJob
