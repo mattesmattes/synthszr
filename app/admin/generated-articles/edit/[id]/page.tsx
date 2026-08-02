@@ -49,6 +49,7 @@ interface QueueItem {
   title: string
   source_display_name: string | null
   source_identifier: string
+  bundle_type?: 'topic' | 'recap' | null
 }
 
 interface AppliedPatternData {
@@ -114,6 +115,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   const [queueItems, setQueueItems] = useState<QueueItem[]>([])
   const [queueItemIds, setQueueItemIds] = useState<string[]>([])
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
+  const [bundleLoadingId, setBundleLoadingId] = useState<string | null>(null)
 
   // Pattern highlighting
   const [appliedPatterns, setAppliedPatterns] = useState<AppliedPatternData[]>([])
@@ -425,12 +427,39 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       return
     }
 
-    const data = await fetchQueueItemsByIds<QueueItem>(itemIds, 'id, title, source_display_name, source_identifier')
+    const data = await fetchQueueItemsByIds<QueueItem>(itemIds, 'id, title, source_display_name, source_identifier, bundle_type')
 
     if (data) {
       setQueueItems(data)
     }
   }, [])
+
+  // Bündel-Tag ("Thema des Tages" / "Nachlese") an einer Quell-News toggeln.
+  // Schreibt news_queue.bundle_type (wie in der News-Queue); der Artikel-Text
+  // bleibt unangetastet — das Tag wirkt erst bei einer Neu-Generierung.
+  const handleBundleType = async (itemId: string, tag: 'topic' | 'recap') => {
+    const current = queueItems.find(item => item.id === itemId)?.bundle_type ?? null
+    const nextValue = current === tag ? null : tag
+    setBundleLoadingId(itemId)
+    setQueueItems(prev => prev.map(item => item.id === itemId ? { ...item, bundle_type: nextValue } : item))
+    try {
+      const res = await fetch('/api/admin/news-queue/bundle-type', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: itemId, bundle_type: nextValue }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        setQueueItems(prev => prev.map(item => item.id === itemId ? { ...item, bundle_type: current } : item))
+        alert(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
+      }
+    } catch (error) {
+      console.error('Bundle type update failed:', error)
+      setQueueItems(prev => prev.map(item => item.id === itemId ? { ...item, bundle_type: current } : item))
+      alert('Netzwerkfehler beim Setzen des Tags')
+    }
+    setBundleLoadingId(null)
+  }
 
   // Remove a queue item (reset to pending) and its associated thumbnail
   const removeQueueItem = async (itemId: string) => {
@@ -1163,6 +1192,35 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                         <p className="text-xs text-muted-foreground">
                           {item.source_display_name || item.source_identifier}
                         </p>
+                        {/* Bündel-Tags: setzen news_queue.bundle_type; wirken erst bei Neu-Generierung */}
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleBundleType(item.id, 'topic')}
+                            disabled={bundleLoadingId === item.id}
+                            title="Thema des Tages"
+                            className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap shrink-0 transition-colors ${
+                              item.bundle_type === 'topic'
+                                ? 'bg-lime-400 text-black border-lime-500'
+                                : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-lime-500 hover:text-lime-600'
+                            }`}
+                          >
+                            Thema des Tages
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleBundleType(item.id, 'recap')}
+                            disabled={bundleLoadingId === item.id}
+                            title="Nachlese"
+                            className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap shrink-0 transition-colors ${
+                              item.bundle_type === 'recap'
+                                ? 'bg-cyan-400 text-black border-cyan-500'
+                                : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-cyan-500 hover:text-cyan-600'
+                            }`}
+                          >
+                            Nachlese
+                          </button>
+                        </div>
                       </div>
                       <Button
                         type="button"
