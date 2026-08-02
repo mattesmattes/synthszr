@@ -1,13 +1,21 @@
 import Link from 'next/link'
 import { ArrowLeft, Mail, ExternalLink } from 'lucide-react'
-import { createAnonClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import type { LanguageCode } from '@/lib/types'
 import type { Metadata } from 'next'
 
-// ISR statt force-dynamic: Anon-Client (kein cookies()) erlaubt Prerender +
-// Edge-Cache. Inhalte ändern sich selten; Frische kommt über revalidate.
+// ISR statt force-dynamic: kein cookies()-Zugriff, daher Prerender +
+// Edge-Cache möglich. Inhalte ändern sich selten; Frische kommt über revalidate.
+//
+// Bewusst der Service-Role-Client statt des Anon-Clients (SEC-016): die Seite
+// braucht `email`, um daraus die Website-Domain abzuleiten. Mit dem
+// Anon-Client musste `anon` die Spalte lesen dürfen — und konnte damit die
+// komplette Absenderliste inklusive deaktivierter Quellen direkt über
+// PostgREST abfragen. Serverseitig gelesen bleibt nach außen nur sichtbar,
+// was diese Seite tatsächlich rendert. Der Key erreicht den Browser nicht;
+// dies ist eine Server Component.
 export const revalidate = 3600
 
 interface NewsletterSource {
@@ -60,13 +68,15 @@ function deriveWebsiteFromEmail(email: string): string | null {
 export default async function SourcesPage({ params }: PageProps) {
   const { lang } = await params
   const locale = lang as LanguageCode
-  const supabase = createAnonClient()
+  const supabase = createAdminClient()
   const t = await getTranslations(locale)
 
   // Fetch active newsletter sources
   const { data: sources, error } = await supabase
     .from('newsletter_sources')
     .select('id, email, name, url, enabled')
+    // Pflicht, nicht Komfort: der Service-Role-Client umgeht RLS, dieser
+    // Filter ist die einzige Grenze zu deaktivierten Quellen.
     .eq('enabled', true)
     .order('name', { ascending: true })
 
