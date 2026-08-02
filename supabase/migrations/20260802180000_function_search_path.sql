@@ -34,6 +34,7 @@
 --   and not exists (
 --     select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%'
 --   )
+--   and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
 -- order by p.prosecdef desc, signatur;
 
 -- ---------------------------------------------------------------------------
@@ -53,6 +54,13 @@ begin
       and not exists (
         select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%'
       )
+      -- Funktionen, die zu einer Extension gehören, überspringen: `vector`
+      -- und `pg_trgm` liegen im public-Schema (SEC-018), ihre Funktionen
+      -- gehören aber der Extension. ALTER FUNCTION scheitert dort mit
+      -- "must be owner of function vector_in".
+      and not exists (
+        select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e'
+      )
   loop
     execute format('alter function %s set search_path = pg_catalog, public', fn.signatur);
     fixed := fixed + 1;
@@ -70,4 +78,5 @@ end $$;
 --   and p.prokind = 'f'
 --   and not exists (
 --     select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%'
---   );
+--   )
+--   and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e');

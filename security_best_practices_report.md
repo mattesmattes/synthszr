@@ -11,8 +11,8 @@
 > | High | 0 | – |
 > | Medium | 1 (teilweise) | SEC-009 — `unsafe-eval` entfernt, `unsafe-inline` ist accepted risk |
 > | Medium | 1 (ausgeschlossen) | SEC-010 — Gmail-Verschlüsselung per Auftraggeber-Entscheid nicht umgesetzt |
-> | Low | 3 (neu) | SEC-016, SEC-017, SEC-018 — bei der Abnahme gefunden, siehe unten |
-> | **geschlossen** | **13** | SEC-001 bis -008, -011 bis -015 |
+> | Low | 1 (accepted risk) | SEC-018 — Extensions im public-Schema, bewusst nicht verschoben |
+> | **geschlossen** | **15** | SEC-001 bis -008, -011 bis -017 |
 >
 > ### Evidenz pro Finding
 >
@@ -34,7 +34,7 @@
 > | SEC-014 | **geschlossen** | Eigenes `REVALIDATE_SECRET`, timing-safe im Header. Prod: Query-Secret → 401, korrekter Bearer → 200. |
 > | SEC-015 | **geschlossen** | Opake 256-Bit-Sessions, Hash in `admin_sessions`, 12 h TTL, sofort widerrufbar. Prod: Logout → altes Cookie 307/401. Dabei aufgedeckt: die Middleware hatte eine zweite JWT-Implementierung mit `JWT_SECRET \|\| ADMIN_PASSWORD` als Key — das Login-Passwort genügte zum Fälschen eines Cookies. |
 >
-> ### SEC-016 (neu, Low) — `newsletter_sources.email` für `anon` lesbar
+> ### SEC-016 (neu, Low) — **GESCHLOSSEN** — `newsletter_sources.email` war für `anon` lesbar
 >
 > Die anon-Leseprobe über alle Tabellen zeigt: `newsletter_sources` liefert 221
 > Zeilen inklusive Spalte `email` (Absenderadressen der abonnierten
@@ -52,13 +52,16 @@
 > zusätzlich SPF/DKIM des jeweiligen Absenders überwinden und im
 > Gmail-Postfach landen.
 >
-> **Fix (nicht umgesetzt, außerhalb des Remediation-Plans):**
-> `sources/page.tsx` auf einen serverseitigen Admin-Client oder eine
-> API-Route umstellen, danach `revoke all … from anon` auf
-> `newsletter_sources`. Alle übrigen Zugriffe auf die Tabelle sind bereits
-> serverseitig und admin-authentifiziert.
+> **Behoben** (Commit 756905d + Migration `20260802190000`): Die Seite nutzt
+> jetzt den Service-Role-Client — sie ist eine Server Component, der Key
+> erreicht den Browser nicht, und ISR bleibt erhalten (Build bestätigt
+> Prerender mit 1 h Revalidate). Weil dieser Client RLS umgeht, ist der
+> `enabled`-Filter jetzt die einzige Grenze zu deaktivierten Quellen; das ist
+> am Aufrufort vermerkt. Anschließend `revoke all … from anon, authenticated`.
+> Prod-verifiziert: anon → `permission denied`, service_role → 228 Zeilen,
+> `/de/sources` rendert die Quellen unverändert.
 >
-> ### SEC-017 (neu, Low) — `search_path` von 20 Funktionen nicht fixiert
+> ### SEC-017 (neu, Low) — **GESCHLOSSEN** — `search_path` von 20 Funktionen war nicht fixiert
 >
 > Der Supabase Security Advisor meldet 20 Funktionen im `public`-Schema mit
 > „role mutable search_path". Ohne festen Suchpfad bestimmt der Aufrufer, in
@@ -73,10 +76,21 @@
 > angelegten Cleanup-Funktionen tauchen nicht auf — sie setzen `search_path`
 > von Anfang an.
 >
-> **Fix bereitgestellt:** `supabase/migrations/20260802180000_function_search_path.sql`
-> setzt `pg_catalog, public` für alle betroffenen Funktionen (mit Diagnose- und
-> Verifikationsquery). `public` muss im Pfad bleiben, weil `vector` und
-> `pg_trgm` dort installiert sind.
+> **Behoben** (Migration `20260802180000`): `pg_catalog, public` für alle
+> betroffenen Funktionen, per `DO`-Block über `pg_proc`. `public` muss im Pfad
+> bleiben, weil `vector` und `pg_trgm` dort installiert sind.
+>
+> Dabei aufgefallen: Der erste Lauf scheiterte an `must be owner of function
+> vector_in` — die Query erfasste auch Extension-eigene Funktionen, weil diese
+> Extensions in `public` liegen (SEC-018). Der Filter
+> `not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')`
+> schließt sie aus. `DO`-Blöcke sind transaktional, es blieb also nichts halb
+> angewandt.
+>
+> Prod-verifiziert, dass der Fix nichts gebrochen hat: `match_mattes_chunks`
+> liefert weiterhin Treffer (pgvector-Operatoren funktionieren mit dem
+> fixierten Pfad), ebenso `match_podcast_memory`, `expire_old_queue_items` und
+> die drei Cleanup-Funktionen dieser Remediation.
 >
 > ### SEC-018 (neu, Low, accepted risk) — Extensions im `public`-Schema
 >
