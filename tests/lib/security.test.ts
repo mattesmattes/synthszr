@@ -34,8 +34,9 @@ describe('Security: Cron Authentication', () => {
     expect(result.method).toBe('bearer')
   })
 
-  it('authorizes with x-vercel-cron header', async () => {
+  it('rejects spoofed x-vercel-cron without bearer secret', async () => {
     vi.stubEnv('NODE_ENV', 'production')
+    process.env.CRON_SECRET = 'real-secret'
 
     const { verifyCronAuth } = await import('@/lib/security/cron-auth')
     const request = {
@@ -45,8 +46,7 @@ describe('Security: Cron Authentication', () => {
     } as any
 
     const result = verifyCronAuth(request)
-    expect(result.authorized).toBe(true)
-    expect(result.method).toBe('vercel-cron')
+    expect(result).toEqual({ authorized: false, method: 'none' })
   })
 
   it('rejects in production without valid credentials', async () => {

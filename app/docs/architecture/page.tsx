@@ -77,7 +77,7 @@ export default function ArchitecturePage() {
           <ul className="list-disc pl-5 space-y-1 text-sm">
             <li><strong>Vercel</strong> hosts the entire app — single project, production on <Code>synthszr.com</Code>, preview URLs per PR.</li>
             <li><strong>Vercel Blob</strong> stores ad-promo images, article thumbnails, and podcast mp3s (public bucket).</li>
-            <li><strong>Vercel Cron</strong> schedules every route under <Code>/api/cron/*</Code>; auth via <Code>Bearer CRON_SECRET</Code> or <Code>x-vercel-cron</Code> header.</li>
+            <li><strong>Vercel Cron</strong> schedules every route under <Code>/api/cron/*</Code>; auth exclusively via <Code>Authorization: Bearer $CRON_SECRET</Code>. The <Code>x-vercel-cron</Code> header is an untrusted, spoofable request header and is not accepted.</li>
             <li><strong>Vercel Analytics</strong> (<Code>@vercel/analytics</Code>) for base web-vitals alongside our own <Code>analytics_events</Code> table.</li>
           </ul>
         </Subsection>
@@ -1235,7 +1235,7 @@ export default function ArchitecturePage() {
             <li><strong className="text-foreground">2026-02-10:</strong> 6 findings all resolved — missing auth on <Code>/api/cron/extract-patterns</Code>, service-role key leak in debug-pipeline, API key fragments in TTS logs, SSRF via cover-image, missing rate-limit on stock-quote.</li>
           </ul>
           <p className="text-xs text-muted-foreground mt-3">
-            Remaining accepted risks (documented, not exploitable in current deployment): <Code>x-vercel-cron</Code> header trust (Vercel-internal), <Code>ADMIN_PASSWORD</Code> JWT fallback, 30-day preference-token TTL.
+            Remaining accepted risks (documented, not exploitable in current deployment): <Code>ADMIN_PASSWORD</Code> JWT fallback, 30-day preference-token TTL.
           </p>
         </Subsection>
       </Section>
