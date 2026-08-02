@@ -46,15 +46,9 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
 
       if (res.ok) {
         setStatus('success')
-        if (data.sid) {
-          try { localStorage.setItem('synthszr_sid', data.sid) } catch {}
-        }
         setMessage(data.message || 'Confirmation email sent!')
         setEmail("")
       } else {
-        if (data.sid) {
-          try { localStorage.setItem('synthszr_sid', data.sid) } catch {}
-        }
         setStatus('error')
         setMessage(data.error || 'An error occurred')
       }

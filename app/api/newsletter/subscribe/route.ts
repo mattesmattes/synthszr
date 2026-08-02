@@ -7,9 +7,63 @@ import { logIfUnexpected } from '@/lib/supabase/error-handling'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 import { requireValidOrigin } from '@/lib/security/origin-check'
 import { trackReferral, generateReferralCode } from '@/lib/referrals/service'
+import { mintSubscriberToken } from '@/lib/newsletter/access-tokens'
 
 // Newsletter rate limiter: 10 requests per hour per IP (anti-spam)
 const newsletterLimiter = rateLimiters.newsletter()
+
+const CONFIRMATION_TTL_MS = 48 * 60 * 60 * 1000
+
+/**
+ * Every request carrying a syntactically valid address gets exactly this
+ * response (SEC-001). Previously an already-subscribed address answered 409
+ * and a new one answered 200 with the subscriber UUID, which turned this
+ * endpoint into both a membership oracle and a source of credentials: submit
+ * a guessed address, learn whether it is subscribed.
+ */
+const ACCEPTED_RESPONSE = {
+  success: true,
+  message: 'If this address can be subscribed, a confirmation email has been sent.',
+}
+
+function accepted() {
+  return NextResponse.json(ACCEPTED_RESPONSE, {
+    status: 202,
+    headers: { 'Cache-Control': 'no-store' },
+  })
+}
+
+/**
+ * Issue a fresh confirmation link. The raw token exists only in the mail;
+ * the database sees a hash. Any earlier confirm token for this subscriber is
+ * dropped first, so a resend invalidates the previous link.
+ */
+async function issueConfirmation(
+  supabase: ReturnType<typeof createAdminClient>,
+  subscriberId: string,
+  email: string,
+  language: string,
+) {
+  const confirmation = mintSubscriberToken(
+    subscriberId,
+    'confirm',
+    new Date(Date.now() + CONFIRMATION_TTL_MS),
+  )
+
+  await supabase
+    .from('subscriber_action_tokens')
+    .delete()
+    .eq('subscriber_id', subscriberId)
+    .eq('purpose', 'confirm')
+
+  const { error } = await supabase.from('subscriber_action_tokens').insert(confirmation.row)
+  if (error) {
+    console.error('Subscribe token insert error:', error)
+    return
+  }
+
+  await sendConfirmationEmail(email, confirmation.rawToken, language)
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,25 +110,19 @@ export async function POST(request: NextRequest) {
     logIfUnexpected('newsletter/subscribe', existingError)
 
     if (existing) {
+      // Already subscribed: do nothing at all, and say exactly what we say to
+      // everyone else. No mail either - resending a confirmation to a
+      // confirmed address would let a third party spam that inbox.
       if (existing.status === 'active') {
-        // KEINE sid zurückgeben: sonst kann jeder mit einer bekannten fremden
-        // E-Mail die interne subscriber-UUID abgreifen (→ Preference-Token →
-        // Account-Übernahme). Die sid ist ein Geheimnis (nur im Newsletter-Footer).
-        return NextResponse.json(
-          { error: 'This email is already subscribed' },
-          { status: 409 }
-        )
+        return accepted()
       }
 
       // Reactivate if unsubscribed
       if (existing.status === 'unsubscribed') {
-        const confirmationToken = crypto.randomUUID()
-
         await supabase
           .from('subscribers')
           .update({
             status: 'pending',
-            confirmation_token: confirmationToken,
             confirmation_sent_at: new Date().toISOString(),
             unsubscribed_at: null,
             updated_at: new Date().toISOString(),
@@ -82,48 +130,32 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', existing.id)
 
-        await sendConfirmationEmail(email, confirmationToken, language)
-
-        // KEINE sid für existierende E-Mails (verhindert E-Mail→UUID-Leak).
-        return NextResponse.json({
-          success: true,
-          message: 'Confirmation email has been resent',
-        })
+        await issueConfirmation(supabase, existing.id, email, language)
+        return accepted()
       }
 
       // Resend confirmation if pending
       if (existing.status === 'pending') {
-        const confirmationToken = crypto.randomUUID()
-
         await supabase
           .from('subscribers')
           .update({
-            confirmation_token: confirmationToken,
             confirmation_sent_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
           .eq('id', existing.id)
 
-        await sendConfirmationEmail(email, confirmationToken, language)
-
-        // KEINE sid für existierende E-Mails (verhindert E-Mail→UUID-Leak).
-        return NextResponse.json({
-          success: true,
-          message: 'Confirmation email has been resent',
-        })
+        await issueConfirmation(supabase, existing.id, email, language)
+        return accepted()
       }
     }
 
     // Create new subscriber
-    const confirmationToken = crypto.randomUUID()
-
     const { data: newSubscriber, error: insertError } = await supabase
       .from('subscribers')
       .insert({
         email: email.toLowerCase(),
         name: name || null,
         status: 'pending',
-        confirmation_token: confirmationToken,
         confirmation_sent_at: new Date().toISOString(),
         preferences: { language },
         referral_code: generateReferralCode(),
@@ -131,7 +163,7 @@ export async function POST(request: NextRequest) {
       .select('id')
       .single()
 
-    if (insertError) {
+    if (insertError || !newSubscriber?.id) {
       console.error('Subscribe insert error:', insertError)
       return NextResponse.json(
         { error: 'Error saving subscription' },
@@ -140,18 +172,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Empfehlung verbuchen (pending bis Opt-In); ignoriert unbekannten Code/Self-Referral.
-    if (refCode && newSubscriber?.id) {
+    if (refCode) {
       await trackReferral(refCode, email, newSubscriber.id)
     }
 
-    // Send confirmation email
-    await sendConfirmationEmail(email, confirmationToken, language)
+    await issueConfirmation(supabase, newSubscriber.id, email, language)
 
-    return NextResponse.json({
-      success: true,
-      message: 'Confirmation email sent',
-      sid: newSubscriber?.id,
-    })
+    // The new subscriber's id stays server-side.
+    return accepted()
   } catch (error) {
     console.error('Subscribe error:', error)
     return NextResponse.json(
