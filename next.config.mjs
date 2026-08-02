@@ -1,3 +1,5 @@
+import { buildContentSecurityPolicy } from './lib/security/csp.mjs'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // X-Powered-By: Next.js nicht verraten (Info-Disclosure)
@@ -57,30 +59,13 @@ const nextConfig = {
             value: 'max-age=63072000; includeSubDomains; preload',
           },
           {
-            // Content-Security-Policy (Defense-in-Depth gegen XSS/Injection).
-            // Quellen aus dem Code ermittelt: Vercel Analytics
-            // (va.vercel-scripts.com / vitals.vercel-insights.com), Supabase
-            // (Browser-Client der Admin-why-Seite), Favicons/Blob (img).
-            // script-src braucht 'unsafe-inline'/'unsafe-eval' (Next.js-Hydration
-            // ohne Nonce-Setup); externe Script-Quellen bleiben so trotzdem
-            // blockiert. frame-ancestors/object-src/base-uri hart restriktiv.
+            // Content-Security-Policy — zentral in lib/security/csp.mjs
+            // (SEC-009). Produktiv ohne 'unsafe-eval'; die verbleibende
+            // 'unsafe-inline'-Ausnahme für script-src ist dort begründet.
             key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com https://vercel.live",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https:",
-              "font-src 'self' data:",
-              // Podcast-Audio liegt auf Vercel Blob (media-src, sonst greift default-src 'self')
-              "media-src 'self' blob: https://*.public.blob.vercel-storage.com",
-              "connect-src 'self' https://*.supabase.co https://va.vercel-scripts.com https://vitals.vercel-insights.com https://vercel.live wss://vercel.live",
-              // vercel.live-Feedback-Toolbar (nur Preview-Deployments) nutzt ein iframe
-              "frame-src 'self' https://vercel.live",
-              "frame-ancestors 'none'",
-              "base-uri 'self'",
-              "object-src 'none'",
-              "form-action 'self'",
-            ].join('; '),
+            value: buildContentSecurityPolicy({
+              development: process.env.NODE_ENV !== 'production',
+            }),
           },
           {
             key: 'X-Content-Type-Options',
