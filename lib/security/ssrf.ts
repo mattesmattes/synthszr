@@ -18,9 +18,14 @@
 
 import { lookup } from 'dns/promises'
 import net from 'net'
+import { Agent, fetch as undiciFetch } from 'undici'
 
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:'])
 const MAX_REDIRECTS = 5
+const DEFAULT_TIMEOUT_MS = 10_000
+
+/** Never replayed to a different origin after a redirect. */
+const CREDENTIAL_HEADERS = ['authorization', 'cookie', 'proxy-authorization']
 
 /**
  * Thrown by assertPublicUrl/safeFetch for every blocking reason (bad
@@ -255,76 +260,129 @@ export async function assertPublicUrl(
 }
 
 /**
+ * Pick the address the connection will be pinned to. IPv4 wins when both
+ * families are available: pinning removes the runtime's happy-eyeballs
+ * fallback, and every current deployment target (Vercel Lambda) reaches the
+ * internet over IPv4 - preferring AAAA here would turn a working dual-stack
+ * host into a connection error.
+ */
+function selectPinnedAddress(ips: string[]): { address: string; family: number } {
+  const address = ips.find(ip => net.isIP(ip) === 4) ?? ips[0]
+  return { address, family: net.isIP(address) }
+}
+
+/**
+ * A single-use dispatcher whose socket-level `lookup` always answers with the
+ * address assertPublicUrl already validated - no matter what the hostname
+ * resolves to by the time the socket is opened. The request URL keeps the
+ * original hostname, so the Host header and TLS SNI stay correct.
+ */
+export function createPinnedAgent(pinned: { address: string; family: number }): Agent {
+  return new Agent({
+    connect: {
+      lookup: (_hostname, options, callback) => {
+        if (options && (options as { all?: boolean }).all) {
+          ;(callback as unknown as (err: null, addresses: Array<{ address: string; family: number }>) => void)(
+            null,
+            [pinned]
+          )
+          return
+        }
+        callback(null, pinned.address, pinned.family)
+      },
+    },
+  })
+}
+
+function stripCredentialHeaders(headers: HeadersInit | undefined): Headers {
+  const next = new Headers(headers ?? {})
+  for (const name of CREDENTIAL_HEADERS) next.delete(name)
+  return next
+}
+
+/**
  * SSRF-safe fetch wrapper. Validates the URL (and every redirect hop) via
- * assertPublicUrl immediately before it is fetched, following up to
- * MAX_REDIRECTS redirects manually.
+ * assertPublicUrl immediately before it is fetched, then pins the actual
+ * connection to the address that validation approved.
  *
- * DNS-rebinding (TOCTOU) note: assertPublicUrl resolves `hostname` and
- * checks the resulting IP(s), but the subsequent `fetch()` call below
- * performs its OWN, independent DNS resolution for the same hostname when it
- * actually opens the connection - so there is an inherent gap between "the
- * name we checked" and "the name fetch() connects to". Fully closing that
- * gap means pinning the outgoing connection to the IP(s) validated here
- * (e.g. a low-level dispatcher/socket `lookup` override that keeps the
- * original hostname for the Host header and TLS SNI but forces the actual
- * connection to the pinned IP). That's not done here because it isn't
- * cleanly achievable on top of the global `fetch()` API in this runtime:
- * it would require either adding `undici` as a direct dependency to build a
- * custom Agent/dispatcher (today it's only a transitive dependency of
- * Next.js, so importing its internals directly is fragile across upgrades),
- * or rewriting this function on raw `http(s).request`, which would lose
- * fetch()'s automatic gzip/br decompression, streaming Response shape, and
- * built-in redirect/abort handling that all current callers (image/audio
- * proxying in the podcast + ad-promo routes, article scraping) depend on.
+ * DNS-rebinding (TOCTOU): resolving a hostname and then handing that same
+ * hostname to `fetch()` leaves a gap - fetch performs its OWN, independent
+ * resolution when it opens the socket, so an attacker-controlled resolver can
+ * answer "public" for the check and "169.254.169.254" for the connection.
+ * We close that gap with a per-hop undici Agent whose `connect.lookup`
+ * returns the already-validated address, which is why undici is a direct
+ * dependency rather than a transitive one: Agent and fetch must come from the
+ * same copy for the dispatcher to be accepted.
  *
- * Given that, this is the pragmatic minimal hardening: re-resolve and
- * re-validate the hostname immediately before every single connection
- * attempt - the initial request AND every redirect hop - with no other
- * async work in between, minimizing the window an attacker's DNS answer
- * could flip in. This defeats the common rebinding pattern (serve a public
- * IP, then flip the record to a private one after a delay/TTL expiry), but
- * NOT a maximally adversarial authoritative DNS server that deliberately
- * answers differently on every individual query regardless of timing -
- * that could in theory still slip a private IP past this check into the
- * actual fetch. Residual risk is bounded by the fact all current callers
- * only reach admin/DB-authored URLs or links embedded in crawled
- * newsletters, not fully free-form third-party input.
+ * Every hop gets its own agent (validated separately, torn down afterwards),
+ * credential headers are dropped when a redirect crosses origins, and each
+ * hop runs under its own timeout budget.
  */
 export interface SafeFetchInit extends RequestInit {
   /** Restricts every hop (initial URL + every redirect target) to this hostname allowlist — see AssertPublicUrlOptions. */
   allowedHostname?: string | readonly string[]
   /** Overrides the default redirect cap (MAX_REDIRECTS) for this call. */
   maxRedirects?: number
+  /** Per-hop timeout budget in milliseconds (default DEFAULT_TIMEOUT_MS). */
+  timeoutMs?: number
 }
 
 export async function safeFetch(rawUrl: string, init?: SafeFetchInit): Promise<Response> {
-  const { allowedHostname, maxRedirects, ...fetchInit } = init ?? {}
+  const { allowedHostname, maxRedirects, timeoutMs, signal, ...fetchInit } = init ?? {}
   const redirectLimit = maxRedirects ?? MAX_REDIRECTS
+  const hopTimeout = timeoutMs ?? DEFAULT_TIMEOUT_MS
 
-  let currentUrl = (await assertPublicUrl(rawUrl, { allowedHostname })).url.toString()
+  let validated = await assertPublicUrl(rawUrl, { allowedHostname })
+  let currentUrl = validated.url.toString()
+  let currentOrigin = validated.url.origin
+  let headers: HeadersInit | undefined = fetchInit.headers
 
   for (let redirectCount = 0; redirectCount <= redirectLimit; redirectCount++) {
-    const response = await fetch(currentUrl, {
-      ...fetchInit,
-      redirect: 'manual',
-    })
+    const agent = createPinnedAgent(selectPinnedAddress(validated.ips))
+    const timeout = AbortSignal.timeout(hopTimeout)
+    const hopSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
 
-    // Manual redirect handling: fetch reports a redirect either via
-    // response.type === 'opaqueredirect' (no-cors-like) or a 3xx status with
-    // a Location header (the typical same-origin/cors case).
+    let response: Response
+    try {
+      response = (await undiciFetch(currentUrl, {
+        ...fetchInit,
+        headers,
+        redirect: 'manual',
+        signal: hopSignal,
+        dispatcher: agent,
+      } as Parameters<typeof undiciFetch>[1])) as unknown as Response
+    } catch (error) {
+      void agent.destroy()
+      throw error
+    }
+
     const isRedirectStatus = response.status >= 300 && response.status < 400
     const location = response.headers.get('location')
 
     if (!isRedirectStatus || !location) {
+      // Graceful close: undici waits for the in-flight request (including the
+      // response body the caller is about to read) before tearing the pool
+      // down. destroy() here would abort streamed bodies mid-flight.
+      void agent.close().catch(() => agent.destroy())
       return response
     }
+
+    // The redirect body is never surfaced to the caller - cancel it so the
+    // socket is released before this hop's agent goes away.
+    await response.body?.cancel().catch(() => {})
+    await agent.close().catch(() => agent.destroy())
 
     if (redirectCount === redirectLimit) {
       throw new SsrfBlockedError('SSRF blocked: too many redirects')
     }
 
     const nextUrl = new URL(location, currentUrl)
-    currentUrl = (await assertPublicUrl(nextUrl.toString(), { allowedHostname })).url.toString()
+    validated = await assertPublicUrl(nextUrl.toString(), { allowedHostname })
+    if (validated.url.origin !== currentOrigin) {
+      headers = stripCredentialHeaders(headers)
+    }
+    currentUrl = validated.url.toString()
+    currentOrigin = validated.url.origin
   }
 
   throw new SsrfBlockedError('SSRF blocked: too many redirects')

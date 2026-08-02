@@ -3,6 +3,7 @@ import * as cheerio from 'cheerio'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { backfillMissingEmbeddings } from '@/lib/embeddings/backfill'
 import { isTrackingRedirectUrl, sanitizeUrl } from '@/lib/utils/url-sanitizer'
+import { safeFetch } from '@/lib/security/ssrf'
 
 const FETCH_WINDOW_HOURS = 72
 const MAX_EMAILS = 5
@@ -11,16 +12,20 @@ const MAX_EMAILS = 5
  * Resolve tracking redirect URLs (beehiiv, convertkit, etc.) to their
  * actual destination by following HTTP redirects.
  * Falls back to sanitizeUrl() if resolution fails.
+ *
+ * Routed through safeFetch (SEC-004): these URLs come out of crawled
+ * newsletters, and every hop of the redirect chain is attacker-influenceable.
+ * safeFetch validates and DNS-pins each hop instead of letting the runtime
+ * follow the chain unchecked.
  */
-async function resolveTrackingUrl(url: string | null): Promise<string | null> {
+export async function resolveTrackingUrl(url: string | null): Promise<string | null> {
   if (!url) return null
   if (!isTrackingRedirectUrl(url)) return sanitizeUrl(url)
 
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       method: 'HEAD',
-      redirect: 'follow',
-      signal: AbortSignal.timeout(5000),
+      timeoutMs: 5000,
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SynthszrBot/1.0)' },
     })
 

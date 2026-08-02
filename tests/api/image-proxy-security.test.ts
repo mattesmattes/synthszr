@@ -9,14 +9,29 @@ import sharp from 'sharp'
 //
 // Rate limiting is mocked exactly like tests/api/analytics-security.test.ts.
 // The actual network fetch (inside lib/security/ssrf.ts's safeFetch) is
-// replaced with a controllable stub via vi.stubGlobal — everything ABOVE
-// that (hostname allowlist, redirect-following, private-IP guard, MIME/
-// magic-byte check, 8 MiB cap) runs for real, including real DNS lookups
-// for the allowlisted hostnames (same convention as tests/lib/ssrf.test.ts,
-// which resolves example.com for real).
+// replaced with a controllable stub — everything ABOVE that (hostname
+// allowlist, redirect-following, private-IP guard, MIME/magic-byte check,
+// 8 MiB cap) runs for real, including real DNS lookups for the allowlisted
+// hostnames (same convention as tests/lib/ssrf.test.ts, which resolves
+// example.com for real).
+//
+// safeFetch calls undici's fetch (not the global one) so it can pin the
+// connection to the validated address (SEC-004), so the stub has to replace
+// the undici export. The global stub stays as a backstop that would surface
+// any other code path trying to reach the network.
 
 const mocks = vi.hoisted(() => ({
   rateLimit: { success: true },
+  fetch: vi.fn(),
+}))
+
+vi.mock('undici', () => ({
+  fetch: mocks.fetch,
+  Agent: class FakeAgent {
+    constructor(public options: unknown) {}
+    async close() {}
+    async destroy() {}
+  },
 }))
 
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
@@ -32,7 +47,7 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
   }
 })
 
-const mockFetch = vi.fn()
+const mockFetch = mocks.fetch
 vi.stubGlobal('fetch', mockFetch)
 
 import { GET as coverImageHandler } from '@/app/api/newsletter/cover-image/route'
