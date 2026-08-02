@@ -150,16 +150,48 @@ export async function POST(request: NextRequest) {
         testLocale,
         undefined,
         activeTipPromo,
+        '{{REFERRAL_TOKEN}}',
       )
 
-      const html = await render(
+      // If the test address belongs to a subscriber, mint real link tokens
+      // exactly like the batch send does. A preview that carries different
+      // links than production cannot verify the links - which was the whole
+      // point of sending it.
+      const { data: testSubscriber } = await supabase
+        .from('subscribers')
+        .select('id')
+        .eq('email', testEmail.toLowerCase())
+        .maybeSingle()
+
+      let unsubscribeUrl = `${BASE_URL}/newsletter/unsubscribe?confirm=1&token=test-preview`
+      let preferencesUrl = `${BASE_URL}/newsletter/preferences?token=test-preview`
+      let referralToken = 'test-preview'
+
+      if (testSubscriber) {
+        const { bySubscriber, rows } = mintNewsletterLinkTokens([testSubscriber.id])
+        const { error: tokenError } = await supabase
+          .from('subscriber_action_tokens')
+          .insert(rows)
+
+        if (tokenError) {
+          console.error('[Newsletter test] token insert failed:', tokenError)
+          return NextResponse.json({ error: 'Token-Erzeugung fehlgeschlagen' }, { status: 500 })
+        }
+
+        const tokens = bySubscriber.get(testSubscriber.id)!
+        unsubscribeUrl = `${BASE_URL}/newsletter/unsubscribe?confirm=1&token=${tokens.unsubscribe.rawToken}`
+        preferencesUrl = `${BASE_URL}/newsletter/preferences?token=${tokens.preferences.rawToken}`
+        referralToken = tokens.referral.rawToken
+      }
+
+      const baseTestHtml = await render(
         NewsletterEmail({
           subject,
           previewText,
           content: emailContent,
           postUrl: testPostUrl,
-          unsubscribeUrl: `${BASE_URL}/newsletter/unsubscribe?confirm=1&token=test-preview`,
-          preferencesUrl: `${BASE_URL}/newsletter/preferences?token=test-preview`,
+          unsubscribeUrl,
+          preferencesUrl,
           footerText,
           coverImageUrl,
           emailCoverImageUrl,
@@ -169,6 +201,7 @@ export async function POST(request: NextRequest) {
           locale: testLocale,
         })
       )
+      const html = baseTestHtml.replaceAll('{{REFERRAL_TOKEN}}', referralToken)
 
       await getResend().emails.send({
         from: FROM_EMAIL,
@@ -179,7 +212,9 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: `Test-E-Mail an ${testEmail} gesendet`,
+        message: testSubscriber
+          ? `Test-E-Mail an ${testEmail} gesendet (echte Links — der Abmelde-Link meldet wirklich ab)`
+          : `Test-E-Mail an ${testEmail} gesendet (Platzhalter-Links: Adresse ist kein Subscriber)`,
       })
     }
 
