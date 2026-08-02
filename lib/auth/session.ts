@@ -1,71 +1,38 @@
 import { cookies } from 'next/headers'
-import { SignJWT, jwtVerify } from 'jose'
 import { timingSafeEqual } from 'crypto'
 import { NextRequest } from 'next/server'
+import {
+  ADMIN_SESSION_TTL_SECONDS,
+  SESSION_COOKIE_NAME as STORE_COOKIE_NAME,
+  createSession as createStoredSession,
+  revokeSession as revokeStoredSession,
+  verifySession as verifyStoredSession,
+  type SessionPayload,
+} from '@/lib/auth/session-store'
 
-export const SESSION_COOKIE_NAME = 'synthszr_session'
-const SESSION_DURATION = 60 * 60 * 24 * 7 // 7 days in seconds
+/**
+ * Public surface of admin auth. The implementation moved to
+ * lib/auth/session-store.ts (SEC-015): sessions are opaque tokens whose hash
+ * lives in `admin_sessions`, instead of self-contained JWTs that could not be
+ * revoked before their 7-day expiry. The function signatures are unchanged so
+ * the ~119 modules importing this file keep working.
+ */
 
-function getSecretKey() {
-  const secret = process.env.JWT_SECRET
-  const isProduction = process.env.NODE_ENV === 'production'
+export const SESSION_COOKIE_NAME = STORE_COOKIE_NAME
+const SESSION_DURATION = ADMIN_SESSION_TTL_SECONDS
 
-  if (!secret) {
-    if (isProduction) {
-      throw new Error('CRITICAL: JWT_SECRET must be set in production')
-    }
-    // Development fallback - warn loudly
-    const fallback = process.env.ADMIN_PASSWORD
-    if (!fallback) {
-      throw new Error('JWT_SECRET or ADMIN_PASSWORD must be set')
-    }
-    console.warn('[Auth] WARNING: Using ADMIN_PASSWORD as JWT secret - set JWT_SECRET in production!')
-    return new TextEncoder().encode(fallback)
-  }
-
-  // Validate minimum secret length (256 bits = 32 chars minimum)
-  if (secret.length < 32) {
-    if (isProduction) {
-      throw new Error('CRITICAL: JWT_SECRET must be at least 32 characters')
-    }
-    console.warn('[Auth] WARNING: JWT_SECRET should be at least 32 characters')
-  }
-
-  return new TextEncoder().encode(secret)
-}
-
-export interface SessionPayload {
-  isAdmin: boolean
-  email?: string
-  name?: string
-  expiresAt: Date
-}
+export type { SessionPayload }
 
 export async function createSession(email?: string, name?: string): Promise<string> {
-  const expiresAt = new Date(Date.now() + SESSION_DURATION * 1000)
-
-  const token = await new SignJWT({ isAdmin: true, email, name })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime(expiresAt)
-    .setIssuedAt()
-    .sign(getSecretKey())
-
-  return token
+  return createStoredSession(email, name)
 }
 
 export async function verifySession(token: string): Promise<SessionPayload | null> {
-  try {
-    const { payload } = await jwtVerify(token, getSecretKey())
+  return verifyStoredSession(token)
+}
 
-    return {
-      isAdmin: payload.isAdmin as boolean,
-      email: payload.email as string | undefined,
-      name: payload.name as string | undefined,
-      expiresAt: new Date((payload.exp as number) * 1000)
-    }
-  } catch {
-    return null
-  }
+export async function revokeSession(token: string): Promise<void> {
+  return revokeStoredSession(token)
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
@@ -127,13 +94,7 @@ export async function isAdminRequest(request: NextRequest): Promise<boolean> {
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
   if (!sessionToken) return false
 
-  try {
-    const secretKey = getSecretKey()
-    await jwtVerify(sessionToken, secretKey)
-    return true
-  } catch {
-    return false
-  }
+  return (await verifySession(sessionToken)) !== null
 }
 
 /**

@@ -437,6 +437,26 @@ export async function GET(request: NextRequest) {
     results.subscriberTokenCleanup = 'error'
   }
 
+  // Admin session cleanup (SEC-015): expired and long-revoked session rows.
+  try {
+    const sessionCleanupRan = !forceRun && await hasRunToday(supabase, 'admin_session_cleanup')
+    if (!sessionCleanupRan) {
+      const { error: sessionError } = await supabase.rpc('cleanup_expired_admin_sessions')
+      if (sessionError) {
+        console.error('[Scheduler] Admin session cleanup error:', sessionError)
+        results.adminSessionCleanup = 'error'
+      } else {
+        await markTaskRun(supabase, 'admin_session_cleanup')
+        results.adminSessionCleanup = 'completed'
+      }
+    } else {
+      results.adminSessionCleanup = 'already_ran'
+    }
+  } catch (error) {
+    console.error('[Scheduler] Admin session cleanup error:', error)
+    results.adminSessionCleanup = 'error'
+  }
+
   // Cron heartbeat: unconditional record of every completed invocation so the
   // tick cadence is observable (Vercel retains runtime logs only briefly). The
   // gap between consecutive heartbeats = the real cron interval; the articleJob

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest, NextFetchEvent } from 'next/server'
-import { jwtVerify } from 'jose'
+import { verifySession } from '@/lib/auth/session-store'
 import { createClient } from '@supabase/supabase-js'
 import { PUBLIC_LOCALES } from '@/lib/i18n/config'
 
@@ -30,19 +30,21 @@ let activeLanguagesCache: Set<string> = new Set(PUBLIC_LOCALES)
 let cacheTimestamp = 0
 const CACHE_TTL = 60 * 60 * 1000 // 1h
 
-function getSecretKey() {
-  const secret = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD
-  if (!secret) {
-    throw new Error('JWT_SECRET or ADMIN_PASSWORD environment variable is not set')
-  }
-  return new TextEncoder().encode(secret)
-}
-
+/**
+ * Session verification goes through the shared store (SEC-015) instead of a
+ * second JWT implementation living here. The previous local copy also fell
+ * back to ADMIN_PASSWORD as a signing key when JWT_SECRET was absent, which
+ * made the login password itself sufficient to forge a session cookie.
+ *
+ * This costs one indexed lookup per /admin request - only on protected and
+ * auth routes, never on public traffic - and buys immediate revocation.
+ */
 async function verifyToken(token: string): Promise<boolean> {
   try {
-    await jwtVerify(token, getSecretKey())
-    return true
-  } catch {
+    return (await verifySession(token)) !== null
+  } catch (error) {
+    // Fail closed: an unreachable database must not authenticate anyone.
+    console.error('[Middleware] Session verification failed:', error)
     return false
   }
 }
