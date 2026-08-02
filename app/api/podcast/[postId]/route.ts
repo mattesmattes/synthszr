@@ -2,18 +2,22 @@
  * GET/POST /api/podcast/[postId]
  * Get or generate podcast audio for a specific post
  *
- * GET: Check if podcast exists, return status and URL
- * POST: Generate podcast (script + audio) for the post
+ * GET: strictly read-only. Returns status/URL for published posts only;
+ *      never triggers generation (SEC-013).
+ * POST: admin-only (getSession()). Sole generation path (script + audio).
  *
- * Query params:
- * - locale: string (default: 'de')
- * - generate: 'true' to trigger generation on GET
+ * GET query params:
+ * - locale: 'de' | 'en' | 'cs' | 'nds' (default: 'de')
+ *
+ * POST body:
+ * - locale: 'de' | 'en' | 'cs' | 'nds' (default: 'de')
+ * - force: boolean (default: false) — delete existing entry before regenerating
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
-import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 import { put } from '@vercel/blob'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
 import {
@@ -33,6 +37,17 @@ const LOCALE_TO_TTS_LANG: Record<string, 'de' | 'en'> = {
   cs: 'en',
   nds: 'en',
 }
+
+// Supported podcast locales (SEC-013)
+const PODCAST_LOCALES = ['de', 'en', 'cs', 'nds'] as const
+const postIdSchema = z.string().uuid()
+const localeSchema = z.enum(PODCAST_LOCALES)
+const postBodySchema = z
+  .object({
+    locale: localeSchema.default('de'),
+    force: z.boolean().default(false),
+  })
+  .strict()
 
 // Script generation prompt
 const SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erstelle ein lebendiges, natürliches Gespräch zwischen einem Host und einem Gast für einen Finance/Tech-Podcast.
@@ -114,28 +129,52 @@ function extractTextFromTiptap(content: unknown): string {
 }
 
 /**
- * GET - Check podcast status
+ * GET - Check podcast status (strictly read-only, public reader)
+ *
+ * No upsert/delete/blob/LLM/TTS ever happens on GET. Generation lives
+ * exclusively in POST, gated by getSession() (SEC-013).
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const { postId } = await params
   const { searchParams } = new URL(request.url)
-  const locale = searchParams.get('locale') || 'de'
-  const shouldGenerate = searchParams.get('generate') === 'true'
-  const forceRegenerate = searchParams.get('force') === 'true'
 
-  // force=true (löscht + regeneriert) → nur Admin.
-  if (forceRegenerate) {
-    const session = await getSession()
-    if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  const postIdResult = postIdSchema.safeParse(postId)
+  if (!postIdResult.success) {
+    return NextResponse.json({ error: 'Invalid postId' }, { status: 400 })
   }
-  // generate=true (öffentliche On-Demand-Generierung via Reader-Player) → Rate-Limit
-  // gegen Massen-Missbrauch (teure KI-Generierung).
-  if (shouldGenerate) {
-    const rl = await checkRateLimit(`podcast-generate:${getClientIP(request)}`, rateLimiters.strict() ?? undefined)
-    if (!rl.success) return rateLimitResponse(rl)
+
+  // GET no longer supports triggering generation. Reject any attempt so a
+  // stale client (or an attacker) gets an explicit error instead of a
+  // silently-ignored no-op.
+  if (searchParams.has('generate') || searchParams.has('force')) {
+    return NextResponse.json(
+      { error: 'GET is read-only; use POST to generate a podcast' },
+      { status: 400 }
+    )
   }
+
+  const localeResult = localeSchema.safeParse(searchParams.get('locale') || 'de')
+  if (!localeResult.success) {
+    return NextResponse.json({ error: 'Invalid locale' }, { status: 400 })
+  }
+  const locale = localeResult.data
 
   const supabase = createAdminClient()
+
+  // Only published posts are visible to the anonymous reader. Verified via
+  // repo-wide grep that no admin page reads this GET for draft preview —
+  // the admin audio UI (app/admin/audio/page.tsx) uses a separate
+  // jobs/generate-script pipeline, not this route.
+  const { data: post } = await supabase
+    .from('generated_posts')
+    .select('id')
+    .eq('id', postId)
+    .eq('status', 'published')
+    .maybeSingle()
+
+  if (!post) {
+    return NextResponse.json({ exists: false }, { status: 404 })
+  }
 
   // Check if podcast exists
   const { data: existingPodcast } = await supabase
@@ -145,65 +184,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     .eq('locale', locale)
     .single()
 
-  // Return existing podcast unless force regeneration requested
-  if (existingPodcast?.status === 'completed' && existingPodcast.audio_url && !forceRegenerate) {
-    return NextResponse.json({
-      exists: true,
-      audioUrl: existingPodcast.audio_url,
-      duration: existingPodcast.duration_seconds,
-      createdAt: existingPodcast.created_at,
-    })
+  if (existingPodcast?.status === 'completed' && existingPodcast.audio_url) {
+    return NextResponse.json(
+      {
+        exists: true,
+        audioUrl: existingPodcast.audio_url,
+        duration: existingPodcast.duration_seconds,
+        createdAt: existingPodcast.created_at,
+      },
+      { headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' } }
+    )
   }
 
-  // Force regeneration: delete old entry first
-  if (forceRegenerate && existingPodcast) {
-    console.log(`[Podcast] Force regeneration requested for post ${postId}`)
-    await supabase
-      .from('post_podcasts')
-      .delete()
-      .eq('post_id', postId)
-      .eq('locale', locale)
-  }
-
-  if (existingPodcast?.status === 'generating' && !forceRegenerate) {
+  if (existingPodcast?.status === 'generating') {
     return NextResponse.json({
       exists: false,
       status: 'generating',
       message: 'Podcast wird gerade generiert...',
-    })
-  }
-
-  // If generate flag is set, trigger generation
-  if (shouldGenerate || forceRegenerate) {
-    console.log(`[Podcast] Starting generation for post ${postId}, locale ${locale}`)
-
-    // Mark as generating BEFORE starting background task (to avoid race condition)
-    const { error: upsertError } = await supabase
-      .from('post_podcasts')
-      .upsert({
-        post_id: postId,
-        locale,
-        status: 'generating',
-        audio_url: null,
-      }, { onConflict: 'post_id,locale' })
-
-    if (upsertError) {
-      console.error(`[Podcast] Failed to mark as generating:`, upsertError)
-      return NextResponse.json({
-        error: 'Failed to start generation',
-        details: upsertError.message
-      }, { status: 500 })
-    }
-
-    // Start generation in background
-    generatePodcastForPost(postId, locale).catch(err => {
-      console.error(`[Podcast] Background generation failed:`, err)
-    })
-
-    return NextResponse.json({
-      exists: false,
-      status: 'generating',
-      message: 'Podcast-Generierung gestartet...',
     })
   }
 
@@ -214,7 +211,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 /**
- * POST - Generate podcast
+ * POST - Generate podcast (sole generation path, admin-only)
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   // Auth-Gate: Podcast-Generierung ist teuer (LLM + TTS) und darf nicht
@@ -223,8 +220,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
   const { postId } = await params
-  const body = await request.json().catch(() => ({}))
-  const locale = (body.locale as string) || 'de'
+  const postIdResult = postIdSchema.safeParse(postId)
+  if (!postIdResult.success) {
+    return NextResponse.json({ error: 'Invalid postId' }, { status: 400 })
+  }
+
+  const rawBody = await request.json().catch(() => ({}))
+  const bodyResult = postBodySchema.safeParse(rawBody)
+  if (!bodyResult.success) {
+    return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
+  }
+  const { locale, force } = bodyResult.data
+
+  if (force) {
+    // Force regeneration: delete old entry first so a stale completed/failed
+    // row doesn't linger once the fresh upsert (inside generatePodcastForPost) runs.
+    const supabase = createAdminClient()
+    await supabase.from('post_podcasts').delete().eq('post_id', postId).eq('locale', locale)
+  }
 
   // Start generation
   const result = await generatePodcastForPost(postId, locale)
