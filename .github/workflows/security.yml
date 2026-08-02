@@ -110,8 +110,15 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Blocking on ERROR-severity findings only, so the gate stays actionable.
+      #
+      # `--config auto` was removed: it resolves its ruleset from the Semgrep
+      # registry and needs SEMGREP_APP_TOKEN, so without one it exits 7 after
+      # ~4 seconds without scanning anything. Combined with the previous
+      # `|| true` that meant this job reported success while never running.
+      # The project rules in .semgrep.yml ship with the repo and always load;
+      # generic coverage comes from the CodeQL job above.
       - name: Run Semgrep
-        run: semgrep scan --error --severity ERROR --config auto --config .semgrep.yml --json -o semgrep-results.json
+        run: semgrep scan --error --severity ERROR --metrics=off --config .semgrep.yml --json -o semgrep-results.json
 
       - name: Upload Semgrep results
         if: always()
