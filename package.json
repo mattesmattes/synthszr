@@ -134,7 +134,8 @@
     "tw-animate-css": "1.3.3",
     "typescript": "^5",
     "vite": "7.3.6",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "yaml": "2.8.1"
   },
   "pnpm": {
     "overrides": {

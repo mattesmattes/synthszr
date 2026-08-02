@@ -50,11 +50,12 @@ rules:
 
   # Detect JSON.parse without try-catch
   - id: unsafe-json-parse
-    pattern: JSON.parse($X)
-    pattern-not-inside: |
-      try { ... } catch { ... }
-    pattern-not-inside: |
-      try { ... } catch (...) { ... }
+    patterns:
+      - pattern: JSON.parse($X)
+      - pattern-not-inside: |
+          try { ... } catch { ... }
+      - pattern-not-inside: |
+          try { ... } catch (...) { ... }
     paths:
       exclude:
         - node_modules/**
@@ -65,14 +66,15 @@ rules:
 
   # Detect .single() without error handling
   - id: supabase-single-no-error
-    pattern: |
-      const { data: $DATA } = await $SUPABASE
-        ...
-        .single()
-    pattern-not: |
-      const { data: $DATA, error: $ERROR } = await $SUPABASE
-        ...
-        .single()
+    patterns:
+      - pattern: |
+          const { data: $DATA } = await $SUPABASE
+            ...
+            .single()
+      - pattern-not: |
+          const { data: $DATA, error: $ERROR } = await $SUPABASE
+            ...
+            .single()
     paths:
       exclude:
         - node_modules/**
@@ -85,7 +87,8 @@ rules:
   - id: fetch-without-timeout
     patterns:
       - pattern: await fetch($URL, { ... })
-      - pattern-not: await fetch($URL, { ..., signal: $SIGNAL, ... })
+      - pattern-not: |
+          await fetch($URL, { ..., signal: $SIGNAL, ... })
     paths:
       include:
         - app/api/cron/**
@@ -99,8 +102,10 @@ rules:
   # Detect potential SQL injection (even though Supabase parameterizes)
   - id: potential-sql-injection
     pattern-either:
-      - pattern: .rpc($FUNC, { ..., $KEY: `...${$VAR}...`, ... })
-      - pattern: .rpc($FUNC, { ..., $KEY: "..." + $VAR, ... })
+      - pattern: |
+          .rpc($FUNC, { ..., $KEY: `...${$VAR}...`, ... })
+      - pattern: |
+          .rpc($FUNC, { ..., $KEY: "..." + $VAR, ... })
     paths:
       exclude:
         - node_modules/**
@@ -110,17 +115,18 @@ rules:
 
   # Detect hardcoded secrets
   - id: hardcoded-secret
-    pattern-either:
-      - pattern: |
-          const $KEY = "sk-..."
-      - pattern: |
-          const $KEY = "sk_..."
-      - pattern: |
-          $OBJ.apiKey = "..."
-      - pattern: |
-          authorization: "Bearer $TOKEN"
-    pattern-not: |
-      authorization: `Bearer ${...}`
+    patterns:
+      - pattern-either:
+          - pattern: |
+              const $KEY = "sk-..."
+          - pattern: |
+              const $KEY = "sk_..."
+          - pattern: |
+              $OBJ.apiKey = "..."
+          - pattern: |
+              authorization: "Bearer $TOKEN"
+      - pattern-not: |
+          authorization: `Bearer ${...}`
     paths:
       exclude:
         - node_modules/**

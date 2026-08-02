@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { parse as parseYaml } from 'yaml'
 
 const root = process.cwd()
 const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))
@@ -53,6 +54,35 @@ describe('repository supply-chain policy', () => {
 
   it('does not invoke npm from a pnpm-managed project', () => {
     expect(Object.values(pkg.scripts).join('\n')).not.toMatch(/\bnpm run\b/)
+  })
+
+  it('keeps the semgrep ruleset loadable', () => {
+    // This file was unparseable YAML for its entire life: three patterns
+    // contained a bare ": ", which YAML reads as a mapping. Semgrep exited 7
+    // without scanning, and the workflow's `|| true` reported success anyway,
+    // so none of these rules ever ran. Parsing it here makes that failure
+    // mode loud instead of silent.
+    const raw = readFileSync(path.join(root, '.semgrep.yml'), 'utf8')
+    const config = parseYaml(raw)
+
+    expect(Array.isArray(config.rules)).toBe(true)
+    expect(config.rules.length).toBeGreaterThan(0)
+
+    const MATCHERS = ['pattern', 'patterns', 'pattern-either', 'pattern-regex']
+    for (const rule of config.rules) {
+      expect(rule.id, `rule without id: ${JSON.stringify(rule).slice(0, 80)}`).toBeTruthy()
+      expect(['ERROR', 'WARNING', 'INFO']).toContain(rule.severity)
+      expect(rule.message).toBeTruthy()
+      expect(rule.languages?.length ?? 0).toBeGreaterThan(0)
+
+      // Semgrep rejects a rule that has more than one top-level matcher -
+      // sibling keys like `pattern:` next to `pattern-not:` have to be
+      // wrapped in a single `patterns:` list instead.
+      const present = MATCHERS.filter(key => key in rule)
+      expect(present, `rule "${rule.id}" must have exactly one top-level matcher`).toHaveLength(1)
+      expect('pattern-not' in rule, `rule "${rule.id}" has a stray top-level pattern-not`).toBe(false)
+      expect('pattern-not-inside' in rule, `rule "${rule.id}" has a stray top-level pattern-not-inside`).toBe(false)
+    }
   })
 
   it('documents every audit exception instead of lowering the gate', () => {
