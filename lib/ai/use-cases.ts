@@ -28,6 +28,7 @@ export type UseCase =
   | 'glossary_readability_qa'
   | 'glossary_news_context'
   | 'glossary_product_assignment'
+  | 'glossary_review'
 
 export interface UseCaseInfo {
   label: string
@@ -143,6 +144,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     label: 'Glossar — Produkt-Zuordnung',
     description: 'Chart-Produkte einem Fachbegriff zuordnen (Relevanz-Bewertung)',
     defaultModel: 'claude-opus-5',
+    allowedProviders: ['anthropic'],
+  },
+  glossary_review: {
+    label: 'Glossar — Aktualitätsprüfung',
+    description: 'Prüft anhand aktueller News, ob ein Lexikoneintrag noch stimmt, und schreibt bei Bedarf eine Revision',
+    defaultModel: 'claude-sonnet-5',
     allowedProviders: ['anthropic'],
   },
 }

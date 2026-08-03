@@ -113,7 +113,7 @@ const USE_CASE_GROUPS: Array<{ title: string; useCases: string[] }> = [
   },
   {
     title: 'Fachbegriff-Lexikon',
-    useCases: ['glossary_candidate_identification', 'glossary_generation', 'glossary_readability_qa', 'glossary_news_context', 'glossary_product_assignment'],
+    useCases: ['glossary_candidate_identification', 'glossary_generation', 'glossary_readability_qa', 'glossary_news_context', 'glossary_product_assignment', 'glossary_review'],
   },
   {
     title: 'Bildgenerierung',

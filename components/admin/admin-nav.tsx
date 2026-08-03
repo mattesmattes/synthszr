@@ -26,7 +26,8 @@ import {
   Headphones,
   Megaphone,
   ClipboardEdit,
-  Wallet
+  Wallet,
+  Library
 } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
@@ -84,6 +85,11 @@ const navGroups: NavGroup[] = [
         label: 'Vokabular',
         href: '/admin/vocabulary',
         icon: BookOpen
+      },
+      {
+        label: 'Lexikon',
+        href: '/admin/glossary',
+        icon: Library
       },
       {
         label: 'Why',

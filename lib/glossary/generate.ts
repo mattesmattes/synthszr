@@ -46,7 +46,7 @@ export interface TipTapDoc { type: 'doc'; content: TipTapBlockNode[] }
  *  rohen LLM-Ausgabe zu vertrauen — eine falsch geschachtelte body-JSONB würde
  *  renderStaticArticleHtml stillschweigend auf einen leeren String zusammenfallen
  *  lassen (siehe Task 6/7). Leere Blocks werden verworfen. */
-function buildTipTapBody(blocks: Array<{ type: 'paragraph' | 'heading'; text: string }>): TipTapDoc {
+export function buildTipTapBody(blocks: Array<{ type: 'paragraph' | 'heading'; text: string }>): TipTapDoc {
   const content: TipTapBlockNode[] = []
   for (const b of blocks) {
     const text = b.text.trim()
@@ -60,8 +60,10 @@ function buildTipTapBody(blocks: Array<{ type: 'paragraph' | 'heading'; text: st
   return { type: 'doc', content }
 }
 
-/** Pure: Klartext-Fassung des Bodys für den Verständlichkeits-Judge-Prompt. */
-function extractPlainText(body: TipTapDoc): string {
+/** Pure: Klartext-Fassung des Bodys für den Verständlichkeits-Judge-Prompt.
+ *  Auch von lib/glossary/review.ts genutzt (Task 17), um den bestehenden
+ *  Erklärungstext in den Aktualitäts-Prompt zu geben. */
+export function extractPlainText(body: TipTapDoc): string {
   return body.content.map((node) => node.content.map((t) => t.text).join('')).join('\n\n')
 }
 

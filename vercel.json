@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/glossary-news",
       "schedule": "0 4 * * 1"
+    },
+    {
+      "path": "/api/cron/glossary-review",
+      "schedule": "0 5 * * *"
     }
   ],
   "headers": [
