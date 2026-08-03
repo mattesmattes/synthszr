@@ -23,7 +23,7 @@ interface PostContentViewProps {
  * DIV mit aus dem Prerender-HTML (genau der Bug, den dieser Hybrid fixt).
  */
 export function PostContentView({ content, postId, queueItemIds, originalContent, locale }: PostContentViewProps) {
-  const staticHtml = renderStaticArticleHtml(content)
+  const staticHtml = renderStaticArticleHtml(content, locale)
   const ssrId = postId ? `post-ssr-${postId}` : `post-ssr-static`
   return (
     <>

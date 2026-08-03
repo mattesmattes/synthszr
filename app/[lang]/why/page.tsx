@@ -92,7 +92,7 @@ export default async function WhyPage({ params }: PageProps) {
 
           <div className="prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-xl prose-h2:text-lg prose-h2:mt-8 prose-h2:mb-3 prose-p:mb-5 prose-blockquote:border-l-2 prose-blockquote:border-accent prose-blockquote:pl-6 prose-blockquote:italic">
             <div className="prose-article">
-              <PostContentView content={content as Record<string, unknown>} />
+              <PostContentView content={content as Record<string, unknown>} locale={locale} />
             </div>
           </div>
         </article>

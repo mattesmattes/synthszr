@@ -6,6 +6,7 @@ import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import { HeadingWithQueueId } from "@/lib/tiptap/heading-with-queue-id"
+import { GlossaryLinkMark } from "@/lib/tiptap/glossary-link-mark"
 import {
   Bold,
   Italic,
@@ -91,6 +92,10 @@ export function TiptapEditorWithPatterns({
         placeholder: "Start writing...",
       }),
       PatternHighlightMark,
+      // Dieser Editor bearbeitet ausschließlich den deutschen Originalcontent
+      // (Übersetzungen laufen über einen separaten Pipeline-Schritt, nicht
+      // über diesen Editor) — 'de' ist hier der reale Wert, kein Blind-Default.
+      GlossaryLinkMark.configure({ lang: 'de' }),
     ],
     content: content,
     onUpdate: ({ editor }) => {

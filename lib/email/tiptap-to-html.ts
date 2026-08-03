@@ -8,6 +8,8 @@ import { isExcludedCompanyName } from '@/lib/data/company-exclusions'
 import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
 import { isAutolinkStopword } from '@/lib/rankings/product-exclusions'
 import { sanitizeUrl } from '@/lib/utils/url-sanitizer'
+import { SITE_URL } from '@/lib/seo/site'
+import { stripLexTags } from '@/lib/glossary/mentions'
 import { PODCAST_APPLE, PODCAST_SPOTIFY } from '@/lib/podcast/platform-links'
 import { applyDateToHeadline } from '@/lib/tip-promos/headline'
 import { bundleLabel, type BundleType } from '@/lib/i18n/bundle-labels'
@@ -169,9 +171,12 @@ function findCompaniesInText(text: string): { public: Array<{ apiName: string; d
  * that are needed for word separation between adjacent text nodes
  */
 function stripExplicitCompanyTags(text: string): string {
+  // {lex:Begriff}-Direktiven zuerst auflösen, sonst verschwindet der Begriff
+  // mitsamt der Klammern im generischen {...}-Strip direkt darunter.
+  const withoutLexTags = stripLexTags(text)
   // Remove {Company} tags and collapse multiple spaces into one
   // But preserve leading/trailing spaces as they may be word separators
-  return text.replace(/\{([^}]+)\}/g, '').replace(/\s{2,}/g, ' ')
+  return withoutLexTags.replace(/\{([^}]+)\}/g, '').replace(/\s{2,}/g, ' ')
 }
 
 /**
@@ -987,7 +992,7 @@ function isAbbreviationDot(text: string, dotIndex: number): boolean {
  * Works at TipTap node level (like the DOM-based web version) to correctly
  * handle highlighting across HTML tags (bold, italic, links).
  */
-function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string {
+function renderContentWithLastSentenceHighlight(content?: TiptapNode[], lang: string = 'de'): string {
   if (!content) return ''
 
   // Build a map of character positions per text node (accounts for mark-transition spaces)
@@ -1054,10 +1059,10 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string 
     if (synthszrMatch) {
       lastSentenceStart = synthszrMatch.index! + synthszrMatch[0].length
       if (!plainText.slice(lastSentenceStart).trim()) {
-        return renderContent(content) // nothing after the label
+        return renderContent(content, lang) // nothing after the label
       }
     } else {
-      return renderContent(content) // no sentence boundary at all
+      return renderContent(content, lang) // no sentence boundary at all
     }
   }
 
@@ -1100,7 +1105,7 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string 
 
     if (nodeInHighlight && highlightStartInNode === 0) {
       // Entire node is in the highlight
-      const rendered = applyMarks(text, node.marks, true)
+      const rendered = applyMarks(text, node.marks, true, lang)
       renderedParts.push(rendered)
     } else if (nodeInHighlight && highlightStartInNode > 0) {
       // Node is split: beginning is normal, rest is highlighted
@@ -1115,11 +1120,11 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string 
           '<strong style="background-color: #FFFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">$1</strong>')
       }
 
-      renderedParts.push(applyMarks(styledBefore, node.marks, false))
-      renderedParts.push(applyMarks(afterText, node.marks, true))
+      renderedParts.push(applyMarks(styledBefore, node.marks, false, lang))
+      renderedParts.push(applyMarks(afterText, node.marks, true, lang))
     } else {
       // Node is entirely before the highlight
-      const rendered = applyMarks(text, node.marks, false)
+      const rendered = applyMarks(text, node.marks, false, lang)
       renderedParts.push(rendered)
     }
   }
@@ -1130,7 +1135,7 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[]): string 
 /**
  * Apply TipTap marks to text, optionally wrapping in highlight span
  */
-function applyMarks(text: string, marks?: Array<{ type: string; attrs?: Record<string, string> }>, highlight?: boolean): string {
+function applyMarks(text: string, marks?: Array<{ type: string; attrs?: Record<string, string> }>, highlight?: boolean, lang: string = 'de'): string {
   let result = text
 
   if (marks) {
@@ -1150,6 +1155,13 @@ function applyMarks(text: string, marks?: Array<{ type: string; attrs?: Record<s
           const rawHref = mark.attrs?.href || '#'
           const cleanHref = sanitizeUrl(rawHref) || rawHref
           result = `<a href="${cleanHref}">${result}</a>`
+          break
+        }
+        case 'glossaryLink': {
+          const slug = mark.attrs?.slug
+          if (!slug) break
+          // Absolute URL: relative Pfade funktionieren in E-Mail-Clients nicht.
+          result = `<a href="${SITE_URL}/${lang}/glossary/${slug}">${result}</a>`
           break
         }
       }
@@ -1172,10 +1184,10 @@ function convertNodeToHtml(node: TiptapNode, locale: string = 'de'): string {
       const textContent = extractTextFromNode(node)
       // Check if this paragraph contains "Synthszr Take:" - highlight the last sentence
       if (/synthszr (take|contra):?/i.test(textContent)) {
-        const content = renderContentWithLastSentenceHighlight(node.content)
+        const content = renderContentWithLastSentenceHighlight(node.content, locale)
         return `<p>${content}</p>`
       }
-      return `<p>${renderContent(node.content)}</p>`
+      return `<p>${renderContent(node.content, locale)}</p>`
     }
     case 'heading': {
       const level = node.attrs?.level || 2
@@ -1189,7 +1201,7 @@ function convertNodeToHtml(node: TiptapNode, locale: string = 'de'): string {
         6: '16px',
       }
       const fontSize = headingSizes[Number(level)] || '22px'
-      let headingHtml = renderContent(node.content)
+      let headingHtml = renderContent(node.content, locale)
 
       // If heading has a source link, wrap content with favicon + link
       const srcUrl = node.attrs?.sourceUrl as string | undefined
@@ -1209,15 +1221,15 @@ function convertNodeToHtml(node: TiptapNode, locale: string = 'de'): string {
       return `${badgeHtml}<h${level} style="font-size: ${fontSize}; margin: 16px 0 8px 0;">${headingHtml}</h${level}>`
     }
     case 'bulletList':
-      return `<ul>${node.content?.map(li => `<li>${renderContent(li.content?.[0]?.content)}</li>`).join('')}</ul>`
+      return `<ul>${node.content?.map(li => `<li>${renderContent(li.content?.[0]?.content, locale)}</li>`).join('')}</ul>`
     case 'orderedList':
-      return `<ol>${node.content?.map(li => `<li>${renderContent(li.content?.[0]?.content)}</li>`).join('')}</ol>`
+      return `<ol>${node.content?.map(li => `<li>${renderContent(li.content?.[0]?.content, locale)}</li>`).join('')}</ol>`
     case 'blockquote':
-      return `<blockquote>${renderContent(node.content)}</blockquote>`
+      return `<blockquote>${renderContent(node.content, locale)}</blockquote>`
     case 'horizontalRule':
       return '<hr />'
     default:
-      return renderContent(node.content)
+      return renderContent(node.content, locale)
   }
 }
 
@@ -1237,7 +1249,7 @@ export function convertTiptapToHtml(doc: TiptapDoc, locale: string = 'de'): stri
  * TipTap stores "italic text" + "normal text" as separate nodes.
  * Without careful handling, they get concatenated without spaces.
  */
-function renderContent(content?: TiptapNode[]): string {
+function renderContent(content?: TiptapNode[], lang: string = 'de'): string {
   if (!content) return ''
 
   const renderedParts: string[] = []
@@ -1283,6 +1295,13 @@ function renderContent(content?: TiptapNode[]): string {
               const rawHref = mark.attrs?.href || '#'
               const cleanHref = sanitizeUrl(rawHref) || rawHref
               text = `<a href="${cleanHref}">${text}</a>`
+              break
+            }
+            case 'glossaryLink': {
+              const slug = mark.attrs?.slug
+              if (!slug) break
+              // Absolute URL: relative Pfade funktionieren in E-Mail-Clients nicht.
+              text = `<a href="${SITE_URL}/${lang}/glossary/${slug}">${text}</a>`
               break
             }
           }

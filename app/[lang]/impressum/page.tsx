@@ -84,7 +84,7 @@ export default async function ImpressumPage({ params }: PageProps) {
           </header>
 
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <PostContentView content={content as Record<string, unknown>} />
+            <PostContentView content={content as Record<string, unknown>} locale={locale} />
           </div>
 
           <div className="mt-8 pt-6 border-t text-xs text-muted-foreground">

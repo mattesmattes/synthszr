@@ -6,6 +6,7 @@ import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import { HeadingWithQueueId } from "@/lib/tiptap/heading-with-queue-id"
+import { GlossaryLinkMark } from "@/lib/tiptap/glossary-link-mark"
 import { Bold, Italic, Strikethrough, List, ListOrdered, Heading1, Heading2, Quote, Undo, Redo, Link as LinkIcon, Unlink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -45,6 +46,10 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
       Placeholder.configure({
         placeholder: "Start writing...",
       }),
+      // Dieser Editor bearbeitet ausschließlich den deutschen Originalcontent
+      // (Übersetzungen laufen über einen separaten Pipeline-Schritt, nicht
+      // über diesen Editor) — 'de' ist hier der reale Wert, kein Blind-Default.
+      GlossaryLinkMark.configure({ lang: 'de' }),
     ],
     content: content,
     onUpdate: ({ editor }) => {

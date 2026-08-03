@@ -146,7 +146,7 @@ export function FeaturedArticle({
       )}
 
       <div className="prose-article">
-        <PostContentView content={content} postId={postId} queueItemIds={queueItemIds} />
+        <PostContentView content={content} postId={postId} queueItemIds={queueItemIds} locale={locale} />
       </div>
 
     </article>

@@ -10,6 +10,7 @@ import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import { createPortal } from "react-dom"
 import { HeadingWithQueueId } from "@/lib/tiptap/heading-with-queue-id"
+import { GlossaryLinkMark } from "@/lib/tiptap/glossary-link-mark"
 import { StockSynthszrLayer } from "../stock-synthszr-layer"
 import { PremarketSynthszrLayer } from "../premarket-synthszr-layer"
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies"
@@ -152,6 +153,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
           rel: 'noopener noreferrer',
         },
       }),
+      GlossaryLinkMark.configure({ lang: locale }),
     ],
     content: content,
     editable: false,

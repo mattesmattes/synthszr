@@ -2,6 +2,8 @@ import { generateHTML } from '@tiptap/html'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import { HeadingWithQueueId } from '@/lib/tiptap/heading-with-queue-id'
+import { GlossaryLinkMark } from '@/lib/tiptap/glossary-link-mark'
+import { stripLexTags } from '@/lib/glossary/mentions'
 
 /**
  * Rendert TipTap-JSON serverseitig zu statischem HTML — der crawlbare
@@ -13,7 +15,7 @@ import { HeadingWithQueueId } from '@/lib/tiptap/heading-with-queue-id'
  * {Company}-Direktiven werden gestript (macht client-seitig
  * hideExplicitCompanyTags). Fehler → leerer String, nie werfen.
  */
-export function renderStaticArticleHtml(content: Record<string, unknown> | string): string {
+export function renderStaticArticleHtml(content: Record<string, unknown> | string, lang = 'de'): string {
   try {
     const json = typeof content === 'string' ? JSON.parse(content) : content
     if (!json || typeof json !== 'object' || !('type' in json)) return ''
@@ -35,12 +37,18 @@ export function renderStaticArticleHtml(content: Record<string, unknown> | strin
           rel: 'noopener noreferrer',
         },
       }),
+      // Ohne diesen Eintrag wirft generateHTML bei der glossaryLink-Mark, der
+      // catch schluckt es, und der komplette Artikel fehlt im Prerender-HTML.
+      GlossaryLinkMark.configure({ lang }),
     ])
     return (
-      html
-        // zeed-dom-Serialisierungs-Artefakt auf Top-Level-Elementen
-        .replace(/ xmlns="http:\/\/www\.w3\.org\/1999\/xhtml"/g, '')
-        // {Company}-Tags entfernen (gleiche Semantik wie hideExplicitCompanyTags)
+      stripLexTags(
+        html
+          // zeed-dom-Serialisierungs-Artefakt auf Top-Level-Elementen
+          .replace(/ xmlns="http:\/\/www\.w3\.org\/1999\/xhtml"/g, '')
+      )
+        // {Company}-Tags entfernen (gleiche Semantik wie hideExplicitCompanyTags).
+        // Erst NACH stripLexTags, sonst verschwindet {lex:Begriff} mitsamt Begriff.
         .replace(/\{[^{}<>\n]{1,80}\}/g, '')
     )
   } catch {

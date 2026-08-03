@@ -85,7 +85,7 @@ export default async function DatenschutzPage({ params }: PageProps) {
           </header>
 
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <PostContentView content={content as Record<string, unknown>} />
+            <PostContentView content={content as Record<string, unknown>} locale={locale} />
           </div>
 
           {/* Consent Settings Button - not part of translated content */}
