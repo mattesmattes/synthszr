@@ -158,6 +158,9 @@ export const defaultTranslations: Record<string, string> = {
   'glossary.index_title': 'Synthszr Lexikon',
   'glossary.index_intro': 'Fachbegriffe aus unseren Artikeln, kurz und verständlich erklärt.',
   'glossary.index_empty': 'Noch keine Begriffe veröffentlicht.',
+  // Registriert für einen künftigen Verwendungsort (noch ohne Aufrufer):
+  // Hover-Tooltips sind ein explizites Design-Spec-Nicht-Ziel, deshalb hier
+  // kein Aufruf erzwungen — kein Bug, siehe Task-18-Report.
   'glossary.explained_here': 'Im Lexikon erklärt',
 
   // Common

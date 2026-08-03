@@ -281,11 +281,13 @@ describe('translateTerm', () => {
     // Schreibpfade (generate.ts' ContentSchema verlangt min(4) Blocks,
     // review.ts lehnt einen leeren pendingBody ab) — Verteidigung gegen einen
     // Bestandsdatensatz mit body.content = [], den keiner der beiden Pfade
-    // verhindert hat.
+    // verhindert hat. Fix-Runde 1 (Minor 4): eigene Fehlermeldung statt der
+    // Blockzahl-Meldung — „0 weicht von 0 ab" läse sich wie ein
+    // Vergleichsfehler, obwohl die Ursache der leere Quell-body ist.
     state.termRow = { id: 'term-1', canonical_name: 'X', aliases: [], summary: 'x', body: { type: 'doc', content: [] } }
     mocks.create.mockResolvedValueOnce(toolUse({ canonical_name: 'X', aliases: [], summary: 'x', blocks: [] }))
     const { translateTerm } = await import('@/lib/glossary/translate')
-    await expect(translateTerm('term-1', 'en')).rejects.toThrow(/Blockzahl/)
+    await expect(translateTerm('term-1', 'en')).rejects.toThrow(/0 Blocks/)
     expect(state.upserts).toHaveLength(0)
   })
 })

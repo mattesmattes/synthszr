@@ -13,6 +13,15 @@ import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { translateTerm, SUPPORTED_GLOSSARY_LANGS } from '@/lib/glossary/translate'
 
+// Task 18 (Review Important 2): die 'translate'-Action führt seit dem neuen
+// Admin-Button einen echten LLM-Call aus (translateTerm, max_tokens: 4096) —
+// ohne deklarierte Laufzeit killt Vercel die Function beim Default-Timeout
+// mitten im Aufruf, der upsert läuft nicht, und der Operator sieht ein 504
+// ohne Hinweis, ob geschrieben wurde. Gleiches Muster wie die einzige andere
+// LLM-Route dieser Größenordnung im Repo, process-queue/route.ts:10, und
+// beide Glossar-Crons.
+export const maxDuration = 300
+
 const PATCH_ACTIONS = ['accept_revision', 'discard_revision', 'hide', 'publish', 'translate'] as const
 type PatchAction = (typeof PATCH_ACTIONS)[number]
 

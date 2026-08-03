@@ -333,7 +333,10 @@ export default function GlossaryAdminPage() {
                         disabled={isBusy}
                         title="Englische Übersetzung erzeugen/aktualisieren"
                       >
-                        <Languages className="h-4 w-4 mr-1.5" />
+                        {/* Review Minor 5: anders als Verbergen/Veröffentlichen (Sub-Sekunden-
+                            Updates) ist das hier ein LLM-Call — derselbe Loader2-Ternary wie
+                            bei „Übernehmen" (unten), statt nur disabled. */}
+                        {isBusy ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Languages className="h-4 w-4 mr-1.5" />}
                         Übersetzen
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => deleteTerm(term.slug)} disabled={isBusy}>

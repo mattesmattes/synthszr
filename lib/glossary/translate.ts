@@ -189,13 +189,26 @@ export async function translateTerm(termId: string, targetLang: string): Promise
   // beides: komplett abgeschnittene Antworten UND einzelne leere Blocks
   // darin. Kein QA findet das sonst (der Review-Cron liest nur die deutsche
   // Quelle, nie glossary_term_translations).
-  // Task 18 (Review-Fund): der `=== 0`-Zweig ging in einer früheren
-  // Fix-Runde verloren — mit sourceBlocks.length === 0 wurde der reine
-  // Ungleichheits-Check (`0 !== 0`) zu false, kein Throw, ein leerer body
-  // wäre geschrieben worden. Praktisch unerreichbar über die beiden
+  // Task 18 (Review-Fund, Fix-Runde 1): der `=== 0`-Zweig ging in einer
+  // früheren Fix-Runde verloren — mit sourceBlocks.length === 0 wurde der
+  // reine Ungleichheits-Check (`0 !== 0`) zu false, kein Throw, ein leerer
+  // body wäre geschrieben worden. Praktisch unerreichbar über die beiden
   // regulären Schreibpfade (generate.ts' ContentSchema verlangt min(4)
   // Blocks, review.ts lehnt einen leeren pendingBody ab) — Defense-in-Depth
   // gegen einen Bestandsdatensatz, den keiner der beiden Pfade verhindert hat.
+  //
+  // Eigener Satz statt Wiederverwendung der Blockzahl-Meldung (Minor 4,
+  // Fix-Runde 1): „Blockzahl der Übersetzung (0) weicht von der Quelle (0)
+  // ab" liest sich wie ein Vergleichsfehler zwischen zwei Werten, obwohl die
+  // Ursache eine andere ist — der Quell-body selbst ist leer. Wer das im Log
+  // sieht, soll den kaputten Bestandsdatensatz suchen, nicht einen
+  // Vergleichsfehler in dieser Funktion.
+  if (sourceBlocks.length === 0) {
+    throw new Error(
+      `[glossary/translate] Quell-body von ${termId} hat 0 Blocks — Übersetzung abgebrochen, statt einen ` +
+      `leeren body zu schreiben`,
+    )
+  }
   if (translatedBody.content.length === 0 || translatedBody.content.length !== sourceBlocks.length) {
     throw new Error(
       `[glossary/translate] Blockzahl der Übersetzung (${translatedBody.content.length}) weicht von der ` +
