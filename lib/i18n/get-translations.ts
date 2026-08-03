@@ -146,6 +146,12 @@ export const defaultTranslations: Record<string, string> = {
   'rankings.last_seen': 'zuletzt',
   'post.mentioned_products': 'Im Artikel erwähnte Chart-Produkte',
 
+  // Lexikon (Fachbegriff-Glossar)
+  'glossary.related_terms': 'Verwandte Begriffe',
+  'glossary.products': 'Produkte in den Synthszr Charts',
+  'glossary.news': 'Aktuelle News',
+  'glossary.not_found': 'Begriff nicht gefunden',
+
   // Common
   'common.loading': 'Laden...',
   'common.error': 'Ein Fehler ist aufgetreten.',
