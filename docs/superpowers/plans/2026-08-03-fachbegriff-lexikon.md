@@ -1102,40 +1102,70 @@ git commit -m "feat(glossary): glossaryLink in allen vier Ausgabepfaden rendern"
 
 - [ ] **Step 1: Failing Test schreiben**
 
-`tests/lib/glossary-terms.test.ts` — Supabase-Client mocken, prüfen dass die
-Listen-Query **keine** `body`-Spalte selektiert:
+`tests/lib/glossary-terms.test.ts` — dem etablierten Mock-Muster des Projekts
+folgen (`tests/lib/newsletter-access-tokens.test.ts:20-32`): ein generischer
+Chain-Stub, bei dem jede Filtermethode die Chain zurückgibt und die Filter
+`vi.fn()`s sind. Damit prüfen die Tests, **welche Constraints** die Query
+angewendet hat — nicht den Rückgabewert. Das ist die Eigenschaft, um die es hier
+geht.
 
 ```ts
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ select: vi.fn() }))
+const state = vi.hoisted(() => ({
+  result: { data: [] as unknown, error: null as unknown },
+  chains: [] as any[],
+}))
+
+function makeChain() {
+  const chain: any = {}
+  // 'in' ist nötig, weil applyTranslations .in('term_id', ids) nutzt.
+  for (const m of ['select', 'eq', 'in', 'is', 'gt', 'order', 'limit', 'update', 'insert', 'delete']) {
+    chain[m] = vi.fn(() => chain)
+  }
+  chain.single = vi.fn(async () => state.result)
+  chain.maybeSingle = vi.fn(async () => state.result)
+  chain.then = (res: (v: unknown) => void) => res(state.result)  // await auf die Chain
+  state.chains.push(chain)
+  return chain
+}
 
 vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: () => ({
-    from: () => ({
-      select: (cols: string) => {
-        mocks.select(cols)
-        return {
-          eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }),
-          order: () => Promise.resolve({ data: [], error: null }),
-        }
-      },
-    }),
-  }),
+  createAdminClient: () => ({ from: vi.fn(() => makeChain()) }),
 }))
 
 describe('getPublishedTermList', () => {
-  beforeEach(() => mocks.select.mockClear())
+  beforeEach(() => { state.chains.length = 0 })
 
   it('selektiert kein body-JSONB', async () => {
     const { getPublishedTermList } = await import('@/lib/glossary/terms')
     await getPublishedTermList('de')
-    const cols = mocks.select.mock.calls[0][0]
+    const cols = state.chains[0].select.mock.calls[0][0] as string
     expect(cols).not.toContain('body')
     expect(cols).toContain('slug')
   })
+
+  it('filtert auf status=published', async () => {
+    const { getPublishedTermList } = await import('@/lib/glossary/terms')
+    await getPublishedTermList('de')
+    expect(state.chains[0].eq).toHaveBeenCalledWith('status', 'published')
+  })
+
+  it('übergibt term_ids an die Übersetzungsabfrage statt nur die Sprache', async () => {
+    // Der PK ist (term_id, language) — ein Filter nur auf language nutzt den
+    // Präfix nicht und läuft als Seq-Scan über alle Sprachen.
+    state.result = { data: [{ id: 't1', slug: 's', canonical_name: 'N', summary: 'S' }], error: null }
+    const { getPublishedTermList } = await import('@/lib/glossary/terms')
+    await getPublishedTermList('en')
+    const t9nChain = state.chains[1]
+    expect(t9nChain.in).toHaveBeenCalledWith('term_id', ['t1'])
+    expect(t9nChain.eq).toHaveBeenCalledWith('language', 'en')
+  })
 })
 ```
+
+Die genaue Terminal-Mechanik (`then` vs. `await` auf die Chain) am Vorbild
+abgleichen — entscheidend ist, dass die Filter-Aufrufe prüfbar bleiben.
 
 - [ ] **Step 2: Test laufen lassen — muss fehlschlagen**
 
@@ -1276,6 +1306,14 @@ export const getGlossaryTerm = cache(async (slug: string, lang: string) => {
   // Begriff + verwandte Begriffe + Produkte + News in vier schmalen Queries
 })
 ```
+
+> **Hinweis:** React `cache()` wird im Projekt bislang **nirgends** verwendet —
+> es gibt kein Vorbild, nach dem sich suchen ließe. Das ist kein Versehen im
+> Plan, sondern der Grund, warum die Spec diesen Egress-Punkt aufführt:
+> `app/[lang]/rankings/[slug]/page.tsx` ruft `getProductDetail` sowohl in
+> `generateMetadata` als auch im Seitenkörper auf, also zwei Queries pro
+> Aufruf. Bei rund 5000 Produktseiten ist das die Hälfte des Egress dieser
+> Route. Hier wird es von Anfang an richtig gemacht.
 
 - [ ] **Step 4: Test laufen lassen — muss bestehen**
 
