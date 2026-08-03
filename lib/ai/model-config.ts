@@ -21,6 +21,9 @@ export type UseCase =
   | 'ranking_attribution_qa'
   | 'ranking_validity_qa'
   | 'subscription_detect'
+  | 'glossary_candidate_identification'
+  | 'glossary_generation'
+  | 'glossary_readability_qa'
 
 export interface UseCaseInfo {
   label: string
@@ -106,6 +109,24 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     label: 'Abo-Erkennung',
     description: 'Kostenpflichtige Newsletter-Abos aus Gmail-Mails klassifizieren',
     defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
+  },
+  glossary_candidate_identification: {
+    label: 'Glossar — Begriffs-Erkennung',
+    description: 'Erklärungsbedürftige Fachbegriffe in einem Artikeltext finden',
+    defaultModel: 'claude-opus-5',
+    allowedProviders: ['anthropic'],
+  },
+  glossary_generation: {
+    label: 'Glossar — Begriffs-Generierung',
+    description: 'Lexikontext für einen Fachbegriff schreiben (15-Jähriger als Zielgruppe)',
+    defaultModel: 'claude-opus-5',
+    allowedProviders: ['anthropic'],
+  },
+  glossary_readability_qa: {
+    label: 'Glossar — Verständlichkeits-QS',
+    description: 'Generierten Lexikontext gegen die Verständlichkeitskriterien prüfen',
+    defaultModel: 'claude-opus-5',
     allowedProviders: ['anthropic'],
   },
 }
