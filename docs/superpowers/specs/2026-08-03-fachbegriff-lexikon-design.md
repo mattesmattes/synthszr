@@ -39,7 +39,7 @@ Nicht explizit entschieden, sondern begründet gesetzt. Jeder einzeln umkehrbar:
 
 | Punkt | Default | Grund |
 |---|---|---|
-| Sprachen | de/en | entspricht `SEO_LOCALES`; cs/nds/fr zeigen EN-Fallback ohne hreflang |
+| Sprachen | de/en | entspricht `SEO_LOCALES`; cs/nds/fr zeigen DE-Fallback ohne hreflang |
 | Link-Policy | erste Erwähnung pro Begriff, max. 8 Begriffe/Artikel | Muster von `product-links.ts`; Lesbarkeit |
 | Kollisionsregel | Company > Chart-Produkt > Lexikonbegriff | spezifisch vor generisch |
 | Altartikel | kein Auto-Backfill; Skript manuell auslösbar | Kosten und Risiko kontrollierbar |
@@ -353,7 +353,7 @@ Neue UI-Labels („Verwandte Begriffe", „Aktuelle News", „Im Lexikon") brauc
 Einträge in `defaultTranslations` **und** `ui_translations`, sonst rendern sie
 in allen Sprachen deutsch.
 
-Nur de/en gehen in `hreflang` und Sitemap. cs/nds/fr zeigen den EN-Fallback.
+Nur de/en gehen in `hreflang` und Sitemap. cs/nds/fr zeigen den DE-Fallback (Companies-Muster, nicht Rankings).
 
 ### I) Monats-Cron
 
