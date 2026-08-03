@@ -2339,9 +2339,40 @@ git commit -m "feat(glossary): Übersetzung mit Neu-Injektion der Marks"
 
 **Files:**
 - Create: `app/api/cron/glossary-review/route.ts`
+- Create: `app/api/admin/glossary/route.ts`
 - Create: `app/admin/glossary/page.tsx`
 - Modify: `vercel.json`
 - Test: `tests/api/glossary-review-cron.test.ts`
+
+> **KORREKTUR 2026-08-03 (Controller-Vorabprüfung, 3 Befunde).**
+>
+> **PLAN-DEFEKT 26:** `app/api/admin/glossary/route.ts` wurde in Step 4 verlangt,
+> fehlte aber in dieser Files-Liste **und** im `git add` von Step 6 — sie wäre
+> angelegt, aber nicht committet worden. Jetzt oben ergänzt und im Commit-Befehl
+> aufgeführt. **Task 16 modifiziert diese Datei**, hängt also an ihr.
+>
+> **PLAN-DEFEKT 25 (harmlos, nur die Begründung ist falsch):** Der Satz unten zu
+> `is_manually_edited` verweist auf eine Spalte, die es auf `glossary_terms`
+> **nicht** gibt — sie existiert auf `content_translations`
+> (`20260111110000_i18n_translations.sql:23`), das ist eine Tabellenverwechslung.
+> Die Funktion ist trotzdem erfüllt, nur strukturell statt per Flag: `pending_body`
+> + `review_state` sorgen dafür, dass der Live-Text **nie** automatisch überschrieben
+> wird und jede Revision eine Freigabe braucht. Kein Flag nötig, **keine neue
+> Spalte, keine Migration.**
+>
+> **KEINE MIGRATION NÖTIG (verifiziert):** `review_state` (mit
+> `check (review_state in ('ok','flagged','revision_pending'))`), `pending_body jsonb`
+> und `last_reviewed_at timestamptz` sind alle in der längst angewendeten Migration
+> `20260803120000_glossary_schema.sql:18-21`. Auch der passende Index existiert dort
+> (Z. 29, `on (last_reviewed_at nulls first)`) — genau der Zugriffspfad für „10
+> Begriffe nach `last_reviewed_at` aufsteigend".
+>
+> **Cron-Slot frei:** `vercel.json` hat heute `scheduled-tasks */15`,
+> `precompute-metrics "30 5 * * *"`, `glossary-news "0 4 * * 1"`. Der geforderte
+> Slot `0 5 * * *` kollidiert mit keinem davon.
+>
+> **Auth-Vorbilder:** `getSession()`-Muster in `app/api/admin/post-images/route.ts`,
+> `edit-history/route.ts`, `podcast-personality/route.ts`.
 
 - [ ] **Step 1: Failing Test schreiben**
 
@@ -2412,7 +2443,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add app/api/cron/glossary-review app/admin/glossary vercel.json tests/api/glossary-review-cron.test.ts
+git add app/api/cron/glossary-review app/api/admin/glossary app/admin/glossary vercel.json tests/api/glossary-review-cron.test.ts
 git commit -m "feat(glossary): Aktualitätsprüfung mit Revisions-Freigabe"
 ```
 
