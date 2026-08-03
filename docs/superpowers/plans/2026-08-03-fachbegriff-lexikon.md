@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Sprachen:** nur `de` und `en` in `hreflang` und Sitemap (entspricht `SEO_LOCALES`). `cs`/`nds`/`fr` zeigen den EN-Fallback.
+- **Sprachen:** nur `de` und `en` in `hreflang` und Sitemap (entspricht `SEO_LOCALES`). `cs`/`nds`/`fr` rendern, zeigen aber den **DE**-Fallback — das Projekt hat keine einheitliche Regel: Rankings fallen auf EN zurück (`rankings/[slug]/page.tsx:77-78`), Companies und alle UI-Labels auf DE (`get-translations.ts:189-190`). Das Glossar folgt Companies, weil `applyTranslations` die Zeile unverändert zurückgibt, wenn keine Übersetzung existiert.
 - **DB-Migrationen** werden vom User im Supabase-SQL-Editor angewendet, nicht per CLI. Das Projekt ist nicht für `supabase db push` verlinkt.
 - **Neue Tabellen:** RLS aktivieren, `revoke all` von `public`/`anon`/`authenticated`, `grant` nur an `service_role`. Neue Funktionen: `security invoker`, `set search_path = pg_catalog, public`, EXECUTE nur `service_role`.
 - **Verifikation gegen Produktion** (`https://www.synthszr.com`), nicht gegen einen lokalen Dev-Server. Prod-Credentials via `vercel env pull /tmp/env.prod --environment=production`, danach löschen.
