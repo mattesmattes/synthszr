@@ -67,6 +67,35 @@ export function extractPlainText(body: TipTapDoc): string {
   return body.content.map((node) => node.content.map((t) => t.text).join('')).join('\n\n')
 }
 
+/** Deterministische Vorprüfung vor extractPlainText: `body` ist jsonb ohne
+ *  NOT NULL (Schema), ein kaputter/fehlender Body würde bei JEDEM Lauf
+ *  identisch scheitern. Hier war body immer frisch von buildTipTapBody
+ *  konstruiert — die Vorbedingung ist durch den Aufrufkontext garantiert,
+ *  eine Prüfung an dieser Stelle wäre also überflüssig. Trotzdem hier
+ *  zentral exportiert (statt in jedem Aufrufer neu geschrieben): sowohl
+ *  lib/glossary/review.ts (liest gespeicherten body, Vorbedingung gilt dort
+ *  NICHT mehr automatisch) als auch lib/glossary/translate.ts (Task 16,
+ *  prüft body VOR dem Übersetzungs-Call) brauchten bytegleiche Kopien dieser
+ *  Funktion — Fix-Runde 1 des Reviews hat das als Duplikat markiert
+ *  (dieselbe Logik hätte sonst zweimal auseinanderlaufen können, wie es
+ *  review.ts' eigener Kommentarverlauf schon einmal zeigte: die erste
+ *  Fassung dort prüfte nur die oberste Ebene, ein Top-Level-Node ohne
+ *  eigenes content-Array wie ein leerer Absatz oder ein horizontalRule warf
+ *  eine TypeError in extractPlainText). Deshalb jetzt jeden Node prüfen,
+ *  nicht nur den Doc-Wrapper — und nur EINE Fassung davon.
+ *
+ *  Task 16 (Übersetzung) baut seinen übersetzten body ebenfalls über
+ *  buildTipTapBody, hebt die paragraph/heading-Garantie also NICHT auf, wie
+ *  ursprünglich befürchtet — die Vorprüfung bleibt trotzdem sinnvoll, weil
+ *  translate.ts vor dem Übersetzen den GESPEICHERTEN Quell-body einer
+ *  Fremdtabelle liest (glossary_terms), nicht selbst konstruiert. */
+export function isValidTipTapDoc(body: unknown): body is TipTapDoc {
+  if (!body || typeof body !== 'object') return false
+  const content = (body as { content?: unknown }).content
+  if (!Array.isArray(content)) return false
+  return content.every((n) => Array.isArray((n as { content?: unknown }).content))
+}
+
 // ---------------------------------------------------------------------------
 // identifyCandidates
 // ---------------------------------------------------------------------------

@@ -28,7 +28,13 @@ vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }))
 // translateTerm ist eigenständig getestet (tests/lib/glossary-translate.test.ts)
 // — hier interessiert nur die Verdrahtung (term-id-Lookup, Revalidierung,
 // Fehlerbehandlung), kein echter Anthropic-Call.
-vi.mock('@/lib/glossary/translate', () => ({ translateTerm: mocks.translateTerm }))
+// SUPPORTED_GLOSSARY_LANGS bleibt die ECHTE Konstante (importOriginal) — nur
+// translateTerm selbst wird gemockt, sonst würde ein Update dieser Liste in
+// translate.ts hier unbemerkt divergieren.
+vi.mock('@/lib/glossary/translate', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/glossary/translate')>()
+  return { ...actual, translateTerm: mocks.translateTerm }
+})
 
 // Tabellen-bewusster PostgREST-Stub mit FIFO-Antwortqueue pro Tabelle (Muster
 // aus tests/api/glossary-inject-on-save.test.ts) — chain.then() bedient ein
@@ -213,6 +219,21 @@ describe('PATCH translate (Task 16)', () => {
     const { PATCH } = await import('@/app/api/admin/glossary/route')
     const res = await PATCH(patchReq({ slug: 'unbekannt', action: 'translate', targetLang: 'en' }) as any)
     expect(res.status).toBe(404)
+    expect(mocks.translateTerm).not.toHaveBeenCalled()
+  })
+
+  it('gibt 400 zurück für ein nicht unterstütztes targetLang (z. B. fr), ohne die DB anzufragen (Minor 2, Fix-Runde 1)', async () => {
+    const { PATCH } = await import('@/app/api/admin/glossary/route')
+    const res = await PATCH(patchReq({ slug: 'inferenz', action: 'translate', targetLang: 'fr' }) as any)
+    expect(res.status).toBe(400)
+    expect(mocks.translateTerm).not.toHaveBeenCalled()
+    expect(state.chains.filter((c) => c.table === 'glossary_terms')).toHaveLength(0)
+  })
+
+  it('gibt 400 zurück für targetLang=de — die Quellsprache wird nie gerendert (Minor 3, Fix-Runde 1)', async () => {
+    const { PATCH } = await import('@/app/api/admin/glossary/route')
+    const res = await PATCH(patchReq({ slug: 'inferenz', action: 'translate', targetLang: 'de' }) as any)
+    expect(res.status).toBe(400)
     expect(mocks.translateTerm).not.toHaveBeenCalled()
   })
 

@@ -140,7 +140,11 @@ async function linkRelatedTerms(
   term: GlossaryTerm,
   lang: string,
 ): Promise<{ body: unknown; relatedTerms: GlossaryRelatedTerm[] }> {
-  const candidates = (await getMatcherTerms(lang)).filter((t) => t.slug !== term.slug)
+  // getMatcherTerms gibt null zurück, wenn die Übersetzungsabfrage
+  // fehlgeschlagen ist (terms.ts) — Lesepfad, deshalb Fehler geloggt (bereits
+  // in getMatcherTerms selbst) und auf leere Kandidatenliste degradiert,
+  // statt die Detailseite abstürzen zu lassen.
+  const candidates = ((await getMatcherTerms(lang)) ?? []).filter((t) => t.slug !== term.slug)
   const text = extractVisibleText(term.body)
   const mentions = candidates.length > 0 && text ? findGlossaryMentions(text, candidates) : []
   const slugs = mentions.map((m) => m.slug)

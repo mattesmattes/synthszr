@@ -19,10 +19,17 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/auth/session', () => ({ getSession: mocks.getSession }))
-vi.mock('@/lib/glossary/terms', () => ({
-  getMatcherTerms: mocks.getMatcherTerms,
-  getChartProductNames: mocks.getChartProductNames,
-}))
+// buildReservedNames bleibt die ECHTE Implementierung (importOriginal) — pur,
+// seit Fix-Runde 1 (Task 16) mit reinjectGlossaryMarksForTranslation geteilt
+// statt in confirm.ts dupliziert.
+vi.mock('@/lib/glossary/terms', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/glossary/terms')>()
+  return {
+    ...actual,
+    getMatcherTerms: mocks.getMatcherTerms,
+    getChartProductNames: mocks.getChartProductNames,
+  }
+})
 
 // Tabellen-bewusster PostgREST-Stub: jede Tabelle bekommt ihre eigene FIFO-
 // Antwortqueue, jeder Filter bleibt ein vi.fn() für Aufruf-Assertions (Muster

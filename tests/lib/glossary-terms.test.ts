@@ -149,6 +149,50 @@ describe('getMatcherTerms', () => {
     const rows = await getMatcherTerms('de')
     expect(rows).toEqual([])
   })
+
+  it('signalisiert einen Ladefehler bei der Übersetzungsabfrage als null, statt die deutsche Fassung wie ein Ergebnis zurückzugeben (Review-Fund Important 1, Fix-Runde 1)', async () => {
+    // Vorher: dieselbe deutsche Fallback-Liste wie beim legitimen Fall "noch
+    // keine Übersetzung vorhanden" — für den Aufrufer nicht unterscheidbar.
+    // null macht den Fehlerfall am Ursprung sichtbar.
+    state.queue = [
+      { data: [{ id: 't1', slug: 's', canonical_name: 'N', aliases: ['n'] }], error: null },
+      { data: null, error: { message: 'boom' } },
+    ]
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { getMatcherTerms } = await import('@/lib/glossary/terms')
+    const rows = await getMatcherTerms('en')
+    expect(rows).toBeNull()
+    errSpy.mockRestore()
+  })
+
+  it('gibt bei fehlender Übersetzungszeile (kein Fehler) weiterhin die deutsche Fassung zurück, nicht null', async () => {
+    // Der legitime, alltägliche Fall — Regressionsschutz gegen eine zu breite
+    // Änderung, die jeden fehlenden Treffer als Fehler behandelt.
+    state.queue = [
+      { data: [{ id: 't1', slug: 's', canonical_name: 'N', aliases: ['n'] }], error: null },
+      { data: [], error: null },
+    ]
+    const { getMatcherTerms } = await import('@/lib/glossary/terms')
+    const rows = await getMatcherTerms('en')
+    expect(rows).toEqual([{ slug: 's', canonicalName: 'N', aliases: ['n'] }])
+  })
+})
+
+describe('buildReservedNames', () => {
+  it('kombiniert Company-Namen (inkl. Premarket) und Chart-Produktnamen', async () => {
+    const { buildReservedNames } = await import('@/lib/glossary/terms')
+    const { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } = await import('@/lib/data/companies')
+    const reserved = buildReservedNames(['ChartProdX'])
+    expect(reserved).toContain(Object.keys(KNOWN_COMPANIES)[0])
+    expect(reserved).toContain(Object.keys(KNOWN_PREMARKET_COMPANIES)[0])
+    expect(reserved).toContain('ChartProdX')
+  })
+
+  it('ist pur — löst keine eigene DB-Anfrage aus', async () => {
+    const { buildReservedNames } = await import('@/lib/glossary/terms')
+    buildReservedNames([])
+    expect(state.chains).toHaveLength(0)
+  })
 })
 
 describe('getChartProductNames', () => {

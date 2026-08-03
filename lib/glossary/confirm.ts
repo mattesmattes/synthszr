@@ -1,8 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getMatcherTerms, getChartProductNames } from '@/lib/glossary/terms'
+import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib/glossary/terms'
 import { injectGlossaryMarks } from '@/lib/glossary/inject-marks'
 import { safeParseJSONWithError } from '@/lib/utils/safe-json'
-import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 
 /**
  * Verarbeitet eine Freigabe-Entscheidung aus dem Editor (PATCH
@@ -97,13 +96,18 @@ export async function applyGlossaryConfirmation(
     getMatcherTerms('de'),
     getChartProductNames(),
   ])
+  // getMatcherTerms('de') nimmt intern den frühen de-Zweig und liefert damit
+  // nie null (das passiert nur, wenn die Übersetzungsabfrage für eine
+  // Nicht-de-Sprache fehlschlägt, terms.ts) — die Absicherung ist trotzdem
+  // nötig, weil der Rückgabetyp seit Task 16/Fix-Runde 1 `| null` ist.
+  //
   // Company- und Chart-Produktnamen reservieren: spezifisch vor generisch
-  // (Kollisionsregel: Company > Chart-Produkt > Lexikonbegriff).
-  const reserved = [
-    ...Object.keys(KNOWN_COMPANIES),
-    ...Object.keys(KNOWN_PREMARKET_COMPANIES),
-    ...chartProductNames,
-  ]
-  const injected = injectGlossaryMarks(parsed, publishedSlugs, terms, { reserved })
+  // (Kollisionsregel: Company > Chart-Produkt > Lexikonbegriff) —
+  // buildReservedNames statt einer eigenen Kopie (Review-Fund Important 2,
+  // Fix-Runde 1: dieselbe Liste wird von reinjectGlossaryMarksForTranslation
+  // in lib/glossary/translate.ts gebraucht, eine Policy-Regel darf dort
+  // nicht unbemerkt auseinanderlaufen).
+  const reserved = buildReservedNames(chartProductNames)
+  const injected = injectGlossaryMarks(parsed, publishedSlugs, terms ?? [], { reserved })
   return { publishedSlugs, content: JSON.stringify(injected) }
 }

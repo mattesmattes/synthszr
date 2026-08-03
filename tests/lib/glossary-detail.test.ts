@@ -208,6 +208,23 @@ describe('getGlossaryTerm — verwandte Begriffe', () => {
     expect(term?.body).toEqual(TERM_ROW.body)
   })
 
+  it('degradiert auf keine verwandten Begriffe, wenn getMatcherTerms wegen eines Übersetzungs-Ladefehlers null zurückgibt (Review-Fund Important 1, Fix-Runde 1)', async () => {
+    // lang='en': zwei separate glossary_term_translations-Konsumenten in
+    // Folge — zuerst applyTermTranslation (eigener Begriff, hier: keine
+    // Übersetzung vorhanden), danach getMatcherTerms('en') intern für die
+    // Kandidatenliste, hier mit einem echten Query-Fehler statt "keine
+    // Übersetzung". getMatcherTerms gibt dafür null zurück (terms.ts) —
+    // linkRelatedTerms muss das über `?? []` abfangen, statt zu werfen.
+    queue('glossary_terms', { data: TERM_WITH_MENTION, error: null }, { data: [CANDIDATE], error: null })
+    queue('glossary_term_translations', { data: null, error: null }, { data: null, error: { message: 'boom' } })
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { getGlossaryTerm } = await import('@/lib/glossary/detail')
+    const term = await getGlossaryTerm('moe', 'en')
+    expect(term?.relatedTerms).toEqual([])
+    expect(linked(term?.body)).toEqual([])
+    errSpy.mockRestore()
+  })
+
   it('verlinkt den eigenen Begriff nicht, auch wenn der eigene Text ihn nennt', async () => {
     // TERM_WITH_MENTION erwähnt "MoE" — der Begriff selbst. Die Kandidatenliste
     // enthält hier absichtlich auch die eigene Zeile, um den Selbstausschluss

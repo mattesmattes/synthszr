@@ -515,7 +515,12 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
         const content = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent
 
         if (content) {
-          const terms = await getMatcherTerms('de')
+          // getMatcherTerms('de') nimmt intern den frühen de-Zweig und liefert
+          // damit nie null (das passiert nur, wenn die Übersetzungsabfrage für
+          // eine Nicht-de-Sprache fehlschlägt, lib/glossary/terms.ts) — die
+          // Absicherung ist trotzdem nötig, weil der Rückgabetyp seit Task
+          // 16/Fix-Runde 1 `| null` ist.
+          const terms = (await getMatcherTerms('de')) ?? []
           const tagged = extractLexTags(content)
           const visibleText = extractVisibleText(content)
           const matched = findGlossaryMentions(visibleText, terms)

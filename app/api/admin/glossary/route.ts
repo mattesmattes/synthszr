@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { translateTerm } from '@/lib/glossary/translate'
+import { translateTerm, SUPPORTED_GLOSSARY_LANGS } from '@/lib/glossary/translate'
 
 const PATCH_ACTIONS = ['accept_revision', 'discard_revision', 'hide', 'publish', 'translate'] as const
 type PatchAction = (typeof PATCH_ACTIONS)[number]
@@ -73,6 +73,17 @@ export async function PATCH(request: NextRequest) {
 
   if (action === 'translate') {
     if (!targetLang) return NextResponse.json({ error: 'targetLang erforderlich' }, { status: 400 })
+    // Review-Fund Minor 2+3 (Fix-Runde 1): ohne diese Whitelist-Prüfung lief
+    // ein ungültiges/unsinniges targetLang (z. B. 'fr', oder 'de' — die
+    // Quellsprache, nie gerendert) erst bis in translateTerm hinein und kam
+    // von dort als 500 mit LLM-Modul-Fehlertext zurück, statt als
+    // erkennbarer 400 — dasselbe Whitelist-Muster wie PATCH_ACTIONS oben.
+    if (!(SUPPORTED_GLOSSARY_LANGS as readonly string[]).includes(targetLang)) {
+      return NextResponse.json(
+        { error: `targetLang muss eine von ${SUPPORTED_GLOSSARY_LANGS.join(', ')} sein` },
+        { status: 400 },
+      )
+    }
     const { data: term, error: termError } = await supabase
       .from('glossary_terms')
       .select('id')

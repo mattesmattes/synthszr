@@ -20,31 +20,34 @@
  */
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buildTipTapBody, type TipTapDoc } from '@/lib/glossary/generate'
-import { getMatcherTerms, getChartProductNames } from '@/lib/glossary/terms'
+import { buildTipTapBody, isValidTipTapDoc, type TipTapDoc } from '@/lib/glossary/generate'
+import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib/glossary/terms'
 import { injectGlossaryMarks } from '@/lib/glossary/inject-marks'
-import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import type { LanguageCode } from '@/lib/types'
 
 // ---------------------------------------------------------------------------
 // translateTerm
 // ---------------------------------------------------------------------------
 
-/** Das Lexikon existiert nur de/en (app/[lang]/glossary/[slug]/page.tsx:
- *  "Lexikon-Content existiert nur de/en" — availableLocales dort ist fest
- *  ['de','en']). Jede andere LanguageCode würde eine Übersetzung schreiben,
- *  die nie gelesen wird (getGlossaryTerm() wird für diese Locales nie mit
- *  einem anderen `lang` aufgerufen) — reiner API-Kosten-Verschleiß, deshalb
- *  hart abgelehnt statt still zu übersetzen. */
-const SUPPORTED_GLOSSARY_LANGS = ['de', 'en'] as const
-type SupportedGlossaryLang = (typeof SUPPORTED_GLOSSARY_LANGS)[number]
+/** Das Lexikon existiert nur de/en, und `de` ist bereits die Quellsprache in
+ *  glossary_terms selbst — eine Übersetzung NACH `de` würde nie gelesen
+ *  (getGlossaryTerm/applyTermTranslation ruft die Übersetzungstabelle nur für
+ *  `lang !== 'de'` auf, app/[lang]/glossary/[slug]/page.tsx:54-57). Reiner
+ *  API-Kosten-Verschleiß, deshalb ist `en` der einzige gültige Zielwert.
+ *
+ *  Review-Fund Minor 2+3 (Fix-Runde 1): ursprünglich waren de+en erlaubt,
+ *  mit der Begründung "das Lexikon existiert nur in de/en". Das war zu
+ *  großzügig — es beschreibt, welche Sprachen das Lexikon RENDERT, nicht
+ *  welche als ÜBERSETZUNGSZIEL sinnvoll sind. `de` ist nie ein sinnvolles
+ *  Ziel, deshalb jetzt nur `en`. */
+export const SUPPORTED_GLOSSARY_LANGS = ['en'] as const
+export type SupportedGlossaryLang = (typeof SUPPORTED_GLOSSARY_LANGS)[number]
 
 function isSupportedGlossaryLang(lang: string): lang is SupportedGlossaryLang {
   return (SUPPORTED_GLOSSARY_LANGS as readonly string[]).includes(lang)
 }
 
 const TARGET_LANG_NAMES: Record<SupportedGlossaryLang, string> = {
-  de: 'German',
   en: 'English',
 }
 
@@ -54,17 +57,6 @@ interface GlossaryTermRow {
   aliases: string[]
   summary: string
   body: unknown
-}
-
-/** Deterministische Vorprüfung, analog lib/glossary/review.ts:isValidTipTapDoc
- *  — body ist jsonb ohne NOT NULL, ein kaputter/fehlender body würde sonst
- *  erst beim extractBlocks()-Zugriff mit einer TypeError abbrechen, statt mit
- *  einer sprechenden Fehlermeldung. */
-function isValidTipTapDoc(body: unknown): body is TipTapDoc {
-  if (!body || typeof body !== 'object') return false
-  const content = (body as { content?: unknown }).content
-  if (!Array.isArray(content)) return false
-  return content.every((n) => Array.isArray((n as { content?: unknown }).content))
 }
 
 /** Kehrt buildTipTapBody um: liefert die Blocks (type + Text), die der
@@ -95,7 +87,7 @@ const TRANSLATE_TOOL = {
       summary: { type: 'string', description: 'Übersetzte 1–2-Satz-Kurzbeschreibung' },
       blocks: {
         type: 'array',
-        description: 'Übersetzte Absätze/Überschriften, GLEICHE Reihenfolge und GLEICHE Struktur (paragraph/heading) wie die Quelle',
+        description: 'Übersetzte Absätze/Überschriften — GENAU dieselbe Anzahl und GLEICHE Reihenfolge (paragraph/heading) wie die Quelle, kein Block darf entfallen oder zusammengefasst werden',
         items: {
           type: 'object',
           properties: {
@@ -115,9 +107,8 @@ function buildTranslatePrompt(
   canonicalName: string,
   aliases: string[],
   summary: string,
-  body: TipTapDoc,
+  sourceBlocks: Array<{ type: 'paragraph' | 'heading'; text: string }>,
 ): string {
-  const blocksJson = JSON.stringify(extractBlocks(body))
   return `Übersetze den folgenden Lexikoneintrag eines KI/Tech-Glossars nach ${targetLangName}. Erhalte Bedeutung, Ton und Struktur — keine Zusammenfassung, keine Kürzung, keine Ergänzung.
 
 BEGRIFF: ${canonicalName}
@@ -125,9 +116,9 @@ ALIASSE: ${aliases.length ? aliases.join(', ') : '(keine)'}
 SUMMARY: ${summary}
 
 BLOCKS (JSON-Array, gleiche Reihenfolge und Struktur beibehalten):
-${blocksJson}
+${JSON.stringify(sourceBlocks)}
 
-Antworte via Tool mit dem übersetzten canonical_name, aliases, summary und blocks — GLEICHE Anzahl Blocks, GLEICHE type-Reihenfolge wie die Quelle.`
+Antworte via Tool mit dem übersetzten canonical_name, aliases, summary und blocks — GENAU ${sourceBlocks.length} Blocks, GLEICHE type-Reihenfolge wie die Quelle. Kein Block darf entfallen, verkürzt oder zusammengefasst werden.`
 }
 
 /**
@@ -136,7 +127,9 @@ Antworte via Tool mit dem übersetzten canonical_name, aliases, summary und bloc
  */
 export async function translateTerm(termId: string, targetLang: string): Promise<void> {
   if (!isSupportedGlossaryLang(targetLang)) {
-    throw new Error(`[glossary/translate] targetLang muss 'de' oder 'en' sein, erhalten: "${targetLang}"`)
+    throw new Error(
+      `[glossary/translate] targetLang muss eine von ${SUPPORTED_GLOSSARY_LANGS.join(', ')} sein, erhalten: "${targetLang}"`,
+    )
   }
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('[glossary/translate] ANTHROPIC_API_KEY fehlt')
@@ -154,6 +147,7 @@ export async function translateTerm(termId: string, targetLang: string): Promise
   if (!isValidTipTapDoc(term.body)) {
     throw new Error(`[glossary/translate] Begriff ${termId} hat keinen gültigen body`)
   }
+  const sourceBlocks = extractBlocks(term.body)
 
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const { getModelForUseCase } = await import('@/lib/ai/model-config')
@@ -166,7 +160,7 @@ export async function translateTerm(termId: string, targetLang: string): Promise
     messages: [{
       role: 'user',
       content: buildTranslatePrompt(
-        TARGET_LANG_NAMES[targetLang], term.canonical_name, term.aliases, term.summary, term.body,
+        TARGET_LANG_NAMES[targetLang], term.canonical_name, term.aliases, term.summary, sourceBlocks,
       ),
     }],
   })
@@ -176,6 +170,19 @@ export async function translateTerm(termId: string, targetLang: string): Promise
     throw new Error(`[glossary/translate] ungültige Tool-Antwort für ${termId}: ${parsed.error.message}`)
   }
   const t = parsed.data
+  // Review-Fund Minor 1 (Fix-Runde 1): max_tokens=4096 ohne Prüfung der
+  // Blockzahl gegen die Quelle ließ eine bei einem stop_reason='max_tokens'
+  // abgeschnittene Antwort unbemerkt durch — buildTipTapBody verwirft leere
+  // Blocks kommentarlos, das Ergebnis wäre ein still verkürzter englischer
+  // Erklärtext. Kein QA findet das (der Review-Cron liest nur die deutsche
+  // Quelle, nie glossary_term_translations). Deshalb hier abbrechen, statt
+  // eine unvollständige Übersetzung zu schreiben.
+  if (t.blocks.length !== sourceBlocks.length) {
+    throw new Error(
+      `[glossary/translate] Blockzahl der Übersetzung (${t.blocks.length}) weicht von der Quelle ` +
+      `(${sourceBlocks.length}) ab für ${termId} — vermutlich abgeschnittene Modellantwort`,
+    )
+  }
   const translatedBody = buildTipTapBody(t.blocks)
   if (translatedBody.content.length === 0) {
     throw new Error(`[glossary/translate] leerer übersetzter body für ${termId}`)
@@ -242,6 +249,24 @@ function extractLinkedSlugs(content: unknown): string[] {
  *
  * Enthält der Quell-Content keine Glossar-Marks, ist nichts zu tun (kein
  * DB-Zugriff, translatedContent geht unverändert zurück).
+ *
+ * Review-Fund Important 1 (Fix-Runde 1): eine frühere Fassung brach ab
+ * (throw), wenn getMatcherTerms([]) zurückgab — das deckte aber nur EINEN von
+ * drei stillen Verlustpfaden ab (die anderen zwei: die Übersetzungsabfrage
+ * schlägt fehl UND fällt auf deutsche Namen zurück statt das zu melden, oder
+ * für die Zielsprache existiert schlicht noch keine Übersetzungszeile —
+ * beides liefert eine NICHT-leere, aber für den übersetzten Text unbrauchbare
+ * Liste, `terms.length === 0` feuert dann gar nicht). Und ein harter Abbruch
+ * wäre für den dritten, häufigen Fall — ein verlinkter Begriff ist
+ * zwischenzeitlich hidden/gelöscht — zu streng gewesen: das ist keine
+ * Störung, die einen Retry der GESAMTEN Artikelübersetzung rechtfertigt.
+ *
+ * Deshalb jetzt: `wanted` (die Teilmenge der Zielsprach-Begriffe, die zu den
+ * verlinkten Slugs passt) explizit bilden und bei Leere SICHTBAR machen
+ * (console.error mit targetLang + Slugs), aber NICHT abbrechen — Sichtbarkeit
+ * ist das Minimum, ein harter Abbruch träfe zu viele legitime Fälle. Die
+ * eigentliche Übersetzung (Titel, Text) bleibt dadurch erhalten, auch wenn
+ * in diesem Lauf keine Glossar-Links gesetzt werden konnten.
  */
 export async function reinjectGlossaryMarksForTranslation(
   sourceContent: unknown,
@@ -251,30 +276,29 @@ export async function reinjectGlossaryMarksForTranslation(
   const slugs = extractLinkedSlugs(sourceContent)
   if (slugs.length === 0) return translatedContent
 
-  const [terms, chartProductNames] = await Promise.all([
+  const [rawTerms, chartProductNames] = await Promise.all([
     getMatcherTerms(targetLang),
     getChartProductNames(),
   ])
-  if (terms.length === 0) {
-    // slugs stammen aus glossary_terms (status=published, sprachunabhängig)
-    // — diese Begriffe existieren nachweislich. getMatcherTerms loggt einen
-    // DB-Fehler intern und gibt dann [] zurück, OHNE ihn nach außen zu
-    // signalisieren — eine leere Liste hier ist also mutmaßlich ein
-    // verschluckter Ladefehler, kein echtes "keine Begriffe vorhanden". Eine
-    // Übersetzung mit null Marks zu schreiben wäre der dauerhafte
-    // Linkverlust, den diese Aufgabe beheben soll — deshalb abbrechen.
-    throw new Error(
-      `[glossary/translate] Zielsprach-Begriffsliste (${targetLang}) leer trotz ${slugs.length} ` +
-      `verlinkter Slugs im Original — Injektion abgebrochen`,
+  // getMatcherTerms gibt null zurück, wenn genau die Übersetzungsabfrage
+  // fehlgeschlagen ist (terms.ts) — von einem legitimen "noch keine
+  // Übersetzung vorhanden" (dort bereits pro Begriff auf die deutsche
+  // Fassung degradiert) unterschieden. Für die Sichtbarkeits-Meldung unten
+  // reicht die Unterscheidung "wanted leer", die Ursache (Ladefehler vs.
+  // hidden/noch nicht übersetzt) landet zusätzlich im Log.
+  const terms = rawTerms ?? []
+  const wanted = terms.filter((t) => slugs.includes(t.slug))
+  if (wanted.length === 0) {
+    console.error(
+      `[glossary/translate] Keine passenden Zielsprach-Begriffe (${targetLang}) für verlinkte Slugs ` +
+      `gefunden — Übersetzung wird ohne Glossar-Links gespeichert. ` +
+      (rawTerms === null ? 'Ursache: Übersetzungsabfrage fehlgeschlagen. ' : '') +
+      `Slugs: ${slugs.join(', ')}`,
     )
   }
 
   // Company- und Chart-Produktnamen reservieren, wie applyGlossaryConfirmation
   // (Kollisionsregel: Company > Chart-Produkt > Lexikonbegriff).
-  const reserved = [
-    ...Object.keys(KNOWN_COMPANIES),
-    ...Object.keys(KNOWN_PREMARKET_COMPANIES),
-    ...chartProductNames,
-  ]
+  const reserved = buildReservedNames(chartProductNames)
   return injectGlossaryMarks(translatedContent, slugs, terms, { reserved })
 }

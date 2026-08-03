@@ -16,10 +16,18 @@ const mocks = vi.hoisted(() => ({
   getChartProductNames: vi.fn(() => Promise.resolve([] as string[])),
 }))
 
-vi.mock('@/lib/glossary/terms', () => ({
-  getMatcherTerms: mocks.getMatcherTerms,
-  getChartProductNames: mocks.getChartProductNames,
-}))
+// buildReservedNames bleibt die ECHTE Implementierung (importOriginal) — sie
+// ist pur (keine DB-Anfrage) und wird seit Fix-Runde 1 (Task 16) mit
+// reinjectGlossaryMarksForTranslation geteilt, statt in confirm.ts dupliziert
+// zu sein. Nur die beiden DB-Repositories werden gemockt.
+vi.mock('@/lib/glossary/terms', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/glossary/terms')>()
+  return {
+    ...actual,
+    getMatcherTerms: mocks.getMatcherTerms,
+    getChartProductNames: mocks.getChartProductNames,
+  }
+})
 
 function doc(text: string) {
   return { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }

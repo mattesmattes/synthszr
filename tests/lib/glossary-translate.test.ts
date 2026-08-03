@@ -19,6 +19,13 @@
  * reapplyBundleTypeAttrs sich abarbeitet) — nur die verlinkten SLUGS
  * (identitätsbasiert, aus den bestehenden glossaryLink-Marks der Quelle)
  * werden übernommen, die Textstelle wird im übersetzten Text neu gesucht.
+ *
+ * Fix-Runde 1 (Review): SUPPORTED_GLOSSARY_LANGS ist jetzt nur noch ['en']
+ * (vorher de+en — de ist die Quellsprache und wird nie gerendert, Minor 2+3).
+ * reinjectGlossaryMarksForTranslation bricht bei einer leeren
+ * Zielsprach-Begriffsliste nicht mehr ab, sondern loggt sichtbar und
+ * speichert die Übersetzung trotzdem (Important 1) — ein harter Abbruch traf
+ * auch den legitimen Fall "Begriff zwischenzeitlich hidden".
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { KNOWN_COMPANIES } from '@/lib/data/companies'
@@ -40,10 +47,17 @@ const termMocks = vi.hoisted(() => ({
   getChartProductNames: vi.fn(() => Promise.resolve([] as string[])),
 }))
 
-vi.mock('@/lib/glossary/terms', () => ({
-  getMatcherTerms: termMocks.getMatcherTerms,
-  getChartProductNames: termMocks.getChartProductNames,
-}))
+// buildReservedNames bleibt die ECHTE Implementierung (importOriginal) — sie
+// ist pur und wird mit applyGlossaryConfirmation (confirm.ts) geteilt, statt
+// hier dupliziert zu sein (Review-Fund Important 2, Fix-Runde 1).
+vi.mock('@/lib/glossary/terms', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/glossary/terms')>()
+  return {
+    ...actual,
+    getMatcherTerms: termMocks.getMatcherTerms,
+    getChartProductNames: termMocks.getChartProductNames,
+  }
+})
 
 const state = vi.hoisted(() => ({
   termRow: null as unknown,
@@ -151,10 +165,15 @@ describe('translateTerm', () => {
     expect(state.upserts[0].onConflict).toBe('term_id,language')
   })
 
-  it('übersetzt nur nach de und en', async () => {
+  it('übersetzt nur nach en — de (die Quellsprache, nie gerendert) und andere Sprachen werden abgelehnt', async () => {
+    // Fix-Runde 1, Minor 2+3: 'de' war ursprünglich erlaubt, wird aber nie
+    // gelesen (applyTermTranslation ruft die Übersetzungstabelle nur für
+    // lang !== 'de' auf) — reiner API-Kosten-Verschleiß, deshalb jetzt
+    // ebenfalls abgelehnt, nicht nur eindeutig falsche Codes wie 'fr'.
     state.termRow = { id: 'term-1', canonical_name: 'Inferenz', aliases: [], summary: 'x', body: SOURCE_BODY }
     const { translateTerm } = await import('@/lib/glossary/translate')
     await expect(translateTerm('term-1', 'fr')).rejects.toThrow()
+    await expect(translateTerm('term-1', 'de')).rejects.toThrow()
     expect(mocks.create).not.toHaveBeenCalled()
     expect(state.upserts).toHaveLength(0)
   })
@@ -178,6 +197,21 @@ describe('translateTerm', () => {
     mocks.create.mockResolvedValueOnce({ content: [] })
     const { translateTerm } = await import('@/lib/glossary/translate')
     await expect(translateTerm('term-1', 'en')).rejects.toThrow()
+    expect(state.upserts).toHaveLength(0)
+  })
+
+  it('wirft, wenn die Blockzahl der Übersetzung von der Quelle abweicht (abgeschnittene Modellantwort, Minor 1)', async () => {
+    // SOURCE_BODY hat 2 Blocks (paragraph + heading). Die Modellantwort
+    // liefert nur 1 — ohne diese Prüfung würde buildTipTapBody das klaglos
+    // zu einem verkürzten Übersetzungstext verarbeiten, den kein QA findet
+    // (der Review-Cron liest nur die deutsche Quelle).
+    state.termRow = { id: 'term-1', canonical_name: 'Inferenz', aliases: [], summary: 'x', body: SOURCE_BODY }
+    mocks.create.mockResolvedValueOnce(toolUse({
+      canonical_name: 'Inference', aliases: [], summary: 'x',
+      blocks: [{ type: 'paragraph', text: 'Inference is expensive.' }], // nur 1 statt 2 Blocks
+    }))
+    const { translateTerm } = await import('@/lib/glossary/translate')
+    await expect(translateTerm('term-1', 'en')).rejects.toThrow(/Blockzahl/)
     expect(state.upserts).toHaveLength(0)
   })
 
@@ -217,12 +251,11 @@ describe('reinjectGlossaryMarksForTranslation', () => {
     expect(termMocks.getMatcherTerms).not.toHaveBeenCalled()
   })
 
-  it('übersetzt nur nach de und en', async () => {
-    // Kein Aufrufer im Repo ruft dies je mit einer anderen Sprache auf
-    // (Files-Hinweis: Lexikon-Content existiert nur de/en), aber
-    // getMatcherTerms(lang) selbst degradiert für unbekannte Sprachen
-    // graceful auf die deutschen Namen zurück (terms.ts) — kein Grund, hier
-    // zusätzlich zu validieren/einzuschränken.
+  it('validiert die Zielsprache selbst nicht — reine Weitergabe an getMatcherTerms', async () => {
+    // Anders als translateTerm (das targetLang gegen SUPPORTED_GLOSSARY_LANGS
+    // prüft) validiert diese Funktion die Sprache nicht selbst: sie wird nur
+    // von den Artikel-Übersetzungspfaden mit der jeweiligen Ziel-LanguageCode
+    // aufgerufen, die schon vorher validiert wurde.
     const source = doc('Die Inferenz ist teuer.', { type: 'glossaryLink', attrs: { slug: 'inferenz' } })
     const translated = doc('Inference is expensive.')
     const { reinjectGlossaryMarksForTranslation } = await import('@/lib/glossary/translate')
@@ -230,21 +263,35 @@ describe('reinjectGlossaryMarksForTranslation', () => {
     expect(termMocks.getMatcherTerms).toHaveBeenCalledWith('en')
   })
 
-  it('bricht ab, wenn die Zielsprach-Begriffsliste trotz verlinkter Slugs leer zurückkommt (mutmaßlicher Ladefehler statt echtes Leer)', async () => {
-    // getMatcherTerms selektiert status=published sprachunabhängig aus
-    // glossary_terms — die verlinkten Slugs stammen aus genau dieser Tabelle,
-    // die Begriffe existieren also nachweislich. Eine leere Rückgabe hier kann
-    // daher nur heißen, dass getMatcherTerms einen Ladefehler verschluckt hat
-    // (es loggt intern und gibt [] zurück, ohne den Fehler nach außen zu
-    // signalisieren) — NICHT, dass legitim null Begriffe existieren. Eine
-    // Übersetzung mit null Marks zu schreiben wäre der dauerhafte
-    // Linkverlust, den diese Aufgabe beheben soll — deshalb abbrechen statt
-        // degradieren.
+  it('loggt sichtbar, bricht aber nicht ab, wenn keine passenden Zielsprach-Begriffe gefunden werden (Important 1, Fix-Runde 1)', async () => {
+    // Ein harter Abbruch (frühere Fassung) traf auch den legitimen Fall
+    // "verlinkter Begriff ist zwischenzeitlich hidden" zu hart — das ist kein
+    // Grund, die GESAMTE Artikelübersetzung zu verwerfen. Sichtbarkeit
+    // (console.error) ist das Minimum, die Übersetzung wird trotzdem
+    // gespeichert, nur eben ohne Glossar-Links.
     termMocks.getMatcherTerms.mockResolvedValue([])
     const source = doc('Die Inferenz ist teuer.', { type: 'glossaryLink', attrs: { slug: 'inferenz' } })
     const translated = doc('Inference is expensive.')
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { reinjectGlossaryMarksForTranslation } = await import('@/lib/glossary/translate')
-    await expect(reinjectGlossaryMarksForTranslation(source, translated, 'en')).rejects.toThrow()
+    const result = await reinjectGlossaryMarksForTranslation(source, translated, 'en')
+    expect(errSpy).toHaveBeenCalled()
+    expect(errSpy.mock.calls[0].join(' ')).toContain('inferenz')
+    expect(linked(result)).toEqual([])
+    errSpy.mockRestore()
+  })
+
+  it('loggt die mutmaßliche Ursache mit, wenn getMatcherTerms null liefert (Übersetzungsabfrage fehlgeschlagen)', async () => {
+    termMocks.getMatcherTerms.mockResolvedValue(null)
+    const source = doc('Die Inferenz ist teuer.', { type: 'glossaryLink', attrs: { slug: 'inferenz' } })
+    const translated = doc('Inference is expensive.')
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { reinjectGlossaryMarksForTranslation } = await import('@/lib/glossary/translate')
+    const result = await reinjectGlossaryMarksForTranslation(source, translated, 'en')
+    expect(errSpy).toHaveBeenCalled()
+    expect(errSpy.mock.calls[0].join(' ')).toMatch(/fehlgeschlagen/)
+    expect(linked(result)).toEqual([])
+    errSpy.mockRestore()
   })
 
   it('reserviert Company-Namen aus KNOWN_COMPANIES gegen Kollision, wie applyGlossaryConfirmation', async () => {

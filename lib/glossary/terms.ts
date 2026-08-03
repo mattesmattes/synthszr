@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
 
 /** Spaltenliste für Listen-Queries. Ohne body/embedding — wide JSONB-Selects
@@ -30,7 +31,26 @@ export async function getPublishedTermList(
   return translated.map(({ id: _id, ...rest }) => rest)
 }
 
-export async function getMatcherTerms(lang: string): Promise<GlossaryMatcherTerm[]> {
+/**
+ * Rückgabe `null` NUR, wenn die Übersetzungsabfrage selbst fehlschlägt
+ * (`trError` unten) — zu unterscheiden von einem legitimen "für dieses
+ * Sprachenpaar existiert (noch) keine Übersetzungszeile", das PRO BEGRIFF
+ * silently auf den deutschen Namen zurückfällt (unten, `t9n?.canonical_name
+ * ?? t.canonicalName`) und genau das gewünschte, alltägliche Verhalten ist.
+ *
+ * Review-Fund Important 1 (Fix-Runde 1, Task 16): vor dieser Änderung gab
+ * ein fehlgeschlagenes Laden der Übersetzungen bytegleich dieselbe deutsche
+ * Fallback-Liste zurück wie der Normalfall "noch keine Übersetzung
+ * vorhanden" — für den Aufrufer nicht unterscheidbar. Für
+ * reinjectGlossaryMarksForTranslation (translate.ts) bedeutete das: ein
+ * transienter DB-Fehler und "dieser Begriff ist einfach noch nicht ins
+ * Englische übersetzt" sahen identisch aus, und beide degradierten
+ * unbemerkt zu null gesetzten Marks im übersetzten Artikel. `null` macht den
+ * Fehlerfall am Ursprung sichtbar, statt ihn wie ein Ergebnis
+ * zurückzugeben — Aufrufer, denen der Unterschied egal ist (detail.ts,
+ * confirm.ts), degradieren mit `?? []` genauso wie zuvor.
+ */
+export async function getMatcherTerms(lang: string): Promise<GlossaryMatcherTerm[] | null> {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('glossary_terms')
@@ -59,7 +79,7 @@ export async function getMatcherTerms(lang: string): Promise<GlossaryMatcherTerm
     .eq('language', lang)
   if (trError) {
     console.error('[Glossary] getMatcherTerms translations:', trError.message)
-    return base.map(({ id: _id, ...t }) => t)
+    return null
   }
   const byId = new Map((tr ?? []).map((t) => [t.term_id as string, t]))
   return base.map((t) => {
@@ -94,6 +114,28 @@ export async function getChartProductNames(): Promise<string[]> {
     if (data.length < 1000) break
   }
   return names
+}
+
+/** Baut die reservierte Namensliste für die Glossar-Mark-Injektion
+ *  (Kollisionsregel: Company > Chart-Produkt > Lexikonbegriff) — gemeinsam
+ *  genutzt von applyGlossaryConfirmation (lib/glossary/confirm.ts, Task 11)
+ *  und reinjectGlossaryMarksForTranslation (lib/glossary/translate.ts,
+ *  Task 16). Vorher an beiden Stellen bytegleich dupliziert (Review-Fund
+ *  Important 2, Fix-Runde 1): eine Policy-Regel, die in zwei Kopien
+ *  auseinanderlaufen kann, ohne dass es auffällt — der deutsche Artikel
+ *  würde dann einen Begriff verlinken, den der übersetzte auslässt, oder
+ *  umgekehrt, ohne Fehler und ohne Log.
+ *
+ *  Pur (keine eigene DB-Anfrage): `chartProductNames` kommt vom Aufrufer,
+ *  der es meist ohnehin parallel zu getMatcherTerms per Promise.all lädt —
+ *  eine eigene getChartProductNames()-Anfrage hier würde diesen Call
+ *  verdoppeln. */
+export function buildReservedNames(chartProductNames: string[]): string[] {
+  return [
+    ...Object.keys(KNOWN_COMPANIES),
+    ...Object.keys(KNOWN_PREMARKET_COMPANIES),
+    ...chartProductNames,
+  ]
 }
 
 interface TranslatableRow {

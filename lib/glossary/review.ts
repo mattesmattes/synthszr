@@ -41,7 +41,7 @@
  * Review-Lauf nicht abbrechen.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buildTipTapBody, extractPlainText, type TipTapDoc } from '@/lib/glossary/generate'
+import { buildTipTapBody, extractPlainText, isValidTipTapDoc } from '@/lib/glossary/generate'
 import { assignProducts } from '@/lib/glossary/products'
 import { z } from 'zod'
 
@@ -158,30 +158,10 @@ async function loadTermNews(
   return (data ?? []) as GlossaryReviewNewsRow[]
 }
 
-/** Deterministische Vorprüfung vor extractPlainText: `body` ist jsonb ohne
- *  NOT NULL (Schema), ein kaputter/fehlender Body würde bei JEDEM Lauf
- *  identisch scheitern — anders als ein transienter Netzwerk-/DB-Fehler
- *  braucht das einen 'flagged'-Stempel (Review-Fund Important 3), sonst
- *  bleibt der Begriff für immer am Kopf der last_reviewed_at-Warteschlange.
- *  extractPlainText selbst prüft das nicht: dort war body immer frisch von
- *  buildTipTapBody konstruiert (generate.ts), die Vorbedingung war durch den
- *  Aufrufkontext garantiert. Hier liest die Funktion gespeicherte Daten, die
- *  Vorbedingung gilt nicht mehr automatisch.
- *
- *  Review-Fund Important 3 (Fix-Runde 2): die erste Fassung prüfte nur die
- *  oberste Ebene (body.content ist ein Array), extractPlainText greift aber
- *  auf JEDEN Top-Level-Node per `node.content.map(...)` zu. Ein Node ohne
- *  eigenes content-Array (leerer Absatz `{"type":"paragraph"}`,
- *  horizontalRule, image) wirft dort eine TypeError — heute unerreichbar,
- *  weil body/pending_body ausschließlich aus buildTipTapBody stammen, aber
- *  Task 16 schreibt auf dieselbe Spalte und hebt genau diese Garantie auf.
- *  Deshalb jetzt jeden Node prüfen, nicht nur den Doc-Wrapper. */
-function isValidTipTapDoc(body: unknown): body is TipTapDoc {
-  if (!body || typeof body !== 'object') return false
-  const content = (body as { content?: unknown }).content
-  if (!Array.isArray(content)) return false
-  return content.every((n) => Array.isArray((n as { content?: unknown }).content))
-}
+// isValidTipTapDoc lebt jetzt in lib/glossary/generate.ts (Fix-Runde 1, Task
+// 16): war bytegleich zu einer zweiten Kopie in translate.ts dupliziert — mit
+// genau der Gefahr, an der die Review-Fund-Important-3-Historie hing (siehe
+// dortiger Kommentar). Verhalten hier unverändert.
 
 /** Markiert einen Begriff mit einem deterministischen Defekt als 'flagged'
  *  und schreibt last_reviewed_at fort, damit er aus dem Warteschlangenkopf
