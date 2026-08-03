@@ -59,7 +59,7 @@ vi.mock('@/lib/supabase/admin', () => ({
  *  einem konfigurierbaren RPC-Ergebnis pro Aufruf. */
 function fakeSupabase(config: {
   terms: TermRow[]
-  rpcResult: (params: unknown) => { data: NewsMatch[] | null; error: { message: string } | null }
+  rpcResult: (params: unknown) => { data: NewsMatch[] | null; error: { message: string; code?: string } | null }
   /** Vorbelegter Bestand, um "ersetzt alte Zeilen" beweisbar zu machen. */
   seedNews?: Record<string, Array<{ repo_item_id: string }>>
 }) {
@@ -224,10 +224,13 @@ describe('GET /api/cron/glossary-news', () => {
     expect(newsStore.get('t1')?.length).toBe(5)
   })
 
-  it('setzt news_refreshed_at NICHT und markiert rpcMissing, wenn die RPC noch nicht existiert', async () => {
+  it('setzt news_refreshed_at NICHT und markiert rpcMissing, wenn die RPC noch nicht existiert (Code 42883)', async () => {
     const { client, calls } = fakeSupabase({
       terms: [term()],
-      rpcResult: () => ({ data: null, error: { message: 'function public.match_glossary_news(...) does not exist' } }),
+      rpcResult: () => ({
+        data: null,
+        error: { message: 'function public.match_glossary_news(...) does not exist', code: '42883' },
+      }),
     })
     mocks.createAdminClient.mockReturnValue(client)
 
@@ -241,6 +244,43 @@ describe('GET /api/cron/glossary-news', () => {
     const body = await res.json()
     expect(body.rpcMissing).toBe(true)
     expect(calls.refreshedAtUpdates).toEqual([])
+  })
+
+  it('isoliert einen fehlgeschlagenen Begriff — die übrigen werden trotzdem aktualisiert (Review-Fix: Per-Item-Isolation)', async () => {
+    // Regressionstest für den Critical-Fund: ein `break` bei JEDEM RPC-Fehler
+    // hätte hier t3 nie erreicht. Nur t2 bekommt einen transienten Fehler
+    // OHNE "Funktion existiert nicht"-Code — t1 und t3 müssen trotzdem
+    // durchlaufen, und rpcMissing muss false bleiben (kein Migrations-Problem).
+    const terms = [
+      term({ id: 't1', embedding: '[1,1,1]' }),
+      term({ id: 't2', embedding: '[2,2,2]' }),
+      term({ id: 't3', embedding: '[3,3,3]' }),
+    ]
+    const { client, calls, newsStore } = fakeSupabase({
+      terms,
+      rpcResult: (params) => {
+        const embedding = (params as { query_embedding: number[] }).query_embedding
+        if (JSON.stringify(embedding) === JSON.stringify([2, 2, 2])) {
+          return { data: null, error: { message: 'connection terminated unexpectedly', code: '08006' } }
+        }
+        return { data: [match()], error: null }
+      },
+    })
+    mocks.createAdminClient.mockReturnValue(client)
+
+    const { GET } = await import('@/app/api/cron/glossary-news/route')
+    const res = await GET(req())
+    expect(res.status).toBe(200)
+    const body = await res.json()
+
+    expect(body.rpcMissing).toBe(false)
+    expect(body.termsRefreshed).toBe(2)
+    expect(calls.refreshedAtUpdates.slice().sort()).toEqual(['t1', 't3'])
+    expect(newsStore.get('t1')?.length).toBe(1)
+    expect(newsStore.get('t3')?.length).toBe(1)
+    // t2 wurde nie geschrieben (weder gelöscht-und-leer noch befüllt) —
+    // der RPC-Fehler für t2 darf gar nicht erst bis delete()/insert() kommen.
+    expect(newsStore.has('t2')).toBe(false)
   })
 
   it('generiert ein fehlendes Embedding aus canonical_name + summary und persistiert es', async () => {

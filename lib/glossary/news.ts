@@ -39,6 +39,20 @@ const TERM_BATCH_LIMIT = 500
  *  Response selbst und den letzten laufenden Begriff. */
 const DEFAULT_BUDGET_MS = 270_000
 
+/** Fehlercodes, die bedeuten "die Funktion existiert nicht" (Migration noch
+ *  nicht angewendet) — NICHT "dieser eine Aufruf ist fehlgeschlagen".
+ *  `42883` ist Postgres' undefined_function, `PGRST202` PostgRESTs "could not
+ *  find the function in the schema cache". Nur bei diesen beiden Codes ist
+ *  ein Abbruch der GESAMTEN Schleife richtig, weil jeder folgende Begriff
+ *  garantiert denselben Fehler produzieren würde. Jeder andere Code (Timeout,
+ *  abgebrochene Verbindung, …) betrifft nur den aktuellen Begriff und darf
+ *  die übrigen nicht blockieren (Review-Fix: ein `break` auf jeden RPC-Fehler
+ *  hätte einen einzelnen dauerhaft problematischen Begriff den News-Refresh
+ *  für alle anderen Begriffe unbegrenzt lahmlegen lassen — er wäre wegen des
+ *  unveränderten `news_refreshed_at` bei jedem Lauf wieder ganz vorn
+ *  gestanden und hätte denselben Abbruch erneut ausgelöst). */
+const RPC_MISSING_CODES = new Set(['42883', 'PGRST202'])
+
 interface GlossaryNewsTermRow {
   id: string
   canonical_name: string
@@ -230,12 +244,20 @@ export async function refreshGlossaryNews(
       })
 
       if (rpcError) {
-        // Vermutlich existiert die RPC noch nicht (Migration nicht
-        // angewendet) — Abbruch statt denselben Fehler für jeden Begriff zu
-        // loggen. news_refreshed_at bleibt für ALLE Begriffe unangetastet.
-        console.error('[GlossaryNews] RPC match_glossary_news fehlgeschlagen:', rpcError.message)
-        rpcMissing = true
-        break
+        if (RPC_MISSING_CODES.has(rpcError.code)) {
+          // Existiert wirklich nicht (Migration nicht angewendet) — Abbruch
+          // der GESAMTEN Schleife statt denselben Fehler für jeden weiteren
+          // Begriff zu loggen. news_refreshed_at bleibt für ALLE Begriffe
+          // unangetastet.
+          console.error('[GlossaryNews] RPC match_glossary_news existiert nicht (Migration nicht angewendet?):', rpcError.message)
+          rpcMissing = true
+          break
+        }
+        // Nur DIESER Aufruf ist fehlgeschlagen (Timeout, Verbindungsabbruch, …)
+        // — wie beim Embedding-Fehler oben: nur der aktuelle Begriff wird
+        // übersprungen, die übrigen laufen weiter.
+        console.error('[GlossaryNews] RPC match_glossary_news fehlgeschlagen für', term.id, rpcError.message)
+        continue
       }
 
       const rows = ((matches ?? []) as GlossaryNewsMatch[]).slice(0, MATCH_LIMIT)
@@ -243,12 +265,19 @@ export async function refreshGlossaryNews(
         term.canonical_name, term.summary, rows.map((r) => r.title),
       )
 
+      // Löschen/Einfügen/Markieren gelten nur gemeinsam als Erfolg — schlägt
+      // einer der drei Schritte fehl, wird der Begriff NICHT als aktualisiert
+      // gezählt und news_refreshed_at bleibt unangetastet: der nächste Lauf
+      // versucht ihn erneut, statt einen tatsächlich fehlgeschlagenen
+      // Schreibvorgang als Erfolg zu melden (Review-Fix: termsRefreshed++
+      // lief vorher unabhängig vom Fehler, die Statistik hat also gelogen).
       const { error: deleteError } = await supabase
         .from('glossary_term_news')
         .delete()
         .eq('term_id', term.id)
       if (deleteError) {
         console.error('[GlossaryNews] Alte News-Zeilen konnten nicht gelöscht werden für', term.id, deleteError.message)
+        continue
       }
 
       if (rows.length > 0) {
@@ -265,9 +294,9 @@ export async function refreshGlossaryNews(
         const { error: insertError } = await supabase.from('glossary_term_news').insert(insertRows)
         if (insertError) {
           console.error('[GlossaryNews] Insert fehlgeschlagen für', term.id, insertError.message)
-        } else {
-          newsRowsWritten += insertRows.length
+          continue
         }
+        newsRowsWritten += insertRows.length
       }
 
       const { error: markError } = await supabase
@@ -276,6 +305,7 @@ export async function refreshGlossaryNews(
         .eq('id', term.id)
       if (markError) {
         console.error('[GlossaryNews] news_refreshed_at konnte nicht gesetzt werden für', term.id, markError.message)
+        continue
       }
       termsRefreshed++
     } catch (e) {
