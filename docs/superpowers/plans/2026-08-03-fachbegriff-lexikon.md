@@ -694,26 +694,47 @@ export const GlossaryLinkMark = Mark.create({
 
 `lib/glossary/inject-marks.ts`:
 
+**Zuerst: `matchNameInText` aus Task 2 exportieren.** Der Injektor darf seine
+Trefferlogik nicht selbst bauen. Sonst entscheiden zwei Module unabhängig, was
+ein Treffer ist — der Editor zeigt Kandidaten, die nicht verlinkt werden, oder
+der Injektor verlinkt Wörter, die als Kandidat nie auftauchten. Und der
+Injektor würde die längenabhängige Grenze aus Task 2 verlieren, also `AI` wieder
+auf „Aida" matchen.
+
+In `lib/glossary/mentions.ts` die bereits vorhandene Logik als Funktion
+herausziehen und exportieren:
+
+```ts
+/**
+ * Findet die erste Erwähnung eines Namens im Text und gibt ihre Position
+ * zurück. Einzige Stelle im System, die entscheidet, was als Treffer gilt —
+ * Matcher und Mark-Injektor müssen dieselbe Antwort bekommen.
+ */
+export function matchNameInText(
+  text: string,
+  name: string,
+): { start: number; end: number; matched: string } | null {
+  const re = name.length < GLOSSARY_MIN_NAME_LENGTH
+    ? boundaryRegexShort(name)
+    : boundaryRegex(name)
+  const m = re.exec(text)
+  if (!m) return null
+  const start = m.index + m[1].length
+  return { start, end: start + m[2].length, matched: m[2] }
+}
+```
+
+`findGlossaryMentions` nutzt fortan dieselbe Funktion, statt die Regex selbst
+zu wählen — die 19 bestehenden Tests müssen unverändert bestehen bleiben.
+
 ```ts
 import { GLOSSARY_MAX_PER_ARTICLE } from '@/lib/glossary/types'
+import { matchNameInText } from '@/lib/glossary/mentions'
 import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
 
 const MARK_TYPE = 'glossaryLink'
 
 type Node = Record<string, unknown>
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-/** Erste Erwähnung eines Namens in einem Textknoten, mit Unicode-Wortgrenze. */
-function findFirst(text: string, name: string): { start: number; end: number } | null {
-  const re = new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegex(name)})`, 'iu')
-  const m = re.exec(text)
-  if (!m) return null
-  const start = m.index + m[1].length
-  return { start, end: start + m[2].length }
-}
 
 function hasMark(node: Node, type: string): boolean {
   return Array.isArray(node.marks) &&
@@ -779,7 +800,7 @@ export function injectGlossaryMarks(
         const names = [term.canonicalName, ...term.aliases]
           .sort((a, b) => b.length - a.length)
         for (const name of names) {
-          const pos = findFirst(o.text as string, name)
+          const pos = matchNameInText(o.text as string, name)
           if (!pos) continue
           done.add(term.slug)
           const before = (o.text as string).slice(0, pos.start)
