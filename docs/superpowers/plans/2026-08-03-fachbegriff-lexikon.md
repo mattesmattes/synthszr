@@ -1024,14 +1024,45 @@ Zwei Dinge, die dieser Fall vom SSR-Pfad unterscheiden:
 
 `components/tiptap-renderer/tiptap-renderer.tsx` — beachte das
 Unterverzeichnis; eine Datei `components/tiptap-renderer.tsx` existiert nicht
-(CLAUDE.md nennt sie falsch). Vor dem Ändern prüfen, wie diese Komponente
-rendert: nutzt sie eine Extension-Liste, genügt der Eintrag von
-`GlossaryLinkMark.configure({ lang })`; hat sie eigene Node-/Mark-Behandlung,
-gehört der Zweig dorthin.
+(CLAUDE.md nennt sie falsch). Verifiziert: die Komponente nutzt
+`useEditor({ extensions: [...] })` mit `EditorContent` (Zeile 138-139, 279), der
+Fix ist also ein Eintrag in dieser Liste — `GlossaryLinkMark.configure({ lang })`
+mit der Sprache aus den Props.
 
 `components/tiptap-editor.tsx` und `components/tiptap-editor-with-patterns.tsx`:
 `GlossaryLinkMark` in das `extensions`-Array aufnehmen. Ohne das verwirft der
 Editor die Marks beim Laden, und sie verschwinden beim nächsten Speichern.
+
+**Die Sprachverdrahtung — hier schlägt der `'de'`-Default sonst zu.**
+
+Verifizierter Stand: `components/post-content-view.tsx` hat bereits ein
+`locale?: string`-Prop (Zeile 11/25) und reicht es an ein Kind weiter (Zeile 45),
+übergibt es aber **nicht** an `renderStaticArticleHtml` (Zeile 26). Von den fünf
+Aufrufern setzen nur der Artikel-Pfad das Prop:
+
+| Aufrufer | `locale` gesetzt | Glossar-Marks möglich |
+|---|---|---|
+| `app/[lang]/posts/[slug]/page.tsx:508` | ja | ja — Hauptpfad |
+| `components/featured-article.tsx:149` | **nein** | **ja** — rendert Artikel-Content |
+| `app/[lang]/why/page.tsx:95` | nein | nein (statische Seite) |
+| `app/[lang]/datenschutz/page.tsx:88` | nein | nein |
+| `app/[lang]/impressum/page.tsx:87` | nein | nein |
+
+`featured-article.tsx` ist die scharfe Stelle: die Komponente **hat** `locale`
+(Zeile 23/38, verwendet es für `postUrl`, `AudioPlayer` und `formatUpdateDate`),
+gibt es nur nicht weiter. Ohne diese eine Zeile bekommt ein englischer Artikel
+auf der Homepage deutsche Glossar-Links — lautlos.
+
+Zu tun: `renderStaticArticleHtml(content, locale)` und `locale={locale}` in
+`featured-article.tsx:149`. Die drei statischen Seiten dürfen es
+mitbekommen — es kostet nichts und verhindert Überraschungen, falls dort später
+Glossarbegriffe auftauchen —, sind aber nicht zwingend.
+
+**Für den E-Mail-Pfad ist die Sprache schon vorhanden:**
+`convertTiptapToHtml(doc, locale = 'de')` (Zeile 1227) hat sie als Parameter. Sie
+muss nur bis `applyMarks` durchgereicht werden. `generateEmailContent`
+(Zeile 386) hat sie dagegen **nicht** — dort prüfen, woher sie kommt, statt
+einen zweiten `'de'`-Default einzuführen.
 
 - [ ] **Step 6: Tests laufen lassen — müssen bestehen**
 
