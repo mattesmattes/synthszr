@@ -4,7 +4,12 @@
  * 300s function call).
  *
  * Lifecycle (one phase per cron tick, state persisted in `article_jobs`):
- *   planning → writing(×n) → finalizing → done
+ *   planning → writing(×n) → finalizing → lexicon → done
+ *
+ * `lexicon` runs behind `finalizing` because only `persistDraftPost` creates
+ * the `generated_post_id` the glossary candidate list hangs off. A failure in
+ * `lexicon` must never block the (already-finished) article — see the
+ * try/catch there.
  *
  * The 05:30 cron enqueues a job (createArticleJob); every tick advances the
  * oldest open job by exactly ONE phase (advanceArticleJob) and persists the
@@ -28,6 +33,11 @@ import {
 import { selectAndEnrichItems, buildVocabularyContext, toPipelineItem } from '@/lib/claude/queue-article'
 import { normalizeArticlePlan } from '@/lib/claude/normalize-plan'
 import { getModelForUseCase } from '@/lib/ai/model-config'
+import { getMatcherTerms } from '@/lib/glossary/terms'
+import { findGlossaryMentions, extractLexTags } from '@/lib/glossary/mentions'
+import { identifyCandidates } from '@/lib/glossary/generate'
+import { buildCandidateList } from '@/lib/glossary/candidates'
+import { extractVisibleText } from '@/lib/posts/product-mentions'
 
 // Re-exported so both job-creation paths below (and their tests) reach the
 // ONE NewsQueueItem→PipelineItem conversion via lib/claude/queue-article.ts.
@@ -58,6 +68,7 @@ interface ArticleJob {
   attempts: number
   max_attempts: number
   started_at: string | null
+  generated_post_id: string | null
 }
 
 /**
@@ -481,16 +492,51 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
       )
       const postId = await persistDraftPost(supabase, job, fullMarkdown)
       await markTaskRun(supabase, 'post_generation')
+      // NICHT status: 'done' — die lexicon-Phase (unten) schließt den Job ab.
+      // Sie braucht die hier gerade erzeugte postId, um die Kandidatenliste an
+      // pending_glossary_terms zu hängen; deshalb kann sie nicht vorher laufen.
       await supabase
         .from('article_jobs')
-        .update({
-          status: 'done',
-          phase: null,
-          generated_post_id: postId,
-          completed_at: new Date().toISOString(),
-        })
+        .update({ phase: 'lexicon', generated_post_id: postId })
         .eq('id', job.id)
       return 'finalized'
+    }
+
+    if (job.phase === 'lexicon') {
+      try {
+        const { data: postRow } = await supabase
+          .from('generated_posts')
+          .select('content')
+          .eq('id', job.generated_post_id!)
+          .maybeSingle()
+        const rawContent = postRow?.content as unknown
+        // Mirrors the parsing in the edit page's loadPost() — content can arrive
+        // either as a JSON string or already-parsed, depending on the caller.
+        const content = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent
+
+        if (content) {
+          const terms = await getMatcherTerms('de')
+          const tagged = extractLexTags(content)
+          const visibleText = extractVisibleText(content)
+          const matched = findGlossaryMentions(visibleText, terms)
+          const fresh = await identifyCandidates(visibleText, terms.map((t) => t.slug))
+          const candidates = await buildCandidateList(supabase, terms, tagged, matched, fresh)
+
+          await supabase
+            .from('generated_posts')
+            .update({ pending_glossary_terms: candidates })
+            .eq('id', job.generated_post_id)
+        }
+      } catch (err) {
+        // Der Artikel ist fertig — eine fehlgeschlagene Begriffssuche darf ihn
+        // nicht blockieren. Der Editor zeigt dann einfach keine Kandidaten.
+        console.error('[ArticleJobs] lexicon phase failed:', err)
+      }
+      await supabase
+        .from('article_jobs')
+        .update({ status: 'done', phase: null, completed_at: new Date().toISOString() })
+        .eq('id', job.id)
+      return 'lexicon_done'
     }
 
     return 'unknown_phase'

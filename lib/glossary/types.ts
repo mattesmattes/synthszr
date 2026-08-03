@@ -40,5 +40,9 @@ export interface GlossaryCandidate {
   slug: string
   name: string
   origin: GlossaryCandidateOrigin
-  summary: string
+  /** Die im Artikeltext gefundene Textstelle — nur bei origin='match' gesetzt
+   *  (aus GlossaryMention.matchedText). Bei 'tag'/'new' gibt es keine Textstelle:
+   *  der Begriff kommt aus einer {lex:}-Direktive bzw. einem LLM-Vorschlag, nicht
+   *  aus einem Text-Match. */
+  matchedText: string | null
 }
