@@ -26,6 +26,24 @@ function boundaryRegexShort(name: string): RegExp {
 }
 
 /**
+ * Findet die erste Erwähnung eines Namens im Text und gibt ihre Position
+ * zurück. Einzige Stelle im System, die entscheidet, was als Treffer gilt —
+ * Matcher und Mark-Injektor müssen dieselbe Antwort bekommen.
+ */
+export function matchNameInText(
+  text: string,
+  name: string,
+): { start: number; end: number; matched: string } | null {
+  const re = name.length < GLOSSARY_MIN_NAME_LENGTH
+    ? boundaryRegexShort(name)
+    : boundaryRegex(name)
+  const m = re.exec(text)
+  if (!m) return null
+  const start = m.index + m[1].length
+  return { start, end: start + m[2].length, matched: m[2] }
+}
+
+/**
  * Findet Lexikonbegriffe im Text — pro Begriff maximal ein Treffer, in der
  * Reihenfolge der übergebenen Begriffsliste. Namen >= GLOSSARY_MIN_NAME_LENGTH
  * brauchen eine Wortgrenze davor (erlauben Komposita wie „Inferenzkosten").
@@ -45,13 +63,9 @@ export function findGlossaryMentions(
     const namesToTry = allNames.sort((a, b) => b.length - a.length)
 
     for (const name of namesToTry) {
-      // Wähle Regex basierend auf Längenkategorie.
-      const regex = name.length >= GLOSSARY_MIN_NAME_LENGTH
-        ? boundaryRegex(name)
-        : boundaryRegexShort(name)
-      const m = regex.exec(text)
-      if (m) {
-        hits.push({ slug: term.slug, matchedText: m[2] })
+      const hit = matchNameInText(text, name)
+      if (hit) {
+        hits.push({ slug: term.slug, matchedText: hit.matched })
         break
       }
     }
