@@ -272,6 +272,22 @@ describe('translateTerm', () => {
     const { translateTerm } = await import('@/lib/glossary/translate')
     await expect(translateTerm('term-1', 'en')).rejects.toThrow()
   })
+
+  it('wirft, wenn Quelle UND Übersetzung 0 Blocks haben, statt einen leeren body zu schreiben (Task 18, Review-Fund)', async () => {
+    // Der `=== 0`-Zweig ging in einer früheren Fix-Runde verloren: mit
+    // sourceBlocks.length === 0 wird `translatedBody.content.length !==
+    // sourceBlocks.length` zu `0 !== 0` (false) — kein Throw, ein leerer body
+    // würde geschrieben. Praktisch unerreichbar über die beiden regulären
+    // Schreibpfade (generate.ts' ContentSchema verlangt min(4) Blocks,
+    // review.ts lehnt einen leeren pendingBody ab) — Verteidigung gegen einen
+    // Bestandsdatensatz mit body.content = [], den keiner der beiden Pfade
+    // verhindert hat.
+    state.termRow = { id: 'term-1', canonical_name: 'X', aliases: [], summary: 'x', body: { type: 'doc', content: [] } }
+    mocks.create.mockResolvedValueOnce(toolUse({ canonical_name: 'X', aliases: [], summary: 'x', blocks: [] }))
+    const { translateTerm } = await import('@/lib/glossary/translate')
+    await expect(translateTerm('term-1', 'en')).rejects.toThrow(/Blockzahl/)
+    expect(state.upserts).toHaveLength(0)
+  })
 })
 
 describe('reinjectGlossaryMarksForTranslation', () => {
@@ -366,6 +382,40 @@ describe('reinjectGlossaryMarksForTranslation', () => {
     const translated = doc('Inference is expensive.')
     const { reinjectGlossaryMarksForTranslation } = await import('@/lib/glossary/translate')
     await expect(reinjectGlossaryMarksForTranslation(source, translated, 'en')).rejects.toThrow(/nicht ladbar/)
+  })
+
+  it('loggt sichtbar bei TEILVERLUST — 2 verlinkte Slugs, nur einer im übersetzten Text auffindbar (Task 18, Pflichttest für Fix-Runde 2)', async () => {
+    // Genau die Eigenschaft, die den Ergebnis-Check dem Vorbedingungs-Check
+    // überlegen macht: BEIDE Slugs sind gültige Kandidaten (eine
+    // Vorbedingungsprüfung "ist die Liste leer?" sähe hier "alles ok"), aber
+    // nur einer kommt im übersetzten Text tatsächlich vor. Die bisherigen
+    // Tests decken nur "alles verloren" (0 von 1) ab, nicht diesen
+    // Mischfall.
+    termMocks.getMatcherTerms.mockResolvedValue([
+      { slug: 'inferenz', canonicalName: 'Inference', aliases: [] },
+      { slug: 'rechenzentrum', canonicalName: 'Rechenzentrum', aliases: [] }, // keine en-Übersetzung, deutscher Name bleibt
+    ])
+    const source = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Die Inferenz.', marks: [{ type: 'glossaryLink', attrs: { slug: 'inferenz' } }] }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Das Rechenzentrum.', marks: [{ type: 'glossaryLink', attrs: { slug: 'rechenzentrum' } }] }] },
+      ],
+    }
+    const translated = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'The Inference.' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'The data center.' }] }, // "Rechenzentrum" kommt hier nicht vor
+      ],
+    }
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { reinjectGlossaryMarksForTranslation } = await import('@/lib/glossary/translate')
+    const result = await reinjectGlossaryMarksForTranslation(source, translated, 'en')
+    expect(errSpy).toHaveBeenCalled()
+    expect(errSpy.mock.calls[0].join(' ')).toContain('1 von 2')
+    expect(linked(result)).toEqual([{ text: 'Inference', slug: 'inferenz' }])
+    errSpy.mockRestore()
   })
 
   it('reserviert Company-Namen aus KNOWN_COMPANIES gegen Kollision, wie applyGlossaryConfirmation', async () => {

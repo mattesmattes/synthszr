@@ -16,6 +16,7 @@ export const defaultTranslations: Record<string, string> = {
   'nav.home': 'Home',
   'nav.archive': 'Archiv',
   'nav.why': 'Warum Synthszr',
+  'nav.glossary': 'Lexikon',
 
   // Footer
   'footer.imprint': 'Impressum',
@@ -148,12 +149,16 @@ export const defaultTranslations: Record<string, string> = {
 
   // Lexikon (Fachbegriff-Glossar)
   'glossary.related_terms': 'Verwandte Begriffe',
-  'glossary.products': 'Produkte in den Synthszr Charts',
+  // Task 18: kürzer als zuvor ("Produkte in den Synthszr Charts"), passend
+  // zum knappen Überschriften-Stil der übrigen arrondierenden Blöcke
+  // ("Verwandte Begriffe", "Aktuelle News").
+  'glossary.products': 'Produkte dazu',
   'glossary.news': 'Aktuelle News',
   'glossary.not_found': 'Begriff nicht gefunden',
   'glossary.index_title': 'Synthszr Lexikon',
   'glossary.index_intro': 'Fachbegriffe aus unseren Artikeln, kurz und verständlich erklärt.',
   'glossary.index_empty': 'Noch keine Begriffe veröffentlicht.',
+  'glossary.explained_here': 'Im Lexikon erklärt',
 
   // Common
   'common.loading': 'Laden...',

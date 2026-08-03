@@ -35,11 +35,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const locale = lang as LanguageCode
   const term = await getGlossaryTerm(slug, lang)
   if (!term) {
-    // Locale-Ternary statt hartem Deutsch — gleiches Muster wie
-    // rankings/[slug]/page.tsx, nur ohne dessen einsprachigen 404-Titel:
-    // noIndex-Seiten laufen hier trotzdem nicht am en-Cluster vorbei.
+    // Task 18: über getTranslations statt eines harten de/en-Ternarys — der
+    // Schlüssel glossary.not_found existierte bereits (defaultTranslations),
+    // hatte aber keinen Aufrufer. Löst nebenbei den DE-Fallback für cs/nds/fr
+    // konsistent zum Rest der Seite (vorher liefen alle Nicht-de-Locales,
+    // auch cs/nds/fr, auf den EN-Text).
+    const t = await getTranslations(locale)
     return {
-      title: locale === 'de' ? 'Begriff nicht gefunden | Synthszr Lexikon' : 'Term not found | Synthszr Lexikon',
+      title: `${t['glossary.not_found']} | Synthszr Lexikon`,
       robots: { index: false, follow: false },
     }
   }

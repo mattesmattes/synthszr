@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, CheckCircle2, XCircle, Trash2, RefreshCw, Eye, EyeOff, BookOpen } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, Trash2, RefreshCw, Eye, EyeOff, BookOpen, Languages } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,7 +26,7 @@ interface GlossaryTermDetail extends GlossaryTermRow {
   pending_body: unknown
 }
 
-type PatchAction = 'accept_revision' | 'discard_revision' | 'hide' | 'publish'
+type PatchAction = 'accept_revision' | 'discard_revision' | 'hide' | 'publish' | 'translate'
 
 // --- Diff-Helfer ---
 //
@@ -213,13 +213,16 @@ export default function GlossaryAdminPage() {
     fetchTerms()
   }, [fetchTerms])
 
-  async function runAction(slug: string, action: PatchAction) {
+  // `extra` trägt targetLang für 'translate' — die übrigen Actions brauchen
+  // kein weiteres Feld, das PATCH-Handler-Payload deckt beides über dieselbe
+  // Signatur ab (Task 18).
+  async function runAction(slug: string, action: PatchAction, extra?: Record<string, unknown>) {
     setActionLoading((s) => ({ ...s, [slug]: true }))
     try {
       const res = await fetch('/api/admin/glossary', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug, action }),
+        body: JSON.stringify({ slug, action, ...extra }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => null)
@@ -323,6 +326,16 @@ export default function GlossaryAdminPage() {
                           Veröffentlichen
                         </Button>
                       )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => runAction(term.slug, 'translate', { targetLang: 'en' })}
+                        disabled={isBusy}
+                        title="Englische Übersetzung erzeugen/aktualisieren"
+                      >
+                        <Languages className="h-4 w-4 mr-1.5" />
+                        Übersetzen
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => deleteTerm(term.slug)} disabled={isBusy}>
                         <Trash2 className="h-4 w-4 text-red-600" />
                       </Button>

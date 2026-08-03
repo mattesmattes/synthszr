@@ -189,7 +189,14 @@ export async function translateTerm(termId: string, targetLang: string): Promise
   // beides: komplett abgeschnittene Antworten UND einzelne leere Blocks
   // darin. Kein QA findet das sonst (der Review-Cron liest nur die deutsche
   // Quelle, nie glossary_term_translations).
-  if (translatedBody.content.length !== sourceBlocks.length) {
+  // Task 18 (Review-Fund): der `=== 0`-Zweig ging in einer früheren
+  // Fix-Runde verloren — mit sourceBlocks.length === 0 wurde der reine
+  // Ungleichheits-Check (`0 !== 0`) zu false, kein Throw, ein leerer body
+  // wäre geschrieben worden. Praktisch unerreichbar über die beiden
+  // regulären Schreibpfade (generate.ts' ContentSchema verlangt min(4)
+  // Blocks, review.ts lehnt einen leeren pendingBody ab) — Defense-in-Depth
+  // gegen einen Bestandsdatensatz, den keiner der beiden Pfade verhindert hat.
+  if (translatedBody.content.length === 0 || translatedBody.content.length !== sourceBlocks.length) {
     throw new Error(
       `[glossary/translate] Blockzahl der Übersetzung (${translatedBody.content.length}) weicht von der ` +
       `Quelle (${sourceBlocks.length}) ab für ${termId} — vermutlich abgeschnittene oder leere Modellantwort`,
