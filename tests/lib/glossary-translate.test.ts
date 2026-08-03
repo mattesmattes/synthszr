@@ -26,6 +26,18 @@
  * Zielsprach-Begriffsliste nicht mehr ab, sondern loggt sichtbar und
  * speichert die Übersetzung trotzdem (Important 1) — ein harter Abbruch traf
  * auch den legitimen Fall "Begriff zwischenzeitlich hidden".
+ *
+ * Fix-Runde 2 (Review): die Fix-Runde-1-Lösung für Important 1 prüfte nur
+ * eine Vorbedingung (Begriffsliste leer?) — das übersieht den häufigsten
+ * Verlustpfad (Begriff existiert, aber noch mit deutschem Namen, siehe der
+ * "Pfad 2"-Pflichttest unten). Jetzt wird das ERGEBNIS der Injektion
+ * gemessen (tatsächlich gesetzte Marks vs. ursprünglich verlinkte Slugs).
+ * Außerdem: `getMatcherTerms`-Rückgabe `null` (transienter Ladefehler) wirft
+ * jetzt, statt nur zu loggen — das gehört in den Queue-Retry, nicht in
+ * log-and-continue, sonst kostet ein kurzer DB-Aussetzer die Links
+ * permanent. Der Blockzahl-Check in translateTerm vergleicht jetzt gegen
+ * translatedBody.content.length (nicht die rohe Blockzahl) und
+ * stop_reason=max_tokens wird direkt geprüft.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { KNOWN_COMPANIES } from '@/lib/data/companies'
@@ -215,6 +227,41 @@ describe('translateTerm', () => {
     expect(state.upserts).toHaveLength(0)
   })
 
+  it('wirft, wenn die rohe Blockzahl stimmt, aber ein Block leeren/Whitespace-Text hat (Minor 3, Fix-Runde 2)', async () => {
+    // SOURCE_BODY hat 2 Blocks. Die Modellantwort liefert ebenfalls 2 (die
+    // alte Prüfung t.blocks.length !== sourceBlocks.length hätte das
+    // passieren lassen) — aber der zweite Block ist nur Whitespace.
+    // buildTipTapBody verwirft solche Blocks kommentarlos (b.text.trim()),
+    // die tatsächlich überlebende Blockzahl ist also nur 1. Der Vergleich
+    // gegen translatedBody.content.length statt gegen die rohe t.blocks.length
+    // deckt das auf.
+    state.termRow = { id: 'term-1', canonical_name: 'Inferenz', aliases: [], summary: 'x', body: SOURCE_BODY }
+    mocks.create.mockResolvedValueOnce(toolUse({
+      canonical_name: 'Inference', aliases: [], summary: 'x',
+      blocks: [
+        { type: 'paragraph', text: 'Inference is expensive.' },
+        { type: 'heading', text: '   ' }, // rohe Blockzahl stimmt (2), Text ist leer
+      ],
+    }))
+    const { translateTerm } = await import('@/lib/glossary/translate')
+    await expect(translateTerm('term-1', 'en')).rejects.toThrow(/Blockzahl/)
+    expect(state.upserts).toHaveLength(0)
+  })
+
+  it('wirft, wenn die Modellantwort mit stop_reason=max_tokens abgeschnitten wurde (Minor 4, Fix-Runde 2)', async () => {
+    // Direkter Beleg statt nur Proxy (Blockzahl-Check) — vor dem Tool-Parsing
+    // geprüft, eine abgeschnittene Antwort kann ohnehin kein valides
+    // tool_use-JSON liefern.
+    state.termRow = { id: 'term-1', canonical_name: 'Inferenz', aliases: [], summary: 'x', body: SOURCE_BODY }
+    mocks.create.mockResolvedValueOnce({
+      stop_reason: 'max_tokens',
+      content: [{ type: 'tool_use', input: { canonical_name: 'Inference', aliases: [], summary: 'x', blocks: [] } }],
+    })
+    const { translateTerm } = await import('@/lib/glossary/translate')
+    await expect(translateTerm('term-1', 'en')).rejects.toThrow(/max_tokens/)
+    expect(state.upserts).toHaveLength(0)
+  })
+
   it('wirft, wenn der Upsert fehlschlägt', async () => {
     state.termRow = { id: 'term-1', canonical_name: 'Inferenz', aliases: [], summary: 'x', body: SOURCE_BODY }
     state.upsertError = { message: 'constraint violation' }
@@ -263,10 +310,9 @@ describe('reinjectGlossaryMarksForTranslation', () => {
     expect(termMocks.getMatcherTerms).toHaveBeenCalledWith('en')
   })
 
-  it('loggt sichtbar, bricht aber nicht ab, wenn keine passenden Zielsprach-Begriffe gefunden werden (Important 1, Fix-Runde 1)', async () => {
-    // Ein harter Abbruch (frühere Fassung) traf auch den legitimen Fall
-    // "verlinkter Begriff ist zwischenzeitlich hidden" zu hart — das ist kein
-    // Grund, die GESAMTE Artikelübersetzung zu verwerfen. Sichtbarkeit
+  it('loggt sichtbar, bricht aber nicht ab, wenn die Zielsprach-Begriffsliste komplett leer zurückkommt (permanenter Zustand)', async () => {
+    // Kein Retry würde eine leere/nicht-passende Begriffsliste heilen (anders
+    // als ein null-Ladefehler, siehe die beiden Tests unten) — Sichtbarkeit
     // (console.error) ist das Minimum, die Übersetzung wird trotzdem
     // gespeichert, nur eben ohne Glossar-Links.
     termMocks.getMatcherTerms.mockResolvedValue([])
@@ -281,28 +327,64 @@ describe('reinjectGlossaryMarksForTranslation', () => {
     errSpy.mockRestore()
   })
 
-  it('loggt die mutmaßliche Ursache mit, wenn getMatcherTerms null liefert (Übersetzungsabfrage fehlgeschlagen)', async () => {
-    termMocks.getMatcherTerms.mockResolvedValue(null)
+  it('loggt sichtbar (Ergebnis-Check), wenn ein verlinkter Begriff nur mit deutschem Namen zurückkommt — Pfad 2, Fix-Runde 2 (Pflichttest)', async () => {
+    // DER Verlustpfad, den eine reine Vorbedingungsprüfung nicht sehen kann:
+    // Slugs sind sprachunabhängig, getMatcherTerms('en') liefert für einen
+    // Begriff OHNE eigene Übersetzungszeile den DEUTSCHEN Namen zurück
+    // (terms.ts, legitimer Normalfall — heute der HÄUFIGSTE Fall, solange kaum
+    // ein Begriff übersetzt ist). Der Slug taucht in der Liste auf (eine
+    // Vorbedingungsprüfung auf "Liste leer?" sähe hier "alles ok"), aber der
+    // deutsche Name "Inferenz" kommt im englischen Text nicht vor — erst der
+    // Ergebnis-Check (tatsächlich gesetzte Marks zählen) deckt das auf.
+    // Gegen den Stand VOR Fix-Runde 2 (Vorbedingungsprüfung auf `wanted`) ist
+    // dieser Test rot: `wanted` wäre hier NICHT leer (der Slug matcht),
+    // der alte Guard hätte also gar nicht gefeuert.
+    termMocks.getMatcherTerms.mockResolvedValue([
+      { slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }, // deutscher Name, keine en-Übersetzung
+    ])
     const source = doc('Die Inferenz ist teuer.', { type: 'glossaryLink', attrs: { slug: 'inferenz' } })
-    const translated = doc('Inference is expensive.')
+    const translated = doc('Inference is expensive.') // "Inferenz" kommt hier nicht vor
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { reinjectGlossaryMarksForTranslation } = await import('@/lib/glossary/translate')
     const result = await reinjectGlossaryMarksForTranslation(source, translated, 'en')
     expect(errSpy).toHaveBeenCalled()
-    expect(errSpy.mock.calls[0].join(' ')).toMatch(/fehlgeschlagen/)
+    expect(errSpy.mock.calls[0].join(' ')).toContain('inferenz')
     expect(linked(result)).toEqual([])
     errSpy.mockRestore()
   })
 
+  it('bricht ab (throw), wenn getMatcherTerms null liefert — transienter Fehler, der Queue-Retry heilt ihn (Fix 2, Fix-Runde 2)', async () => {
+    // Unterscheidung ist NICHT "loggen vs. abbrechen" nach Häufigkeit,
+    // sondern "kann ein Retry es heilen?": null bedeutet, dass GENAU die
+    // Übersetzungsabfrage in getMatcherTerms scheiterte (transienter
+    // DB-Fehler) — dafür existiert der Queue-Retry (status bleibt 'pending'
+    // bis MAX_ATTEMPTS). Log-and-continue würde hier eine dauerhaft linkfreie
+    // Übersetzung festschreiben, obwohl ein zweiter Versuch Sekunden später
+    // den Zustand vollständig heilen könnte.
+    termMocks.getMatcherTerms.mockResolvedValue(null)
+    const source = doc('Die Inferenz ist teuer.', { type: 'glossaryLink', attrs: { slug: 'inferenz' } })
+    const translated = doc('Inference is expensive.')
+    const { reinjectGlossaryMarksForTranslation } = await import('@/lib/glossary/translate')
+    await expect(reinjectGlossaryMarksForTranslation(source, translated, 'en')).rejects.toThrow(/nicht ladbar/)
+  })
+
   it('reserviert Company-Namen aus KNOWN_COMPANIES gegen Kollision, wie applyGlossaryConfirmation', async () => {
+    // Akzeptierter Nebeneffekt (siehe Kommentar in translate.ts): der
+    // Ergebnis-Check loggt auch hier, weil weniger Marks gesetzt wurden als
+    // im Original verlinkt waren — der Log-Eintrag ist dann harmlos (ein
+    // Operator sieht in den Slugs, dass es sich um eine Kollision handelt),
+    // aber nicht falsch. Deshalb console.error hier bewusst weggefangen,
+    // statt den Test daran scheitern zu lassen.
     const companyName = Object.keys(KNOWN_COMPANIES)[0]
     termMocks.getMatcherTerms.mockResolvedValue([
       { slug: 'firmenbegriff', canonicalName: companyName, aliases: [] },
     ])
     const source = doc('X', { type: 'glossaryLink', attrs: { slug: 'firmenbegriff' } })
     const translated = doc(`${companyName} is well known.`)
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { reinjectGlossaryMarksForTranslation } = await import('@/lib/glossary/translate')
     const result = await reinjectGlossaryMarksForTranslation(source, translated, 'en')
     expect(linked(result)).toEqual([])
+    errSpy.mockRestore()
   })
 })

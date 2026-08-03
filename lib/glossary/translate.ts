@@ -164,28 +164,36 @@ export async function translateTerm(termId: string, targetLang: string): Promise
       ),
     }],
   })
+  // Review-Fund Minor 4 (Fix-Runde 2): der Blockzahl-Check unten ist ein
+  // guter Proxy für eine abgeschnittene Antwort, aber stop_reason='max_tokens'
+  // ist der direkte Beleg — vor dem Tool-Parsing prüfen, eine abgeschnittene
+  // Antwort kann ohnehin kein valides tool_use-JSON liefern.
+  if (resp.stop_reason === 'max_tokens') {
+    throw new Error(`[glossary/translate] Modellantwort abgeschnitten (stop_reason=max_tokens) für ${termId}`)
+  }
   const block = resp.content.find((b) => b.type === 'tool_use')
   const parsed = TranslationSchema.safeParse(block && 'input' in block ? block.input : null)
   if (!parsed.success) {
     throw new Error(`[glossary/translate] ungültige Tool-Antwort für ${termId}: ${parsed.error.message}`)
   }
   const t = parsed.data
-  // Review-Fund Minor 1 (Fix-Runde 1): max_tokens=4096 ohne Prüfung der
-  // Blockzahl gegen die Quelle ließ eine bei einem stop_reason='max_tokens'
-  // abgeschnittene Antwort unbemerkt durch — buildTipTapBody verwirft leere
-  // Blocks kommentarlos, das Ergebnis wäre ein still verkürzter englischer
-  // Erklärtext. Kein QA findet das (der Review-Cron liest nur die deutsche
-  // Quelle, nie glossary_term_translations). Deshalb hier abbrechen, statt
-  // eine unvollständige Übersetzung zu schreiben.
-  if (t.blocks.length !== sourceBlocks.length) {
-    throw new Error(
-      `[glossary/translate] Blockzahl der Übersetzung (${t.blocks.length}) weicht von der Quelle ` +
-      `(${sourceBlocks.length}) ab für ${termId} — vermutlich abgeschnittene Modellantwort`,
-    )
-  }
   const translatedBody = buildTipTapBody(t.blocks)
-  if (translatedBody.content.length === 0) {
-    throw new Error(`[glossary/translate] leerer übersetzter body für ${termId}`)
+  // Review-Fund Minor 1 (Fix-Runde 1) + Minor 3 (Fix-Runde 2): verglichen wird
+  // NACH buildTipTapBody (translatedBody.content.length), nicht die rohe
+  // t.blocks.length — buildTipTapBody verwirft Blocks mit leerem/Whitespace-
+  // Text kommentarlos. Eine Antwort mit KORREKTER Blockzahl, aber leerem Text
+  // in einzelnen Blocks, hätte den alten Check (t.blocks.length !==
+  // sourceBlocks.length) unbemerkt passiert und wäre erst danach — beim
+  // reinen `=== 0`-Check — aufgefallen, und auch nur, wenn ALLE Blocks leer
+  // waren. Der Vergleich gegen die tatsächlich überlebende Blockzahl erfasst
+  // beides: komplett abgeschnittene Antworten UND einzelne leere Blocks
+  // darin. Kein QA findet das sonst (der Review-Cron liest nur die deutsche
+  // Quelle, nie glossary_term_translations).
+  if (translatedBody.content.length !== sourceBlocks.length) {
+    throw new Error(
+      `[glossary/translate] Blockzahl der Übersetzung (${translatedBody.content.length}) weicht von der ` +
+      `Quelle (${sourceBlocks.length}) ab für ${termId} — vermutlich abgeschnittene oder leere Modellantwort`,
+    )
   }
 
   const { error: upsertError } = await supabase
@@ -250,23 +258,45 @@ function extractLinkedSlugs(content: unknown): string[] {
  * Enthält der Quell-Content keine Glossar-Marks, ist nichts zu tun (kein
  * DB-Zugriff, translatedContent geht unverändert zurück).
  *
- * Review-Fund Important 1 (Fix-Runde 1): eine frühere Fassung brach ab
- * (throw), wenn getMatcherTerms([]) zurückgab — das deckte aber nur EINEN von
- * drei stillen Verlustpfaden ab (die anderen zwei: die Übersetzungsabfrage
- * schlägt fehl UND fällt auf deutsche Namen zurück statt das zu melden, oder
- * für die Zielsprache existiert schlicht noch keine Übersetzungszeile —
- * beides liefert eine NICHT-leere, aber für den übersetzten Text unbrauchbare
- * Liste, `terms.length === 0` feuert dann gar nicht). Und ein harter Abbruch
- * wäre für den dritten, häufigen Fall — ein verlinkter Begriff ist
- * zwischenzeitlich hidden/gelöscht — zu streng gewesen: das ist keine
- * Störung, die einen Retry der GESAMTEN Artikelübersetzung rechtfertigt.
+ * Review-Fund Important 1, Fix-Runde 1 → korrigiert in Fix-Runde 2: eine
+ * Vorbedingungsprüfung ("ist die Zielsprach-Begriffsliste leer?") kann den
+ * HÄUFIGSTEN Verlustpfad prinzipiell nicht sehen. Slugs sind sprachunabhängig
+ * — fehlt für einen verlinkten Begriff nur die `en`-Übersetzungszeile, liefert
+ * getMatcherTerms trotzdem eine passende, NICHT-leere Liste, nur mit
+ * DEUTSCHEM Namen (terms.ts, legitimer Normalfall). Die Vorbedingung sieht
+ * also "alles ok aus", obwohl injectGlossaryMarks den deutschen Namen im
+ * übersetzten (englischen) Text in aller Regel nicht findet. Nur das
+ * tatsächliche ERGEBNIS der Injektion zeigt das zuverlässig — deshalb wird
+ * nach injectGlossaryMarks gezählt, wie viele der ursprünglich verlinkten
+ * Slugs tatsächlich wieder verlinkt wurden, und bei einer Lücke geloggt
+ * (Sichtbarkeit ist das Minimum — dieser Fall ist ein PERMANENTER Zustand,
+ * kein Retry der Artikelübersetzung würde ihn heilen, deshalb loggen statt
+ * abbrechen). Erfasst nebenbei auch echte Teilverluste und den Fall
+ * "Zielsprachname kommt im übersetzten Text schlicht nicht vor".
  *
- * Deshalb jetzt: `wanted` (die Teilmenge der Zielsprach-Begriffe, die zu den
- * verlinkten Slugs passt) explizit bilden und bei Leere SICHTBAR machen
- * (console.error mit targetLang + Slugs), aber NICHT abbrechen — Sichtbarkeit
- * ist das Minimum, ein harter Abbruch träfe zu viele legitime Fälle. Die
- * eigentliche Übersetzung (Titel, Text) bleibt dadurch erhalten, auch wenn
- * in diesem Lauf keine Glossar-Links gesetzt werden konnten.
+ * Abweichend vom exakten Review-Vorschlag ("bei gesetzt < wanted.length
+ * loggen", wanted = terms.filter(t => slugs.includes(t.slug))): das würde den
+ * Fall übersehen, in dem ein Slug in `terms` GAR NICHT mehr auftaucht (Begriff
+ * hidden/gelöscht — getMatcherTerms filtert selbst auf status=published) —
+ * dort ist `wanted` bereits auf denselben Wert wie `gesetzt` geschrumpft, der
+ * Vergleich feuert nie. Vergleichsbasis ist deshalb `slugs.length` (wie viele
+ * Begriffe im deutschen Original TATSÄCHLICH verlinkt waren) statt `wanted`
+ * (wie viele davon aktuell überhaupt noch als Kandidat auftauchen) — die
+ * einzige Zahl, die für JEDEN der drei Verlustpfade als verlässliche Basis
+ * taugt, ohne eine weitere Fallunterscheidung zu brauchen.
+ *
+ * Review-Fund Important 1, Fix 2 (Fix-Runde 2): `rawTerms === null` ist KEIN
+ * Fall für diesen Log-Pfad, sondern für einen Wurf (siehe unten) — die
+ * Unterscheidung ist nicht "loggen vs. abbrechen", sondern "kann ein
+ * Retry es heilen?". Ein `null` ist ein TRANSIENTER DB-Fehler (die
+ * Übersetzungsabfrage selbst ist gescheitert) — dafür existiert der
+ * Queue-Retry (status bleibt 'pending' bis MAX_ATTEMPTS). Log-and-continue
+ * würde hier eine dauerhaft linkfreie Übersetzung festschreiben, obwohl ein
+ * zweiter Versuch Sekunden später den Zustand vollständig heilen könnte — ein
+ * kurzer DB-Aussetzer kostet sonst PERMANENT die Links. Ein hidden/gelöschter
+ * Begriff oder eine schlicht noch fehlende Übersetzungszeile ist dagegen ein
+ * PERMANENTER Zustand: kein Retry ändert daran etwas, deshalb dort loggen statt
+ * werfen (diese Fälle laufen unten durch dieselbe result-basierte Prüfung).
  */
 export async function reinjectGlossaryMarksForTranslation(
   sourceContent: unknown,
@@ -280,25 +310,36 @@ export async function reinjectGlossaryMarksForTranslation(
     getMatcherTerms(targetLang),
     getChartProductNames(),
   ])
-  // getMatcherTerms gibt null zurück, wenn genau die Übersetzungsabfrage
-  // fehlgeschlagen ist (terms.ts) — von einem legitimen "noch keine
-  // Übersetzung vorhanden" (dort bereits pro Begriff auf die deutsche
-  // Fassung degradiert) unterschieden. Für die Sichtbarkeits-Meldung unten
-  // reicht die Unterscheidung "wanted leer", die Ursache (Ladefehler vs.
-  // hidden/noch nicht übersetzt) landet zusätzlich im Log.
-  const terms = rawTerms ?? []
-  const wanted = terms.filter((t) => slugs.includes(t.slug))
-  if (wanted.length === 0) {
-    console.error(
-      `[glossary/translate] Keine passenden Zielsprach-Begriffe (${targetLang}) für verlinkte Slugs ` +
-      `gefunden — Übersetzung wird ohne Glossar-Links gespeichert. ` +
-      (rawTerms === null ? 'Ursache: Übersetzungsabfrage fehlgeschlagen. ' : '') +
-      `Slugs: ${slugs.join(', ')}`,
+  if (rawTerms === null) {
+    // Transienter Fehler bei der Übersetzungsabfrage selbst — werfen, damit
+    // der Aufrufer (processGeneratedPost in translation-queue.ts bzw.
+    // process-queue/route.ts) das ungefangen an den bestehenden
+    // Per-Item-Retry der Queue durchreicht, statt eine dauerhaft linkfreie
+    // Übersetzung zu schreiben.
+    throw new Error(
+      `[glossary/translate] Zielsprach-Begriffsliste (${targetLang}) nicht ladbar (Übersetzungsabfrage ` +
+      `fehlgeschlagen) — Injektion abgebrochen, Queue-Retry übernimmt`,
     )
   }
 
   // Company- und Chart-Produktnamen reservieren, wie applyGlossaryConfirmation
   // (Kollisionsregel: Company > Chart-Produkt > Lexikonbegriff).
   const reserved = buildReservedNames(chartProductNames)
-  return injectGlossaryMarks(translatedContent, slugs, terms, { reserved })
+  const injected = injectGlossaryMarks(translatedContent, slugs, rawTerms, { reserved })
+
+  const actuallyLinked = extractLinkedSlugs(injected).length
+  if (actuallyLinked < slugs.length) {
+    // Permanenter Zustand (hidden/gelöschter Begriff, noch keine
+    // Übersetzungszeile, oder der Name kommt im übersetzten Text schlicht
+    // nicht vor) — kein Retry würde daran etwas ändern, deshalb nur sichtbar
+    // machen, nicht abbrechen. Trifft auch zu, wenn ein Name absichtlich
+    // wegen einer Company-/Produkt-Kollision übersprungen wurde (reserved) —
+    // akzeptierter Nebeneffekt: der Log-Eintrag ist dann harmlos, aber nicht
+    // falsch (es wurden tatsächlich weniger Marks gesetzt als im Original).
+    console.error(
+      `[glossary/translate] Nur ${actuallyLinked} von ${slugs.length} erwarteten Glossar-Marks im ` +
+      `übersetzten Text (${targetLang}) gesetzt — Slugs: ${slugs.join(', ')}`,
+    )
+  }
+  return injected
 }
