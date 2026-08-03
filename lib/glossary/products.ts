@@ -154,13 +154,19 @@ export async function assignProducts(termId: string, termName: string, summary: 
   if (rows.length === 0) return 0
 
   // Manuelle Zuordnungen laden und aus der LLM-Antwort herausfiltern, statt
-  // sie upzuserten (ein onConflict-Upsert allein kennt kein WHERE).
+  // sie upzuserten (ein onConflict-Upsert allein kennt kein WHERE). Anders als
+  // loadProductCandidates (reiner Read, degradiert auf []) ist das hier ein
+  // Read, der einen Schreibvorgang absichert: schlägt er fehl, wüssten wir
+  // nicht mehr, welche product_ids manuell (source='manual') sind — "loggen
+  // und mit leerem Set weiterlaufen" würde dann genau die Zeilen überschreiben,
+  // die Befund 5 schützen soll. Also abbrechen, nichts schreiben.
   const { data: existing, error: existingError } = await supabase
     .from('glossary_term_products')
     .select('product_id, source')
     .eq('term_id', termId)
   if (existingError) {
-    console.error('[Glossary] assignProducts: Bestandsabgleich fehlgeschlagen:', existingError.message)
+    console.error('[Glossary] assignProducts: Bestandsabgleich fehlgeschlagen, breche ohne Schreiben ab:', existingError.message)
+    return 0
   }
   const manualIds = new Set(
     ((existing ?? []) as Array<{ product_id: string; source: string }>)

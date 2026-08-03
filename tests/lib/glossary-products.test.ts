@@ -83,9 +83,14 @@ beforeEach(() => {
 })
 
 describe('assignProducts', () => {
-  it('berücksichtigt nur visible und chartable Produkte', async () => {
+  it('berücksichtigt nur visible und chartable Produkte, kappt Halluzinationen und clamped relevance', async () => {
     state.candidateRows = CANDIDATES
-    mocks.create.mockResolvedValueOnce(toolUse({ assignments: [{ product_id: 'p1', relevance: 0.9 }] }))
+    // p1 mit out-of-range relevance (muss auf 1 geclamped werden) + eine
+    // vom Modell erfundene id, die NICHT aus der Kandidatenliste stammt (muss
+    // verworfen werden, sonst FK-Violation beim Upsert).
+    mocks.create.mockResolvedValueOnce(toolUse({
+      assignments: [{ product_id: 'p1', relevance: 1.7 }, { product_id: 'p-halluziniert', relevance: 0.5 }],
+    }))
     const { assignProducts } = await import('@/lib/glossary/products')
     const written = await assignProducts('term-1', 'Mixture of Experts', 'Kurzfassung.')
 
@@ -94,8 +99,11 @@ describe('assignProducts', () => {
     expect(metricsCalls).toContainEqual({ table: 'product_metrics', method: 'eq', args: ['chartable', true] })
     expect(metricsCalls).toContainEqual({ table: 'product_metrics', method: 'eq', args: ['products.visibility_status', 'visible'] })
     expect(metricsCalls).toContainEqual({ table: 'product_metrics', method: 'gte', args: ['mention_count', 2] })
+    // Befund 4: der Cap muss wirklich in der Query ankommen, nicht nur im Kommentar.
+    expect(metricsCalls).toContainEqual({ table: 'product_metrics', method: 'order', args: ['mention_count', { ascending: false }] })
+    expect(metricsCalls).toContainEqual({ table: 'product_metrics', method: 'limit', args: [300] })
     expect(state.upserts).toEqual([
-      { table: 'glossary_term_products', rows: [{ term_id: 'term-1', product_id: 'p1', relevance: 0.9, source: 'llm' }] },
+      { table: 'glossary_term_products', rows: [{ term_id: 'term-1', product_id: 'p1', relevance: 1, source: 'llm' }] },
     ])
   })
 
@@ -124,5 +132,42 @@ describe('assignProducts', () => {
 
     expect(written).toBe(0)
     expect(state.upserts).toHaveLength(0)
+  })
+
+  it('Review-Fix (Important 1): bricht ohne Schreiben ab, wenn der Bestandsabgleich für manuelle Zuordnungen fehlschlägt', async () => {
+    // Vorher: ein Fehler beim Laden von glossary_term_products wurde nur
+    // geloggt, manualIds blieb ein leeres Set, und der Code upsertete trotzdem
+    // — genau im Fehlerfall hätte das eine echte source='manual'-Zeile mit
+    // source='llm' überschrieben. Gegen den alten Code ist dieser Test rot:
+    // written wäre 1 und state.upserts hätte einen Eintrag.
+    state.candidateRows = CANDIDATES
+    state.existingError = { message: 'DB nicht erreichbar' }
+    mocks.create.mockResolvedValueOnce(toolUse({ assignments: [{ product_id: 'p1', relevance: 0.9 }] }))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { assignProducts } = await import('@/lib/glossary/products')
+    const written = await assignProducts('term-1', 'Mixture of Experts', 'Kurzfassung.')
+
+    expect(written).toBe(0)
+    expect(state.upserts).toHaveLength(0)
+    errSpy.mockRestore()
+  })
+
+  it('degradiert auf 0 ohne LLM-Call, wenn das Laden der Kandidatenliste fehlschlägt', async () => {
+    state.candidateError = { message: 'DB nicht erreichbar' }
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { assignProducts } = await import('@/lib/glossary/products')
+    const written = await assignProducts('term-1', 'Mixture of Experts', 'Kurzfassung.')
+
+    expect(written).toBe(0)
+    expect(mocks.create).not.toHaveBeenCalled()
+    errSpy.mockRestore()
+  })
+
+  it('wirft, wenn der finale Upsert fehlschlägt', async () => {
+    state.candidateRows = CANDIDATES
+    state.upsertError = { message: 'constraint violation' }
+    mocks.create.mockResolvedValueOnce(toolUse({ assignments: [{ product_id: 'p1', relevance: 0.9 }] }))
+    const { assignProducts } = await import('@/lib/glossary/products')
+    await expect(assignProducts('term-1', 'Mixture of Experts', 'Kurzfassung.')).rejects.toThrow()
   })
 })
