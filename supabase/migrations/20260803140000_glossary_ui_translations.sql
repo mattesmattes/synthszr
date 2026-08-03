@@ -67,12 +67,16 @@ ON CONFLICT (key, language_code) DO UPDATE SET
   value = EXCLUDED.value,
   updated_at = NOW();
 
--- Verifikation (Review Important 1): ein INSERT ohne RETURNING quittiert der
--- SQL-Editor mit „Success. No rows returned" — identisch für einen
--- Volltreffer, einen halb eingefügten Paste oder einen nur teilweise
--- markierten/ausgeführten Block. Muss 9 Schlüssel (nav.glossary +
--- 8 glossary.*-Schlüssel) × 3 Sprachen (en/nds/cs) = 27 Zeilen liefern.
+-- Verifikation (Review Important 1, Fix-Runde 2): ein INSERT ohne RETURNING
+-- quittiert der SQL-Editor mit „Success. No rows returned" — identisch für
+-- einen Volltreffer, einen halb eingefügten Paste oder einen nur teilweise
+-- markierten/ausgeführten Block. `language_code in (...)` grenzt auf die drei
+-- Sprachen dieser Migration ein — ohne diesen Filter zählt der Query auch
+-- eine `fr`-Zeile mit, falls scripts/_translate_fr.ts (iteriert über jeden
+-- Schlüssel in defaultTranslations) seit Task 15/17 einmal gelaufen ist.
 select language_code, count(*) as zeilen
 from ui_translations
-where key = 'nav.glossary' or key like 'glossary.%'
+where language_code in ('en', 'nds', 'cs')
+  and (key = 'nav.glossary' or key like 'glossary.%')
 group by language_code order by language_code;
+-- Erwartet: genau 3 Zeilen (cs/en/nds), je 9 — zusammen die 27 Zeilen dieser Migration.
