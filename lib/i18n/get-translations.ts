@@ -151,6 +151,9 @@ export const defaultTranslations: Record<string, string> = {
   'glossary.products': 'Produkte in den Synthszr Charts',
   'glossary.news': 'Aktuelle News',
   'glossary.not_found': 'Begriff nicht gefunden',
+  'glossary.index_title': 'Synthszr Lexikon',
+  'glossary.index_intro': 'Fachbegriffe aus unseren Artikeln, kurz und verständlich erklärt.',
+  'glossary.index_empty': 'Noch keine Begriffe veröffentlicht.',
 
   // Common
   'common.loading': 'Laden...',

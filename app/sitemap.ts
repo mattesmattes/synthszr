@@ -5,6 +5,7 @@ import { getRankedProducts } from '@/lib/rankings/leaderboard'
 import { fetchAllCompanyMentions } from '@/lib/companies/mention-rows'
 import { categorySlugsWithIntro } from '@/lib/rankings/category-intros'
 import { AUTHOR } from '@/lib/data/author'
+import { getPublishedTermList } from '@/lib/glossary/terms'
 
 // ISR statt voll-dynamisch: der cookie-freie Anon-Client erlaubt Prerender +
 // stündliche Regenerierung. Wichtig für Googlebot: schlägt eine Regenerierung
@@ -62,7 +63,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const sitemap: MetadataRoute.Sitemap = []
 
   // Static pages - available in all active languages
-  const staticPages = ['', '/archive', '/why', '/datenschutz', '/impressum', '/companies', '/sources']
+  const staticPages = ['', '/archive', '/why', '/datenschutz', '/impressum', '/companies', '/sources', '/glossary']
 
   // Static pages - each locale gets its own <url> entry with full alternates
   for (const page of staticPages) {
@@ -220,6 +221,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.4,
       alternates: { languages: authorAlternates },
     })
+  }
+
+  // Lexikon-Detailseiten: nur veröffentlichte Begriffe (getPublishedTermList
+  // filtert bereits auf status=published) und nur aktive SEO-Locales — der
+  // Slug ist locale-unabhängig, ein Aufruf mit DEFAULT_LOCALE reicht. Wie bei
+  // Rankings/Companies: activeLocales statt eines eigenen Locale-Arrays, damit
+  // eine in der DB deaktivierte Sprache auch hier nicht auftaucht. PostgREST
+  // cappt Ergebnisse bei 1000 Zeilen — der Bestand liegt heute weit darunter;
+  // braucht getPublishedTermList (lib/glossary/terms.ts) Range-Pagination,
+  // sobald sich das Lexikon dieser Größenordnung nähert.
+  try {
+    const terms = await getPublishedTermList(DEFAULT_LOCALE)
+    for (const term of terms) {
+      const alternates: Record<string, string> = {
+        'x-default': `${BASE_URL}/${DEFAULT_LOCALE}/glossary/${term.slug}`,
+      }
+      for (const locale of activeLocales) {
+        alternates[locale] = `${BASE_URL}/${locale}/glossary/${term.slug}`
+      }
+      for (const locale of activeLocales) {
+        sitemap.push({
+          url: `${BASE_URL}/${locale}/glossary/${term.slug}`,
+          changeFrequency: 'monthly',
+          priority: locale === DEFAULT_LOCALE ? 0.6 : 0.4,
+          alternates: { languages: alternates },
+        })
+      }
+    }
+  } catch (e) {
+    console.error('sitemap: glossary section failed', e)
   }
 
   return sitemap
