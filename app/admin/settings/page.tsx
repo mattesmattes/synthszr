@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { USE_CASE_DEFINITIONS, type UseCaseInfo } from '@/lib/ai/use-cases'
 
 // --- Types ---
 
@@ -22,13 +23,6 @@ interface ModelInfo {
   provider: 'anthropic' | 'openai' | 'google'
   pricing: { input: number; output: number }
   category?: 'text' | 'image'
-}
-
-interface UseCaseInfo {
-  label: string
-  description: string
-  defaultModel: string
-  allowedProviders: Array<'anthropic' | 'openai' | 'google'>
 }
 
 interface ApiKeyTestResult {
@@ -81,57 +75,12 @@ interface ScheduleConfig {
 }
 
 // --- Constants ---
-
-const USE_CASE_DEFINITIONS: Record<string, UseCaseInfo> = {
-  ghostwriter: {
-    label: 'Ghostwriter',
-    description: 'Blog-Artikel aus dem Digest generieren',
-    defaultModel: 'claude-opus-4-8',
-    allowedProviders: ['anthropic', 'openai', 'google'],
-  },
-  article_planning: {
-    label: 'Artikel-Planung',
-    description: 'Struktur, Reihenfolge und Überschriften planen',
-    defaultModel: 'gemini-2.5-flash',
-    allowedProviders: ['anthropic', 'openai', 'google'],
-  },
-  proofreading: {
-    label: 'Rechtschreibprüfung',
-    description: 'Deutsche Rechtschreib- und Grammatikkorrektur',
-    defaultModel: 'claude-haiku-4-5-20251001',
-    allowedProviders: ['anthropic', 'openai', 'google'],
-  },
-  synthesis_scoring: {
-    label: 'Bewertung (Scoring)',
-    description: 'Artikel nach Originalität und Relevanz bewerten',
-    defaultModel: 'claude-haiku-4-5-20251001',
-    allowedProviders: ['anthropic'],
-  },
-  podcast_script: {
-    label: 'Podcast-Skript',
-    description: 'Podcast-Skripte aus Blog-Artikeln generieren',
-    defaultModel: 'claude-sonnet-4-6',
-    allowedProviders: ['anthropic'],
-  },
-  edit_analysis: {
-    label: 'Edit-Analyse',
-    description: 'Manuelle Edits klassifizieren und analysieren',
-    defaultModel: 'claude-sonnet-4-6',
-    allowedProviders: ['anthropic'],
-  },
-  pattern_extraction: {
-    label: 'Pattern-Extraktion',
-    description: 'Muster aus wiederkehrenden Edits extrahieren',
-    defaultModel: 'claude-sonnet-4-6',
-    allowedProviders: ['anthropic'],
-  },
-  image_generation: {
-    label: 'Bildgenerierung',
-    description: 'Article-Thumbnails und Cover-Bilder',
-    defaultModel: 'google/gemini-3-pro-image',
-    allowedProviders: ['openai', 'google'],
-  },
-}
+//
+// USE_CASE_DEFINITIONS is imported from lib/ai/use-cases.ts — the same
+// source lib/ai/model-config.ts reads from server-side. Do not redefine a
+// second copy here; that duplication is what previously caused newer use
+// cases (queue_ranking, ranking_*, subscription_detect, glossary_*) to be
+// configurable in the database but invisible in this UI.
 
 // Use-cases that pick from image-generation models instead of text models.
 const IMAGE_USE_CASES = new Set(['image_generation'])
@@ -156,7 +105,15 @@ const USE_CASE_GROUPS: Array<{ title: string; useCases: string[] }> = [
   },
   {
     title: 'Analyse & Verarbeitung',
-    useCases: ['synthesis_scoring', 'edit_analysis', 'pattern_extraction'],
+    useCases: ['synthesis_scoring', 'edit_analysis', 'pattern_extraction', 'queue_ranking', 'subscription_detect'],
+  },
+  {
+    title: 'Rankings (Synthszr Charts)',
+    useCases: ['ranking_extract', 'ranking_attribution_qa', 'ranking_validity_qa'],
+  },
+  {
+    title: 'Fachbegriff-Lexikon',
+    useCases: ['glossary_candidate_identification', 'glossary_generation', 'glossary_readability_qa'],
   },
   {
     title: 'Bildgenerierung',
@@ -197,6 +154,7 @@ export default function SettingsPage() {
   const [refreshSuccess, setRefreshSuccess] = useState(false)
   const [savingModels, setSavingModels] = useState(false)
   const [modelsSaved, setModelsSaved] = useState(false)
+  const [modelsError, setModelsError] = useState<string | null>(null)
   const [testingKeys, setTestingKeys] = useState(false)
   const [keyTestResults, setKeyTestResults] = useState<ApiKeyTestResults | null>(null)
 
@@ -223,17 +181,25 @@ export default function SettingsPage() {
 
   // --- Fetchers ---
 
-  async function fetchModelsAndConfig(refresh = false) {
+  async function fetchModelsAndConfig(refresh = false): Promise<boolean> {
     if (!refresh) setModelsLoading(true)
+    setModelsError(null)
     try {
       const url = refresh ? '/api/admin/available-models?refresh=true' : '/api/admin/available-models'
       const res = await fetch(url)
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || `Laden fehlgeschlagen (HTTP ${res.status})`)
+      }
       const data = await res.json()
       setAvailableModels(data.models || [])
       setModelConfig(data.config || {})
       setPricingLastUpdated(data.pricingLastUpdated || null)
+      return true
     } catch (err) {
       console.error('Error fetching models:', err)
+      setModelsError(err instanceof Error ? err.message : 'Laden der Modelle fehlgeschlagen')
+      return false
     } finally {
       setModelsLoading(false)
     }
@@ -242,27 +208,33 @@ export default function SettingsPage() {
   async function refreshModels() {
     setRefreshingModels(true)
     setRefreshSuccess(false)
-    await fetchModelsAndConfig(true)
+    const ok = await fetchModelsAndConfig(true)
     setRefreshingModels(false)
-    setRefreshSuccess(true)
-    setTimeout(() => setRefreshSuccess(false), 3000)
+    if (ok) {
+      setRefreshSuccess(true)
+      setTimeout(() => setRefreshSuccess(false), 3000)
+    }
   }
 
   async function saveModelConfiguration() {
     setSavingModels(true)
     setModelsSaved(false)
+    setModelsError(null)
     try {
       const res = await fetch('/api/admin/available-models', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(modelConfig),
       })
-      if (res.ok) {
-        setModelsSaved(true)
-        setTimeout(() => setModelsSaved(false), 3000)
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || `Speichern fehlgeschlagen (HTTP ${res.status})`)
       }
+      setModelsSaved(true)
+      setTimeout(() => setModelsSaved(false), 3000)
     } catch (err) {
       console.error('Error saving model config:', err)
+      setModelsError(err instanceof Error ? err.message : 'Speichern der Modell-Konfiguration fehlgeschlagen')
     } finally {
       setSavingModels(false)
     }
@@ -404,7 +376,7 @@ export default function SettingsPage() {
 
   // Get models available for a specific use case
   function getModelsForUseCase(useCaseKey: string): ModelInfo[] {
-    const info = USE_CASE_DEFINITIONS[useCaseKey]
+    const info = (USE_CASE_DEFINITIONS as Record<string, UseCaseInfo>)[useCaseKey]
     if (!info) return []
     const wantsImage = IMAGE_USE_CASES.has(useCaseKey)
     return availableModels.filter(m => {
@@ -549,7 +521,7 @@ export default function SettingsPage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       {group.useCases.map(useCaseKey => {
-                        const info = USE_CASE_DEFINITIONS[useCaseKey]
+                        const info = (USE_CASE_DEFINITIONS as Record<string, UseCaseInfo>)[useCaseKey]
                         if (!info) return null
                         const models = getModelsForUseCase(useCaseKey)
                         const currentModel = modelConfig[useCaseKey] || info.defaultModel
@@ -629,41 +601,58 @@ export default function SettingsPage() {
                 </Card>
 
                 {/* Save Button + Pricing Freshness */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <Button onClick={saveModelConfiguration} disabled={savingModels}>
-                      {savingModels ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Modelle speichern
-                    </Button>
-                    {modelsSaved && (
-                      <span className="text-sm text-green-600 flex items-center gap-1">
-                        <CheckCircle className="h-4 w-4" />
-                        Gespeichert
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {pricingLastUpdated && (() => {
-                      const daysSince = Math.floor((Date.now() - new Date(pricingLastUpdated).getTime()) / 86400000)
-                      const isStale = daysSince > 30
-                      return (
-                        <span className={`text-xs flex items-center gap-1 ${isStale ? 'text-orange-500' : 'text-muted-foreground'}`}>
-                          {isStale && <AlertTriangle className="h-3 w-3" />}
-                          Preise aktualisiert: {new Date(pricingLastUpdated).toLocaleDateString('de-DE')}
-                          {isStale && ` (${daysSince} Tage)`}
+                <div className="space-y-2">
+                  {modelsError && (
+                    <div className="flex items-center gap-2 text-sm text-red-600">
+                      <XCircle className="h-4 w-4 shrink-0" />
+                      {modelsError}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <Button onClick={saveModelConfiguration} disabled={savingModels}>
+                        {savingModels ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                        Modelle speichern
+                      </Button>
+                      {modelsSaved && (
+                        <span className="text-sm text-green-600 flex items-center gap-1">
+                          <CheckCircle className="h-4 w-4" />
+                          Gespeichert
                         </span>
-                      )
-                    })()}
-                    <Button variant="ghost" size="sm" onClick={refreshModels} disabled={refreshingModels}>
-                      <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshingModels ? 'animate-spin' : ''}`} />
-                      Modelle aktualisieren
-                    </Button>
-                    {refreshSuccess && (
-                      <span className="text-xs text-green-600 flex items-center gap-1">
-                        <CheckCircle className="h-3 w-3" />
-                        Aktualisiert
-                      </span>
-                    )}
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {pricingLastUpdated && (() => {
+                        const daysSince = Math.floor((Date.now() - new Date(pricingLastUpdated).getTime()) / 86400000)
+                        const isStale = daysSince > 30
+                        return (
+                          <span
+                            className={`text-xs flex items-center gap-1 ${isStale ? 'text-orange-500' : 'text-muted-foreground'}`}
+                            title="Preise werden manuell in lib/ai/model-pricing.ts gepflegt — die Anbieter bieten keine Preis-API an."
+                          >
+                            {isStale && <AlertTriangle className="h-3 w-3" />}
+                            Preise manuell gepflegt: {new Date(pricingLastUpdated).toLocaleDateString('de-DE')}
+                            {isStale && ` (${daysSince} Tage — lib/ai/model-pricing.ts prüfen)`}
+                          </span>
+                        )
+                      })()}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={refreshModels}
+                        disabled={refreshingModels}
+                        title="Lädt die Modell-Liste der Anbieter neu. Aktualisiert keine Preise — die werden manuell in lib/ai/model-pricing.ts gepflegt."
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshingModels ? 'animate-spin' : ''}`} />
+                        Modell-Liste neu laden
+                      </Button>
+                      {refreshSuccess && (
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                          <CheckCircle className="h-3 w-3" />
+                          Aktualisiert
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </>
