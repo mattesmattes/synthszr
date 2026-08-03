@@ -68,6 +68,9 @@ function fakeSupabase(config: {
   terms: TermRow[]
   news?: Record<string, NewsRow[]>
   updateErrorFor?: Set<string>
+  /** Simuliert einen Query-Fehler beim News-Read für bestimmte Begriffe
+   *  (Important 2 — unterscheidbar von "keine News vorhanden" = leeres Array). */
+  newsErrorFor?: Set<string>
 }) {
   const newsByTerm = config.news ?? {}
   const calls = {
@@ -113,7 +116,12 @@ function fakeSupabase(config: {
             eq: (_col: string, termId: string) => {
               calls.newsQueriedFor.push(termId)
               return {
-                order: () => Promise.resolve({ data: newsByTerm[termId] ?? [], error: null }),
+                order: () => {
+                  if (config.newsErrorFor?.has(termId)) {
+                    return Promise.resolve({ data: null, error: { message: 'db down' } })
+                  }
+                  return Promise.resolve({ data: newsByTerm[termId] ?? [], error: null })
+                },
               }
             },
           }),
@@ -161,6 +169,12 @@ function outdatedResponse(text = 'Neuer, aktualisierter Text.') {
       },
     }],
   }
+}
+
+/** Antwort, die ReviewSchema NICHT parsen kann (outdated fehlt) — simuliert
+ *  eine unparsbare Modellantwort (Important 3, deterministischer Defekt). */
+function invalidToolResponse() {
+  return { content: [{ type: 'tool_use', input: { reasoning: 'ohne outdated-Feld' } }] }
 }
 
 beforeEach(() => {
@@ -309,5 +323,97 @@ describe('GET /api/cron/glossary-review', () => {
     expect(updatedIds).toEqual(['t1', 't2'])
     const body = await res.json()
     expect(body.termsReviewed).toBe(2)
+  })
+
+  it('gibt die aktuellen News als Kontext an den LLM-Call weiter', async () => {
+    const { client } = fakeSupabase({
+      terms: [term()],
+      news: { t1: [{ title: 'Neuer Inferenz-Chip vorgestellt', context_sentence: 'Senkt die Inferenzkosten deutlich.', published_at: '2026-08-01T00:00:00Z' }] },
+    })
+    mocks.createAdminClient.mockReturnValue(client)
+
+    const { GET } = await import('@/app/api/cron/glossary-review/route')
+    await GET(req())
+
+    const promptContent = mocks.anthropicCreate.mock.calls[0][0].messages[0].content as string
+    expect(promptContent).toContain('Neuer Inferenz-Chip vorgestellt')
+    expect(promptContent).toContain('Senkt die Inferenzkosten deutlich.')
+  })
+
+  it('schreibt bei einem News-Lesefehler KEINEN Stempel — weder ok noch flagged (Important 2)', async () => {
+    // Vor dem Fix gab loadTermNews bei einem Query-Fehler `[]` zurück —
+    // ununterscheidbar von "wirklich keine News" — und der Aufrufer stempelte
+    // das Ergebnis trotzdem als review_state='ok' mit last_reviewed_at=now().
+    const { client, calls } = fakeSupabase({
+      terms: [term()],
+      newsErrorFor: new Set(['t1']),
+    })
+    mocks.createAdminClient.mockReturnValue(client)
+
+    const { GET } = await import('@/app/api/cron/glossary-review/route')
+    const res = await GET(req())
+    expect(res.status).toBe(200)
+
+    // Kein update()-Aufruf für t1 — weder 'ok' noch 'flagged'. Ein
+    // Lesefehler ist transient, der Begriff muss unverändert bleiben.
+    expect(calls.updates).toHaveLength(0)
+    // Ohne News-Kontext darf gar nicht erst geurteilt werden.
+    expect(mocks.anthropicCreate).not.toHaveBeenCalled()
+  })
+
+  it('markiert einen Begriff mit kaputtem/fehlendem body als flagged statt abzustürzen (Important 3)', async () => {
+    // extractPlainText(term.body as TipTapDoc) war ein ungeprüfter Cast auf
+    // beliebiges DB-JSONB — body ist jsonb ohne NOT NULL und kann null oder
+    // ein Dokument ohne content sein. Ohne Vorprüfung würde das bei JEDEM
+    // Lauf identisch scheitern und den Begriff für immer an der Spitze der
+    // last_reviewed_at-Sortierung halten.
+    const { client, calls } = fakeSupabase({ terms: [term({ body: null })] })
+    mocks.createAdminClient.mockReturnValue(client)
+
+    const { GET } = await import('@/app/api/cron/glossary-review/route')
+    const res = await GET(req())
+    expect(res.status).toBe(200)
+
+    expect(calls.updates).toHaveLength(1)
+    const { payload } = calls.updates[0]
+    expect(payload.review_state).toBe('flagged')
+    expect(typeof payload.last_reviewed_at).toBe('string')
+    // Ein Begriff mit kaputtem body wird gar nicht erst ans LLM geschickt.
+    expect(mocks.anthropicCreate).not.toHaveBeenCalled()
+    expect(calls.newsQueriedFor).not.toContain('t1')
+
+    const body = await res.json()
+    expect(body.termsReviewed).toBe(1)
+  })
+
+  it('markiert einen Begriff mit unparsbarer Modellantwort als flagged (Important 3)', async () => {
+    const { client, calls } = fakeSupabase({ terms: [term()] })
+    mocks.createAdminClient.mockReturnValue(client)
+    mocks.anthropicCreate.mockResolvedValue(invalidToolResponse())
+
+    const { GET } = await import('@/app/api/cron/glossary-review/route')
+    const res = await GET(req())
+    expect(res.status).toBe(200)
+
+    expect(calls.updates).toHaveLength(1)
+    const { payload } = calls.updates[0]
+    expect(payload.review_state).toBe('flagged')
+    expect(typeof payload.last_reviewed_at).toBe('string')
+  })
+
+  it('markiert einen Begriff mit leerer Revision (outdated=true ohne brauchbaren Text) als flagged', async () => {
+    const { client, calls } = fakeSupabase({ terms: [term()] })
+    mocks.createAdminClient.mockReturnValue(client)
+    mocks.anthropicCreate.mockResolvedValue(outdatedResponse('   '))
+
+    const { GET } = await import('@/app/api/cron/glossary-review/route')
+    const res = await GET(req())
+    expect(res.status).toBe(200)
+
+    expect(calls.updates).toHaveLength(1)
+    const { payload } = calls.updates[0]
+    expect(payload.review_state).toBe('flagged')
+    expect(payload).not.toHaveProperty('pending_body')
+    expect(typeof payload.last_reviewed_at).toBe('string')
   })
 })

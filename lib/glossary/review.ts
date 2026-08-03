@@ -21,6 +21,19 @@
  * einem Begriff werden geloggt und übersprungen statt die Schleife
  * abzubrechen (Per-Item-Isolation, Review-Fix aus Task 14).
  *
+ * Review-Fund (Fix-Runde 1): zwei Fehlerarten brauchen ENTGEGENGESETZTE
+ * Behandlung, sonst tauscht man einen Defekt gegen einen anderen.
+ * - Transiente Infrastrukturfehler (News-Query scheitert, DB-Write scheitert,
+ *   Netzwerk/Timeout im LLM-Call) sind dem Begriff nicht zuzurechnen: Begriff
+ *   überspringen, OHNE review_state/last_reviewed_at zu ändern — er soll beim
+ *   nächsten Lauf unverändert wieder ganz vorn stehen.
+ * - Deterministische, begriffsspezifische Defekte (kaputter/leerer body,
+ *   unparsbare Modellantwort, leere Revision) würden bei jedem Lauf identisch
+ *   wiederkehren: `review_state='flagged'` + `last_reviewed_at=now()`
+ *   schreiben. Das rotiert den Begriff aus dem Warteschlangenkopf heraus und
+ *   macht ihn im Admin sichtbar (Badge existiert bereits in
+ *   app/admin/glossary/page.tsx), statt den Cron dauerhaft zu blockieren.
+ *
  * ZUSATZ (Controller, aus der Task-15-Vorabprüfung): pro erfolgreich
  * geprüftem Begriff wird zusätzlich assignProducts (Task 15) aufgerufen —
  * Begriffe, die vor Task 15 entstanden sind, bekämen sonst nie Produkte, und
@@ -55,7 +68,10 @@ interface GlossaryReviewNewsRow {
 export interface GlossaryReviewResult {
   /** Wie viele Begriffe in diesem Lauf geladen wurden (Batch-Größe). */
   termsChecked: number
-  /** Wie viele davon erfolgreich geprüft UND geschrieben wurden. */
+  /** Wie viele davon erfolgreich geprüft UND geschrieben wurden — inklusive
+   *  Begriffen, die wegen eines deterministischen Defekts als 'flagged'
+   *  markiert wurden (auch das ist ein geschriebenes Ergebnis, kein Fehler,
+   *  der übersprungen wurde). */
   termsReviewed: number
   /** Teilmenge von termsReviewed, die als veraltet markiert wurde. */
   revisionsProposed: number
@@ -118,11 +134,18 @@ Ist der bestehende Erklärungstext angesichts dieser News noch sachlich korrekt 
 
 /** Aktuelle News für den Aktualitäts-Kontext (Design-Spec §I) — liest nur die
  *  bereits vom wöchentlichen Cron (Task 14) befüllte Cache-Tabelle, kein
- *  eigener Vektor-Zugriff im Review-Pfad. */
+ *  eigener Vektor-Zugriff im Review-Pfad.
+ *
+ *  Rückgabe `null` bei einem Query-Fehler — UNTERSCHIEDEN von einem echten
+ *  „keine News vorhanden" (leeres Array, ein legitimer Prüffall). Review-Fund
+ *  Important 2: ein verschluckter Lesefehler wäre sonst nicht von „wirklich
+ *  keine News" zu unterscheiden gewesen, das Modell hätte ohne den
+ *  entscheidenden Kontext geurteilt, und der Aufrufer hätte das Ergebnis
+ *  trotzdem als 'ok' mit frischem last_reviewed_at gestempelt. */
 async function loadTermNews(
   supabase: SupabaseAdminClient,
   termId: string,
-): Promise<GlossaryReviewNewsRow[]> {
+): Promise<GlossaryReviewNewsRow[] | null> {
   const { data, error } = await supabase
     .from('glossary_term_news')
     .select('title, context_sentence, published_at')
@@ -130,9 +153,39 @@ async function loadTermNews(
     .order('published_at', { ascending: false })
   if (error) {
     console.error('[GlossaryReview] News konnten nicht geladen werden für', termId, error.message)
-    return []
+    return null
   }
   return (data ?? []) as GlossaryReviewNewsRow[]
+}
+
+/** Deterministische Vorprüfung vor extractPlainText: `body` ist jsonb ohne
+ *  NOT NULL (Schema), ein kaputter/fehlender Body würde bei JEDEM Lauf
+ *  identisch scheitern — anders als ein transienter Netzwerk-/DB-Fehler
+ *  braucht das einen 'flagged'-Stempel (Review-Fund Important 3), sonst
+ *  bleibt der Begriff für immer am Kopf der last_reviewed_at-Warteschlange.
+ *  extractPlainText selbst prüft das nicht: dort war body immer frisch von
+ *  buildTipTapBody konstruiert (generate.ts), die Vorbedingung war durch den
+ *  Aufrufkontext garantiert. Hier liest die Funktion gespeicherte Daten, die
+ *  Vorbedingung gilt nicht mehr automatisch. */
+function isValidTipTapDoc(body: unknown): body is TipTapDoc {
+  return !!body && typeof body === 'object' && Array.isArray((body as { content?: unknown }).content)
+}
+
+/** Markiert einen Begriff mit einem deterministischen Defekt als 'flagged'
+ *  und schreibt last_reviewed_at fort, damit er aus dem Warteschlangenkopf
+ *  rotiert. Gibt zurück, ob der Schreibvorgang gelungen ist — schlägt er
+ *  fehl, zählt der Begriff (korrekt) nicht als geprüft. */
+async function markFlagged(supabase: SupabaseAdminClient, termId: string, reason: string): Promise<boolean> {
+  console.error('[GlossaryReview] als flagged markiert für', termId, '—', reason)
+  const { error } = await supabase
+    .from('glossary_terms')
+    .update({ review_state: 'flagged', last_reviewed_at: new Date().toISOString() })
+    .eq('id', termId)
+  if (error) {
+    console.error('[GlossaryReview] flagged-Update fehlgeschlagen für', termId, error.message)
+    return false
+  }
+  return true
 }
 
 /**
@@ -174,8 +227,22 @@ export async function reviewGlossaryTerms(supabase: SupabaseAdminClient): Promis
 
   for (const term of termRows) {
     try {
+      if (!isValidTipTapDoc(term.body)) {
+        // Deterministischer Defekt (kaputter/fehlender body) — flaggen statt
+        // überspringen, sonst bliebe der Begriff für immer an der Spitze der
+        // last_reviewed_at-Sortierung.
+        if (await markFlagged(supabase, term.id, 'ungültiger oder fehlender body')) termsReviewed++
+        continue
+      }
+
       const news = await loadTermNews(supabase, term.id)
-      const bodyText = extractPlainText(term.body as TipTapDoc)
+      if (news === null) {
+        // Transienter Lesefehler, dem Begriff nicht zuzurechnen — OHNE
+        // Stempel überspringen, der nächste Lauf versucht es erneut.
+        continue
+      }
+
+      const bodyText = extractPlainText(term.body)
       const resp = await client.messages.create({
         model, max_tokens: 4096, tools: [REVIEW_TOOL],
         tool_choice: { type: 'tool', name: REVIEW_TOOL.name },
@@ -184,7 +251,10 @@ export async function reviewGlossaryTerms(supabase: SupabaseAdminClient): Promis
       const block = resp.content.find((b) => b.type === 'tool_use')
       const parsed = ReviewSchema.safeParse(block && 'input' in block ? block.input : null)
       if (!parsed.success) {
-        console.error('[GlossaryReview] ungültige Tool-Antwort für', term.id, parsed.error.message)
+        // Unparsbare Modellantwort auf denselben Input wiederholt sich beim
+        // nächsten Lauf identisch — deterministisch, deshalb flaggen statt
+        // stillschweigend überspringen.
+        if (await markFlagged(supabase, term.id, `ungültige Tool-Antwort: ${parsed.error.message}`)) termsReviewed++
         continue
       }
 
@@ -213,7 +283,9 @@ export async function reviewGlossaryTerms(supabase: SupabaseAdminClient): Promis
       const blocks = parsed.data.blocks ?? []
       const pendingBody = buildTipTapBody(blocks)
       if (pendingBody.content.length === 0) {
-        console.error('[GlossaryReview] outdated=true aber leerer Revisionstext für', term.id)
+        // outdated=true ohne brauchbaren Text — wiederholt sich beim nächsten
+        // Lauf auf denselben Input identisch, deshalb flaggen.
+        if (await markFlagged(supabase, term.id, 'outdated=true aber leerer Revisionstext')) termsReviewed++
         continue
       }
       const { error: updateError } = await supabase

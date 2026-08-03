@@ -156,6 +156,12 @@ const REVIEW_ORDER: Record<GlossaryReviewState, number> = { revision_pending: 0,
 export default function GlossaryAdminPage() {
   const [terms, setTerms] = useState<GlossaryTermRow[]>([])
   const [details, setDetails] = useState<Record<string, GlossaryTermDetail>>({})
+  // Review-Fund Important 5: ein fehlgeschlagener Detail-Fetch verschwand
+  // bisher stillschweigend (Eintrag fehlte einfach in `details`) und zeigte
+  // dauerhaft „Lade Revision..." ohne Fehlermeldung — mit Übernehmen/Verwerfen
+  // unerreichbar, weil beide Buttons innerhalb des `detail ?`-Zweigs lagen.
+  // Eigener Fehlerzustand pro Slug macht das sichtbar.
+  const [detailErrors, setDetailErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [error, setError] = useState<string | null>(null)
@@ -175,13 +181,27 @@ export default function GlossaryAdminPage() {
       const pending = rows.filter((r) => r.review_state === 'revision_pending')
       const entries = await Promise.all(
         pending.map(async (r) => {
-          const dRes = await fetch(`/api/admin/glossary?slug=${encodeURIComponent(r.slug)}`)
-          if (!dRes.ok) return null
-          const dData = await dRes.json()
-          return [r.slug, dData.term as GlossaryTermDetail] as const
+          try {
+            const dRes = await fetch(`/api/admin/glossary?slug=${encodeURIComponent(r.slug)}`)
+            if (!dRes.ok) {
+              const data = await dRes.json().catch(() => null)
+              return { slug: r.slug, detail: null, error: data?.error || `HTTP ${dRes.status}` }
+            }
+            const dData = await dRes.json()
+            return { slug: r.slug, detail: dData.term as GlossaryTermDetail, error: null }
+          } catch (err) {
+            return { slug: r.slug, detail: null, error: err instanceof Error ? err.message : 'Netzwerkfehler' }
+          }
         }),
       )
-      setDetails(Object.fromEntries(entries.filter((e): e is [string, GlossaryTermDetail] => e !== null)))
+      const newDetails: Record<string, GlossaryTermDetail> = {}
+      const newDetailErrors: Record<string, string> = {}
+      for (const entry of entries) {
+        if (entry.detail) newDetails[entry.slug] = entry.detail
+        else newDetailErrors[entry.slug] = entry.error ?? 'Unbekannter Fehler'
+      }
+      setDetails(newDetails)
+      setDetailErrors(newDetailErrors)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Laden fehlgeschlagen')
     } finally {
@@ -312,26 +332,34 @@ export default function GlossaryAdminPage() {
 
                 {term.review_state === 'revision_pending' && (
                   <CardContent className="space-y-3">
-                    {detail ? (
-                      <>
-                        <RevisionDiff body={detail.body} pendingBody={detail.pending_body} />
-                        <div className="flex items-center gap-2">
-                          <Button size="sm" onClick={() => runAction(term.slug, 'accept_revision')} disabled={isBusy}>
-                            {isBusy ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
-                            Übernehmen
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => runAction(term.slug, 'discard_revision')} disabled={isBusy}>
-                            <XCircle className="h-4 w-4 mr-1.5" />
-                            Verwerfen
-                          </Button>
-                        </div>
-                      </>
-                    ) : (
+                    {detail && <RevisionDiff body={detail.body} pendingBody={detail.pending_body} />}
+                    {!detail && detailErrors[term.slug] && (
+                      <div className="flex items-center gap-2 text-sm text-red-600">
+                        <XCircle className="h-4 w-4 shrink-0" />
+                        Vorschau konnte nicht geladen werden ({detailErrors[term.slug]}) — Übernehmen/Verwerfen
+                        funktionieren trotzdem, oder oben „Neu laden" versuchen.
+                      </div>
+                    )}
+                    {!detail && !detailErrors[term.slug] && (
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Lade Revision...
                       </div>
                     )}
+                    {/* Übernehmen/Verwerfen bleiben unabhängig vom Detail-Fetch
+                        erreichbar (Review-Fund Important 5) — beide Aktionen
+                        brauchen serverseitig nur den slug, keinen geladenen
+                        body/pending_body. */}
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={() => runAction(term.slug, 'accept_revision')} disabled={isBusy}>
+                        {isBusy ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
+                        Übernehmen
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => runAction(term.slug, 'discard_revision')} disabled={isBusy}>
+                        <XCircle className="h-4 w-4 mr-1.5" />
+                        Verwerfen
+                      </Button>
+                    </div>
                   </CardContent>
                 )}
               </Card>

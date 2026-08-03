@@ -19,10 +19,17 @@ type PatchAction = (typeof PATCH_ACTIONS)[number]
  *  eine Aktion, die den servierten Inhalt ändert, muss beide Locale-Pfade
  *  revalidieren, sonst zeigt die ISR-Seite (revalidate=900) bis zu 15 Minuten
  *  den alten Stand. Gleiches Muster wie app/api/stock-synthszr/route.ts, das
- *  aus demselben Grund /de/rankings/[slug] und /en/rankings/[slug] revalidiert. */
+ *  aus demselben Grund /de/rankings/[slug] und /en/rankings/[slug] revalidiert.
+ *
+ *  Review-Fund Important 4: die A-Z-Indexseite (app/[lang]/glossary/page.tsx,
+ *  revalidate=3600) listet denselben Begriff und muss aus demselben Grund
+ *  mitrevalidiert werden — sonst verlinkt sie nach `delete` bis zu eine Stunde
+ *  weiter auf einen 404, bleibt nach `hide` sichtbar oder fehlt nach `publish`. */
 function revalidateGlossaryDetail(slug: string) {
   revalidatePath(`/de/glossary/${slug}`)
   revalidatePath(`/en/glossary/${slug}`)
+  revalidatePath('/de/glossary')
+  revalidatePath('/en/glossary')
 }
 
 export async function GET(request: NextRequest) {
@@ -78,9 +85,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Keine offene Revision für diesen Begriff' }, { status: 400 })
     }
 
+    // last_reviewed_at MUSS in beiden Zweigen fortgeschrieben werden (Review-
+    // Fund Important 1): sonst bleibt der Begriff unverändert an der Spitze
+    // der Cron-Sortierung (review.ts:203) und der nächste Lauf sieht denselben
+    // body/dieselben News wieder — bei discard_revision würde das denselben
+    // abgelehnten Vorschlag täglich erneut erzeugen und der Redaktion erneut
+    // vorlegen, statt die Ablehnung dauerhaft zu machen.
+    const now = new Date().toISOString()
     const update = action === 'accept_revision'
-      ? { body: row.pending_body, pending_body: null, review_state: 'ok', updated_at: new Date().toISOString() }
-      : { pending_body: null, review_state: 'ok' }
+      ? { body: row.pending_body, pending_body: null, review_state: 'ok', last_reviewed_at: now, updated_at: now }
+      : { pending_body: null, review_state: 'ok', last_reviewed_at: now }
     const { error } = await supabase.from('glossary_terms').update(update).eq('slug', slug)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
