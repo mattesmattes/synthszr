@@ -82,11 +82,11 @@ beforeEach(() => {
 })
 
 describe('applyGlossaryConfirmation', () => {
-  it('gibt {} zurück und rührt die DB nicht an, wenn keine Slugs bestätigt wurden', async () => {
+  it('gibt publishedSlugs: [] zurück und rührt die DB nicht an, wenn keine Slugs bestätigt wurden', async () => {
     const { applyGlossaryConfirmation } = await import('@/lib/glossary/confirm')
     const supabase = fakeSupabase({})
     const result = await applyGlossaryConfirmation(supabase as never, 'p1', [], undefined)
-    expect(result).toEqual({})
+    expect(result).toEqual({ publishedSlugs: [] })
   })
 
   it('veröffentlicht den Draft und injiziert die Mark für den bestätigten Slug', async () => {
@@ -102,6 +102,34 @@ describe('applyGlossaryConfirmation', () => {
     )
     expect(result.content).toBeDefined()
     expect(linked(result.content!)).toEqual([{ text: 'Inferenz', slug: 'inferenz' }])
+    expect(result.publishedSlugs).toEqual(['inferenz'])
+  })
+
+  it('ruft getMatcherTerms erst NACH dem Freigabe-Versuch auf, nicht davor', async () => {
+    // getMatcherTerms filtert intern auf status=published. Ein frisch
+    // bestätigter Draft-Begriff ist zum Zeitpunkt des Publish-Updates noch
+    // nicht published — würde getMatcherTerms VORHER laufen, fehlte er in der
+    // Trefferliste, und der Regelfall (Draft zum ersten Mal bestätigen) würde
+    // still brechen (das war der Fehler im ursprünglichen Plan-Pseudocode).
+    // mockResolvedValue liefert unabhängig vom Aufrufzeitpunkt immer dieselbe
+    // Liste — ein Assertion auf den Rückgabewert allein kann eine Regression
+    // hier nicht erkennen, deshalb der Vergleich über invocationCallOrder.
+    const { applyGlossaryConfirmation } = await import('@/lib/glossary/confirm')
+    const chains: any[] = []
+    const supabase = fakeSupabase({
+      glossary_terms: [
+        { error: null },
+        { data: [{ slug: 'inferenz' }], error: null },
+      ],
+    }, chains)
+    await applyGlossaryConfirmation(
+      supabase as never, 'p1', ['inferenz'], JSON.stringify(doc('Die Inferenz ist teuer.')),
+    )
+    const publishOrder = chains[0].update.mock.invocationCallOrder[0]
+    const statusCheckOrder = chains[1].select.mock.invocationCallOrder[0]
+    const matcherOrder = mocks.getMatcherTerms.mock.invocationCallOrder[0]
+    expect(publishOrder).toBeLessThan(matcherOrder)
+    expect(statusCheckOrder).toBeLessThan(matcherOrder)
   })
 
   it('verlinkt einen bestätigten, aber weiterhin hidden-gesetzten Begriff nicht', async () => {
@@ -165,7 +193,7 @@ describe('applyGlossaryConfirmation', () => {
     )).resolves.toBeDefined()
   })
 
-  it('gibt {} zurück, wenn der Content nicht parsebar ist, statt zu werfen', async () => {
+  it('gibt kein content zurück, wenn der Content nicht parsebar ist, statt zu werfen', async () => {
     const { applyGlossaryConfirmation } = await import('@/lib/glossary/confirm')
     const supabase = fakeSupabase({
       glossary_terms: [
@@ -174,10 +202,13 @@ describe('applyGlossaryConfirmation', () => {
       ],
     })
     const result = await applyGlossaryConfirmation(supabase as never, 'p1', ['inferenz'], 'kein-json{')
-    expect(result).toEqual({})
+    // Der Begriff selbst wurde trotzdem published (davon hängt die
+    // pending_glossary_terms-Freigabe beim Aufrufer ab) — nur die Mark im
+    // Artikeltext konnte nicht gesetzt werden.
+    expect(result).toEqual({ publishedSlugs: ['inferenz'] })
   })
 
-  it('gibt {} zurück, wenn kein Slug tatsächlich published ist (fehlgeschlagene Freigabe)', async () => {
+  it('gibt publishedSlugs: [] zurück, wenn kein Slug tatsächlich published ist (fehlgeschlagene Freigabe)', async () => {
     const { applyGlossaryConfirmation } = await import('@/lib/glossary/confirm')
     const supabase = fakeSupabase({
       glossary_terms: [
@@ -188,7 +219,10 @@ describe('applyGlossaryConfirmation', () => {
     const result = await applyGlossaryConfirmation(
       supabase as never, 'p1', ['inferenz'], JSON.stringify(doc('Die Inferenz ist teuer.')),
     )
-    expect(result).toEqual({})
+    // publishedSlugs: [] ist das Signal an den Aufrufer, pending_glossary_terms
+    // NICHT zu leeren — sonst verschwindet die Kandidatenliste, obwohl nichts
+    // tatsächlich veröffentlicht wurde (Review-Fix, Task 11).
+    expect(result).toEqual({ publishedSlugs: [] })
   })
 
   it('reserviert Chart-Produktnamen aus getChartProductNames gegen Kollision', async () => {

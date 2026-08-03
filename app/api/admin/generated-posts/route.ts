@@ -206,7 +206,11 @@ export async function PATCH(request: NextRequest) {
         updateData.content as string | undefined,
       )
       if (result.content !== undefined) updateData.content = result.content
-      updateData.pending_glossary_terms = null
+      // Nur leeren, wenn die Freigabe für mindestens einen Slug tatsächlich
+      // gegriffen hat — sonst bleibt die Kandidatenliste erhalten, statt bei
+      // z.B. einem kurzzeitigen DB-Fehler spurlos zu verschwinden, während
+      // der Begriff weiterhin unveröffentlicht bleibt.
+      if (result.publishedSlugs.length > 0) updateData.pending_glossary_terms = null
     }
 
     const { error } = await supabase

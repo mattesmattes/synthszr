@@ -130,6 +130,29 @@ describe('PATCH /api/admin/generated-posts mit Glossar-Slugs', () => {
     expect(finalUpdate().pending_glossary_terms).toBeNull()
   })
 
+  it('lässt pending_glossary_terms unangetastet, wenn die Freigabe komplett fehlschlägt', async () => {
+    // Review-Fix: schlägt das Publish-Update fehl (z.B. DB kurz nicht
+    // erreichbar), bleibt der Begriff draft — die Kandidatenliste darf dann
+    // NICHT verschwinden, sonst hat der Admin keinen Weg mehr, die Freigabe
+    // erneut anzustoßen, und der Begriff bleibt unauffindbar unveröffentlicht.
+    state.queues = {
+      glossary_terms: [
+        { error: { message: 'db down' } }, // Publish-Update schlägt fehl
+        { data: [], error: null }, // Status-Check: nichts wurde published
+      ],
+    }
+    const { PATCH } = await import('@/app/api/admin/generated-posts/route')
+    await PATCH(patch({
+      id: 'p1',
+      content: doc('Die Inferenz ist teuer.'),
+      confirmedGlossarySlugs: ['inferenz'],
+    }) as never)
+
+    const saved = finalUpdate()
+    expect(saved.pending_glossary_terms).toBeUndefined()
+    expect(saved.content).not.toContain('glossaryLink')
+  })
+
   it('lädt den Content aus der DB nach, wenn der Body keinen mitschickt (Übersetzungs-/Backfill-Pfad)', async () => {
     state.queues = {
       glossary_terms: [

@@ -24,16 +24,24 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies
  * gelöschte und fehlgeschlagene Freigaben in einem Schritt ab, statt jeden
  * Fall einzeln zu behandeln.
  *
- * @returns `{ content }` nur, wenn tatsächlich etwas injiziert wurde — sonst
- * `{}`, damit der Aufrufer `updateData.content` unangetastet lässt.
+ * `publishedSlugs` geht IMMER mit zurück (auch leer), damit der Aufrufer
+ * `pending_glossary_terms` nur dann leert, wenn die Freigabe für mindestens
+ * einen Slug tatsächlich gegriffen hat — schlägt z.B. das Publish-Update
+ * komplett fehl (DB kurz nicht erreichbar), bleibt die Kandidatenliste
+ * erhalten, statt einen Begriff dauerhaft unveröffentlicht und unauffindbar
+ * zu machen (Review-Fix, Task 11).
+ *
+ * @returns `content` nur, wenn tatsächlich etwas injiziert wurde — sonst
+ * bleibt es undefined, damit der Aufrufer `updateData.content` unangetastet
+ * lässt.
  */
 export async function applyGlossaryConfirmation(
   supabase: ReturnType<typeof createAdminClient>,
   postId: string,
   confirmedSlugs: string[],
   content: string | undefined,
-): Promise<{ content?: string }> {
-  if (confirmedSlugs.length === 0) return {}
+): Promise<{ content?: string; publishedSlugs: string[] }> {
+  if (confirmedSlugs.length === 0) return { publishedSlugs: [] }
 
   // Bestätigte Drafts veröffentlichen — erst damit wird die Lexikonseite
   // erreichbar und landet in der Sitemap.
@@ -55,7 +63,7 @@ export async function applyGlossaryConfirmation(
     console.error(`[Glossary] Status-Check fehlgeschlagen für Post ${postId}:`, statusError.message)
   }
   const publishedSlugs = (statusRows ?? []).map((r) => r.slug as string)
-  if (publishedSlugs.length === 0) return {}
+  if (publishedSlugs.length === 0) return { publishedSlugs }
 
   // Content: vom Aufrufer übernehmen oder selbst nachladen — der Editor
   // schickt ihn immer mit, Übersetzung/Backfill tun das nicht.
@@ -68,18 +76,23 @@ export async function applyGlossaryConfirmation(
       .single()
     if (fetchError) {
       console.error(`[Glossary] Content für Post ${postId} nicht ladbar:`, fetchError.message)
-      return {}
+      return { publishedSlugs }
     }
     raw = existing?.content as string | undefined
   }
-  if (raw === undefined) return {}
+  if (raw === undefined) return { publishedSlugs }
 
   const { data: parsed, error: parseError } = safeParseJSONWithError(raw)
   if (parseError) {
     console.error(`[Glossary] Content für Post ${postId} nicht parsebar, Mark-Injektion übersprungen: ${parseError}`)
-    return {}
+    return { publishedSlugs }
   }
 
+  // Reihenfolge bewusst NACH dem Freigabe-Versuch: getMatcherTerms filtert
+  // intern auf status=published. Ein frisch bestätigter Draft-Begriff wäre
+  // vor dem Publish-Update noch nicht published und würde in der
+  // Trefferliste fehlen — die Mark bliebe für genau den Regelfall
+  // (Draft zum ersten Mal bestätigen) unsichtbar aus.
   const [terms, chartProductNames] = await Promise.all([
     getMatcherTerms('de'),
     getChartProductNames(),
@@ -92,5 +105,5 @@ export async function applyGlossaryConfirmation(
     ...chartProductNames,
   ]
   const injected = injectGlossaryMarks(parsed, publishedSlugs, terms, { reserved })
-  return { content: JSON.stringify(injected) }
+  return { publishedSlugs, content: JSON.stringify(injected) }
 }
