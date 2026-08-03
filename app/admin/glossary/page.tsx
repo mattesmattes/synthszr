@@ -336,8 +336,9 @@ export default function GlossaryAdminPage() {
                     {!detail && detailErrors[term.slug] && (
                       <div className="flex items-center gap-2 text-sm text-red-600">
                         <XCircle className="h-4 w-4 shrink-0" />
-                        Vorschau konnte nicht geladen werden ({detailErrors[term.slug]}) — Übernehmen/Verwerfen
-                        funktionieren trotzdem, oder oben „Neu laden" versuchen.
+                        Vorschau konnte nicht geladen werden ({detailErrors[term.slug]}) — „Übernehmen" ist
+                        deshalb gesperrt (niemand hat den Vorschlag gesehen). Oben „Neu laden" versuchen,
+                        oder direkt verwerfen.
                       </div>
                     )}
                     {!detail && !detailErrors[term.slug] && (
@@ -346,12 +347,21 @@ export default function GlossaryAdminPage() {
                         Lade Revision...
                       </div>
                     )}
-                    {/* Übernehmen/Verwerfen bleiben unabhängig vom Detail-Fetch
-                        erreichbar (Review-Fund Important 5) — beide Aktionen
-                        brauchen serverseitig nur den slug, keinen geladenen
-                        body/pending_body. */}
+                    {/* Verwerfen bleibt unabhängig vom Detail-Fetch erreichbar
+                        (Review-Fund Important 5) — es braucht serverseitig nur
+                        den slug und ändert den Live-Text nicht. Übernehmen
+                        dagegen ist das redaktionelle Freigabe-Gate: ohne
+                        geladenen Diff hat niemand den Vorschlag gesehen, also
+                        bleibt es gesperrt, bis die Vorschau lädt (Review-Fund
+                        Important 2 aus Fix-Runde 2) — sonst ließe sich eine nie
+                        gesehene Revision live schalten. */}
                     <div className="flex items-center gap-2">
-                      <Button size="sm" onClick={() => runAction(term.slug, 'accept_revision')} disabled={isBusy}>
+                      <Button
+                        size="sm"
+                        onClick={() => runAction(term.slug, 'accept_revision')}
+                        disabled={isBusy || !detail}
+                        title={!detail ? 'Erst laden, um den Vorschlag vor der Freigabe zu sehen' : undefined}
+                      >
                         {isBusy ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
                         Übernehmen
                       </Button>

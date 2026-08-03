@@ -386,6 +386,29 @@ describe('GET /api/cron/glossary-review', () => {
     expect(body.termsReviewed).toBe(1)
   })
 
+  it('markiert einen Begriff mit einem Top-Level-Node ohne content-Array als flagged (Fix-Runde 2, Important 3 vertieft)', async () => {
+    // isValidTipTapDoc prüfte in der ersten Fassung nur, dass body.content ein
+    // Array ist — ein Node OHNE eigenes content-Array (leerer TipTap-Absatz
+    // `{"type":"paragraph"}`, ebenso horizontalRule/image) besteht diese
+    // Vorprüfung trotzdem, lässt extractPlainText aber mit einer TypeError
+    // abstürzen (node.content.map ist dann undefined.map). Das landet im
+    // äußeren catch OHNE Stempel — dieselbe Klasse Head-of-Line-Blocking wie
+    // der body=null-Fall oben, nur eine Ebene tiefer.
+    const brokenBody = { type: 'doc', content: [{ type: 'paragraph' }] }
+    const { client, calls } = fakeSupabase({ terms: [term({ body: brokenBody })] })
+    mocks.createAdminClient.mockReturnValue(client)
+
+    const { GET } = await import('@/app/api/cron/glossary-review/route')
+    const res = await GET(req())
+    expect(res.status).toBe(200)
+
+    expect(calls.updates).toHaveLength(1)
+    const { payload } = calls.updates[0]
+    expect(payload.review_state).toBe('flagged')
+    expect(typeof payload.last_reviewed_at).toBe('string')
+    expect(mocks.anthropicCreate).not.toHaveBeenCalled()
+  })
+
   it('markiert einen Begriff mit unparsbarer Modellantwort als flagged (Important 3)', async () => {
     const { client, calls } = fakeSupabase({ terms: [term()] })
     mocks.createAdminClient.mockReturnValue(client)

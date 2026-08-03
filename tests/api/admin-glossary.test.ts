@@ -52,10 +52,22 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({ from: (table: string) => makeChain(table) }),
 }))
 
-/** Findet den ersten update()-Aufruf auf glossary_terms und liefert dessen Payload. */
+/** Alle bislang aufgezeichneten update()-Payloads auf glossary_terms, über
+ *  ALLE from()-Aufrufe hinweg (jeder from()-Call erzeugt eine eigene Chain,
+ *  s. makeChain) und in Aufrufreihenfolge — robust, falls eine Aktion
+ *  künftig mehr als einen Write auf dieser Tabelle auslöst. */
+function updatePayloads(): Array<Record<string, unknown>> {
+  return state.chains
+    .filter((c) => c.table === 'glossary_terms')
+    .flatMap((c) => c.update.mock.calls.map((args: unknown[]) => args[0] as Record<string, unknown>))
+}
+
+/** Der zeitlich LETZTE update()-Aufruf auf glossary_terms (Review-Fund: die
+ *  vorherige Fassung hieß so, gab aber den ersten Call zurück — hier egal,
+ *  weil pro Test nur ein Write passiert, aber irreführend benannt). */
 function lastUpdatePayload(): Record<string, unknown> {
-  const chain = state.chains.find((c) => c.table === 'glossary_terms' && c.update.mock.calls.length > 0)
-  return chain.update.mock.calls[0][0] as Record<string, unknown>
+  const payloads = updatePayloads()
+  return payloads[payloads.length - 1]
 }
 
 function patchReq(body: unknown) {
