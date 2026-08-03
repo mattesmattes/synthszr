@@ -31,6 +31,8 @@ import { convertTiptapToMarkdown, parseTiptapContent } from '@/lib/utils/tiptap-
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
 import { runEditorInChiefOnMarkdown } from '@/lib/editor-in-chief/run-stream'
 import type { LearnedPattern } from '@/lib/edit-learning/retrieval'
+import { GlossaryApprovalPanel } from '@/components/admin/glossary-approval-panel'
+import type { GlossaryCandidate } from '@/lib/glossary/types'
 
 // Fetch helper for die news-queue "by-ids" Action (Security-Stufe 2, Welle 1c) —
 // ersetzt direkte Browser-Queries `.from('news_queue').select(...).in('id', ids)[.limit(n)]`.
@@ -94,6 +96,7 @@ interface GeneratedPost {
   pending_queue_item_ids: string[] | null
   ai_model: string | null
   digest_id: string | null
+  pending_glossary_terms: GlossaryCandidate[] | null
 }
 
 export default function EditGeneratedArticlePage({ params }: { params: Promise<{ id: string }> }) {
@@ -145,6 +148,12 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
   // Metadata section collapsed state
   const [metadataOpen, setMetadataOpen] = useState(false)
+
+  // Lexikon-Freigabe (Task 12): Kandidatenliste aus der Job-Phase (Task 10) und
+  // die vom Menschen bestätigte Teilmenge, die beim Speichern veröffentlicht
+  // und im Text verlinkt wird (Task 11, PATCH confirmedGlossarySlugs).
+  const [glossaryCandidates, setGlossaryCandidates] = useState<GlossaryCandidate[]>([])
+  const [confirmedGlossarySlugs, setConfirmedGlossarySlugs] = useState<string[]>([])
 
   // Extract article count from TipTap content
   const countArticles = useCallback((tiptapContent: Record<string, unknown>): number => {
@@ -543,6 +552,16 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
           fetchQueueItems(itemIds)
         }
 
+        // Lexikon-Freigabe: Kandidaten aus der Job-Phase, Vorauswahl NUR für
+        // origin='tag' UND isNewlyGenerated=false — ein frisch generierter
+        // Tag-Kandidat ist ungeprüfter LLM-Text und bekommt dieselbe offene
+        // Checkbox wie ein 'new'-Kandidat (s. glossary-approval-panel.tsx).
+        const candidates: GlossaryCandidate[] = data.pending_glossary_terms || []
+        setGlossaryCandidates(candidates)
+        setConfirmedGlossarySlugs(
+          candidates.filter((c) => c.origin === 'tag' && !c.isNewlyGenerated).map((c) => c.slug),
+        )
+
         // Load applied patterns for highlighting (pass content + ai_model for auto-redetection)
         fetchAppliedPatterns(parsedContent, data.ai_model)
 
@@ -622,6 +641,11 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       updated_at: new Date().toISOString(),
       // Always update with current queue item IDs
       pending_queue_item_ids: isNowPublished ? [] : currentQueueItems,
+      // Lexikon-Freigabe (Task 12): welche Kandidaten der Mensch bestätigt hat.
+      // Die PATCH-Route (applyGlossaryConfirmation, Task 11) veröffentlicht die
+      // Drafts und injiziert die Marks serverseitig — nur bei Erfolg wird
+      // pending_glossary_terms dort geleert, s. Kommentar in der Route.
+      confirmedGlossarySlugs,
     }
 
     const updateRes = await fetch('/api/admin/generated-posts', {
@@ -968,6 +992,13 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
               )}
             </div>
           </div>
+
+          {/* Lexikon-Freigabe (Task 12) — rendert nichts, solange keine Kandidaten vorliegen */}
+          <GlossaryApprovalPanel
+            candidates={glossaryCandidates}
+            value={confirmedGlossarySlugs}
+            onChange={setConfirmedGlossarySlugs}
+          />
 
           {/* Collapsible Metadata Section */}
           <Collapsible open={metadataOpen} onOpenChange={setMetadataOpen}>

@@ -46,7 +46,7 @@ function findTermSlugByName(name: string, terms: GlossaryMatcherTerm[]): string 
 async function tryGenerateDraft(
   supabase: AdminClient,
   name: string,
-): Promise<GlossaryMatcherTerm | null> {
+): Promise<(GlossaryMatcherTerm & { summary: string }) | null> {
   try {
     const generated = await generateTermContent(name)
 
@@ -83,7 +83,12 @@ async function tryGenerateDraft(
     })
     if (error) throw new Error(`glossary_terms insert failed: ${error.message}`)
 
-    return { slug: generated.slug, canonicalName: generated.canonicalName, aliases: generated.aliases }
+    return {
+      slug: generated.slug,
+      canonicalName: generated.canonicalName,
+      aliases: generated.aliases,
+      summary: generated.summary,
+    }
   } catch (err) {
     console.error(`[Glossary] Begriffs-Generierung für "${name}" fehlgeschlagen:`, err)
     return null
@@ -121,10 +126,11 @@ export async function buildCandidateList(
   // Erste Quelle gewinnt bei Kollision: tag (explizite Ghostwriter-Direktive)
   // vor match vor new, entsprechend der Verarbeitungsreihenfolge unten.
   const addCandidate = (
-    slug: string, name: string, origin: GlossaryCandidateOrigin, matchedText: string | null, isNewlyGenerated: boolean,
+    slug: string, name: string, origin: GlossaryCandidateOrigin, matchedText: string | null,
+    isNewlyGenerated: boolean, summary: string | undefined,
   ) => {
     if (bySlug.has(slug)) return
-    bySlug.set(slug, { slug, name, origin, matchedText, isNewlyGenerated })
+    bySlug.set(slug, { slug, name, origin, matchedText, isNewlyGenerated, summary })
   }
 
   // 1) {lex:Name}-Direktiven. Ein Tag kann auf einen bestehenden Begriff
@@ -139,13 +145,14 @@ export async function buildCandidateList(
   for (const name of tagged) {
     const existingSlug = findTermSlugByName(name, knownTerms)
     if (existingSlug) {
-      addCandidate(existingSlug, name, 'tag', null, false)
+      // summary noch unbekannt — knownTerms trägt sie nicht (s. Nachschlag unten).
+      addCandidate(existingSlug, name, 'tag', null, false, undefined)
       continue
     }
     const created = await tryGenerateDraft(supabase, name)
     if (created) {
       knownTerms.push(created)
-      addCandidate(created.slug, created.canonicalName, 'tag', null, true)
+      addCandidate(created.slug, created.canonicalName, 'tag', null, true, created.summary)
     }
   }
 
@@ -153,20 +160,48 @@ export async function buildCandidateList(
   //    bereits, hier wird nur die Trefferstelle mitgegeben.
   for (const mention of matched) {
     const term = publishedTerms.find((t) => t.slug === mention.slug)
-    addCandidate(mention.slug, term?.canonicalName ?? mention.matchedText, 'match', mention.matchedText, false)
+    // summary noch unbekannt — publishedTerms (getMatcherTerms) führt sie aus
+    // Egress-Gründen bewusst nicht mit (s. Nachschlag unten).
+    addCandidate(mention.slug, term?.canonicalName ?? mention.matchedText, 'match', mention.matchedText, false, undefined)
   }
 
   // 3) Vom LLM neu identifizierte Begriffe ohne (bekannten) Glossareintrag.
   for (const name of fresh) {
     const existingSlug = findTermSlugByName(name, knownTerms)
     if (existingSlug) {
-      addCandidate(existingSlug, name, 'new', null, false)
+      addCandidate(existingSlug, name, 'new', null, false, undefined)
       continue
     }
     const created = await tryGenerateDraft(supabase, name)
     if (created) {
       knownTerms.push(created)
-      addCandidate(created.slug, created.canonicalName, 'new', null, true)
+      addCandidate(created.slug, created.canonicalName, 'new', null, true, created.summary)
+    }
+  }
+
+  // Nachschlag für Kandidaten, die auf einen BEREITS existierenden Begriff
+  // aufgelöst wurden (Matcher-Treffer, oder tag/new-Namen mit bestehendem
+  // Eintrag): weder publishedTerms (getMatcherTerms, Egress-schmal) noch
+  // knownTerms (GlossaryMatcherTerm, kein summary-Feld) führen die summary
+  // mit. Ein gezielter Batch-Nachschlag statt eines Joins in jeder
+  // Matcher-Query, die dafür nicht gebaut ist.
+  const needSummary = Array.from(bySlug.values())
+    .filter((c) => c.summary === undefined)
+    .map((c) => c.slug)
+  if (needSummary.length > 0) {
+    const { data: summaryRows, error: summaryError } = await supabase
+      .from('glossary_terms')
+      .select('slug, summary')
+      .in('slug', needSummary)
+    if (summaryError) {
+      console.error('[Glossary] buildCandidateList: Summary-Nachschlag fehlgeschlagen:', summaryError.message)
+    } else {
+      const summaryBySlug = new Map(
+        ((summaryRows ?? []) as Array<{ slug: string; summary: string }>).map((r) => [r.slug, r.summary]),
+      )
+      for (const candidate of bySlug.values()) {
+        if (candidate.summary === undefined) candidate.summary = summaryBySlug.get(candidate.slug)
+      }
     }
   }
 

@@ -12,6 +12,12 @@
  * Kosten-Bremse-Check vor der Generierung ausgeführt, überlebt die Liste einen
  * einzelnen fehlgeschlagenen Kandidaten. Der Supabase-Chain-Stub folgt dem
  * Muster aus tests/lib/rankings-resolve-product-db.test.ts / glossary-terms.test.ts.
+ *
+ * Task 12 (Freigabe-Panel): buildCandidateList schlägt für Kandidaten, die auf
+ * einen bereits existierenden Begriff aufgelöst wurden, dessen `summary` per
+ * separater Query nach (`.in('slug', ...)`) — der Chain-Stub unterscheidet
+ * diese von der Draft/Hidden-Namensabgleich-Query (`.in('status', ...)`) am
+ * zuletzt aufgerufenen `.in()`-Filterschlüssel, s. `lastInKey` in makeChain.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { GeneratedTerm } from '@/lib/glossary/generate'
@@ -34,6 +40,10 @@ vi.mock('@/lib/gemini/image-generator', () => ({
 const state = vi.hoisted(() => ({
   draftRows: [] as unknown[],
   draftRowsError: null as { message: string } | null,
+  // Fixture für den Summary-Nachschlag (Requirement 2) — eigene Query
+  // (`.in('slug', [...])`), daher eigene Antwortdaten statt draftRows.
+  summaryRows: [] as unknown[],
+  summaryRowsError: null as { message: string } | null,
   inserts: [] as Array<Record<string, unknown>>,
   // Zeichnet jeden .in(...)-Aufruf auf jeder Chain auf — Review-Fix 1 prüft
   // damit, dass der Namens-Abgleich WIRKLICH gegen draft+hidden abfragt statt
@@ -44,19 +54,29 @@ const state = vi.hoisted(() => ({
 
 function makeChain(table: string) {
   const chain: any = {}
+  let lastInKey: unknown = null
   chain.select = vi.fn(() => chain)
   chain.eq = vi.fn(() => chain)
-  chain.in = vi.fn((...args: unknown[]) => { state.inCalls.push(args); return chain })
+  chain.in = vi.fn((...args: unknown[]) => { state.inCalls.push(args); lastInKey = args[0]; return chain })
   chain.order = vi.fn(() => chain)
   chain.limit = vi.fn(() => chain)
   chain.insert = vi.fn((payload: Record<string, unknown>) => {
     state.inserts.push({ table, ...payload })
     return { error: null }
   })
-  chain.then = (res: (v: unknown) => void) => res({
-    data: table === 'glossary_terms' ? state.draftRows : [],
-    error: table === 'glossary_terms' ? state.draftRowsError : null,
-  })
+  chain.then = (res: (v: unknown) => void) => {
+    // Zwei verschiedene Queries laufen gegen dieselbe Tabelle glossary_terms:
+    // der Draft/Hidden-Namensabgleich (.in('status', ...)) und der
+    // Summary-Nachschlag (.in('slug', ...)) — am Filterschlüssel unterscheidbar.
+    if (table === 'glossary_terms' && lastInKey === 'slug') {
+      res({ data: state.summaryRows, error: state.summaryRowsError })
+      return
+    }
+    res({
+      data: table === 'glossary_terms' ? state.draftRows : [],
+      error: table === 'glossary_terms' ? state.draftRowsError : null,
+    })
+  }
   return chain
 }
 
@@ -84,19 +104,26 @@ beforeEach(() => {
   mocks.uploadGlossaryIllustration.mockReset()
   state.draftRows = []
   state.draftRowsError = null
+  state.summaryRows = []
+  state.summaryRowsError = null
   state.inserts = []
   state.inCalls = []
 })
 
 describe('buildCandidateList', () => {
   it('löst einen {lex:}-Tag gegen einen bereits veröffentlichten Begriff auf, ohne neu zu generieren', async () => {
+    state.summaryRows = [{ slug: 'inferenz', summary: 'Kurzfassung von Inferenz.' }]
     const { buildCandidateList } = await import('@/lib/glossary/candidates')
     const published = [{ slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }]
     const result = await buildCandidateList(makeSupabase() as never, published, ['Inferenz'], [], [])
     expect(result).toEqual([
-      { slug: 'inferenz', name: 'Inferenz', origin: 'tag', matchedText: null, isNewlyGenerated: false },
+      { slug: 'inferenz', name: 'Inferenz', origin: 'tag', matchedText: null, isNewlyGenerated: false, summary: 'Kurzfassung von Inferenz.' },
     ])
     expect(mocks.generateTermContent).not.toHaveBeenCalled()
+    // Die claim ist nicht nur "irgendeine summary kam zurück", sondern dass
+    // GENAU nach diesem Slug gefragt wurde (publishedTerms/knownTerms führen
+    // keine summary — s. Kommentar in candidates.ts).
+    expect(state.inCalls).toContainEqual(['slug', ['inferenz']])
   })
 
   it('generiert und legt einen Begriff aus einem {lex:}-Tag als draft an, wenn er noch nicht existiert', async () => {
@@ -104,21 +131,31 @@ describe('buildCandidateList', () => {
     const { buildCandidateList } = await import('@/lib/glossary/candidates')
     const result = await buildCandidateList(makeSupabase() as never, [], ['Mixture of Experts'], [], [])
     expect(result).toEqual([
-      { slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'tag', matchedText: null, isNewlyGenerated: true },
+      {
+        slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'tag', matchedText: null,
+        isNewlyGenerated: true, summary: fixtureGenerated().summary,
+      },
     ])
     expect(mocks.generateTermContent).toHaveBeenCalledWith('Mixture of Experts')
     expect(state.inserts).toHaveLength(1)
     expect(state.inserts[0]).toMatchObject({ table: 'glossary_terms', slug: 'mixture-of-experts', status: 'draft' })
+    // Ein frisch generierter Kandidat hat die summary schon aus generateTermContent
+    // — der zusätzliche DB-Nachschlag (teuer, unnötig) darf dafür NICHT laufen.
+    expect(state.inCalls.some((call) => call[0] === 'slug')).toBe(false)
   })
 
-  it('übernimmt bei Matcher-Treffern die matchedText aus dem Mention und den Namen aus der Begriffsliste', async () => {
+  it('übernimmt bei Matcher-Treffern die matchedText aus dem Mention und den Namen aus der Begriffsliste, summary per DB-Nachschlag', async () => {
+    state.summaryRows = [{ slug: 'inferenz', summary: 'Kurzfassung von Inferenz.' }]
     const { buildCandidateList } = await import('@/lib/glossary/candidates')
     const published = [{ slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }]
     const result = await buildCandidateList(
       makeSupabase() as never, published, [], [{ slug: 'inferenz', matchedText: 'Inferenzkosten' }], [],
     )
     expect(result).toEqual([
-      { slug: 'inferenz', name: 'Inferenz', origin: 'match', matchedText: 'Inferenzkosten', isNewlyGenerated: false },
+      {
+        slug: 'inferenz', name: 'Inferenz', origin: 'match', matchedText: 'Inferenzkosten',
+        isNewlyGenerated: false, summary: 'Kurzfassung von Inferenz.',
+      },
     ])
   })
 
@@ -127,7 +164,10 @@ describe('buildCandidateList', () => {
     const { buildCandidateList } = await import('@/lib/glossary/candidates')
     const result = await buildCandidateList(makeSupabase() as never, [], [], [], ['Mixture of Experts'])
     expect(result).toEqual([
-      { slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'new', matchedText: null, isNewlyGenerated: true },
+      {
+        slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'new', matchedText: null,
+        isNewlyGenerated: true, summary: fixtureGenerated().summary,
+      },
     ])
     expect(state.inserts).toHaveLength(1)
   })
@@ -139,6 +179,11 @@ describe('buildCandidateList', () => {
     expect(result).toEqual([
       { slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'new', matchedText: null, isNewlyGenerated: false },
     ])
+    // Rückwärtskompatibilität: findet der Summary-Nachschlag keine Zeile (hier:
+    // state.summaryRows bewusst leer gelassen), bleibt summary undefined statt
+    // zu crashen — derselbe Zustand wie bei einer VOR diesem Feature
+    // geschriebenen pending_glossary_terms-Kandidatenliste.
+    expect(result[0].summary).toBeUndefined()
     expect(mocks.generateTermContent).not.toHaveBeenCalled()
     expect(state.inserts).toHaveLength(0)
   })
@@ -203,7 +248,10 @@ describe('buildCandidateList', () => {
     const { buildCandidateList } = await import('@/lib/glossary/candidates')
     const result = await buildCandidateList(makeSupabase() as never, [], [], [], ['Mixture of Experts'])
     expect(result).toEqual([
-      { slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'new', matchedText: null, isNewlyGenerated: true },
+      {
+        slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'new', matchedText: null,
+        isNewlyGenerated: true, summary: fixtureGenerated().summary,
+      },
     ])
     expect(state.inserts).toHaveLength(1)
     expect(state.inserts[0].illustration_url).toBeNull()
@@ -217,7 +265,10 @@ describe('buildCandidateList', () => {
     const { buildCandidateList } = await import('@/lib/glossary/candidates')
     const result = await buildCandidateList(makeSupabase() as never, [], [], [], ['Bricht ab', 'OK Begriff'])
     expect(result).toEqual([
-      { slug: 'ok-begriff', name: 'OK Begriff', origin: 'new', matchedText: null, isNewlyGenerated: true },
+      {
+        slug: 'ok-begriff', name: 'OK Begriff', origin: 'new', matchedText: null,
+        isNewlyGenerated: true, summary: fixtureGenerated().summary,
+      },
     ])
   })
 

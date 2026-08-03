@@ -54,4 +54,9 @@ export interface GlossaryCandidate {
    *  genau die Information, die dafür fehlt, an Task 11/12 (Freigabe/
    *  Vorauswahl im Editor). */
   isNewlyGenerated: boolean
+  /** 1-2 Sätze-Vorschau für das Freigabe-Panel (Task 12). Optional, weil
+   *  `pending_glossary_terms` schemaloses JSON ist: Kandidatenlisten, die vor
+   *  Einführung dieses Felds geschrieben wurden, haben kein `summary` — der
+   *  Editor muss auch dann sauber (ohne Absturz/„undefined") rendern. */
+  summary?: string
 }
