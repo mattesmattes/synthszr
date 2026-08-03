@@ -28,8 +28,9 @@ describe('findGlossaryMentions', () => {
     expect(findGlossaryMentions('Ragout kochen', terms)).toEqual([])
   })
 
-  it('überspringt Namen unter der Mindestlänge', () => {
-    expect(findGlossaryMentions('Wir nutzen RAG dafür.', terms).map(h => h.slug)).toEqual([])
+  it('findet kurze Abkürzungen als eigenständiges Wort', () => {
+    const hits = findGlossaryMentions('Wir nutzen RAG dafür.', terms)
+    expect(hits.map(h => h.slug)).toEqual(['rag'])
   })
 
   it('meldet jeden Begriff nur einmal', () => {

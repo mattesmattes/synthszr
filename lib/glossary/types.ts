@@ -1,8 +1,12 @@
 /** Obergrenze verlinkter Begriffe pro Artikel. Mehr macht den Text unlesbar. */
 export const GLOSSARY_MAX_PER_ARTICLE = 8
 
-/** Mindestlänge eines Begriffsnamens für den Matcher. Kürzere erzeugen zu
- *  viele False Positives (gleiche Schwelle wie bei Chart-Produkten). */
+/** Schwelle, ab der ein Begriffsname als „lang" gilt. Kurze Namen werden nicht
+ *  verworfen, sondern strenger gematcht: sie brauchen eine Wortgrenze auf
+ *  beiden Seiten, lange nur davor (siehe boundaryRegex in
+ *  lib/glossary/mentions.ts). Ohne diese Unterscheidung würde der 2-Zeichen-
+ *  Alias „AI" das Wort „Aida" treffen, oder die Abkürzungen MoE/RAG/LLM wären
+ *  gar nicht verlinkbar. Gleicher Wert wie bei Chart-Produkten. */
 export const GLOSSARY_MIN_NAME_LENGTH = 4
 
 export type GlossaryStatus = 'draft' | 'published' | 'hidden'

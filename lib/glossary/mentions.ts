@@ -25,9 +25,10 @@ function boundaryRegexShort(name: string): RegExp {
 
 /**
  * Findet Lexikonbegriffe im Text — pro Begriff maximal ein Treffer, in der
- * Reihenfolge der übergebenen Begriffsliste. Namen unter
- * GLOSSARY_MIN_NAME_LENGTH werden übersprungen, falls der Term auch längere
- * Namen hat; wenn der Term nur kurze Namen hat, wird er ganz ignoriert.
+ * Reihenfolge der übergebenen Begriffsliste. Namen >= GLOSSARY_MIN_NAME_LENGTH
+ * brauchen eine Wortgrenze davor (erlauben Komposita wie „Inferenzkosten").
+ * Namen darunter brauchen Grenzen davor und dahinter (z.B. „AI" in „Aida" wird
+ * verhindert, aber „RAG" in „Wir nutzen RAG." wird gefunden).
  */
 export function findGlossaryMentions(
   text: string,
@@ -38,32 +39,18 @@ export function findGlossaryMentions(
   for (const term of terms) {
     if (hits.length >= max) break
     const allNames = [term.canonicalName, ...term.aliases]
-    const longNames = allNames.filter((n) => n.length >= GLOSSARY_MIN_NAME_LENGTH)
-    // Wenn kein Name >= Mindestlänge: Term ignorieren.
-    if (longNames.length === 0) continue
-
     // Längste zuerst: „Mixture-of-Experts" vor „Mixture of Experts".
-    const namesToTry = longNames.sort((a, b) => b.length - a.length)
+    const namesToTry = allNames.sort((a, b) => b.length - a.length)
 
     for (const name of namesToTry) {
-      const m = boundaryRegex(name).exec(text)
+      // Wähle Regex basierend auf Längenkategorie.
+      const regex = name.length >= GLOSSARY_MIN_NAME_LENGTH
+        ? boundaryRegex(name)
+        : boundaryRegexShort(name)
+      const m = regex.exec(text)
       if (m) {
         hits.push({ slug: term.slug, matchedText: m[2] })
         break
-      }
-    }
-
-    // Wenn kein langer Name matched, versuche auch kurze Namen (als Fallback).
-    // Kurze Namen brauchen Grenze auf BEIDEN Seiten, um False-Positives zu vermeiden.
-    if (!hits.some(h => h.slug === term.slug)) {
-      const shortNames = allNames.filter((n) => n.length < GLOSSARY_MIN_NAME_LENGTH)
-        .sort((a, b) => b.length - a.length)
-      for (const name of shortNames) {
-        const m = boundaryRegexShort(name).exec(text)
-        if (m) {
-          hits.push({ slug: term.slug, matchedText: m[2] })
-          break
-        }
       }
     }
   }
