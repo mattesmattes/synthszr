@@ -1421,11 +1421,32 @@ Verfügbare Parameter von `generateLocalizedMetadata` (verifiziert,
 `safeJsonLd(x: unknown): string` (`lib/seo/site.ts:7`) escapt `<` und ist für
 `dangerouslySetInnerHTML` gedacht.
 
-- [ ] **Step 2: HTML-Reihenfolge einhalten**
+- [ ] **Step 2: HTML-Reihenfolge und visuelle Hierarchie**
 
-H1 → `summary` als Lead → Illustration → Erklärungstext (volle Breite) →
-Trennung → arrondierende Blöcke. Die Reihenfolge ist GEO-relevant, nicht nur
-optisch: LLMs zitieren den ersten substanziellen Textblock.
+Reihenfolge im **HTML**, nicht nur optisch: H1 → `summary` als Lead →
+Illustration → Erklärungstext (volle Breite) → Trennung → arrondierende Blöcke.
+LLMs zitieren den ersten substanziellen Textblock; steht dort eine Produktliste,
+verwässert das genau die Passage, für die die Seite existiert.
+
+Die Hierarchie ist die Kernanforderung des Auftrags („der Erklärungstext ist der
+Hauptfokus"), also konkret:
+
+| Zone | Gestaltung |
+|---|---|
+| H1 + Lead | größte Typo der Seite, Lead deutlich größer als Fließtext |
+| Erklärungstext | volle Spaltenbreite, Lesetypografie (`prose`-Klassen wie im Artikel-Renderer), keine Konkurrenz daneben |
+| Trennung | sichtbare Grenze — Linie oder deutlicher Abstand |
+| Arrondierung | kleinere Typo, gedämpfte Farben, kompakt; nie mehrspaltig neben dem Text |
+
+Kein Sidebar-Layout: der Text bekommt die Seite, die Zusatzblöcke kommen
+darunter. Ein zweispaltiges Layout mit News neben dem Erklärtext wäre die
+naheliegende, aber falsche Wahl — es stellt Arrondierung auf Augenhöhe mit dem
+Inhalt.
+
+**Seitenrahmen:** `app/[lang]/layout.tsx` liefert nur `{children}`, keinen
+Header oder Footer. Die Seite bringt ihren Rahmen selbst mit, nach dem Muster
+von `app/[lang]/rankings/[slug]/page.tsx`: `BloomLanguageSwitcher` und
+`SiteFooter` importieren und einbinden.
 
 - [ ] **Step 3: JSON-LD ergänzen**
 
@@ -1448,8 +1469,23 @@ Ausgabe über `safeJsonLd` aus `lib/seo/site.ts`.
 
 - [ ] **Step 4: Arrondierende Komponenten**
 
-Drei Server-Komponenten, visuell zurückgenommen (kleinere Typo, gedämpfte
-Farben), jede rendert nichts bei leeren Daten.
+Drei Server-Komponenten in `components/glossary/`, jede rendert **`null`** bei
+leeren Daten — kein leerer Kasten, keine Überschrift ohne Inhalt. Das ist heute
+der Normalfall: `glossary_term_products` und `glossary_term_news` werden erst
+von Task 14/15 gefüllt.
+
+| Komponente | Props | Inhalt |
+|---|---|---|
+| `related-terms.tsx` | `terms: Array<{ slug, canonicalName }>`, `lang` | Liste von Links auf `/${lang}/glossary/${slug}` |
+| `term-products.tsx` | `products: Array<{ slug, canonicalName }>`, `lang` | Liste von Links auf `/${lang}/rankings/${slug}` |
+| `term-news.tsx` | `news: Array<{ title, sourceName, sourceUrl, publishedAt, contextSentence }>`, `lang` | Titel als externer Link, Quelle und Datum klein, Einordnungssatz darunter |
+
+News-Links sind extern: `target="_blank"` mit `rel="noopener noreferrer"`, wie
+`Link.configure` es im Renderer für Quellenlinks macht. Die anderen beiden sind
+interne `next/link`.
+
+Labels kommen über `getTranslations` — keine deutschen Strings hartcodieren, das
+holt Task 18 nicht nachträglich ein.
 
 - [ ] **Step 5: Testbegriff anlegen und gegen Prod verifizieren**
 
