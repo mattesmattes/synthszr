@@ -163,10 +163,10 @@ alter table public.generated_posts
 do $$
 declare t text;
 begin
-  foreach t in array array[
+  for t in select unnest(array[
     'glossary_terms', 'glossary_term_translations',
     'glossary_term_products', 'glossary_term_news'
-  ]
+  ])
   loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on table public.%I from public', t);
@@ -177,9 +177,6 @@ begin
   end loop;
 end $$;
 ```
-
-> `foreach ... in array` ist PL/pgSQL-Syntax; falls die Supabase-Version das
-> ablehnt, die vier Blöcke ausschreiben. Die Wirkung muss identisch sein.
 
 - [ ] **Step 2: Typen-Test schreiben**
 
@@ -1038,21 +1035,27 @@ export async function getMatcherTerms(lang: string): Promise<GlossaryMatcherTerm
   })
 }
 
+interface TranslatableRow {
+  slug: string
+  canonicalName: string
+  summary: string
+}
+
 /** Überschreibt Name und Summary mit der Übersetzung, wo eine existiert.
  *  Fehlt sie, bleibt die deutsche Fassung stehen — besser als eine Lücke. */
-async function applyTranslations<T extends { slug: string }>(
+async function applyTranslations<T extends TranslatableRow>(
   rows: T[],
   lang: string,
 ): Promise<T[]> {
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('glossary_term_translations')
-    .select('term_id, canonical_name, summary, glossary_terms!inner(slug)')
+    .select('canonical_name, summary, glossary_terms!inner(slug)')
     .eq('language', lang)
   const bySlug = new Map(
     (data ?? []).map((t) => [
       (t.glossary_terms as unknown as { slug: string }).slug,
-      t,
+      { canonicalName: t.canonical_name as string | null, summary: t.summary as string | null },
     ]),
   )
   return rows.map((r) => {
@@ -1060,8 +1063,8 @@ async function applyTranslations<T extends { slug: string }>(
     if (!t9n) return r
     return {
       ...r,
-      canonicalName: (t9n.canonical_name as string) ?? (r as never),
-      summary: (t9n.summary as string) ?? (r as never),
+      canonicalName: t9n.canonicalName ?? r.canonicalName,
+      summary: t9n.summary ?? r.summary,
     }
   })
 }
@@ -2010,8 +2013,8 @@ Umsetzung am Code verifiziert werden:
 2. Die Spaltennamen von `daily_repo` für die RPC (Task 14, Step 1).
 3. `ditheringCoarseness: 3` für Illustrationen ist eine begründete Annahme, kein
    Messergebnis (Task 9, Step 5).
-4. `foreach ... in array` in PL/pgSQL — falls die Supabase-Version das ablehnt,
-   die vier RLS-Blöcke ausschreiben (Task 1, Step 1).
+4. Ob `daily_repo` und `products` die in Task 14/15 erwarteten `embedding`- und
+   `visibility_status`-Spalten führen.
 5. Ob `products` die Spalten `visibility_status` und `chartable` genau so heißt
    (Task 15, Step 3).
 6. Ob eine Funktion für die Chart-Produktnamen existiert oder eine schmale Query
