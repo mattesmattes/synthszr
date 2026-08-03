@@ -1087,30 +1087,47 @@ export async function getMatcherTerms(lang: string): Promise<GlossaryMatcherTerm
 }
 
 interface TranslatableRow {
+  id: string
   slug: string
   canonicalName: string
   summary: string
 }
 
-/** Überschreibt Name und Summary mit der Übersetzung, wo eine existiert.
- *  Fehlt sie, bleibt die deutsche Fassung stehen — besser als eine Lücke. */
+/**
+ * Überschreibt Name und Summary mit der Übersetzung, wo eine existiert.
+ * Fehlt sie, bleibt die deutsche Fassung stehen — besser als eine Lücke.
+ *
+ * Die `term_id`s werden bewusst mitgegeben statt nur auf `language` zu
+ * filtern: der Primary Key ist `(term_id, language)`, ein language-only-Filter
+ * nutzt dessen Präfix nicht und läuft als Seq-Scan über alle Sprachen. Mit den
+ * IDs greift der PK, und es werden nur die tatsächlich benötigten Zeilen
+ * übertragen — in diesem Projekt hat genau dieser Reflex 109 GB Egress
+ * gekostet.
+ */
 async function applyTranslations<T extends TranslatableRow>(
   rows: T[],
   lang: string,
 ): Promise<T[]> {
+  if (rows.length === 0) return rows
   const supabase = createAdminClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('glossary_term_translations')
-    .select('canonical_name, summary, glossary_terms!inner(slug)')
+    .select('term_id, canonical_name, summary')
+    .in('term_id', rows.map((r) => r.id))
     .eq('language', lang)
-  const bySlug = new Map(
+  if (error) {
+    // Fehlende Übersetzungen sind kein Grund, die Seite leer zu rendern.
+    console.error('[Glossary] applyTranslations:', error.message)
+    return rows
+  }
+  const byId = new Map(
     (data ?? []).map((t) => [
-      (t.glossary_terms as unknown as { slug: string }).slug,
+      t.term_id as string,
       { canonicalName: t.canonical_name as string | null, summary: t.summary as string | null },
     ]),
   )
   return rows.map((r) => {
-    const t9n = bySlug.get(r.slug)
+    const t9n = byId.get(r.id)
     if (!t9n) return r
     return {
       ...r,
@@ -1120,6 +1137,11 @@ async function applyTranslations<T extends TranslatableRow>(
   })
 }
 ```
+
+`getPublishedTermList` muss dafür `id` mitselektieren und intern durchreichen —
+nach außen bleibt `{ slug, canonicalName, summary }`, die `id` wird vor der
+Rückgabe verworfen. `LIST_COLUMNS` lautet also
+`'id, slug, canonical_name, summary'`.
 
 `lib/glossary/detail.ts`:
 
