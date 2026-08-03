@@ -1,0 +1,207 @@
+import { cache } from 'react'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getMatcherTerms } from '@/lib/glossary/terms'
+import { findGlossaryMentions } from '@/lib/glossary/mentions'
+import { injectGlossaryMarks } from '@/lib/glossary/inject-marks'
+import { extractVisibleText } from '@/lib/posts/product-mentions'
+import { GLOSSARY_MAX_PER_ARTICLE } from '@/lib/glossary/types'
+import type { GlossaryStatus, GlossaryTerm } from '@/lib/glossary/types'
+
+/** Obergrenze für die beiden verbleibenden arrondierenden Blöcke (Produkte,
+ *  News) — die Begriffsverlinkung selbst nutzt GLOSSARY_MAX_PER_ARTICLE, weil
+ *  sie mit den im Text injizierten Marks konsistent bleiben muss. */
+const MAX_PRODUCTS = 10
+const MAX_NEWS_ITEMS = 10
+
+export interface GlossaryRelatedTerm {
+  slug: string
+  canonicalName: string
+}
+
+export interface GlossaryTermProduct {
+  slug: string
+  canonicalName: string
+  relevance: number
+}
+
+export interface GlossaryTermNews {
+  title: string
+  sourceName: string | null
+  sourceUrl: string
+  publishedAt: string | null
+  contextSentence: string | null
+}
+
+export type GlossaryTermDetail = GlossaryTerm & {
+  relatedTerms: GlossaryRelatedTerm[]
+  products: GlossaryTermProduct[]
+  news: GlossaryTermNews[]
+}
+
+/** cache() verhindert, dass generateMetadata und die Page dieselbe Query
+ *  zweimal absetzen — das verdoppelt sonst den Egress pro Seitenaufruf (vgl.
+ *  app/[lang]/rankings/[slug]/page.tsx, das genau das noch nicht tut).
+ *
+ *  Die Memoisierung ist nicht unit-testbar, und das ist keine Lücke: cache()
+ *  memoisiert nur innerhalb eines aktiven RSC-Renders. Außerhalb — also in
+ *  jedem Vitest-Lauf mit environment: 'node' — ist der Dispatcher ein No-Op,
+ *  jeder Aufruf führt frisch aus (empirisch geprüft, React 19.2.0). Ein Test
+ *  "zweiter Aufruf trifft die DB nicht erneut" würde deshalb am korrekten Code
+ *  vorbei fehlschlagen. Diese Zeile ist trotzdem kein unnötiger Wrapper — sie
+ *  wirkt beim echten Request, nur eben nicht in diesem Testaufbau. */
+export const getGlossaryTerm = cache(
+  async (slug: string, lang: string): Promise<GlossaryTermDetail | null> => {
+    const supabase = createAdminClient()
+
+    const { data: row, error } = await supabase
+      .from('glossary_terms')
+      .select('id, slug, canonical_name, aliases, status, summary, body, illustration_url, illustration_alt')
+      .eq('slug', slug)
+      .eq('status', 'published')
+      .maybeSingle()
+    if (error) {
+      console.error('[Glossary] getGlossaryTerm:', error.message)
+      return null
+    }
+    if (!row) return null
+
+    let term: GlossaryTerm = {
+      id: row.id as string,
+      slug: row.slug as string,
+      canonicalName: row.canonical_name as string,
+      aliases: (row.aliases ?? []) as string[],
+      status: row.status as GlossaryStatus,
+      summary: row.summary as string,
+      body: row.body,
+      illustrationUrl: row.illustration_url as string | null,
+      illustrationAlt: row.illustration_alt as string | null,
+    }
+
+    if (lang !== 'de') {
+      term = await applyTermTranslation(supabase, term, lang)
+    }
+
+    const [{ body, relatedTerms }, products, news] = await Promise.all([
+      linkRelatedTerms(term, lang),
+      getTermProducts(term.id),
+      getTermNews(term.id),
+    ])
+
+    return { ...term, body, relatedTerms, products, news }
+  },
+)
+
+/** Einzelzeile über den vollen Primary Key (term_id, language) — kein
+ *  Seq-Scan-Risiko, anders als ein reiner language-Filter über viele Zeilen. */
+async function applyTermTranslation(
+  supabase: ReturnType<typeof createAdminClient>,
+  term: GlossaryTerm,
+  lang: string,
+): Promise<GlossaryTerm> {
+  const { data: t9n, error } = await supabase
+    .from('glossary_term_translations')
+    .select('canonical_name, aliases, summary, body')
+    .eq('term_id', term.id)
+    .eq('language', lang)
+    .maybeSingle()
+  if (error) {
+    console.error('[Glossary] getGlossaryTerm translation:', error.message)
+    return term
+  }
+  if (!t9n) return term
+  return {
+    ...term,
+    canonicalName: (t9n.canonical_name as string | null) ?? term.canonicalName,
+    aliases: (t9n.aliases as string[] | null) ?? term.aliases,
+    summary: (t9n.summary as string | null) ?? term.summary,
+    body: t9n.body ?? term.body,
+  }
+}
+
+/**
+ * Verlinkt Begriffe, die dieser Begriff in seinem eigenen Erklärungstext
+ * erwähnt — kein eigenes Relations-Schema (es gibt keine
+ * `glossary_term_related`-Tabelle, und kein Task legt eine an), sondern
+ * Wiederverwendung des Matchers aus Task 2 auf `body` statt auf einen Artikel.
+ *
+ * Die eigentliche Anforderung ist die Verlinkung IM Text, nicht nur ein Block
+ * darunter — deshalb werden die Marks hier injiziert (injectGlossaryMarks aus
+ * Task 3) und der veränderte Body zurückgegeben. Das passiert bewusst im
+ * Loader und nicht beim Generieren (Task 8): ein neu angelegter Begriff
+ * erscheint dadurch rückwirkend in allen älteren Erklärtexten, die ihn
+ * erwähnen, ohne dass deren `body` neu geschrieben werden müsste.
+ *
+ * `relatedTerms` wird aus derselben Kandidaten-/Treffer-Menge abgeleitet und
+ * mit GLOSSARY_MAX_PER_ARTICLE gekappt — demselben Limit, das
+ * injectGlossaryMarks intern anwendet. Beide Ausgaben zeigen so garantiert
+ * dieselben Begriffe.
+ */
+async function linkRelatedTerms(
+  term: GlossaryTerm,
+  lang: string,
+): Promise<{ body: unknown; relatedTerms: GlossaryRelatedTerm[] }> {
+  const candidates = (await getMatcherTerms(lang)).filter((t) => t.slug !== term.slug)
+  const text = extractVisibleText(term.body)
+  const mentions = candidates.length > 0 && text ? findGlossaryMentions(text, candidates) : []
+  const slugs = mentions.map((m) => m.slug)
+  const body = injectGlossaryMarks(term.body, slugs, candidates)
+  const relatedTerms = candidates
+    .filter((t) => slugs.includes(t.slug))
+    .slice(0, GLOSSARY_MAX_PER_ARTICLE)
+    .map((t) => ({ slug: t.slug, canonicalName: t.canonicalName }))
+  return { body, relatedTerms }
+}
+
+/** Supabase typisiert einen Fremdschlüssel-Join je nach FK-Erkennung als
+ *  Objekt ODER Array — gleiches Muster wie lib/rankings/product-detail.ts. */
+function joinedProduct(p: unknown): { slug: string; canonical_name: string } | null {
+  if (!p) return null
+  return (Array.isArray(p) ? p[0] : p) as { slug: string; canonical_name: string } | undefined ?? null
+}
+
+async function getTermProducts(termId: string): Promise<GlossaryTermProduct[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('glossary_term_products')
+    .select('relevance, product:products(slug, canonical_name)')
+    .eq('term_id', termId)
+    .eq('products.visibility_status', 'visible')
+    .order('relevance', { ascending: false })
+    .limit(MAX_PRODUCTS)
+  if (error) {
+    console.error('[Glossary] getTermProducts:', error.message)
+    return []
+  }
+  return (data ?? [])
+    .map((r) => {
+      const product = joinedProduct((r as { product: unknown }).product)
+      if (!product) return null
+      return {
+        slug: product.slug,
+        canonicalName: product.canonical_name,
+        relevance: (r as { relevance: number }).relevance,
+      }
+    })
+    .filter((p): p is GlossaryTermProduct => p !== null)
+}
+
+async function getTermNews(termId: string): Promise<GlossaryTermNews[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('glossary_term_news')
+    .select('title, source_name, source_url, published_at, context_sentence')
+    .eq('term_id', termId)
+    .order('published_at', { ascending: false })
+    .limit(MAX_NEWS_ITEMS)
+  if (error) {
+    console.error('[Glossary] getTermNews:', error.message)
+    return []
+  }
+  return (data ?? []).map((r) => ({
+    title: r.title as string,
+    sourceName: r.source_name as string | null,
+    sourceUrl: r.source_url as string,
+    publishedAt: r.published_at as string | null,
+    contextSentence: r.context_sentence as string | null,
+  }))
+}
