@@ -1,6 +1,7 @@
 import sharp from 'sharp'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { put } from '@vercel/blob'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { getModelForUseCase } from '@/lib/ai/model-config'
@@ -339,43 +340,21 @@ export interface CoverImageNews {
 }
 
 /**
- * Generate a satirical image from news text
- * Supports single newsText string OR multiple news items for cover images
- *
- * @param options.fast — when true, OpenAI image models are called with
- *   quality:'low' (~3× faster). Use for thumbnails.
- * @param options.aspectRatio — 'landscape' (3:2) for cover images, 'square'
- *   (1:1, default) for thumbnails. OpenAI honors this via gpt-image-2
- *   size; Google steers it via the prompt template.
+ * Kern der Bildgenerierung: Provider-Routing (Direct Google API oder Vercel
+ * AI SDK), 3 Versuche mit Backoff, und Letterbox-Trim bei Erfolg. Gemeinsam
+ * für generateSatiricalImage (Cover/Thumbnail, Prompt aus getActiveImagePrompt())
+ * und generateRawImage (Glossar-Illustrationen, fertiger Prompt) — beide
+ * unterscheiden sich nur im Prompt-Aufbau, nicht in Provider-Handling,
+ * Retry- oder Trim-Logik. Ein separater Wrapper pro Aufrufer würde diese
+ * ~50 Zeilen duplizieren und über kurz oder lang auseinanderlaufen.
  */
-export async function generateSatiricalImage(
-  newsTextOrItems: string | CoverImageNews,
-  options: { fast?: boolean; aspectRatio?: 'square' | 'landscape' } = {}
+async function generateImageWithRetry(
+  prompt: string,
+  fast: boolean,
+  aspectRatio: 'square' | 'landscape'
 ): Promise<GenerateImageResult> {
   const maxRetries = 3
   let lastError: Error | null = null
-  const fast = options.fast === true
-  const aspectRatio = options.aspectRatio ?? 'square'
-
-  const promptTemplate = await getActiveImagePrompt()
-
-  // Build prompt with variable substitution
-  let prompt: string
-  if (typeof newsTextOrItems === 'string') {
-    // Single news text (backward compatible)
-    prompt = promptTemplate.replace('{newsText}', newsTextOrItems.slice(0, 2000))
-  } else {
-    // Multiple news items for cover image composition
-    prompt = promptTemplate
-      .replace('{news1}', newsTextOrItems.news1?.slice(0, 800) || '')
-      .replace('{news2}', newsTextOrItems.news2?.slice(0, 800) || '')
-      .replace('{news3}', newsTextOrItems.news3?.slice(0, 800) || '')
-      .replace('{newsText}', [
-        newsTextOrItems.news1,
-        newsTextOrItems.news2,
-        newsTextOrItems.news3
-      ].filter(Boolean).join('\n\n---\n\n').slice(0, 2000))
-  }
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -443,6 +422,63 @@ export async function generateSatiricalImage(
     success: false,
     error: lastError?.message || 'Unknown error'
   }
+}
+
+/**
+ * Generate a satirical image from news text
+ * Supports single newsText string OR multiple news items for cover images
+ *
+ * @param options.fast — when true, OpenAI image models are called with
+ *   quality:'low' (~3× faster). Use for thumbnails.
+ * @param options.aspectRatio — 'landscape' (3:2) for cover images, 'square'
+ *   (1:1, default) for thumbnails. OpenAI honors this via gpt-image-2
+ *   size; Google steers it via the prompt template.
+ */
+export async function generateSatiricalImage(
+  newsTextOrItems: string | CoverImageNews,
+  options: { fast?: boolean; aspectRatio?: 'square' | 'landscape' } = {}
+): Promise<GenerateImageResult> {
+  const fast = options.fast === true
+  const aspectRatio = options.aspectRatio ?? 'square'
+
+  const promptTemplate = await getActiveImagePrompt()
+
+  // Build prompt with variable substitution
+  let prompt: string
+  if (typeof newsTextOrItems === 'string') {
+    // Single news text (backward compatible)
+    prompt = promptTemplate.replace('{newsText}', newsTextOrItems.slice(0, 2000))
+  } else {
+    // Multiple news items for cover image composition
+    prompt = promptTemplate
+      .replace('{news1}', newsTextOrItems.news1?.slice(0, 800) || '')
+      .replace('{news2}', newsTextOrItems.news2?.slice(0, 800) || '')
+      .replace('{news3}', newsTextOrItems.news3?.slice(0, 800) || '')
+      .replace('{newsText}', [
+        newsTextOrItems.news1,
+        newsTextOrItems.news2,
+        newsTextOrItems.news3
+      ].filter(Boolean).join('\n\n---\n\n').slice(0, 2000))
+  }
+
+  return generateImageWithRetry(prompt, fast, aspectRatio)
+}
+
+/**
+ * Erzeugt ein Rohbild direkt aus einem fertigen Prompt — ohne das Satire-
+ * Prompttemplate aus getActiveImagePrompt(), das {newsText}-Platzhalter
+ * erwartet und auf Nachrichtenbilder festgelegt ist. Nutzt dieselbe
+ * Provider-/Modellauflösung (aktives Bildmodell aus /admin/settings →
+ * KI-Modelle → Bildgenerierung) sowie denselben Retry (3 Versuche) und
+ * Letterbox-Trim wie generateSatiricalImage — ein schmaler Wrapper allein
+ * um generateImageOpenAI würde die Modellauflösung hart auf OpenAI verdrahten
+ * und Retry/Trim verlieren.
+ */
+export async function generateRawImage(
+  prompt: string,
+  opts?: { fast?: boolean }
+): Promise<GenerateImageResult> {
+  return generateImageWithRetry(prompt, opts?.fast === true, 'square')
 }
 
 /**
@@ -943,4 +979,62 @@ export async function generateEmailCover(
     base64: finalImage.toString('base64'),
     mimeType: 'image/png',
   }
+}
+
+/** Erklärender Bildstil für Lexikonseiten — bewusst nicht das Satire-Template
+ *  aus getActiveImagePrompt(), das auf Nachrichtenbilder festgelegt ist. */
+export function buildGlossaryImagePrompt(termName: string, summary: string): string {
+  return [
+    'A clear, schematic technical illustration explaining the concept:',
+    `"${termName}" — ${summary.slice(0, 400)}`,
+    'Style: high-contrast black ink on white, diagrammatic, no text labels,',
+    'no photorealism, thick clean lines that survive heavy dithering.',
+  ].join('\n')
+}
+
+/**
+ * Generiert die Illustration für einen Glossareintrag: Rohbild via
+ * generateRawImage, dann dieselbe Dither-Pipeline wie bei Cover-Bildern
+ * (Scale-to-cover → Tonkurve → Floyd-Steinberg → whiteToTransparent) über
+ * preloadedRawBase64 — generateAndProcessImage generiert dabei nicht erneut.
+ *
+ * coarseness=1 (Cover-Default), NICHT die im Task-Brief angenommene 3: der
+ * visuelle Abgleich in scripts/_glossary_image_test.ts zeigt für ein echtes
+ * generiertes Schema-Bild das Gegenteil der Annahme — bei coarseness 3 werden
+ * feine Elemente (Beschriftungen, kleine Kästen) zu unlesbarem Rauschen,
+ * während coarseness 1 dieselben dicken Linien scharf UND Text lesbar hält,
+ * bei sauberer, moiréfreier Dither-Körnung auf nativer Auflösung. coarseness
+ * 3 bot in diesem Test keinen erkennbaren Vorteil für die Hauptlinien.
+ */
+export async function generateGlossaryIllustration(
+  termName: string,
+  summary: string
+): Promise<{ success: boolean; imageBase64?: string; error?: string }> {
+  const raw = await generateRawImage(buildGlossaryImagePrompt(termName, summary))
+  if (!raw.success || !raw.imageBase64) return { success: false, error: raw.error }
+  return generateAndProcessImage(termName, {
+    enableDithering: true,
+    ditheringGain: 1.0,
+    ditheringCoarseness: 1,
+    targetWidth: 1024,
+    targetHeight: 1024,
+  }, raw.imageBase64)
+}
+
+/**
+ * Lädt eine fertig prozessierte Glossar-Illustration in denselben Blob-Store
+ * wie Artikel-Cover hoch (Muster aus app/api/post-images/route.ts). KEIN
+ * eigener Store: next.config.mjs whitelistet in images.remotePatterns genau
+ * den einen Host des bestehenden Stores — next/image würfe zur Laufzeit
+ * (erster Seitenaufruf, nicht beim Build) bei jedem anderen Host. Fehler
+ * werden nicht verschluckt: der Aufrufer (Task 10) entscheidet, wie mit
+ * einem gescheiterten Upload umgegangen wird.
+ */
+export async function uploadGlossaryIllustration(imageBase64: string, slug: string): Promise<string> {
+  const blob = await put(
+    `glossary/${slug}.png`,
+    Buffer.from(imageBase64, 'base64'),
+    { access: 'public', contentType: 'image/png' }
+  )
+  return blob.url
 }
