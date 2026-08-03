@@ -1363,9 +1363,19 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     path: `/glossary/${slug}`,
     locale: lang as LanguageCode,
     availableLocales: ['de', 'en'],
+    // Die Dither-Illustration als OG-Bild, wenn es eine gibt — geteilte Links
+    // zeigen sonst nichts. `pathByLocale` ist nicht nötig: der Slug entsteht aus
+    // dem deutschen Begriff und ist damit sprachunabhängig.
+    ogImage: term.illustrationUrl ?? undefined,
   })
 }
 ```
+
+Verfügbare Parameter von `generateLocalizedMetadata` (verifiziert,
+`lib/i18n/metadata.ts:30-40`): `title`, `description`, `path`,
+`availableLocales`, `noIndex`, `locale`, `ogImage`, `ogType`, `pathByLocale`.
+`safeJsonLd(x: unknown): string` (`lib/seo/site.ts:7`) escapt `<` und ist für
+`dangerouslySetInnerHTML` gedacht.
 
 - [ ] **Step 2: HTML-Reihenfolge einhalten**
 
