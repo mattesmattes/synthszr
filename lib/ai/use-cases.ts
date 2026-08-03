@@ -26,6 +26,7 @@ export type UseCase =
   | 'glossary_candidate_identification'
   | 'glossary_generation'
   | 'glossary_readability_qa'
+  | 'glossary_news_context'
 
 export interface UseCaseInfo {
   label: string
@@ -129,6 +130,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     label: 'Glossar — Verständlichkeits-QS',
     description: 'Generierten Lexikontext gegen die Verständlichkeitskriterien prüfen',
     defaultModel: 'claude-opus-5',
+    allowedProviders: ['anthropic'],
+  },
+  glossary_news_context: {
+    label: 'Glossar — News-Einordnung',
+    description: 'Einordnungssatz für gematchte News-Titel im wöchentlichen Refresh schreiben (hochvolumig)',
+    defaultModel: 'claude-haiku-4-5-20251001',
     allowedProviders: ['anthropic'],
   },
 }
