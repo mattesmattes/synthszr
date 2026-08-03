@@ -184,7 +184,9 @@ describe('advanceArticleJob — Phase lexicon', () => {
     })
     mocks.getMatcherTerms.mockResolvedValue([{ slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }])
     mocks.extractLexTags.mockReturnValue(['Inferenz'])
-    mocks.buildCandidateList.mockResolvedValue([{ slug: 'inferenz', name: 'Inferenz', origin: 'tag', matchedText: null }])
+    mocks.buildCandidateList.mockResolvedValue([
+      { slug: 'inferenz', name: 'Inferenz', origin: 'tag', matchedText: null, isNewlyGenerated: false },
+    ])
 
     const { advanceArticleJob } = await import('@/lib/article-jobs/service')
     const result = await advanceArticleJob('job-1')
@@ -199,7 +201,7 @@ describe('advanceArticleJob — Phase lexicon', () => {
     )
     const candidatesUpdate = state.updates.find((u) => u.table === 'generated_posts' && 'pending_glossary_terms' in u.payload)
     expect(candidatesUpdate?.payload.pending_glossary_terms).toEqual([
-      { slug: 'inferenz', name: 'Inferenz', origin: 'tag', matchedText: null },
+      { slug: 'inferenz', name: 'Inferenz', origin: 'tag', matchedText: null, isNewlyGenerated: false },
     ])
     const jobDone = state.updates.find((u) => u.table === 'article_jobs' && u.payload.status === 'done')
     expect(jobDone?.payload).toMatchObject({ status: 'done', phase: null })

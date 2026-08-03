@@ -45,4 +45,13 @@ export interface GlossaryCandidate {
    *  der Begriff kommt aus einer {lex:}-Direktive bzw. einem LLM-Vorschlag, nicht
    *  aus einem Text-Match. */
   matchedText: string | null
+  /** true, wenn der Begriffsinhalt in DIESEM Tick frisch generiert wurde (LLM-
+   *  Text, von keinem Menschen gelesen) — unabhängig von `origin`. Ein
+   *  {lex:}-Tag auf einen frisch generierten Begriff hat also origin='tag' UND
+   *  isNewlyGenerated=true: dieselbe Vertrauensstufe wie ein 'new'-Kandidat.
+   *  `origin` beschreibt nur die Herkunft (Direktive/Match/LLM-Scan), nicht ob
+   *  der Inhalt schon von einem Menschen gesehen wurde — dieses Feld liefert
+   *  genau die Information, die dafür fehlt, an Task 11/12 (Freigabe/
+   *  Vorauswahl im Editor). */
+  isNewlyGenerated: boolean
 }
