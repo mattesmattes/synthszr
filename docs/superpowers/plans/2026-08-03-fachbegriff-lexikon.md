@@ -1344,6 +1344,20 @@ export const getGlossaryTerm = cache(async (slug: string, lang: string) => {
 > `generateMetadata` als auch im Seitenkörper auf, also zwei Queries pro
 > Aufruf. Bei rund 5000 Produktseiten ist das die Hälfte des Egress dieser
 > Route. Hier wird es von Anfang an richtig gemacht.
+>
+> **Die Memoisierung ist nicht unit-testbar, und das ist keine Lücke.**
+> `cache()` memoisiert nur innerhalb eines aktiven RSC-Renders. Außerhalb —
+> also in jedem Vitest-Lauf mit `environment: 'node'` — ist der Dispatcher ein
+> No-Op und jeder Aufruf führt die Funktion frisch aus (empirisch geprüft,
+> React 19.2.0). Ein Test „zweiter Aufruf trifft die DB nicht erneut" schlägt
+> deshalb fehl, obwohl der Code korrekt ist. Auch gegen Produktion ist die
+> Query-Anzahl für einen einzelnen Aufruf nicht sinnvoll zählbar; die
+> Verdoppelung zeigt sich erst verzögert in den Egress-Metriken.
+>
+> Statt eines Tests, der nur Zeremonie wäre: ein Kommentar am Loader, der
+> festhält **warum** `cache()` dort steht und **warum kein Test es deckt** —
+> sonst verschwindet die Zeile beim nächsten Aufräumen als „unnötiger Wrapper".
+> Der Review darf den fehlenden Test nicht als Lücke werten.
 
 - [ ] **Step 4: Test laufen lassen — muss bestehen**
 
