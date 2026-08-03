@@ -1605,9 +1605,18 @@ Expected: FAIL, Modul fehlt
 
 - [ ] **Step 3: Implementieren**
 
-Modell `claude-opus-5` mit `thinking: { type: 'adaptive' }`, Ausgabe über einen
-Tool-Call für schema-validierte Rückgabe. **Kein `budget_tokens`** — die
-2026er-Frontier-Modelle lehnen das mit 400 ab.
+Modell `claude-opus-5`, Ausgabe über einen Tool-Call für schema-validierte
+Rückgabe. **Dem erprobten Projektmuster folgen** (`lib/rankings/product-validity-qa.ts:87-88`):
+
+```ts
+{ model, max_tokens: <n>, tools: [tool], tool_choice: { type: 'tool', name: '<tool_name>' } }
+```
+
+Also **kein** `temperature`, **kein** `budget_tokens`, **kein** `thinking`. Die
+2026er-Frontier-Modelle lehnen manche Parameter-Kombinationen mit 400 ab, und
+das obige Muster ist das einzige in diesem Projekt nachweislich funktionierende.
+`thinking: { type: 'adaptive' }` ist hier nirgends erprobt — wer es einbauen
+will, muss es vorher gegen die API verifizieren, nicht auf Verdacht setzen.
 
 Prompt-Anforderungen, die im Systemprompt stehen müssen:
 
