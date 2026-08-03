@@ -157,11 +157,19 @@ export interface GeneratedTerm {
   readabilityScore: number | null
 }
 
+// Untergrenzen sind kein Stil-Detail: canonical_name='' würde slugify('') zu
+// '' machen, und blocks=[] würde buildTipTapBody zu einem leeren Dokument.
+// Beides muss die Parse-Stufe ablehnen, statt still ein degeneriertes
+// GeneratedTerm zu erzeugen — sonst matcht ein leerer Name in Task 2 überall
+// (boundaryRegex('')) und injectGlossaryMarks erzeugt ungültiges TipTap-JSON.
+// min(4) auf blocks: Regel 3 im Systemprompt verlangt mindestens die vier
+// Struktureinheiten (Intro-Absatz + drei Überschriften); das ist die
+// Zod-seitige Grobgrenze, nicht die vollständige Struktur-Prüfung.
 const ContentSchema = z.object({
-  canonical_name: z.string(),
+  canonical_name: z.string().min(1),
   aliases: z.array(z.string()),
-  summary: z.string(),
-  blocks: z.array(z.object({ type: z.enum(['paragraph', 'heading']), text: z.string() })),
+  summary: z.string().min(1),
+  blocks: z.array(z.object({ type: z.enum(['paragraph', 'heading']), text: z.string() })).min(4),
   needs_illustration: z.boolean(),
   illustration_alt: z.string().nullable().optional(),
 })
@@ -333,6 +341,13 @@ export async function generateTermContent(name: string): Promise<GeneratedTerm> 
   const c = parsedContent.data
   const canonicalName = c.canonical_name.trim()
   const slug = slugify(canonicalName)
+  // ContentSchema prüft nur die Roh-Länge von canonical_name — ein reiner
+  // Whitespace-String ("   ") besteht min(1), wird aber nach trim() bzw.
+  // slugify() leer. "slug" ist kein Rohfeld des Tools (wir berechnen es
+  // selbst), deshalb hier die äquivalente Non-Empty-Prüfung auf das Ergebnis.
+  if (!canonicalName || !slug) {
+    throw new Error(`[glossary/generate] leerer canonical_name/slug für "${name}"`)
+  }
   const aliases = dedupeAliases(c.aliases, canonicalName)
   const body = buildTipTapBody(c.blocks)
   const needsIllustration = c.needs_illustration

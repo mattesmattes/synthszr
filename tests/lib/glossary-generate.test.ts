@@ -89,14 +89,21 @@ describe('identifyCandidates', () => {
 })
 
 describe('generateTermContent', () => {
+  // Volle Rule-3-Struktur (Intro-Absatz + drei Heading/Paragraph-Paare = 7
+  // Blocks), nicht nur die für .min(4) nötige Mindestmenge — die Fixture soll
+  // eine plausible Modellantwort simulieren, nicht nur knapp am Schema vorbei.
   const contentInput = {
     canonical_name: 'Mixture of Experts',
     aliases: ['MoE', 'Mixture-of-Experts', 'Mixture of Experts'],
     summary: 'Ein Ansatz, bei dem pro Anfrage nur ein Teil eines Modells rechnet.',
     blocks: [
       { type: 'paragraph', text: 'Stell dir eine Redaktion vor, in der nur zwei Leute pro Frage recherchieren.' },
+      { type: 'heading', text: 'Warum das wichtig ist' },
+      { type: 'paragraph', text: 'So bleiben auch sehr große Modelle im Betrieb bezahlbar.' },
       { type: 'heading', text: 'Wie die Auswahl funktioniert' },
       { type: 'paragraph', text: 'Ein kleines Zusatznetz, der Router, entscheidet, welche Experten zuständig sind.' },
+      { type: 'heading', text: 'Wo man dem Begriff begegnet' },
+      { type: 'paragraph', text: 'Viele aktuelle Sprachmodelle großer Anbieter nutzen dieses Prinzip.' },
     ],
     needs_illustration: true,
     illustration_alt: 'Schema eines Routers, der Anfragen an einzelne Experten verteilt',
@@ -152,9 +159,14 @@ describe('generateTermContent', () => {
     expect(t.readabilityScore).toBe(88)
   })
 
-  it('setzt needsIllustration/illustrationAlt aus der Tool-Antwort um (false-Fall)', async () => {
+  it('erzwingt illustrationAlt=null bei needs_illustration=false, auch wenn das Modell trotzdem einen Alt-Text liefert', async () => {
+    // Scharfer Test: illustration_alt ist NICHT leer, needs_illustration ist
+    // false. Nur wenn der Code bei false wirklich hart auf null zwingt (statt
+    // nur durchzureichen, was das Modell schickt), kommt hier null heraus.
     mocks.create
-      .mockResolvedValueOnce(toolUse({ ...contentInput, needs_illustration: false, illustration_alt: null }))
+      .mockResolvedValueOnce(
+        toolUse({ ...contentInput, needs_illustration: false, illustration_alt: 'ein nicht leerer Alt-Text' }),
+      )
       .mockResolvedValueOnce(toolUse(readabilityInput))
     const { generateTermContent } = await import('@/lib/glossary/generate')
     const t = await generateTermContent('Compliance')
@@ -174,6 +186,20 @@ describe('generateTermContent', () => {
 
   it('wirft, wenn die erste Tool-Antwort ungültig/fehlend ist', async () => {
     mocks.create.mockResolvedValueOnce({ content: [] })
+    const { generateTermContent } = await import('@/lib/glossary/generate')
+    await expect(generateTermContent('Foo')).rejects.toThrow()
+  })
+
+  it('wirft bei einer degenerierten Antwort (leerer Name, leere blocks) statt ein leeres Dokument zu bauen', async () => {
+    mocks.create.mockResolvedValueOnce(
+      toolUse({ ...contentInput, canonical_name: '', blocks: [] }),
+    )
+    const { generateTermContent } = await import('@/lib/glossary/generate')
+    await expect(generateTermContent('Foo')).rejects.toThrow()
+  })
+
+  it('wirft bei reinem Whitespace-canonical_name (besteht die Roh-Längenprüfung, ist aber nach trim() leer)', async () => {
+    mocks.create.mockResolvedValueOnce(toolUse({ ...contentInput, canonical_name: '   ' }))
     const { generateTermContent } = await import('@/lib/glossary/generate')
     await expect(generateTermContent('Foo')).rejects.toThrow()
   })
