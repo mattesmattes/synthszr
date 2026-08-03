@@ -18,7 +18,8 @@ const state = vi.hoisted(() => ({
 function makeChain() {
   const chain: any = {}
   // 'in' ist nötig, weil applyTranslations .in('term_id', ids) nutzt.
-  for (const m of ['select', 'eq', 'in', 'is', 'gt', 'order', 'limit', 'update', 'insert', 'delete']) {
+  // 'range' ist nötig für die Paginierung in getChartProductNames.
+  for (const m of ['select', 'eq', 'in', 'is', 'gt', 'order', 'limit', 'range', 'update', 'insert', 'delete']) {
     chain[m] = vi.fn(() => chain)
   }
   const own = state.queue.length ? state.queue.shift() : undefined
@@ -147,5 +148,42 @@ describe('getMatcherTerms', () => {
     const { getMatcherTerms } = await import('@/lib/glossary/terms')
     const rows = await getMatcherTerms('de')
     expect(rows).toEqual([])
+  })
+})
+
+describe('getChartProductNames', () => {
+  it('selektiert nur canonical_name', async () => {
+    state.result = { data: [{ canonical_name: 'Cursor' }], error: null }
+    const { getChartProductNames } = await import('@/lib/glossary/terms')
+    await getChartProductNames()
+    expect(state.chains[0].select).toHaveBeenCalledWith('canonical_name')
+  })
+
+  it('filtert auf visibility_status=visible', async () => {
+    state.result = { data: [], error: null }
+    const { getChartProductNames } = await import('@/lib/glossary/terms')
+    await getChartProductNames()
+    expect(state.chains[0].eq).toHaveBeenCalledWith('visibility_status', 'visible')
+  })
+
+  it('paginiert über mehrere Seiten, weil PostgREST sonst bei 1000 kappt', async () => {
+    const page1 = Array.from({ length: 1000 }, (_, i) => ({ canonical_name: `Produkt${i}` }))
+    state.queue = [
+      { data: page1, error: null },
+      { data: [{ canonical_name: 'LetztesProdukt' }], error: null },
+    ]
+    const { getChartProductNames } = await import('@/lib/glossary/terms')
+    const names = await getChartProductNames()
+    expect(names).toHaveLength(1001)
+    expect(names).toContain('LetztesProdukt')
+    expect(state.chains[0].range).toHaveBeenCalledWith(0, 999)
+    expect(state.chains[1].range).toHaveBeenCalledWith(1000, 1999)
+  })
+
+  it('degradiert bei DB-Fehler auf leere Liste statt zu werfen', async () => {
+    state.result = { data: null, error: { message: 'boom' } }
+    const { getChartProductNames } = await import('@/lib/glossary/terms')
+    const names = await getChartProductNames()
+    expect(names).toEqual([])
   })
 })

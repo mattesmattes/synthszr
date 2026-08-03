@@ -72,6 +72,30 @@ export async function getMatcherTerms(lang: string): Promise<GlossaryMatcherTerm
   })
 }
 
+/** Chart-Produktnamen für die Kollisions-Reservierung bei der Mark-Injektion
+ *  (Task 11) — Kollisionsregel: Company > Chart-Produkt > Lexikonbegriff.
+ *  Nur `canonical_name`, keine weiteren Spalten (Egress). Paginiert wie in
+ *  lib/rankings/categorize.ts: PostgREST kappt sonst still bei 1000 Zeilen. */
+export async function getChartProductNames(): Promise<string[]> {
+  const supabase = createAdminClient()
+  const names: string[] = []
+  for (let off = 0; ; off += 1000) {
+    const { data, error } = await supabase
+      .from('products')
+      .select('canonical_name')
+      .eq('visibility_status', 'visible')
+      .range(off, off + 999)
+    if (error) {
+      console.error('[Glossary] getChartProductNames:', error.message)
+      break
+    }
+    if (!data?.length) break
+    names.push(...data.map((r) => r.canonical_name as string))
+    if (data.length < 1000) break
+  }
+  return names
+}
+
 interface TranslatableRow {
   id: string
   slug: string

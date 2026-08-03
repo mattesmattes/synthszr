@@ -6,6 +6,7 @@ import { syncPostCompanyMentions } from '@/lib/companies/sync'
 import { queueTranslations } from '@/lib/translations/queue'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
 import { embedPostContent, upsertPostEmbedding } from '@/lib/search/embeddings'
+import { applyGlossaryConfirmation } from '@/lib/glossary/confirm'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -192,6 +193,22 @@ export async function PATCH(request: NextRequest) {
     if (body.pending_queue_item_ids !== undefined) updateData.pending_queue_item_ids = body.pending_queue_item_ids
 
     const supabase = createAdminClient()
+
+    // Fachbegriff-Lexikon (Task 11): Mark-Injektion und Draft-Freigabe
+    // serverseitig, nicht im Client — der Browser hat keinen Service-Role-
+    // Zugriff, und dieselbe Injektion muss auch die Übersetzungs- und
+    // Backfill-Pfade bedienen, die nie über den Editor laufen.
+    if (Array.isArray(body.confirmedGlossarySlugs)) {
+      const result = await applyGlossaryConfirmation(
+        supabase,
+        id,
+        body.confirmedGlossarySlugs,
+        updateData.content as string | undefined,
+      )
+      if (result.content !== undefined) updateData.content = result.content
+      updateData.pending_glossary_terms = null
+    }
+
     const { error } = await supabase
       .from('generated_posts')
       .update(updateData)
