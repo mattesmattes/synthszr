@@ -3,7 +3,7 @@
  * Prices in USD per 1M tokens
  *
  * Since no provider offers a pricing API, this is maintained manually.
- * Last updated: 2026-03-16
+ * Last updated: 2026-08-03
  *
  * Pricing sources:
  * - Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
@@ -25,11 +25,29 @@ export interface ModelInfo {
   category?: 'text' | 'image'
 }
 
-// Last verified: 2026-03-18
-export const PRICING_LAST_UPDATED = '2026-03-18'
+// Last verified: 2026-08-03
+export const PRICING_LAST_UPDATED = '2026-08-03'
 
 export const MODEL_PRICING: Record<string, ModelInfo> = {
-  // ── Anthropic (verified 2026-03-16) ───────────────────────────────────────
+  // ── Anthropic (verified 2026-08-03) ───────────────────────────────────────
+  'claude-fable-5': {
+    id: 'claude-fable-5',
+    name: 'Claude Fable 5',
+    provider: 'anthropic',
+    pricing: { input: 10, output: 50 },
+  },
+  'claude-opus-5': {
+    id: 'claude-opus-5',
+    name: 'Claude Opus 5',
+    provider: 'anthropic',
+    pricing: { input: 5, output: 25 },
+  },
+  'claude-sonnet-5': {
+    id: 'claude-sonnet-5',
+    name: 'Claude Sonnet 5',
+    provider: 'anthropic',
+    pricing: { input: 3, output: 15 },
+  },
   'claude-opus-4-8': {
     id: 'claude-opus-4-8',
     name: 'Claude Opus 4.8',
