@@ -41,6 +41,46 @@ describe('findGlossaryMentions', () => {
     const hits = findGlossaryMentions('Inferenz und Mixture of Experts.', terms, 1)
     expect(hits).toHaveLength(1)
   })
+
+  it('kurzer Alias trifft nicht als Wortpräfix (Aida)', () => {
+    const aiTerm: GlossaryMatcherTerm = { slug: 'ai', canonicalName: 'Artificial Intelligence', aliases: ['AI'] }
+    expect(findGlossaryMentions('Aida singt.', [aiTerm])).toEqual([])
+  })
+
+  it('kurzer Alias trifft mit Bindestrich-Grenze', () => {
+    const moeTerm: GlossaryMatcherTerm = { slug: 'moe', canonicalName: 'Mixture of Experts', aliases: ['MoE'] }
+    const hits = findGlossaryMentions('Ein MoE-Modell skaliert.', [moeTerm])
+    expect(hits.map(h => h.slug)).toEqual(['moe'])
+  })
+
+  it('kurzer Alias trifft nicht mit angehängtem Buchstaben', () => {
+    const moeTerm: GlossaryMatcherTerm = { slug: 'moe', canonicalName: 'Mixture of Experts', aliases: ['MoE'] }
+    expect(findGlossaryMentions('MoEs skalieren gut.', [moeTerm])).toEqual([])
+  })
+
+  it('Kompositum über Substring ohne exakten Alias', () => {
+    const inferenzTerm: GlossaryMatcherTerm = { slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }
+    const hits = findGlossaryMentions('Die Inferenzkosten sinken.', [inferenzTerm])
+    expect(hits.map(h => h.slug)).toEqual(['inferenz'])
+  })
+
+  it('Umlaut an Wortgrenze in Kompositum', () => {
+    const embeddingTerm: GlossaryMatcherTerm = { slug: 'einbettung', canonicalName: 'Einbettung', aliases: ['Worteinbettung'] }
+    const hits = findGlossaryMentions('Die Wörter-Einbettung ist zentral.', [embeddingTerm])
+    expect(hits.map(h => h.slug)).toEqual(['einbettung'])
+  })
+
+  it('escapeRegex mit Regex-Sonderzeichen im Namen', () => {
+    const gptTerm: GlossaryMatcherTerm = { slug: 'gpt-4-turbo', canonicalName: 'GPT-4 (Turbo)', aliases: [] }
+    const hits = findGlossaryMentions('Wir nutzen GPT-4 (Turbo) dafür.', [gptTerm])
+    expect(hits.map(h => h.slug)).toEqual(['gpt-4-turbo'])
+  })
+
+  it('escapeRegex verhindert Regex-Interpretation', () => {
+    const gptTerm: GlossaryMatcherTerm = { slug: 'gpt-4-turbo', canonicalName: 'GPT-4 (Turbo)', aliases: [] }
+    const hits = findGlossaryMentions('GPT4Turbo ist nicht gleich GPT-4 (Turbo).', [gptTerm])
+    expect(hits.map(h => h.slug)).toEqual(['gpt-4-turbo'])
+  })
 })
 
 describe('extractLexTags', () => {
@@ -57,6 +97,17 @@ describe('extractLexTags', () => {
 
   it('liefert bei fehlenden Tags ein leeres Array', () => {
     expect(extractLexTags({ type: 'doc', content: [] })).toEqual([])
+  })
+
+  it('dedupliziert echte Duplikate', () => {
+    const doc = {
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [{ type: 'text', text: '{lex:Inferenz} und nochmal {lex:Inferenz}.' }],
+      }],
+    }
+    expect(extractLexTags(doc)).toEqual(['Inferenz'])
   })
 })
 

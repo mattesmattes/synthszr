@@ -17,6 +17,12 @@ function boundaryRegex(name: string): RegExp {
   return new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegex(name)})`, 'iu')
 }
 
+/** Für kurze Namen (< GLOSSARY_MIN_NAME_LENGTH): Grenze auch hinten erforderlich,
+ *  um False-Positives wie „AI" in „Aida" zu vermeiden. */
+function boundaryRegexShort(name: string): RegExp {
+  return new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegex(name)})($|[^\\p{L}\\p{N}])`, 'iu')
+}
+
 /**
  * Findet Lexikonbegriffe im Text — pro Begriff maximal ein Treffer, in der
  * Reihenfolge der übergebenen Begriffsliste. Namen unter
@@ -48,11 +54,12 @@ export function findGlossaryMentions(
     }
 
     // Wenn kein langer Name matched, versuche auch kurze Namen (als Fallback).
+    // Kurze Namen brauchen Grenze auf BEIDEN Seiten, um False-Positives zu vermeiden.
     if (!hits.some(h => h.slug === term.slug)) {
       const shortNames = allNames.filter((n) => n.length < GLOSSARY_MIN_NAME_LENGTH)
         .sort((a, b) => b.length - a.length)
       for (const name of shortNames) {
-        const m = boundaryRegex(name).exec(text)
+        const m = boundaryRegexShort(name).exec(text)
         if (m) {
           hits.push({ slug: term.slug, matchedText: m[2] })
           break
