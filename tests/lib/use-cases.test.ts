@@ -24,6 +24,7 @@ const EXPECTED_USE_CASES: UseCase[] = [
   'glossary_news_context',
   'glossary_product_assignment',
   'glossary_review',
+  'glossary_translation',
 ]
 
 describe('USE_CASE_DEFINITIONS (lib/ai/use-cases.ts)', () => {

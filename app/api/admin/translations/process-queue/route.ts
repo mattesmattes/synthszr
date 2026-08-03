@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth/session'
 import { translateContent, type TranslationModel } from '@/lib/i18n/translation-service'
 import type { LanguageCode, TranslationQueueItem } from '@/lib/types'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
+import { reinjectGlossaryMarksForTranslation } from '@/lib/glossary/translate'
 
 export const maxDuration = 300 // 5 minutes per single translation (Pro plan allows up to 300s)
 
@@ -209,11 +210,12 @@ async function processGeneratedPost(
   // Translate content
   console.log(`[Queue] Translating post "${post.title}" to ${item.target_language} using ${model}`)
 
+  const sourceContent = parseTipTapContent(post.content)
   const translationResult = await translateContent(
     {
       title: post.title,
       excerpt: post.excerpt,
-      content: parseTipTapContent(post.content),
+      content: sourceContent,
     },
     item.target_language as LanguageCode,
     model
@@ -224,6 +226,15 @@ async function processGeneratedPost(
     return { success: false, error: translationResult.error }
   }
 
+  // Glossar-Marks NICHT aus der Quelle übertragen, sondern mit der
+  // Zielsprach-Begriffsliste neu injizieren (lib/glossary/translate.ts).
+  // Wirft bewusst ungefangen — der Aufrufer (POST-Handler-Schleife) fängt
+  // Fehler pro Item und setzt status='pending'/'failed' nach MAX_ATTEMPTS,
+  // statt eine Übersetzung ohne Links zu speichern.
+  const content = await reinjectGlossaryMarksForTranslation(
+    sourceContent, translationResult.content, item.target_language as LanguageCode,
+  )
+
   // Save or update translation
   const translationData = {
     generated_post_id: item.content_id,
@@ -231,7 +242,7 @@ async function processGeneratedPost(
     title: translationResult.title,
     slug: translationResult.slug,
     excerpt: translationResult.excerpt,
-    content: translationResult.content,
+    content,
     translation_status: 'completed',
     source_updated_at: post.updated_at,
     translated_at: new Date().toISOString(),

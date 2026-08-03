@@ -20,10 +20,15 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(async () => ({ email: 'admin@test' }) as { email: string } | null),
   revalidatePath: vi.fn(),
+  translateTerm: vi.fn(async () => {}),
 }))
 
 vi.mock('@/lib/auth/session', () => ({ getSession: mocks.getSession }))
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }))
+// translateTerm ist eigenständig getestet (tests/lib/glossary-translate.test.ts)
+// — hier interessiert nur die Verdrahtung (term-id-Lookup, Revalidierung,
+// Fehlerbehandlung), kein echter Anthropic-Call.
+vi.mock('@/lib/glossary/translate', () => ({ translateTerm: mocks.translateTerm }))
 
 // Tabellen-bewusster PostgREST-Stub mit FIFO-Antwortqueue pro Tabelle (Muster
 // aus tests/api/glossary-inject-on-save.test.ts) — chain.then() bedient ein
@@ -92,6 +97,8 @@ beforeEach(() => {
   mocks.getSession.mockReset()
   mocks.getSession.mockResolvedValue({ email: 'admin@test' })
   mocks.revalidatePath.mockReset()
+  mocks.translateTerm.mockReset()
+  mocks.translateTerm.mockResolvedValue(undefined)
 })
 
 describe('Auth', () => {
@@ -189,6 +196,47 @@ describe('Revalidierung — Important 4 (Index-Seite mitrevalidieren)', () => {
     ]
     const { PATCH } = await import('@/app/api/admin/glossary/route')
     await PATCH(patchReq({ slug: 'inferenz', action: 'discard_revision' }) as any)
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  })
+})
+
+describe('PATCH translate (Task 16)', () => {
+  it('gibt 400 zurück, wenn targetLang fehlt', async () => {
+    const { PATCH } = await import('@/app/api/admin/glossary/route')
+    const res = await PATCH(patchReq({ slug: 'inferenz', action: 'translate' }) as any)
+    expect(res.status).toBe(400)
+    expect(mocks.translateTerm).not.toHaveBeenCalled()
+  })
+
+  it('gibt 404 zurück, wenn der Begriff nicht existiert', async () => {
+    state.queues['glossary_terms'] = [{ data: null, error: null }]
+    const { PATCH } = await import('@/app/api/admin/glossary/route')
+    const res = await PATCH(patchReq({ slug: 'unbekannt', action: 'translate', targetLang: 'en' }) as any)
+    expect(res.status).toBe(404)
+    expect(mocks.translateTerm).not.toHaveBeenCalled()
+  })
+
+  it('ruft translateTerm mit der term-id auf und revalidiert Detail- UND Index-Pfade in beiden Sprachen', async () => {
+    state.queues['glossary_terms'] = [{ data: { id: 'term-1' }, error: null }]
+    const { PATCH } = await import('@/app/api/admin/glossary/route')
+    const res = await PATCH(patchReq({ slug: 'inferenz', action: 'translate', targetLang: 'en' }) as any)
+    expect(res.status).toBe(200)
+    expect(mocks.translateTerm).toHaveBeenCalledWith('term-1', 'en')
+
+    const paths = mocks.revalidatePath.mock.calls.map((c) => c[0])
+    expect(paths).toEqual(expect.arrayContaining([
+      '/de/glossary/inferenz', '/en/glossary/inferenz', '/de/glossary', '/en/glossary',
+    ]))
+  })
+
+  it('gibt 500 zurück und revalidiert NICHT, wenn translateTerm wirft', async () => {
+    state.queues['glossary_terms'] = [{ data: { id: 'term-1' }, error: null }]
+    mocks.translateTerm.mockRejectedValue(new Error('LLM nicht erreichbar'))
+    const { PATCH } = await import('@/app/api/admin/glossary/route')
+    const res = await PATCH(patchReq({ slug: 'inferenz', action: 'translate', targetLang: 'en' }) as any)
+    expect(res.status).toBe(500)
+    const body = await res.json()
+    expect(body.error).toBe('LLM nicht erreichbar')
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
   })
 })

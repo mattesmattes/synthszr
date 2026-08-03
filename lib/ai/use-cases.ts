@@ -29,6 +29,7 @@ export type UseCase =
   | 'glossary_news_context'
   | 'glossary_product_assignment'
   | 'glossary_review'
+  | 'glossary_translation'
 
 export interface UseCaseInfo {
   label: string
@@ -149,6 +150,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
   glossary_review: {
     label: 'Glossar — Aktualitätsprüfung',
     description: 'Prüft anhand aktueller News, ob ein Lexikoneintrag noch stimmt, und schreibt bei Bedarf eine Revision',
+    defaultModel: 'claude-sonnet-5',
+    allowedProviders: ['anthropic'],
+  },
+  glossary_translation: {
+    label: 'Glossar — Übersetzung',
+    description: 'Lexikoneintrag (Name, Aliasse, Summary, Erklärungstext) in eine Zielsprache übersetzen',
     defaultModel: 'claude-sonnet-5',
     allowedProviders: ['anthropic'],
   },

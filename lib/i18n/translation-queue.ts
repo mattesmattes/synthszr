@@ -10,6 +10,7 @@ import { translateContent, type TranslationModel } from '@/lib/i18n/translation-
 import type { LanguageCode, TranslationQueueItem } from '@/lib/types'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { reinjectGlossaryMarksForTranslation } from '@/lib/glossary/translate'
 
 const MAX_ATTEMPTS = 3
 const STUCK_TIMEOUT_MS = 6 * 60 * 1000
@@ -152,8 +153,9 @@ async function processGeneratedPost(
 
   console.log(`[TranslationQueue] Translating post "${post.title}" → ${item.target_language} (${model})`)
 
+  const sourceContent = parseTipTapContent(post.content)
   const result = await translateContent(
-    { title: post.title, excerpt: post.excerpt, content: parseTipTapContent(post.content) },
+    { title: post.title, excerpt: post.excerpt, content: sourceContent },
     item.target_language as LanguageCode,
     model
   )
@@ -163,13 +165,24 @@ async function processGeneratedPost(
     return { success: false, error: result.error }
   }
 
+  // Glossar-Marks werden nicht durch die Übersetzung getragen (siehe
+  // lib/glossary/translate.ts) — Neu-Injektion mit der Zielsprach-
+  // Begriffsliste. Wirft bewusst ungefangen: der Aufrufer
+  // (processTranslationQueue) fängt Fehler pro Item und setzt
+  // status='pending'/'failed' nach MAX_ATTEMPTS — der content_translations-
+  // Write darunter bleibt dadurch aus, statt einen Artikel dauerhaft ohne
+  // Glossar-Links zu speichern.
+  const content = await reinjectGlossaryMarksForTranslation(
+    sourceContent, result.content, item.target_language as LanguageCode,
+  )
+
   const data = {
     generated_post_id: item.content_id,
     language_code: item.target_language,
     title: result.title,
     slug: result.slug,
     excerpt: result.excerpt,
-    content: result.content,
+    content,
     translation_status: 'completed',
     source_updated_at: post.updated_at,
     translated_at: new Date().toISOString(),

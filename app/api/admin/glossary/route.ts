@@ -11,8 +11,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { translateTerm } from '@/lib/glossary/translate'
 
-const PATCH_ACTIONS = ['accept_revision', 'discard_revision', 'hide', 'publish'] as const
+const PATCH_ACTIONS = ['accept_revision', 'discard_revision', 'hide', 'publish', 'translate'] as const
 type PatchAction = (typeof PATCH_ACTIONS)[number]
 
 /** Begriffe sind bilingual (de/en, s. app/[lang]/glossary/[slug]/page.tsx) —
@@ -62,13 +63,40 @@ export async function PATCH(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
-  const { slug, action } = await request.json() as { slug?: string; action?: PatchAction }
+  const { slug, action, targetLang } = await request.json() as { slug?: string; action?: PatchAction; targetLang?: string }
   if (!slug) return NextResponse.json({ error: 'slug erforderlich' }, { status: 400 })
   if (!action || !PATCH_ACTIONS.includes(action)) {
     return NextResponse.json({ error: `action muss eine von ${PATCH_ACTIONS.join(', ')} sein` }, { status: 400 })
   }
 
   const supabase = createAdminClient()
+
+  if (action === 'translate') {
+    if (!targetLang) return NextResponse.json({ error: 'targetLang erforderlich' }, { status: 400 })
+    const { data: term, error: termError } = await supabase
+      .from('glossary_terms')
+      .select('id')
+      .eq('slug', slug)
+      .maybeSingle()
+    if (termError) return NextResponse.json({ error: termError.message }, { status: 500 })
+    if (!term) return NextResponse.json({ error: 'Begriff nicht gefunden' }, { status: 404 })
+
+    try {
+      await translateTerm(term.id, targetLang)
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : 'Übersetzung fehlgeschlagen' }, { status: 500 })
+    }
+
+    // Eine neue Übersetzung ändert, was getGlossaryTerm() für lang=targetLang
+    // serviert (applyTermTranslation liest dieselbe Zeile) — dieselbe
+    // Revalidierungspflicht wie bei accept_revision/hide/publish/DELETE oben,
+    // deshalb dasselbe revalidateGlossaryDetail() statt einer sprachscharfen
+    // Variante: einfacher, konsistent mit jeder anderen Aktion in dieser
+    // Route, und das Revalidieren der unveränderten Sprache ist harmlos
+    // (gleicher Inhalt wird neu gecacht).
+    revalidateGlossaryDetail(slug)
+    return NextResponse.json({ ok: true })
+  }
 
   if (action === 'accept_revision' || action === 'discard_revision') {
     // pending_body kann nicht per einzelnem update() auf sich selbst
