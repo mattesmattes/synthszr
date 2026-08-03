@@ -153,6 +153,12 @@ describe('assignProducts', () => {
   })
 
   it('degradiert auf 0 ohne LLM-Call, wenn das Laden der Kandidatenliste fehlschlägt', async () => {
+    // candidateRows bewusst NICHT leer: der Mock liefert data UND error
+    // gleichzeitig zurück (wie ein echter PostgREST-Fehler es nicht täte, aber
+    // genau deshalb diskriminierend für den Code) — nur wenn assignProducts
+    // den error wirklich prüft (statt nur auf leere Daten zu reagieren),
+    // bleibt written=0 und mocks.create unaufgerufen.
+    state.candidateRows = CANDIDATES
     state.candidateError = { message: 'DB nicht erreichbar' }
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { assignProducts } = await import('@/lib/glossary/products')
