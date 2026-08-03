@@ -1639,6 +1639,14 @@ git commit -m "feat(glossary): LLM-Generator für Begriffe mit Verständlichkeit
 
 ### Task 9: Illustration über die Dither-Pipeline
 
+> **Zwingend derselbe Blob-Store wie die Artikel-Cover.** `next.config.mjs`
+> whitelistet in `images.remotePatterns` genau **einen** Host
+> (`lbrzdn804nhy3kox.public.blob.vercel-storage.com`). Ein Bild auf einem anderen
+> Host lässt `next/image` zur **Laufzeit** werfen — nicht beim Build, sondern beim
+> ersten Seitenaufruf mit Illustration. `put` aus `@vercel/blob` wie in
+> `app/api/post-images/route.ts` verwenden; wer einen eigenen Store anlegt, muss
+> `remotePatterns` mit erweitern.
+
 **Files:**
 - Modify: `lib/gemini/image-generator.ts`
 - Test: `tests/lib/glossary-illustration.test.ts`
