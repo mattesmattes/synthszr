@@ -27,6 +27,7 @@ export type UseCase =
   | 'glossary_generation'
   | 'glossary_readability_qa'
   | 'glossary_news_context'
+  | 'glossary_product_assignment'
 
 export interface UseCaseInfo {
   label: string
@@ -136,6 +137,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     label: 'Glossar — News-Einordnung',
     description: 'Einordnungssatz für gematchte News-Titel im wöchentlichen Refresh schreiben (hochvolumig)',
     defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
+  },
+  glossary_product_assignment: {
+    label: 'Glossar — Produkt-Zuordnung',
+    description: 'Chart-Produkte einem Fachbegriff zuordnen (Relevanz-Bewertung)',
+    defaultModel: 'claude-opus-5',
     allowedProviders: ['anthropic'],
   },
 }

@@ -20,6 +20,7 @@
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateTermContent } from '@/lib/glossary/generate'
 import { generateGlossaryIllustration, uploadGlossaryIllustration } from '@/lib/gemini/image-generator'
+import { assignProducts } from '@/lib/glossary/products'
 import type { GlossaryCandidate, GlossaryCandidateOrigin, GlossaryMatcherTerm, GlossaryMention } from '@/lib/glossary/types'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -70,7 +71,7 @@ async function tryGenerateDraft(
       }
     }
 
-    const { error } = await supabase.from('glossary_terms').insert({
+    const { data: inserted, error } = await supabase.from('glossary_terms').insert({
       slug: generated.slug,
       canonical_name: generated.canonicalName,
       aliases: generated.aliases,
@@ -80,8 +81,22 @@ async function tryGenerateDraft(
       illustration_url: illustrationUrl,
       illustration_alt: illustrationAlt,
       readability_score: generated.readabilityScore,
-    })
+    }).select('id').single()
     if (error) throw new Error(`glossary_terms insert failed: ${error.message}`)
+
+    // Produkt-Zuordnung (Task 15) ist reine Zugabe — ein Fehler hier darf den
+    // fertig generierten Begriff nicht kosten, deshalb eigener try/catch wie
+    // beim Illustrations-Block oben.
+    const termId = (inserted as { id: string } | null)?.id
+    if (termId) {
+      try {
+        await assignProducts(termId, generated.canonicalName, generated.summary)
+      } catch (err) {
+        console.error(`[Glossary] Produkt-Zuordnung für "${generated.slug}" fehlgeschlagen:`, err)
+      }
+    } else {
+      console.error(`[Glossary] glossary_terms insert für "${generated.slug}" lieferte keine id — Produkt-Zuordnung übersprungen`)
+    }
 
     return {
       slug: generated.slug,

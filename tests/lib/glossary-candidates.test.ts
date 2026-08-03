@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   generateTermContent: vi.fn(),
   generateGlossaryIllustration: vi.fn(),
   uploadGlossaryIllustration: vi.fn(),
+  assignProducts: vi.fn(),
 }))
 
 vi.mock('@/lib/glossary/generate', () => ({
@@ -35,6 +36,10 @@ vi.mock('@/lib/glossary/generate', () => ({
 vi.mock('@/lib/gemini/image-generator', () => ({
   generateGlossaryIllustration: mocks.generateGlossaryIllustration,
   uploadGlossaryIllustration: mocks.uploadGlossaryIllustration,
+}))
+
+vi.mock('@/lib/glossary/products', () => ({
+  assignProducts: mocks.assignProducts,
 }))
 
 const state = vi.hoisted(() => ({
@@ -60,10 +65,19 @@ function makeChain(table: string) {
   chain.in = vi.fn((...args: unknown[]) => { state.inCalls.push(args); lastInKey = args[0]; return chain })
   chain.order = vi.fn(() => chain)
   chain.limit = vi.fn(() => chain)
+  let lastInsertPayload: Record<string, unknown> | null = null
   chain.insert = vi.fn((payload: Record<string, unknown>) => {
     state.inserts.push({ table, ...payload })
-    return { error: null }
+    lastInsertPayload = payload
+    return chain
   })
+  // Task 15: der Insert liefert jetzt die id zurück (.select('id').single()),
+  // damit assignProducts einen term_id bekommt. Deterministisch aus dem Slug
+  // abgeleitet, damit Tests die id ohne Umweg vorhersagen können.
+  chain.single = vi.fn(async () => ({
+    data: lastInsertPayload ? { id: `id-${lastInsertPayload.slug}` } : null,
+    error: null,
+  }))
   chain.then = (res: (v: unknown) => void) => {
     // Zwei verschiedene Queries laufen gegen dieselbe Tabelle glossary_terms:
     // der Draft/Hidden-Namensabgleich (.in('status', ...)) und der
@@ -102,6 +116,7 @@ beforeEach(() => {
   mocks.generateTermContent.mockReset()
   mocks.generateGlossaryIllustration.mockReset()
   mocks.uploadGlossaryIllustration.mockReset()
+  mocks.assignProducts.mockReset()
   state.draftRows = []
   state.draftRowsError = null
   state.summaryRows = []
@@ -270,6 +285,34 @@ describe('buildCandidateList', () => {
         isNewlyGenerated: true, summary: fixtureGenerated().summary,
       },
     ])
+  })
+
+  it('verdrahtet: ein neu generierter Begriff bekommt Produkte zugeordnet', async () => {
+    mocks.generateTermContent.mockResolvedValue(fixtureGenerated())
+    mocks.assignProducts.mockResolvedValue(3)
+    const { buildCandidateList } = await import('@/lib/glossary/candidates')
+    await buildCandidateList(makeSupabase() as never, [], [], [], ['Mixture of Experts'])
+    // Die id kommt jetzt aus dem Insert (.select('id').single()), nicht mehr
+    // aus dem Rückgabewert von generateTermContent — genau das ist Befund 1.
+    expect(mocks.assignProducts).toHaveBeenCalledWith(
+      'id-mixture-of-experts', 'Mixture of Experts', fixtureGenerated().summary,
+    )
+  })
+
+  it('verdrahtet: ein Fehler in assignProducts verwirft den Begriff nicht', async () => {
+    mocks.generateTermContent.mockResolvedValue(fixtureGenerated())
+    mocks.assignProducts.mockRejectedValue(new Error('LLM-Fehler'))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { buildCandidateList } = await import('@/lib/glossary/candidates')
+    const result = await buildCandidateList(makeSupabase() as never, [], [], [], ['Mixture of Experts'])
+    expect(result).toEqual([
+      {
+        slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'new', matchedText: null,
+        isNewlyGenerated: true, summary: fixtureGenerated().summary,
+      },
+    ])
+    expect(state.inserts).toHaveLength(1)
+    errSpy.mockRestore()
   })
 
   it('Kollision: derselbe Slug aus Tag UND Matcher wird nur einmal aufgenommen, Tag gewinnt', async () => {
