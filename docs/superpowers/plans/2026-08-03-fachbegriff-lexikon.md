@@ -2270,15 +2270,26 @@ git commit -m "feat(glossary): LLM-Zuordnung von Chart-Produkten zu Begriffen"
 > `createAdminClient`/`supabase`), die Zielsprach-Begriffsliste kommt aber aus der
 > DB. Dieselbe Trennung wie bei `generate.ts` in Task 15, also gilt dieselbe
 > Konsequenz: die Injektion gehört **nicht** in den Übersetzungs-Service.
-> `translateContent` (Z. 137) hat **vier** Aufrufstellen:
-> `lib/i18n/translation-queue.ts:155` und `:219`,
-> `app/api/admin/translations/process-queue/route.ts:212` und `:300`.
-> Vier Stellen sind vier Gelegenheiten zum Vergessen — genau die Struktur, an der
-> Task 4 hing (dort 13 Call-Sites, zwei Renderpfade). Deshalb: **eine** Hilfsfunktion
-> in `lib/glossary/`, die die Zielsprach-Begriffe lädt und injiziert, und die an
-> jeder zutreffenden Aufrufstelle aufgerufen wird. Zwei Dinge dabei klären und im
-> Report begründen: (a) welche der vier Stellen überhaupt Artikel (`generated_post`)
-> übersetzen — `static_page` und `ui` brauchen keine Glossar-Links; (b) `translateContent`
+> `translateContent` (Z. 137) hat **vier** Aufrufstellen. Punkt (a) unten ist
+> inzwischen vom Controller aufgelöst — **zwei davon sind zuständig, zwei nicht:**
+>
+> | Aufrufstelle | Funktion | Glossar-Marks? |
+> |---|---|---|
+> | `lib/i18n/translation-queue.ts:155` | `processGeneratedPost` (Z. 125) | **JA** |
+> | `lib/i18n/translation-queue.ts:219` | `processStaticPage` (Z. 189) | nein |
+> | `app/api/admin/translations/process-queue/route.ts:212` | `processGeneratedPost` (Z. 174) | **JA** |
+> | `app/api/admin/translations/process-queue/route.ts:300` | `processStaticPage` (Z. 263) | nein |
+>
+> **ACHTUNG, DIE ENTSCHEIDENDE STRUKTUR:** `processGeneratedPost` existiert
+> **zweimal** — als eigene Implementierung in beiden Dateien. Das ist exakt die
+> Struktur, an der Task 4 hing (zwei byte-identische `switch`-Blöcke im
+> Mail-Renderer, PLAN-DEFEKT 7): wer nur einen Pfad erweitert, verliert die
+> Glossar-Links für alle Artikel, die über den anderen laufen — ohne Fehler und
+> ohne Log. **Beide erweitern**, und ein Test muss beide Pfade abdecken.
+>
+> Deshalb: **eine** Hilfsfunktion in `lib/glossary/`, die die Zielsprach-Begriffe
+> lädt und injiziert, an beiden `processGeneratedPost` aufgerufen. Noch zu klären
+> und im Report zu begründen: (b) `translateContent`
 > kehrt bei Z. 174 mit `return await translateContentChunked(...)` **früh zurück** und
 > umgeht damit alles danach. Ein Test muss **beide** Pfade abdecken (kurzer und
 > gechunkter Inhalt), sonst verlieren große Artikel die Links — die Fehlerklasse
