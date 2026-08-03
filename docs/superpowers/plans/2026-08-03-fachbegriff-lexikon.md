@@ -59,7 +59,7 @@
 | `lib/claude/ghostwriter-pipeline.ts` | `{lex:}`-Direktive im Prompt |
 | `lib/tiptap/render-static-html.ts` | Mark rendern, `{lex:}` strippen |
 | `lib/email/tiptap-to-html.ts` | Mark zu `<a>` |
-| `components/tiptap-renderer.tsx` | Mark rendern |
+| `components/tiptap-renderer/tiptap-renderer.tsx` | Mark rendern |
 | `components/tiptap-editor.tsx`, `components/tiptap-editor-with-patterns.tsx` | Mark registrieren |
 | `app/api/admin/generated-posts/route.ts` | Mark-Injektion beim Speichern |
 | `app/admin/generated-articles/edit/[id]/page.tsx` | Freigabe-Panel |
@@ -871,7 +871,7 @@ verschwindet der komplette Artikel aus dem Prerender-HTML.
 **Files:**
 - Modify: `lib/tiptap/render-static-html.ts`
 - Modify: `lib/email/tiptap-to-html.ts`
-- Modify: `components/tiptap-renderer.tsx`
+- Modify: `components/tiptap-renderer/tiptap-renderer.tsx`
 - Modify: `components/tiptap-editor.tsx`, `components/tiptap-editor-with-patterns.tsx`
 - Test: `tests/lib/glossary-render-paths.test.ts`
 
@@ -977,26 +977,47 @@ Begriff aus dem Text, nicht nur die Klammern.
 
 - [ ] **Step 4: E-Mail-Pfad erweitern**
 
-In `lib/email/tiptap-to-html.ts` analog:
+`lib/email/tiptap-to-html.ts` hat — anders als der SSR-Fallback — eine **eigene
+Mark-Behandlung**: die Funktion `applyMarks` (Zeile 1133) ist ein
+`switch (mark.type)` mit den Fällen `bold`, `italic` und `link`. Dort kommt ein
+neuer Fall dazu:
 
 ```ts
-if (mark.type === 'glossaryLink' && mark.attrs?.slug) {
+case 'glossaryLink': {
+  const slug = mark.attrs?.slug
+  if (!slug) break
   // Absolute URL: relative Pfade funktionieren in E-Mail-Clients nicht.
-  return `<a href="${SITE_URL}/${lang}/glossary/${mark.attrs.slug}" style="${LINK_STYLE}">${inner}</a>`
+  // SITE_URL kommt aus lib/seo/site.ts.
+  result = `<a href="${SITE_URL}/${lang}/glossary/${slug}">${result}</a>`
+  break
 }
 ```
 
+Zwei Dinge, die dieser Fall vom SSR-Pfad unterscheiden:
+
+- **Kein Style-Attribut.** Der bestehende `link`-Fall rendert schlicht
+  `<a href="...">` ohne Styles. Nicht abweichen, sonst sehen Glossar-Links im
+  Newsletter anders aus als Quellenlinks.
+- **`lang` muss bis hierher durchgereicht werden.** Prüfen, ob `applyMarks` die
+  Sprache über einen Parameter oder aus dem umgebenden Modulzustand erreichen
+  kann; falls nicht, den Parameter ergänzen — `applyMarks` hat mehrere
+  Aufrufer (u. a. Zeile 1103, 1118, 1119, 1122).
+
 `sanitizeHtmlForEmail` muss nicht erweitert werden — `a` ist erlaubt. Den
-`{lex:}`-Strip auch hier ergänzen.
+`{lex:}`-Strip in Zeile 174 ebenfalls ergänzen (`stripLexTags` davor).
 
 - [ ] **Step 5: Web-Renderer und Editor**
 
-`components/tiptap-renderer.tsx`: Mark rendert als `next/link` auf
-`/${lang}/glossary/${slug}`.
+`components/tiptap-renderer/tiptap-renderer.tsx` — beachte das
+Unterverzeichnis; eine Datei `components/tiptap-renderer.tsx` existiert nicht
+(CLAUDE.md nennt sie falsch). Vor dem Ändern prüfen, wie diese Komponente
+rendert: nutzt sie eine Extension-Liste, genügt der Eintrag von
+`GlossaryLinkMark.configure({ lang })`; hat sie eigene Node-/Mark-Behandlung,
+gehört der Zweig dorthin.
 
 `components/tiptap-editor.tsx` und `components/tiptap-editor-with-patterns.tsx`:
 `GlossaryLinkMark` in das `extensions`-Array aufnehmen. Ohne das verwirft der
-Editor die Marks beim Laden.
+Editor die Marks beim Laden, und sie verschwinden beim nächsten Speichern.
 
 - [ ] **Step 6: Tests laufen lassen — müssen bestehen**
 
@@ -1012,7 +1033,7 @@ geänderten Dateien ab.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add lib/tiptap/render-static-html.ts lib/email/tiptap-to-html.ts components/tiptap-renderer.tsx components/tiptap-editor.tsx components/tiptap-editor-with-patterns.tsx tests/lib/glossary-render-paths.test.ts
+git add lib/tiptap/render-static-html.ts lib/email/tiptap-to-html.ts components/tiptap-renderer/tiptap-renderer.tsx components/tiptap-editor.tsx components/tiptap-editor-with-patterns.tsx tests/lib/glossary-render-paths.test.ts
 git commit -m "feat(glossary): glossaryLink in allen vier Ausgabepfaden rendern"
 ```
 

@@ -188,7 +188,7 @@ Pflichtstellen — jede einzelne bricht still, wenn sie fehlt:
   ist der Pfad, den Crawler sehen, also der für das SEO-Ziel entscheidende.
 - **`lib/email/tiptap-to-html.ts`**: Mark zu `<a>`. Der Sanitizer erlaubt `a`
   bereits, `sanitizeHtmlForEmail` muss nicht erweitert werden.
-- **`components/tiptap-renderer.tsx`**: Mark rendert als Link. Kein neuer
+- **`components/tiptap-renderer/tiptap-renderer.tsx`**: Mark rendert als Link. Kein neuer
   DOM-Prozessor — die Marks stehen schon im JSON.
 - **Beide Brace-Strip-Stellen** — `render-static-html.ts:44`
   (`/\{[^{}<>\n]{1,80}\}/g`) und `tiptap-to-html.ts:174` — ersetzen `{...}`
@@ -400,7 +400,7 @@ fehlgeschlagen markieren (Muster aus dem `article_jobs`-Cron).
 | `app/api/admin/generated-posts/route.ts` | Mark-Injektion, Draft→published |
 | `app/admin/generated-articles/edit/[id]/page.tsx` | Freigabe-Panel |
 | `components/tiptap-editor.tsx`, `-with-patterns.tsx` | Mark registrieren |
-| `components/tiptap-renderer.tsx` | Mark rendern |
+| `components/tiptap-renderer/tiptap-renderer.tsx` | Mark rendern |
 | `lib/tiptap/render-static-html.ts` | Mark rendern, `{lex:}` strippen |
 | `lib/email/tiptap-to-html.ts` | Mark zu `<a>` |
 | `app/sitemap.ts` | Glossar-Einträge |
