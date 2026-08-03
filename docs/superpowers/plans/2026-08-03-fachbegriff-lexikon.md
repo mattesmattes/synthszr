@@ -2462,6 +2462,28 @@ git commit -m "feat(glossary): Aktualitätsprüfung mit Revisions-Freigabe"
 
 ### Task 18: UI-Labels und Abschluss-Verifikation
 
+> **ZUSATZ 2026-08-03 (Controller, aus der Task-16-Abnahme): FEHLENDER BEDIEN-EINSTIEG
+> FÜR DIE ÜBERSETZUNG.** Task 16 hat `translateTerm` gebaut und korrekt an die
+> PATCH-Action `translate` gehängt (`app/api/admin/glossary/route.ts:74-85`) — aber
+> **die Admin-Seite ruft diese Action nirgends auf** (per grep über
+> `app/admin/glossary/page.tsx` verifiziert: kein Treffer). Die Kette endet an der
+> API: das Lexikon bleibt einsprachig, solange niemand die Route per `curl` aufruft.
+>
+> Task 16 ist damit spec-konform — sein Brief verlangte ausdrücklich nur Funktion und
+> Route. Aber die Kernanforderung „das Lexikon ist mehrsprachig" ist ohne Trigger
+> nicht erfüllt. Es ist dieselbe Struktur wie PLAN-DEFEKT 21 bei `assignProducts`,
+> nur eine Schicht höher: dort fehlte der Funktions-Aufrufer, hier der
+> Bedien-Einstieg. Ein Aufrufer, der selbst keinen hat, schließt keine Kette.
+>
+> **Deshalb in diesem Task mit umzusetzen:** ein „Übersetzen"-Auslöser auf
+> `app/admin/glossary/page.tsx`, der die bestehende Action mit `targetLang: 'en'`
+> aufruft. Minimal halten — die Action existiert, es geht nur um den Einstieg. Muster
+> für Aktionen samt Ladezustand und Fehleranzeige liefert dieselbe Seite bereits
+> (`runAction`, `detailErrors`). Sinnvoll wäre eine Anzeige, ob eine EN-Übersetzung
+> schon existiert; falls das eine zusätzliche Query braucht, ist der Auslöser wichtiger
+> als die Anzeige — dann nur der Auslöser.
+
+
 **Files:**
 - Modify: `lib/i18n/default-translations.ts`
 - Test: gesamte Suite plus Produktions-Verifikation
