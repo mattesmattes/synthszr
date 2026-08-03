@@ -868,6 +868,20 @@ git commit -m "feat(glossary): TipTap-Mark und idempotente Mark-Injektion"
 Der kritischste Task. Fehlt eine Stelle, bricht es still — im schlimmsten Fall
 verschwindet der komplette Artikel aus dem Prerender-HTML.
 
+> **Pflicht für diesen Task: jede `.configure()`-Stelle muss `lang` explizit
+> setzen.** `GlossaryLinkMark.addOptions()` liefert den Default `'de'`, und der
+> ist keine neutrale Vorbelegung, sondern eine inhaltliche Sprachentscheidung.
+> Ein vergessenes `configure({ lang })` erzeugt lautlos deutsche Links in jedem
+> englischen Artikel — ohne Fehler, ohne Testausschlag. Ein Pflichtparameter ist
+> im TipTap-Extension-Modell nicht durchsetzbar: `addOptions()` muss einen
+> konkreten Wert liefern, `.configure()` ist per Design optional. Die Absicherung
+> kann deshalb nur hier stattfinden. Der Review dieses Tasks muss **jede**
+> Registrierungsstelle einzeln daraufhin prüfen.
+>
+> Präzedenzfall im Projekt: die Podcast-INTERMEZZO-Sprachdrift entstand genauso —
+> ein separater Call mit hart deutschem Prompt, der englische Podcasts
+> mittendrin ins Deutsche kippen ließ.
+
 **Files:**
 - Modify: `lib/tiptap/render-static-html.ts`
 - Modify: `lib/email/tiptap-to-html.ts`
