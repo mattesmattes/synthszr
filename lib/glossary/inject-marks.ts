@@ -6,6 +6,12 @@ const MARK_TYPE = 'glossaryLink'
 
 type Node = Record<string, unknown>
 
+/** walk() liefert bei einem Split ein Array statt eines einzelnen Knotens —
+ *  hier auf eine flache Liste normiert, egal welche der beiden Formen kam. */
+function asArray(x: unknown): Node[] {
+  return Array.isArray(x) ? (x as Node[]) : [x as Node]
+}
+
 function hasMark(node: Node, type: string): boolean {
   return Array.isArray(node.marks) &&
     node.marks.some((m) => (m as { type?: string }).type === type)
@@ -46,11 +52,13 @@ export function injectGlossaryMarks(
   // `reserved` sind Company- und Chart-Produktnamen. Die Kollisionsregel kann
   // NICHT über eine bestehende Mark geprüft werden: die Produkt- und
   // Company-Verlinkung läuft client-seitig im DOM, im gespeicherten JSON
-  // existiert dafür keine Mark. Also wird die Namensliste übergeben.
+  // existiert dafür keine Mark. Also wird die Namensliste übergeben. Gefiltert
+  // wird unten pro Name, nicht hier pro Begriff — ein Begriff bleibt über
+  // seinen unproblematischen kanonischen Namen verlinkbar, auch wenn einer
+  // seiner Aliasse reserviert ist.
   const reserved = new Set((opts.reserved ?? []).map((n) => n.toLowerCase()))
   const wanted = terms
     .filter((t) => slugs.includes(t.slug))
-    .filter((t) => !reserved.has(t.canonicalName.toLowerCase()))
     .slice(0, GLOSSARY_MAX_PER_ARTICLE)
   if (wanted.length === 0) return cleaned
 
@@ -67,8 +75,13 @@ export function injectGlossaryMarks(
 
       for (const term of wanted) {
         if (done.has(term.slug)) continue
+        // Reservierte Namen fallen einzeln raus, nicht der ganze Begriff —
+        // ein Alias-Kollision mit einer Company/einem Produkt darf den
+        // kanonischen Namen desselben Begriffs nicht mitblockieren.
         const names = [term.canonicalName, ...term.aliases]
+          .filter((n) => !reserved.has(n.toLowerCase()))
           .sort((a, b) => b.length - a.length)
+        if (names.length === 0) continue
         for (const name of names) {
           const pos = matchNameInText(o.text as string, name)
           if (!pos) continue
@@ -78,22 +91,20 @@ export function injectGlossaryMarks(
           const after = (o.text as string).slice(pos.end)
           const baseMarks = Array.isArray(o.marks) ? o.marks : []
           const parts: Node[] = []
-          if (before) parts.push({ ...o, text: before })
+          // Beide Seiten rekursiv weiterwalken, nicht nur `after`: die
+          // Term-Schleife läuft in Array-Reihenfolge (Reihenfolge aus der
+          // DB), nicht in Textreihenfolge. Ein anderer bestätigter Begriff
+          // kann vor dem aktuellen Treffer im Text stehen und würde sonst
+          // unbemerkt im `before`-Teil verschwinden. `walk()` kann bei einem
+          // Split ein Array zurückgeben — asArray()+spread hält `parts` in
+          // jedem Fall flach (gleiche Technik wie beim `after`-Fix).
+          if (before) parts.push(...asArray(walk({ ...o, text: before })))
           parts.push({
             ...o,
             text: hit,
             marks: [...baseMarks, { type: MARK_TYPE, attrs: { slug: term.slug } }],
           })
-          if (after) {
-            // Der Rest kann selbst wieder aufgeteilt werden (weiterer Begriff
-            // im selben Textknoten) — dann liefert walk() ein Array statt
-            // eines einzelnen Knotens. Gespreadet statt verschachtelt, sonst
-            // bleibt `parts` nach mehreren kaskadierten Splits mehrstufig
-            // verschachtelt und das äußere `.flat()` (Tiefe 1) reicht nicht.
-            const rest = walk({ ...o, text: after })
-            if (Array.isArray(rest)) parts.push(...(rest as Node[]))
-            else parts.push(rest as Node)
-          }
+          if (after) parts.push(...asArray(walk({ ...o, text: after })))
           return parts
         }
       }

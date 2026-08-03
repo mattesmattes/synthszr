@@ -105,4 +105,34 @@ describe('injectGlossaryMarks', () => {
     const out = injectGlossaryMarks(doc(text), many.map(t => t.slug), many)
     expect(linked(out)).toHaveLength(8)
   })
+
+  it('verlinkt beide Begriffe, wenn die Textreihenfolge der Term-Reihenfolge widerspricht', () => {
+    // Der Fall, der den Missed-Link-Bug erzeugte: 'moe' steht im Text vor
+    // 'Inferenz', aber im terms-Array dahinter. Die Term-Reihenfolge kommt in
+    // Produktion aus der DB und hat mit der Textposition nichts zu tun.
+    const both: GlossaryMatcherTerm[] = [
+      { slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] },
+      { slug: 'moe', canonicalName: 'MoE', aliases: [] },
+    ]
+    const out = injectGlossaryMarks(
+      doc('MoE nutzt Inferenz für alles.'), ['inferenz', 'moe'], both,
+    )
+    expect(linked(out).map(l => l.slug).sort()).toEqual(['inferenz', 'moe'])
+  })
+
+  it('ist idempotent auch im widersprüchlichen Fall (Text- vs. Term-Reihenfolge)', () => {
+    const both: GlossaryMatcherTerm[] = [
+      { slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] },
+      { slug: 'moe', canonicalName: 'MoE', aliases: [] },
+    ]
+    const once = injectGlossaryMarks(doc('MoE nutzt Inferenz für alles.'), ['inferenz', 'moe'], both)
+    const twice = injectGlossaryMarks(once, ['inferenz', 'moe'], both)
+    expect(twice).toEqual(once)
+  })
+
+  it('reserviert auch Aliasse, nicht nur den kanonischen Namen', () => {
+    const t: GlossaryMatcherTerm[] = [{ slug: 'x', canonicalName: 'Etwas Anderes', aliases: ['Cursor'] }]
+    expect(linked(injectGlossaryMarks(doc('Cursor macht viel.'), ['x'], t, { reserved: ['Cursor'] })))
+      .toEqual([])
+  })
 })
