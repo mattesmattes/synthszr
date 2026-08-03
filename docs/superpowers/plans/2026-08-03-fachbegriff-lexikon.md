@@ -101,7 +101,7 @@ create table if not exists public.glossary_terms (
   body jsonb,
   illustration_url text,
   illustration_alt text,
-  embedding vector(1536),
+  embedding vector(768),
   readability_score numeric,
   review_state text not null default 'ok'
     check (review_state in ('ok', 'flagged', 'revision_pending')),
@@ -796,7 +796,7 @@ verschwindet der komplette Artikel aus dem Prerender-HTML.
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { renderStaticHtml } from '@/lib/tiptap/render-static-html'
+import { renderStaticArticleHtml } from '@/lib/tiptap/render-static-html'
 
 const withGlossary = {
   type: 'doc',
@@ -812,13 +812,13 @@ const withGlossary = {
 
 describe('render-static-html mit glossaryLink', () => {
   it('rendert den Link im ausgelieferten HTML', () => {
-    const html = renderStaticHtml(withGlossary)
+    const html = renderStaticArticleHtml(withGlossary)
     expect(html).toContain('/glossary/inferenz')
     expect(html).toContain('Inferenz')
   })
 
   it('verliert den umgebenden Text nicht', () => {
-    const html = renderStaticHtml(withGlossary)
+    const html = renderStaticArticleHtml(withGlossary)
     expect(html).toContain('ist teuer')
   })
 
@@ -827,7 +827,7 @@ describe('render-static-html mit glossaryLink', () => {
       type: 'doc',
       content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Ein {lex:Inferenz}-Problem.' }] }],
     }
-    const html = renderStaticHtml(doc)
+    const html = renderStaticArticleHtml(doc)
     expect(html).not.toContain('{lex:')
     expect(html).toContain('Inferenz')
   })
@@ -837,7 +837,7 @@ describe('render-static-html mit glossaryLink', () => {
       type: 'doc',
       content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Nur Text.' }] }],
     }
-    expect(renderStaticHtml(plain)).toContain('Nur Text.')
+    expect(renderStaticArticleHtml(plain)).toContain('Nur Text.')
   })
 })
 ```
@@ -864,9 +864,10 @@ if (mark.type === 'glossaryLink' && mark.attrs?.slug) {
 }
 ```
 
-Zusätzlich den `{...}`-Strip in Zeile 44 so anpassen, dass `{lex:Begriff}` zum
-Begriff wird statt komplett zu verschwinden — `stripLexTags` aus Task 2 **vor**
-dem generischen Strip anwenden.
+Zusätzlich `stripLexTags` aus Task 2 **vor** dem generischen Strip in Zeile 44
+anwenden. Der Strip dort lautet `/\{[^{}<>\n]{1,80}\}/g` und ersetzt durch den
+**Leerstring** — ohne die Vorbehandlung verschwindet `{lex:Inferenz}` samt
+Begriff aus dem Text, nicht nur die Klammern.
 
 - [ ] **Step 4: E-Mail-Pfad erweitern**
 
@@ -1702,26 +1703,27 @@ git commit -m "feat(glossary): Ghostwriter markiert Fachbegriffe mit {lex:}"
 
 ```sql
 create or replace function public.match_glossary_news(
-  query_embedding vector(1536),
+  query_embedding vector(768),
   since timestamptz,
   match_limit int default 5
 )
-returns table (id uuid, title text, source_url text, source_name text,
+returns table (id uuid, title text, source_url text,
                published_at timestamptz, similarity numeric)
 language sql
 security invoker
 set search_path = pg_catalog, public
 as $$
-  select r.id, r.title, r.source_url, r.source_name, r.created_at,
+  select r.id, r.title, r.source_url, r.collected_at,
          1 - (r.embedding <=> query_embedding) as similarity
   from public.daily_repo r
   where r.embedding is not null
     -- Nur Artikel und Webcrawl: Newsletter-Rows enthalten den gesamten
     -- Newsletter-Plaintext über mehrere Themen, ein Embedding-Treffer sagt
     -- dort nichts über den Begriff aus, und source_url ist unzuverlässig
-    -- (lib/newsletter/fetcher.ts:473-478).
+    -- (lib/newsletter/fetcher.ts:473-478). source_type kennt außerdem
+    -- 'newsletter' und 'email_note' — beide sind hier ungeeignet.
     and r.source_type in ('article', 'webcrawl')
-    and r.created_at >= since
+    and r.collected_at >= since
   order by r.embedding <=> query_embedding
   limit match_limit;
 $$;
@@ -1732,8 +1734,11 @@ revoke all on function public.match_glossary_news(vector, timestamptz, int) from
 grant execute on function public.match_glossary_news(vector, timestamptz, int) to service_role;
 ```
 
-> Spaltennamen von `daily_repo` vor dem Schreiben verifizieren
-> (`source_type`, `source_name`, `embedding`, Datumsspalte) und ggf. anpassen.
+> Verifiziert: `daily_repo` führt `id, title, content, source_type,
+> source_email, source_url, collected_at, embedding` — die Datumsspalte heißt
+> `collected_at`, und eine Spalte `source_name` existiert **nicht**. Der
+> Quellenname wird im Cron aus der Host-Komponente von `source_url` abgeleitet
+> und nach `glossary_term_news.source_name` geschrieben.
 
 - [ ] **Step 2: Failing Test für den Cron**
 
@@ -1803,10 +1808,27 @@ Expected: FAIL
 
 - [ ] **Step 3: Implementieren**
 
-Kandidatenliste aus `products` mit `visibility_status = 'visible'` und
-`chartable = true` laden (schmal: `id, canonical_name, vendor`), LLM ordnet zu
-und liefert `relevance`. Upsert nach `glossary_term_products` mit
-`source = 'llm'`, aber nur für Zeilen ohne `source = 'manual'`.
+Kandidatenliste laden (schmal: `id, canonical_name, vendor`), LLM ordnet zu und
+liefert `relevance`. Upsert nach `glossary_term_products` mit `source = 'llm'`,
+aber nur für Zeilen ohne `source = 'manual'`.
+
+**Achtung, die beiden Filter liegen auf verschiedenen Tabellen:**
+`visibility_status` ist eine Spalte von `products` (Werte `visible` | `hidden` |
+`suppressed`, `supabase/migrations/20260628150000_rankings_schema.sql:22`),
+`chartable` dagegen von `product_metrics`
+(`20260701150000_product_metrics_chartable.sql:3`). Die Kandidaten-Query braucht
+also einen Join:
+
+```ts
+const { data } = await supabase
+  .from('products')
+  .select('id, canonical_name, vendor, product_metrics!inner(chartable)')
+  .eq('visibility_status', 'visible')
+  .eq('product_metrics.chartable', true)
+```
+
+Den genauen Beziehungsnamen an einer bestehenden Query prüfen — `lib/rankings/`
+enthält Vorbilder für den Join zwischen `products` und `product_metrics`.
 
 Kein Mapping über `product_categories`: die ~50 Slugs sind Produktkategorien
 (`frontier-llms`, `reasoning-models`), keine Fachbegriffe.
@@ -2006,20 +2028,37 @@ git commit -m "feat(glossary): UI-Labels für alle öffentlichen Sprachen"
 
 ## Offene Punkte für die Umsetzung
 
-Diese Annahmen sind im Plan bewusst als solche markiert und müssen bei der
-Umsetzung am Code verifiziert werden:
+**Vor Umsetzungsbeginn am Bestandscode verifiziert** (2026-08-03) — diese Werte
+sind keine Annahmen mehr:
 
-1. Der Export-Name in `lib/tiptap/render-static-html.ts` (Task 4, Step 1).
-2. Die Spaltennamen von `daily_repo` für die RPC (Task 14, Step 1).
-3. `ditheringCoarseness: 3` für Illustrationen ist eine begründete Annahme, kein
+- Embedding-Dimension ist projektweit **`vector(768)`** (17 Vorkommen in den
+  Migrationen, kein einziges 1536). Bei pgvector ist eine Abweichung ein harter
+  Insert-Fehler, keine Warnung.
+- Der Export in `lib/tiptap/render-static-html.ts` heißt
+  **`renderStaticArticleHtml`**.
+- `daily_repo` führt `id, title, content, source_type, source_email, source_url,
+  collected_at, embedding`. Datumsspalte ist `collected_at`; `source_name`
+  existiert nicht. `source_type` kennt `article`, `webcrawl`, `newsletter`,
+  `email_note`.
+- `visibility_status` liegt auf `products`, `chartable` auf `product_metrics` —
+  der Filter braucht einen Join (Task 15).
+- Es gibt genau **zwei** generische `{...}`-Strips, nicht drei:
+  `lib/tiptap/render-static-html.ts:44` (`/\{[^{}<>\n]{1,80}\}/g`) und
+  `lib/email/tiptap-to-html.ts:174` (`/\{([^}]+)\}/g`). **Beide ersetzen durch
+  den Leerstring**, nicht durch `$1` — eine `{lex:Begriff}`-Direktive würde
+  also samt Begriff aus dem Text verschwinden. `stripLexTags` muss vor beiden
+  laufen.
+- `renderStaticArticleHtml` endet auf `catch { return '' }`
+  (`render-static-html.ts:48-49`) — der stille Totalverlust bei unbekannten
+  Node-/Mark-Typen ist damit im Code bestätigt.
+
+**Noch offen, bei der Umsetzung zu klären:**
+
+1. `ditheringCoarseness: 3` für Illustrationen ist eine begründete Annahme, kein
    Messergebnis (Task 9, Step 5).
-4. Ob `daily_repo` und `products` die in Task 14/15 erwarteten `embedding`- und
-   `visibility_status`-Spalten führen.
-5. Ob `products` die Spalten `visibility_status` und `chartable` genau so heißt
-   (Task 15, Step 3).
-6. Ob eine Funktion für die Chart-Produktnamen existiert oder eine schmale Query
+2. Ob eine Funktion für die Chart-Produktnamen existiert oder eine schmale Query
    nötig ist (Task 11, Step 3).
-7. Der `PATCH`-Export-Name und die Body-Struktur in
+3. Der `PATCH`-Export-Name und die Body-Struktur in
    `app/api/admin/generated-posts/route.ts` — der Test in Task 11 mockt die
    bestehende Struktur und muss daran angepasst werden.
 

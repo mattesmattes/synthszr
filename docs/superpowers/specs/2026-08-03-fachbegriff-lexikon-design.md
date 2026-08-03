@@ -72,7 +72,7 @@ Abschnitt 5: RLS aktiviert, `revoke all` von `public`/`anon`/`authenticated`,
 | `body` | jsonb | TipTap-Dokument, der Erklärungstext |
 | `illustration_url` | text null | Vercel-Blob-URL des Dither-Bilds |
 | `illustration_alt` | text null | beschreibender Alt-Text (SEO-relevant) |
-| `embedding` | vector null | aus `canonical_name + summary`, für die News-Suche |
+| `embedding` | vector(768) null | aus `canonical_name + summary`, für die News-Suche |
 | `readability_score` | numeric null | Ergebnis der Verständlichkeitsprüfung |
 | `review_state` | text | `ok` \| `flagged` \| `revision_pending` |
 | `pending_body` | jsonb null | Cron-Revisionsvorschlag, bis zur Freigabe |
@@ -190,10 +190,10 @@ Pflichtstellen — jede einzelne bricht still, wenn sie fehlt:
   bereits, `sanitizeHtmlForEmail` muss nicht erweitert werden.
 - **`components/tiptap-renderer.tsx`**: Mark rendert als Link. Kein neuer
   DOM-Prozessor — die Marks stehen schon im JSON.
-- **Die drei Brace-Strip-Stellen** (u. a. `render-static-html.ts:44`) müssen
-  `{lex:...}` mit entfernen. Sonst bleibt die Direktive sichtbar, oder der
-  pauschale `{...}`-Strip verschluckt sie an einer Stelle und nicht an der
-  anderen.
+- **Beide Brace-Strip-Stellen** — `render-static-html.ts:44`
+  (`/\{[^{}<>\n]{1,80}\}/g`) und `tiptap-to-html.ts:174` — ersetzen `{...}`
+  durch den **Leerstring**. Ohne vorgeschaltetes `stripLexTags` verschwindet der
+  Begriff samt Direktive aus dem Text, nicht nur die Klammern.
 
 **Reihenfolge:** `injectGlossaryMarks` läuft **nach** `hideExplicitCompanyTags`
 und nach der Produkt-Verlinkung, damit die Kollisionsregel greift: ein Wort, das
@@ -288,7 +288,7 @@ nicht, weil sich die Nachrichtenlage ändert.
 `find_similar_items` ist unbrauchbar: es verlangt eine `item_id` und liefert
 ausschließlich Einträge mit **älterem** `newsletter_date`.
 
-Neue RPC `match_glossary_news(query_embedding vector, since timestamptz, match_limit int)`:
+Neue RPC `match_glossary_news(query_embedding vector(768), since timestamptz, match_limit int)`:
 
 - `security invoker`, `set search_path = pg_catalog, public`, EXECUTE nur für
   `service_role` (Muster aus dem Runbook Abschnitt 5).
