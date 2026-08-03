@@ -1295,6 +1295,36 @@ nach außen bleibt `{ slug, canonicalName, summary }`, die `id` wird vor der
 Rückgabe verworfen. `LIST_COLUMNS` lautet also
 `'id, slug, canonical_name, summary'`.
 
+**Querverlinkung: `relatedTerms` hat keine eigene Datenquelle — und braucht keine.**
+
+Das Schema kennt keine Relationstabelle zwischen Begriffen, und kein Task
+erzeugt eine. Die Verwandtschaft entsteht stattdessen aus dem Text: der Loader
+lässt `findGlossaryMentions` über den Klartext des eigenen `body` laufen, mit
+allen veröffentlichten Begriffen außer dem eigenen als Kandidaten. Was die
+Erklärung erwähnt, ist verwandt.
+
+Im selben Durchlauf werden die Marks in den Body injiziert — das ist die
+eigentliche Anforderung („das Lexikon ist untereinander verlinkt"), nicht bloß
+ein Block darunter:
+
+```ts
+const candidates = (await getMatcherTerms(lang)).filter((t) => t.slug !== slug)
+const mentions = findGlossaryMentions(extractVisibleText(term.body), candidates)
+const relatedSlugs = mentions.map((m) => m.slug)
+const linkedBody = injectGlossaryMarks(term.body, relatedSlugs, candidates)
+```
+
+Warum im Loader und nicht bei der Anzeige oder der Generierung: der Loader hat
+die Kandidatenliste schon geladen (ein zweiter Satz Queries pro Seitenaufruf
+wäre der falsche Reflex in diesem Projekt), und die Injektion wirkt hier
+**rückwirkend** — ein neuer Begriff erscheint beim nächsten Revalidate in allen
+älteren Erklärtexten, die ihn erwähnen. Beim Generieren injiziert (Task 8) wären
+alte Texte für immer unverlinkt.
+
+Bewusste Grenzen: kein `reserved` (der Erklärtext ist keine Nachrichtenmeldung
+voller Firmennamen, die Liste zu laden kostet mehr als sie bringt);
+asymmetrische Verwandtschaft ist in Ordnung und wird nicht symmetrisiert.
+
 `lib/glossary/detail.ts`:
 
 ```ts
