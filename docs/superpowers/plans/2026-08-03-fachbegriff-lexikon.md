@@ -2126,11 +2126,63 @@ git commit -m "feat(glossary): News-RPC und wöchentlicher Refresh-Cron"
 ### Task 15: Produkt-Zuordnung
 
 **Files:**
-- Modify: `lib/glossary/generate.ts`
+- Create: `lib/glossary/products.ts`
+- Modify: `lib/glossary/candidates.ts` (Verdrahtung), `lib/ai/use-cases.ts` (neuer Use Case)
 - Test: `tests/lib/glossary-products.test.ts`
 
 **Interfaces:**
 - Produces: `assignProducts(termId: string, termName: string, summary: string): Promise<number>`
+
+> **KORREKTUR 2026-08-03 (Controller-Vorabprüfung, 5 Befunde am Bestandscode).**
+> Der ursprüngliche Tasktext hatte einen Aufrufer-losen Entwurf und drei falsche
+> Annahmen. Die Punkte unten sind verifiziert, nicht vermutet.
+
+**Befund 1 — PLAN-DEFEKT 21 (Konzeptloch, gleiche Klasse wie Nr. 8/relatedTerms):**
+`assignProducts` hatte **keinen Aufrufer**. Kein Task ruft sie auf; Task 17 (der
+einzige verbleibende Cron) macht ausschließlich Review. `glossary_term_products`
+wäre dauerhaft leer geblieben — obwohl die Leseseite `getTermProducts`
+(`lib/glossary/detail.ts:162`) fertig, getestet und live ist. Deshalb ist die
+Verdrahtung **Teil dieses Tasks** (Step 4).
+
+**Befund 2 — Spalte `vendor` existiert nicht.** `products` hat
+`vendor_namespace` (`20260628150000_rankings_schema.sql:8`). Ein
+`select('… vendor')` liefert einen PostgREST-Fehler, die Kandidatenliste bliebe
+leer, und zwar **ohne Crash** — still, wie die vier Fehler zuvor in diesem Plan.
+
+**Befund 3 — das Join-Vorbild geht in die andere Richtung.** Das einzige echte
+PostgREST-Embed im Repo ist `lib/rankings/leaderboard.ts:40`: es geht von
+`product_metrics` AUS und bettet `products!inner(...)` ein. Nutze diese belegte
+Richtung, dann liegt `chartable` auf der Basistabelle:
+
+```ts
+const { data } = await supabase
+  .from('product_metrics')
+  .select('mention_count, products!inner(id, canonical_name, vendor_namespace)')
+  .eq('chartable', true)
+  .eq('products.visibility_status', 'visible')
+  .gte('mention_count', 2)
+  .order('mention_count', { ascending: false })
+  .limit(PRODUCT_CANDIDATE_LIMIT)
+```
+
+**Befund 4 — die Kandidatenliste MUSS begrenzt werden.** `chartable` ist nur ein
+Ausschlussflag (`precompute.ts:49-52`: Umbrella/Allerwelts-Wort/Exclusion), keine
+Relevanzschwelle — nahezu alle ~5000 Produkte sind chartable. Ungefiltert wäre das
+pro Begriff ein Prompt von mehreren Zehntausend Token. `minMentions: 2` ist das im
+Projekt belegte Chart-Kriterium (`leaderboard.ts:103`); zusätzlich nach
+`mention_count` absteigend und auf `PRODUCT_CANDIDATE_LIMIT = 300` kappen. Die
+prominentesten Produkte sind für einen Lexikoneintrag auch die relevantesten.
+**Die echte Trefferzahl gegen Prod messen und im Report nennen** — liegt sie unter
+50, ist die Filterkette zu streng und der Wert muss begründet angepasst werden.
+
+**Befund 5 — `source = 'manual'` ist mit einem Upsert allein nicht schützbar.**
+Ein Upsert mit `onConflict: 'term_id,product_id'` überschreibt manuelle Zeilen;
+ein `WHERE` gibt es dort nicht. Also zweistufig: erst
+`.select('product_id, source').eq('term_id', termId)`, die `product_id`s mit
+`source === 'manual'` aus der LLM-Antwort herausfiltern, dann den Rest upserten.
+
+Kein Mapping über `product_categories`: die ~50 Slugs sind Produktkategorien
+(`frontier-llms`, `reasoning-models`), keine Fachbegriffe.
 
 - [ ] **Step 1: Failing Test schreiben**
 
@@ -2138,6 +2190,8 @@ git commit -m "feat(glossary): News-RPC und wöchentlicher Refresh-Cron"
 it('berücksichtigt nur visible und chartable Produkte', async () => { /* … */ })
 it('überschreibt manuelle Zuordnungen nicht', async () => { /* … */ })
 it('schreibt nichts, wenn kein Produkt passt', async () => { /* … */ })
+it('verdrahtet: ein neu generierter Begriff bekommt Produkte zugeordnet', async () => { /* … */ })
+it('verdrahtet: ein Fehler in assignProducts verwirft den Begriff nicht', async () => { /* … */ })
 ```
 
 - [ ] **Step 2: Test laufen lassen — muss fehlschlagen**
@@ -2145,42 +2199,43 @@ it('schreibt nichts, wenn kein Produkt passt', async () => { /* … */ })
 Run: `npx vitest run tests/lib/glossary-products.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: Implementieren**
+- [ ] **Step 3: `assignProducts` implementieren**
 
-Kandidatenliste laden (schmal: `id, canonical_name, vendor`), LLM ordnet zu und
-liefert `relevance`. Upsert nach `glossary_term_products` mit `source = 'llm'`,
-aber nur für Zeilen ohne `source = 'manual'`.
+Neue Datei `lib/glossary/products.ts` (nicht `generate.ts` — die ist mit 380
+Zeilen schon der Generator; Produktzuordnung ist ein eigener Belang und braucht
+DB-Zugriff, den `generate.ts` bewusst nicht hat: „Reines LLM-Modul", Z. 5).
 
-**Achtung, die beiden Filter liegen auf verschiedenen Tabellen:**
-`visibility_status` ist eine Spalte von `products` (Werte `visible` | `hidden` |
-`suppressed`, `supabase/migrations/20260628150000_rankings_schema.sql:22`),
-`chartable` dagegen von `product_metrics`
-(`20260701150000_product_metrics_chartable.sql:3`). Die Kandidaten-Query braucht
-also einen Join:
+Kandidatenliste nach Befund 3+4 laden, LLM ordnet zu und liefert `relevance`
+(0…1). Upsert nach `glossary_term_products` mit `source = 'llm'` unter Beachtung
+von Befund 5. Rückgabe: Anzahl geschriebener Zeilen.
 
-```ts
-const { data } = await supabase
-  .from('products')
-  .select('id, canonical_name, vendor, product_metrics!inner(chartable)')
-  .eq('visibility_status', 'visible')
-  .eq('product_metrics.chartable', true)
-```
+Neuer Use Case `glossary_product_assignment` in `lib/ai/use-cases.ts` — Muster
+exakt wie die vier bestehenden `glossary_*`-Einträge (Task 8/14). Modellauflösung
+über `getModelForUseCase`, niemals eine hartcodierte Modell-ID.
 
-Den genauen Beziehungsnamen an einer bestehenden Query prüfen — `lib/rankings/`
-enthält Vorbilder für den Join zwischen `products` und `product_metrics`.
+- [ ] **Step 4: Verdrahten (Befund 1 — ohne diesen Schritt ist der Task wirkungslos)**
 
-Kein Mapping über `product_categories`: die ~50 Slugs sind Produktkategorien
-(`frontier-llms`, `reasoning-models`), keine Fachbegriffe.
+In `lib/glossary/candidates.ts`, Funktion `tryGenerateDraft`, direkt nach dem
+Insert. Zwei Änderungen dort:
 
-- [ ] **Step 4: Test laufen lassen — muss bestehen**
+1. Der Insert gibt heute **keine id zurück** (`.insert({…})` ohne `select`).
+   `assignProducts` braucht die `term_id` → auf `.insert({…}).select('id').single()`
+   umstellen.
+2. Der Aufruf muss **eigenständig degradieren**, mit demselben Muster wie der
+   Illustrations-Block direkt darüber (eigener `try/catch`, `console.error`,
+   weiterlaufen). Eine fehlgeschlagene Produktzuordnung darf **niemals** den
+   fertig generierten Begriff kosten — der Text ist das Produkt, die Zuordnung
+   die Zugabe.
 
-Run: `npx vitest run tests/lib/glossary-products.test.ts`
-Expected: PASS
+- [ ] **Step 5: Tests laufen lassen — müssen bestehen**
 
-- [ ] **Step 5: Commit**
+Run: `npx vitest run tests/lib/glossary-products.test.ts tests/lib/glossary-candidates.test.ts`
+Expected: PASS (die Candidates-Suite muss mitlaufen — Step 4 ändert ihre Datei)
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add lib/glossary/generate.ts tests/lib/glossary-products.test.ts
+git add lib/glossary/products.ts lib/glossary/candidates.ts lib/ai/use-cases.ts tests/lib/glossary-products.test.ts
 git commit -m "feat(glossary): LLM-Zuordnung von Chart-Produkten zu Begriffen"
 ```
 
@@ -2272,6 +2327,16 @@ mit den aktuellen News als Kontext:
 
 Der Live-Text bleibt unverändert. `is_manually_edited` existiert genau deshalb,
 weil automatische Regenerierung manuelle Korrekturen überschreibt.
+
+> **ZUSATZ 2026-08-03 (Controller, aus der Task-15-Vorabprüfung):** Dieser Cron
+> ruft pro geprüftem Begriff auch `assignProducts` (Task 15) auf. Zwei Gründe,
+> beide unabhängig hinreichend: (a) Begriffe, die vor Task 15 entstanden sind,
+> bekämen sonst **nie** Produkte — die Verdrahtung in `tryGenerateDraft` greift nur
+> bei Neugenerierung; (b) die Charts wachsen laufend, ein heute zugeordneter
+> Begriff soll später auch neu aufgetauchte Produkte zeigen. Da der Cron ohnehin
+> jeden Begriff etwa monatlich anfasst, ist das die natürliche Stelle — ohne
+> zusätzlichen Cron und ohne Nachrüstskript. Fehler in `assignProducts` dürfen den
+> Review-Lauf nicht abbrechen (Per-Item-Isolation wie in Task 14).
 
 `vercel.json`: `{ "path": "/api/cron/glossary-review", "schedule": "0 5 * * *" }`
 — täglich 10 Begriffe, damit jeder Begriff etwa monatlich dran ist, ohne dass ein
