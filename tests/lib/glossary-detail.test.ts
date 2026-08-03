@@ -207,6 +207,19 @@ describe('getGlossaryTerm — verwandte Begriffe', () => {
     expect(linked(term?.body)).toEqual([])
     expect(term?.body).toEqual(TERM_ROW.body)
   })
+
+  it('verlinkt den eigenen Begriff nicht, auch wenn der eigene Text ihn nennt', async () => {
+    // TERM_WITH_MENTION erwähnt "MoE" — der Begriff selbst. Die Kandidatenliste
+    // enthält hier absichtlich auch die eigene Zeile, um den Selbstausschluss
+    // wirklich zu prüfen (nicht nur, dass er in der Praxis nie auftaucht).
+    const SELF_CANDIDATE = { id: 't1', slug: 'moe', canonical_name: 'Mixture-of-Experts', aliases: ['MoE'] }
+    queue('glossary_terms', { data: TERM_WITH_MENTION, error: null }, { data: [SELF_CANDIDATE, CANDIDATE], error: null })
+    const { getGlossaryTerm } = await import('@/lib/glossary/detail')
+    const term = await getGlossaryTerm('moe', 'de')
+    expect(term?.relatedTerms).toEqual([{ slug: 'llm', canonicalName: 'Large Language Model' }])
+    expect(term?.relatedTerms.some((t) => t.slug === 'moe')).toBe(false)
+    expect(linked(term?.body).some((l) => l.slug === 'moe')).toBe(false)
+  })
 })
 
 describe('getGlossaryTerm — Produkte', () => {
