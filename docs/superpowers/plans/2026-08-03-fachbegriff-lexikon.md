@@ -656,14 +656,31 @@ Expected: FAIL, `Cannot find module '@/lib/glossary/inject-marks'`
 ```ts
 import { Mark, mergeAttributes } from '@tiptap/core'
 
+export interface GlossaryLinkOptions {
+  /** Sprachpräfix für den href. Ein Artikel verlinkt auf die Lexikonseite
+   *  seiner eigenen Sprache. Ein sprachneutraler Pfad wäre keine Alternative:
+   *  die Middleware beantwortet Pfade ohne Präfix mit einem 307, dessen Ziel
+   *  von Cookie und Geo-Erkennung abhängt (middleware.ts:243-257) — Crawler
+   *  landen dann je nach Herkunft auf verschiedenen Sprachen. */
+  lang: string
+}
+
 /**
  * Mark für Lexikon-Verlinkungen. Wird serverseitig injiziert
  * (lib/glossary/inject-marks.ts), nicht vom Nutzer gesetzt — muss aber im
  * Editor registriert sein, sonst verwirft TipTap sie beim Laden und der Link
  * verschwindet beim nächsten Speichern.
+ *
+ * Dieses renderHTML ist die einzige Stelle, die das Link-HTML für den
+ * crawlbaren SSR-Pfad erzeugt: render-static-html.ts rendert über
+ * generateHTML(json, extensions) und hat keine eigene Mark-Behandlung.
  */
-export const GlossaryLinkMark = Mark.create({
+export const GlossaryLinkMark = Mark.create<GlossaryLinkOptions>({
   name: 'glossaryLink',
+
+  addOptions() {
+    return { lang: 'de' }
+  },
 
   addAttributes() {
     return {
@@ -683,7 +700,7 @@ export const GlossaryLinkMark = Mark.create({
   renderHTML({ HTMLAttributes }) {
     const slug = HTMLAttributes['data-glossary-slug']
     return ['a', mergeAttributes(HTMLAttributes, {
-      href: `/de/glossary/${slug}`,
+      href: `/${this.options.lang}/glossary/${slug}`,
       class: 'glossary-link',
     }), 0]
   },
@@ -923,17 +940,35 @@ Expected: FAIL — der Link fehlt im HTML, weil die Mark unbekannt ist.
 
 - [ ] **Step 3: SSR-Fallback erweitern**
 
-In `lib/tiptap/render-static-html.ts` die Mark im Mark-Handling ergänzen:
+`lib/tiptap/render-static-html.ts` hat **keine Mark-Schleife** — es rendert über
+`generateHTML(json, extensions)` aus `@tiptap/html` (Zeile 20-38). Der Fix ist
+also die Extension-Liste, nicht ein manueller HTML-Zweig. Der Doc-Kommentar der
+Datei sagt warum: „Die Extension-Liste MUSS mit dem Client-Editor deckungsgleich
+sein, sonst wirft generateHTML bei unbekannten Node-Typen" — und der `catch` in
+Zeile 46-48 macht daraus einen leeren String, also den lautlosen Totalverlust
+des Artikels.
+
+Die Funktion braucht dafür die Sprache. Sie hat genau **einen** Aufrufer
+(`components/post-content-view.tsx:26`), der Wechsel ist also billig:
 
 ```ts
-// glossaryLink: sprachneutraler Pfad, die Route redirected /glossary auf die
-// aktive Sprache. Diese Datei ist der Pfad, den Crawler sehen — ohne diesen
-// Zweig fehlt der Link im ausgelieferten HTML, und das SEO-Ziel des Lexikons
-// ist nicht erreichbar.
-if (mark.type === 'glossaryLink' && mark.attrs?.slug) {
-  return `<a href="/glossary/${escapeHtml(String(mark.attrs.slug))}" class="glossary-link">${inner}</a>`
-}
+export function renderStaticArticleHtml(
+  content: Record<string, unknown> | string,
+  lang = 'de',
+): string {
+  // ...
+  const html = generateHTML(json as Parameters<typeof generateHTML>[0], [
+    StarterKit.configure({ heading: false, link: false }),
+    HeadingWithQueueId.configure({ levels: [1, 2, 3, 4, 5, 6] }),
+    Link.configure({ /* unverändert */ }),
+    // Ohne diesen Eintrag wirft generateHTML bei der glossaryLink-Mark, der
+    // catch schluckt es, und der komplette Artikel fehlt im Prerender-HTML.
+    GlossaryLinkMark.configure({ lang }),
+  ])
 ```
+
+`post-content-view.tsx` muss die Sprache durchreichen — sie liegt dort als Prop
+oder über den Locale-Kontext an.
 
 Zusätzlich `stripLexTags` aus Task 2 **vor** dem generischen Strip in Zeile 44
 anwenden. Der Strip dort lautet `/\{[^{}<>\n]{1,80}\}/g` und ersetzt durch den
