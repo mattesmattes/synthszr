@@ -65,10 +65,20 @@ describe('findGlossaryMentions', () => {
     expect(hits.map(h => h.slug)).toEqual(['inferenz'])
   })
 
-  it('Umlaut an Wortgrenze in Kompositum', () => {
+  it('trifft einen Namen nach einem Bindestrich', () => {
     const embeddingTerm: GlossaryMatcherTerm = { slug: 'einbettung', canonicalName: 'Einbettung', aliases: ['Worteinbettung'] }
     const hits = findGlossaryMentions('Die Wörter-Einbettung ist zentral.', [embeddingTerm])
     expect(hits.map(h => h.slug)).toEqual(['einbettung'])
+  })
+
+  it('behandelt einen Umlaut vor dem Namen als Wortzeichen', () => {
+    // 'fen' ist 3 Zeichen, wird also beidseitig begrenzt geprüft.
+    // \p{L} erkennt 'Ö' als Buchstaben -> keine Wortgrenze -> kein Treffer.
+    // Eine naive \b-Regex würde 'Ö' als Nicht-Wortzeichen sehen und
+    // fälschlich treffen. Genau diese Unterscheidung ist der Grund für die
+    // Unicode-Klassen, und nur dieser Test beweist sie.
+    const fen = [{ slug: 'fen', canonicalName: 'fen', aliases: [] }]
+    expect(findGlossaryMentions('Öfen sind heiss.', fen)).toEqual([])
   })
 
   it('escapeRegex mit Regex-Sonderzeichen im Namen', () => {

@@ -11,14 +11,16 @@ function escapeRegex(s: string): string {
 }
 
 /** Wortgrenzen über Unicode-Klassen statt \b: \b bricht bei Umlauten und
- *  deutschen Komposita („Inferenzkosten" soll „Inferenz" treffen, „Ragout"
- *  aber nicht „RAG"). Dasselbe Muster wie in lib/posts/product-mentions.ts. */
+ *  Komposita. Diese Funktion erlaubt Komposita (z.B. „Inferenzkosten" soll
+ *  „Inferenz" treffen). Gleicher Muster wie in lib/posts/product-mentions.ts. */
 function boundaryRegex(name: string): RegExp {
   return new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegex(name)})`, 'iu')
 }
 
 /** Für kurze Namen (< GLOSSARY_MIN_NAME_LENGTH): Grenze auch hinten erforderlich,
- *  um False-Positives wie „AI" in „Aida" zu vermeiden. */
+ *  um False-Positives zu vermeiden. Z.B. „RAG" in „Ragout" treffen („Rag" gefolgt
+ *  von „out"), aber nicht „AI" in „Aida" („Ai" gefolgt von „da"). \p{L} erkennt
+ *  Umlaute als Buchstaben, daher wird „Öfen" nicht als „fen" erkannt. */
 function boundaryRegexShort(name: string): RegExp {
   return new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegex(name)})($|[^\\p{L}\\p{N}])`, 'iu')
 }
