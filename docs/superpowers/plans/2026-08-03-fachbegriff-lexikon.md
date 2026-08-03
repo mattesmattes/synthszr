@@ -206,8 +206,12 @@ Expected: FAIL, `Cannot find module '@/lib/glossary/types'`
 /** Obergrenze verlinkter Begriffe pro Artikel. Mehr macht den Text unlesbar. */
 export const GLOSSARY_MAX_PER_ARTICLE = 8
 
-/** Mindestlänge eines Begriffsnamens für den Matcher. Kürzere erzeugen zu
- *  viele False Positives (gleiche Schwelle wie bei Chart-Produkten). */
+/** Schwelle, ab der ein Begriffsname als „lang" gilt. Kurze Namen werden nicht
+ *  verworfen, sondern strenger gematcht: sie brauchen eine Wortgrenze auf
+ *  beiden Seiten, lange nur davor (siehe boundaryRegex in
+ *  lib/glossary/mentions.ts). Ohne diese Unterscheidung würde der 2-Zeichen-
+ *  Alias „AI" das Wort „Aida" treffen, oder die Abkürzungen MoE/RAG/LLM wären
+ *  gar nicht verlinkbar. Gleicher Wert wie bei Chart-Produkten. */
 export const GLOSSARY_MIN_NAME_LENGTH = 4
 
 export type GlossaryStatus = 'draft' | 'published' | 'hidden'
@@ -329,8 +333,36 @@ describe('findGlossaryMentions', () => {
     expect(findGlossaryMentions('Ragout kochen', terms)).toEqual([])
   })
 
-  it('überspringt Namen unter der Mindestlänge', () => {
-    expect(findGlossaryMentions('Wir nutzen RAG dafür.', terms).map(h => h.slug)).toEqual([])
+  it('findet kurze Abkürzungen als eigenständiges Wort', () => {
+    // RAG ist 3 Zeichen, braucht also eine Grenze auf beiden Seiten — hier
+    // durch Leerzeichen erfüllt.
+    expect(findGlossaryMentions('Wir nutzen RAG dafür.', terms).map(h => h.slug)).toEqual(['rag'])
+  })
+
+  it('matcht einen kurzen Namen nicht als Wortpräfix', () => {
+    const ai = [{ slug: 'ai', canonicalName: 'Artificial Intelligence', aliases: ['AI'] }]
+    expect(findGlossaryMentions('Aida singt.', ai)).toEqual([])
+  })
+
+  it('matcht einen kurzen Namen nicht mit angehängtem Buchstaben', () => {
+    expect(findGlossaryMentions('MoEs skalieren gut.', terms)).toEqual([])
+  })
+
+  it('trifft ein Kompositum über den Substring-Pfad, nicht nur als gelisteten Alias', () => {
+    // Bewusst OHNE Alias 'Inferenzkosten': der Treffer muss über die fehlende
+    // Trailing-Grenze bei langen Namen entstehen.
+    const only = [{ slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }]
+    expect(findGlossaryMentions('Die Inferenzkosten sinken.', only).map(h => h.slug))
+      .toEqual(['inferenz'])
+  })
+
+  it('behandelt Regex-Sonderzeichen im Namen als Literal', () => {
+    const gpt = [{ slug: 'gpt-4-turbo', canonicalName: 'GPT-4 (Turbo)', aliases: [] }]
+    expect(findGlossaryMentions('Wir nutzen GPT-4 (Turbo) dafür.', gpt).map(h => h.slug))
+      .toEqual(['gpt-4-turbo'])
+    // Ohne Escaping würde '(Turbo)' als Gruppe interpretiert und 'GPT-4 Turbo'
+    // fälschlich treffen.
+    expect(findGlossaryMentions('Wir nutzen GPT-4 Turbo dafür.', gpt)).toEqual([])
   })
 
   it('meldet jeden Begriff nur einmal', () => {
@@ -390,11 +422,27 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-/** Wortgrenzen über Unicode-Klassen statt \b: \b bricht bei Umlauten und
- *  deutschen Komposita („Inferenzkosten" soll „Inferenz" treffen, „Ragout"
- *  aber nicht „RAG"). Dasselbe Muster wie in lib/posts/product-mentions.ts. */
+/**
+ * Wortgrenzen über Unicode-Klassen statt \b: \b bricht bei Umlauten und
+ * deutschen Komposita.
+ *
+ * Die Grenze hinter dem Namen ist LÄNGENABHÄNGIG, und das ist der Kern der
+ * Regel:
+ *
+ * - Ab GLOSSARY_MIN_NAME_LENGTH nur eine Grenze davor. Damit trifft
+ *   „Inferenzkosten" den Begriff „Inferenz" — deutsche Komposita sind in
+ *   Fachtexten der Normalfall.
+ * - Darunter zusätzlich eine Grenze dahinter. Kurze Abkürzungen (MoE, RAG,
+ *   LLM, AI) sind legitime Aliasse, würden ohne diese Grenze aber jedes Wort
+ *   treffen, das so anfängt: „AI" als Alias von „Artificial Intelligence"
+ *   matchte sonst „Aida". „MoE-Modell" trifft weiterhin, weil der Bindestrich
+ *   eine Grenze ist; „MoEs" trifft nicht.
+ */
 function boundaryRegex(name: string): RegExp {
-  return new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegex(name)})`, 'iu')
+  const head = `(^|[^\\p{L}\\p{N}])(${escapeRegex(name)})`
+  return name.length < GLOSSARY_MIN_NAME_LENGTH
+    ? new RegExp(`${head}($|[^\\p{L}\\p{N}])`, 'iu')
+    : new RegExp(head, 'iu')
 }
 
 /**
@@ -410,8 +458,10 @@ export function findGlossaryMentions(
   const hits: GlossaryMention[] = []
   for (const term of terms) {
     if (hits.length >= max) break
+    // Kein Längenfilter: kurze Namen werden nicht verworfen, sondern von
+    // boundaryRegex strenger behandelt. Ein Filter hier würde legitime
+    // Abkürzungen (MoE, RAG, LLM) unauffindbar machen.
     const names = [term.canonicalName, ...term.aliases]
-      .filter((n) => n.length >= GLOSSARY_MIN_NAME_LENGTH)
       // Längste zuerst: „Mixture-of-Experts" vor „Mixture of Experts".
       .sort((a, b) => b.length - a.length)
     for (const name of names) {
