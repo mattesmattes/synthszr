@@ -2245,13 +2245,53 @@ git commit -m "feat(glossary): LLM-Zuordnung von Chart-Produkten zu Begriffen"
 
 ### Task 16: Übersetzung
 
+> **KORREKTUR 2026-08-03 (Controller-Vorabprüfung, 3 Befunde).**
+>
+> **REIHENFOLGE GEÄNDERT: Task 17 läuft VOR Task 16.**
+> Grund (PLAN-DEFEKT 23): Task 16 will `app/api/admin/glossary/route.ts`
+> *modifizieren*, aber diese Datei wird erst in **Task 17** *angelegt* —
+> `app/api/admin/glossary/` existiert heute nicht. Damit hätte `translateTerm`
+> wieder keinen Aufrufer (die Klasse von Defekt 21). Task 17 hat keine
+> Gegenabhängigkeit zu Task 16 (er braucht `translateTerm` nicht), der Tausch ist
+> also gefahrlos. Alternative — Task 16 legt eine Ein-Zweck-Route an, die Task 17
+> gleich umbaut — wäre doppelte Arbeit plus ein Review über einen Zwischenzustand.
+>
+> **PLAN-DEFEKT 24 (fehlende Datei, betrifft Kernfunktionalität):** Die
+> Anforderung „für Artikel-Übersetzungen `injectGlossaryMarks` erneut laufen
+> lassen" hat **keine Datei in der Files-Liste**. Verifiziert: `grep glossary`
+> über `lib/i18n/translation-service.ts` ergibt **0 Treffer** — übersetzte Artikel
+> haben heute also **keine** Glossar-Links. Das ist nicht Kosmetik: das Lexikon
+> existiert für SEO in **beiden** Sprachen, und Task 11 deckt es nicht ab (dessen
+> Injektion läuft beim Speichern des deutschen Artikels; die Übersetzung entsteht
+> später).
+>
+> **Wo die Injektion hingehört — verifiziert, nicht geraten:**
+> `translation-service.ts` hat **keinen DB-Zugriff** (0 Treffer für
+> `createAdminClient`/`supabase`), die Zielsprach-Begriffsliste kommt aber aus der
+> DB. Dieselbe Trennung wie bei `generate.ts` in Task 15, also gilt dieselbe
+> Konsequenz: die Injektion gehört **nicht** in den Übersetzungs-Service.
+> `translateContent` (Z. 137) hat **vier** Aufrufstellen:
+> `lib/i18n/translation-queue.ts:155` und `:219`,
+> `app/api/admin/translations/process-queue/route.ts:212` und `:300`.
+> Vier Stellen sind vier Gelegenheiten zum Vergessen — genau die Struktur, an der
+> Task 4 hing (dort 13 Call-Sites, zwei Renderpfade). Deshalb: **eine** Hilfsfunktion
+> in `lib/glossary/`, die die Zielsprach-Begriffe lädt und injiziert, und die an
+> jeder zutreffenden Aufrufstelle aufgerufen wird. Zwei Dinge dabei klären und im
+> Report begründen: (a) welche der vier Stellen überhaupt Artikel (`generated_post`)
+> übersetzen — `static_page` und `ui` brauchen keine Glossar-Links; (b) `translateContent`
+> kehrt bei Z. 174 mit `return await translateContentChunked(...)` **früh zurück** und
+> umgeht damit alles danach. Ein Test muss **beide** Pfade abdecken (kurzer und
+> gechunkter Inhalt), sonst verlieren große Artikel die Links — die Fehlerklasse
+> dieses Vorhabens, fünfmal aufgetreten.
+
 **Files:**
 - Create: `lib/glossary/translate.ts`
-- Modify: `app/api/admin/glossary/route.ts`
+- Modify: `app/api/admin/glossary/route.ts` (existiert nach Task 17), `lib/i18n/translation-queue.ts`, `app/api/admin/translations/process-queue/route.ts`
 - Test: `tests/lib/glossary-translate.test.ts`
 
 **Interfaces:**
 - Produces: `translateTerm(termId: string, targetLang: string): Promise<void>`
+- Produces: eine Hilfsfunktion für die Mark-Neu-Injektion in übersetzten Artikel-Content (Name frei, in `lib/glossary/`)
 
 - [ ] **Step 1: Failing Test schreiben**
 
