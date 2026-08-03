@@ -135,4 +135,36 @@ describe('tiptap-to-html (E-Mail) mit glossaryLink', () => {
     }
     expect(convertTiptapToHtml(plain)).toContain('Nur Text.')
   })
+
+  it('verlinkt Glossarbegriffe im normalen Absatz UND im Synthszr-Take-Absatz', () => {
+    // Zwei getrennte Renderpfade in tiptap-to-html.ts: normale Knoten laufen
+    // über den switch in renderContent, "Synthszr Take/Contra"-Absätze über
+    // applyMarks. Beide müssen die Mark kennen — sonst fehlen die Links genau
+    // dort, wo die meisten Absätze sind.
+    const link = { type: 'glossaryLink', attrs: { slug: 'inferenz' } }
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Inferenz', marks: [link] },
+            { type: 'text', text: ' ist teuer.' },
+          ],
+        },
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Synthszr Take: ', marks: [{ type: 'bold' }] },
+            { type: 'text', text: 'Inferenz', marks: [link] },
+            { type: 'text', text: ' bleibt der Kostentreiber.' },
+          ],
+        },
+      ],
+    }
+    const html = convertTiptapToHtml(doc, 'en')
+    const hits = html.match(/\/en\/glossary\/inferenz/g) ?? []
+    expect(hits).toHaveLength(2) // einmal pro Pfad
+    expect(html).toContain(SITE_URL)
+  })
 })
