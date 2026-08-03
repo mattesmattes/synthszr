@@ -229,6 +229,17 @@ React `cache()`, damit `generateMetadata` und die Page nicht doppelt lesen.
 LLMs zitieren den ersten substanziellen Textblock. Arrondierende Blöcke oben
 würden genau die Passage verwässern, für die die Seite existiert.
 
+**Querverlinkung ohne Relationstabelle.** Es gibt keine Tabelle, die Begriffe
+untereinander verknüpft, und es braucht keine: der Loader lässt
+`findGlossaryMentions` über den Klartext des eigenen `body` laufen (Kandidaten:
+alle veröffentlichten Begriffe außer dem eigenen) und injiziert die Marks im
+selben Durchlauf in den Text. Was die Erklärung erwähnt, ist verwandt — und es
+ist **im Text** verlinkt, nicht nur als Block darunter.
+
+Weil das im Loader passiert und nicht bei der Generierung, wirkt ein neu
+angelegter Begriff rückwirkend in allen älteren Erklärtexten, die ihn nennen.
+Asymmetrische Verwandtschaft ist gewollt und wird nicht symmetrisiert.
+
 **SEO/GEO:**
 
 - JSON-LD `DefinedTerm` innerhalb eines `DefinedTermSet` („Synthszr Lexikon"),
