@@ -168,3 +168,37 @@ describe('tiptap-to-html (E-Mail) mit glossaryLink', () => {
     expect(html).toContain(SITE_URL)
   })
 })
+
+describe('tiptap-to-markdown (GET /api/posts/[slug]/markdown) mit {lex:}', () => {
+  // Dritter {…}-Strip-Pfad im Repo neben render-static-html.ts und
+  // tiptap-to-html.ts (siehe die beiden describe-Blöcke oben) — dieser hier
+  // fehlte in dieser Testdatei, obwohl die anderen zwei Pfade hier stehen.
+  // Genau das war der strukturelle Grund, warum die fehlende Erweiterung für
+  // {lex:} hier durchgefallen ist (Abschluss-Review, Befund A). Speist den
+  // öffentlichen, unauthentifizierten Endpunkt GET /api/posts/[slug]/markdown.
+  it('entfernt {lex:}-Direktiven, behält aber den Begriff (nicht preserveCompanyTags)', async () => {
+    const { convertTiptapToMarkdown } = await import('@/lib/utils/tiptap-to-markdown')
+    const doc = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Ein {lex:Mixture of Experts}-Modell skaliert billiger.' }] }],
+    }
+    const markdown = convertTiptapToMarkdown(doc)
+    expect(markdown).not.toContain('{lex:')
+    expect(markdown).toContain('Mixture of Experts')
+  })
+
+  it('behält {lex:}-Direktiven verbatim, wenn preserveCompanyTags gesetzt ist (EIC-Re-Run-Pfad)', async () => {
+    // preserveCompanyTags ist für den Editor-in-Chief-Re-Run-Roundtrip
+    // (tiptap → markdown → LLM → markdown → tiptap) gedacht — der Tag muss
+    // dafür unangetastet bleiben, sonst geht die Struktur-Markierung für den
+    // nächsten Tiptap-Import verloren. Nur der Public-Markdown-Pfad (ohne
+    // preserveCompanyTags) muss den Tag auflösen.
+    const { convertTiptapToMarkdown } = await import('@/lib/utils/tiptap-to-markdown')
+    const doc = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Ein {lex:Mixture of Experts}-Modell.' }] }],
+    }
+    const markdown = convertTiptapToMarkdown(doc, { preserveCompanyTags: true })
+    expect(markdown).toContain('{lex:Mixture of Experts}')
+  })
+})

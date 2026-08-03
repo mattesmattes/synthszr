@@ -233,6 +233,26 @@ describe('applyGlossaryConfirmation', () => {
     expect(result).toEqual({ publishedSlugs: [] })
   })
 
+  it('gibt kein content zurück, wenn getMatcherTerms einen Lesefehler mit null signalisiert (Abschluss-Review, Befund B)', async () => {
+    // injectGlossaryMarks strippt zuerst ALLE bestehenden glossaryLink-Marks
+    // im Content — ein `terms ?? []` würde bei diesem transienten Lesefehler
+    // sämtliche bestehenden Verlinkungen des Artikels entfernen, ohne Fehler
+    // und ohne Meldung. Der Fix bricht deshalb VOR der Injektion ab; der
+    // bereits erfolgreich freigegebene Slug bleibt in publishedSlugs stehen.
+    mocks.getMatcherTerms.mockResolvedValue(null)
+    const { applyGlossaryConfirmation } = await import('@/lib/glossary/confirm')
+    const supabase = fakeSupabase({
+      glossary_terms: [
+        { error: null },
+        { data: [{ slug: 'inferenz' }], error: null },
+      ],
+    })
+    const result = await applyGlossaryConfirmation(
+      supabase as never, 'p1', ['inferenz'], JSON.stringify(doc('Die Inferenz ist teuer.')),
+    )
+    expect(result).toEqual({ publishedSlugs: ['inferenz'] })
+  })
+
   it('reserviert Chart-Produktnamen aus getChartProductNames gegen Kollision', async () => {
     mocks.getMatcherTerms.mockResolvedValue([
       { slug: 'produktname', canonicalName: 'ChartProdX', aliases: [] },

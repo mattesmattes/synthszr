@@ -4,6 +4,7 @@
  */
 
 import type { TiptapNode, TiptapDoc } from '@/lib/email/tiptap-to-html'
+import { stripLexTags } from '@/lib/glossary/mentions'
 
 export interface ConvertOptions {
   /**
@@ -126,6 +127,11 @@ function renderTextNode(node: TiptapNode, options: ConvertOptions): string {
   // Strip {Company} explicit tags from display unless the caller
   // (EIC re-run pipeline) needs them preserved.
   if (!options.preserveCompanyTags) {
+    // {lex:Begriff}-Direktiven zuerst auflösen, sonst verschwindet der Begriff
+    // mitsamt Klammern im generischen {...}-Strip direkt darunter — dritter
+    // Strip-Pfad im Repo neben render-static-html.ts/tiptap-to-html.ts,
+    // gleiche Reihenfolge (Abschluss-Review, Befund A).
+    text = stripLexTags(text)
     text = text.replace(/\{([^}]+)\}/g, '')
   }
 

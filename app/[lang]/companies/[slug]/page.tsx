@@ -7,6 +7,7 @@ import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { parseTipTapContent } from '@/lib/companies/extractor'
+import { stripLexTags } from '@/lib/glossary/mentions'
 import { VendorProducts } from '@/components/rankings/vendor-products'
 import { SITE_URL, safeJsonLd } from '@/lib/seo/site'
 import type { LanguageCode } from '@/lib/types'
@@ -28,7 +29,10 @@ function extractTextFromNode(node: TipTapNode): string {
 }
 
 function extractExcerpt(text: string, maxLength = 150): string {
-  const cleaned = text.replace(/\{[^}]+\}/g, '').replace(/\s+/g, ' ').trim()
+  // {lex:Begriff}-Direktiven zuerst auflösen, sonst verschwindet der Begriff
+  // mitsamt Klammern im generischen {...}-Strip direkt darunter (vierter
+  // Strip-Pfad im Repo, Abschluss-Review Befund A2).
+  const cleaned = stripLexTags(text).replace(/\{[^}]+\}/g, '').replace(/\s+/g, ' ').trim()
   if (cleaned.length <= maxLength) return cleaned
   const truncated = cleaned.slice(0, maxLength)
   const lastSpace = truncated.lastIndexOf(' ')

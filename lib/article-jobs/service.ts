@@ -515,12 +515,22 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
         const content = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent
 
         if (content) {
-          // getMatcherTerms('de') nimmt intern den frühen de-Zweig und liefert
-          // damit nie null (das passiert nur, wenn die Übersetzungsabfrage für
-          // eine Nicht-de-Sprache fehlschlägt, lib/glossary/terms.ts) — die
-          // Absicherung ist trotzdem nötig, weil der Rückgabetyp seit Task
-          // 16/Fix-Runde 1 `| null` ist.
-          const terms = (await getMatcherTerms('de')) ?? []
+          const terms = await getMatcherTerms('de')
+          // Abschluss-Review, Befund B: getMatcherTerms('de') signalisiert
+          // einen Lesefehler der Begriffsliste seit dem Fix in terms.ts mit
+          // `null` (vorher `[]`, ununterscheidbar von "keine veröffentlichten
+          // Begriffe"). Ein `?? []` liefe hier auf denselben Ausfall hinaus,
+          // den der Modul-Header von candidates.ts beschreibt: JEDER
+          // {lex:Begriff}, der auf einen bereits veröffentlichten Begriff
+          // zeigt, würde als neuer Kandidat behandelt und komplett neu
+          // generiert (Opus + Gemini + Blob-Upload) — der Insert stirbt am
+          // slug-Unique-Constraint, wird gefangen und der Kandidat
+          // verschwindet lautlos. Werfen statt degradieren: der bestehende
+          // catch unten loggt, der Artikel bleibt fertig, nur die
+          // Kandidatenliste bleibt unangetastet statt falsch überschrieben.
+          if (terms === null) {
+            throw new Error('[ArticleJobs] getMatcherTerms(de) fehlgeschlagen — Lexikon-Phase abgebrochen')
+          }
           const tagged = extractLexTags(content)
           const visibleText = extractVisibleText(content)
           const matched = findGlossaryMentions(visibleText, terms)

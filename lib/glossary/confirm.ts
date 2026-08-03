@@ -96,11 +96,19 @@ export async function applyGlossaryConfirmation(
     getMatcherTerms('de'),
     getChartProductNames(),
   ])
-  // getMatcherTerms('de') nimmt intern den frühen de-Zweig und liefert damit
-  // nie null (das passiert nur, wenn die Übersetzungsabfrage für eine
-  // Nicht-de-Sprache fehlschlägt, terms.ts) — die Absicherung ist trotzdem
-  // nötig, weil der Rückgabetyp seit Task 16/Fix-Runde 1 `| null` ist.
-  //
+  // Abschluss-Review, Befund B: getMatcherTerms('de') liefert seit dem Fix
+  // in terms.ts auch bei einem Lesefehler der Begriffsliste selbst `null`
+  // (vorher `[]`, ununterscheidbar von "keine veröffentlichten Begriffe").
+  // Ein `?? []` wäre hier ein Datenverlust: injectGlossaryMarks strippt
+  // zuerst ALLE bestehenden glossaryLink-Marks im Content und liefert bei
+  // einer leeren Terms-Liste genau diesen gestrippten Content zurück — ein
+  // Save mit mindestens einem bestätigten Slug würde dann sämtliche
+  // bestehenden Lexikon-Verlinkungen des Artikels entfernen, ohne Fehler und
+  // ohne Meldung. Deshalb: ohne content zurückkehren (kein
+  // updateData.content beim Aufrufer), statt falsch zu schreiben — ein
+  // erneuter Save-Versuch kann den transienten Fehler heilen.
+  if (terms === null) return { publishedSlugs }
+
   // Company- und Chart-Produktnamen reservieren: spezifisch vor generisch
   // (Kollisionsregel: Company > Chart-Produkt > Lexikonbegriff) —
   // buildReservedNames statt einer eigenen Kopie (Review-Fund Important 2,
@@ -108,6 +116,6 @@ export async function applyGlossaryConfirmation(
   // in lib/glossary/translate.ts gebraucht, eine Policy-Regel darf dort
   // nicht unbemerkt auseinanderlaufen).
   const reserved = buildReservedNames(chartProductNames)
-  const injected = injectGlossaryMarks(parsed, publishedSlugs, terms ?? [], { reserved })
+  const injected = injectGlossaryMarks(parsed, publishedSlugs, terms, { reserved })
   return { publishedSlugs, content: JSON.stringify(injected) }
 }

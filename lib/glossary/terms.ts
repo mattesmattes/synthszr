@@ -32,8 +32,9 @@ export async function getPublishedTermList(
 }
 
 /**
- * Rückgabe `null` NUR, wenn die Übersetzungsabfrage selbst fehlschlägt
- * (`trError` unten) — zu unterscheiden von einem legitimen "für dieses
+ * Rückgabe `null`, wenn eine der beiden Datenbankabfragen fehlschlägt — die
+ * Begriffsliste selbst (`error` unten) genauso wie die Übersetzungsabfrage
+ * (`trError` unten). Zu unterscheiden von einem legitimen "für dieses
  * Sprachenpaar existiert (noch) keine Übersetzungszeile", das PRO BEGRIFF
  * silently auf den deutschen Namen zurückfällt (unten, `t9n?.canonical_name
  * ?? t.canonicalName`) und genau das gewünschte, alltägliche Verhalten ist.
@@ -47,8 +48,20 @@ export async function getPublishedTermList(
  * Englische übersetzt" sahen identisch aus, und beide degradierten
  * unbemerkt zu null gesetzten Marks im übersetzten Artikel. `null` macht den
  * Fehlerfall am Ursprung sichtbar, statt ihn wie ein Ergebnis
- * zurückzugeben — Aufrufer, denen der Unterschied egal ist (detail.ts,
- * confirm.ts), degradieren mit `?? []` genauso wie zuvor.
+ * zurückzugeben.
+ *
+ * Abschluss-Review, Befund B: die Begriffslisten-Abfrage selbst gab bei
+ * einem Fehler bis hierhin weiterhin `[]` zurück — derselbe Fehlerpfad in
+ * derselben Funktion mit einem anderen Signal als der Übersetzungs-Zweig
+ * oben, und der WAHRSCHEINLICHERE der beiden: sie ist unbegrenzt (kein
+ * `.limit()`) und läuft vor jeder gefilterten Geschwister-Query. Zwei
+ * Schreibpfade (confirm.ts, article-jobs/service.ts) hatten sich mit einem
+ * `?? []`-Kommentar wörtlich darauf verlassen, dass `getMatcherTerms('de')`
+ * "nie null liefert" — richtig für den Übersetzungs-Zweig (der läuft für
+ * `de` gar nicht), blind für diesen. Jetzt liefern beide Fehlerpfade `null`.
+ * Reine Lesepfade, denen der Unterschied egal ist (detail.ts), degradieren
+ * weiterhin mit `?? []`; die beiden Schreibpfade brechen bei `null` ab,
+ * statt eine leere Begriffsliste wie ein Ergebnis zu behandeln.
  */
 export async function getMatcherTerms(lang: string): Promise<GlossaryMatcherTerm[] | null> {
   const supabase = createAdminClient()
@@ -58,7 +71,7 @@ export async function getMatcherTerms(lang: string): Promise<GlossaryMatcherTerm
     .eq('status', 'published')
   if (error) {
     console.error('[Glossary] getMatcherTerms:', error.message)
-    return []
+    return null
   }
   const base = (data ?? []).map((r) => ({
     id: r.id as string,

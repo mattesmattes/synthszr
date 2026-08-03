@@ -143,11 +143,18 @@ describe('getMatcherTerms', () => {
     expect(rows).toEqual([{ slug: 's', canonicalName: 'EN-N', aliases: ['en-n'] }])
   })
 
-  it('degradiert bei DB-Fehler auf leere Liste statt zu werfen', async () => {
+  it('signalisiert einen Ladefehler bei der Begriffsliste selbst als null, nicht als leere Liste (Abschluss-Review, Befund B)', async () => {
+    // Vorher: `[]` — für Schreibpfade (confirm.ts, article-jobs/service.ts)
+    // nicht von "keine veröffentlichten Begriffe" zu unterscheiden. Dieselbe
+    // Unterscheidung wie beim Übersetzungs-Lesefehler unten, nur für die
+    // WAHRSCHEINLICHERE der beiden Abfragen: sie ist unbegrenzt (kein
+    // .limit()) und läuft vor jeder gefilterten Geschwister-Query.
     state.result = { data: null, error: { message: 'boom' } }
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { getMatcherTerms } = await import('@/lib/glossary/terms')
     const rows = await getMatcherTerms('de')
-    expect(rows).toEqual([])
+    expect(rows).toBeNull()
+    errSpy.mockRestore()
   })
 
   it('signalisiert einen Ladefehler bei der Übersetzungsabfrage als null, statt die deutsche Fassung wie ein Ergebnis zurückzugeben (Review-Fund Important 1, Fix-Runde 1)', async () => {

@@ -225,4 +225,25 @@ describe('advanceArticleJob — Phase lexicon', () => {
     // Die Kandidatenliste wurde nicht geschrieben — die Suche scheiterte davor.
     expect(state.updates.some((u) => u.table === 'generated_posts' && 'pending_glossary_terms' in u.payload)).toBe(false)
   })
+
+  it('schließt den Job ab, ohne die Kandidatenliste zu schreiben, wenn getMatcherTerms einen Lesefehler mit null signalisiert (Abschluss-Review, Befund B)', async () => {
+    // Anders als der Fall oben (Reject/Exception): getMatcherTerms wirft nie,
+    // sondern signalisiert einen Lesefehler der Begriffsliste seit Befund B
+    // mit `null` statt `[]` (lib/glossary/terms.ts). Ein `?? []` würde
+    // buildCandidateList mit einer leeren publishedTerms-Liste laufen lassen
+    // — jeder {lex:Begriff}, der auf einen bereits veröffentlichten Begriff
+    // zeigt, würde dann fälschlich als neuer Kandidat komplett neu generiert.
+    state.job = makeJob({ phase: 'lexicon', generated_post_id: 'post-1' })
+    state.postContent = JSON.stringify({ type: 'doc', content: [] })
+    mocks.getMatcherTerms.mockResolvedValue(null)
+
+    const { advanceArticleJob } = await import('@/lib/article-jobs/service')
+    const result = await advanceArticleJob('job-1')
+
+    expect(result).toBe('lexicon_done')
+    const jobDone = state.updates.find((u) => u.table === 'article_jobs' && u.payload.status === 'done')
+    expect(jobDone?.payload).toMatchObject({ status: 'done', phase: null })
+    expect(mocks.buildCandidateList).not.toHaveBeenCalled()
+    expect(state.updates.some((u) => u.table === 'generated_posts' && 'pending_glossary_terms' in u.payload)).toBe(false)
+  })
 })
