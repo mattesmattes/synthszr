@@ -94,7 +94,8 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
           aria-label="Home"
           className="flex-shrink-0 self-center"
         >
-          <Image src="/synthszr-logo.svg" alt="synthszr" width={120} height={24} className="h-5 w-auto" priority />
+          <Image src="/synthszr-logo-dark.svg" alt="synthszr" width={120} height={24} className="h-5 w-auto dark:hidden" priority />
+          <Image src="/synthszr-logo.svg" alt="" width={120} height={24} className="hidden h-5 w-auto dark:block" aria-hidden />
         </Link>
         <span aria-hidden className="h-5 w-px shrink-0 self-center bg-border" />
         <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
@@ -151,13 +152,29 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
         aria-label="Home"
         className="flex-shrink-0 self-center"
       >
+        {/* Die Wortmarke in public/synthszr-logo.svg ist WEISS (fill: #fff) — sie
+            ist für die dunklen Podcast-/Newsletter-Cover gemacht und war im
+            hellen Header unsichtbar. synthszr-logo-dark.svg ist dieselbe Datei
+            mit getauschter Füllfarbe, identische Pfade. Beide eingebunden und per
+            dark: umgeschaltet, statt eine per CSS-Filter zu invertieren: die
+            Marke soll in beiden Themes exakt sie selbst sein.
+            Das zweite Bild trägt alt="" und aria-hidden, damit Screenreader die
+            Wortmarke nicht doppelt vorlesen. */}
         <Image
-          src="/synthszr-logo.svg"
+          src="/synthszr-logo-dark.svg"
           alt="synthszr"
           width={120}
           height={24}
-          className="h-5 w-auto"
+          className="h-5 w-auto dark:hidden"
           priority
+        />
+        <Image
+          src="/synthszr-logo.svg"
+          alt=""
+          width={120}
+          height={24}
+          className="hidden h-5 w-auto dark:block"
+          aria-hidden
         />
       </Link>
       <span aria-hidden className="h-5 w-px shrink-0 self-center bg-border" />
