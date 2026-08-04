@@ -51,9 +51,12 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
 
   if (slug) {
+    // illustration_url zusätzlich zu body/pending_body (Draft-Preview-Fix):
+    // die Admin-Vorschau zeigt das Begriffsbild neben dem Text, damit vor
+    // dem Veröffentlichen der komplette Eintrag sichtbar ist, nicht nur Text.
     const { data, error } = await supabase
       .from('glossary_terms')
-      .select('id, slug, canonical_name, status, review_state, last_reviewed_at, summary, body, pending_body')
+      .select('id, slug, canonical_name, status, review_state, last_reviewed_at, summary, body, pending_body, illustration_url')
       .eq('slug', slug)
       .maybeSingle()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

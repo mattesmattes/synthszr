@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, CheckCircle2, XCircle, Trash2, RefreshCw, Eye, EyeOff, BookOpen, Languages } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, Trash2, RefreshCw, Eye, EyeOff, BookOpen, Languages, ChevronDown, ChevronUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,7 @@ interface GlossaryTermDetail extends GlossaryTermRow {
   summary: string
   body: unknown
   pending_body: unknown
+  illustration_url: string | null
 }
 
 type PatchAction = 'accept_revision' | 'discard_revision' | 'hide' | 'publish' | 'translate'
@@ -162,9 +163,33 @@ export default function GlossaryAdminPage() {
   // unerreichbar, weil beide Buttons innerhalb des `detail ?`-Zweigs lagen.
   // Eigener Fehlerzustand pro Slug macht das sichtbar.
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({})
+  // Draft-Preview-Fix: Vorschau-Aufklapp-Zustand + eigener Loading-Zustand
+  // pro Slug fürs bedarfsweise Nachladen (nicht actionLoading, das ist für
+  // schreibende PATCH/DELETE-Aktionen reserviert und würde sonst z. B. den
+  // Löschen-Button während eines reinen Lesevorgangs sperren).
+  const [previewOpen, setPreviewOpen] = useState<Record<string, boolean>>({})
+  const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [error, setError] = useState<string | null>(null)
+
+  // Einzelner Detail-Fetch (body + pending_body + illustration_url) — von
+  // fetchTerms (offene Revisionen, vorab) UND von loadPreview (Vorschau auf
+  // Zuruf, jeder Status) gemeinsam genutzt, statt die Fetch-Logik zweimal zu
+  // pflegen.
+  const fetchDetail = useCallback(async (slug: string): Promise<{ detail: GlossaryTermDetail | null; error: string | null }> => {
+    try {
+      const res = await fetch(`/api/admin/glossary?slug=${encodeURIComponent(slug)}`)
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        return { detail: null, error: data?.error || `HTTP ${res.status}` }
+      }
+      const data = await res.json()
+      return { detail: data.term as GlossaryTermDetail, error: null }
+    } catch (err) {
+      return { detail: null, error: err instanceof Error ? err.message : 'Netzwerkfehler' }
+    }
+  }, [])
 
   const fetchTerms = useCallback(async () => {
     setLoading(true)
@@ -176,23 +201,12 @@ export default function GlossaryAdminPage() {
       const rows: GlossaryTermRow[] = data.terms ?? []
       setTerms(rows)
 
-      // Detail-Fetch (body + pending_body) nur für offene Revisionen — die
-      // Listen-Antwort schickt body bewusst nicht mit (Payload-Größe).
+      // Detail-Fetch nur vorab für offene Revisionen — die Listen-Antwort
+      // schickt body bewusst nicht mit (Payload-Größe). Für alle anderen
+      // Begriffe lädt die Vorschau (loadPreview) bedarfsweise nach.
       const pending = rows.filter((r) => r.review_state === 'revision_pending')
       const entries = await Promise.all(
-        pending.map(async (r) => {
-          try {
-            const dRes = await fetch(`/api/admin/glossary?slug=${encodeURIComponent(r.slug)}`)
-            if (!dRes.ok) {
-              const data = await dRes.json().catch(() => null)
-              return { slug: r.slug, detail: null, error: data?.error || `HTTP ${dRes.status}` }
-            }
-            const dData = await dRes.json()
-            return { slug: r.slug, detail: dData.term as GlossaryTermDetail, error: null }
-          } catch (err) {
-            return { slug: r.slug, detail: null, error: err instanceof Error ? err.message : 'Netzwerkfehler' }
-          }
-        }),
+        pending.map(async (r) => ({ slug: r.slug, ...(await fetchDetail(r.slug)) })),
       )
       const newDetails: Record<string, GlossaryTermDetail> = {}
       const newDetailErrors: Record<string, string> = {}
@@ -200,18 +214,57 @@ export default function GlossaryAdminPage() {
         if (entry.detail) newDetails[entry.slug] = entry.detail
         else newDetailErrors[entry.slug] = entry.error ?? 'Unbekannter Fehler'
       }
-      setDetails(newDetails)
-      setDetailErrors(newDetailErrors)
+      // Zusammenführen statt Ersetzen: sonst würden bereits bedarfsweise
+      // geladene Vorschauen (loadPreview, für nicht-pending Begriffe) bei
+      // jedem Neu-laden/nach jeder Aktion wieder verworfen. Für die hier neu
+      // abgefragten pending-Slugs zählt IMMER der frische Stand — ein alter
+      // Fehler wird daher vor dem Merge entfernt, bevor evtl. ein neuer
+      // Fehler dazukommt.
+      setDetails((prev) => ({ ...prev, ...newDetails }))
+      setDetailErrors((prev) => {
+        const next = { ...prev }
+        for (const r of pending) delete next[r.slug]
+        return { ...next, ...newDetailErrors }
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Laden fehlgeschlagen')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [fetchDetail])
 
   useEffect(() => {
     fetchTerms()
   }, [fetchTerms])
+
+  // Vorschau bedarfsweise nachladen (nicht-pending Begriffe haben noch
+  // keinen Detail-Fetch aus fetchTerms bekommen).
+  async function loadPreview(slug: string) {
+    setDetailLoading((s) => ({ ...s, [slug]: true }))
+    const { detail, error } = await fetchDetail(slug)
+    if (detail) {
+      setDetails((prev) => ({ ...prev, [slug]: detail }))
+      setDetailErrors((prev) => {
+        const next = { ...prev }
+        delete next[slug]
+        return next
+      })
+    } else {
+      setDetailErrors((prev) => ({ ...prev, [slug]: error ?? 'Unbekannter Fehler' }))
+    }
+    setDetailLoading((s) => ({ ...s, [slug]: false }))
+  }
+
+  // Aufklappen lädt einmalig nach, sofern weder ein Detail noch ein Fehler
+  // dazu vorliegt — Zuklappen/erneutes Aufklappen fragt nicht erneut ab,
+  // "Neu laden" oben tut das für pending-Begriffe ohnehin schon.
+  function togglePreview(slug: string) {
+    const willOpen = !previewOpen[slug]
+    setPreviewOpen((s) => ({ ...s, [slug]: willOpen }))
+    if (willOpen && !details[slug] && !detailErrors[slug]) {
+      loadPreview(slug)
+    }
+  }
 
   // `extra` trägt targetLang für 'translate' — die übrigen Actions brauchen
   // kein weiteres Feld, das PATCH-Handler-Payload deckt beides über dieselbe
@@ -315,6 +368,15 @@ export default function GlossaryAdminPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => togglePreview(term.slug)}
+                        title="Aktuellen Text (und ggf. Illustration) dieses Begriffs anzeigen"
+                      >
+                        {previewOpen[term.slug] ? <ChevronUp className="h-4 w-4 mr-1.5" /> : <ChevronDown className="h-4 w-4 mr-1.5" />}
+                        Vorschau
+                      </Button>
                       {term.status === 'published' ? (
                         <Button variant="outline" size="sm" onClick={() => runAction(term.slug, 'hide')} disabled={isBusy}>
                           <EyeOff className="h-4 w-4 mr-1.5" />
@@ -345,6 +407,50 @@ export default function GlossaryAdminPage() {
                     </div>
                   </div>
                 </CardHeader>
+
+                {previewOpen[term.slug] && (
+                  // Draft-Preview-Fix: einziger Weg, den Text eines Begriffs vor dem
+                  // Veröffentlichen (oder vor Verbergen/Löschen) zu lesen — die
+                  // öffentliche Detailseite liefert für status≠'published' ein
+                  // notFound(). Bewusst für JEDEN Status verfügbar, nicht nur
+                  // 'draft': dieselbe Notwendigkeit besteht vorm Verbergen eines
+                  // veröffentlichten Begriffs. Kein Gate auf „Veröffentlichen" —
+                  // anders als bei accept_revision geht es hier nicht um fehlende
+                  // Daten, die Vorschau ist einfach verfügbar, wenn gewünscht.
+                  <CardContent className="pt-0 pb-4 space-y-3">
+                    {detailLoading[term.slug] && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Lade Vorschau...
+                      </div>
+                    )}
+                    {!detailLoading[term.slug] && detail && (
+                      <>
+                        {detail.illustration_url && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={detail.illustration_url}
+                            alt=""
+                            className="h-32 w-auto rounded-md border object-cover"
+                          />
+                        )}
+                        {tiptapPlainText(detail.body) ? (
+                          <div className="rounded-md border bg-muted/40 p-3 text-sm leading-relaxed whitespace-pre-wrap">
+                            {tiptapPlainText(detail.body)}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">Kein Text vorhanden.</p>
+                        )}
+                      </>
+                    )}
+                    {!detailLoading[term.slug] && !detail && detailErrors[term.slug] && (
+                      <div className="flex items-center gap-2 text-sm text-red-600">
+                        <XCircle className="h-4 w-4 shrink-0" />
+                        Vorschau konnte nicht geladen werden ({detailErrors[term.slug]}).
+                      </div>
+                    )}
+                  </CardContent>
+                )}
 
                 {term.review_state === 'revision_pending' && (
                   <CardContent className="space-y-3">

@@ -206,6 +206,27 @@ describe('Revalidierung — Important 4 (Index-Seite mitrevalidieren)', () => {
   })
 })
 
+describe('GET ?slug= (Draft-Preview-Fix)', () => {
+  it('selektiert illustration_url mit, damit die Admin-Vorschau das Begriffsbild zeigen kann', async () => {
+    state.queues['glossary_terms'] = [{
+      data: {
+        id: '1', slug: 'inferenz', canonical_name: 'Inferenz', status: 'draft',
+        review_state: 'ok', last_reviewed_at: null, summary: 'x', body: {}, pending_body: null,
+        illustration_url: 'https://blob.example/inferenz.png',
+      },
+      error: null,
+    }]
+    const { GET } = await import('@/app/api/admin/glossary/route')
+    const res = await GET(new Request('http://localhost/api/admin/glossary?slug=inferenz') as any)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.term.illustration_url).toBe('https://blob.example/inferenz.png')
+
+    const chain = state.chains.find((c) => c.table === 'glossary_terms')
+    expect(chain!.select.mock.calls[0][0]).toContain('illustration_url')
+  })
+})
+
 describe('PATCH translate (Task 16)', () => {
   it('gibt 400 zurück, wenn targetLang fehlt', async () => {
     const { PATCH } = await import('@/app/api/admin/glossary/route')
