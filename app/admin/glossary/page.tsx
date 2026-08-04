@@ -5,6 +5,7 @@ import { Loader2, CheckCircle2, XCircle, Trash2, RefreshCw, Eye, EyeOff, BookOpe
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { GlossaryCrawlPanel } from '@/components/admin/glossary-crawl-panel'
 
 // --- Types ---
 
@@ -189,6 +190,11 @@ export default function GlossaryAdminPage() {
   // veröffentlichten. Ohne Filter ist die Liste eine Wand aus Karten, in der die
   // veröffentlichten Begriffe und offene Revisionen untergehen.
   const [statusFilter, setStatusFilter] = useState<GlossaryStatus | 'all'>('all')
+  // Zwei Ansichten auf denselben Gegenstand: die Begriffsliste und der
+  // Artikel-Crawl, der neue Begriffe findet. Bewusst ein Umschalter statt einer
+  // eigenen Route — nach dem Erzeugen will man direkt in der Liste sehen, was
+  // entstanden ist.
+  const [view, setView] = useState<'terms' | 'crawl'>('terms')
   const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
@@ -358,12 +364,39 @@ export default function GlossaryAdminPage() {
             Fachbegriffe, Aktualitätsstatus und offene Revisionen aus der täglichen Aktualitätsprüfung
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchTerms} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Neu laden
-        </Button>
+        {view === 'terms' && (
+          <Button variant="outline" size="sm" onClick={fetchTerms} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Neu laden
+          </Button>
+        )}
       </div>
 
+      {/* Ansicht-Umschalter über den Statusfiltern: der Crawl findet Begriffe,
+          die Liste zeigt sie — beides gehört zum Lexikon und bleibt an einem Ort. */}
+      <div className="mb-6 flex items-center gap-2 border-b">
+        {([['terms', 'Begriffe'], ['crawl', 'Artikel-Crawl']] as Array<['terms' | 'crawl', string]>).map(
+          ([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setView(key)}
+              className={`-mb-px border-b-2 px-1 pb-2 text-sm transition-colors ${
+                view === key
+                  ? 'border-foreground font-medium text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {label}
+            </button>
+          ),
+        )}
+      </div>
+
+      {view === 'crawl' && <GlossaryCrawlPanel onTermsChanged={fetchTerms} />}
+
+      {view === 'terms' && (
+      <>
       {error && (
         <div className="mb-6 flex items-center gap-2 text-sm text-red-600">
           <XCircle className="h-4 w-4 shrink-0" />
@@ -552,6 +585,8 @@ export default function GlossaryAdminPage() {
             )
           })}
         </div>
+      )}
+      </>
       )}
     </div>
   )
