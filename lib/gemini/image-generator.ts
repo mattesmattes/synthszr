@@ -983,12 +983,28 @@ export async function generateEmailCover(
 
 /** Erklärender Bildstil für Lexikonseiten — bewusst nicht das Satire-Template
  *  aus getActiveImagePrompt(), das auf Nachrichtenbilder festgelegt ist. */
+/**
+ * Bild-Prompt für Glossar-Illustrationen.
+ *
+ * ⚠️ DER PROMPT MUSS TONWERTE ANFORDERN. Floyd-Steinberg (ditherImage) wandelt
+ * Graustufen in Punktmuster — es rastert also TONWERTE, keine Kanten. Die erste
+ * Fassung forderte „high-contrast black ink on white" an: reine Linienzeichnung,
+ * keine Mitteltöne, folglich nichts zu rastern. Ergebnis waren Bilder, die
+ * nachweislich durch die Dither-Pipeline liefen und trotzdem ungedithert
+ * aussahen (Befund D, 2026-08-04) — der Effekt fehlte nicht wegen der
+ * Rasterweite, sondern wegen des fehlenden Materials.
+ *
+ * Die Hauptformen bleiben trotzdem bewusst kräftig: das Raster darf Volumen und
+ * Flächen füllen, die tragenden Konturen müssen es überleben.
+ */
 export function buildGlossaryImagePrompt(termName: string, summary: string): string {
   return [
     'A clear, schematic technical illustration explaining the concept:',
     `"${termName}" — ${summary.slice(0, 400)}`,
-    'Style: high-contrast black ink on white, diagrammatic, no text labels,',
-    'no photorealism, thick clean lines that survive heavy dithering.',
+    'Style: monochrome illustration with soft GRAYSCALE shading — volumes,',
+    'surfaces and depth modelled in continuous mid-tones, not flat line art.',
+    'Diagrammatic and legible, no text labels, no photorealism.',
+    'Keep the main contours bold enough to survive halftone dithering.',
   ].join('\n')
 }
 

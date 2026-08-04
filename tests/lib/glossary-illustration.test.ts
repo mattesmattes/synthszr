@@ -51,6 +51,20 @@ describe('buildGlossaryImagePrompt', () => {
     expect(p.toLowerCase()).not.toContain('satir')
   })
 
+  it('fordert TONWERTE an, damit das Dithering überhaupt etwas zu rastern hat', async () => {
+    // Befund D (2026-08-04): die Illustrationen sahen nicht gedithert aus. Ursache
+    // war NICHT ditheringCoarseness (die 1 ist durch einen visuellen Test belegt,
+    // s. Kommentar an generateGlossaryIllustration), sondern dieser Prompt: er
+    // forderte "high-contrast black ink on white" an. Floyd-Steinberg wandelt
+    // TONWERTE in Punktmuster — eine reine Schwarz-Weiß-Linienzeichnung hat keine,
+    // also entsteht kein Raster, egal wie grob es eingestellt ist.
+    const { buildGlossaryImagePrompt } = await import('@/lib/gemini/image-generator')
+    const p = buildGlossaryImagePrompt('Inferenz', 'Wenn ein Modell antwortet.').toLowerCase()
+    expect(p).toMatch(/grayscale|greyscale|mid-tone|midtone/)
+    // Und die Gegenprobe: die Formulierung, die tonfreie Grafiken erzwang, ist weg.
+    expect(p).not.toContain('black ink on white')
+  })
+
   it('kürzt das Summary auf 400 Zeichen', async () => {
     const { buildGlossaryImagePrompt } = await import('@/lib/gemini/image-generator')
     const longSummary = 'a'.repeat(500)
