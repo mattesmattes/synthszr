@@ -8,25 +8,52 @@ import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
  *  wieder verworfen. */
 const LIST_COLUMNS = 'id, slug, canonical_name, summary'
 
+/** Ohne summary — für das Register in der Seitenspalte und für die Sitemap, die
+ *  beide nur Slug und Name brauchen. Bei 500 Begriffen sind das rund 20 KB statt
+ *  120 KB je Seitenaufbau, und die Funktion läuft in JEDER Begriffsseite. */
+const NAV_COLUMNS = 'id, slug, canonical_name'
+
+/** Seitengröße der Pagination. PostgREST kappt eine Abfrage ohne range() still
+ *  bei 1000 Zeilen — bei den Company-Mentions hat genau das 34% der Zeilen
+ *  verschluckt, ohne Fehler und ohne Log. */
+const PAGE_SIZE = 1000
+
 export async function getPublishedTermList(
   lang: string,
+  options: { includeSummary?: boolean } = {},
 ): Promise<Array<{ slug: string; canonicalName: string; summary: string }>> {
+  const includeSummary = options.includeSummary ?? true
   const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('glossary_terms')
-    .select(LIST_COLUMNS)
-    .eq('status', 'published')
-    .order('canonical_name')
-  if (error) {
-    console.error('[Glossary] getPublishedTermList:', error.message)
-    return []
+
+  const rows: Array<{ id: string; slug: string; canonicalName: string; summary: string }> = []
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('glossary_terms')
+      // Cast nötig: supabase-js parst den Select-String zur COMPILE-Zeit als
+      // Literal, um den Rückgabetyp abzuleiten. Ein Ternär ergibt dort eine
+      // Union, die der Parser nicht auflöst (ParserError). Der Cast auf das
+      // breitere Literal ist ungefährlich, weil summary unten defensiv gelesen
+      // wird — genau für den Fall, dass die Spalte nicht dabei ist.
+      .select((includeSummary ? LIST_COLUMNS : NAV_COLUMNS) as typeof LIST_COLUMNS)
+      .eq('status', 'published')
+      .order('canonical_name')
+      .range(offset, offset + PAGE_SIZE - 1)
+    if (error) {
+      console.error('[Glossary] getPublishedTermList:', error.message)
+      return []
+    }
+    if (!data?.length) break
+    rows.push(...data.map((r) => ({
+      id: r.id as string,
+      slug: r.slug as string,
+      canonicalName: r.canonical_name as string,
+      // Leerstring statt undefined, wenn die Spalte nicht geladen wurde: der
+      // Rückgabetyp bleibt so derselbe, und kein Aufrufer bekommt versehentlich
+      // "undefined" in die Ausgabe.
+      summary: (r.summary as string | undefined) ?? '',
+    })))
+    if (data.length < PAGE_SIZE) break
   }
-  const rows = (data ?? []).map((r) => ({
-    id: r.id as string,
-    slug: r.slug as string,
-    canonicalName: r.canonical_name as string,
-    summary: r.summary as string,
-  }))
   const translated = lang === 'de' ? rows : await applyTranslations(rows, lang)
   return translated.map(({ id: _id, ...rest }) => rest)
 }

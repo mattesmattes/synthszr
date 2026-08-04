@@ -232,7 +232,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // braucht getPublishedTermList (lib/glossary/terms.ts) Range-Pagination,
   // sobald sich das Lexikon dieser Größenordnung nähert.
   try {
-    const terms = await getPublishedTermList(DEFAULT_LOCALE)
+    // Ohne summary: die Sitemap braucht nur Slugs.
+    const terms = await getPublishedTermList(DEFAULT_LOCALE, { includeSummary: false })
     for (const term of terms) {
       const alternates: Record<string, string> = {
         'x-default': `${BASE_URL}/${DEFAULT_LOCALE}/glossary/${term.slug}`,

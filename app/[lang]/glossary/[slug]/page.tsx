@@ -89,7 +89,9 @@ export default async function GlossaryTermPage({ params }: PageProps) {
   const bodyHtml = renderStaticArticleHtml(term.body as Record<string, unknown> | string, lang)
   // A-Z-Navigation über alle Begriffe: von jeder Begriffsseite aus soll das
   // ganze Lexikon erreichbar sein, ohne den Umweg über den Index.
-  const allTerms = await getPublishedTermList(lang)
+  // includeSummary=false: das Register zeigt nur Namen. Bei 500 Begriffen sind
+  // das rund 20 KB statt 120 KB je Seitenaufbau.
+  const allTerms = await getPublishedTermList(lang, { includeSummary: false })
 
   // Logo und Score für die Produktkarten, damit die Darstellung der in den
   // Rankings entspricht. includeHistory=FALSE ist wesentlich: der history-JSONB
@@ -248,6 +250,7 @@ export default async function GlossaryTermPage({ params }: PageProps) {
             lang={lang}
             currentSlug={slug}
             heading={t('glossary.index_title')}
+            allLabel={locale === 'de' ? 'Alle {count} Begriffe →' : 'All {count} terms →'}
           />
         </aside>
 

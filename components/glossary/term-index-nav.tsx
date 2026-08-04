@@ -1,92 +1,111 @@
 import Link from 'next/link'
+import { buildIndexNav, type IndexNavTerm } from '@/lib/glossary/index-nav'
 
-export interface IndexNavTerm {
-  slug: string
-  canonicalName: string
-}
+export type { IndexNavTerm }
 
 /**
- * A-Z-Navigation über alle veröffentlichten Begriffe, für die linke Spalte der
- * Detailseite (Desktop) bzw. unter dem Artikel (Mobile).
+ * Register-Navigation in der Seitenspalte einer Begriffsseite.
  *
- * Zweck ist Orientierung im Lexikon: von einer Begriffsseite aus soll jeder
- * andere Begriff erreichbar sein, ohne über den Index zu gehen. Der aktuelle
- * Begriff steht mit drin, aber als nicht klickbarer Marker — ein Link auf die
- * Seite, auf der man schon ist, wäre eine Sackgasse, und ihn weglassen würde
- * die alphabetische Reihenfolge löchrig machen.
+ * REDUZIERT STATT VOLLSTÄNDIG (2026-08-04). Vorher standen hier ALLE Begriffe,
+ * nach Anfangsbuchstaben gruppiert. Bei 17 Begriffen war das harmlos, bei 500
+ * wären es 500 Links in jeder einzelnen Begriffsseite: Egress (die Liste wird pro
+ * Seite geladen), aufgeblähtes HTML, und für Suchmaschinen wie Sprachmodelle ein
+ * schlechteres Verhältnis von Inhalt zu Boilerplate — für GEO der teuerste Teil,
+ * weil die zitierfähige Passage an Gewicht verliert.
  *
- * Gruppiert nach Anfangsbuchstabe wie der Index (app/[lang]/glossary/page.tsx),
- * damit die Reihenfolge zwischen Index und Detailseite dieselbe ist.
- * `localeCompare` mit der Sprache: bei „Ä" vor „B" entscheidet die Locale.
+ * Jetzt zwei Ebenen:
+ *   1. Buchstabenleiste mit Anzahl je Buchstabe. Sie zeigt den GANZEN Bestand,
+ *      kostet aber nur rund 30 Links, und führt auf die Anker des Index
+ *      (id="letter-X", dort schon vorhanden).
+ *   2. Die Begriffe des eigenen Anfangsbuchstabens als nähere Nachbarschaft.
+ *
+ * Die vollständige Liste bleibt auf /glossary. Damit ist jeder Begriff für
+ * Crawler einen Klick entfernt, und die Sitemap führt ihn ohnehin.
  */
 export function TermIndexNav({
   terms,
   lang,
   currentSlug,
   heading,
+  allLabel,
 }: {
   terms: IndexNavTerm[]
   lang: string
   currentSlug: string
   heading: string
+  /** Beschriftung des Verweises auf den vollen Index, mit {count}-Platzhalter. */
+  allLabel: string
 }) {
-  if (terms.length === 0) return null
-
-  const grouped = new Map<string, IndexNavTerm[]>()
-  for (const term of terms) {
-    const letter = term.canonicalName.charAt(0).toUpperCase()
-    if (!grouped.has(letter)) grouped.set(letter, [])
-    grouped.get(letter)!.push(term)
-  }
-  const letters = [...grouped.keys()].sort((a, b) => a.localeCompare(b, lang))
+  const nav = buildIndexNav(terms, currentSlug, lang)
+  if (nav.total === 0) return null
 
   return (
     <nav aria-label={heading}>
       <h2 className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
         {heading}
       </h2>
-      <div className="space-y-3">
-        {letters.map((letter) => (
-          <div key={letter}>
-            {/* Buchstabe als Register-Marke: font-mono und eine feine Linie
-                gliedern die Liste, ohne eine zweite Farbe einzuführen. */}
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-[10px] font-bold text-muted-foreground/50">{letter}</span>
-              <span className="h-px flex-1 bg-border" aria-hidden />
-            </div>
-            <ul className="mt-1 space-y-1">
-              {grouped.get(letter)!.map((term) => (
-                <li key={term.slug}>
-                  {term.slug === currentSlug ? (
-                    /* DIE EINE STELLE MIT AKZENTFARBE. Der aktive Begriff ist die
-                       Funktion dieser Navigation — hier zahlt sich Farbe aus, und
-                       nur hier. Ein 2px-Balken statt eingefärbtem Text: er markiert
-                       die Position im Register, ohne den Namen aus der Typografie
-                       der Liste zu heben. Kantig (kein rounded), passend zu
-                       --radius: 0.125rem im Design-System. */
-                    <span
-                      aria-current="page"
-                      className="flex items-start gap-2 text-sm font-medium leading-snug text-foreground"
-                    >
-                      <span className="mt-[0.3em] h-3 w-[2px] shrink-0 bg-accent" aria-hidden />
-                      <span className="hyphens-auto break-words">{term.canonicalName}</span>
-                    </span>
-                  ) : (
-                    <Link
-                      href={`/${lang}/glossary/${term.slug}`}
-                      // pl-[10px] richtet die Namen an der Kante des Akzentbalkens
-                      // aus, damit die Liste beim aktiven Eintrag nicht springt.
-                      className="block pl-[10px] text-sm leading-snug text-foreground/60 hyphens-auto break-words transition-colors hover:text-foreground hover:underline hover:decoration-accent hover:underline-offset-4"
-                    >
-                      {term.canonicalName}
-                    </Link>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
+
+      {/* Buchstabenleiste. title trägt die Anzahl, statt sie neben jeden
+          Buchstaben zu schreiben — in einer 11rem-Spalte wäre das Zahlensalat. */}
+      <ul className="mb-4 flex flex-wrap gap-x-1.5 gap-y-1">
+        {nav.letters.map(({ letter, count }) => (
+          <li key={letter}>
+            {letter === nav.activeLetter ? (
+              <span
+                aria-current="true"
+                className="font-mono text-[11px] font-bold text-foreground underline decoration-accent decoration-2 underline-offset-4"
+              >
+                {letter}
+              </span>
+            ) : (
+              <Link
+                href={`/${lang}/glossary#letter-${letter}`}
+                title={`${count}`}
+                className="font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:decoration-accent"
+              >
+                {letter}
+              </Link>
+            )}
+          </li>
         ))}
-      </div>
+      </ul>
+
+      <ul className="space-y-1">
+        {nav.siblings.map((term) => (
+          <li key={term.slug}>
+            {term.slug === currentSlug ? (
+              /* DIE EINE STELLE MIT AKZENTFARBE im Listenteil. Der aktive Begriff
+                 ist die Funktion dieser Navigation. Ein 2px-Balken statt
+                 eingefärbtem Text: er markiert die Position, ohne den Namen aus
+                 der Typografie der Liste zu heben. Kantig, passend zu
+                 --radius: 0.125rem im Design-System. */
+              <span
+                aria-current="page"
+                className="flex items-start gap-2 text-sm font-medium leading-snug text-foreground"
+              >
+                <span className="mt-[0.3em] h-3 w-[2px] shrink-0 bg-accent" aria-hidden />
+                <span className="hyphens-auto break-words">{term.canonicalName}</span>
+              </span>
+            ) : (
+              <Link
+                href={`/${lang}/glossary/${term.slug}`}
+                // pl-[10px] richtet die Namen an der Kante des Akzentbalkens aus,
+                // damit die Liste beim aktiven Eintrag nicht springt.
+                className="block pl-[10px] text-sm leading-snug text-foreground/60 hyphens-auto break-words transition-colors hover:text-foreground hover:underline hover:decoration-accent hover:underline-offset-4"
+              >
+                {term.canonicalName}
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <Link
+        href={`/${lang}/glossary`}
+        className="mt-3 inline-block font-mono text-[10px] uppercase tracking-wide text-muted-foreground transition-colors hover:text-accent"
+      >
+        {allLabel.replace('{count}', String(nav.total))}
+      </Link>
     </nav>
   )
 }
