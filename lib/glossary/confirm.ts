@@ -64,6 +64,23 @@ export async function applyGlossaryConfirmation(
   const publishedSlugs = (statusRows ?? []).map((r) => r.slug as string)
   if (publishedSlugs.length === 0) return { publishedSlugs }
 
+  // Frisch veröffentlichte Begriffe gleich übersetzen — sonst bleiben sie auf
+  // /en/glossary/* deutsch. Die Menge ist durch die Freigabe des Operators
+  // begrenzt (typisch 1-3), nicht durch die Zahl aller Kandidaten.
+  // translatePublishedTerms wirft nie: eine fehlende Übersetzung darf das
+  // Speichern des Artikels nicht kosten.
+  try {
+    const { data: idRows } = await supabase
+      .from('glossary_terms').select('id').in('slug', publishedSlugs)
+    const ids = ((idRows ?? []) as Array<{ id: string }>).map((r) => r.id)
+    if (ids.length > 0) {
+      const { translatePublishedTerms } = await import('@/lib/glossary/translate')
+      await translatePublishedTerms(ids)
+    }
+  } catch (err) {
+    console.error(`[Glossary] Übersetzung nach Freigabe für Post ${postId} fehlgeschlagen:`, err)
+  }
+
   // Content: vom Aufrufer übernehmen oder selbst nachladen — der Editor
   // schickt ihn immer mit, Übersetzung/Backfill tun das nicht.
   let raw = content

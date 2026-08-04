@@ -364,6 +364,21 @@ export async function generateCandidates(supabase: AdminClient): Promise<Generat
       console.error('[GlossaryCrawl] Produkt-Zuordnung fehlgeschlagen für', created.slug, err)
     }
 
+    // Gleich übersetzen: der Crawl veröffentlicht direkt, ohne Übersetzung wäre
+    // jeder so entstandene Begriff auf /en/glossary/* deutsch. Menge ist durch
+    // TERMS_PER_GENERATION gedeckelt, der Aufruf wirft nie.
+    try {
+      const { data: row } = await supabase
+        .from('glossary_terms').select('id').eq('slug', created.slug).maybeSingle()
+      const tid = (row as { id: string } | null)?.id
+      if (tid) {
+        const { translatePublishedTerms } = await import('@/lib/glossary/translate')
+        await translatePublishedTerms([tid])
+      }
+    } catch (err) {
+      console.error(`[GlossaryCrawl] Übersetzung für ${created.slug} fehlgeschlagen:`, err)
+    }
+
     generated.push({ name, slug: created.slug, mentions })
     generatedSlugs.push(created.slug)
     delete candidates[name]

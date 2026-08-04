@@ -363,3 +363,43 @@ export async function reinjectGlossaryMarksForTranslation(
   }
   return injected
 }
+
+/**
+ * Übersetzt frisch veröffentlichte Begriffe in alle SEO-Sprachen.
+ *
+ * Wird von JEDEM Publish-Pfad aufgerufen (Admin-Aktion, Editor-Freigabe,
+ * Artikel-Crawl). Vorher gab es nur den manuellen „Übersetzen"-Knopf: ein
+ * veröffentlichter Begriff blieb damit auf /en/glossary/* dauerhaft deutsch,
+ * bis jemand ihn einzeln anklickte — und der Sichtbarkeits-Log aus Task 16
+ * feuerte bei jeder Artikelübersetzung, weil glossary_term_translations leer war.
+ *
+ * WIRFT NIE. Eine fehlende Übersetzung ist ein Qualitätsmangel, ein
+ * fehlgeschlagenes Publish ein Datenfehler — der teurere Fehler darf nicht vom
+ * billigeren ausgelöst werden. Die Seite fällt ohne Übersetzung auf die deutsche
+ * Fassung zurück (getGlossaryTerm, Fallback pro Feld), sie ist also nie leer.
+ *
+ * SEQUENZIELL und über die Aufrufmenge gedeckelt: pro Begriff und Sprache ein
+ * LLM-Call über den vollen Erklärtext. Bei einem Bulk-Publish von zehn Begriffen
+ * wären das zehn Calls in einer Function mit 300s-Limit — deshalb rufen die
+ * Aufrufer mit ihrer bereits gedeckelten Menge auf (Crawl: 3 pro Lauf) und nicht
+ * mit allem, was gerade published wurde.
+ */
+export async function translatePublishedTerms(termIds: string[]): Promise<{
+  translated: number
+  failed: number
+}> {
+  let translated = 0
+  let failed = 0
+  for (const termId of termIds) {
+    for (const lang of SUPPORTED_GLOSSARY_LANGS) {
+      try {
+        await translateTerm(termId, lang)
+        translated++
+      } catch (err) {
+        failed++
+        console.error(`[Glossary] Übersetzung (${lang}) für ${termId} fehlgeschlagen:`, err)
+      }
+    }
+  }
+  return { translated, failed }
+}

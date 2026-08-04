@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { translateTerm, SUPPORTED_GLOSSARY_LANGS } from '@/lib/glossary/translate'
+import { translateTerm, translatePublishedTerms, SUPPORTED_GLOSSARY_LANGS } from '@/lib/glossary/translate'
 
 // Task 18 (Review Important 2): die 'translate'-Action führt seit dem neuen
 // Admin-Button einen echten LLM-Call aus (translateTerm, max_tokens: 4096) —
@@ -158,13 +158,26 @@ export async function PATCH(request: NextRequest) {
   // 'hide' | 'publish' — ändert status, also ebenfalls, was die Detailseite
   // serviert (getGlossaryTerm filtert auf status='published').
   const status = action === 'hide' ? 'hidden' : 'published'
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('glossary_terms')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('slug', slug)
+    .select('id')
+    .maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Veröffentlichen zieht die Übersetzung nach sich: ohne sie bliebe der Begriff
+  // auf /en/glossary/* dauerhaft deutsch, bis jemand den Knopf einzeln klickt.
+  // translatePublishedTerms wirft nie — ein Übersetzungsfehler darf ein
+  // erfolgreiches Publish nicht in einen 500 verwandeln.
+  let translation: { translated: number; failed: number } | undefined
+  const termId = (updated as { id: string } | null)?.id
+  if (action === 'publish' && termId) {
+    translation = await translatePublishedTerms([termId])
+  }
+
   revalidateGlossaryDetail(slug)
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, translation })
 }
 
 export async function DELETE(request: NextRequest) {

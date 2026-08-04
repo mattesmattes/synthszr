@@ -440,3 +440,39 @@ describe('reinjectGlossaryMarksForTranslation', () => {
     errSpy.mockRestore()
   })
 })
+
+/**
+ * translatePublishedTerms — der automatische Auslöser nach dem Veröffentlichen.
+ *
+ * Vorher gab es nur den manuellen „Übersetzen"-Knopf: ein veröffentlichter
+ * Begriff blieb auf /en/glossary/* dauerhaft deutsch, bis jemand ihn einzeln
+ * anklickte. Jetzt rufen alle drei Publish-Pfade (Admin-Aktion,
+ * Editor-Freigabe, Artikel-Crawl) diese Funktion.
+ *
+ * Die tragende Eigenschaft ist, dass sie NIE WIRFT: eine fehlende Übersetzung
+ * ist ein Qualitätsmangel, ein fehlgeschlagenes Publish ein Datenfehler — der
+ * teurere Fehler darf nicht vom billigeren ausgelöst werden. Die Seite fällt
+ * ohne Übersetzung pro Feld auf die deutsche Fassung zurück, ist also nie leer.
+ */
+describe('translatePublishedTerms', () => {
+  it('meldet Fehler als Zahl, statt sie zu werfen', async () => {
+    // Kein Anthropic-Mock-Ergebnis gesetzt → translateTerm scheitert für beide.
+    mocks.create.mockRejectedValue(new Error('LLM nicht erreichbar'))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { translatePublishedTerms } = await import('@/lib/glossary/translate')
+    const result = await translatePublishedTerms(['t1', 't2'])
+    // Kein Wurf, sondern eine Bilanz — genau das brauchen die Publish-Pfade.
+    expect(result.translated).toBe(0)
+    expect(result.failed).toBe(2)
+    expect(errSpy).toHaveBeenCalled()
+    errSpy.mockRestore()
+  })
+
+  it('gibt bei leerer Liste eine leere Bilanz zurück, ohne einen Call zu machen', async () => {
+    mocks.create.mockClear()
+    const { translatePublishedTerms } = await import('@/lib/glossary/translate')
+    const result = await translatePublishedTerms([])
+    expect(result).toEqual({ translated: 0, failed: 0 })
+    expect(mocks.create).not.toHaveBeenCalled()
+  })
+})
