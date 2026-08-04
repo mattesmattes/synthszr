@@ -24,8 +24,22 @@ import { generateEmbedding } from '@/lib/embeddings/generator'
 
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>
 
-/** Zeitfenster für die RPC (Design-Spec §F): 90 Tage. */
-const NEWS_WINDOW_DAYS = 90
+/**
+ * Zeitfenster für die Artikelsuche.
+ *
+ * Die Design-Spec §F nannte 90 Tage — sinnvoll, solange die Quelle FREMDE News
+ * waren (bei denen täglich neue nachkommen). Seit der Umstellung auf eigene
+ * Artikel (2026-08-04) ist die Grundmenge viel kleiner: 219 veröffentlichte
+ * Posts insgesamt. Gegen Prod gemessen lagen die passenden Artikel für
+ * `token`, `mixture-of-experts`, `cuda` und `halluzination` bei 95-180 Tagen
+ * Alter, mit guter Ähnlichkeit (0.58-0.65) — 9 von 15 Begriffen hatten dadurch
+ * einen leeren Block, obwohl es inhaltlich passende Artikel gibt.
+ *
+ * Ein halbes Jahr alter, thematisch treffender eigener Artikel ist besser als
+ * kein Verweis. Die Anzeige sortiert ohnehin nach published_at absteigend, die
+ * frischesten stehen also weiter oben.
+ */
+const NEWS_WINDOW_DAYS = 365
 /** Maximal 5 News pro Begriff (Design-Spec §F). Wird der RPC als Parameter
  *  mitgegeben UND hier defensiv nochmal durchgesetzt — falls die Migration
  *  nur teilweise angewendet wurde und eine ältere Fassung der Funktion ohne
