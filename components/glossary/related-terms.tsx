@@ -53,7 +53,11 @@ export function RelatedTerms({
                 // decoration-accent: die Akzentfarbe erscheint erst beim Hover
                 // und nur als Unterstreichung — der Text selbst bleibt neutral,
                 // damit die Spalte im Ruhezustand nicht mit dem Artikel konkurriert.
-                className="block text-sm leading-snug text-foreground/70 hyphens-auto break-words transition-colors hover:text-foreground hover:underline hover:decoration-accent hover:underline-offset-4"
+                // Akzent DAUERHAFT als Unterstreichung, nicht erst im Hover: die Spalte war
+                // vorher rein grau und damit kaum als Navigation lesbar. Die Farbe sitzt
+                // in der Linie, nicht im Text — --accent ist ein kräftiges Rot-Orange und
+                // als Textfarbe für eine ganze Liste zu laut.
+                className="block text-sm leading-snug text-foreground hyphens-auto break-words underline decoration-accent decoration-2 underline-offset-4 transition-colors hover:text-accent"
               >
                 {term.canonicalName}
               </Link>

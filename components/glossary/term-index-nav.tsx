@@ -51,9 +51,12 @@ export function TermIndexNav({
         {nav.letters.map(({ letter, count }) => (
           <li key={letter}>
             {letter === nav.activeLetter ? (
+              /* Aktiver Buchstabe als Akzent-Chip: --accent ist ein kräftiges
+                 Rot-Orange mit weißem Vordergrund, hier trägt es die Position
+                 sofort erkennbar. Kantig (rounded-sm) passend zu --radius. */
               <span
                 aria-current="true"
-                className="font-mono text-[11px] font-bold text-foreground underline decoration-accent decoration-2 underline-offset-4"
+                className="inline-block rounded-sm bg-accent px-1.5 py-px font-mono text-[11px] font-bold text-accent-foreground"
               >
                 {letter}
               </span>
@@ -61,7 +64,7 @@ export function TermIndexNav({
               <Link
                 href={`/${lang}/glossary#letter-${letter}`}
                 title={`${count}`}
-                className="font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:decoration-accent"
+                className="font-mono text-[11px] text-foreground/70 transition-colors hover:text-accent"
               >
                 {letter}
               </Link>
@@ -91,7 +94,7 @@ export function TermIndexNav({
                 href={`/${lang}/glossary/${term.slug}`}
                 // pl-[10px] richtet die Namen an der Kante des Akzentbalkens aus,
                 // damit die Liste beim aktiven Eintrag nicht springt.
-                className="block pl-[10px] text-sm leading-snug text-foreground/60 hyphens-auto break-words transition-colors hover:text-foreground hover:underline hover:decoration-accent hover:underline-offset-4"
+                className="block pl-[10px] text-sm leading-snug text-foreground/80 hyphens-auto break-words underline decoration-accent/60 decoration-1 underline-offset-4 transition-colors hover:text-accent hover:decoration-accent hover:decoration-2"
               >
                 {term.canonicalName}
               </Link>
@@ -102,7 +105,7 @@ export function TermIndexNav({
 
       <Link
         href={`/${lang}/glossary`}
-        className="mt-3 inline-block font-mono text-[10px] uppercase tracking-wide text-muted-foreground transition-colors hover:text-accent"
+        className="mt-3 inline-block font-mono text-[10px] font-bold uppercase tracking-wide text-accent transition-colors hover:underline hover:decoration-2 hover:underline-offset-4"
       >
         {allLabel.replace('{count}', String(nav.total))}
       </Link>
