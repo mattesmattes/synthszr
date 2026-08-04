@@ -110,6 +110,24 @@ describe('generateTermContent', () => {
   }
   const readabilityInput = { readability_score: 88, reasoning: 'kurze Sätze, klare Struktur' }
 
+  it('verbietet im Prompt die Schablonen-Überschriften', async () => {
+    // Prod-Befund 2026-08-04: "Warum das wichtig ist" / "Wie es funktioniert" /
+    // "Wo man dem Begriff begegnet" standen WORTGLEICH über api-gateway und cuda.
+    // Ursache war Regel 3: sie nennt Leitfragen, und das Modell übernahm sie als
+    // Überschrift. Regel 3a trennt jetzt Inhaltsvorgabe von Formulierung.
+    // Vertragstest auf den Prompt — die Wirkung selbst zeigt sich erst am
+    // nächsten generierten Begriff und ist nicht deterministisch prüfbar.
+    mocks.create
+      .mockResolvedValueOnce(toolUse(contentInput))
+      .mockResolvedValueOnce(toolUse(readabilityInput))
+    const { generateTermContent } = await import('@/lib/glossary/generate')
+    await generateTermContent('Mixture of Experts')
+    const system = JSON.stringify(mocks.create.mock.calls[0][0].system)
+    expect(system).toContain('Wie es funktioniert')       // als Verbot genannt
+    expect(system).toContain('darf auf keinen anderen Eintrag passen')
+    expect(system).toContain('NIE dieselbe Überschrift')
+  })
+
   it('slugifiziert den Begriffsnamen URL-safe', async () => {
     mocks.create
       .mockResolvedValueOnce(toolUse(contentInput))

@@ -284,11 +284,12 @@ ZIELGRUPPE: ein 15-jähriger Gymnasiast ohne Vorwissen in KI oder Informatik. Sp
 HARTE REGELN — keine Ausnahmen, kein "im Zweifel großzügig sein":
 1. Der ERSTE ABSATZ darf KEINEN unerklärten Fachbegriff enthalten. Jeden Begriff, den du dort brauchst, erklärst du im selben Satz beiläufig — oder du verzichtest an dieser Stelle darauf und holst ihn erst später nach. Ein Verstoß gegen diese Regel macht den ganzen Eintrag unbrauchbar.
 2. Durchschnittliche Satzlänge unter 20 Wörtern. Kurze Sätze, pro Satz ein Gedanke.
-3. Struktur, in genau dieser Reihenfolge:
+3. Struktur, in genau dieser Reihenfolge. Die Fragen bestimmen, WAS im Abschnitt steht — nicht, wie die Überschrift lautet:
    - Ein Block "paragraph" ohne Überschrift: Was ist es?
    - Ein Block "heading" + mindestens ein "paragraph": Warum ist es wichtig?
    - Ein Block "heading" + mindestens ein "paragraph": Wie funktioniert es?
    - Ein Block "heading" + mindestens ein "paragraph": Wo begegnet man dem Begriff (im Alltag, in News, in Produkten)?
+3a. ÜBERSCHRIFTEN benennen die SACHE, nicht die Leitfrage. Jede muss erkennbar zu DIESEM Begriff gehören und darf auf keinen anderen Eintrag passen. VERBOTEN sind deshalb die Leitfragen als Überschrift und jede Schablone dieser Art: "Warum das wichtig ist", "Wie es funktioniert", "Wo man dem Begriff begegnet". Zwei Einträge des Lexikons dürfen NIE dieselbe Überschrift tragen. Beispiel für "Inferenz": "Wie man sie günstiger macht" statt "Wie es funktioniert" — dieselbe Leitfrage, aber am konkreten Begriff formuliert.
 4. Gesamtlänge 400–700 Wörter über alle Blocks zusammen.
 5. Nutze eine konkrete Analogie, wo sie den Sachverhalt wirklich trägt — erzwinge aber keine Metapher, wenn eine klare Definition treffender ist.
 
