@@ -14,7 +14,6 @@ import { getCompanyMentionsForPost } from "@/lib/companies/recent-posts"
 import { SwipeNavigation } from "@/components/swipe-navigation"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
-import { HomeHero } from "@/components/home-hero"
 import { PostSearchHighlight } from "@/components/post-search-highlight"
 import { AudioPlayer } from "@/components/audio-player"
 import { PodcastBadges } from "@/components/podcast-badges"
@@ -439,7 +438,9 @@ export default async function PostPage({ params }: PageProps) {
           <BloomLanguageSwitcher currentLocale={locale} />
         </Suspense>
 
-        <HomeHero locale={locale} />
+        {/* Charts-Promo hier entfernt (2026-08-04), wie auf beiden Startseiten.
+            VIER Dateien hatten sie: /, /[lang], /posts/[slug], /[lang]/posts/[slug]
+            — nacheinander gefunden, weil jede fuer sich ausgeliefert wird. */}
         <Suspense fallback={null}>
           <PostSearchHighlight targetId="post-article" />
         </Suspense>

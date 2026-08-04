@@ -9,7 +9,6 @@ import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
 import { SwipeNavigation } from "@/components/swipe-navigation"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
-import { HomeHero } from "@/components/home-hero"
 import { PostSearchHighlight } from "@/components/post-search-highlight"
 import { AudioPlayer } from "@/components/audio-player"
 import { PodcastBadges } from "@/components/podcast-badges"
@@ -154,7 +153,9 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           <BloomLanguageSwitcher currentLocale="de" />
         </Suspense>
 
-        <HomeHero locale="de" />
+        {/* Charts-Promo hier entfernt (2026-08-04), wie auf beiden Startseiten.
+            VIER Dateien hatten sie: /, /[lang], /posts/[slug], /[lang]/posts/[slug]
+            — nacheinander gefunden, weil jede fuer sich ausgeliefert wird. */}
         <Suspense fallback={null}>
           <PostSearchHighlight targetId="post-article" />
         </Suspense>
