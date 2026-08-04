@@ -184,6 +184,11 @@ export default function GlossaryAdminPage() {
   // schreibende PATCH/DELETE-Aktionen reserviert und würde sonst z. B. den
   // Löschen-Button während eines reinen Lesevorgangs sperren).
   const [previewOpen, setPreviewOpen] = useState<Record<string, boolean>>({})
+  // Statusfilter: seit der Lexikon-Entkopplung (2026-08-04) sammeln sich hier
+  // Entwürfe an, die noch nie ein Mensch gesehen hat — zeitweise 59 gegenüber 5
+  // veröffentlichten. Ohne Filter ist die Liste eine Wand aus Karten, in der die
+  // veröffentlichten Begriffe und offene Revisionen untergehen.
+  const [statusFilter, setStatusFilter] = useState<GlossaryStatus | 'all'>('all')
   const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
@@ -326,11 +331,20 @@ export default function GlossaryAdminPage() {
     }
   }
 
-  const sortedTerms = [...terms].sort((a, b) => {
-    const orderDiff = REVIEW_ORDER[a.review_state] - REVIEW_ORDER[b.review_state]
-    if (orderDiff !== 0) return orderDiff
-    return a.canonical_name.localeCompare(b.canonical_name)
-  })
+  // Zähler über ALLE Begriffe (nicht über die gefilterte Liste), damit die
+  // Chips auch dann die Gesamtmenge zeigen, wenn gerade ein Filter aktiv ist.
+  const statusCounts = terms.reduce<Record<string, number>>((acc, t) => {
+    acc[t.status] = (acc[t.status] ?? 0) + 1
+    return acc
+  }, {})
+
+  const sortedTerms = [...terms]
+    .filter((t) => statusFilter === 'all' || t.status === statusFilter)
+    .sort((a, b) => {
+      const orderDiff = REVIEW_ORDER[a.review_state] - REVIEW_ORDER[b.review_state]
+      if (orderDiff !== 0) return orderDiff
+      return a.canonical_name.localeCompare(b.canonical_name)
+    })
 
   return (
     <div className="p-8">
@@ -357,13 +371,37 @@ export default function GlossaryAdminPage() {
         </div>
       )}
 
+      {!loading && terms.length > 0 && (
+        <div className="mb-6 flex items-center gap-2 flex-wrap">
+          {([
+            ['all', `Alle (${terms.length})`],
+            ['published', `${STATUS_LABELS.published} (${statusCounts.published ?? 0})`],
+            ['draft', `${STATUS_LABELS.draft} (${statusCounts.draft ?? 0})`],
+            ['hidden', `${STATUS_LABELS.hidden} (${statusCounts.hidden ?? 0})`],
+          ] as Array<[GlossaryStatus | 'all', string]>).map(([key, label]) => (
+            <Button
+              key={key}
+              variant={statusFilter === key ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setStatusFilter(key)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
           Lade Begriffe...
         </div>
       ) : sortedTerms.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Noch keine Begriffe im Lexikon.</p>
+        <p className="text-sm text-muted-foreground">
+          {terms.length === 0
+            ? 'Noch keine Begriffe im Lexikon.'
+            : 'Kein Begriff mit diesem Status.'}
+        </p>
       ) : (
         <div className="space-y-4">
           {sortedTerms.map((term) => {
