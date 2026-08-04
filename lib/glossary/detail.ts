@@ -34,6 +34,10 @@ export interface GlossaryTermNews {
 }
 
 export type GlossaryTermDetail = GlossaryTerm & {
+  /** Letzte Änderung, für dateModified in den strukturierten Daten. Kommt aus
+   *  der Basiszeile, NICHT aus der Übersetzung: gemeint ist die Aktualität des
+   *  Begriffs, nicht die des Übersetzungslaufs. */
+  updatedAt: string | null
   relatedTerms: GlossaryRelatedTerm[]
   products: GlossaryTermProduct[]
   news: GlossaryTermNews[]
@@ -56,7 +60,7 @@ export const getGlossaryTerm = cache(
 
     const { data: row, error } = await supabase
       .from('glossary_terms')
-      .select('id, slug, canonical_name, aliases, status, summary, body, illustration_url, illustration_alt')
+      .select('id, slug, canonical_name, aliases, status, summary, body, illustration_url, illustration_alt, updated_at')
       .eq('slug', slug)
       .eq('status', 'published')
       .maybeSingle()
@@ -88,7 +92,7 @@ export const getGlossaryTerm = cache(
       getTermNews(term.id),
     ])
 
-    return { ...term, body, relatedTerms, products, news }
+    return { ...term, body, updatedAt: (row.updated_at as string | null) ?? null, relatedTerms, products, news }
   },
 )
 

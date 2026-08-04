@@ -7,6 +7,8 @@ import { renderStaticArticleHtml } from '@/lib/tiptap/render-static-html'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import { SITE_URL, safeJsonLd } from '@/lib/seo/site'
+import { shortenForMeta } from '@/lib/seo/meta-description'
+import { buildGlossaryJsonLd } from '@/lib/glossary/structured-data'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
 import { SiteFooter } from '@/components/site-footer'
 import { RelatedTerms } from '@/components/glossary/related-terms'
@@ -50,11 +52,19 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }
   }
 
+  // "Lexikon" stand bis 2026-08-04 auch im englischen Titel. index_title traegt
+  // die Uebersetzung schon ("Synthszr Lexikon" / "Synthszr Glossary"), sie war
+  // hier nur nicht benutzt.
+  const tMeta = await getTranslations(locale)
+  const setName = tMeta['glossary.index_title'] ?? 'Synthszr Lexikon'
+
   return generateLocalizedMetadata({
     title: locale === 'de'
-      ? `${term.canonicalName} — einfach erklärt | Synthszr Lexikon`
-      : `${term.canonicalName} — explained | Synthszr Lexikon`,
-    description: term.summary,
+      ? `${term.canonicalName} — einfach erklärt | ${setName}`
+      : `${term.canonicalName} — explained | ${setName}`,
+    // Gekuerzt statt volles summary: an Prod gemessen waren es 280 Zeichen,
+    // Google zeigt rund 155 und schnitt selbst ab — mitten im Satz.
+    description: shortenForMeta(term.summary),
     path: `/glossary/${slug}`,
     locale,
     // Lexikon-Content existiert nur de/en — cs/fr/nds gehören nicht in den
@@ -100,23 +110,32 @@ export default async function GlossaryTermPage({ params }: PageProps) {
     score: chartBySlug.get(p.slug)?.score ?? null,
   }))
 
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'DefinedTerm',
+  // DefinedTerm + BreadcrumbList (+ WebPage mit dateModified, falls vorhanden).
+  // Die beiden letzten fehlten und sind die zwei Signale, die Lexikonseiten am
+  // meisten bringen: eine echte Hierarchie und eine Aktualitaetsangabe.
+  const jsonLd = buildGlossaryJsonLd({
     name: term.canonicalName,
-    description: term.summary,
-    url: `${SITE_URL}/${lang}/glossary/${slug}`,
-    inDefinedTermSet: {
-      '@type': 'DefinedTermSet',
-      name: 'Synthszr Lexikon',
-      url: `${SITE_URL}/${lang}/glossary`,
-    },
-  }
+    summary: term.summary,
+    slug,
+    lang,
+    setName: t('glossary.index_title'),
+    indexLabel: locale === 'de' ? 'Lexikon' : 'Glossary',
+    updatedAt: term.updatedAt,
+  })
 
   return (
     <>
       <main className="max-w-5xl mx-auto px-4 py-10">
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
+        {/* Ein <script> je Block statt eines @graph: fuer Google gleichwertig, aber
+            jeder Block bleibt einzeln lesbar und safeJsonLd behaelt seine
+            Objekt-Signatur (es escaped </script> in Strings). */}
+        {jsonLd.map((block, i) => (
+          <script
+            key={i}
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: safeJsonLd(block) }}
+          />
+        ))}
 
         {/* Zweispaltig ab lg: Navigation links, Text rechts. Die
             HTML-Reihenfolge bleibt dabei Artikel ZUERST — das ist SEO/GEO-relevant
@@ -150,12 +169,21 @@ export default async function GlossaryTermPage({ params }: PageProps) {
               ist eine schmale Zeile, ohne diesen Abstand klebt die Illustration
               daran und beide lesen sich als ein Block. */}
           {term.illustrationUrl && (
-            <div className="mt-8 mb-6">
+            <figure className="mt-8 mb-6">
               <Image
                 src={term.illustrationUrl}
-                alt={term.illustrationAlt || term.canonicalName}
+                // alt LEER, wenn eine Bildunterschrift daruntersteht: die
+                // figcaption beschreibt das Bild dann bereits, und Screenreader
+                // laesen sonst denselben Satz zweimal. Ohne Untertitel (kein
+                // illustration_alt) traegt das alt weiter die Beschreibung.
+                alt={term.illustrationAlt ? '' : term.canonicalName}
                 width={768}
                 height={768}
+                // priority statt lazy: das Bild steht ueber der Ueberschrift, ist
+                // also above the fold und mit 768px das groesste Element — mit
+                // hoher Wahrscheinlichkeit das LCP-Element. lazy verzoegerte
+                // genau das, was Core Web Vitals messen (an Prod gesehen).
+                priority
                 // 326px = max-w-sm (384px) minus 15%. Kein Tailwind-Preset trifft
                 // das; die Zahl ist hier bewusst explizit, weil sie mit der
                 // Rasterweite zusammenhängt: das 768px-Bild wird dadurch stärker
@@ -163,7 +191,15 @@ export default async function GlossaryTermPage({ params }: PageProps) {
                 // (s. generateGlossaryIllustration).
                 className="mx-auto h-auto w-full max-w-[326px] dithered-cover"
               />
-            </div>
+              {/* Bildunterschrift: zusaetzlicher, thematisch dichter Text direkt am
+                  Bild — fuer die Bildsuche und fuer Sprachmodelle, die Bild und
+                  Text zusammen lesen. */}
+              {term.illustrationAlt && (
+                <figcaption className="mx-auto mt-2 max-w-[326px] text-xs leading-snug text-gray-500">
+                  {term.illustrationAlt}
+                </figcaption>
+              )}
+            </figure>
           )}
 
           <header className="mb-6">
