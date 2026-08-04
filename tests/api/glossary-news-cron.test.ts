@@ -26,6 +26,10 @@ interface TermRow {
 
 interface NewsMatch {
   id: string
+  // Fixture-Titel müssen wie echte Schlagzeilen aussehen: looksLikeHeadline
+  // (lib/glossary/news.ts) verwirft Fragmente unter 25 Zeichen oder mit weniger
+  // als 4 Wörtern. Kürzt man sie hier, filtert der Code sie weg und die Tests
+  // prüfen ins Leere, obwohl es um Ersetzen/Kappung geht, nicht um Titelqualität.
   title: string
   source_url: string
   published_at: string | null
@@ -179,7 +183,7 @@ describe('GET /api/cron/glossary-news', () => {
     const { client, newsStore } = fakeSupabase({
       terms: [term()],
       rpcResult: () => ({
-        data: [match({ id: 'repo-neu-1', title: 'Neuer Artikel A' }), match({ id: 'repo-neu-2', title: 'Neuer Artikel B' })],
+        data: [match({ id: 'repo-neu-1', title: 'Neuer Artikel über sinkende Inferenzkosten' }), match({ id: 'repo-neu-2', title: 'Zweiter Artikel über Inferenz im Betrieb' })],
         error: null,
       }),
       // Alter Bestand: zwei Zeilen, die im neuen Treffer-Set NICHT mehr vorkommen.
@@ -203,7 +207,7 @@ describe('GET /api/cron/glossary-news', () => {
   })
 
   it('schreibt maximal 5 News pro Begriff', async () => {
-    const sevenMatches = Array.from({ length: 7 }, (_, i) => match({ id: `repo-${i}`, title: `Artikel ${i}` }))
+    const sevenMatches = Array.from({ length: 7 }, (_, i) => match({ id: `repo-${i}`, title: `Ausführlicher Artikel über Inferenz Nummer ${i}` }))
     const { client, calls, newsStore } = fakeSupabase({
       terms: [term()],
       rpcResult: () => ({ data: sevenMatches, error: null }),

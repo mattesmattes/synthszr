@@ -79,6 +79,31 @@ export interface GlossaryNewsRefreshResult {
   rpcMissing: boolean
 }
 
+/**
+ * Sieht dieser daily_repo-Titel wie eine Schlagzeile aus?
+ *
+ * An der ersten vollständigen Prod-Seite aufgefallen: /de/glossary/inferenz
+ * führte unter "Aktuelle News" die Titel "cut inference costs",
+ * "@steph_palazzolo", "SpaceX S-1" und "only 15-20%". Das sind Fragmente aus der
+ * Link-Extraktion von Newsletter-Quellen (beehiiv, substack), die in daily_repo
+ * als source_type='article' liegen — der source_type-Filter der RPC greift dort
+ * also nicht, und die Embedding-Ähnlichkeit war mit 0.67-0.69 sogar hoch, weil
+ * die Fragmente thematisch durchaus passen.
+ *
+ * Bewusst grob und konservativ: die drei Kriterien (Länge, Wortzahl, kein
+ * Handle/Hashtag am Anfang) verwerfen im Zweifel. Ein leerer News-Block ist auf
+ * einer öffentlichen Lexikonseite besser als ein Twitter-Handle als Überschrift.
+ * Der wöchentliche Cron löscht und schreibt die Zeilen pro Begriff neu, der
+ * Bestand heilt sich also beim nächsten Lauf von selbst.
+ */
+export function looksLikeHeadline(title: string): boolean {
+  const t = (title ?? '').trim()
+  if (t.length < 25) return false          // Fragmente sind kurz
+  if (/^[@#]/.test(t)) return false        // Handles und Hashtag-Ketten
+  if (t.split(/\s+/).length < 4) return false // "SpaceX S-1", "only 15-20%"
+  return true
+}
+
 /** Postgres liefert eine vector-Spalte über PostgREST als Bracket-Notation-
  *  String ("[0.01,-0.02,...]"). Ein reines Array kommt praktisch nie vor, wird
  *  hier aber trotzdem akzeptiert (gleiches defensives Muster wie
@@ -260,7 +285,12 @@ export async function refreshGlossaryNews(
         continue
       }
 
-      const rows = ((matches ?? []) as GlossaryNewsMatch[]).slice(0, MATCH_LIMIT)
+      // Titel-Qualität VOR der Kappung filtern: sonst verdrängt ein Fragment mit
+      // hoher Ähnlichkeit (gemessen 0.69) eine brauchbare Schlagzeile aus den
+      // Top-5, und der Block zeigt am Ende weniger Nutzbares als er könnte.
+      const rows = ((matches ?? []) as GlossaryNewsMatch[])
+        .filter((r) => looksLikeHeadline(r.title))
+        .slice(0, MATCH_LIMIT)
       const contextSentences = await generateContextSentences(
         term.canonical_name, term.summary, rows.map((r) => r.title),
       )
