@@ -84,9 +84,19 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
     return (
       <div className="flex justify-center items-baseline gap-4 mb-6">
         <span className={`${linkStyle} opacity-50`}>Language</span>
-        <Link href={currentLocale === 'de' ? '/' : `/${currentLocale}`} aria-label="Home" className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-center">
-          <Image src="/oh-so-icon.svg" alt="OH-SO" width={32} height={32} />
+        {/* Zweite Fassung desselben Headers (nur eine Sprache aktiv bzw. noch am
+            Laden). Muss identisch bleiben — die beiden Zweige sind heute schon
+            einmal auseinandergelaufen, deshalb hier dieselbe Wortmarke und
+            dieselben Trennstriche wie unten. */}
+        <span aria-hidden className="h-5 w-px shrink-0 self-center bg-border" />
+        <Link
+          href={currentLocale === 'de' ? '/' : `/${currentLocale}`}
+          aria-label="Home"
+          className="flex-shrink-0 self-center"
+        >
+          <Image src="/synthszr-logo.svg" alt="synthszr" width={120} height={24} className="h-5 w-auto" priority />
         </Link>
+        <span aria-hidden className="h-5 w-px shrink-0 self-center bg-border" />
         <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
           Search
         </button>
@@ -129,10 +139,28 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
         )}
       </div>
 
-      {/* OH-SO Logo in the middle → Home */}
-      <Link href={currentLocale === 'de' ? '/' : `/${currentLocale}`} aria-label="Home" className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-center">
-        <Image src="/oh-so-icon.svg" alt="OH-SO" width={32} height={32} />
+      {/* Synthszr-Wortmarke in der Mitte → Home. Ersetzt das OH-SO-Icon: der
+          Header trägt die Marke der Seite, nicht die der Agentur. Dasselbe Asset
+          wie im Podcast-/Newsletter-Cover (public/synthszr-logo.svg), also 1:1
+          dieselbe Wortmarke. Senkrechte Trennstriche gliedern die drei Elemente,
+          weil die Wortmarke breiter ist als das runde Icon und sonst mit
+          „Language" und „Search" verschwimmt. */}
+      <span aria-hidden className="h-5 w-px shrink-0 self-center bg-border" />
+      <Link
+        href={currentLocale === 'de' ? '/' : `/${currentLocale}`}
+        aria-label="Home"
+        className="flex-shrink-0 self-center"
+      >
+        <Image
+          src="/synthszr-logo.svg"
+          alt="synthszr"
+          width={120}
+          height={24}
+          className="h-5 w-auto"
+          priority
+        />
       </Link>
+      <span aria-hidden className="h-5 w-px shrink-0 self-center bg-border" />
 
       {/* Search toggle */}
       <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
