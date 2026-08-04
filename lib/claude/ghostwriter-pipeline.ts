@@ -959,8 +959,18 @@ async function callModelNonStreaming(
       } else {
         params.thinking = { type: 'enabled', budget_tokens: Math.min(4000, tokenLimit - 1024) }
       }
-    } else if (options?.temperature !== undefined && !rejectsSampling) {
-      params.temperature = options.temperature
+    } else {
+      // ⚠️ Opus 5 (und Fable/Mythos 5) DENKEN PER DEFAULT, wenn `thinking` fehlt —
+      // anders als alle Vorgängermodelle, wo "kein thinking-Feld" = kein Thinking hieß.
+      // max_tokens deckt Thinking UND Antworttext gemeinsam ab: writeSection ruft mit
+      // maxTokens 2000 auf, das Thinking frisst das Budget, der sichtbare Text bleibt
+      // leer oder abgeschnitten. Deshalb hier explizit abschalten.
+      // Bei Opus 5 ist `disabled` nur bis effort 'high' erlaubt — wir setzen in diesem
+      // Zweig kein output_config, also greift der Default 'high'. Passt.
+      if (adaptiveThinking) params.thinking = { type: 'disabled' }
+      if (options?.temperature !== undefined && !rejectsSampling) {
+        params.temperature = options.temperature
+      }
     }
 
     // Thinking + große Requests streamen: vermeidet den 10-Minuten-Reject des SDK,
