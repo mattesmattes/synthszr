@@ -117,9 +117,6 @@ export default async function GlossaryTermPage({ params }: PageProps) {
     <>
       <main className="max-w-5xl mx-auto px-4 py-10">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
-        <Suspense fallback={null}>
-          <BloomLanguageSwitcher currentLocale={locale} />
-        </Suspense>
 
         {/* Zweispaltig ab lg: Navigation links, Text rechts. Die
             HTML-Reihenfolge bleibt dabei Artikel ZUERST — das ist SEO/GEO-relevant
@@ -132,6 +129,16 @@ export default async function GlossaryTermPage({ params }: PageProps) {
             die Navigation landet unter dem Artikel, wie gewünscht. */}
         <div className="lg:grid lg:grid-cols-[minmax(0,11rem)_minmax(0,1fr)] lg:gap-10 lg:items-start">
         <div className="lg:col-start-2 lg:row-start-1">
+        {/* Header INNERHALB der Textspalte, nicht über dem Grid: er zentriert
+            sich per justify-center in seinem Container. Stand er über dem Grid,
+            war seine Achse die volle max-w-5xl-Breite, die von Illustration und
+            Text aber nur die rechte Spalte — der Header saß dadurch um die halbe
+            Sidebar-Breite (11rem + 2.5rem gap, also rund 108px) nach links
+            versetzt. Hier liegt er auf derselben Achse wie Bild und Fließtext.
+            Ohne lg greift kein Grid, dort ändert sich nichts. */}
+        <Suspense fallback={null}>
+          <BloomLanguageSwitcher currentLocale={locale} />
+        </Suspense>
         <article>
           {/* Illustration ÜBER der Überschrift: sie führt in den Begriff ein, wie
               das Cover in einen Artikel. GEO-unkritisch, anders als es der
@@ -145,7 +152,12 @@ export default async function GlossaryTermPage({ params }: PageProps) {
                 alt={term.illustrationAlt || term.canonicalName}
                 width={768}
                 height={768}
-                className="mx-auto h-auto w-full max-w-sm dithered-cover"
+                // 326px = max-w-sm (384px) minus 15%. Kein Tailwind-Preset trifft
+                // das; die Zahl ist hier bewusst explizit, weil sie mit der
+                // Rasterweite zusammenhängt: das 768px-Bild wird dadurch stärker
+                // verkleinert, das Dither-Raster erscheint also rund 15% feiner
+                // (s. generateGlossaryIllustration).
+                className="mx-auto h-auto w-full max-w-[326px] dithered-cover"
               />
             </div>
           )}

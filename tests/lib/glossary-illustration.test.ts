@@ -65,6 +65,23 @@ describe('buildGlossaryImagePrompt', () => {
     expect(p).not.toContain('black ink on white')
   })
 
+  it('verlangt ein GESCHLOSSENES Motiv, das nirgends aus dem Bild ragt', async () => {
+    // 2026-08-04 an echten Bildern gesehen: Hand und Geige waren am Bildrand
+    // abgeschnitten. Ursache war eine frühere Anweisung von mir — "one central
+    // subject FILLING MOST OF THE FRAME", eingebaut gegen leere Ränder. Sie
+    // erzeugt genau den Anschnitt. Beide Ziele sind vereinbar, aber nur wenn der
+    // Rand ausdrücklich verlangt wird, statt ihn dem Modell zu überlassen.
+    const { buildGlossaryImagePrompt } = await import('@/lib/gemini/image-generator')
+    const p = buildGlossaryImagePrompt('Geige', 'Ein Streichinstrument.').toLowerCase()
+    // Positiv: das Motiv ist vollständig und freistehend. Verbote allein wirken
+    // hier erfahrungsgemäß nicht — beim Text-in-Bildern hat erst der Wechsel der
+    // angeforderten BILDSORTE geholfen, nicht das Verbot.
+    expect(p).toMatch(/entirely within|fully visible|complete and unbroken/)
+    expect(p).toMatch(/margin|breathing room|clear space/)
+    // Gegenprobe: die Formulierung, die den Anschnitt verursacht hat, ist weg.
+    expect(p).not.toContain('filling most of the frame')
+  })
+
   it('kürzt das Summary auf 400 Zeichen', async () => {
     const { buildGlossaryImagePrompt } = await import('@/lib/gemini/image-generator')
     const longSummary = 'a'.repeat(500)
@@ -124,8 +141,8 @@ describe('generateGlossaryIllustration', () => {
     //
     // 768 statt vormals 1024 (2026-08-04): die Zielgröße ist hier kein Detail,
     // sondern Teil der Dither-Wirkung. Sichtbar ist nicht die Rasterweite im
-    // Bild, sondern ihr Verhältnis zur Anzeigegröße (max-w-sm = 384 CSS-px,
-    // auf Retina 768 Geräte-px — bei 768px Bildbreite also 1:1). Bei 1024px
+    // Bild, sondern ihr Verhältnis zur Anzeigegröße (326 CSS-px, auf Retina 652
+    // Geräte-px — bei 768px Bildbreite also knapp 1:1). Bei 1024px
     // wird das Bild verkleinert und ein grobes Raster verschwimmt wieder zum
     // Grauwert. Diese Breite festzuhalten ist deshalb wichtiger als der
     // Coarseness-Wert selbst: sie bestimmt, was eine Rasterzelle auf dem

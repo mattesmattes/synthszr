@@ -19,14 +19,21 @@
  * NEUER DATEINAME statt Überschreiben: bei gleichbleibender URL liefern Browser
  * und CDN weiter die alte Datei aus.
  *
- * WORTMARKE ALS TEXT, nicht als PNG: der Charts-Banner legt ein fertiges
- * Wortmark-Bild auf, für „stocks" existiert keines. Text mit der
- * Projektschrift skaliert schärfer, trägt den Dark Mode und lässt sich ohne
- * Bildbearbeitung ändern. „synthszr" dunkel-teal, „stocks" weiß — dieselbe
- * Aufteilung wie im Vorbild.
+ * WORTMARKE ALS PNG (2026-08-04, war vorher Text): gesetzte Vorlage vom Nutzer,
+ * damit die Marke exakt sitzt statt über Webfont-Metriken angenähert zu werden.
+ * Damit ist der Banner nun in beiden Teilen baugleich zum Charts-Banner.
+ *
+ * Die Vorlage kam mit blauer Fläche; Alpha wurde aus der FARBDISTANZ zum
+ * Hintergrund abgeleitet, nicht per Schwellenwert. Die Schriftkanten sind
+ * antialiased, also Mischtöne — ein Schwellenwert hätte dort Treppen oder einen
+ * blauen Saum hinterlassen. Mischpixel sind jetzt halbtransparent weiß und
+ * sitzen deshalb sauber auf Neon-Cyan, obwohl die Vorlage blau war.
  */
 const BANNER_URL =
   'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/stocks/synthszr-stocks-banner-fill-2x.png'
+
+const WORDMARK_URL =
+  'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/stocks/synthszr-stocks-wordmark-white.png'
 
 export function StocksBanner() {
   return (
@@ -40,11 +47,17 @@ export function StocksBanner() {
         loading="eager"
         className="mx-auto block h-auto w-full max-w-[880px]"
       />
+      {/* Wortmark-Overlay, Größe wie beim Charts-Banner (32% der Bannerbreite) —
+          dasselbe Verhältnis, in dem die Vorlage gesetzt war (478 von 1477px). */}
       <div className="pointer-events-none absolute inset-x-0 bottom-[8%] z-10 flex justify-center">
-        <span className="text-[clamp(1.75rem,7vw,3.5rem)] font-bold leading-none tracking-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.25)]">
-          <span className="text-[#0f5c56]">synthszr</span>
-          <span className="ml-2 text-white">stocks</span>
-        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={WORDMARK_URL}
+          alt="synthszr stocks"
+          width={478}
+          height={170}
+          className="h-auto w-[32%] max-w-[280px] drop-shadow-[0_2px_10px_rgba(0,0,0,0.25)]"
+        />
       </div>
     </div>
   )

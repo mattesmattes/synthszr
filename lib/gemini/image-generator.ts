@@ -1006,7 +1006,20 @@ export async function generateEmailCover(
  *     zusätzlich positiv formuliert (Formen statt Wörter).
  *   - Das Motiv war ein breites, flaches Flussdiagramm; bei quadratischem
  *     1024x1024-Ziel blieb oben und unten die Hälfte der Fläche leer. Der Prompt
- *     verlangt jetzt eine formatfüllende, quadratische Komposition.
+ *     verlangt jetzt eine quadratische Komposition.
+ *
+ * GESCHLOSSENES MOTIV (2026-08-04): dieselbe Anweisung gegen leere Ränder — „one
+ * central subject FILLING MOST OF THE FRAME" — erzeugte den nächsten Fehler:
+ * Motive ragten aus dem Bild, Hände und Objekte waren am Rand abgeschnitten. Die
+ * beiden Ziele (Fläche nutzen, nichts anschneiden) sind vereinbar, aber nur wenn
+ * der Rand ausdrücklich verlangt wird, statt ihn dem Modell zu überlassen.
+ *
+ * Formuliert ist es bewusst als BILDSORTE („wie ein einzeln fotografiertes
+ * Museumsexponat"), nicht nur als Verbot. Das ist die Lehre aus den Textlabels
+ * weiter oben: das Modell befolgt eine positiv beschriebene Gattung deutlich
+ * zuverlässiger als eine Liste von Verboten. Die Verbote stehen zusätzlich dabei,
+ * inklusive „keine Hände oder Requisiten, die von außen ins Bild reichen" — genau
+ * das war der beobachtete Fall.
  */
 export function buildGlossaryImagePrompt(termName: string, summary: string): string {
   return [
@@ -1018,7 +1031,12 @@ export function buildGlossaryImagePrompt(termName: string, summary: string): str
     'shading, strong light and shadow modelling volume and surface texture.',
     'Bold silhouettes and clear forms that survive halftone dithering.',
     'No text, no letters, no labels, no arrows, no boxes, no callouts.',
-    'Composition: SQUARE, one central subject filling most of the frame.',
+    'Composition: SQUARE. ONE self-contained object, shown COMPLETE AND UNBROKEN',
+    'and entirely within the frame, like a museum specimen photographed on its own —',
+    'every part of it visible, nothing running past the edges, nothing cropped,',
+    'no hands, arms or extra props entering from outside the picture.',
+    'Keep a small even margin of empty white space on all four sides; the object',
+    'should be large but never touch the border.',
     'Lighting: BRIGHT overall, lit from the front on a PLAIN WHITE background —',
     'the subject carries the mid-tones, the background stays clean white. Avoid',
     'dark or filled backgrounds.',
@@ -1046,9 +1064,9 @@ export function buildGlossaryImagePrompt(termName: string, summary: string): str
  * intern auf 85x85 und zerstört das Motiv, 1024px/3 auf 341x341 und bleibt
  * unsichtbar fein.
  *
- * MASSSTAB IST DIE ANZEIGE, NICHT DAS BILD: die Illustration steht in max-w-sm
- * = 384 CSS-px, auf einem Retina-Schirm also 768 Geräte-Pixel — bei 768px
- * Bildbreite genau 1:1. Eine Rasterzelle von n px im Bild ist damit n/2 CSS-px
+ * MASSSTAB IST DIE ANZEIGE, NICHT DAS BILD: die Illustration steht in 326 CSS-px
+ * (max-w-sm minus 15%, s. app/[lang]/glossary/[slug]/page.tsx), auf einem
+ * Retina-Schirm also 652 Geräte-Pixel — bei 768px Bildbreite knapp 1:1. Eine Rasterzelle von n px im Bild ist damit n/2 CSS-px
  * auf dem Schirm. Zwei Urteile grenzen den Wert ein:
  *   - coarseness 1 bei 1024px → 0,375 CSS-px pro Punkt → verschwimmt zum
  *     Grauwert, kein Raster sichtbar ("zu fein").
