@@ -27,6 +27,7 @@ import {
   buildSectionContext,
   writeSectionsBatch,
   finalizeArticle,
+  buildBundleWriteUnits,
   type ArticlePlan,
   type PipelineItem,
 } from '@/lib/claude/ghostwriter-pipeline'
@@ -219,6 +220,38 @@ async function getJobById(id: string): Promise<ArticleJob | null> {
 }
 
 /**
+ * Zahl der Sektionen, die die Schreibphase tatsächlich produziert.
+ *
+ * NICHT die Item-Anzahl: buildBundleWriteUnits fasst alle 'topic'-Items zu EINER
+ * Sektion zusammen und alle 'recap' ebenfalls (Artikel-Bündelung). `cursor`
+ * zählt diese Write-Units, also muss `total` dieselbe Einheit verwenden — sonst
+ * bleibt die Fortschrittsanzeige bei "7 von 10" stehen, obwohl die Phase mit
+ * cursor === units.length abgeschlossen ist, und sieht wie ein Abbruch aus.
+ * Genau diese Verwechslung ("35 von 38") kostete bei Befund B eine
+ * Diagnoserunde.
+ *
+ * Ohne Plan (planning-Phase) sind die Units noch nicht bestimmbar; dort ist die
+ * Item-Anzahl die einzige verfügbare Schätzung und besser als 0.
+ */
+function countWriteUnits(job: ArticleJob): number {
+  const itemCount = job.selected_items?.length ?? 0
+  if (!job.plan || itemCount === 0) return itemCount
+  try {
+    const plan = normalizeArticlePlan(job.plan, itemCount)
+    const orderedItems = plan.ordering
+      .map((idx: number) => job.selected_items[idx - 1])
+      .filter(Boolean) as PipelineItem[]
+    return buildBundleWriteUnits(orderedItems, plan).length
+  } catch (err) {
+    // Eine Fortschrittsanzeige darf den Status-Poll nicht scheitern lassen —
+    // ein driftender Plan (s. normalizeArticlePlan) würde sonst die ganze
+    // Statusabfrage killen, von der die Editor-UI abhängt.
+    console.error('[ArticleJobs] countWriteUnits fehlgeschlagen, nutze Item-Anzahl:', err)
+    return itemCount
+  }
+}
+
+/**
  * Lightweight status for client polling: phase, progress, and the resulting
  * draft id once done. `total` is the section count, `cursor` how many are written.
  */
@@ -242,7 +275,7 @@ export async function getArticleJobStatus(jobId: string): Promise<{
     status: job.status,
     phase: job.phase,
     cursor: job.cursor ?? 0,
-    total: job.selected_items?.length ?? 0,
+    total: countWriteUnits(job),
     generatedPostId: (row?.generated_post_id as string | null) ?? null,
     error: job.status === 'error' ? (job as unknown as { error_message?: string }).error_message ?? 'unknown' : null,
   }
