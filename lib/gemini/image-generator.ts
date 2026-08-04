@@ -1031,13 +1031,14 @@ export function buildGlossaryImagePrompt(termName: string, summary: string): str
  * (Scale-to-cover → Tonkurve → Floyd-Steinberg → whiteToTransparent) über
  * preloadedRawBase64 — generateAndProcessImage generiert dabei nicht erneut.
  *
- * coarseness=1 (Cover-Default), NICHT die im Task-Brief angenommene 3: der
- * visuelle Abgleich in scripts/_glossary_image_test.ts zeigt für ein echtes
- * generiertes Schema-Bild das Gegenteil der Annahme — bei coarseness 3 werden
- * feine Elemente (Beschriftungen, kleine Kästen) zu unlesbarem Rauschen,
- * während coarseness 1 dieselben dicken Linien scharf UND Text lesbar hält,
- * bei sauberer, moiréfreier Dither-Körnung auf nativer Auflösung. coarseness
- * 3 bot in diesem Test keinen erkennbaren Vorteil für die Hauptlinien.
+ * coarseness=3, GEÄNDERT am 2026-08-04. Die frühere Begründung für 1 stammte aus
+ * einem visuellen Abgleich mit einem SCHEMA-Bild: dort zerfielen bei 3 die feinen
+ * Elemente (Beschriftungen, kleine Kästen) zu Rauschen. Diese Bildsorte gibt es
+ * nicht mehr — der Prompt fordert seit demselben Tag ein tonales Metapher-Motiv
+ * ohne Text und ohne Kleinteile an (s. buildGlossaryImagePrompt). Bei großen,
+ * weich modellierten Flächen ist ein Raster von 1 auf nativer Auflösung so fein,
+ * dass es als Grauwert verschwimmt statt als Punktmuster zu wirken. 3 macht die
+ * Körnung sichtbar, ohne dass es noch Details gäbe, die sie zerstören könnte.
  */
 export async function generateGlossaryIllustration(
   termName: string,
@@ -1048,7 +1049,7 @@ export async function generateGlossaryIllustration(
   return generateAndProcessImage(termName, {
     enableDithering: true,
     ditheringGain: 1.0,
-    ditheringCoarseness: 1,
+    ditheringCoarseness: 3,
     targetWidth: 1024,
     targetHeight: 1024,
   }, raw.imageBase64)
@@ -1067,7 +1068,16 @@ export async function uploadGlossaryIllustration(imageBase64: string, slug: stri
   const blob = await put(
     `glossary/${slug}.png`,
     Buffer.from(imageBase64, 'base64'),
-    { access: 'public', contentType: 'image/png' }
+    {
+      access: 'public',
+      contentType: 'image/png',
+      // allowOverwrite: der Pfad ist deterministisch aus dem Slug gebildet, ein
+      // zweiter Versuch für denselben Begriff trifft also immer denselben Blob.
+      // Ohne das Flag wirft Vercel Blob ("This blob already exists"), und ein
+      // Bild ließe sich nie ersetzen — weder nach einer Revision noch nach einem
+      // Fehlversuch. Aufgefallen beim Nachziehen fehlender Illustrationen.
+      allowOverwrite: true,
+    }
   )
   return blob.url
 }

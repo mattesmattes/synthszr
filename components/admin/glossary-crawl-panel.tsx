@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, RefreshCw, Search, Sparkles, RotateCcw, AlertCircle } from 'lucide-react'
+import { Loader2, RefreshCw, Search, Sparkles, RotateCcw, AlertCircle, Image as ImageIcon } from 'lucide-react'
 
 interface CrawlStatus {
   postsProcessed: number
@@ -32,7 +32,7 @@ interface CrawlStatus {
 export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => void }) {
   const [status, setStatus] = useState<CrawlStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState<'extract' | 'generate' | 'reset' | null>(null)
+  const [busy, setBusy] = useState<'extract' | 'generate' | 'reset' | 'images' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastResult, setLastResult] = useState<string | null>(null)
 
@@ -74,7 +74,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     }
   }
 
-  async function run(action: 'extract' | 'generate' | 'reset') {
+  async function run(action: 'extract' | 'generate' | 'reset' | 'images') {
     setBusy(action)
     setError(null)
     setLastResult(null)
@@ -98,6 +98,13 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
             ? `Erzeugt und veröffentlicht: ${names.join(', ')}` +
               (data.failed?.length ? ` · übersprungen: ${data.failed.join(', ')}` : '')
             : 'Keine Begriffe erzeugt' + (data.failed?.length ? ` (übersprungen: ${data.failed.join(', ')})` : ''),
+        )
+        onTermsChanged?.()
+      } else if (action === 'images') {
+        setLastResult(
+          `${data.done?.length ?? 0} Illustrationen erzeugt` +
+          (data.failed?.length ? ` · fehlgeschlagen: ${data.failed.join(', ')}` : '') +
+          (data.remaining ? ` · noch ${data.remaining} ohne Bild` : ' — alle Begriffe haben ein Bild.'),
         )
         onTermsChanged?.()
       } else {
@@ -173,6 +180,10 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               {busy === 'generate' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
               {status?.termsPerGeneration ?? 3}{' '}Begriffe erzeugen &amp; veröffentlichen
             </Button>
+            <Button size="sm" variant="outline" onClick={() => run('images')} disabled={busy !== null}>
+              {busy === 'images' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
+              Fehlende Illustrationen erzeugen
+            </Button>
             <Button size="sm" variant="ghost" onClick={() => void fetchStatus()} disabled={busy !== null}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Neu laden
@@ -186,6 +197,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           {busy === 'generate' && (
             <p className="text-xs text-muted-foreground">
               Erzeugen läuft — pro Begriff etwa eine Minute. Fenster offen lassen.
+            </p>
+          )}
+          {busy === 'images' && (
+            <p className="text-xs text-muted-foreground">
+              Bildgenerierung läuft — bis zu fünf Begriffe pro Klick, je 10-25 Sekunden.
             </p>
           )}
           {lastResult && <p className="text-sm">{lastResult}</p>}

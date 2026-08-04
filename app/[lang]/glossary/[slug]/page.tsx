@@ -133,13 +133,13 @@ export default async function GlossaryTermPage({ params }: PageProps) {
         <div className="lg:grid lg:grid-cols-[minmax(0,11rem)_minmax(0,1fr)] lg:gap-10 lg:items-start">
         <div className="lg:col-start-2 lg:row-start-1">
         <article>
-          <header className="mb-6">
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{term.canonicalName}</h1>
-            <p className="mt-4 text-xl text-gray-700 leading-snug">{term.summary}</p>
-          </header>
-
+          {/* Illustration ÜBER der Überschrift: sie führt in den Begriff ein, wie
+              das Cover in einen Artikel. GEO-unkritisch, anders als es der
+              Kommentar oben für Navigation festhält — ein Bild ist kein
+              Textblock, es verdrängt die zitierfähige Passage nicht, und sein
+              alt-Attribut ist ein Satz. */}
           {term.illustrationUrl && (
-            <div className="mb-8">
+            <div className="mb-6">
               <Image
                 src={term.illustrationUrl}
                 alt={term.illustrationAlt || term.canonicalName}
@@ -149,6 +149,11 @@ export default async function GlossaryTermPage({ params }: PageProps) {
               />
             </div>
           )}
+
+          <header className="mb-6">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{term.canonicalName}</h1>
+            <p className="mt-4 text-xl text-gray-700 leading-snug">{term.summary}</p>
+          </header>
 
           {bodyHtml && (
             <div

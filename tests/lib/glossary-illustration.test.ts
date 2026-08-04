@@ -148,7 +148,12 @@ describe('uploadGlossaryIllustration', () => {
     expect(mocks.put).toHaveBeenCalledWith(
       'glossary/mixture-of-experts.png',
       expect.any(Buffer),
-      { access: 'public', contentType: 'image/png' },
+      // allowOverwrite ist Teil des Vertrags, nicht Beifang: der Blob-Pfad wird
+      // deterministisch aus dem Slug gebildet, ein zweiter Versuch für denselben
+      // Begriff trifft also immer denselben Blob. Ohne das Flag wirft Vercel Blob
+      // ("This blob already exists") und ein Bild ließe sich nie ersetzen — weder
+      // nach einer Revision noch nach einem Fehlversuch.
+      { access: 'public', contentType: 'image/png', allowOverwrite: true },
     )
     expect(url).toBe('https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/glossary/mixture-of-experts.png')
   })

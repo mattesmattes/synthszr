@@ -7,6 +7,7 @@ import {
   generateCandidates,
   resetCrawlState,
   setCandidateExcluded,
+  generateMissingIllustrations,
   POSTS_PER_EXTRACTION,
   TERMS_PER_GENERATION,
 } from '@/lib/glossary/crawl'
@@ -56,7 +57,7 @@ export async function GET() {
   })
 }
 
-const ACTIONS = ['extract', 'generate', 'reset', 'toggle'] as const
+const ACTIONS = ['extract', 'generate', 'reset', 'toggle', 'images'] as const
 type Action = (typeof ACTIONS)[number]
 
 /**
@@ -64,6 +65,7 @@ type Action = (typeof ACTIONS)[number]
  * POST ?action=generate  → die häufigsten Kandidaten erzeugen und veröffentlichen
  * POST ?action=reset     → Cursor und Kandidatenliste leeren (keine Begriffe löschen)
  * POST ?action=toggle    → { name, selected } einen Kandidaten ab-/zuwählen
+ * POST ?action=images    → Illustrationen für Begriffe ohne Bild nachziehen
  *
  * Getrennte Aktionen statt eines "Alles machen"-Knopfes: Extraktion ist billig
  * und schnell, Generierung teuer und langsam. Zusammengelegt würde ein Klick
@@ -90,6 +92,14 @@ export async function POST(request: NextRequest) {
       if (!body.name) return NextResponse.json({ error: 'name fehlt' }, { status: 400 })
       const result = await setCandidateExcluded(supabase, body.name, body.selected === false)
       return NextResponse.json({ ok: true, excludedCount: result.excluded.length })
+    }
+
+    if (action === 'images') {
+      // Läuft absichtlich hier und nicht als Skript: die Modellkonfiguration
+      // zeigt auf openai/gpt-image-2, und lokal ist OPENAI_API_KEY nur der
+      // redigierte Platzhalter aus `vercel env pull`. In dieser Umgebung ist er echt.
+      const result = await generateMissingIllustrations(supabase)
+      return NextResponse.json(result)
     }
 
     if (action === 'reset') {

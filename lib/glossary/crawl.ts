@@ -220,6 +220,84 @@ export async function extractCandidates(
   }
 }
 
+/**
+ * Illustrationen pro Lauf. gpt-image-2 braucht pro Bild 10-25s (plus Dithering
+ * und Upload); fünf liegen mit Reserve unter dem 300s-Limit der Route.
+ */
+export const IMAGES_PER_RUN = 5
+
+export interface IllustrationResult {
+  done: string[]
+  failed: string[]
+  remaining: number
+}
+
+/**
+ * Erzeugt Illustrationen für veröffentlichte Begriffe, die noch keine haben.
+ *
+ * MUSS IN PROD LAUFEN: die Modellkonfiguration für image_generation zeigt auf
+ * openai/gpt-image-2, und `vercel env pull` liefert OPENAI_API_KEY nur als
+ * redigiertes "[SENSITIVE]" — lokal gibt es dort einen 401. Deshalb als
+ * Admin-Aktion und nicht als Skript: in der Serverless-Umgebung ist der Key echt.
+ *
+ * Für ALLE Begriffe ohne Bild, nicht nur die mit needs_illustration: dieses Feld
+ * wird beim Generieren entschieden und nicht gespeichert, im Nachhinein ist die
+ * damalige Entscheidung nicht rekonstruierbar. Auf einer Lexikonseite ist ein
+ * Bild ohnehin der Regelfall.
+ */
+export async function generateMissingIllustrations(
+  supabase: AdminClient,
+): Promise<IllustrationResult> {
+  const { generateGlossaryIllustration, uploadGlossaryIllustration } =
+    await import('@/lib/gemini/image-generator')
+
+  const { data, error } = await supabase
+    .from('glossary_terms')
+    .select('id, slug, canonical_name, summary')
+    .eq('status', 'published')
+    .is('illustration_url', null)
+    .order('slug')
+  if (error) throw new Error(`Begriffe nicht ladbar: ${error.message}`)
+
+  const all = (data ?? []) as Array<{ id: string; slug: string; canonical_name: string; summary: string }>
+  const batch = all.slice(0, IMAGES_PER_RUN)
+  const done: string[] = []
+  const failed: string[] = []
+
+  for (const term of batch) {
+    try {
+      const img = await generateGlossaryIllustration(term.canonical_name, term.summary)
+      if (!img.success || !img.imageBase64) {
+        console.error(`[GlossaryCrawl] Bild für ${term.slug} fehlgeschlagen: ${img.error}`)
+        failed.push(term.slug)
+        continue
+      }
+      const url = await uploadGlossaryIllustration(img.imageBase64, term.slug)
+      const { error: upErr } = await supabase
+        .from('glossary_terms')
+        .update({
+          illustration_url: url,
+          // Der beim Generieren erzeugte Alt-Text existiert für diese Begriffe
+          // nicht (needs_illustration war false, illustration_alt blieb leer).
+          // Ein beschreibender Fallback ist besser als ein leeres alt-Attribut.
+          illustration_alt: `Illustration zum Begriff ${term.canonical_name}`,
+        })
+        .eq('id', term.id)
+      if (upErr) {
+        console.error(`[GlossaryCrawl] illustration_url für ${term.slug} nicht speicherbar:`, upErr.message)
+        failed.push(term.slug)
+        continue
+      }
+      done.push(term.slug)
+    } catch (err) {
+      console.error(`[GlossaryCrawl] Bild für ${term.slug} abgebrochen:`, err)
+      failed.push(term.slug)
+    }
+  }
+
+  return { done, failed, remaining: Math.max(0, all.length - done.length) }
+}
+
 export interface GenerationResult {
   generated: Array<{ name: string; slug: string; mentions: number }>
   failed: string[]
