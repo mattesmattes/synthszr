@@ -31,6 +31,15 @@ export async function GET() {
     .select('id', { count: 'exact', head: true })
     .eq('status', 'published')
 
+  // Wie viele veröffentlichte Begriffe haben kein Bild? Ohne diese Zahl war im
+  // Panel nicht erkennbar, dass ein Klick nur einen Teil erledigt — die Bilder
+  // entstehen alphabetisch, ein Begriff weiter hinten blieb scheinbar grundlos leer.
+  const { count: missingImages } = await supabase
+    .from('glossary_terms')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'published')
+    .is('illustration_url', null)
+
   // ALLE offenen Kandidaten, in genau der Reihenfolge, in der
   // generateCandidates sie abarbeitet — damit die Anzeige nicht lügt.
   //
@@ -50,6 +59,7 @@ export async function GET() {
     // Nur die ausgewählten werden erzeugt — die Zahl, die der Operator braucht.
     selectedCount: Object.keys(state.candidates).filter((n) => !excluded.has(n)).length,
     generatedCount: state.generated.length,
+    missingImages: missingImages ?? 0,
     updatedAt: state.updatedAt,
     topCandidates: top,
     postsPerExtraction: POSTS_PER_EXTRACTION,

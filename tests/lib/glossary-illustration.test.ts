@@ -164,7 +164,14 @@ describe('uploadGlossaryIllustration', () => {
       // nach einer Revision noch nach einem Fehlversuch.
       { access: 'public', contentType: 'image/png', allowOverwrite: true },
     )
-    expect(url).toBe('https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/glossary/mixture-of-experts.png')
+    // Der Pfad bleibt stabil, die zurückgegebene URL trägt aber einen
+    // Versionsparameter. Das ist die Kehrseite von allowOverwrite: weil der Pfad
+    // gleich bleibt, liefern next/image, Browser und CDN nach einem Überschreiben
+    // weiter die ALTE Datei — sie cachen nach URL. In Prod beobachtet: der
+    // Blob-Store hatte das neue Bild, die Seite zeigte das alte.
+    expect(url).toMatch(
+      /^https:\/\/lbrzdn804nhy3kox\.public\.blob\.vercel-storage\.com\/glossary\/mixture-of-experts\.png\?v=\d+$/,
+    )
   })
 
   it('gibt einen Upload-Fehler unverändert weiter, statt ihn zu verschlucken', async () => {

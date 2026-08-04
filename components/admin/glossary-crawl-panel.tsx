@@ -12,6 +12,7 @@ interface CrawlStatus {
   candidateCount: number
   selectedCount: number
   generatedCount: number
+  missingImages: number
   updatedAt: string | null
   topCandidates: Array<{ name: string; mentions: number; selected: boolean }>
   postsPerExtraction: number
@@ -71,6 +72,58 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Auswahl nicht gespeichert')
       await fetchStatus()
+    }
+  }
+
+  /**
+   * Erzeugt ALLE fehlenden Illustrationen — ruft die Route so lange auf, bis
+   * keine mehr offen ist.
+   *
+   * Der Deckel bleibt serverseitig (IMAGES_PER_RUN): gpt-image-2 braucht 10-25s
+   * je Bild, 17 Bilder in EINEM Request würden das 300s-Limit reißen. Getrieben
+   * wird die Schleife deshalb hier im Browser — dasselbe Muster, mit dem
+   * create-article den resumable Artikel-Job vorantreibt.
+   *
+   * Abbruch, wenn eine Runde NICHTS mehr schafft (weder erzeugt noch
+   * fehlgeschlagen): sonst liefe die Schleife bei einem dauerhaften Fehler
+   * endlos und würde bei jedem Durchgang Geld verbrennen.
+   */
+  async function runAllImages() {
+    setBusy('images')
+    setError(null)
+    setLastResult(null)
+    let totalDone = 0
+    const totalFailed: string[] = []
+    try {
+      for (let round = 1; ; round++) {
+        const res = await fetch('/api/admin/glossary-crawl?action=images', {
+          method: 'POST',
+          credentials: 'include',
+        })
+        const data = await res.json().catch(() => null)
+        if (!res.ok) throw new Error(data?.error || `Fehlgeschlagen (HTTP ${res.status})`)
+
+        const done: string[] = data.done ?? []
+        const failed: string[] = data.failed ?? []
+        totalDone += done.length
+        totalFailed.push(...failed)
+        setLastResult(
+          `${totalDone} Illustrationen erzeugt` +
+          (data.remaining ? ` · noch ${data.remaining} offen …` : '') +
+          (totalFailed.length ? ` · fehlgeschlagen: ${totalFailed.join(', ')}` : ''),
+        )
+        if (!data.remaining) break
+        if (done.length === 0 && failed.length === 0) {
+          setError('Kein Fortschritt mehr — abgebrochen, damit keine Endlosschleife entsteht.')
+          break
+        }
+      }
+      onTermsChanged?.()
+      await fetchStatus()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -164,6 +217,10 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               <span className="font-mono font-bold tabular-nums">{status?.generatedCount ?? 0}</span>
               <span className="ml-1.5 text-muted-foreground">bereits erzeugt</span>
             </span>
+            <span className="whitespace-nowrap">
+              <span className="font-mono font-bold tabular-nums">{status?.missingImages ?? 0}</span>
+              <span className="ml-1.5 text-muted-foreground">ohne Illustration</span>
+            </span>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -180,9 +237,14 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               {busy === 'generate' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
               {status?.termsPerGeneration ?? 3}{' '}Begriffe erzeugen &amp; veröffentlichen
             </Button>
-            <Button size="sm" variant="outline" onClick={() => run('images')} disabled={busy !== null}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={runAllImages}
+              disabled={busy !== null || (status?.missingImages ?? 0) === 0}
+            >
               {busy === 'images' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
-              Fehlende Illustrationen erzeugen
+              Alle fehlenden Illustrationen erzeugen
             </Button>
             <Button size="sm" variant="ghost" onClick={() => void fetchStatus()} disabled={busy !== null}>
               <RefreshCw className="mr-2 h-4 w-4" />
@@ -201,7 +263,8 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           )}
           {busy === 'images' && (
             <p className="text-xs text-muted-foreground">
-              Bildgenerierung läuft — bis zu fünf Begriffe pro Klick, je 10-25 Sekunden.
+              Bildgenerierung läuft in Runden, bis keine Illustration mehr fehlt — je Bild
+              10-25 Sekunden. Fenster offen lassen, der Fortschritt steht unten.
             </p>
           )}
           {lastResult && <p className="text-sm">{lastResult}</p>}

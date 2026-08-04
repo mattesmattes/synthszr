@@ -1094,5 +1094,12 @@ export async function uploadGlossaryIllustration(imageBase64: string, slug: stri
       allowOverwrite: true,
     }
   )
-  return blob.url
+  // ?v=<Zeitstempel> ist NICHT Kosmetik, sondern die Kehrseite von allowOverwrite:
+  // weil der Pfad gleich bleibt, liefern next/image, Browser und CDN nach einem
+  // Überschreiben weiter die ALTE Datei aus — sie cachen nach URL. Genau das war
+  // in Prod zu sehen: der Blob-Store hatte das neue, grob gerasterte Bild, die
+  // Seite zeigte das alte feine. Der Parameter ändert die URL, die in
+  // illustration_url landet, und erzeugt damit einen neuen Cache-Eintrag; die
+  // Datei selbst bleibt unter ihrem stabilen Pfad.
+  return `${blob.url}?v=${Date.now()}`
 }
