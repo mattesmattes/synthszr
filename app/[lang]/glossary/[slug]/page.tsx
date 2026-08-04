@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
@@ -160,6 +161,28 @@ export default async function GlossaryTermPage({ params }: PageProps) {
         <Suspense fallback={null}>
           <BloomLanguageSwitcher currentLocale={locale} />
         </Suspense>
+        {/* SICHTBARER Breadcrumb als Entsprechung zum BreadcrumbList-Schema:
+            Google erwartet, dass strukturierte Daten im Inhalt wiederzufinden
+            sind — ein Breadcrumb, den es nur im Markup gibt, ist ein
+            Mismatch-Risiko. Gleiche Stufen und gleiche Reihenfolge wie dort
+            (buildGlossaryJsonLd). Die aktuelle Seite ist bewusst KEIN Link,
+            sondern per aria-current markiert. */}
+        <nav aria-label={locale === 'de' ? 'Brotkrumen' : 'Breadcrumb'} className="mb-4">
+          <ol className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+            <li>
+              <Link href={`/${lang}`} className="transition-colors hover:text-accent">Synthszr</Link>
+            </li>
+            <li aria-hidden className="text-muted-foreground/50">/</li>
+            <li>
+              <Link href={`/${lang}/glossary`} className="transition-colors hover:text-accent">
+                {locale === 'de' ? 'Lexikon' : 'Glossary'}
+              </Link>
+            </li>
+            <li aria-hidden className="text-muted-foreground/50">/</li>
+            <li aria-current="page" className="text-foreground">{term.canonicalName}</li>
+          </ol>
+        </nav>
+
         <article>
           {/* Illustration ÜBER der Überschrift: sie führt in den Begriff ein, wie
               das Cover in einen Artikel. GEO-unkritisch, anders als es der
@@ -186,6 +209,15 @@ export default async function GlossaryTermPage({ params }: PageProps) {
                 // hoher Wahrscheinlichkeit das LCP-Element. lazy verzoegerte
                 // genau das, was Core Web Vitals messen (an Prod gesehen).
                 priority
+                // sizes IST HIER KEIN DETAIL. Ohne sizes baut next/image ein
+                // srcSet mit x-Deskriptoren und laedt auf Retina die Variante
+                // w=1920 — fuer ein 326px breites Bild rund sechsfache
+                // Auflaesung, mehr Bytes als das Lazy-Loading je gekostet hat
+                // (in Prod im srcSet nachgelesen). Ausserdem erzeugt Next den
+                // <link rel="preload" as="image" fetchPriority="high"> nur mit
+                // sizes; auf den Artikelseiten ist er deshalb vorhanden, hier
+                // fehlte er trotz priority.
+                sizes="326px"
                 // 326px = max-w-sm (384px) minus 15%. Kein Tailwind-Preset trifft
                 // das; die Zahl ist hier bewusst explizit, weil sie mit der
                 // Rasterweite zusammenhängt: das 768px-Bild wird dadurch stärker
