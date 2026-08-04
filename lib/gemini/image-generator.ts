@@ -996,15 +996,32 @@ export async function generateEmailCover(
  *
  * Die Hauptformen bleiben trotzdem bewusst kräftig: das Raster darf Volumen und
  * Flächen füllen, die tragenden Konturen müssen es überleben.
+ *
+ * Zwei weitere Eigenschaften stehen hier, weil das Modell sie beim ersten
+ * Gegenprobe-Bild verletzt hat (D2/D3, am echten Bild gesehen, nicht vermutet):
+ *   - Es beschriftete die Grafik ("Input Query", "Output", "sub-model"), obwohl
+ *     ein knappes "no text labels" dastand. Nach dem Dithering ist so ein Label
+ *     unlesbarer Matsch. Die Anweisung ist jetzt ausdrücklich und begründet
+ *     wiederholt — das Modell befolgt Verbote schlechter als Gebote, deshalb
+ *     zusätzlich positiv formuliert (Formen statt Wörter).
+ *   - Das Motiv war ein breites, flaches Flussdiagramm; bei quadratischem
+ *     1024x1024-Ziel blieb oben und unten die Hälfte der Fläche leer. Der Prompt
+ *     verlangt jetzt eine formatfüllende, quadratische Komposition.
  */
 export function buildGlossaryImagePrompt(termName: string, summary: string): string {
   return [
-    'A clear, schematic technical illustration explaining the concept:',
+    'A single symbolic object or scene that stands for this idea:',
     `"${termName}" — ${summary.slice(0, 400)}`,
-    'Style: monochrome illustration with soft GRAYSCALE shading — volumes,',
-    'surfaces and depth modelled in continuous mid-tones, not flat line art.',
-    'Diagrammatic and legible, no text labels, no photorealism.',
-    'Keep the main contours bold enough to survive halftone dithering.',
+    'Interpret it as a metaphor with physical objects, materials and light —',
+    'NOT as a diagram, chart, flowchart or infographic.',
+    'Style: monochrome engraving-like illustration, rich continuous GRAYSCALE',
+    'shading, strong light and shadow modelling volume and surface texture.',
+    'Bold silhouettes and clear forms that survive halftone dithering.',
+    'No text, no letters, no labels, no arrows, no boxes, no callouts.',
+    'Composition: SQUARE, one central subject filling most of the frame.',
+    'Lighting: BRIGHT overall, lit from the front on a PLAIN WHITE background —',
+    'the subject carries the mid-tones, the background stays clean white. Avoid',
+    'dark or filled backgrounds.',
   ].join('\n')
 }
 
