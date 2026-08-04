@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,7 +33,10 @@ interface CrawlStatus {
 export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => void }) {
   const [status, setStatus] = useState<CrawlStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState<'extract' | 'generate' | 'reset' | 'images' | null>(null)
+  const [busy, setBusy] = useState<'extract' | 'generate' | 'generate-all' | 'reset' | 'images' | null>(null)
+  /** Abbruchwunsch fuer die Dauerlaeufe. REF, nicht State: die laufende
+   *  Schleife sieht einen State-Wert aus ihrer Closure heraus nie aktualisiert. */
+  const stopRequested = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [lastResult, setLastResult] = useState<string | null>(null)
 
@@ -113,8 +116,16 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           (totalFailed.length ? ` · fehlgeschlagen: ${totalFailed.join(', ')}` : ''),
         )
         if (!data.remaining) break
-        if (done.length === 0 && failed.length === 0) {
-          setError('Kein Fortschritt mehr — abgebrochen, damit keine Endlosschleife entsteht.')
+        if (stopRequested.current) { setLastResult((p) => `${p ?? ''} · abgebrochen`); break }
+        // Abbruch, sobald eine Runde NICHTS GESCHAFFT hat — nicht erst, wenn sie
+        // auch keine Fehler meldet. Gescheiterte Einträge bleiben in `remaining`
+        // und würden erneut versucht: die Schleife liefe endlos und würde bei
+        // jedem Durchgang Geld verbrennen. (Fiel zunächst nicht auf, weil im
+        // ersten Lauf alle Bilder gelangen.)
+        if (done.length === 0) {
+          setError(failed.length > 0
+            ? `Kein Fortschritt — ${failed.length} Fehlschlag/Fehlschläge in Folge, abgebrochen.`
+            : 'Kein Fortschritt mehr — abgebrochen, damit keine Endlosschleife entsteht.')
           break
         }
       }
@@ -124,6 +135,73 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
       setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
     } finally {
       setBusy(null)
+    }
+  }
+
+  /**
+   * Erzeugt ALLE ausgewaehlten Begriffe — ruft die Route in Runden auf, bis kein
+   * ausgewaehlter Kandidat mehr offen ist.
+   *
+   * WARUM UEBERHAUPT: der Deckel liegt bei TERMS_PER_GENERATION (3), weil ein
+   * Begriff 45-90s braucht und ein Request das 300s-Limit nicht reissen darf. Bei
+   * 177 ausgewaehlten Kandidaten waeren das 59 Klicks — dieselbe Luecke wie
+   * zuvor bei den Illustrationen.
+   *
+   * MIT ABBRUCH, anders als der Bilder-Lauf: 177 Begriffe sind rund drei Stunden
+   * und mehrere hundert Modell-Aufrufe. Ein Dauerlauf dieser Groesse ohne
+   * Stopp-Moeglichkeit waere fahrlaessig. Der Abbruch wirkt nach der laufenden
+   * Runde, nicht mitten in einem Begriff — ein halb geschriebener Eintrag waere
+   * schlimmer als drei zu viel.
+   *
+   * Das Fenster muss offen bleiben: getrieben wird im Browser, wie beim
+   * resumable Artikel-Job in create-article.
+   */
+  async function runAllTerms() {
+    setBusy('generate-all')
+    setError(null)
+    setLastResult(null)
+    stopRequested.current = false
+    let totalDone = 0
+    const totalFailed: string[] = []
+    try {
+      for (let round = 1; ; round++) {
+        const res = await fetch('/api/admin/glossary-crawl?action=generate', {
+          method: 'POST',
+          credentials: 'include',
+        })
+        const data = await res.json().catch(() => null)
+        if (!res.ok) throw new Error(data?.error || `Fehlgeschlagen (HTTP ${res.status})`)
+
+        const generated: Array<{ name: string }> = data.generated ?? []
+        const failed: string[] = data.failed ?? []
+        totalDone += generated.length
+        totalFailed.push(...failed)
+        const remaining: number = data.remainingCandidates ?? 0
+        setLastResult(
+          `${totalDone} Begriffe erzeugt und veroeffentlicht` +
+          (remaining ? ` · noch ${remaining} offen …` : '') +
+          (totalFailed.length ? ` · uebersprungen: ${totalFailed.join(', ')}` : ''),
+        )
+        onTermsChanged?.()
+
+        if (remaining === 0) break
+        if (stopRequested.current) { setLastResult((p) => `${p ?? ''} · abgebrochen`); break }
+        // Wie beim Bilder-Lauf: Abbruch, sobald eine Runde nichts geschafft hat.
+        // Uebersprungene Kandidaten bleiben in der Warteschlange und kaemen sonst
+        // in jeder Runde erneut dran.
+        if (generated.length === 0) {
+          setError(failed.length > 0
+            ? `Kein Fortschritt — ${failed.join(', ')} scheitern wiederholt, abgebrochen.`
+            : 'Kein Fortschritt mehr — abgebrochen, damit keine Endlosschleife entsteht.')
+          break
+        }
+      }
+      await fetchStatus()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
+    } finally {
+      setBusy(null)
+      stopRequested.current = false
     }
   }
 
@@ -228,6 +306,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               {busy === 'extract' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
               Nächste{' '}{status?.postsPerExtraction ?? 10}{' '}Artikel lesen
             </Button>
+            {/* ZWEI Knoepfe fuer dieselbe Aktion, mit Absicht: der erste erzeugt
+                eine Handvoll und ist in einer Minute durch, der zweite laeuft bei
+                177 Kandidaten Stunden und kostet entsprechend. Beides hinter
+                einem Knopf zu verstecken hiesse, einen dreistuendigen Lauf
+                versehentlich auszuloesen. */}
             <Button
               size="sm"
               variant="outline"
@@ -237,6 +320,23 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               {busy === 'generate' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
               {status?.termsPerGeneration ?? 3}{' '}Begriffe erzeugen &amp; veröffentlichen
             </Button>
+            {busy === 'generate-all' ? (
+              <Button size="sm" variant="destructive" onClick={() => { stopRequested.current = true }}>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Nach dieser Runde stoppen
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={runAllTerms}
+                disabled={busy !== null || (status?.selectedCount ?? 0) === 0}
+                title="Läuft in Runden, bis alle ausgewählten Begriffe erzeugt sind. Das Fenster muss offen bleiben."
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Alle{' '}{status?.selectedCount ?? 0}{' '}ausgewählten erzeugen
+              </Button>
+            )}
             <Button
               size="sm"
               variant="outline"
