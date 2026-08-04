@@ -1031,14 +1031,27 @@ export function buildGlossaryImagePrompt(termName: string, summary: string): str
  * (Scale-to-cover → Tonkurve → Floyd-Steinberg → whiteToTransparent) über
  * preloadedRawBase64 — generateAndProcessImage generiert dabei nicht erneut.
  *
- * coarseness=3, GEÄNDERT am 2026-08-04. Die frühere Begründung für 1 stammte aus
- * einem visuellen Abgleich mit einem SCHEMA-Bild: dort zerfielen bei 3 die feinen
- * Elemente (Beschriftungen, kleine Kästen) zu Rauschen. Diese Bildsorte gibt es
- * nicht mehr — der Prompt fordert seit demselben Tag ein tonales Metapher-Motiv
- * ohne Text und ohne Kleinteile an (s. buildGlossaryImagePrompt). Bei großen,
- * weich modellierten Flächen ist ein Raster von 1 auf nativer Auflösung so fein,
- * dass es als Grauwert verschwimmt statt als Punktmuster zu wirken. 3 macht die
- * Körnung sichtbar, ohne dass es noch Details gäbe, die sie zerstören könnte.
+ * coarseness=4 und targetWidth=768 — beides gehört zusammen, und das ist der
+ * eigentliche Punkt: SICHTBAR ist nicht die Rasterweite im Bild, sondern ihr
+ * Verhältnis zur DARSTELLUNGSGRÖSSE.
+ *
+ * Die Seite zeigt die Illustration mit max-w-sm, also 384px breit. Ein bei 1024px
+ * generiertes Bild wird dabei um Faktor 2,7 verkleinert: ein 3px-Raster schrumpft
+ * auf gut 1px und verschwimmt wieder zum Grauwert. Genau das war zu sehen,
+ * nachdem coarseness von 1 auf 3 gegangen war — die Änderung wirkte, nur eben
+ * unterhalb der Sichtbarkeitsschwelle.
+ *
+ * Deshalb näher an der Anzeigegröße generieren (768px statt 1024px) UND gröber
+ * rastern (4). AN ECHTEN BILDERN ABGEGLICHEN, nicht gerechnet: 512px/6 arbeitet
+ * intern auf 85x85 und zerstört das Motiv, 1024px/3 auf 341x341 und bleibt
+ * unsichtbar fein. 768px/4 landet auf 192x192 — Raster klar erkennbar, Motiv
+ * intakt, effektiv rund 2px pro Punkt auf dem Schirm.
+ *
+ * Die frühere Begründung für 1 stammte aus einem Abgleich mit einem SCHEMA-Bild,
+ * bei dem 3 die feinen Elemente (Beschriftungen, kleine Kästen) zu Rauschen
+ * zerfallen ließ. Diese Bildsorte gibt es nicht mehr: der Prompt fordert ein
+ * tonales Metapher-Motiv ohne Text und Kleinteile (s. buildGlossaryImagePrompt),
+ * es gibt also keine Details, die ein grobes Raster zerstören könnte.
  */
 export async function generateGlossaryIllustration(
   termName: string,
@@ -1049,9 +1062,11 @@ export async function generateGlossaryIllustration(
   return generateAndProcessImage(termName, {
     enableDithering: true,
     ditheringGain: 1.0,
-    ditheringCoarseness: 3,
-    targetWidth: 1024,
-    targetHeight: 1024,
+    ditheringCoarseness: 4,
+    // 768 statt 1024: je stärker das Bild im Browser verkleinert wird, desto
+    // feiner erscheint das Raster (Anzeige ist max-w-sm = 384px).
+    targetWidth: 768,
+    targetHeight: 768,
   }, raw.imageBase64)
 }
 

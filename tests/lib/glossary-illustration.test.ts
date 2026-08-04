@@ -118,12 +118,21 @@ describe('generateGlossaryIllustration', () => {
     // zweites Mal auf.
     expect(mocks.generate).toHaveBeenCalledTimes(1)
 
-    // Beweist zusätzlich, dass die Dither-Pipeline wirklich auf dem
-    // übergebenen Rohbild gelaufen ist (Zielgröße 1024×1024, Transparenz aus
-    // whiteToTransparent) — nicht nur, dass irgendein Erfolg zurückkam.
+    // Beweist zusätzlich, dass die Dither-Pipeline wirklich auf dem übergebenen
+    // Rohbild gelaufen ist (Zielgröße, Transparenz aus whiteToTransparent) —
+    // nicht nur, dass irgendein Erfolg zurückkam.
+    //
+    // 768 statt vormals 1024 (2026-08-04): die Zielgröße ist hier kein Detail,
+    // sondern Teil der Dither-Wirkung. Sichtbar ist nicht die Rasterweite im
+    // Bild, sondern ihr Verhältnis zur Anzeigegröße (max-w-sm = 384px). Bei
+    // 1024px wird das Bild um Faktor 2,7 verkleinert und ein grobes Raster
+    // verschwimmt wieder zum Grauwert — genau der Effekt, der nach der
+    // Erhöhung auf coarseness 3 zu sehen war. An echten Bildern abgeglichen:
+    // 768px/4 arbeitet intern auf 192x192 und trifft die Mitte zwischen
+    // sichtbarem Raster und erkennbarem Motiv.
     const meta = await sharp(Buffer.from(result.imageBase64!, 'base64')).metadata()
-    expect(meta.width).toBe(1024)
-    expect(meta.height).toBe(1024)
+    expect(meta.width).toBe(768)
+    expect(meta.height).toBe(768)
     expect(meta.hasAlpha).toBe(true)
   })
 
