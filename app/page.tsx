@@ -4,7 +4,6 @@ import { FooterBrands } from "@/components/footer-brands"
 import { FeaturedArticle } from "@/components/featured-article"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
-import { HomeHero } from "@/components/home-hero"
 // import { CalligramFooter } from "@/components/calligram-footer"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -135,9 +134,11 @@ export default async function Page() {
 
         {featuredPost ? (
           <>
-            {/* Charts-Promo; "Search" (Nav) blendet das Such-Formular ein */}
-            <HomeHero />
-
+            {/* Charts-Promo hier entfernt (2026-08-04): der Header trägt jetzt die
+                synthszr-Wortmarke, und die Charts sind über Navigation und Footer
+                erreichbar — ein Beta-Hinweis über dem Leitartikel schob sich
+                zwischen Leser und Inhalt. Die Komponente selbst bleibt, sie wird
+                von app/posts/[slug] noch genutzt. */}
             <FeaturedArticle
               slug={featuredPost.slug}
               title={featuredPost.title}
