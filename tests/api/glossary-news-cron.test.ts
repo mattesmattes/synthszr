@@ -1,6 +1,6 @@
 /**
  * Wöchentlicher News-Refresh fürs Fachbegriff-Lexikon (Task 14, Design-Spec
- * §F): der Cron ruft match_glossary_news pro Begriff auf und ersetzt
+ * §F): der Cron ruft match_generated_posts pro Begriff auf und ersetzt
  * glossary_term_news für diesen Begriff.
  *
  * Der Fake-Supabase-Client führt für glossary_term_news einen echten
@@ -31,8 +31,10 @@ interface NewsMatch {
   // als 4 Wörtern. Kürzt man sie hier, filtert der Code sie weg und die Tests
   // prüfen ins Leere, obwohl es um Ersetzen/Kappung geht, nicht um Titelqualität.
   title: string
-  source_url: string
-  published_at: string | null
+  // match_generated_posts liefert slug + created_at (nicht source_url/published_at):
+  // der News-Block verweist seit 2026-08-04 auf EIGENE Artikel.
+  slug: string
+  created_at: string | null
   similarity: number
 }
 
@@ -65,9 +67,9 @@ function fakeSupabase(config: {
   terms: TermRow[]
   rpcResult: (params: unknown) => { data: NewsMatch[] | null; error: { message: string; code?: string } | null }
   /** Vorbelegter Bestand, um "ersetzt alte Zeilen" beweisbar zu machen. */
-  seedNews?: Record<string, Array<{ repo_item_id: string }>>
+  seedNews?: Record<string, Array<{ post_id: string }>>
 }) {
-  const newsStore = new Map<string, Array<{ term_id: string; repo_item_id: string; [k: string]: unknown }>>()
+  const newsStore = new Map<string, Array<{ term_id: string; post_id: string; [k: string]: unknown }>>()
   for (const [termId, rows] of Object.entries(config.seedNews ?? {})) {
     newsStore.set(termId, rows.map((r) => ({ term_id: termId, ...r })))
   }
@@ -82,7 +84,7 @@ function fakeSupabase(config: {
     newsStore.set(termId, [])
     return Promise.resolve({ error: null })
   })
-  const insert = vi.fn((rows: Array<{ term_id: string; repo_item_id: string; [k: string]: unknown }>) => {
+  const insert = vi.fn((rows: Array<{ term_id: string; post_id: string; [k: string]: unknown }>) => {
     for (const row of rows) {
       const existing = newsStore.get(row.term_id) ?? []
       existing.push(row)
@@ -145,10 +147,10 @@ function term(overrides: Partial<TermRow> = {}): TermRow {
 
 function match(overrides: Partial<NewsMatch> = {}): NewsMatch {
   return {
-    id: 'repo-1',
+    id: 'post-1',
     title: 'Ein Artikel über Inferenzkosten',
-    source_url: 'https://www.example.com/artikel',
-    published_at: '2026-08-01T00:00:00Z',
+    slug: 'ein-artikel-ueber-inferenzkosten',
+    created_at: new Date().toISOString(),
     similarity: 0.8,
     ...overrides,
   }
@@ -183,11 +185,11 @@ describe('GET /api/cron/glossary-news', () => {
     const { client, newsStore } = fakeSupabase({
       terms: [term()],
       rpcResult: () => ({
-        data: [match({ id: 'repo-neu-1', title: 'Neuer Artikel über sinkende Inferenzkosten' }), match({ id: 'repo-neu-2', title: 'Zweiter Artikel über Inferenz im Betrieb' })],
+        data: [match({ id: 'post-neu-1', title: 'Neuer Artikel über sinkende Inferenzkosten' }), match({ id: 'post-neu-2', title: 'Zweiter Artikel über Inferenz im Betrieb' })],
         error: null,
       }),
       // Alter Bestand: zwei Zeilen, die im neuen Treffer-Set NICHT mehr vorkommen.
-      seedNews: { t1: [{ repo_item_id: 'repo-alt-1' }, { repo_item_id: 'repo-alt-2' }] },
+      seedNews: { t1: [{ post_id: 'post-alt-1' }, { post_id: 'post-alt-2' }] },
     })
     mocks.createAdminClient.mockReturnValue(client)
     mocks.anthropicCreate.mockResolvedValue({
@@ -199,15 +201,15 @@ describe('GET /api/cron/glossary-news', () => {
     expect(res.status).toBe(200)
 
     const finalRows = newsStore.get('t1') ?? []
-    const ids = finalRows.map((r) => r.repo_item_id).sort()
+    const ids = finalRows.map((r) => r.post_id).sort()
     // Die alten Zeilen dürfen NICHT mehr da sein — ein Mock, der insert()
     // immer grün beantwortet, würde das nicht abdecken, der In-Memory-Store
     // hier schon.
-    expect(ids).toEqual(['repo-neu-1', 'repo-neu-2'])
+    expect(ids).toEqual(['post-neu-1', 'post-neu-2'])
   })
 
   it('schreibt maximal 5 News pro Begriff', async () => {
-    const sevenMatches = Array.from({ length: 7 }, (_, i) => match({ id: `repo-${i}`, title: `Ausführlicher Artikel über Inferenz Nummer ${i}` }))
+    const sevenMatches = Array.from({ length: 7 }, (_, i) => match({ id: `post-${i}`, title: `Ausführlicher Artikel über Inferenz Nummer ${i}` }))
     const { client, calls, newsStore } = fakeSupabase({
       terms: [term()],
       rpcResult: () => ({ data: sevenMatches, error: null }),
@@ -222,13 +224,13 @@ describe('GET /api/cron/glossary-news', () => {
     expect(res.status).toBe(200)
 
     // Die RPC wird bereits mit match_limit=5 aufgerufen (DB-seitiges Limit) ...
-    expect(calls.rpcParams[0]?.match_limit).toBe(5)
+    expect(calls.rpcParams[0]?.match_count).toBe(5)
     // ... UND der Code kappt defensiv nach, falls eine ältere/andere
     // Fassung der Funktion doch mehr als 5 Zeilen liefert.
     expect(newsStore.get('t1')?.length).toBe(5)
   })
 
-  it('setzt news_refreshed_at NICHT und markiert rpcMissing, wenn die RPC noch nicht existiert (Code 42883)', async () => {
+  it('setzt news_refreshed_at NICHT und markiert rpcMissing, wenn die RPC nicht existiert (Code 42883)', async () => {
     const { client, calls } = fakeSupabase({
       terms: [term()],
       rpcResult: () => ({

@@ -31,6 +31,20 @@ const NEWS_WINDOW_DAYS = 90
  *  nur teilweise angewendet wurde und eine ältere Fassung der Funktion ohne
  *  Limit greift. */
 const MATCH_LIMIT = 5
+
+/**
+ * Mindest-Ähnlichkeit für einen eigenen Artikel. Höher als die Suchschwelle
+ * (0.35): im News-Block soll ein Artikel nur erscheinen, wenn er erkennbar vom
+ * Thema des Begriffs handelt — sonst liest er sich wie eine erzwungene
+ * Verlinkung. Dieselbe Begründung wie DEFAULT_THRESHOLD in
+ * lib/posts/historical-retrieval.ts, dort 0.45 für Artikel-Rückverweise.
+ * Gegen Prod gemessen: das Embedding von "Inferenz" trifft passende Artikel
+ * zwischen 0.62 und 0.66.
+ */
+const POST_MATCH_THRESHOLD = 0.5
+
+/** Sprachsegment im gespeicherten Pfad; die Komponente tauscht es beim Rendern. */
+const DEFAULT_LOCALE = 'de'
 /** Obergrenze pro Cron-Lauf für die Begriffsliste selbst — verhindert nur eine
  *  unbegrenzte PostgREST-Antwort, falls das Glossar stark wächst. Das
  *  eigentliche Limit ist das Zeitbudget unten. */
@@ -60,11 +74,14 @@ interface GlossaryNewsTermRow {
   embedding: unknown
 }
 
-interface GlossaryNewsMatch {
+/** Rückgabeform von match_generated_posts (s. lib/posts/historical-retrieval.ts).
+ *  `content` liefert die RPC ebenfalls mit, wird hier aber nicht gelesen. */
+interface GlossaryPostMatch {
   id: string
   title: string
-  source_url: string
-  published_at: string | null
+  slug: string
+  excerpt: string | null
+  created_at: string | null
   similarity: number
 }
 
@@ -262,10 +279,16 @@ export async function refreshGlossaryNews(
       const vec = await ensureTermEmbedding(supabase, term)
       if (!vec) continue // Embedding-Erzeugung fehlgeschlagen — nächster Lauf versucht es erneut
 
-      const { data: matches, error: rpcError } = await supabase.rpc('match_glossary_news', {
+      // EIGENE Artikel statt externer Quellen (2026-08-04): match_generated_posts
+      // existiert schon (lib/posts/historical-retrieval.ts, app/api/search) und
+      // arbeitet auf generated_posts.content_embedding — es braucht also keine
+      // eigene RPC. Ein Lexikonbegriff soll in die eigene Berichterstattung
+      // führen, nicht auf fremde Seiten; nebenbei erledigt das die
+      // Fragment-Titel aus der Newsletter-Link-Extraktion.
+      const { data: matches, error: rpcError } = await supabase.rpc('match_generated_posts', {
         query_embedding: vec as unknown as string,
-        since,
-        match_limit: MATCH_LIMIT,
+        match_threshold: POST_MATCH_THRESHOLD,
+        match_count: MATCH_LIMIT,
       })
 
       if (rpcError) {
@@ -274,21 +297,26 @@ export async function refreshGlossaryNews(
           // der GESAMTEN Schleife statt denselben Fehler für jeden weiteren
           // Begriff zu loggen. news_refreshed_at bleibt für ALLE Begriffe
           // unangetastet.
-          console.error('[GlossaryNews] RPC match_glossary_news existiert nicht (Migration nicht angewendet?):', rpcError.message)
+          console.error('[GlossaryNews] RPC match_generated_posts existiert nicht:', rpcError.message)
           rpcMissing = true
           break
         }
         // Nur DIESER Aufruf ist fehlgeschlagen (Timeout, Verbindungsabbruch, …)
         // — wie beim Embedding-Fehler oben: nur der aktuelle Begriff wird
         // übersprungen, die übrigen laufen weiter.
-        console.error('[GlossaryNews] RPC match_glossary_news fehlgeschlagen für', term.id, rpcError.message)
+        console.error('[GlossaryNews] RPC match_generated_posts fehlgeschlagen für', term.id, rpcError.message)
         continue
       }
 
-      // Titel-Qualität VOR der Kappung filtern: sonst verdrängt ein Fragment mit
-      // hoher Ähnlichkeit (gemessen 0.69) eine brauchbare Schlagzeile aus den
-      // Top-5, und der Block zeigt am Ende weniger Nutzbares als er könnte.
-      const rows = ((matches ?? []) as GlossaryNewsMatch[])
+      // `since` gilt weiter, aber im Code: match_generated_posts kennt keinen
+      // Zeitfilter. Ein Lexikonbegriff soll auf aktuelle Berichterstattung
+      // zeigen, nicht auf einen zwei Jahre alten Artikel.
+      //
+      // Der Titel-Filter bleibt: eigene Schlagzeilen sind zwar redaktionell,
+      // aber die Auto-Posts tragen bis zur Freigabe generische Platzhalter
+      // ("cron 0707") — die gehören nicht auf eine öffentliche Seite.
+      const rows = ((matches ?? []) as GlossaryPostMatch[])
+        .filter((r) => !since || !r.created_at || r.created_at >= since)
         .filter((r) => looksLikeHeadline(r.title))
         .slice(0, MATCH_LIMIT)
       const contextSentences = await generateContextSentences(
@@ -313,11 +341,18 @@ export async function refreshGlossaryNews(
       if (rows.length > 0) {
         const insertRows = rows.map((r, i) => ({
           term_id: term.id,
-          repo_item_id: r.id,
+          post_id: r.id,
           title: r.title,
-          source_name: deriveSourceName(r.source_url),
-          source_url: r.source_url,
-          published_at: r.published_at,
+          // source_name bleibt leer: bei eigenen Artikeln wäre "synthszr.com"
+          // neben jedem Eintrag reine Redundanz. Die Komponente rendert das Feld
+          // nur, wenn es gesetzt ist.
+          source_name: null,
+          // Interner Pfad statt externer URL. Sprachneutral gespeichert wäre
+          // hier nicht möglich (middleware.ts antwortet auf /posts/<slug> mit
+          // 307 je Cookie/Geo, s. Task-3-Vorabfix), deshalb der DEFAULT_LOCALE-
+          // Pfad — die Komponente ersetzt das Sprachsegment beim Rendern.
+          source_url: `/${DEFAULT_LOCALE}/posts/${r.slug}`,
+          published_at: r.created_at,
           context_sentence: contextSentences[i] ?? null,
           similarity: r.similarity,
         }))
