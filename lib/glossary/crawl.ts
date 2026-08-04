@@ -275,13 +275,19 @@ export async function generateMissingIllustrations(
       const url = await uploadGlossaryIllustration(img.imageBase64, term.slug)
       const { error: upErr } = await supabase
         .from('glossary_terms')
-        .update({
-          illustration_url: url,
-          // Der beim Generieren erzeugte Alt-Text existiert für diese Begriffe
-          // nicht (needs_illustration war false, illustration_alt blieb leer).
-          // Ein beschreibender Fallback ist besser als ein leeres alt-Attribut.
-          illustration_alt: `Illustration zum Begriff ${term.canonical_name}`,
-        })
+        // NUR die URL. Hier stand vorher ein Schablonen-Alt-Text
+        // ("Illustration zum Begriff X") mit der Begründung, ein beschreibender
+        // Fallback sei besser als ein leeres alt-Attribut. Das war falsch in
+        // zwei Richtungen:
+        //   - Als alt-Text sagt die Schablone einem Screenreader nichts, was der
+        //     Begriff daneben nicht schon sagt. Die Seite rendert stattdessen den
+        //     Begriffsnamen als alt, wenn kein echter Text vorliegt.
+        //   - Als Bildunterschrift (2026-08-04 eingeführt) stand die Schablone
+        //     sichtbar auf der Seite und trug nichts bei. Weil dieser Pfad ALLE
+        //     nachträglich erzeugten Bilder betrifft, war das jeder Eintrag.
+        // Leer lassen heißt: keine Unterschrift. Nur ein wirklich beschreibender
+        // Text aus der Generierung (generate.ts) bekommt eine.
+        .update({ illustration_url: url })
         .eq('id', term.id)
       if (upErr) {
         console.error(`[GlossaryCrawl] illustration_url für ${term.slug} nicht speicherbar:`, upErr.message)
