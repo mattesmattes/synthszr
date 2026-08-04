@@ -8,6 +8,17 @@
  * Motiv: Marmor-Bulle und -Bär vor Börsensäulen, erzeugt mit
  * scripts/_stocks_banner.ts durch dieselbe Dither-Pipeline wie die Post-Cover.
  *
+ * AUF DAS MOTIV BESCHNITTEN (2026-08-04): das generierte Bild hatte 23% leere
+ * Fläche oben und je ~13% links/rechts, gemessen an der Alpha-Bounding-Box —
+ * durch die Transparenz schien dort nur das Cyan des Containers, das Motiv wirkte
+ * verloren. Der Zuschnitt nimmt den leeren Rand weg und schneidet zusätzlich 90px
+ * oben an, weil Bulle und Bär im Motiv tief sitzen und sonst eine Lücke über
+ * ihnen bliebe. Ergebnis 1326x525 (2,53:1 statt 2,20:1) — das Layout verschiebt
+ * sich kaum, das Motiv erscheint rund ein Drittel größer.
+ *
+ * NEUER DATEINAME statt Überschreiben: bei gleichbleibender URL liefern Browser
+ * und CDN weiter die alte Datei aus.
+ *
  * WORTMARKE ALS TEXT, nicht als PNG: der Charts-Banner legt ein fertiges
  * Wortmark-Bild auf, für „stocks" existiert keines. Text mit der
  * Projektschrift skaliert schärfer, trägt den Dark Mode und lässt sich ohne
@@ -15,7 +26,7 @@
  * Aufteilung wie im Vorbild.
  */
 const BANNER_URL =
-  'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/stocks/synthszr-stocks-banner-2x.png'
+  'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/stocks/synthszr-stocks-banner-fill-2x.png'
 
 export function StocksBanner() {
   return (
@@ -24,8 +35,8 @@ export function StocksBanner() {
       <img
         src={BANNER_URL}
         alt="Synthszr Stocks — Marmorner Bulle und Bär vor den Säulen der Börse"
-        width={880}
-        height={400}
+        width={1326}
+        height={525}
         loading="eager"
         className="mx-auto block h-auto w-full max-w-[880px]"
       />
