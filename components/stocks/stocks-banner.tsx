@@ -45,7 +45,13 @@ export function StocksBanner() {
         width={1326}
         height={525}
         loading="eager"
-        className="mx-auto block h-auto w-full max-w-[880px]"
+        // 663px = 1326/2, und das ist der Punkt: ein GERASTERTES Bild verträgt nur
+        // ganzzahlige Skalierung. Bei jedem anderen Faktor interferiert das
+        // Punktraster mit dem Pixelraster des Schirms — Moiré. Das Original hieß
+        // "-2x", weil 1760 = 2x880 genau aufging; mein Zuschnitt auf 1326 hat das
+        // zerstört (1326/736 Inhaltsbreite ≈ 1,8) und das Moiré erzeugt. Bei 663
+        // CSS-px ist es auf Retina 1:1 und auf normalen Schirmen 2:1.
+        className="mx-auto block h-auto w-full max-w-[663px]"
       />
       {/* Wortmark-Overlay, Größe wie beim Charts-Banner (32% der Bannerbreite) —
           dasselbe Verhältnis, in dem die Vorlage gesetzt war (478 von 1477px). */}

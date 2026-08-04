@@ -9,6 +9,8 @@ import { PostProductLinks } from "@/components/post-product-links"
 import { FooterBrands } from "@/components/footer-brands"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
+import { PostCompanies } from "@/components/companies/post-companies"
+import { getCompanyMentionsForPost } from "@/lib/companies/recent-posts"
 import { SwipeNavigation } from "@/components/swipe-navigation"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
@@ -306,6 +308,11 @@ export default async function PostPage({ params }: PageProps) {
     .maybeSingle()
   const appleEpisodeUrl = pp?.apple_episode_url ?? null
 
+  // Erwähnte Unternehmen für den Block über der Newsletter-Box. Nutzt den schon
+  // vorhandenen adminDb: post_company_mentions ist RLS-gesperrt, und ein zweiter
+  // Client für dieselbe Anfrage wäre nur Overhead.
+  const mentionedCompanies = await getCompanyMentionsForPost(adminDb, post.id)
+
   // Fetch adjacent posts for navigation
   const currentDate = post.created_at
 
@@ -542,6 +549,15 @@ export default async function PostPage({ params }: PageProps) {
             )}
           </div>
         </nav>
+
+        {/* Erwähnte Unternehmen ÜBER der Newsletter-Box: public und premarket,
+            beide verlinkt auf ihre Seite unter /companies/<slug>. */}
+        <PostCompanies
+          companies={mentionedCompanies}
+          lang={locale}
+          heading={locale === 'de' ? 'Im Artikel erwähnt' : 'Mentioned in this article'}
+          premarketLabel={locale === 'de' ? 'Premarket' : 'Premarket'}
+        />
 
         <AdPromo locale={locale} />
         <Newsletter locale={locale} />

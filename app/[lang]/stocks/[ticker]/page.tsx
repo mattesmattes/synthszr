@@ -10,6 +10,9 @@ import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
 import { SiteFooter } from '@/components/site-footer'
 import { StocksBanner } from '@/components/stocks/stocks-banner'
 import { StockSynthesisBlock } from '@/components/rankings/stock-synthesis-block'
+import { CompanyPostList } from '@/components/companies/company-post-list'
+import { getRecentPostsForCompany } from '@/lib/companies/recent-posts'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { LanguageCode } from '@/lib/types'
 
 // ISR wie die Lexikon- und Ranking-Seiten: die Analyse wird vom Cron bzw.
@@ -84,6 +87,11 @@ export default async function StockPage({ params }: PageProps) {
   const t = (key: string) => translations[key] ?? key
   const symbol = ticker.toUpperCase()
 
+  // Die letzten Artikel, in denen die Firma vorkam. service_role, weil
+  // post_company_mentions RLS-gesperrt ist — mit dem anon-Key käme still null
+  // zurück und der Block wäre unsichtbar, ohne Fehler.
+  const recentPosts = await getRecentPostsForCompany(createAdminClient(), stock.companyKey, 7)
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Corporation',
@@ -117,6 +125,14 @@ export default async function StockPage({ params }: PageProps) {
           createdAt={stock.createdAt}
           stale={stock.stale}
           locale={lang}
+        />
+
+        <CompanyPostList
+          posts={recentPosts}
+          lang={lang}
+          heading={locale === 'de'
+            ? `${stock.company} bei Synthszr`
+            : `${stock.company} at Synthszr`}
         />
 
         {stock.data === null && (
