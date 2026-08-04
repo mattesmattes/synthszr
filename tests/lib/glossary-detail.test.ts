@@ -33,14 +33,23 @@ function makeChain(table: string) {
   return chain
 }
 
+const rpcMock = vi.hoisted(() => vi.fn())
+
 vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: () => ({ from: vi.fn((table: string) => makeChain(table)) }),
+  createAdminClient: () => ({
+    from: vi.fn((table: string) => makeChain(table)),
+    // Semantisch verwandte Begriffe kommen über match_glossary_related_terms;
+    // Default: kein Nachbar, damit Bestandstests unverändert gelten.
+    rpc: rpcMock,
+  }),
 }))
 
 beforeEach(() => {
   state.queues = {}
   state.fallback = { data: null, error: null }
   state.chains = {}
+  rpcMock.mockReset()
+  rpcMock.mockResolvedValue({ data: [], error: null })
 })
 
 function queue(table: string, ...results: unknown[]) {
@@ -320,5 +329,79 @@ describe('getGlossaryTerm — zwei Aufrufe mit unterschiedlichen Args', () => {
     const second = await getGlossaryTerm('rag', 'de')
     expect(first?.canonicalName).toBe('Mixture-of-Experts')
     expect(second?.canonicalName).toBe('Retrieval-Augmented Generation')
+  })
+})
+
+/**
+ * Semantisch verwandte Begriffe (2026-08-04). Text-Matching über den eigenen
+ * Erklärtext findet nur wörtliche Vorkommen; gemessen hatte damit 1 von 5
+ * veröffentlichten Begriffen überhaupt einen Treffer. Zweite Quelle sind
+ * Embedding-Nachbarn über match_glossary_related_terms.
+ *
+ * Entscheidend ist die ASYMMETRIE: der Block darf mehr zeigen als der Text
+ * verlinkt. Ein semantischer Nachbar, der im Erklärtext nicht vorkommt, kann
+ * dort auch nicht als Mark erscheinen — er gehört in die Liste, nicht in den
+ * Fließtext. (Das war schon bei Task 5 als zulässig festgehalten.)
+ */
+describe('getGlossaryTerm — semantisch verwandte Begriffe', () => {
+  it('nimmt Embedding-Nachbarn in relatedTerms auf', async () => {
+    queue('glossary_terms', { data: TERM_ROW, error: null }, { data: [], error: null })
+    rpcMock.mockResolvedValue({
+      data: [{ slug: 'inferenz', canonical_name: 'Inferenz', summary: 'x', similarity: 0.67 }],
+      error: null,
+    })
+    const { getGlossaryTerm } = await import('@/lib/glossary/detail')
+    const term = await getGlossaryTerm('moe', 'de')
+    expect(rpcMock).toHaveBeenCalledWith(
+      'match_glossary_related_terms',
+      expect.objectContaining({ source_slug: 'moe' }),
+    )
+    expect(term?.relatedTerms).toEqual([{ slug: 'inferenz', canonicalName: 'Inferenz' }])
+  })
+
+  it('verlinkt einen Embedding-Nachbarn NICHT im Fließtext', async () => {
+    // TERM_ROW.body enthält "Reiner Text ohne Verweise." — 'Inferenz' kommt dort
+    // nicht vor. Ein Mark dafür wäre eine Verlinkung auf einem Wort, das der
+    // Leser nie gelesen hat.
+    queue('glossary_terms', { data: TERM_ROW, error: null }, { data: [], error: null })
+    rpcMock.mockResolvedValue({
+      data: [{ slug: 'inferenz', canonical_name: 'Inferenz', summary: 'x', similarity: 0.67 }],
+      error: null,
+    })
+    const { getGlossaryTerm } = await import('@/lib/glossary/detail')
+    const term = await getGlossaryTerm('moe', 'de')
+    expect(JSON.stringify(term?.body)).not.toContain('glossaryLink')
+  })
+
+  it('führt Text-Treffer und Nachbarn ohne Duplikat zusammen', async () => {
+    queue('glossary_terms', { data: TERM_ROW, error: null }, { data: [], error: null })
+    // Derselbe Slug aus beiden Quellen darf nur einmal erscheinen.
+    rpcMock.mockResolvedValue({
+      data: [
+        { slug: 'moe', canonical_name: 'Mixture-of-Experts', summary: 'x', similarity: 0.9 },
+        { slug: 'cuda', canonical_name: 'CUDA', summary: 'x', similarity: 0.61 },
+      ],
+      error: null,
+    })
+    const { getGlossaryTerm } = await import('@/lib/glossary/detail')
+    const term = await getGlossaryTerm('moe', 'de')
+    const slugs = term?.relatedTerms.map((t) => t.slug) ?? []
+    // Der eigene Slug darf nie in der eigenen Liste stehen, auch wenn die RPC
+    // ihn (fehlerhaft) liefern würde.
+    expect(slugs).not.toContain('moe')
+    expect(new Set(slugs).size).toBe(slugs.length)
+  })
+
+  it('degradiert auf die Text-Treffer, wenn die RPC fehlschlägt', async () => {
+    // Etwa solange die Migration noch nicht angewendet ist: Postgres antwortet
+    // dann mit "function does not exist". Die Detailseite muss trotzdem laden.
+    queue('glossary_terms', { data: TERM_ROW, error: null }, { data: [], error: null })
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'function does not exist' } })
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { getGlossaryTerm } = await import('@/lib/glossary/detail')
+    const term = await getGlossaryTerm('moe', 'de')
+    expect(term).not.toBeNull()
+    expect(term?.relatedTerms).toEqual([])
+    errSpy.mockRestore()
   })
 })

@@ -136,6 +136,48 @@ async function applyTermTranslation(
  * injectGlossaryMarks intern anwendet. Beide Ausgaben zeigen so garantiert
  * dieselben Begriffe.
  */
+/**
+ * Ab dieser Cosine-Ähnlichkeit gilt ein Begriff als semantisch verwandt.
+ *
+ * 0.6 ist an den echten Daten gewählt, nicht geraten: über die fünf
+ * veröffentlichten Begriffe lagen ALLE zehn Paare zwischen 0.4882 und 0.6723,
+ * und 0.6 trennt dort das thematisch enge Paar (inferenz/mixture-of-experts,
+ * 0.6723) von den übrigen. Die Spreizung ist eng, die Schwelle also vorläufig —
+ * sie sollte nach der ersten größeren Freigabewelle neu gemessen werden, weil
+ * eine Kalibrierung auf zehn Datenpunkte nichts über den Regelfall sagt.
+ */
+const RELATED_SIMILARITY_THRESHOLD = 0.6
+
+/**
+ * Semantisch verwandte Begriffe über match_glossary_related_terms.
+ *
+ * Die Ähnlichkeit rechnet Postgres, nicht dieser Prozess: die Embeddings aller
+ * veröffentlichten Begriffe pro Seiten-Render zu laden wären bei 100 Begriffen
+ * ~300 KB, und das Projekt liegt beim Egress schon in der Overage. Die RPC holt
+ * das Quell-Embedding selbst über den Slug, der Vektor verlässt die DB also gar
+ * nicht.
+ *
+ * Degradiert auf [] statt zu werfen: solange die Migration nicht angewendet ist,
+ * antwortet Postgres mit "function does not exist" — die Detailseite muss dann
+ * trotzdem laden, nur eben ohne die zweite Quelle.
+ */
+async function fetchSemanticNeighbours(slug: string): Promise<GlossaryRelatedTerm[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.rpc('match_glossary_related_terms', {
+    source_slug: slug,
+    match_threshold: RELATED_SIMILARITY_THRESHOLD,
+    match_count: GLOSSARY_MAX_PER_ARTICLE,
+  })
+  if (error) {
+    console.error(`[Glossary] Verwandte Begriffe für "${slug}" nicht ladbar:`, error.message)
+    return []
+  }
+  return ((data ?? []) as Array<{ slug: string; canonical_name: string }>).map((r) => ({
+    slug: r.slug,
+    canonicalName: r.canonical_name,
+  }))
+}
+
 async function linkRelatedTerms(
   term: GlossaryTerm,
   lang: string,
@@ -148,12 +190,30 @@ async function linkRelatedTerms(
   const text = extractVisibleText(term.body)
   const mentions = candidates.length > 0 && text ? findGlossaryMentions(text, candidates) : []
   const slugs = mentions.map((m) => m.slug)
+  // Die Mark-Injektion bekommt AUSSCHLIESSLICH die Text-Treffer. Ein semantischer
+  // Nachbar kommt im Erklärtext nicht vor — ihn zu verlinken wäre eine Verlinkung
+  // auf einem Wort, das der Leser nie gelesen hat. Der Block darf mehr zeigen als
+  // der Text verlinkt (bei Task 5 bereits als zulässig festgehalten), aber nicht
+  // umgekehrt.
   const body = injectGlossaryMarks(term.body, slugs, candidates)
-  const relatedTerms = candidates
+
+  const fromText = candidates
     .filter((t) => slugs.includes(t.slug))
-    .slice(0, GLOSSARY_MAX_PER_ARTICLE)
     .map((t) => ({ slug: t.slug, canonicalName: t.canonicalName }))
-  return { body, relatedTerms }
+
+  // Text-Treffer zuerst: sie sind im Fließtext belegt und damit die stärkere
+  // Aussage. Semantische Nachbarn füllen auf, was das Text-Matching nicht findet
+  // — bei einem jungen Lexikon ist das der Normalfall (gemessen: 1 von 5
+  // veröffentlichten Begriffen hatte überhaupt einen Text-Treffer).
+  const seen = new Set<string>([term.slug, ...fromText.map((t) => t.slug)])
+  const merged = [...fromText]
+  for (const neighbour of await fetchSemanticNeighbours(term.slug)) {
+    if (seen.has(neighbour.slug)) continue
+    seen.add(neighbour.slug)
+    merged.push(neighbour)
+  }
+
+  return { body, relatedTerms: merged.slice(0, GLOSSARY_MAX_PER_ARTICLE) }
 }
 
 /** Supabase typisiert einen Fremdschlüssel-Join je nach FK-Erkennung als
