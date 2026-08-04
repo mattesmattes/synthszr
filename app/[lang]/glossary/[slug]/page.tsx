@@ -214,9 +214,20 @@ export default async function GlossaryTermPage({ params }: PageProps) {
             heading={t('glossary.index_title')}
           />
         </aside>
+
+        {/* Newsletter und Footer IN der Textspalte, aus demselben Grund wie der
+            Sprachumschalter oben: beide zentrieren sich intern per mx-auto
+            (max-w-2xl bzw. w-[704px]), und weil SiteFooter sonst ausserhalb von
+            <main> steht, ist ihre Achse die des Fensters — die des Lexikontexts
+            liegt aber um die halbe Sidebar-Breite (rund 108px) weiter rechts.
+            Hier liegen Text, Bild, Newsletter und Footer auf einer Achse.
+            row-start-2 statt implizitem Fluss: sonst landete der Block neben dem
+            <aside> in dessen Zeile. */}
+        <div className="lg:col-start-2 lg:row-start-2">
+          <SiteFooter locale={lang} />
+        </div>
         </div>
       </main>
-      <SiteFooter locale={lang} />
     </>
   )
 }
