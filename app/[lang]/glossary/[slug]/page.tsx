@@ -12,6 +12,9 @@ import { SiteFooter } from '@/components/site-footer'
 import { RelatedTerms } from '@/components/glossary/related-terms'
 import { TermProducts } from '@/components/glossary/term-products'
 import { TermNews } from '@/components/glossary/term-news'
+import { TermIndexNav } from '@/components/glossary/term-index-nav'
+import { getPublishedTermList } from '@/lib/glossary/terms'
+import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
 import type { LanguageCode } from '@/lib/types'
 
 // ISR statt on-demand-only: der Erklärungstext ändert sich nur über den
@@ -74,10 +77,22 @@ export default async function GlossaryTermPage({ params }: PageProps) {
   const t = (key: string) => translations[key] ?? key
 
   const bodyHtml = renderStaticArticleHtml(term.body as Record<string, unknown> | string, lang)
-  // Sichtbare Trennung nur zeigen, wenn danach wirklich etwas kommt — sonst
-  // endet die Seite auf eine Trennlinie ins Nichts (heute der Normalfall,
-  // solange Produkte/News/verwandte Begriffe noch leer sind).
-  const hasSideContent = term.relatedTerms.length > 0 || term.products.length > 0 || term.news.length > 0
+  // A-Z-Navigation über alle Begriffe: von jeder Begriffsseite aus soll das
+  // ganze Lexikon erreichbar sein, ohne den Umweg über den Index.
+  const allTerms = await getPublishedTermList(lang)
+
+  // Kategorie-Rang für die Chart-Produkte, damit die Darstellung der im Artikel
+  // entspricht ("vLLM #12"). includeHistory=FALSE ist wesentlich: der
+  // history-JSONB war die Hauptursache der Egress-Overage, und für den Rang
+  // braucht man ihn nicht. Fehlschlag ist unkritisch — dann fehlt nur die Zahl.
+  let rankBySlug = new Map<string, number>()
+  try {
+    const chartProducts = await getCategoryCappedProducts(50, false)
+    rankBySlug = new Map(chartProducts.map((p) => [p.slug, p.catRank]))
+  } catch (err) {
+    console.error('[Glossary] Chart-Ränge nicht ladbar:', err)
+  }
+  const productsWithRank = term.products.map((p) => ({ ...p, catRank: rankBySlug.get(p.slug) ?? null }))
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -94,17 +109,23 @@ export default async function GlossaryTermPage({ params }: PageProps) {
 
   return (
     <>
-      <main className="max-w-3xl mx-auto px-4 py-10">
+      <main className="max-w-5xl mx-auto px-4 py-10">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
         <Suspense fallback={null}>
           <BloomLanguageSwitcher currentLocale={locale} />
         </Suspense>
 
-        {/* HTML-Reihenfolge ist SEO/GEO-relevant, nicht nur Layout: H1 → Lead
-            → Illustration → Erklärungstext, volle Breite, keine Konkurrenz
-            daneben. LLMs zitieren den ersten substanziellen Textblock — eine
-            Produktliste davor würde genau die Passage verwässern, für die
-            die Seite existiert. */}
+        {/* Zweispaltig ab lg: Navigation links, Text rechts. Die
+            HTML-Reihenfolge bleibt dabei Artikel ZUERST — das ist SEO/GEO-relevant
+            und nicht nur Layout: LLMs zitieren den ersten substanziellen
+            Textblock, eine Navigationsliste davor würde genau die Passage
+            verwässern, für die die Seite existiert. Deshalb explizite
+            Grid-Platzierung (col-start) statt der DOM-Reihenfolge: das <aside>
+            steht im Markup hinter dem <article> und erscheint trotzdem links.
+            Ohne lg (mobil) greift kein Grid — dann gilt die DOM-Reihenfolge und
+            die Navigation landet unter dem Artikel, wie gewünscht. */}
+        <div className="lg:grid lg:grid-cols-[minmax(0,11rem)_minmax(0,1fr)] lg:gap-10 lg:items-start">
+        <div className="lg:col-start-2 lg:row-start-1">
         <article>
           <header className="mb-6">
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{term.canonicalName}</h1>
@@ -134,13 +155,38 @@ export default async function GlossaryTermPage({ params }: PageProps) {
           )}
         </article>
 
-        {hasSideContent && (
-          <div className="mt-10 space-y-8 border-t border-gray-200 pt-8">
-            <RelatedTerms terms={term.relatedTerms} lang={lang} heading={t('glossary.related_terms')} />
-            <TermProducts products={term.products} lang={lang} heading={t('glossary.products')} />
+        {/* News bleiben im Textbereich: sie sind Inhalt mit Titel, Quelle und
+            Einordnungssatz, keine Navigation, und wären in 11rem unlesbar. */}
+        {term.news.length > 0 && (
+          <div className="mt-10 border-t border-gray-200 pt-8">
             <TermNews news={term.news} lang={lang} heading={t('glossary.news')} />
           </div>
         )}
+        </div>
+
+        {/* Linke Spalte (Desktop) bzw. unter dem Artikel (Mobile). sticky, damit
+            die Navigation beim Lesen langer Erklärtexte sichtbar bleibt. */}
+        <aside className="lg:col-start-1 lg:row-start-1 lg:sticky lg:top-6 mt-10 lg:mt-0 space-y-8 border-t border-gray-200 pt-8 lg:border-t-0 lg:pt-0">
+          <RelatedTerms
+            terms={term.relatedTerms}
+            lang={lang}
+            heading={t('glossary.related_terms')}
+            variant="sidebar"
+          />
+          <TermProducts
+            products={productsWithRank}
+            lang={lang}
+            heading={t('glossary.products')}
+            variant="sidebar"
+          />
+          <TermIndexNav
+            terms={allTerms}
+            lang={lang}
+            currentSlug={slug}
+            heading={t('glossary.index_title')}
+          />
+        </aside>
+        </div>
       </main>
       <SiteFooter locale={lang} />
     </>
