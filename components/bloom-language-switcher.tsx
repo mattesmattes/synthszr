@@ -82,22 +82,22 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
   // Don't render language switcher if loading or only one language, but still show companies link
   if (loading || activeLanguages.length <= 1) {
     return (
-      <div className="flex justify-center items-baseline gap-4 mb-6">
+      <div className="flex justify-center items-center gap-4 mb-6">
         <span className={`${linkStyle} opacity-50`}>Language</span>
         {/* Zweite Fassung desselben Headers (nur eine Sprache aktiv bzw. noch am
             Laden). Muss identisch bleiben — die beiden Zweige sind heute schon
             einmal auseinandergelaufen, deshalb hier dieselbe Wortmarke und
             dieselben Trennstriche wie unten. */}
-        <span aria-hidden className="h-5 w-px shrink-0 self-center bg-border" />
+        <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
         <Link
           href={currentLocale === 'de' ? '/' : `/${currentLocale}`}
           aria-label="Home"
-          className="flex-shrink-0 self-center"
+          className="flex-shrink-0"
         >
           <Image src="/synthszr-logo-dark.svg" alt="synthszr" width={120} height={24} className="h-5 w-auto dark:hidden" priority />
           <Image src="/synthszr-logo.svg" alt="" width={120} height={24} className="hidden h-5 w-auto dark:block" aria-hidden />
         </Link>
-        <span aria-hidden className="h-5 w-px shrink-0 self-center bg-border" />
+        <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
         <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
           Search
         </button>
@@ -106,7 +106,7 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
   }
 
   return (
-    <div ref={containerRef} className="flex justify-center items-baseline gap-4 mb-6">
+    <div ref={containerRef} className="flex justify-center items-center gap-4 mb-6">
       {/* Switch Language dropdown */}
       <div className="relative" ref={menuRef}>
         <button
@@ -140,17 +140,24 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
         )}
       </div>
 
+      {/* items-center am Container, NICHT items-baseline: bei baseline setzt der
+          Browser die UNTERKANTE eines Bildes auf die Schriftlinie der Nachbarn.
+          Die Wortmarke hat mit dem „y" eine Unterlänge, saß dadurch zu hoch und
+          Text und Bild folgten zwei verschiedenen Ausrichtungssystemen. Mit
+          center liegen Labels, Trennstriche und Wortmarke auf einer optischen
+          Mitte. Das runde OH-SO-Icon vorher fiel damit nicht auf, weil es
+          symmetrisch war und keine Unterlänge hatte. */}
       {/* Synthszr-Wortmarke in der Mitte → Home. Ersetzt das OH-SO-Icon: der
           Header trägt die Marke der Seite, nicht die der Agentur. Dasselbe Asset
           wie im Podcast-/Newsletter-Cover (public/synthszr-logo.svg), also 1:1
           dieselbe Wortmarke. Senkrechte Trennstriche gliedern die drei Elemente,
           weil die Wortmarke breiter ist als das runde Icon und sonst mit
           „Language" und „Search" verschwimmt. */}
-      <span aria-hidden className="h-5 w-px shrink-0 self-center bg-border" />
+      <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
       <Link
         href={currentLocale === 'de' ? '/' : `/${currentLocale}`}
         aria-label="Home"
-        className="flex-shrink-0 self-center"
+        className="flex-shrink-0"
       >
         {/* Die Wortmarke in public/synthszr-logo.svg ist WEISS (fill: #fff) — sie
             ist für die dunklen Podcast-/Newsletter-Cover gemacht und war im
@@ -177,7 +184,7 @@ export function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherPr
           aria-hidden
         />
       </Link>
-      <span aria-hidden className="h-5 w-px shrink-0 self-center bg-border" />
+      <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
 
       {/* Search toggle */}
       <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
