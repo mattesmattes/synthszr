@@ -36,7 +36,13 @@ export function RelatedTerms({
   if (variant === 'sidebar') {
     return (
       <section>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{heading}</h2>
+        {/* Design-System-Tokens statt gray-*: nur so trägt die Navigation den
+            Dark Mode und eine spätere Farbänderung mit. Die Rubrik ist
+            font-mono — dasselbe Signal wie bei den Chart-Leisten, es trennt
+            Beschriftung von Inhalt ohne eine zweite Farbe zu brauchen. */}
+        <h2 className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
+          {heading}
+        </h2>
         <ul className="space-y-1.5">
           {terms.map((term) => (
             <li key={term.slug}>
@@ -44,7 +50,10 @@ export function RelatedTerms({
                 href={`/${lang}/glossary/${term.slug}`}
                 // hyphens/break-words: lange Begriffe dürfen umbrechen statt die
                 // Spalte zu sprengen oder abgeschnitten zu werden.
-                className="block text-sm leading-snug text-gray-600 hyphens-auto break-words transition-colors hover:text-black hover:underline"
+                // decoration-accent: die Akzentfarbe erscheint erst beim Hover
+                // und nur als Unterstreichung — der Text selbst bleibt neutral,
+                // damit die Spalte im Ruhezustand nicht mit dem Artikel konkurriert.
+                className="block text-sm leading-snug text-foreground/70 hyphens-auto break-words transition-colors hover:text-foreground hover:underline hover:decoration-accent hover:underline-offset-4"
               >
                 {term.canonicalName}
               </Link>

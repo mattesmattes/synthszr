@@ -42,25 +42,41 @@ export function TermIndexNav({
 
   return (
     <nav aria-label={heading}>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{heading}</h2>
+      <h2 className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
+        {heading}
+      </h2>
       <div className="space-y-3">
         {letters.map((letter) => (
           <div key={letter}>
-            <div className="font-mono text-[11px] text-gray-300">{letter}</div>
-            <ul className="mt-0.5 space-y-1">
+            {/* Buchstabe als Register-Marke: font-mono und eine feine Linie
+                gliedern die Liste, ohne eine zweite Farbe einzuführen. */}
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] font-bold text-muted-foreground/50">{letter}</span>
+              <span className="h-px flex-1 bg-border" aria-hidden />
+            </div>
+            <ul className="mt-1 space-y-1">
               {grouped.get(letter)!.map((term) => (
                 <li key={term.slug}>
                   {term.slug === currentSlug ? (
+                    /* DIE EINE STELLE MIT AKZENTFARBE. Der aktive Begriff ist die
+                       Funktion dieser Navigation — hier zahlt sich Farbe aus, und
+                       nur hier. Ein 2px-Balken statt eingefärbtem Text: er markiert
+                       die Position im Register, ohne den Namen aus der Typografie
+                       der Liste zu heben. Kantig (kein rounded), passend zu
+                       --radius: 0.125rem im Design-System. */
                     <span
                       aria-current="page"
-                      className="block text-sm font-medium leading-snug text-black hyphens-auto break-words"
+                      className="flex items-start gap-2 text-sm font-medium leading-snug text-foreground"
                     >
-                      {term.canonicalName}
+                      <span className="mt-[0.3em] h-3 w-[2px] shrink-0 bg-accent" aria-hidden />
+                      <span className="hyphens-auto break-words">{term.canonicalName}</span>
                     </span>
                   ) : (
                     <Link
                       href={`/${lang}/glossary/${term.slug}`}
-                      className="block text-sm leading-snug text-gray-500 hyphens-auto break-words transition-colors hover:text-black hover:underline"
+                      // pl-[10px] richtet die Namen an der Kante des Akzentbalkens
+                      // aus, damit die Liste beim aktiven Eintrag nicht springt.
+                      className="block pl-[10px] text-sm leading-snug text-foreground/60 hyphens-auto break-words transition-colors hover:text-foreground hover:underline hover:decoration-accent hover:underline-offset-4"
                     >
                       {term.canonicalName}
                     </Link>

@@ -81,18 +81,24 @@ export default async function GlossaryTermPage({ params }: PageProps) {
   // ganze Lexikon erreichbar sein, ohne den Umweg über den Index.
   const allTerms = await getPublishedTermList(lang)
 
-  // Kategorie-Rang für die Chart-Produkte, damit die Darstellung der im Artikel
-  // entspricht ("vLLM #12"). includeHistory=FALSE ist wesentlich: der
-  // history-JSONB war die Hauptursache der Egress-Overage, und für den Rang
-  // braucht man ihn nicht. Fehlschlag ist unkritisch — dann fehlt nur die Zahl.
-  let rankBySlug = new Map<string, number>()
+  // Logo und Score für die Produktkarten, damit die Darstellung der in den
+  // Rankings entspricht. includeHistory=FALSE ist wesentlich: der history-JSONB
+  // war die Hauptursache der Egress-Overage, und für Logo und Score braucht man
+  // ihn nicht (nur die Sparkline würde ihn brauchen — die zeigen wir deshalb
+  // nicht). Fehlschlag ist unkritisch: dann fehlen Logo und Zahl, die Namen
+  // stehen trotzdem da.
+  let chartBySlug = new Map<string, { vendor: string | null; score: number | null }>()
   try {
     const chartProducts = await getCategoryCappedProducts(50, false)
-    rankBySlug = new Map(chartProducts.map((p) => [p.slug, p.catRank]))
+    chartBySlug = new Map(chartProducts.map((p) => [p.slug, { vendor: p.vendor ?? null, score: p.score ?? null }]))
   } catch (err) {
-    console.error('[Glossary] Chart-Ränge nicht ladbar:', err)
+    console.error('[Glossary] Chart-Daten für Produkte nicht ladbar:', err)
   }
-  const productsWithRank = term.products.map((p) => ({ ...p, catRank: rankBySlug.get(p.slug) ?? null }))
+  const productsWithChartData = term.products.map((p) => ({
+    ...p,
+    vendor: chartBySlug.get(p.slug)?.vendor ?? null,
+    score: chartBySlug.get(p.slug)?.score ?? null,
+  }))
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -155,10 +161,14 @@ export default async function GlossaryTermPage({ params }: PageProps) {
           )}
         </article>
 
-        {/* News bleiben im Textbereich: sie sind Inhalt mit Titel, Quelle und
-            Einordnungssatz, keine Navigation, und wären in 11rem unlesbar. */}
-        {term.news.length > 0 && (
-          <div className="mt-10 border-t border-gray-200 pt-8">
+        {/* Produkte und News bleiben im Textbereich: beides ist Inhalt, keine
+            Navigation. Die Produktkarten brauchen Breite für Logo, Name und
+            Score, die News-Einträge für Titel, Datum und Einordnungssatz — in
+            der 11rem-Spalte wäre beides unlesbar. Dort stehen nur verwandte
+            Begriffe und das A-Z-Register. */}
+        {(term.products.length > 0 || term.news.length > 0) && (
+          <div className="mt-10 space-y-8 border-t border-border pt-8">
+            <TermProducts products={productsWithChartData} lang={lang} heading={t('glossary.products')} />
             <TermNews news={term.news} lang={lang} heading={t('glossary.news')} />
           </div>
         )}
@@ -166,17 +176,14 @@ export default async function GlossaryTermPage({ params }: PageProps) {
 
         {/* Linke Spalte (Desktop) bzw. unter dem Artikel (Mobile). sticky, damit
             die Navigation beim Lesen langer Erklärtexte sichtbar bleibt. */}
-        <aside className="lg:col-start-1 lg:row-start-1 lg:sticky lg:top-6 mt-10 lg:mt-0 space-y-8 border-t border-gray-200 pt-8 lg:border-t-0 lg:pt-0">
+        {/* border-border statt gray-200: Design-System-Token, trägt den Dark Mode.
+            Auf Desktop trennt eine feine vertikale Linie die Navigation vom Text —
+            dieselbe Aufgabe wie die horizontale Linie auf Mobile. */}
+        <aside className="lg:col-start-1 lg:row-start-1 lg:sticky lg:top-6 mt-10 lg:mt-0 space-y-8 border-t border-border pt-8 lg:border-t-0 lg:pt-0 lg:border-r lg:pr-6">
           <RelatedTerms
             terms={term.relatedTerms}
             lang={lang}
             heading={t('glossary.related_terms')}
-            variant="sidebar"
-          />
-          <TermProducts
-            products={productsWithRank}
-            lang={lang}
-            heading={t('glossary.products')}
             variant="sidebar"
           />
           <TermIndexNav
