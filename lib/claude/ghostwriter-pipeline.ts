@@ -930,7 +930,16 @@ async function callModelNonStreaming(
     // temperature/top_p/top_k UND budget_tokens mit 400 ab. effort gibt es ab
     // Opus 4.5 + Sonnet 4.6 + Sonnet 5, NICHT auf Haiku/Sonnet 4.5.
     const id = resolved.modelId
-    const is2026Frontier = id.startsWith('claude-sonnet-5') || id.startsWith('claude-fable-5') || id.startsWith('claude-mythos-5')
+    // ⚠️ WARTUNGSFALLE: das hier ist eine ALLOWLIST. Ein neues Modell, das hier fehlt,
+    // fällt in den else-Zweig und bekommt budget_tokens — was genau diese Modelle mit
+    // HTTP 400 ablehnen. Passiert am 2026-08-04 in Prod mit claude-opus-5: jeder
+    // Abschnitt des Tages-Artikels wurde durch die Fehlermeldung ersetzt.
+    // Beim Eintragen eines neuen Modells in lib/ai/use-cases.ts IMMER hier gegenprüfen.
+    const is2026Frontier =
+      id.startsWith('claude-opus-5') ||
+      id.startsWith('claude-sonnet-5') ||
+      id.startsWith('claude-fable-5') ||
+      id.startsWith('claude-mythos-5')
     const adaptiveThinking = /claude-opus-4-[678]\b/.test(id) || id.startsWith('claude-sonnet-4-6') || is2026Frontier
     const supportsEffort = /claude-opus-4-[5678]\b/.test(id) || id.startsWith('claude-sonnet-4-6') || is2026Frontier
     const rejectsSampling = /claude-opus-4-[78]\b/.test(id) || is2026Frontier
