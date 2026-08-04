@@ -257,9 +257,14 @@ const READABILITY_TOOL = {
 // Referenztexte (supabase/_glossary_testdata.sql) als Kalibrierungsbeispiele im
 // Prompt — sie sind der konkrete Beweis für "was heißt 15-Jähriger ohne
 // Vorwissen, aber nicht kindlich", präziser als jede abstrakte Beschreibung.
-/** Untergrenze aus Regel 4 des Prompts — hier gespiegelt, damit ein Unterbieten
- *  messbar wird, statt still durchzugehen. */
+/** Untergrenze aus Regel 4 des Prompts. Wird durchgesetzt (Nachforderung, dann
+ *  Abbruch), nicht nur formuliert — die Regel gilt. */
 const MIN_BODY_WORDS = 400
+
+/** Wörter über alle Blocks, die Messgröße für Regel 4. */
+function countBodyWords(blocks: Array<{ text: string }>): number {
+  return blocks.reduce((n, b) => n + b.text.trim().split(/\s+/).filter(Boolean).length, 0)
+}
 
 const CALIBRATION_EXAMPLES = `--- BEISPIEL 1: Inferenz ---
 Ein KI-Modell durchläuft zwei sehr verschiedene Phasen. Beim Training lernt es aus Beispielen, was über Wochen laufen kann und einmal passiert. Bei der Inferenz benutzt man das fertige Modell: man stellt eine Frage, das Modell rechnet, eine Antwort kommt heraus. Das dauert Sekunden statt Wochen, passiert aber jedes Mal neu.
@@ -363,18 +368,78 @@ export async function generateTermContent(name: string): Promise<GeneratedTerm> 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
   const contentModel = await getModelForUseCase('glossary_generation')
-  const contentResp = await client.messages.create({
-    model: contentModel, max_tokens: 4096, tools: [CONTENT_TOOL],
+  const { getModelCapabilities } = await import('@/lib/claude/model-capabilities')
+  const caps = getModelCapabilities(contentModel)
+
+  /**
+   * Ein Content-Call. `extraInstruction` hängt eine Nachforderung an denselben
+   * Ein-Turn-Prompt an, statt einen Multi-Turn mit tool_result aufzubauen — das
+   * Modell braucht für einen Neuschrieb keinen Gesprächsverlauf, nur die
+   * gemessene Abweichung.
+   *
+   * max_tokens 8192 statt 4096: 700 Wörter sind mit JSON-Overhead rund 1.400
+   * Tokens, aber das alte Budget musste ohne `thinking`-Feld zusätzlich das
+   * Reasoning tragen — bei Opus 5 ist Thinking dann per Default AN und
+   * max_tokens deckt beides gemeinsam ab. Genau daran wurden die Erklärtexte
+   * abgeschnitten. Thinking wird deshalb explizit abgeschaltet (nur bei
+   * Modellen, die die adaptive Form kennen — die alte Form würde `disabled`
+   * nicht akzeptieren).
+   */
+  const callContent = (extraInstruction?: string) => client.messages.create({
+    model: contentModel, max_tokens: 8192, tools: [CONTENT_TOOL],
     tool_choice: { type: 'tool', name: CONTENT_TOOL.name },
+    ...(caps.adaptiveThinking ? { thinking: { type: 'disabled' as const } } : {}),
     system: [{ type: 'text', text: GENERATE_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: buildContentUserPrompt(name) }],
+    messages: [{
+      role: 'user' as const,
+      content: extraInstruction
+        ? `${buildContentUserPrompt(name)}\n\n${extraInstruction}`
+        : buildContentUserPrompt(name),
+    }],
   })
-  const contentBlock = contentResp.content.find((b) => b.type === 'tool_use')
-  const parsedContent = ContentSchema.safeParse(contentBlock && 'input' in contentBlock ? contentBlock.input : null)
+
+  const parse = (resp: { content: Array<unknown> }) => {
+    const block = (resp.content as Array<{ type: string; input?: unknown }>).find((b) => b.type === 'tool_use')
+    return ContentSchema.safeParse(block && 'input' in block ? block.input : null)
+  }
+
+  const contentResp = await callContent()
+  const parsedContent = parse(contentResp)
   if (!parsedContent.success) {
     throw new Error(`[glossary/generate] ungültige Tool-Antwort für "${name}": ${parsedContent.error.message}`)
   }
-  const c = parsedContent.data
+  let c = parsedContent.data
+
+  // Regel 4 wird DURCHGESETZT, nicht nur formuliert. Muster: enforceHeadingLength
+  // im Ghostwriter — deterministisch angestoßen, nur wenn die Grenze verletzt ist.
+  // Ein Versuch, danach Abbruch: der Aufrufer (generateAndInsertDraft) fängt den
+  // Wurf und liefert null, der Kandidat bleibt in pending_glossary_terms für
+  // einen späteren Anlauf vorgemerkt. Ein dauerhaft zu dünner Eintrag wird also
+  // nicht angelegt, aber auch nicht stillschweigend verworfen.
+  let words = countBodyWords(c.blocks)
+  if (words < MIN_BODY_WORDS) {
+    console.warn(`[glossary/generate] "${name}": ${words} Wörter im ersten Entwurf — fordere nach`)
+    const retryResp = await callContent(
+      `NACHFORDERUNG: Dein erster Entwurf war mit ${words} Wörtern zu kurz. Regel 4 verlangt ` +
+      `mindestens ${MIN_BODY_WORDS} Wörter über alle Blocks zusammen. Schreibe den Eintrag ` +
+      `vollständig neu und deutlich ausführlicher — nicht durch Wiederholung, sondern durch ` +
+      `Substanz: ein konkretes Beispiel, eine Zahl, die Abgrenzung zu einem verwandten Begriff, ` +
+      `ein typischer Irrtum. Jeder Abschnitt mit Überschrift braucht 2–3 Absätze à 3–5 Sätze.`,
+    )
+    const parsedRetry = parse(retryResp)
+    if (parsedRetry.success) {
+      const retryWords = countBodyWords(parsedRetry.data.blocks)
+      if (retryWords > words) {
+        c = parsedRetry.data
+        words = retryWords
+      }
+    }
+    if (words < MIN_BODY_WORDS) {
+      throw new Error(
+        `[glossary/generate] "${name}" bleibt mit ${words} Wörtern zu kurz (Regel 4: mindestens ${MIN_BODY_WORDS})`,
+      )
+    }
+  }
   const canonicalName = c.canonical_name.trim()
   const slug = slugify(canonicalName)
   // ContentSchema prüft nur die Roh-Länge von canonical_name — ein reiner
@@ -402,24 +467,6 @@ export async function generateTermContent(name: string): Promise<GeneratedTerm> 
     if (parsedJudge.success) readabilityScore = parsedJudge.data.readability_score
   } catch (e) {
     console.error('[glossary/generate] readability judge:', e instanceof Error ? e.message : e)
-  }
-
-  // Längen-Sichtbarkeit: Regel 4 verlangt mindestens 400 Wörter, das Modell
-  // unterbot das in Prod deutlich (ein Eintrag mit ~150 Wörtern). Ursache war,
-  // dass die Kalibrierungsbeispiele selbst nur 121-165 Wörter haben — der
-  // Prompt ZEIGTE also etwas anderes, als er SAGTE, und das Gezeigte gewinnt.
-  //
-  // Bewusst nur geloggt, nicht geworfen: ein zu kurzer Eintrag ist ein
-  // Qualitätsmangel, kein Defekt. Ihn zu verwerfen würde den Kandidaten
-  // vernichten (der Aufrufer bekommt null) und den Operator ohne Vorschlag
-  // dastehen lassen — schlechter als ein kurzer Text, den er sehen und
-  // überarbeiten kann. Der Log macht das Unterbieten messbar, falls die
-  // Prompt-Korrektur nicht ausreicht.
-  const bodyWords = c.blocks.reduce((n, b) => n + b.text.trim().split(/\s+/).filter(Boolean).length, 0)
-  if (bodyWords < MIN_BODY_WORDS) {
-    console.warn(
-      `[glossary/generate] "${canonicalName}": nur ${bodyWords} Wörter (Vorgabe ${MIN_BODY_WORDS}-700) — Eintrag ist zu dünn`,
-    )
   }
 
   return {

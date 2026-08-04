@@ -88,6 +88,20 @@ describe('identifyCandidates', () => {
   })
 })
 
+/**
+ * Hängt Füllwörter an einen Absatz, damit die Fixture die von Regel 4 verlangten
+ * 400 Wörter erreicht.
+ *
+ * Nötig, seit generateTermContent die Länge DURCHSETZT (Nachforderung, dann
+ * Abbruch — 2026-08-04): eine Fixture unter der Grenze löst den Retry-Pfad aus,
+ * und jeder Test würde dann etwas anderes prüfen als seinen Gegenstand. Der
+ * Füllsatz hält die Fixture lesbar, statt 400 Wörter Beispielprosa zu erfinden;
+ * die inhaltlich tragenden ersten Sätze bleiben unverändert vorne.
+ */
+function pad(text: string): string {
+  return `${text} ${Array.from({ length: 110 }, (_, i) => `Füllwort${i}`).join(' ')}`
+}
+
 describe('generateTermContent', () => {
   // Volle Rule-3-Struktur (Intro-Absatz + drei Heading/Paragraph-Paare = 7
   // Blocks), nicht nur die für .min(4) nötige Mindestmenge — die Fixture soll
@@ -97,13 +111,13 @@ describe('generateTermContent', () => {
     aliases: ['MoE', 'Mixture-of-Experts', 'Mixture of Experts'],
     summary: 'Ein Ansatz, bei dem pro Anfrage nur ein Teil eines Modells rechnet.',
     blocks: [
-      { type: 'paragraph', text: 'Stell dir eine Redaktion vor, in der nur zwei Leute pro Frage recherchieren.' },
+      { type: 'paragraph', text: pad('Stell dir eine Redaktion vor, in der nur zwei Leute pro Frage recherchieren.') },
       { type: 'heading', text: 'Warum das wichtig ist' },
-      { type: 'paragraph', text: 'So bleiben auch sehr große Modelle im Betrieb bezahlbar.' },
+      { type: 'paragraph', text: pad('So bleiben auch sehr große Modelle im Betrieb bezahlbar.') },
       { type: 'heading', text: 'Wie die Auswahl funktioniert' },
-      { type: 'paragraph', text: 'Ein kleines Zusatznetz, der Router, entscheidet, welche Experten zuständig sind.' },
+      { type: 'paragraph', text: pad('Ein kleines Zusatznetz, der Router, entscheidet, welche Experten zuständig sind.') },
       { type: 'heading', text: 'Wo man dem Begriff begegnet' },
-      { type: 'paragraph', text: 'Viele aktuelle Sprachmodelle großer Anbieter nutzen dieses Prinzip.' },
+      { type: 'paragraph', text: pad('Viele aktuelle Sprachmodelle großer Anbieter nutzen dieses Prinzip.') },
     ],
     needs_illustration: true,
     illustration_alt: 'Schema eines Routers, der Anfragen an einzelne Experten verteilt',
@@ -220,5 +234,88 @@ describe('generateTermContent', () => {
     mocks.create.mockResolvedValueOnce(toolUse({ ...contentInput, canonical_name: '   ' }))
     const { generateTermContent } = await import('@/lib/glossary/generate')
     await expect(generateTermContent('Foo')).rejects.toThrow()
+  })
+})
+
+/**
+ * Durchsetzung von Regel 4 (400–700 Wörter). Bis 2026-08-04 war die Regel im
+ * Prompt formuliert, aber nichts prüfte sie: ein Prod-Eintrag hatte ~150 Wörter.
+ *
+ * Zwei Ursachen, beide behoben:
+ *  - max_tokens 4096 OHNE `thinking`-Feld. Opus 5 denkt per Default, wenn das
+ *    Feld fehlt, und max_tokens deckt Thinking UND Text gemeinsam ab — das
+ *    Reasoning fraß das Budget, der Text wurde abgeschnitten. (Derselbe
+ *    Fehlermodus wie im Ghostwriter, dort schon gefixt.)
+ *  - Keine Nachforderung bei zu kurzer Antwort.
+ *
+ * Muster für die Nachforderung ist enforceHeadingLength im Ghostwriter:
+ * deterministisch angestoßen, nur wenn die Grenze verletzt ist.
+ */
+describe('generateTermContent — Längendurchsetzung (Regel 4)', () => {
+  const longBlocks = (wordsPerParagraph: number) => {
+    const filler = Array.from({ length: wordsPerParagraph }, (_, i) => `Wort${i}`).join(' ')
+    return [
+      { type: 'paragraph', text: filler },
+      { type: 'heading', text: 'Ein konkreter Aspekt' },
+      { type: 'paragraph', text: filler },
+      { type: 'heading', text: 'Ein zweiter Aspekt' },
+      { type: 'paragraph', text: filler },
+      { type: 'heading', text: 'Ein dritter Aspekt' },
+      { type: 'paragraph', text: filler },
+    ]
+  }
+  const base = {
+    canonical_name: 'Mixture of Experts',
+    aliases: ['MoE'],
+    summary: 'Kurz erklärt.',
+    needs_illustration: false,
+    illustration_alt: '',
+  }
+  const readability = { readability_score: 88, reasoning: 'ok' }
+
+  it('schaltet Thinking ab und gibt Platz für 700 Wörter', async () => {
+    mocks.create
+      .mockResolvedValueOnce(toolUse({ ...base, blocks: longBlocks(120) }))
+      .mockResolvedValueOnce(toolUse(readability))
+    const { generateTermContent } = await import('@/lib/glossary/generate')
+    await generateTermContent('Mixture of Experts')
+    const params = mocks.create.mock.calls[0][0]
+    expect(params.thinking).toEqual({ type: 'disabled' })
+    expect(params.max_tokens).toBeGreaterThanOrEqual(8192)
+  })
+
+  it('fordert nach, wenn die Antwort unter 400 Wörtern bleibt', async () => {
+    mocks.create
+      .mockResolvedValueOnce(toolUse({ ...base, blocks: longBlocks(10) }))   // ~40 Wörter
+      .mockResolvedValueOnce(toolUse({ ...base, blocks: longBlocks(120) }))  // Nachforderung
+      .mockResolvedValueOnce(toolUse(readability))
+    const { generateTermContent } = await import('@/lib/glossary/generate')
+    const t = await generateTermContent('Mixture of Experts')
+    // Drei Calls: Erstversuch, Nachforderung, Lesbarkeits-Urteil.
+    expect(mocks.create).toHaveBeenCalledTimes(3)
+    // Die Nachforderung muss die gemessene Kürze benennen, sonst schreibt das
+    // Modell dieselbe Länge erneut.
+    expect(JSON.stringify(mocks.create.mock.calls[1][0].messages)).toMatch(/zu kurz|400/)
+    expect(JSON.stringify(t.body)).toContain('Wort119')
+  })
+
+  it('fordert NICHT nach, wenn die Antwort lang genug ist', async () => {
+    mocks.create
+      .mockResolvedValueOnce(toolUse({ ...base, blocks: longBlocks(120) }))
+      .mockResolvedValueOnce(toolUse(readability))
+    const { generateTermContent } = await import('@/lib/glossary/generate')
+    await generateTermContent('Mixture of Experts')
+    expect(mocks.create).toHaveBeenCalledTimes(2)
+  })
+
+  it('wirft, wenn der Eintrag auch nach der Nachforderung zu kurz bleibt', async () => {
+    // Regel 4 GILT: ein dauerhaft zu dünner Eintrag wird nicht angelegt. Der
+    // Aufrufer (generateAndInsertDraft) fängt den Wurf und liefert null, der
+    // Kandidat bleibt für einen späteren Versuch vorgemerkt.
+    mocks.create
+      .mockResolvedValueOnce(toolUse({ ...base, blocks: longBlocks(10) }))
+      .mockResolvedValueOnce(toolUse({ ...base, blocks: longBlocks(12) }))
+    const { generateTermContent } = await import('@/lib/glossary/generate')
+    await expect(generateTermContent('Mixture of Experts')).rejects.toThrow(/zu kurz|400/)
   })
 })
