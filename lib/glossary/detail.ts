@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getMatcherTerms } from '@/lib/glossary/terms'
 import { findGlossaryMentions } from '@/lib/glossary/mentions'
 import { injectGlossaryMarks } from '@/lib/glossary/inject-marks'
+import { injectStockLinks } from '@/lib/glossary/inject-stock-links'
 import { extractVisibleText } from '@/lib/posts/product-mentions'
 import { GLOSSARY_MAX_PER_ARTICLE } from '@/lib/glossary/types'
 import type { GlossaryStatus, GlossaryTerm } from '@/lib/glossary/types'
@@ -195,7 +196,17 @@ async function linkRelatedTerms(
   // auf einem Wort, das der Leser nie gelesen hat. Der Block darf mehr zeigen als
   // der Text verlinkt (bei Task 5 bereits als zulässig festgehalten), aber nicht
   // umgekehrt.
-  const body = injectGlossaryMarks(term.body, slugs, candidates)
+  // Zwei Injektionen, in dieser Reihenfolge: erst Lexikonbegriffe, dann
+  // Firmennamen auf ihre Stocks-Seite. Sie können sich nicht überschreiben —
+  // injectStockLinks überspringt Text, der schon eine Mark trägt, und
+  // injectGlossaryMarks hat Company-Namen ohnehin auf seiner reserved-Liste
+  // (Kollisionsregel des Projekts: Company > Chart-Produkt > Lexikonbegriff).
+  //
+  // Serverseitig, weil diese Seite ihren Text über renderStaticArticleHtml
+  // rendert: die DOM-Prozessoren, die Firmennamen in ARTIKELN verlinken, laufen
+  // client-seitig und kommen hier nie zum Zug.
+  const withGlossary = injectGlossaryMarks(term.body, slugs, candidates)
+  const body = injectStockLinks(withGlossary, lang)
 
   const fromText = candidates
     .filter((t) => slugs.includes(t.slug))
