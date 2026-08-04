@@ -674,3 +674,27 @@
 
 .tiptap-content:not(.ProseMirror) ul { list-style-type: disc; }
 .tiptap-content:not(.ProseMirror) ol { list-style-type: decimal; }
+
+/* Lexikon-Begriffe im Fließtext: gepunktete Unterstreichung, die Konvention aus
+   gedruckten Lexika. Muss sich von zwei bereits belegten Signalen unterscheiden —
+   DURCHGEZOGENE Unterstreichung markiert Chart-Produkte, cyaner Hintergrund den
+   Synthszr Take. Deshalb bewusst keine Farbe und kein Hintergrund: der Begriff
+   bleibt Teil des Satzes, die Auszeichnung ist eine Fußnote, keine Hervorhebung.
+
+   text-decoration statt border-bottom, damit die Linie bei einem Umbruch dem
+   Wort folgt statt am Zeilenende zu kleben. Beim Hover wird sie durchgezogen —
+   das ist die einzige Stelle, an der der Link wie ein Link aussehen darf. */
+.glossary-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: rgb(0 0 0 / 0.45);
+}
+
+.glossary-link:hover,
+.glossary-link:focus-visible {
+  text-decoration-style: solid;
+  text-decoration-color: currentColor;
+}

@@ -106,7 +106,14 @@ describe('tiptap-to-html (E-Mail) mit glossaryLink', () => {
     expect(html).not.toContain('/de/glossary/inferenz')
   })
 
-  it('rendert keinen style-Attribut (wie der bestehende link-Fall)', () => {
+  it('erbt die Textfarbe, statt wie ein gewöhnlicher Link zu färben', () => {
+    // Ersetzt einen Test, der bis 2026-08-04 das GEGENTEIL fixierte ("rendert
+    // kein style-Attribut, wie der bestehende link-Fall"). Damals stimmte das:
+    // ohne Auszeichnung war ein Begriffs-Link ein nackter <a>. Mit der
+    // Entscheidung für die gepunktete Unterstreichung braucht die E-Mail einen
+    // Inline-Stil — dort gibt es kein Stylesheet, das die Klasse aufgreifen
+    // könnte. Geprüft bleibt die Eigenschaft, die den Sinn trägt: der Begriff
+    // bleibt Teil des Satzes und wird nicht zum blauen Link.
     const doc = {
       type: 'doc',
       content: [{
@@ -115,7 +122,8 @@ describe('tiptap-to-html (E-Mail) mit glossaryLink', () => {
       }],
     }
     const html = convertTiptapToHtml(doc)
-    expect(html).toMatch(/<a href="[^"]+">Inferenz<\/a>/)
+    expect(html).toContain('color: inherit')
+    expect(html).not.toMatch(/color:\s*#?(0000ff|blue|1a0dab)/i)
   })
 
   it('entfernt {lex:}-Direktiven', () => {
@@ -200,5 +208,37 @@ describe('tiptap-to-markdown (GET /api/posts/[slug]/markdown) mit {lex:}', () =>
     }
     const markdown = convertTiptapToMarkdown(doc, { preserveCompanyTags: true })
     expect(markdown).toContain('{lex:Mixture of Experts}')
+  })
+})
+
+/**
+ * Auszeichnung der Begriffs-Links (Design-Entscheidung 2026-08-04): gepunktete
+ * Unterstreichung, die Lexikon-Konvention. Sie muss sich von zwei bereits
+ * belegten Signalen unterscheiden — durchgezogene Unterstreichung markiert
+ * Chart-Produkte, cyan Hintergrund den Synthszr Take.
+ *
+ * Im Web trägt die Mark die Klasse .glossary-link (globals.css). In der E-Mail
+ * gibt es kein Stylesheet, dort MUSS der Stil inline stehen, sonst ist ein
+ * Begriffs-Link von einem Quellen-Link nicht zu unterscheiden.
+ */
+describe('glossaryLink — Auszeichnung', () => {
+  const doc = {
+    type: 'doc',
+    content: [{
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'Inferenz', marks: [{ type: 'glossaryLink', attrs: { slug: 'inferenz' } }] }],
+    }],
+  }
+
+  it('zeichnet den Link in der E-Mail inline gepunktet aus', () => {
+    const html = convertTiptapToHtml(doc)
+    expect(html).toMatch(/underline\s+dotted|border-bottom:\s*1px\s+dotted/)
+  })
+
+  it('nutzt im Web die Klasse glossary-link statt Inline-Styles', () => {
+    // Im Web kommt der Stil aus globals.css — die Klasse ist der Anknüpfpunkt,
+    // ohne sie greift die CSS-Regel nicht.
+    const html = renderStaticArticleHtml(doc as never, 'de')
+    expect(html).toContain('glossary-link')
   })
 })

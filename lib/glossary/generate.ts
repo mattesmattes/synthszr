@@ -257,6 +257,10 @@ const READABILITY_TOOL = {
 // Referenztexte (supabase/_glossary_testdata.sql) als Kalibrierungsbeispiele im
 // Prompt — sie sind der konkrete Beweis für "was heißt 15-Jähriger ohne
 // Vorwissen, aber nicht kindlich", präziser als jede abstrakte Beschreibung.
+/** Untergrenze aus Regel 4 des Prompts — hier gespiegelt, damit ein Unterbieten
+ *  messbar wird, statt still durchzugehen. */
+const MIN_BODY_WORDS = 400
+
 const CALIBRATION_EXAMPLES = `--- BEISPIEL 1: Inferenz ---
 Ein KI-Modell durchläuft zwei sehr verschiedene Phasen. Beim Training lernt es aus Beispielen, was über Wochen laufen kann und einmal passiert. Bei der Inferenz benutzt man das fertige Modell: man stellt eine Frage, das Modell rechnet, eine Antwort kommt heraus. Das dauert Sekunden statt Wochen, passiert aber jedes Mal neu.
 
@@ -290,10 +294,10 @@ HARTE REGELN — keine Ausnahmen, kein "im Zweifel großzügig sein":
    - Ein Block "heading" + mindestens ein "paragraph": Wie funktioniert es?
    - Ein Block "heading" + mindestens ein "paragraph": Wo begegnet man dem Begriff (im Alltag, in News, in Produkten)?
 3a. ÜBERSCHRIFTEN benennen die SACHE, nicht die Leitfrage. Jede muss erkennbar zu DIESEM Begriff gehören und darf auf keinen anderen Eintrag passen. VERBOTEN sind deshalb die Leitfragen als Überschrift und jede Schablone dieser Art: "Warum das wichtig ist", "Wie es funktioniert", "Wo man dem Begriff begegnet". Zwei Einträge des Lexikons dürfen NIE dieselbe Überschrift tragen. Beispiel für "Inferenz": "Wie man sie günstiger macht" statt "Wie es funktioniert" — dieselbe Leitfrage, aber am konkreten Begriff formuliert.
-4. Gesamtlänge 400–700 Wörter über alle Blocks zusammen.
+4. LÄNGE, verbindlich: 400–700 Wörter über alle Blocks zusammen. Das ist keine Obergrenze, die du unterbieten sollst — 400 Wörter sind das MINDESTE. Konkret heißt das: der einleitende Absatz 4–6 Sätze, und jeder der drei Abschnitte mit Überschrift 2–3 Absätze à 3–5 Sätze. Ein Abschnitt aus einem einzigen Absatz ist zu dünn. Wenn dir der Stoff ausgeht, gehe in die Tiefe: ein konkretes Beispiel, eine Zahl, eine Abgrenzung zu einem verwandten Begriff, ein typischer Irrtum.
 5. Nutze eine konkrete Analogie, wo sie den Sachverhalt wirklich trägt — erzwinge aber keine Metapher, wenn eine klare Definition treffender ist.
 
-KALIBRIERUNG — bereits veröffentlichte Einträge auf exakt diesem Niveau (Ton, Satzlänge, Konkretheit):
+KALIBRIERUNG — die folgenden Beispiele sind AUSZÜGE und zeigen AUSSCHLIESSLICH Ton, Satzlänge und Konkretheit. Sie sind KEIN Längenmaßstab: sie sind auf ihre ersten Abschnitte gekürzt und damit deutlich kürzer als die 400–700 Wörter, die dein Eintrag haben muss. Schreibe in diesem Ton, aber vollständig nach Regel 3 und 4.
 
 ${CALIBRATION_EXAMPLES}
 
@@ -398,6 +402,24 @@ export async function generateTermContent(name: string): Promise<GeneratedTerm> 
     if (parsedJudge.success) readabilityScore = parsedJudge.data.readability_score
   } catch (e) {
     console.error('[glossary/generate] readability judge:', e instanceof Error ? e.message : e)
+  }
+
+  // Längen-Sichtbarkeit: Regel 4 verlangt mindestens 400 Wörter, das Modell
+  // unterbot das in Prod deutlich (ein Eintrag mit ~150 Wörtern). Ursache war,
+  // dass die Kalibrierungsbeispiele selbst nur 121-165 Wörter haben — der
+  // Prompt ZEIGTE also etwas anderes, als er SAGTE, und das Gezeigte gewinnt.
+  //
+  // Bewusst nur geloggt, nicht geworfen: ein zu kurzer Eintrag ist ein
+  // Qualitätsmangel, kein Defekt. Ihn zu verwerfen würde den Kandidaten
+  // vernichten (der Aufrufer bekommt null) und den Operator ohne Vorschlag
+  // dastehen lassen — schlechter als ein kurzer Text, den er sehen und
+  // überarbeiten kann. Der Log macht das Unterbieten messbar, falls die
+  // Prompt-Korrektur nicht ausreicht.
+  const bodyWords = c.blocks.reduce((n, b) => n + b.text.trim().split(/\s+/).filter(Boolean).length, 0)
+  if (bodyWords < MIN_BODY_WORDS) {
+    console.warn(
+      `[glossary/generate] "${canonicalName}": nur ${bodyWords} Wörter (Vorgabe ${MIN_BODY_WORDS}-700) — Eintrag ist zu dünn`,
+    )
   }
 
   return {

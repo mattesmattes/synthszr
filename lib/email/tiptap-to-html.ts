@@ -1161,7 +1161,7 @@ function applyMarks(text: string, marks?: Array<{ type: string; attrs?: Record<s
           const slug = mark.attrs?.slug
           if (!slug) break
           // Absolute URL: relative Pfade funktionieren in E-Mail-Clients nicht.
-          result = `<a href="${SITE_URL}/${lang}/glossary/${slug}">${result}</a>`
+          result = `<a href="${SITE_URL}/${lang}/glossary/${slug}" style="color: inherit; text-decoration: underline dotted; text-underline-offset: 2px;">${result}</a>`
           break
         }
       }
@@ -1301,7 +1301,7 @@ function renderContent(content?: TiptapNode[], lang: string = 'de'): string {
               const slug = mark.attrs?.slug
               if (!slug) break
               // Absolute URL: relative Pfade funktionieren in E-Mail-Clients nicht.
-              text = `<a href="${SITE_URL}/${lang}/glossary/${slug}">${text}</a>`
+              text = `<a href="${SITE_URL}/${lang}/glossary/${slug}" style="color: inherit; text-decoration: underline dotted; text-underline-offset: 2px;">${text}</a>`
               break
             }
           }
