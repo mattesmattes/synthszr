@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, CheckCircle2, XCircle, Trash2, RefreshCw, Eye, EyeOff, BookOpen, Languages, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, Trash2, RefreshCw, Eye, EyeOff, BookOpen, Languages, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -123,13 +123,29 @@ const STATUS_LABELS: Record<GlossaryStatus, string> = {
   hidden: 'Verborgen',
 }
 
-function StatusBadge({ status }: { status: GlossaryStatus }) {
+/** Bei `published` ist das Badge ein Link auf die öffentliche Seite — nur dort
+ *  existiert sie: der Loader filtert auf status='published' und liefert für
+ *  draft/hidden ein notFound(). Ein Link auf einen Entwurf wäre also ein 404. */
+function StatusBadge({ status, slug }: { status: GlossaryStatus; slug: string }) {
   const cls = status === 'published'
     ? 'text-green-700 border-green-300 dark:text-green-400'
     : status === 'hidden'
       ? 'text-muted-foreground'
       : 'text-blue-700 border-blue-300 dark:text-blue-400'
-  return <Badge variant="outline" className={cls}>{STATUS_LABELS[status]}</Badge>
+  const badge = <Badge variant="outline" className={cls}>{STATUS_LABELS[status]}</Badge>
+  if (status !== 'published') return badge
+  return (
+    <a
+      href={`/de/glossary/${slug}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Veröffentlichte Seite in neuem Tab öffnen"
+      className="inline-flex items-center gap-1 hover:opacity-80"
+    >
+      {badge}
+      <ExternalLink className="h-3 w-3 text-green-700 dark:text-green-400" />
+    </a>
+  )
 }
 
 const REVIEW_LABELS: Record<GlossaryReviewState, string> = {
@@ -360,7 +376,7 @@ export default function GlossaryAdminPage() {
                     <div className="min-w-0">
                       <CardTitle className="text-base flex items-center gap-2">
                         {term.canonical_name}
-                        <StatusBadge status={term.status} />
+                        <StatusBadge status={term.status} slug={term.slug} />
                         <ReviewBadge state={term.review_state} />
                       </CardTitle>
                       <p className="mt-1 text-xs text-muted-foreground">
