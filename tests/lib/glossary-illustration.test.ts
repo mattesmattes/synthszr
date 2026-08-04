@@ -124,12 +124,12 @@ describe('generateGlossaryIllustration', () => {
     //
     // 768 statt vormals 1024 (2026-08-04): die Zielgröße ist hier kein Detail,
     // sondern Teil der Dither-Wirkung. Sichtbar ist nicht die Rasterweite im
-    // Bild, sondern ihr Verhältnis zur Anzeigegröße (max-w-sm = 384px). Bei
-    // 1024px wird das Bild um Faktor 2,7 verkleinert und ein grobes Raster
-    // verschwimmt wieder zum Grauwert — genau der Effekt, der nach der
-    // Erhöhung auf coarseness 3 zu sehen war. An echten Bildern abgeglichen:
-    // 768px/4 arbeitet intern auf 192x192 und trifft die Mitte zwischen
-    // sichtbarem Raster und erkennbarem Motiv.
+    // Bild, sondern ihr Verhältnis zur Anzeigegröße (max-w-sm = 384 CSS-px,
+    // auf Retina 768 Geräte-px — bei 768px Bildbreite also 1:1). Bei 1024px
+    // wird das Bild verkleinert und ein grobes Raster verschwimmt wieder zum
+    // Grauwert. Diese Breite festzuhalten ist deshalb wichtiger als der
+    // Coarseness-Wert selbst: sie bestimmt, was eine Rasterzelle auf dem
+    // Schirm überhaupt bedeutet (n px im Bild = n/2 CSS-px).
     const meta = await sharp(Buffer.from(result.imageBase64!, 'base64')).metadata()
     expect(meta.width).toBe(768)
     expect(meta.height).toBe(768)

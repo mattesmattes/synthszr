@@ -1042,10 +1042,20 @@ export function buildGlossaryImagePrompt(termName: string, summary: string): str
  * unterhalb der Sichtbarkeitsschwelle.
  *
  * Deshalb näher an der Anzeigegröße generieren (768px statt 1024px) UND gröber
- * rastern (4). AN ECHTEN BILDERN ABGEGLICHEN, nicht gerechnet: 512px/6 arbeitet
+ * rastern. AN ECHTEN BILDERN ABGEGLICHEN, nicht gerechnet: 512px/6 arbeitet
  * intern auf 85x85 und zerstört das Motiv, 1024px/3 auf 341x341 und bleibt
- * unsichtbar fein. 768px/4 landet auf 192x192 — Raster klar erkennbar, Motiv
- * intakt, effektiv rund 2px pro Punkt auf dem Schirm.
+ * unsichtbar fein.
+ *
+ * MASSSTAB IST DIE ANZEIGE, NICHT DAS BILD: die Illustration steht in max-w-sm
+ * = 384 CSS-px, auf einem Retina-Schirm also 768 Geräte-Pixel — bei 768px
+ * Bildbreite genau 1:1. Eine Rasterzelle von n px im Bild ist damit n/2 CSS-px
+ * auf dem Schirm. Zwei Urteile grenzen den Wert ein:
+ *   - coarseness 1 bei 1024px → 0,375 CSS-px pro Punkt → verschwimmt zum
+ *     Grauwert, kein Raster sichtbar ("zu fein").
+ *   - coarseness 4 bei 768px → 2 CSS-px pro Punkt → Zellen als Quadrate lesbar,
+ *     das Motiv wirkt verpixelt statt gerastert ("zu grob").
+ * 2 trifft mit 1 CSS-px pro Punkt genau dazwischen und ist der klassische
+ * Dither-Look: ein Rasterpunkt pro Bildschirmpunkt.
  *
  * Die frühere Begründung für 1 stammte aus einem Abgleich mit einem SCHEMA-Bild,
  * bei dem 3 die feinen Elemente (Beschriftungen, kleine Kästen) zu Rauschen
@@ -1062,7 +1072,7 @@ export async function generateGlossaryIllustration(
   return generateAndProcessImage(termName, {
     enableDithering: true,
     ditheringGain: 1.0,
-    ditheringCoarseness: 4,
+    ditheringCoarseness: 2,
     // 768 statt 1024: je stärker das Bild im Browser verkleinert wird, desto
     // feiner erscheint das Raster (Anzeige ist max-w-sm = 384px).
     targetWidth: 768,
