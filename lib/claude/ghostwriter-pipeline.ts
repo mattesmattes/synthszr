@@ -19,6 +19,7 @@ import { enforceTakeEnding, TAKE_MARKER_RE } from '@/lib/claude/take-ending'
 import { capSummarySentences, shortenBySentences, BUNDLE_TAG_LINE_RE } from '@/lib/claude/bundle-length'
 import { stripLoneSurrogates, escapeQuellmaterialTag } from '@/lib/claude/sanitize'
 import { repoRetrievalParams } from '@/lib/mattes/repo-intensity'
+import { getModelCapabilities } from '@/lib/claude/model-capabilities'
 import {
   getActiveLearnedPatterns,
   findSimilarEditExamples,
@@ -930,19 +931,13 @@ async function callModelNonStreaming(
     // temperature/top_p/top_k UND budget_tokens mit 400 ab. effort gibt es ab
     // Opus 4.5 + Sonnet 4.6 + Sonnet 5, NICHT auf Haiku/Sonnet 4.5.
     const id = resolved.modelId
-    // ⚠️ WARTUNGSFALLE: das hier ist eine ALLOWLIST. Ein neues Modell, das hier fehlt,
-    // fällt in den else-Zweig und bekommt budget_tokens — was genau diese Modelle mit
-    // HTTP 400 ablehnen. Passiert am 2026-08-04 in Prod mit claude-opus-5: jeder
-    // Abschnitt des Tages-Artikels wurde durch die Fehlermeldung ersetzt.
-    // Beim Eintragen eines neuen Modells in lib/ai/use-cases.ts IMMER hier gegenprüfen.
-    const is2026Frontier =
-      id.startsWith('claude-opus-5') ||
-      id.startsWith('claude-sonnet-5') ||
-      id.startsWith('claude-fable-5') ||
-      id.startsWith('claude-mythos-5')
-    const adaptiveThinking = /claude-opus-4-[678]\b/.test(id) || id.startsWith('claude-sonnet-4-6') || is2026Frontier
-    const supportsEffort = /claude-opus-4-[5678]\b/.test(id) || id.startsWith('claude-sonnet-4-6') || is2026Frontier
-    const rejectsSampling = /claude-opus-4-[78]\b/.test(id) || is2026Frontier
+    // Capabilities kommen aus lib/claude/model-capabilities.ts. Dort stehen
+    // DENYLISTS der alten Modelle statt einer Allowlist der neuen: ein
+    // unbekanntes Modell gilt als modern und bekommt kein budget_tokens.
+    // Vorher war es umgekehrt, und claude-opus-5 fiel am 2026-08-04 in Prod
+    // durch das Raster — jeder Abschnitt des Tages-Artikels wurde durch die
+    // HTTP-400-Meldung ersetzt. Neue Modelle brauchen hier jetzt KEINE Pflege.
+    const { adaptiveThinking, supportsEffort, rejectsSampling } = getModelCapabilities(id)
 
     // SDK 0.71 typisiert adaptive/output_config noch nicht; die Felder werden zur
     // Laufzeit korrekt weitergereicht (gegen Production verifiziert), daher das `any`.
