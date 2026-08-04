@@ -623,3 +623,54 @@
     image-rendering: auto;
   }
 }
+
+/* Statisch gerenderter Lesetext (renderStaticArticleHtml) trägt .tiptap-content,
+   aber NICHT .ProseMirror — die .ProseMirror-Regeln weiter oben greifen dort
+   also nicht. Die ebenfalls gesetzte Utility "prose" ist wirkungslos:
+   @tailwindcss/typography ist in diesem Projekt nicht installiert (node_modules/
+   @tailwindcss/ enthält nur node, oxide, postcss), "prose"/"prose-h2:*" sind
+   damit undefinierte Klassen.
+
+   Folge ohne diese Regeln: Zwischenüberschriften im Erklärtext erscheinen als
+   normaler Fließtext und Absätze kleben aneinander — auf /de/glossary/* gesehen
+   (2026-08-04). Artikel fiel es nicht auf, weil dort nach der Hydration der
+   Client-Renderer mit .ProseMirror übernimmt.
+
+   :not(.ProseMirror) ist deshalb Absicht: identische Spezifität zu
+   ".ProseMirror h2" würde sonst allein über die Reihenfolge entscheiden und das
+   Artikel-Styling mitverändern. So greift das hier nur, wo nichts anderes greift
+   — inklusive des Artikel-SSR vor der Hydration, was den Layout-Shift dort
+   zusätzlich verkleinert. */
+.tiptap-content:not(.ProseMirror) h2 {
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  margin-top: 2rem;
+  margin-bottom: 0.625rem;
+}
+
+.tiptap-content:not(.ProseMirror) h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.tiptap-content:not(.ProseMirror) p {
+  margin-bottom: 1.125rem;
+}
+
+.tiptap-content:not(.ProseMirror) > *:first-child {
+  margin-top: 0;
+}
+
+.tiptap-content:not(.ProseMirror) ul,
+.tiptap-content:not(.ProseMirror) ol {
+  margin-bottom: 1.125rem;
+  padding-left: 1.5rem;
+  list-style-position: outside;
+}
+
+.tiptap-content:not(.ProseMirror) ul { list-style-type: disc; }
+.tiptap-content:not(.ProseMirror) ol { list-style-type: decimal; }
