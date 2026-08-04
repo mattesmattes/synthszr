@@ -144,9 +144,13 @@ export default async function GlossaryTermPage({ params }: PageProps) {
               das Cover in einen Artikel. GEO-unkritisch, anders als es der
               Kommentar oben für Navigation festhält — ein Bild ist kein
               Textblock, es verdrängt die zitierfähige Passage nicht, und sein
-              alt-Attribut ist ein Satz. */}
+              alt-Attribut ist ein Satz.
+
+              mt-8 zusätzlich zum mb-6 des Headers: der Sprachumschalter darüber
+              ist eine schmale Zeile, ohne diesen Abstand klebt die Illustration
+              daran und beide lesen sich als ein Block. */}
           {term.illustrationUrl && (
-            <div className="mb-6">
+            <div className="mt-8 mb-6">
               <Image
                 src={term.illustrationUrl}
                 alt={term.illustrationAlt || term.canonicalName}
