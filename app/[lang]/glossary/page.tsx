@@ -87,8 +87,25 @@ export default async function GlossaryIndexPage({ params }: PageProps) {
           <p className="text-gray-500">{t('glossary.index_empty')}</p>
         ) : (
           <div className="space-y-10">
+            {/* Sprungleiste erst ab 8 Buchstaben: die A-Z-Gliederung selbst gibt es
+                schon (eine Sektion je Anfangsbuchstabe), aber solange fast jeder
+                Buchstabe nur einen Eintrag hat, wäre eine Navigation länger als
+                die Liste, die sie erschließt. Reine Anker-Links, kein Client-JS. */}
+            {letters.length >= 8 && (
+              <nav aria-label={t('glossary.index_title')} className="flex flex-wrap gap-x-3 gap-y-1 border-b pb-4">
+                {letters.map((letter) => (
+                  <a
+                    key={letter}
+                    href={`#letter-${letter}`}
+                    className="font-mono text-sm text-gray-500 hover:text-black hover:underline"
+                  >
+                    {letter}
+                  </a>
+                ))}
+              </nav>
+            )}
             {letters.map((letter) => (
-              <section key={letter}>
+              <section key={letter} id={`letter-${letter}`} className="scroll-mt-6">
                 <h2 className="mb-3 font-mono text-sm text-gray-400">{letter}</h2>
                 <ul className="space-y-4">
                   {grouped.get(letter)!.map((term) => (
