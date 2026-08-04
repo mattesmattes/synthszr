@@ -16,9 +16,16 @@ const mocks = vi.hoisted(() => ({
     { slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] },
   ])),
   getChartProductNames: vi.fn(() => Promise.resolve([] as string[])),
+  generateAndInsertDraft: vi.fn(),
 }))
 
 vi.mock('@/lib/auth/session', () => ({ getSession: mocks.getSession }))
+// Die teure Begriffs-Erzeugung wird gemockt, ensure-terms läuft ECHT — der Test
+// prüft damit die tatsächliche Verdrahtung der Route (Erzeugen VOR Freigeben),
+// nicht das Verhalten eines Mocks.
+vi.mock('@/lib/glossary/draft-writer', () => ({
+  generateAndInsertDraft: mocks.generateAndInsertDraft,
+}))
 // buildReservedNames bleibt die ECHTE Implementierung (importOriginal) — pur,
 // seit Fix-Runde 1 (Task 16) mit reinjectGlossaryMarksForTranslation geteilt
 // statt in confirm.ts dupliziert.
@@ -50,6 +57,8 @@ function makeChain(table: string) {
     return q && q.length ? q.shift() : { data: null, error: null }
   }
   chain.single = vi.fn(async () => resolve())
+  // ensureConfirmedTermsExist lädt die Kandidatenliste mit .maybeSingle().
+  chain.maybeSingle = vi.fn(async () => resolve())
   chain.then = (res: (v: unknown) => void) => res(resolve())
   state.chains.push(chain)
   return chain
@@ -88,6 +97,10 @@ beforeEach(() => {
   state.chains.length = 0
   mocks.getMatcherTerms.mockClear()
   mocks.getChartProductNames.mockClear()
+  mocks.generateAndInsertDraft.mockReset()
+  mocks.generateAndInsertDraft.mockImplementation(async (_sb: unknown, name: string, slug: string) => ({
+    slug, canonicalName: name, aliases: [], summary: `Kurzfassung von ${name}.`,
+  }))
 })
 
 describe('PATCH /api/admin/generated-posts mit Glossar-Slugs', () => {
@@ -137,6 +150,47 @@ describe('PATCH /api/admin/generated-posts mit Glossar-Slugs', () => {
     expect(finalUpdate().pending_glossary_terms).toBeNull()
   })
 
+  it('erzeugt einen bestätigten, noch nicht existierenden Begriff VOR der Freigabe', async () => {
+    // Entkopplung 2026-08-04 (Befund B): die lexicon-Phase merkt Begriffe nur
+    // vor, erzeugt wird beim Speichern — und nur, was bestätigt wurde.
+    state.queues = {
+      generated_posts: [
+        // ensure-terms lädt die Kandidatenliste
+        { data: { pending_glossary_terms: [{
+          slug: 'speculative-decoding', name: 'Speculative Decoding', origin: 'new',
+          matchedText: null, isNewlyGenerated: false, needsGeneration: true,
+        }] }, error: null },
+      ],
+      glossary_terms: [
+        { data: [], error: null },                                  // Existenzprüfung: fehlt noch
+        { error: null },                                            // publish-Update
+        { data: [{ slug: 'speculative-decoding' }], error: null },  // Status-Check
+      ],
+    }
+    // Once, nicht dauerhaft: das beforeEach dieser Datei macht mockClear()
+    // (nicht mockReset(), das den in vi.hoisted definierten Default löschen
+    // würde) — eine dauerhafte Implementierung würde in die Folgetests lecken.
+    mocks.getMatcherTerms.mockResolvedValueOnce([
+      { slug: 'speculative-decoding', canonicalName: 'Speculative Decoding', aliases: [] },
+    ])
+    const { PATCH } = await import('@/app/api/admin/generated-posts/route')
+    await PATCH(patch({
+      id: 'p1',
+      content: doc('Speculative Decoding beschleunigt die Ausgabe.'),
+      confirmedGlossarySlugs: ['speculative-decoding'],
+    }) as never)
+
+    expect(mocks.generateAndInsertDraft).toHaveBeenCalledWith(
+      expect.anything(), 'Speculative Decoding', 'speculative-decoding',
+    )
+    // Reihenfolge ist der Kern: erst erzeugen, dann freigeben — sonst fände
+    // applyGlossaryConfirmation keinen Draft und der Artikel verlinkte auf eine
+    // notFound()-Seite.
+    const saved = finalUpdate()
+    expect(saved.content).toContain('glossaryLink')
+    expect(saved.pending_glossary_terms).toBeNull()
+  })
+
   it('lässt pending_glossary_terms unangetastet, wenn die Freigabe komplett fehlschlägt', async () => {
     // Review-Fix: schlägt das Publish-Update fehl (z.B. DB kurz nicht
     // erreichbar), bleibt der Begriff draft — die Kandidatenliste darf dann
@@ -167,6 +221,11 @@ describe('PATCH /api/admin/generated-posts mit Glossar-Slugs', () => {
         { data: [{ slug: 'inferenz' }], error: null },
       ],
       generated_posts: [
+        // Seit der Entkopplung läuft ensureConfirmedTermsExist VOR der Freigabe
+        // und fragt zuerst die Kandidatenliste ab — hier leer, es gibt nichts
+        // zu erzeugen. Ohne diesen Eintrag griffe sich die Kandidaten-Abfrage
+        // die Antwort des Content-Fallbacks (FIFO pro Tabelle).
+        { data: { pending_glossary_terms: null }, error: null },
         { data: { content: doc('Die Inferenz ist teuer.') }, error: null }, // Fallback-Fetch
       ],
     }

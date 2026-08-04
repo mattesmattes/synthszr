@@ -556,10 +556,19 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         // origin='tag' UND isNewlyGenerated=false — ein frisch generierter
         // Tag-Kandidat ist ungeprüfter LLM-Text und bekommt dieselbe offene
         // Checkbox wie ein 'new'-Kandidat (s. glossary-approval-panel.tsx).
+        //
+        // needsGeneration ebenfalls ausgenommen (Entkopplung 2026-08-04): zu
+        // diesen Kandidaten existiert noch kein Begriff, das Bestätigen LÖST DIE
+        // ERZEUGUNG AUS (LLM-Call + Bild, bis zu ~90s pro Begriff). Vorausgewählt
+        // würde ein gewöhnliches Speichern ungefragt Kosten und Wartezeit
+        // verursachen — die Vorauswahl bleibt deshalb auf das beschränkt, was nur
+        // veröffentlicht und verlinkt wird.
         const candidates: GlossaryCandidate[] = data.pending_glossary_terms || []
         setGlossaryCandidates(candidates)
         setConfirmedGlossarySlugs(
-          candidates.filter((c) => c.origin === 'tag' && !c.isNewlyGenerated).map((c) => c.slug),
+          candidates
+            .filter((c) => c.origin === 'tag' && !c.isNewlyGenerated && !c.needsGeneration)
+            .map((c) => c.slug),
         )
 
         // Load applied patterns for highlighting (pass content + ai_model for auto-redetection)

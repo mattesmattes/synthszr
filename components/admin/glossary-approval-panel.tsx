@@ -47,6 +47,8 @@ export function GlossaryApprovalPanel({ candidates, value, onChange }: GlossaryA
         <h3 className="font-medium text-sm">Lexikon-Begriffe zur Freigabe</h3>
         <p className="text-xs text-muted-foreground">
           Bestätigte Begriffe werden beim Speichern veröffentlicht und im Artikeltext verlinkt.
+          Bei „Text wird beim Speichern erzeugt“ entsteht der Erklärtext erst dann — pro
+          Speichervorgang höchstens drei, der Rest bleibt für den nächsten vorgemerkt.
         </p>
       </div>
 
@@ -70,6 +72,11 @@ export function GlossaryApprovalPanel({ candidates, value, onChange }: GlossaryA
                 {c.isNewlyGenerated && (
                   <Badge className="text-[10px] px-1.5 border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-100">
                     neu generiert · ungeprüft
+                  </Badge>
+                )}
+                {c.needsGeneration && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5">
+                    Text wird beim Speichern erzeugt
                   </Badge>
                 )}
               </div>

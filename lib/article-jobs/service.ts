@@ -519,15 +519,15 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
           // Abschluss-Review, Befund B: getMatcherTerms('de') signalisiert
           // einen Lesefehler der Begriffsliste seit dem Fix in terms.ts mit
           // `null` (vorher `[]`, ununterscheidbar von "keine veröffentlichten
-          // Begriffe"). Ein `?? []` liefe hier auf denselben Ausfall hinaus,
-          // den der Modul-Header von candidates.ts beschreibt: JEDER
-          // {lex:Begriff}, der auf einen bereits veröffentlichten Begriff
-          // zeigt, würde als neuer Kandidat behandelt und komplett neu
-          // generiert (Opus + Gemini + Blob-Upload) — der Insert stirbt am
-          // slug-Unique-Constraint, wird gefangen und der Kandidat
-          // verschwindet lautlos. Werfen statt degradieren: der bestehende
-          // catch unten loggt, der Artikel bleibt fertig, nur die
-          // Kandidatenliste bleibt unangetastet statt falsch überschrieben.
+          // Begriffe"). Ein `?? []` würde jeden {lex:Begriff}, der auf einen
+          // bereits veröffentlichten Begriff zeigt, als NEUEN Kandidaten
+          // vormerken. Seit der Entkopplung (2026-08-04) kostet das hier
+          // nichts mehr — aber der falsche Kandidat landet in der Freigabe,
+          // und bestätigt ihn der Operator, scheitert der Insert am
+          // slug-Unique-Constraint, nachdem Content-Call und Bild bezahlt sind.
+          // Werfen statt degradieren: der bestehende catch unten loggt, der
+          // Artikel bleibt fertig, nur die Kandidatenliste bleibt unangetastet
+          // statt falsch überschrieben.
           if (terms === null) {
             throw new Error('[ArticleJobs] getMatcherTerms(de) fehlgeschlagen — Lexikon-Phase abgebrochen')
           }

@@ -7,6 +7,15 @@ import { queueTranslations } from '@/lib/translations/queue'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
 import { embedPostContent, upsertPostEmbedding } from '@/lib/search/embeddings'
 import { applyGlossaryConfirmation } from '@/lib/glossary/confirm'
+import { ensureConfirmedTermsExist } from '@/lib/glossary/ensure-terms'
+
+// Der PATCH-Pfad erzeugt seit der Lexikon-Entkopplung (2026-08-04) bei einer
+// Freigabe bis zu MAX_GENERATE_PER_SAVE Begriffe, also LLM-Calls plus
+// Bildgenerierung. Ohne diese Deklaration liefe die Route auf dem Plattform-
+// Default — dieselbe latente Lücke, die der Task-18-Review für
+// app/api/admin/glossary/route.ts gemeldet hat: ein Bedien-Einstieg macht aus
+// einer theoretischen Laufzeitfrage eine reale.
+export const maxDuration = 300
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -199,6 +208,13 @@ export async function PATCH(request: NextRequest) {
     // Zugriff, und dieselbe Injektion muss auch die Übersetzungs- und
     // Backfill-Pfade bedienen, die nie über den Editor laufen.
     if (Array.isArray(body.confirmedGlossarySlugs)) {
+      // Reihenfolge ist zwingend: bestätigte Begriffe, die es noch nicht gibt,
+      // werden ERST erzeugt (Entkopplung 2026-08-04, Befund B — die
+      // lexicon-Phase merkt nur vor). Danach findet applyGlossaryConfirmation
+      // den Draft vor und kann ihn veröffentlichen; ohne diesen Schritt
+      // verlinkte der Artikel auf eine notFound()-Seite.
+      const ensured = await ensureConfirmedTermsExist(supabase, id, body.confirmedGlossarySlugs)
+
       const result = await applyGlossaryConfirmation(
         supabase,
         id,
@@ -210,7 +226,18 @@ export async function PATCH(request: NextRequest) {
       // gegriffen hat — sonst bleibt die Kandidatenliste erhalten, statt bei
       // z.B. einem kurzzeitigen DB-Fehler spurlos zu verschwinden, während
       // der Begriff weiterhin unveröffentlicht bleibt.
-      if (result.publishedSlugs.length > 0) updateData.pending_glossary_terms = null
+      //
+      // pendingRemainder hat Vorrang vor dem Leeren: hat der Deckel
+      // (MAX_GENERATE_PER_SAVE) Kandidaten abgeschnitten oder ist eine
+      // Generierung fehlgeschlagen, wird die gekürzte Liste geschrieben statt
+      // null. Sonst müsste der Operator die Begriffe neu identifizieren lassen
+      // — ein LLM-Call, um Information wiederzubeschaffen, die wir gerade
+      // gelöscht hätten.
+      if (ensured.pendingRemainder !== null) {
+        updateData.pending_glossary_terms = ensured.pendingRemainder
+      } else if (result.publishedSlugs.length > 0) {
+        updateData.pending_glossary_terms = null
+      }
     }
 
     const { error } = await supabase

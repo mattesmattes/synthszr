@@ -29,7 +29,11 @@ const mocks = vi.hoisted(() => ({
   assignProducts: vi.fn(),
 }))
 
-vi.mock('@/lib/glossary/generate', () => ({
+// importOriginal, damit slugify() ECHT bleibt: der Kandidaten-Slug für einen noch
+// nicht generierten Begriff entsteht seit der Entkopplung genau dort, ein Fake
+// würde die Behauptung "Slug ist ohne LLM-Call bestimmbar" wertlos machen.
+vi.mock('@/lib/glossary/generate', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/glossary/generate')>()),
   generateTermContent: mocks.generateTermContent,
 }))
 
@@ -141,24 +145,6 @@ describe('buildCandidateList', () => {
     expect(state.inCalls).toContainEqual(['slug', ['inferenz']])
   })
 
-  it('generiert und legt einen Begriff aus einem {lex:}-Tag als draft an, wenn er noch nicht existiert', async () => {
-    mocks.generateTermContent.mockResolvedValue(fixtureGenerated())
-    const { buildCandidateList } = await import('@/lib/glossary/candidates')
-    const result = await buildCandidateList(makeSupabase() as never, [], ['Mixture of Experts'], [], [])
-    expect(result).toEqual([
-      {
-        slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'tag', matchedText: null,
-        isNewlyGenerated: true, summary: fixtureGenerated().summary,
-      },
-    ])
-    expect(mocks.generateTermContent).toHaveBeenCalledWith('Mixture of Experts')
-    expect(state.inserts).toHaveLength(1)
-    expect(state.inserts[0]).toMatchObject({ table: 'glossary_terms', slug: 'mixture-of-experts', status: 'draft' })
-    // Ein frisch generierter Kandidat hat die summary schon aus generateTermContent
-    // — der zusätzliche DB-Nachschlag (teuer, unnötig) darf dafür NICHT laufen.
-    expect(state.inCalls.some((call) => call[0] === 'slug')).toBe(false)
-  })
-
   it('übernimmt bei Matcher-Treffern die matchedText aus dem Mention und den Namen aus der Begriffsliste, summary per DB-Nachschlag', async () => {
     state.summaryRows = [{ slug: 'inferenz', summary: 'Kurzfassung von Inferenz.' }]
     const { buildCandidateList } = await import('@/lib/glossary/candidates')
@@ -172,19 +158,6 @@ describe('buildCandidateList', () => {
         isNewlyGenerated: false, summary: 'Kurzfassung von Inferenz.',
       },
     ])
-  })
-
-  it('generiert einen neuen Begriff aus dem LLM-Vorschlag (origin=new) und legt ihn als draft an', async () => {
-    mocks.generateTermContent.mockResolvedValue(fixtureGenerated())
-    const { buildCandidateList } = await import('@/lib/glossary/candidates')
-    const result = await buildCandidateList(makeSupabase() as never, [], [], [], ['Mixture of Experts'])
-    expect(result).toEqual([
-      {
-        slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'new', matchedText: null,
-        isNewlyGenerated: true, summary: fixtureGenerated().summary,
-      },
-    ])
-    expect(state.inserts).toHaveLength(1)
   })
 
   it('Kosten-Bremse: generiert einen LLM-Vorschlag NICHT neu, wenn bereits ein Draft mit passendem Namen existiert', async () => {
@@ -236,85 +209,6 @@ describe('buildCandidateList', () => {
     errSpy.mockRestore()
   })
 
-  it('generiert eine Illustration nur, wenn needsIllustration=true ist', async () => {
-    mocks.generateTermContent.mockResolvedValue(fixtureGenerated({ needsIllustration: false }))
-    const { buildCandidateList } = await import('@/lib/glossary/candidates')
-    await buildCandidateList(makeSupabase() as never, [], [], [], ['Mixture of Experts'])
-    expect(mocks.generateGlossaryIllustration).not.toHaveBeenCalled()
-    expect(state.inserts[0].illustration_url).toBeNull()
-  })
-
-  it('lädt eine Illustration hoch und setzt illustration_url, wenn needsIllustration=true ist', async () => {
-    mocks.generateTermContent.mockResolvedValue(
-      fixtureGenerated({ needsIllustration: true, illustrationAlt: 'Schema der Experten-Auswahl' }),
-    )
-    mocks.generateGlossaryIllustration.mockResolvedValue({ success: true, imageBase64: 'ZmFrZQ==' })
-    mocks.uploadGlossaryIllustration.mockResolvedValue('https://blob.example/glossary/mixture-of-experts.png')
-    const { buildCandidateList } = await import('@/lib/glossary/candidates')
-    await buildCandidateList(makeSupabase() as never, [], [], [], ['Mixture of Experts'])
-    expect(state.inserts[0].illustration_url).toBe('https://blob.example/glossary/mixture-of-experts.png')
-    expect(state.inserts[0].illustration_alt).toBe('Schema der Experten-Auswahl')
-  })
-
-  it('verliert den Kandidaten NICHT, wenn der Illustration-Upload wirft (uploadGlossaryIllustration throws)', async () => {
-    mocks.generateTermContent.mockResolvedValue(fixtureGenerated({ needsIllustration: true, illustrationAlt: 'Alt' }))
-    mocks.generateGlossaryIllustration.mockResolvedValue({ success: true, imageBase64: 'ZmFrZQ==' })
-    mocks.uploadGlossaryIllustration.mockRejectedValue(new Error('blob store down'))
-    const { buildCandidateList } = await import('@/lib/glossary/candidates')
-    const result = await buildCandidateList(makeSupabase() as never, [], [], [], ['Mixture of Experts'])
-    expect(result).toEqual([
-      {
-        slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'new', matchedText: null,
-        isNewlyGenerated: true, summary: fixtureGenerated().summary,
-      },
-    ])
-    expect(state.inserts).toHaveLength(1)
-    expect(state.inserts[0].illustration_url).toBeNull()
-  })
-
-  it('verwirft nur den einen fehlgeschlagenen Kandidaten, nicht die ganze Liste', async () => {
-    mocks.generateTermContent.mockImplementation(async (name: string) => {
-      if (name === 'Bricht ab') throw new Error('LLM-Fehler')
-      return fixtureGenerated({ slug: 'ok-begriff', canonicalName: 'OK Begriff' })
-    })
-    const { buildCandidateList } = await import('@/lib/glossary/candidates')
-    const result = await buildCandidateList(makeSupabase() as never, [], [], [], ['Bricht ab', 'OK Begriff'])
-    expect(result).toEqual([
-      {
-        slug: 'ok-begriff', name: 'OK Begriff', origin: 'new', matchedText: null,
-        isNewlyGenerated: true, summary: fixtureGenerated().summary,
-      },
-    ])
-  })
-
-  it('verdrahtet: ein neu generierter Begriff bekommt Produkte zugeordnet', async () => {
-    mocks.generateTermContent.mockResolvedValue(fixtureGenerated())
-    mocks.assignProducts.mockResolvedValue(3)
-    const { buildCandidateList } = await import('@/lib/glossary/candidates')
-    await buildCandidateList(makeSupabase() as never, [], [], [], ['Mixture of Experts'])
-    // Die id kommt jetzt aus dem Insert (.select('id').single()), nicht mehr
-    // aus dem Rückgabewert von generateTermContent — genau das ist Befund 1.
-    expect(mocks.assignProducts).toHaveBeenCalledWith(
-      'id-mixture-of-experts', 'Mixture of Experts', fixtureGenerated().summary,
-    )
-  })
-
-  it('verdrahtet: ein Fehler in assignProducts verwirft den Begriff nicht', async () => {
-    mocks.generateTermContent.mockResolvedValue(fixtureGenerated())
-    mocks.assignProducts.mockRejectedValue(new Error('LLM-Fehler'))
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { buildCandidateList } = await import('@/lib/glossary/candidates')
-    const result = await buildCandidateList(makeSupabase() as never, [], [], [], ['Mixture of Experts'])
-    expect(result).toEqual([
-      {
-        slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'new', matchedText: null,
-        isNewlyGenerated: true, summary: fixtureGenerated().summary,
-      },
-    ])
-    expect(state.inserts).toHaveLength(1)
-    errSpy.mockRestore()
-  })
-
   it('Kollision: derselbe Slug aus Tag UND Matcher wird nur einmal aufgenommen, Tag gewinnt', async () => {
     const published = [{ slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }]
     const { buildCandidateList } = await import('@/lib/glossary/candidates')
@@ -323,5 +217,65 @@ describe('buildCandidateList', () => {
     )
     expect(result).toHaveLength(1)
     expect(result[0].origin).toBe('tag')
+  })
+})
+
+/**
+ * Entkopplung der Begriffs-Generierung (2026-08-04, Befund B).
+ *
+ * Vorher generierte buildCandidateList jeden unbekannten Namen sofort:
+ * pro Begriff zwei LLM-Calls + Bildgenerierung + Blob-Upload, sequenziell und
+ * ohne Zeitbudget. Ein Artikel mit 25 neuen Begriffen brauchte damit ~25 Min in
+ * einer Phase mit 300s-Limit — die lexicon-Phase wurde von Vercel gekillt,
+ * `pending_glossary_terms` nie geschrieben, und die bereits erzeugten Drafts
+ * blieben ohne Kandidatenliste unerreichbar (55 verwaiste Drafts in Prod).
+ *
+ * Jetzt markiert die Phase unbekannte Namen nur; generiert wird erst bei der
+ * Freigabe, also nur für die Begriffe, die der Operator tatsächlich will.
+ */
+describe('buildCandidateList — Generierung ist entkoppelt', () => {
+  it('generiert einen unbekannten {lex:}-Tag NICHT, sondern markiert ihn mit needsGeneration', async () => {
+    const { buildCandidateList } = await import('@/lib/glossary/candidates')
+    const result = await buildCandidateList(makeSupabase() as never, [], ['Mixture of Experts'], [], [])
+    expect(result).toEqual([
+      {
+        slug: 'mixture-of-experts', name: 'Mixture of Experts', origin: 'tag', matchedText: null,
+        isNewlyGenerated: false, needsGeneration: true, summary: undefined,
+      },
+    ])
+    expect(mocks.generateTermContent).not.toHaveBeenCalled()
+    expect(state.inserts).toHaveLength(0)
+  })
+
+  it('markiert auch einen LLM-Vorschlag (origin=new) statt ihn zu generieren', async () => {
+    const { buildCandidateList } = await import('@/lib/glossary/candidates')
+    const result = await buildCandidateList(makeSupabase() as never, [], [], [], ['Speculative Decoding'])
+    expect(result).toEqual([
+      {
+        slug: 'speculative-decoding', name: 'Speculative Decoding', origin: 'new', matchedText: null,
+        isNewlyGenerated: false, needsGeneration: true, summary: undefined,
+      },
+    ])
+    expect(mocks.generateTermContent).not.toHaveBeenCalled()
+    expect(mocks.generateGlossaryIllustration).not.toHaveBeenCalled()
+    expect(mocks.assignProducts).not.toHaveBeenCalled()
+  })
+
+  it('leitet den Slug per slugify aus dem Namen ab — ohne LLM-Call bestimmbar', async () => {
+    const { buildCandidateList } = await import('@/lib/glossary/candidates')
+    const result = await buildCandidateList(makeSupabase() as never, [], [], [], ['Große Sprachmodelle'])
+    // Der Slug muss der URL-Form entsprechen, die generate.ts erzeugt hätte:
+    // Umlaut transliteriert, nicht gestrippt (sonst wäre es "groe-sprachmodelle").
+    expect(result[0].slug).toBe('grosse-sprachmodelle')
+    expect(result[0].needsGeneration).toBe(true)
+  })
+
+  it('markiert einen Kandidaten mit bestehendem Begriff NICHT als needsGeneration', async () => {
+    state.draftRows = [{ slug: 'mixture-of-experts', canonical_name: 'Mixture of Experts', aliases: ['MoE'] }]
+    const { buildCandidateList } = await import('@/lib/glossary/candidates')
+    const result = await buildCandidateList(makeSupabase() as never, [], [], [], ['MoE'])
+    expect(result).toHaveLength(1)
+    expect(result[0].slug).toBe('mixture-of-experts')
+    expect(result[0].needsGeneration).toBeFalsy()
   })
 })

@@ -5,22 +5,29 @@
  *   - match: Matcher-Treffer gegen bereits veröffentlichte Begriffe
  *   - new:   vom LLM neu identifizierte, noch unbekannte Begriffe
  *
- * Für tag/new-Namen ohne bestehenden Begriff wird der Inhalt (+ ggf. eine
- * Illustration) generiert und der Begriff mit status='draft' angelegt.
- * Kosten-Bremse: bevor generiert wird, prüft ein Namens-Abgleich gegen
- * veröffentlichte, bereits als draft angelegte UND hidden-Begriffe — ein
- * unbestätigter Kandidat aus einem früheren Artikel (oder ein bewusst
- * versteckter) wird so wiederverwendet statt erneut (teuer) generiert zu
- * werden. hidden MUSS mit rein: glossary_terms.slug ist unique, also würde ein
- * erneuter Vorschlag desselben (versteckten) Begriffs sonst den vollen
- * LLM-Content-Call + ggf. Illustration/Upload durchlaufen und dann am
- * Unique-Constraint scheitern — der Kandidat verschwindet dabei lautlos
- * (tryGenerateDrafts catch), und zwar bei JEDER künftigen Erwähnung erneut.
+ * Diese Funktion GENERIERT NICHTS (Entkopplung 2026-08-04, Befund B). Sie ist
+ * reine Listen-Arbeit: DB-Reads plus Namensabgleich, damit die lexicon-Phase in
+ * Sekunden durchläuft. tag/new-Namen ohne bestehenden Begriff werden mit
+ * `needsGeneration: true` und einem aus dem Namen abgeleiteten Slug markiert;
+ * den Inhalt erzeugt erst die Freigabe (lib/glossary/confirm.ts) für die
+ * Begriffe, die der Operator wirklich bestätigt.
+ *
+ * Warum: vorher generierte jeder unbekannte Name hier sofort — zwei LLM-Calls,
+ * eine Bildgenerierung und ein Blob-Upload pro Begriff, sequenziell. Ein
+ * Artikel mit 25 neuen Begriffen brauchte ~25 Minuten in einer Phase mit
+ * 300s-Limit; Vercel killte sie, `pending_glossary_terms` wurde nie
+ * geschrieben, und die schon erzeugten Drafts blieben ohne Kandidatenliste
+ * unerreichbar (55 verwaiste Drafts in Prod).
+ *
+ * Der Namens-Abgleich gegen veröffentlichte, draft- UND hidden-Begriffe bleibt:
+ * er entscheidet, ob ein Kandidat auf einen bestehenden Begriff zeigt (nur
+ * verlinken) oder noch erzeugt werden muss. hidden MUSS mit rein, weil
+ * glossary_terms.slug unique ist — ein erneuter Vorschlag desselben
+ * (versteckten) Begriffs würde bei der Freigabe sonst am Unique-Constraint
+ * scheitern, und zwar bei jeder künftigen Erwähnung erneut.
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
-import { generateTermContent } from '@/lib/glossary/generate'
-import { generateGlossaryIllustration, uploadGlossaryIllustration } from '@/lib/gemini/image-generator'
-import { assignProducts } from '@/lib/glossary/products'
+import { slugify } from '@/lib/glossary/generate'
 import type { GlossaryCandidate, GlossaryCandidateOrigin, GlossaryMatcherTerm, GlossaryMention } from '@/lib/glossary/types'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -36,78 +43,6 @@ function findTermSlugByName(name: string, terms: GlossaryMatcherTerm[]): string 
     if (term.aliases.some((a) => a.trim().toLowerCase() === needle)) return term.slug
   }
   return null
-}
-
-/**
- * Generiert Inhalt + optional eine Illustration für `name` und legt den
- * Begriff als draft an. Gibt bei Fehlschlag `null` zurück statt zu werfen —
- * ein einzelner missratener LLM-Call darf nicht die gesamte Kandidatenliste
- * kosten (inkl. bereits aufgelöster tag-/match-Kandidaten).
- */
-async function tryGenerateDraft(
-  supabase: AdminClient,
-  name: string,
-): Promise<(GlossaryMatcherTerm & { summary: string }) | null> {
-  try {
-    const generated = await generateTermContent(name)
-
-    let illustrationUrl: string | null = null
-    let illustrationAlt: string | null = null
-    if (generated.needsIllustration) {
-      try {
-        const img = await generateGlossaryIllustration(generated.canonicalName, generated.summary)
-        if (img.success && img.imageBase64) {
-          // uploadGlossaryIllustration wirft bei Fehlern statt ein Error-Objekt
-          // zurückzugeben — der Begriff bleibt auch ohne Bild nützlich, also
-          // fängt der äußere try/catch dieses Blocks den Wurf ab, ohne den
-          // Kandidaten selbst zu verwerfen.
-          illustrationUrl = await uploadGlossaryIllustration(img.imageBase64, generated.slug)
-          illustrationAlt = generated.illustrationAlt
-        } else {
-          console.error(`[Glossary] Illustration für "${generated.slug}" fehlgeschlagen: ${img.error}`)
-        }
-      } catch (err) {
-        console.error(`[Glossary] Illustration-Upload für "${generated.slug}" fehlgeschlagen:`, err)
-      }
-    }
-
-    const { data: inserted, error } = await supabase.from('glossary_terms').insert({
-      slug: generated.slug,
-      canonical_name: generated.canonicalName,
-      aliases: generated.aliases,
-      status: 'draft',
-      summary: generated.summary,
-      body: generated.body,
-      illustration_url: illustrationUrl,
-      illustration_alt: illustrationAlt,
-      readability_score: generated.readabilityScore,
-    }).select('id').single()
-    if (error) throw new Error(`glossary_terms insert failed: ${error.message}`)
-
-    // Produkt-Zuordnung (Task 15) ist reine Zugabe — ein Fehler hier darf den
-    // fertig generierten Begriff nicht kosten, deshalb eigener try/catch wie
-    // beim Illustrations-Block oben.
-    const termId = (inserted as { id: string } | null)?.id
-    if (termId) {
-      try {
-        await assignProducts(termId, generated.canonicalName, generated.summary)
-      } catch (err) {
-        console.error(`[Glossary] Produkt-Zuordnung für "${generated.slug}" fehlgeschlagen:`, err)
-      }
-    } else {
-      console.error(`[Glossary] glossary_terms insert für "${generated.slug}" lieferte keine id — Produkt-Zuordnung übersprungen`)
-    }
-
-    return {
-      slug: generated.slug,
-      canonicalName: generated.canonicalName,
-      aliases: generated.aliases,
-      summary: generated.summary,
-    }
-  } catch (err) {
-    console.error(`[Glossary] Begriffs-Generierung für "${name}" fehlgeschlagen:`, err)
-    return null
-  }
 }
 
 export async function buildCandidateList(
@@ -133,8 +68,6 @@ export async function buildCandidateList(
     aliases: (r.aliases ?? []) as string[],
   }))
 
-  // Wächst während des Laufs: ein in diesem Tick neu generierter Begriff soll
-  // bei einer zweiten Erwähnung im selben Artikel nicht doppelt generiert werden.
   const knownTerms: GlossaryMatcherTerm[] = [...publishedTerms, ...existingTerms]
 
   const bySlug = new Map<string, GlossaryCandidate>()
@@ -148,15 +81,49 @@ export async function buildCandidateList(
     bySlug.set(slug, { slug, name, origin, matchedText, isNewlyGenerated, summary })
   }
 
+  /**
+   * Unbekannter Name: nur vormerken, nicht generieren. Der Slug wird JETZT
+   * festgelegt (nicht erst beim Erzeugen), weil Panel, Freigabe, Mark-Injektion
+   * und Seiten-URL denselben Schlüssel brauchen — die Freigabe gibt ihn als
+   * `forcedSlug` an generateAndInsertDraft weiter.
+   *
+   * Leerer Slug wird verworfen statt aufgenommen: slugify('') und
+   * slugify('   ') ergeben '', und ein Kandidat mit leerem Slug würde später in
+   * injectGlossaryMarks über boundaryRegex('') an JEDER Position mit Länge 0
+   * treffen und leere Textknoten erzeugen (ungültiges TipTap-JSON).
+   *
+   * Bekannte Grenze: zwei Schreibweisen desselben unbekannten Begriffs („MoE“
+   * und „Mixture of Experts“) ergeben zwei Slugs und damit zwei Kandidaten. Vorher
+   * fing das der Alias-Abgleich gegen den frisch generierten Begriff ab — was
+   * voraussetzte, dass das Modell den Alias auch liefert. Der Operator wählt
+   * jetzt ohnehin aus und kann den Doppelgänger abwählen; ein zweiter
+   * LLM-Call nur zur Namensnormalisierung wäre genau die Kostenart, die dieser
+   * Umbau beseitigt.
+   */
+  const addPendingCandidate = (name: string, origin: GlossaryCandidateOrigin) => {
+    const slug = slugify(name)
+    if (!slug) {
+      console.error(`[Glossary] Kandidat "${name}" ergibt einen leeren Slug — übersprungen`)
+      return
+    }
+    if (bySlug.has(slug)) return
+    bySlug.set(slug, {
+      slug, name, origin, matchedText: null,
+      isNewlyGenerated: false, needsGeneration: true, summary: undefined,
+    })
+  }
+
   // 1) {lex:Name}-Direktiven. Ein Tag kann auf einen bestehenden Begriff
   //    zeigen (dann nur verlinken) ODER auf einen, der noch nicht existiert
-  //    (dann jetzt generieren) — in beiden Fällen bleibt origin='tag', weil
+  //    (dann vormerken) — in beiden Fällen bleibt origin='tag', weil
   //    die Herkunft (explizite Direktive) zählt, nicht ob schon Inhalt existiert.
   //    isNewlyGenerated hält zusätzlich fest, ob der Inhalt ungeprüfter,
   //    frisch generierter LLM-Text ist — das ist eine andere Achse als origin
   //    und wird von Task 11/12 gebraucht, um Freigabe-Vorauswahl korrekt zu
-  //    steuern (ein frischer Tag-Kandidat hat dieselbe Vertrauensstufe wie ein
-  //    frischer new-Kandidat, obwohl beide origin unterschiedlich ist).
+  //    steuern. Seit der Entkopplung ist es beim Vormerken IMMER false: es
+  //    existiert noch kein Text, den ein Mensch übersehen könnte. Sobald die
+  //    Freigabe generiert, ist der Text zwar frisch — aber genau dort hat ihn
+  //    ein Mensch bewusst angefordert, was die Vorauswahl-Frage erledigt.
   for (const name of tagged) {
     const existingSlug = findTermSlugByName(name, knownTerms)
     if (existingSlug) {
@@ -164,11 +131,7 @@ export async function buildCandidateList(
       addCandidate(existingSlug, name, 'tag', null, false, undefined)
       continue
     }
-    const created = await tryGenerateDraft(supabase, name)
-    if (created) {
-      knownTerms.push(created)
-      addCandidate(created.slug, created.canonicalName, 'tag', null, true, created.summary)
-    }
+    addPendingCandidate(name, 'tag')
   }
 
   // 2) Matcher-Treffer gegen bereits veröffentlichte Begriffe — Inhalt existiert
@@ -187,11 +150,7 @@ export async function buildCandidateList(
       addCandidate(existingSlug, name, 'new', null, false, undefined)
       continue
     }
-    const created = await tryGenerateDraft(supabase, name)
-    if (created) {
-      knownTerms.push(created)
-      addCandidate(created.slug, created.canonicalName, 'new', null, true, created.summary)
-    }
+    addPendingCandidate(name, 'new')
   }
 
   // Nachschlag für Kandidaten, die auf einen BEREITS existierenden Begriff
@@ -200,8 +159,10 @@ export async function buildCandidateList(
   // knownTerms (GlossaryMatcherTerm, kein summary-Feld) führen die summary
   // mit. Ein gezielter Batch-Nachschlag statt eines Joins in jeder
   // Matcher-Query, die dafür nicht gebaut ist.
+  // needsGeneration-Kandidaten ausgenommen: zu ihnen existiert per Definition
+  // keine Zeile in glossary_terms, ein Nachschlag könnte nichts finden.
   const needSummary = Array.from(bySlug.values())
-    .filter((c) => c.summary === undefined)
+    .filter((c) => c.summary === undefined && !c.needsGeneration)
     .map((c) => c.slug)
   if (needSummary.length > 0) {
     const { data: summaryRows, error: summaryError } = await supabase

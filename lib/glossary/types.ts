@@ -59,4 +59,12 @@ export interface GlossaryCandidate {
    *  Einführung dieses Felds geschrieben wurden, haben kein `summary` — der
    *  Editor muss auch dann sauber (ohne Absturz/„undefined") rendern. */
   summary?: string
+  /** true, wenn zu diesem Kandidaten noch KEIN Begriff in `glossary_terms`
+   *  existiert: der Inhalt wird erst bei der Freigabe erzeugt (Entkopplung
+   *  2026-08-04, Befund B). Ein solcher Kandidat hat zwangsläufig keine
+   *  `summary` — das Panel zeigt ihn als „wird bei Freigabe erzeugt" statt mit
+   *  Vorschautext. Optional aus demselben Grund wie `summary`: Listen, die
+   *  vor dem Umbau geschrieben wurden, führen das Feld nicht, und dort ist
+   *  „fehlt" gleichbedeutend mit „Begriff existiert schon". */
+  needsGeneration?: boolean
 }
