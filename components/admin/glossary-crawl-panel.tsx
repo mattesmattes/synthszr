@@ -10,9 +10,10 @@ interface CrawlStatus {
   postsProcessed: number
   postsTotal: number
   candidateCount: number
+  selectedCount: number
   generatedCount: number
   updatedAt: string | null
-  topCandidates: Array<{ name: string; mentions: number }>
+  topCandidates: Array<{ name: string; mentions: number; selected: boolean }>
   postsPerExtraction: number
   termsPerGeneration: number
 }
@@ -49,6 +50,29 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   }, [])
 
   useEffect(() => { void fetchStatus() }, [fetchStatus])
+
+  /** Kandidat ab-/zuwählen. Optimistisch: der Klick soll sofort sichtbar sein,
+   *  bei 60 Badges wäre ein Rundlauf pro Klick träge. Bei Fehler wird der
+   *  Serverstand nachgeladen, damit die Anzeige nicht dauerhaft lügt. */
+  async function toggle(name: string, selected: boolean) {
+    setStatus((prev) => prev && ({
+      ...prev,
+      topCandidates: prev.topCandidates.map((c) => (c.name === name ? { ...c, selected } : c)),
+      selectedCount: prev.selectedCount + (selected ? 1 : -1),
+    }))
+    try {
+      const res = await fetch('/api/admin/glossary-crawl?action=toggle', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, selected }),
+      })
+      if (!res.ok) throw new Error(`Auswahl nicht gespeichert (HTTP ${res.status})`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Auswahl nicht gespeichert')
+      await fetchStatus()
+    }
+  }
 
   async function run(action: 'extract' | 'generate' | 'reset') {
     setBusy(action)
@@ -126,8 +150,12 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
 
           <div className="flex flex-wrap items-center gap-4 text-sm">
             <span>
-              <span className="font-mono font-bold tabular-nums">{status?.candidateCount ?? 0}</span>
-              <span className="ml-1.5 text-muted-foreground">Begriffe gefunden, noch nicht erzeugt</span>
+              <span className="font-mono font-bold tabular-nums">{status?.selectedCount ?? 0}</span>
+              <span className="ml-1.5 text-muted-foreground">
+                ausgewählt{' '}
+                {(status?.candidateCount ?? 0) !== (status?.selectedCount ?? 0) &&
+                  `(von ${status?.candidateCount ?? 0} gefunden)`}
+              </span>
             </span>
             <span>
               <span className="font-mono font-bold tabular-nums">{status?.generatedCount ?? 0}</span>
@@ -144,7 +172,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               size="sm"
               variant="outline"
               onClick={() => run('generate')}
-              disabled={busy !== null || (status?.candidateCount ?? 0) === 0}
+              disabled={busy !== null || (status?.selectedCount ?? 0) === 0}
             >
               {busy === 'generate' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
               {status?.termsPerGeneration ?? 3} Begriffe erzeugen &amp; veröffentlichen
@@ -185,18 +213,34 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           </CardHeader>
           <CardContent>
             <ul className="flex flex-wrap gap-1.5">
-              {status.topCandidates.map((c, i) => (
+              {status.topCandidates.map((c) => (
                 <li key={c.name}>
-                  <Badge
-                    variant={i < (status.termsPerGeneration ?? 3) ? 'default' : 'outline'}
-                    className="font-normal"
+                  {/* Klick wählt ab bzw. wieder zu. Abgewählte bleiben sichtbar,
+                      nur durchgestrichen und blass — verschwinden wäre schlechter,
+                      weil der Operator seine Entscheidung nicht mehr zurücknehmen
+                      könnte und der Begriff beim nächsten Crawl wieder auftaucht. */}
+                  <button
+                    type="button"
+                    onClick={() => toggle(c.name, !c.selected)}
+                    title={c.selected ? 'Abwählen — wird nicht erzeugt' : 'Wieder auswählen'}
+                    className="cursor-pointer"
                   >
-                    {c.name}
-                    <span className="ml-1.5 font-mono text-[10px] tabular-nums opacity-70">{c.mentions}×</span>
-                  </Badge>
+                    <Badge
+                      variant={c.selected ? 'default' : 'outline'}
+                      className={`font-normal ${c.selected ? '' : 'text-muted-foreground line-through opacity-60'}`}
+                    >
+                      {c.name}
+                      <span className="ml-1.5 font-mono text-[10px] tabular-nums opacity-70">{c.mentions}×</span>
+                    </Badge>
+                  </button>
                 </li>
               ))}
             </ul>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Alle gefundenen Begriffe sind ausgewählt. Klick entfernt einen aus der Warteschlange —
+              er bleibt sichtbar und lässt sich wieder zuschalten. Erzeugt werden immer die{' '}
+              {status.termsPerGeneration} häufigsten der ausgewählten.
+            </p>
             {status.candidateCount > status.topCandidates.length && (
               <p className="mt-2 text-xs text-muted-foreground">
                 … und {status.candidateCount - status.topCandidates.length} weitere.

@@ -55,11 +55,21 @@ export interface CrawlState {
   candidates: Record<string, number>
   /** Bereits erzeugte Slugs — verhindert einen zweiten Versuch nach Fehlschlag. */
   generated: string[]
+  /**
+   * Abgewählte Kandidaten-Namen. Alle gefundenen Begriffe sind standardmäßig
+   * AUSGEWÄHLT; hier stehen nur die, die der Operator ausdrücklich nicht will.
+   *
+   * Die Ausnahmen zu speichern statt der Auswahl ist wesentlich: die
+   * Kandidatenliste wächst bei jeder Extraktion weiter, und ein neu gefundener
+   * Begriff soll automatisch dabei sein. Würde man die Auswahl speichern, wäre
+   * jeder neue Kandidat implizit abgewählt und müsste erst zugeschaltet werden.
+   */
+  excluded: string[]
   updatedAt: string | null
 }
 
 const EMPTY_STATE: CrawlState = {
-  cursor: null, postsProcessed: 0, candidates: {}, generated: [], updatedAt: null,
+  cursor: null, postsProcessed: 0, candidates: {}, generated: [], excluded: [], updatedAt: null,
 }
 
 export async function readCrawlState(supabase: AdminClient): Promise<CrawlState> {
@@ -82,8 +92,27 @@ export async function readCrawlState(supabase: AdminClient): Promise<CrawlState>
     postsProcessed: typeof s.postsProcessed === 'number' ? s.postsProcessed : 0,
     candidates: s.candidates && typeof s.candidates === 'object' ? s.candidates : {},
     generated: Array.isArray(s.generated) ? s.generated : [],
+    excluded: Array.isArray(s.excluded) ? s.excluded : [],
     updatedAt: typeof s.updatedAt === 'string' ? s.updatedAt : null,
   }
+}
+
+/**
+ * Wählt einen Kandidaten ab oder wieder zu. Idempotent, damit ein doppelter
+ * Klick (oder ein wiederholter Request) den Zustand nicht kippt.
+ */
+export async function setCandidateExcluded(
+  supabase: AdminClient,
+  name: string,
+  excluded: boolean,
+): Promise<{ excluded: string[] }> {
+  const state = await readCrawlState(supabase)
+  const set = new Set(state.excluded)
+  if (excluded) set.add(name)
+  else set.delete(name)
+  const next = [...set]
+  await writeCrawlState(supabase, { ...state, excluded: next })
+  return { excluded: next }
 }
 
 async function writeCrawlState(supabase: AdminClient, state: CrawlState): Promise<void> {
@@ -212,9 +241,13 @@ export interface GenerationResult {
 export async function generateCandidates(supabase: AdminClient): Promise<GenerationResult> {
   const state = await readCrawlState(supabase)
   const alreadyGenerated = new Set(state.generated)
+  const excluded = new Set(state.excluded)
 
   const queue = Object.entries(state.candidates)
-    .filter(([name]) => !alreadyGenerated.has(slugify(name)))
+    // Abgewählte werden übersprungen, bleiben aber in der Liste: der Operator
+    // soll seine Entscheidung sehen und zurücknehmen können, statt dass der
+    // Begriff verschwindet und beim nächsten Crawl wieder auftaucht.
+    .filter(([name]) => !excluded.has(name) && !alreadyGenerated.has(slugify(name)))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, TERMS_PER_GENERATION)
 

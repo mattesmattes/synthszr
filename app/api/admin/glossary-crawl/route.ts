@@ -6,6 +6,7 @@ import {
   extractCandidates,
   generateCandidates,
   resetCrawlState,
+  setCandidateExcluded,
   POSTS_PER_EXTRACTION,
   TERMS_PER_GENERATION,
 } from '@/lib/glossary/crawl'
@@ -31,15 +32,18 @@ export async function GET() {
 
   // Die häufigsten offenen Kandidaten — genau die Reihenfolge, in der
   // generateCandidates sie abarbeitet, damit die Anzeige nicht lügt.
+  const excluded = new Set(state.excluded)
   const top = Object.entries(state.candidates)
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 40)
-    .map(([name, mentions]) => ({ name, mentions }))
+    .slice(0, 60)
+    .map(([name, mentions]) => ({ name, mentions, selected: !excluded.has(name) }))
 
   return NextResponse.json({
     postsProcessed: state.postsProcessed,
     postsTotal: totalPosts ?? 0,
     candidateCount: Object.keys(state.candidates).length,
+    // Nur die ausgewählten werden erzeugt — die Zahl, die der Operator braucht.
+    selectedCount: Object.keys(state.candidates).filter((n) => !excluded.has(n)).length,
     generatedCount: state.generated.length,
     updatedAt: state.updatedAt,
     topCandidates: top,
@@ -48,13 +52,14 @@ export async function GET() {
   })
 }
 
-const ACTIONS = ['extract', 'generate', 'reset'] as const
+const ACTIONS = ['extract', 'generate', 'reset', 'toggle'] as const
 type Action = (typeof ACTIONS)[number]
 
 /**
  * POST ?action=extract   → nächste 10 Artikel lesen, Kandidaten sammeln
  * POST ?action=generate  → die häufigsten Kandidaten erzeugen und veröffentlichen
  * POST ?action=reset     → Cursor und Kandidatenliste leeren (keine Begriffe löschen)
+ * POST ?action=toggle    → { name, selected } einen Kandidaten ab-/zuwählen
  *
  * Getrennte Aktionen statt eines "Alles machen"-Knopfes: Extraktion ist billig
  * und schnell, Generierung teuer und langsam. Zusammengelegt würde ein Klick
@@ -76,6 +81,13 @@ export async function POST(request: NextRequest) {
   const supabase = createAdminClient()
 
   try {
+    if (action === 'toggle') {
+      const body = await request.json().catch(() => ({})) as { name?: string; selected?: boolean }
+      if (!body.name) return NextResponse.json({ error: 'name fehlt' }, { status: 400 })
+      const result = await setCandidateExcluded(supabase, body.name, body.selected === false)
+      return NextResponse.json({ ok: true, excludedCount: result.excluded.length })
+    }
+
     if (action === 'reset') {
       await resetCrawlState(supabase)
       return NextResponse.json({ ok: true })
