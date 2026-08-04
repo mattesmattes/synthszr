@@ -30,12 +30,16 @@ export async function GET() {
     .select('id', { count: 'exact', head: true })
     .eq('status', 'published')
 
-  // Die häufigsten offenen Kandidaten — genau die Reihenfolge, in der
-  // generateCandidates sie abarbeitet, damit die Anzeige nicht lügt.
+  // ALLE offenen Kandidaten, in genau der Reihenfolge, in der
+  // generateCandidates sie abarbeitet — damit die Anzeige nicht lügt.
+  //
+  // Bewusst ohne Obergrenze: der Operator soll jeden Begriff abwählen können,
+  // und was er nicht sieht, kann er nicht abwählen. Eine Kappung machte die
+  // Auswahl für den Rest unmöglich (bei 187 Kandidaten waren 121 unsichtbar).
+  // Die Namen sind wenige Kilobyte, das trägt die Antwort problemlos.
   const excluded = new Set(state.excluded)
   const top = Object.entries(state.candidates)
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 60)
     .map(([name, mentions]) => ({ name, mentions, selected: !excluded.has(name) }))
 
   return NextResponse.json({

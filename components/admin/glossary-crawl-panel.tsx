@@ -144,18 +144,14 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               <span className="font-mono text-xs text-muted-foreground">{pct}%</span>
             </div>
             <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-sm bg-secondary">
-              <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+              <div className="h-full bg-foreground transition-all" style={{ width: `${pct}%` }} />
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-4 text-sm">
-            <span>
+            <span className="whitespace-nowrap">
               <span className="font-mono font-bold tabular-nums">{status?.selectedCount ?? 0}</span>
-              <span className="ml-1.5 text-muted-foreground">
-                ausgewählt{' '}
-                {(status?.candidateCount ?? 0) !== (status?.selectedCount ?? 0) &&
-                  `(von ${status?.candidateCount ?? 0} gefunden)`}
-              </span>
+              <span className="ml-1.5 text-muted-foreground">von {status?.candidateCount ?? 0} ausgewählt</span>
             </span>
             <span>
               <span className="font-mono font-bold tabular-nums">{status?.generatedCount ?? 0}</span>
@@ -166,7 +162,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => run('extract')} disabled={busy !== null}>
               {busy === 'extract' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-              Nächste {status?.postsPerExtraction ?? 10} Artikel lesen
+              Nächste{' '}{status?.postsPerExtraction ?? 10}{' '}Artikel lesen
             </Button>
             <Button
               size="sm"
@@ -175,7 +171,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               disabled={busy !== null || (status?.selectedCount ?? 0) === 0}
             >
               {busy === 'generate' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-              {status?.termsPerGeneration ?? 3} Begriffe erzeugen &amp; veröffentlichen
+              {status?.termsPerGeneration ?? 3}{' '}Begriffe erzeugen &amp; veröffentlichen
             </Button>
             <Button size="sm" variant="ghost" onClick={() => void fetchStatus()} disabled={busy !== null}>
               <RefreshCw className="mr-2 h-4 w-4" />
@@ -241,11 +237,6 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               er bleibt sichtbar und lässt sich wieder zuschalten. Erzeugt werden immer die{' '}
               {status.termsPerGeneration} häufigsten der ausgewählten.
             </p>
-            {status.candidateCount > status.topCandidates.length && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                … und {status.candidateCount - status.topCandidates.length} weitere.
-              </p>
-            )}
           </CardContent>
         </Card>
       )}

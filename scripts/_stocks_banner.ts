@@ -84,7 +84,10 @@ async function main() {
     ditheringCoarseness: 1,
     targetWidth: 1760,
     targetHeight: 800,
-  }, raw.imageBase64)
+  // rawBase64, NICHT raw.imageBase64: im Fallback-Fall ist letzteres leer, und
+  // generateAndProcessImage würde dann selbst generieren — also erneut über den
+  // redigierten OpenAI-Key laufen und mit 401 scheitern.
+  }, rawBase64)
   if (!processed.success || !processed.imageBase64) {
     console.error('[StocksBanner] Dithering fehlgeschlagen:', processed.error)
     process.exit(1)
