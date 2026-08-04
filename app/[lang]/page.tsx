@@ -4,7 +4,6 @@ import { FeaturedArticle } from "@/components/featured-article"
 import { FooterBrands } from "@/components/footer-brands"
 import { Newsletter } from "@/components/newsletter"
 import { AdPromo } from "@/components/ad-promo"
-import { HomeHero } from "@/components/home-hero"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 // import { CalligramFooter } from "@/components/calligram-footer"
@@ -275,9 +274,10 @@ export default async function Page({ params }: PageProps) {
 
         {featuredPost ? (
           <>
-            {/* Charts-Promo; "Search" (Nav) blendet das Such-Formular ein */}
-            <HomeHero locale={locale} />
-
+            {/* Charts-Promo hier entfernt (2026-08-04) — dieselbe Änderung wie in
+                app/page.tsx. ZWEI Startseiten-Dateien: die unlokalisierte (/) und
+                diese (/de, /en). Nur eine anzupassen hieß, dass die Promo auf /de
+                stehen blieb, während / sauber war. */}
             <FeaturedArticle
               slug={featuredPost.slug}
               title={featuredPost.title}
