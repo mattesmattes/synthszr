@@ -144,6 +144,24 @@ describe('stampLease', () => {
   })
 })
 
+describe('releaseLease', () => {
+  it('setzt last_advanced_at auf null, ohne den Status anzufassen', async () => {
+    // advanceJob ruft dies, wenn ein Tick ohne Abschluss endet (Budget oder
+    // Ueberlast unter dem Attempts-Limit): sonst bliebe der zuletzt von
+    // appendLog gestempelte Wert stehen, und getNextOpenJob wuerde den Job erst
+    // nach LEASE_STALE_MS (6 Minuten) wieder aufgreifen statt im naechsten
+    // Minutentick.
+    const { releaseLease } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_jobs'] = [{ data: null, error: null }]
+
+    await releaseLease(client, 'j1')
+
+    const chain = state.chains['glossary_jobs'][0]
+    expect(chain.update).toHaveBeenCalledWith({ last_advanced_at: null })
+    expect(chain.eq).toHaveBeenCalledWith('id', 'j1')
+  })
+})
+
 describe('appendLog', () => {
   it('haengt an das bestehende Protokoll an und zaehlt hoch', async () => {
     const { appendLog } = await import('@/lib/glossary/jobs/service')

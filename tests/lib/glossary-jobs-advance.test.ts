@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   finishJob: vi.fn(),
   setAttempts: vi.fn(),
   stampLease: vi.fn(),
+  releaseLease: vi.fn(),
 }))
 
 vi.mock('@/lib/glossary/crawl', () => ({
@@ -28,6 +29,7 @@ vi.mock('@/lib/glossary/jobs/service', () => ({
   finishJob: mocks.finishJob,
   setAttempts: mocks.setAttempts,
   stampLease: mocks.stampLease,
+  releaseLease: mocks.releaseLease,
 }))
 
 const client = {} as any
@@ -84,6 +86,10 @@ describe('advanceJob (generate)', () => {
 
     expect(res.units).toBe(1)
     expect(res.finished).toBe(false)
+    // Das Lease muss frei werden, sobald der Tick ohne Ergebnis "fertig" endet —
+    // sonst sieht getNextOpenJob erst nach LEASE_STALE_MS (6 Minuten) wieder
+    // nach diesem Job, statt ihn im naechsten Minutentick aufzugreifen.
+    expect(mocks.releaseLease).toHaveBeenCalledWith(client, 'j1')
   })
 
   it('beendet den Job, wenn nichts mehr offen ist', async () => {
@@ -98,6 +104,9 @@ describe('advanceJob (generate)', () => {
 
     expect(res.finished).toBe(true)
     expect(mocks.finishJob).toHaveBeenCalledWith(client, 'j1', 'done')
+    // Ein abgeschlossener Job wird nie wieder von getNextOpenJob aufgegriffen
+    // (Status nicht mehr in OPEN) — die Freigabe waere hier ueberfluessig.
+    expect(mocks.releaseLease).not.toHaveBeenCalled()
   })
 
   it('eskaliert nach zehn erfolglosen Durchgaengen zu error', async () => {
@@ -114,6 +123,7 @@ describe('advanceJob (generate)', () => {
     expect(mocks.finishJob).toHaveBeenCalledWith(
       client, 'j1', 'error', expect.stringContaining('überlastet'),
     )
+    expect(mocks.releaseLease).not.toHaveBeenCalled()
   })
 
   it('bleibt bei Ueberlast unter zehn Versuchen offen und beendet nur den Tick', async () => {
@@ -129,6 +139,9 @@ describe('advanceJob (generate)', () => {
     expect(res.finished).toBe(false)
     expect(mocks.setAttempts).toHaveBeenCalledWith(client, 'j1', 3)
     expect(mocks.finishJob).not.toHaveBeenCalled()
+    // Der naechste Cron soll den Job in der naechsten Minute wieder aufgreifen,
+    // nicht erst nach LEASE_STALE_MS — daher muss das Lease hier frei werden.
+    expect(mocks.releaseLease).toHaveBeenCalledWith(client, 'j1')
   })
 
   it('bricht bei cancel_requested ab, ohne zu arbeiten', async () => {
@@ -141,6 +154,7 @@ describe('advanceJob (generate)', () => {
 
     expect(mocks.generate).not.toHaveBeenCalled()
     expect(mocks.finishJob).toHaveBeenCalledWith(client, 'j1', 'cancelled')
+    expect(mocks.releaseLease).not.toHaveBeenCalled()
   })
 })
 
@@ -176,5 +190,80 @@ describe('advanceJob (images, relink)', () => {
     )
 
     expect(mocks.relink).toHaveBeenCalledWith(client, { since: '2020-01-01T00:00:00.000Z' })
+  })
+
+  it('images: haengt der Batch dauerhaft fest (done leer, aber Rest offen), endet der Tick nach EINEM Versuch', async () => {
+    // Regressionstest fuer den Review-Befund: generateMissingIllustrations hat
+    // kein retryable-Signal. Ohne Ueberlast-Erkennung waere "remaining > 0"
+    // gleichzeitig "exhausted: false" UND "overloaded: false" — die
+    // for(;;)-Schleife haette denselben deterministischen Batch (order('slug'))
+    // erneut aufgerufen, bis das ganze 240s-Budget verbraucht ist.
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.images.mockImplementation(async () => {
+      clock.advance()
+      return { done: [], failed: ['broken-term'], remaining: 3 }
+    })
+
+    const res = await advanceJob(
+      client, { ...JOB, kind: 'images' }, { now: clock.now, budgetMs: 240_000 },
+    )
+
+    expect(mocks.images).toHaveBeenCalledTimes(1)
+    expect(res.finished).toBe(false)
+    expect(mocks.setAttempts).toHaveBeenCalledWith(client, 'j1', 1)
+  })
+
+  it('images eskaliert nach zehn erfolglosen Durchgaengen zu error', async () => {
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.images.mockImplementation(async () => {
+      clock.advance()
+      return { done: [], failed: ['broken-term'], remaining: 3 }
+    })
+
+    const res = await advanceJob(
+      client, { ...JOB, kind: 'images', attempts: 9 }, { now: clock.now, budgetMs: 240_000 },
+    )
+
+    expect(res.finished).toBe(true)
+    expect(mocks.finishJob).toHaveBeenCalledWith(
+      client, 'j1', 'error', expect.stringContaining('überlastet'),
+    )
+  })
+
+  it('relink: findet ein Durchgang nichts (weder verlinkt noch unveraendert), endet der Tick nach EINEM Versuch', async () => {
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.relink.mockImplementation(async () => {
+      clock.advance()
+      return { linked: [], unchanged: 0, remaining: 5, cursor: 'abc' }
+    })
+
+    const res = await advanceJob(
+      client, { ...JOB, kind: 'relink' }, { now: clock.now, budgetMs: 240_000 },
+    )
+
+    expect(mocks.relink).toHaveBeenCalledTimes(1)
+    expect(res.finished).toBe(false)
+    expect(mocks.setAttempts).toHaveBeenCalledWith(client, 'j1', 1)
+  })
+
+  it('relink eskaliert nach zehn erfolglosen Durchgaengen zu error', async () => {
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.relink.mockImplementation(async () => {
+      clock.advance()
+      return { linked: [], unchanged: 0, remaining: 5, cursor: 'abc' }
+    })
+
+    const res = await advanceJob(
+      client, { ...JOB, kind: 'relink', attempts: 9 }, { now: clock.now, budgetMs: 240_000 },
+    )
+
+    expect(res.finished).toBe(true)
+    expect(mocks.finishJob).toHaveBeenCalledWith(
+      client, 'j1', 'error', expect.stringContaining('überlastet'),
+    )
   })
 })

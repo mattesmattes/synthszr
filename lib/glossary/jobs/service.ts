@@ -161,6 +161,27 @@ export async function stampLease(supabase: AdminClient, id: string): Promise<voi
 }
 
 /**
+ * Gibt das Lease frei, ohne den Status zu aendern.
+ *
+ * NUR aufrufen, nachdem die letzte Einheit eines Ticks abgeschlossen und ihr
+ * Ergebnis persistiert ist — sonst koennte ein zweiter Minutentick denselben
+ * Job uebernehmen, waehrend der erste noch arbeitet.
+ *
+ * Ohne diese Freigabe bleibt last_advanced_at auf dem zuletzt von appendLog
+ * gestempelten Wert stehen, wenn ein Tick ohne Abschluss endet (Budget
+ * aufgebraucht oder Ueberlast unter dem Attempts-Limit). getNextOpenJob
+ * haette den Job dann erst nach LEASE_STALE_MS (6 Minuten) wieder aufgegriffen
+ * statt im naechsten Minutentick — aus "naechster Cron in einer Minute" waeren
+ * ohne diese Funktion sechs Minuten geworden.
+ */
+export async function releaseLease(supabase: AdminClient, id: string): Promise<void> {
+  await supabase
+    .from('glossary_jobs')
+    .update({ last_advanced_at: null })
+    .eq('id', id)
+}
+
+/**
  * Haengt Protokollzeilen an und erhoeht den Zaehler.
  *
  * Read-modify-write auf dem JSONB: der Job wird immer nur von EINEM Tick

@@ -5,7 +5,7 @@
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateCandidates, generateMissingIllustrations, relinkNextBatch } from '@/lib/glossary/crawl'
-import { appendLog, finishJob, setAttempts, type GlossaryJob, type GlossaryJobLogEntry } from '@/lib/glossary/jobs/service'
+import { appendLog, finishJob, releaseLease, setAttempts, type GlossaryJob, type GlossaryJobLogEntry } from '@/lib/glossary/jobs/service'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -37,7 +37,11 @@ interface UnitOutcome {
   doneDelta: number
   /** Nichts mehr offen: der Job ist fertig. */
   exhausted: boolean
-  /** Nur voruebergehend gescheitert (Modell-Ueberlast). */
+  /**
+   * Nur voruebergehend gescheitert: die Einheit hat NICHTS erreicht, obwohl
+   * noch Arbeit offen ist (Modell-Ueberlast bei generate; bei images/relink
+   * mangels retryable-Signal als "keine Fortschritt" erkannt, s. runUnit).
+   */
   overloaded: boolean
 }
 
@@ -66,6 +70,13 @@ async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOut
 
   if (job.kind === 'images') {
     const r = await generateMissingIllustrations(supabase)
+    // IllustrationResult hat kein retryable-Signal wie generate — "ueberlastet"
+    // heisst hier deshalb: der Batch hat NICHTS erreicht (kein einziges Bild),
+    // obwohl noch etwas offen ist. Ohne dieses Signal wiederholt der Aufrufer
+    // denselben deterministischen Batch (order('slug'), crawl.ts) sofort erneut
+    // im selben Tick — bei einem dauerhaft scheiternden Begriff bis das ganze
+    // Zeitbudget verbraucht ist, Tick fuer Tick, ohne je zu eskalieren.
+    const noProgress = r.done.length === 0 && r.failed.length > 0 && r.remaining > 0
     return {
       entries: [
         ...r.done.map((s) => ({ at: stamp(), text: `${s} — Illustration erzeugt`, ok: true })),
@@ -73,12 +84,16 @@ async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOut
       ],
       doneDelta: r.done.length,
       exhausted: r.remaining === 0,
-      overloaded: false,
+      overloaded: noProgress,
     }
   }
 
   const since = (job.params.since as string | undefined) ?? null
   const r = await relinkNextBatch(supabase, { since })
+  // Gleiche Begruendung wie bei images: BackfillResult hat kein retryable-Feld,
+  // "ueberlastet" heisst hier "der Durchgang hat weder etwas verlinkt noch als
+  // unveraendert geprueft, obwohl noch Artikel offen sind".
+  const noProgress = r.linked.length === 0 && r.unchanged === 0 && r.remaining > 0
   return {
     entries: [
       ...r.linked.map((s) => ({ at: stamp(), text: `${s} — neu verlinkt`, ok: true })),
@@ -86,7 +101,7 @@ async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOut
     ],
     doneDelta: r.linked.length,
     exhausted: r.remaining === 0,
-    overloaded: false,
+    overloaded: noProgress,
   }
 }
 
@@ -120,7 +135,14 @@ export async function advanceJob(
     // die bisher langsamste reicht.
     if (units > 0) {
       const elapsed = now() - started
-      if (elapsed + slowestMs > budgetMs) return { units, finished: false }
+      if (elapsed + slowestMs > budgetMs) {
+        // Lease freigeben: die letzte Einheit ist abgeschlossen und persistiert,
+        // der naechste Minutentick darf den Job sofort wieder aufnehmen (s.
+        // releaseLease-Doku in service.ts — ohne das waeren es sechs Minuten
+        // statt einer).
+        await releaseLease(supabase, job.id)
+        return { units, finished: false }
+      }
     }
 
     const before = now()
@@ -148,7 +170,11 @@ export async function advanceJob(
       }
       await setAttempts(supabase, job.id, attempts)
       // Tick beenden statt sofort erneut zu versuchen: der naechste Cron
-      // kommt in einer Minute, das ist die Wartezeit.
+      // kommt in einer Minute. Das stimmt nur, WEIL das Lease jetzt freigegeben
+      // wird — sonst haette last_advanced_at (gerade erst von appendLog
+      // gestempelt) den Job fuer LEASE_STALE_MS (6 Minuten) fuer getNextOpenJob
+      // gesperrt.
+      await releaseLease(supabase, job.id)
       return { units, finished: false }
     }
 
