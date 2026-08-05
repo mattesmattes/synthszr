@@ -190,11 +190,15 @@ export default function GlossaryAdminPage() {
   // veröffentlichten. Ohne Filter ist die Liste eine Wand aus Karten, in der die
   // veröffentlichten Begriffe und offene Revisionen untergehen.
   const [statusFilter, setStatusFilter] = useState<GlossaryStatus | 'all'>('all')
-  // Zwei Ansichten auf denselben Gegenstand: die Begriffsliste und der
-  // Artikel-Crawl, der neue Begriffe findet. Bewusst ein Umschalter statt einer
+  // Zwei Ansichten auf denselben Gegenstand: der Artikel-Crawl, der neue
+  // Begriffe findet, und die Begriffsliste. Bewusst ein Umschalter statt einer
   // eigenen Route — nach dem Erzeugen will man direkt in der Liste sehen, was
   // entstanden ist.
-  const [view, setView] = useState<'terms' | 'crawl'>('terms')
+  //
+  // Der Crawl steht vorn und ist die Startansicht: er ist der Einstieg in die
+  // Arbeit (Artikel lesen, Kandidaten finden, Begriffe erzeugen), die Liste
+  // zeigt das Ergebnis danach.
+  const [view, setView] = useState<'terms' | 'crawl'>('crawl')
   const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
@@ -375,7 +379,7 @@ export default function GlossaryAdminPage() {
       {/* Ansicht-Umschalter über den Statusfiltern: der Crawl findet Begriffe,
           die Liste zeigt sie — beides gehört zum Lexikon und bleibt an einem Ort. */}
       <div className="mb-6 flex items-center gap-2 border-b">
-        {([['terms', 'Begriffe'], ['crawl', 'Artikel-Crawl']] as Array<['terms' | 'crawl', string]>).map(
+        {([['crawl', 'Artikel-Crawl'], ['terms', 'Begriffe']] as Array<['terms' | 'crawl', string]>).map(
           ([key, label]) => (
             <button
               key={key}
