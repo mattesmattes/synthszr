@@ -97,13 +97,17 @@ describe('injectGlossaryMarks', () => {
     expect(out.content[0].content[0].marks.map(m => m.type).sort()).toEqual(['bold', 'glossaryLink'])
   })
 
-  it('begrenzt auf GLOSSARY_MAX_PER_ARTICLE', () => {
+  it('verlinkt ALLE vorkommenden Begriffe, ohne Obergrenze', () => {
+    // Bis 2026-08-05 auf GLOSSARY_MAX_PER_ARTICLE (8) gedeckelt, gegen Linkspam
+    // im Fließtext. Betreiber-Entscheidung: der Deckel ist raus, jeder erkannte
+    // Begriff wird verlinkt. Die Konstante bleibt für die Länge der
+    // Sidebar-Liste in detail.ts, sie hat dort einen anderen Zweck.
     const many = Array.from({ length: 12 }, (_, i) => ({
       slug: `t${i}`, canonicalName: `Begriff${i}`, aliases: [],
     }))
     const text = many.map(t => t.canonicalName).join(' und ')
     const out = injectGlossaryMarks(doc(text), many.map(t => t.slug), many)
-    expect(linked(out)).toHaveLength(8)
+    expect(linked(out)).toHaveLength(12)
   })
 
   it('verlinkt beide Begriffe, wenn die Textreihenfolge der Term-Reihenfolge widerspricht', () => {

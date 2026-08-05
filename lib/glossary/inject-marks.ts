@@ -1,4 +1,3 @@
-import { GLOSSARY_MAX_PER_ARTICLE } from '@/lib/glossary/types'
 import { matchNameInText } from '@/lib/glossary/mentions'
 import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
 
@@ -39,7 +38,7 @@ function stripMarks(node: unknown): unknown {
  * durch die Übersetzung getragen werden.
  *
  * Pro Begriff wird nur die erste Erwähnung verlinkt, insgesamt maximal
- * GLOSSARY_MAX_PER_ARTICLE Begriffe. Text, der schon eine `link`-Mark trägt
+ * beliebig viele Begriffe. Text, der schon eine `link`-Mark trägt
  * (Quellenlink) oder bereits Company-/Produkt-verlinkt ist, wird übersprungen.
  */
 export function injectGlossaryMarks(
@@ -57,15 +56,20 @@ export function injectGlossaryMarks(
   // seinen unproblematischen kanonischen Namen verlinkbar, auch wenn einer
   // seiner Aliasse reserviert ist.
   const reserved = new Set((opts.reserved ?? []).map((n) => n.toLowerCase()))
-  // KEIN slice() hier. Der Deckel greift unten auf die TATSÄCHLICH GESETZTEN
-  // Marks (`done.size`), nicht auf die Kandidatenauswahl.
+  // KEINE OBERGRENZE (Betreiber-Entscheidung 2026-08-05): jeder erkannte Begriff
+  // wird verlinkt.
   //
-  // PROD-BEFUND 2026-08-05: vorher stand hier .slice(0, GLOSSARY_MAX_PER_ARTICLE).
-  // Solange `slugs` die bestätigten Kandidaten EINES Artikels waren, war das
-  // harmlos — die kamen ohnehin alle aus seinem Text. Der Nachverlinkungs-Lauf
-  // übergibt aber den GANZEN Bestand, und dann schnitt der Deckel die ersten acht
-  // Begriffe in DB-Reihenfolge heraus. Bei 101 Begriffen war keiner davon im
-  // Artikel: null Marks, ohne Fehler und ohne Log.
+  // Zur Geschichte, weil hier zwei Fehler übereinander lagen: ursprünglich stand
+  // .slice(0, GLOSSARY_MAX_PER_ARTICLE) an dieser Stelle — der Deckel griff also
+  // auf die AUSWAHL statt auf das Ergebnis. Solange `slugs` die bestätigten
+  // Kandidaten EINES Artikels waren, fiel das nicht auf; der
+  // Nachverlinkungs-Lauf übergibt aber den ganzen Bestand, und dann schnitt der
+  // Deckel die ersten acht Begriffe in DB-Reihenfolge heraus. Bei 101 Begriffen
+  // war keiner davon im Artikel: null Marks, ohne Fehler und ohne Log. Der
+  // Zwischenfix zählte die gesetzten Marks; jetzt ist der Deckel ganz raus.
+  //
+  // GLOSSARY_MAX_PER_ARTICLE bleibt in lib/glossary/detail.ts in Gebrauch — dort
+  // begrenzt es die Länge der Sidebar-Liste und hat einen anderen Zweck.
   const wanted = terms.filter((t) => slugs.includes(t.slug))
   if (wanted.length === 0) return cleaned
 
@@ -80,13 +84,8 @@ export function injectGlossaryMarks(
       // Link geschachtelt werden.
       if (hasMark(o, 'link')) return o
 
-      // Deckel auf die gesetzten Marks: ein Artikel soll nicht zur Linkliste
-      // werden. Hier statt oben, damit gezählt wird, was wirklich verlinkt wurde.
-      if (done.size >= GLOSSARY_MAX_PER_ARTICLE) return o
-
       for (const term of wanted) {
         if (done.has(term.slug)) continue
-        if (done.size >= GLOSSARY_MAX_PER_ARTICLE) break
         // Reservierte Namen fallen einzeln raus, nicht der ganze Begriff —
         // ein Alias-Kollision mit einer Company/einem Produkt darf den
         // kanonischen Namen desselben Begriffs nicht mitblockieren.
