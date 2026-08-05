@@ -73,6 +73,20 @@ export function injectGlossaryMarks(
   const wanted = terms.filter((t) => slugs.includes(t.slug))
   if (wanted.length === 0) return cleaned
 
+  // MEHRDEUTIGE ALIASSE ausschliessen (Prod-Befund 2026-08-05): "Benchmarking"
+  // steht als Alias bei "Evaluation" UND bei "Benchmark". Verlinkt wurde, wer in
+  // der DB-Reihenfolge zufaellig vorne stand — im Artikel fuehrte "Benchmarking"
+  // auf /glossary/evaluation. Bei Mehrdeutigkeit ist kein Link besser als der
+  // falsche; der KANONISCHE Name bleibt unberuehrt, er ist eindeutig zugeordnet.
+  const aliasOwners = new Map<string, number>()
+  for (const t of wanted) {
+    for (const a of t.aliases) {
+      const key = a.toLowerCase()
+      aliasOwners.set(key, (aliasOwners.get(key) ?? 0) + 1)
+    }
+  }
+  const ambiguous = new Set([...aliasOwners.entries()].filter(([, n]) => n > 1).map(([k]) => k))
+
   const done = new Set<string>()
 
   const walk = (node: unknown): unknown => {
@@ -91,6 +105,8 @@ export function injectGlossaryMarks(
         // kanonischen Namen desselben Begriffs nicht mitblockieren.
         const names = [term.canonicalName, ...term.aliases]
           .filter((n) => !reserved.has(n.toLowerCase()))
+          // Mehrdeutige Aliasse fallen einzeln raus, der kanonische Name bleibt.
+          .filter((n) => n === term.canonicalName || !ambiguous.has(n.toLowerCase()))
           .sort((a, b) => b.length - a.length)
         if (names.length === 0) continue
         for (const name of names) {

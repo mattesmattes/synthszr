@@ -197,11 +197,11 @@ export default async function GlossaryTermPage({ params }: PageProps) {
             <figure className="mt-8 mb-6">
               <Image
                 src={term.illustrationUrl}
-                // alt LEER, wenn eine Bildunterschrift daruntersteht: die
-                // figcaption beschreibt das Bild dann bereits, und Screenreader
-                // laesen sonst denselben Satz zweimal. Ohne Untertitel (kein
-                // illustration_alt) traegt das alt weiter die Beschreibung.
-                alt={term.illustrationAlt ? '' : term.canonicalName}
+                // Der Alt-Text traegt die Beschreibung — SICHTBARE Bildunterschrift
+                // gibt es nicht mehr (Betreiber-Entscheidung 2026-08-05). Sie war
+                // als zusaetzlicher Text am Bild fuer Bildsuche und Sprachmodelle
+                // gedacht, stand aber unter jeder Illustration im Weg.
+                alt={term.illustrationAlt || term.canonicalName}
                 width={768}
                 height={768}
                 // priority statt lazy: das Bild steht ueber der Ueberschrift, ist
@@ -225,14 +225,6 @@ export default async function GlossaryTermPage({ params }: PageProps) {
                 // (s. generateGlossaryIllustration).
                 className="mx-auto h-auto w-full max-w-[326px] dithered-cover"
               />
-              {/* Bildunterschrift: zusaetzlicher, thematisch dichter Text direkt am
-                  Bild — fuer die Bildsuche und fuer Sprachmodelle, die Bild und
-                  Text zusammen lesen. */}
-              {term.illustrationAlt && (
-                <figcaption className="mx-auto mt-2 max-w-[326px] text-xs leading-snug text-gray-500">
-                  {term.illustrationAlt}
-                </figcaption>
-              )}
             </figure>
           )}
 

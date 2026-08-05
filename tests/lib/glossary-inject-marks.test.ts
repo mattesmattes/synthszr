@@ -140,3 +140,41 @@ describe('injectGlossaryMarks', () => {
       .toEqual([])
   })
 })
+
+describe('injectGlossaryMarks — mehrdeutige Aliasse', () => {
+  it('verlinkt einen mehrdeutigen Alias nicht auf den FALSCHEN Begriff', () => {
+    // PROD-BEFUND 2026-08-05: "Benchmarking" wurde auf /glossary/evaluation
+    // verlinkt, obwohl es einen eigenen Begriff "Benchmark" gibt — der Alias steht
+    // bei BEIDEN, und gewonnen hat, wer in der DB-Reihenfolge vorne stand.
+    //
+    // Der mehrdeutige Alias faellt jetzt aus. Uebrig bleibt der Treffer ueber den
+    // kanonischen Namen "Benchmark" (die Kompositum-Regel erlaubt Grenzen nur
+    // davor, "Benchmarking" enthaelt also "Benchmark") — und der zeigt auf die
+    // RICHTIGE Seite. Genau das ist erwuenscht.
+    const terms = [
+      { slug: 'evaluation', canonicalName: 'Evaluation', aliases: ['Benchmarking'] },
+      { slug: 'benchmark', canonicalName: 'Benchmark', aliases: ['Benchmarking'] },
+    ]
+    const out = injectGlossaryMarks(doc('Ein eingestuftes Benchmarking-Verfahren.'),
+      terms.map(t => t.slug), terms)
+    expect(linked(out).map(l => l.slug)).toEqual(['benchmark'])
+  })
+
+  it('verlinkt weiter über den KANONISCHEN Namen, auch wenn ein Alias mehrdeutig ist', () => {
+    const terms = [
+      { slug: 'evaluation', canonicalName: 'Evaluation', aliases: ['Benchmarking'] },
+      { slug: 'benchmark', canonicalName: 'Benchmark', aliases: ['Benchmarking'] },
+    ]
+    const out = injectGlossaryMarks(doc('Der Benchmark zeigt es.'), terms.map(t => t.slug), terms)
+    expect(linked(out).map(l => l.slug)).toEqual(['benchmark'])
+  })
+
+  it('verlinkt einen EINDEUTIGEN Alias weiterhin', () => {
+    const terms = [
+      { slug: 'evaluation', canonicalName: 'Evaluation', aliases: ['Modellevaluation'] },
+      { slug: 'benchmark', canonicalName: 'Benchmark', aliases: ['Leistungstest'] },
+    ]
+    const out = injectGlossaryMarks(doc('Die Modellevaluation lief.'), terms.map(t => t.slug), terms)
+    expect(linked(out).map(l => l.slug)).toEqual(['evaluation'])
+  })
+})
