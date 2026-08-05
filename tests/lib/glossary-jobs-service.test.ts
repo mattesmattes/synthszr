@@ -125,6 +125,25 @@ describe('getNextOpenJob', () => {
   })
 })
 
+describe('stampLease', () => {
+  it('setzt processing und stempelt last_advanced_at', async () => {
+    // Die Cron-Route ruft dies direkt nach getNextOpenJob: der Job muss noch
+    // vor der ersten Arbeitseinheit als "in Arbeit" markiert sein, sonst
+    // koennte ein zweiter Minutentick denselben Job innerhalb der Lease-Frist
+    // fuer sich beanspruchen.
+    const { stampLease } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_jobs'] = [{ data: null, error: null }]
+
+    await stampLease(client, 'j1')
+
+    const chain = state.chains['glossary_jobs'][0]
+    expect(chain.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'processing', last_advanced_at: expect.any(String) }),
+    )
+    expect(chain.eq).toHaveBeenCalledWith('id', 'j1')
+  })
+})
+
 describe('appendLog', () => {
   it('haengt an das bestehende Protokoll an und zaehlt hoch', async () => {
     const { appendLog } = await import('@/lib/glossary/jobs/service')
