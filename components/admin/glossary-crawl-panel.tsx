@@ -39,6 +39,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   const stopRequested = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [lastResult, setLastResult] = useState<string | null>(null)
+  /** Laufendes Protokoll des Batchs — ein Eintrag je Begriff, damit sichtbar
+   *  ist, dass etwas passiert. Ein Zaehler allein reicht nicht: bei 90s je
+   *  Begriff sieht eine unveraenderte Zahl wie ein Absturz aus. */
+  const [log, setLog] = useState<Array<{ text: string; ok: boolean; at: string }>>([])
+  const [current, setCurrent] = useState<string | null>(null)
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -139,70 +144,96 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   }
 
   /**
-   * Erzeugt ALLE ausgewaehlten Begriffe — ruft die Route in Runden auf, bis kein
-   * ausgewaehlter Kandidat mehr offen ist.
+   * Erzeugt ALLE ausgewaehlten Begriffe — EINZELN, mit sichtbarem Protokoll.
    *
-   * WARUM UEBERHAUPT: der Deckel liegt bei TERMS_PER_GENERATION (3), weil ein
-   * Begriff 45-90s braucht und ein Request das 300s-Limit nicht reissen darf. Bei
-   * 177 ausgewaehlten Kandidaten waeren das 59 Klicks — dieselbe Luecke wie
-   * zuvor bei den Illustrationen.
+   * WARUM EINZELN (2026-08-05, nach einem Abbruch in Prod): die Route hat
+   * maxDuration=300. Drei Begriffe brauchen 135-270s plus Uebersetzung und
+   * Produktzuordnung; einer mit Nachforderung nach Regel 4 reisst das Limit. Der
+   * Request stirbt dann als 504 OHNE JSON-Koerper — von aussen ununterscheidbar
+   * von "es passiert einfach nichts mehr". Mit limit=1 bleibt jeder Aufruf bei
+   * 45-90s, weit unter dem Limit.
    *
-   * MIT ABBRUCH, anders als der Bilder-Lauf: 177 Begriffe sind rund drei Stunden
-   * und mehrere hundert Modell-Aufrufe. Ein Dauerlauf dieser Groesse ohne
-   * Stopp-Moeglichkeit waere fahrlaessig. Der Abbruch wirkt nach der laufenden
-   * Runde, nicht mitten in einem Begriff — ein halb geschriebener Eintrag waere
-   * schlimmer als drei zu viel.
+   * WARUM EIN PROTOKOLL: ein Zaehler allein reicht nicht. Bei 90s je Begriff
+   * steht eine unveraenderte Zahl minutenlang still und sieht aus wie ein
+   * Absturz — gerade bei einem Lauf ueber Nacht muss nachvollziehbar sein, WAS
+   * wann fertig wurde und woran es ggf. haengt.
    *
-   * Das Fenster muss offen bleiben: getrieben wird im Browser, wie beim
+   * Das Fenster muss offen bleiben; getrieben wird im Browser, wie beim
    * resumable Artikel-Job in create-article.
    */
   async function runAllTerms() {
     setBusy('generate-all')
     setError(null)
     setLastResult(null)
+    setLog([])
     stopRequested.current = false
-    let totalDone = 0
-    const totalFailed: string[] = []
+    const stamp = () => new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    let done = 0
+
     try {
-      for (let round = 1; ; round++) {
-        const res = await fetch('/api/admin/glossary-crawl?action=generate', {
+      for (;;) {
+        // Naechsten Namen VOR dem Request anzeigen: die Route arbeitet die
+        // Warteschlange in genau dieser Reihenfolge ab (nach Fundstellen
+        // sortiert), also ist der erste offene Kandidat der, der jetzt drankommt.
+        setCurrent(nextCandidateName())
+
+        const res = await fetch('/api/admin/glossary-crawl?action=generate&limit=1', {
           method: 'POST',
           credentials: 'include',
         })
         const data = await res.json().catch(() => null)
-        if (!res.ok) throw new Error(data?.error || `Fehlgeschlagen (HTTP ${res.status})`)
+        if (!res.ok) {
+          // 504 kommt ohne JSON — den Fall ausdruecklich benennen, statt eine
+          // nichtssagende Nummer zu zeigen.
+          throw new Error(
+            data?.error ||
+            (res.status === 504
+              ? 'Zeitlimit der Funktion erreicht (504). Der Begriff war zu langsam.'
+              : `Fehlgeschlagen (HTTP ${res.status})`),
+          )
+        }
 
         const generated: Array<{ name: string }> = data.generated ?? []
         const failed: string[] = data.failed ?? []
-        totalDone += generated.length
-        totalFailed.push(...failed)
         const remaining: number = data.remainingCandidates ?? 0
-        setLastResult(
-          `${totalDone} Begriffe erzeugt und veroeffentlicht` +
-          (remaining ? ` · noch ${remaining} offen …` : '') +
-          (totalFailed.length ? ` · uebersprungen: ${totalFailed.join(', ')}` : ''),
-        )
-        onTermsChanged?.()
 
-        if (remaining === 0) break
-        if (stopRequested.current) { setLastResult((p) => `${p ?? ''} · abgebrochen`); break }
-        // Wie beim Bilder-Lauf: Abbruch, sobald eine Runde nichts geschafft hat.
-        // Uebersprungene Kandidaten bleiben in der Warteschlange und kaemen sonst
-        // in jeder Runde erneut dran.
-        if (generated.length === 0) {
-          setError(failed.length > 0
-            ? `Kein Fortschritt — ${failed.join(', ')} scheitern wiederholt, abgebrochen.`
-            : 'Kein Fortschritt mehr — abgebrochen, damit keine Endlosschleife entsteht.')
+        for (const g of generated) {
+          done++
+          setLog((l) => [...l, { text: `${g.name} — erzeugt und veroeffentlicht`, ok: true, at: stamp() }])
+        }
+        for (const f of failed) {
+          setLog((l) => [...l, { text: `${f} — uebersprungen`, ok: false, at: stamp() }])
+        }
+        setLastResult(`${done} erzeugt · noch ${remaining} offen`)
+        onTermsChanged?.()
+        await fetchStatus()
+
+        if (remaining === 0) { setLastResult(`Fertig — ${done} Begriffe erzeugt.`); break }
+        if (stopRequested.current) { setLastResult(`Abgebrochen nach ${done} Begriffen · ${remaining} bleiben offen.`); break }
+        // Weder erzeugt noch uebersprungen heisst: die Warteschlange bewegt sich
+        // nicht mehr. Gescheiterte Begriffe werden serverseitig als erledigt
+        // markiert, ein Fehlschlag allein ist also KEIN Grund aufzuhoeren.
+        if (generated.length === 0 && failed.length === 0) {
+          setError('Kein Fortschritt mehr — abgebrochen, damit keine Endlosschleife entsteht.')
           break
         }
       }
-      await fetchStatus()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
+      const msg = err instanceof Error ? err.message : 'Fehlgeschlagen'
+      setError(`${msg} — nach ${done} erzeugten Begriffen. Der Fortschritt ist gespeichert, der Knopf setzt hier fort.`)
+      setLog((l) => [...l, { text: msg, ok: false, at: stamp() }])
     } finally {
+      setCurrent(null)
       setBusy(null)
       stopRequested.current = false
+      await fetchStatus()
     }
+  }
+
+  /** Der Kandidat, der als naechstes drankommt: erster ausgewaehlter in der
+   *  nach Fundstellen sortierten Liste. Nur fuer die Anzeige. */
+  function nextCandidateName(): string | null {
+    return status?.topCandidates.find((c) => c.selected)?.name ?? null
   }
 
   async function run(action: 'extract' | 'generate' | 'reset' | 'images') {
@@ -301,6 +332,30 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
             </span>
           </div>
 
+          {(current || log.length > 0) && (
+            <div className="rounded-md border border-border bg-muted/30 p-3">
+              {current && (
+                <div className="mb-2 flex items-center gap-2 text-sm">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span className="text-muted-foreground">In Arbeit:</span>
+                  <span className="font-medium">{current}</span>
+                </div>
+              )}
+              {/* Neueste zuerst und scrollbar: bei 177 Begriffen soll der Kasten
+                  nicht die Seite sprengen, und interessant ist das Ende. */}
+              <ol className="max-h-56 space-y-1 overflow-y-auto font-mono text-xs">
+                {[...log].reverse().map((entry, i) => (
+                  <li key={log.length - i} className="flex gap-2">
+                    <span className="shrink-0 text-muted-foreground/60 tabular-nums">{entry.at}</span>
+                    <span className={entry.ok ? 'text-foreground' : 'text-destructive'}>
+                      {entry.ok ? '✓' : '×'} {entry.text}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => run('extract')} disabled={busy !== null}>
               {busy === 'extract' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
@@ -334,7 +389,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                 title="Läuft in Runden, bis alle ausgewählten Begriffe erzeugt sind. Das Fenster muss offen bleiben."
               >
                 <Sparkles className="mr-2 h-4 w-4" />
-                Alle{' '}{status?.selectedCount ?? 0}{' '}ausgewählten erzeugen
+                Alle{' '}{status?.selectedCount ?? 0}{' '}einzeln erzeugen
               </Button>
             )}
             <Button

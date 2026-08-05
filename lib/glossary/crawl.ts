@@ -322,7 +322,38 @@ export interface GenerationResult {
  * generateTermContent, die bei unter 400 Wörtern nachfordert und danach
  * abbricht — ein zu dünner Eintrag entsteht also gar nicht.
  */
-export async function generateCandidates(supabase: AdminClient): Promise<GenerationResult> {
+/**
+ * Wie viele Kandidaten sind noch ECHTE Arbeit — also weder abgewählt noch schon
+ * erzeugt (oder endgültig gescheitert, was ebenfalls in `generated` landet)?
+ *
+ * Muss von der reinen Kandidatenzahl unterschieden werden: abgewählte Namen
+ * bleiben absichtlich in der Liste, damit der Operator seine Entscheidung sieht
+ * und zurücknehmen kann. Sie als offene Arbeit zu melden hat den Batch-Lauf im
+ * Browser nie enden lassen — der wartet darauf, dass diese Zahl 0 wird, und mit
+ * einem einzigen abgewählten Kandidaten wurde sie das nie.
+ */
+export function openCandidateCount(
+  candidates: Record<string, number>,
+  excluded: string[],
+  generated: string[],
+): number {
+  const ex = new Set(excluded)
+  const gen = new Set(generated)
+  return Object.keys(candidates).filter((name) => !ex.has(name) && !gen.has(slugify(name))).length
+}
+
+/**
+ * @param limit Wie viele Begriffe dieser Aufruf erzeugt. Default
+ *   TERMS_PER_GENERATION (3) für den kleinen Knopf; der Dauerlauf im Browser
+ *   ruft mit 1 auf. Grund ist maxDuration=300: drei Begriffe brauchen 135-270s
+ *   plus Übersetzung und Produktzuordnung, ein Begriff mit Nachforderung nach
+ *   Regel 4 reißt das Limit. Der Request stirbt dann als 504 ohne JSON — für den
+ *   Aufrufer sieht das aus wie ein stiller Abbruch mitten in der Nacht.
+ */
+export async function generateCandidates(
+  supabase: AdminClient,
+  limit: number = TERMS_PER_GENERATION,
+): Promise<GenerationResult> {
   const state = await readCrawlState(supabase)
   const alreadyGenerated = new Set(state.generated)
   const excluded = new Set(state.excluded)
@@ -333,7 +364,7 @@ export async function generateCandidates(supabase: AdminClient): Promise<Generat
     // Begriff verschwindet und beim nächsten Crawl wieder auftaucht.
     .filter(([name]) => !excluded.has(name) && !alreadyGenerated.has(slugify(name)))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, TERMS_PER_GENERATION)
+    .slice(0, Math.max(1, limit))
 
   const generated: GenerationResult['generated'] = []
   const failed: string[] = []
@@ -392,5 +423,11 @@ export async function generateCandidates(supabase: AdminClient): Promise<Generat
 
   await writeCrawlState(supabase, { ...state, candidates, generated: generatedSlugs })
 
-  return { generated, failed, remainingCandidates: Object.keys(candidates).length }
+  // NUR offene Arbeit zählen, nicht alle Kandidaten: abgewählte bleiben in der
+  // Liste stehen und hätten den Batch-Lauf endlos weiterlaufen lassen.
+  return {
+    generated,
+    failed,
+    remainingCandidates: openCandidateCount(candidates, state.excluded, generatedSlugs),
+  }
 }

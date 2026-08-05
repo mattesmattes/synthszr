@@ -133,7 +133,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result)
     }
 
-    const result = await generateCandidates(supabase)
+    // ?limit=1 fuer den Dauerlauf im Browser. Grund ist maxDuration=300: drei
+    // Begriffe brauchen 135-270s plus Uebersetzung und Produktzuordnung, einer
+    // mit Nachforderung nach Regel 4 reisst das Limit. Der Request stirbt dann
+    // als 504 ohne JSON — fuer den Aufrufer ununterscheidbar von einem stillen
+    // Abbruch. Einzeln bleibt jeder Aufruf bei 45-90s.
+    const rawLimit = Number(request.nextUrl.searchParams.get('limit'))
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(rawLimit, TERMS_PER_GENERATION)
+      : undefined
+    const result = await generateCandidates(supabase, limit)
     return NextResponse.json(result)
   } catch (e) {
     return NextResponse.json(
