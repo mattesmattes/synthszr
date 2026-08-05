@@ -4,6 +4,7 @@
  */
 
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
+import { applyTypographicQuotes } from '@/lib/typography/quotes'
 import { isExcludedCompanyName } from '@/lib/data/company-exclusions'
 import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
 import { isAutolinkStopword } from '@/lib/rankings/product-exclusions'
@@ -1238,7 +1239,13 @@ function convertNodeToHtml(node: TiptapNode, locale: string = 'de'): string {
  */
 export function convertTiptapToHtml(doc: TiptapDoc, locale: string = 'de'): string {
   if (!doc.content) return ''
-  return doc.content.map(node => convertNodeToHtml(node, locale)).join('\n')
+  // Typografische Anfuehrungszeichen — dritter Renderpfad neben SSR und Client.
+  // Auf dem JSON, VOR dem Bauen des HTML: hier entstehen gleich Attribute
+  // (href, style), in denen ein `"` kein Inhalt ist. E-Mail-Clients zeigen die
+  // Zollzeichen genauso wie der Browser, der Pfad darf also nicht abweichen.
+  const typed = applyTypographicQuotes(doc, locale) as TiptapDoc
+  if (!typed.content) return ''
+  return typed.content.map(node => convertNodeToHtml(node, locale)).join('\n')
 }
 
 /**
