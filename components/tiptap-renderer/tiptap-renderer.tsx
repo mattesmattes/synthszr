@@ -3,7 +3,7 @@
 // TipTap content renderer with Synthszr Vote badges
 // Supports: DE, EN, NDS (Low German), CS (Czech) translations
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
@@ -11,6 +11,7 @@ import Link from "@tiptap/extension-link"
 import { createPortal } from "react-dom"
 import { HeadingWithQueueId } from "@/lib/tiptap/heading-with-queue-id"
 import { GlossaryLinkMark } from "@/lib/tiptap/glossary-link-mark"
+import { applyTypographicQuotes } from "@/lib/typography/quotes"
 import { StockSynthszrLayer } from "../stock-synthszr-layer"
 import { PremarketSynthszrLayer } from "../premarket-synthszr-layer"
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies"
@@ -36,6 +37,23 @@ import type { TiptapRendererProps, PublicPortal, PremarketPortal } from "./types
 import type { ArticleThumbnail, ThumbnailPortal } from "@/lib/tiptap/dom-processors/news-headings"
 
 export function TiptapRenderer({ content, postId, queueItemIds, originalContent, ssrFallbackId, locale = 'de' }: TiptapRendererProps) {
+  /**
+   * Typografische Anfuehrungszeichen VOR dem Setzen ins Dokument.
+   *
+   * Hier statt im DOM: der Walk laeuft ueber Textknoten, und im gerenderten DOM
+   * stuende ein `"` auch in Attributen. Der SSR-Pfad
+   * (lib/tiptap/render-static-html.ts) macht dasselbe an derselben Stelle — beide
+   * Renderer muessen dieselbe Antwort geben, sonst springt der Text bei der
+   * Hydration.
+   *
+   * useMemo, weil der Walk das ganze Dokument kopiert: ohne ihn liefe er bei
+   * jedem Render, und der Vergleich in setContent unten wuerde jedes Mal ein
+   * neues Objekt sehen.
+   */
+  const typedContent = useMemo(
+    () => applyTypographicQuotes(content, locale) as typeof content,
+    [content, locale],
+  )
   const containerRef = useRef<HTMLDivElement>(null)
   const searchParams = useSearchParams()
   const [ratingPortals, setRatingPortals] = useState<PublicPortal[]>([])
@@ -155,7 +173,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
       }),
       GlossaryLinkMark.configure({ lang: locale }),
     ],
-    content: content,
+    content: typedContent,
     editable: false,
     immediatelyRender: false,
     editorProps: {
@@ -174,14 +192,14 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
   useEffect(() => {
     if (editor && content) {
       const currentContent = JSON.stringify(editor.getJSON())
-      const newContent = JSON.stringify(content)
+      const newContent = JSON.stringify(typedContent)
       if (currentContent !== newContent) {
         setEditorReady(false)
-        editor.commands.setContent(content)
+        editor.commands.setContent(typedContent)
         requestAnimationFrame(() => setEditorReady(true))
       }
     }
-  }, [editor, content])
+  }, [editor, typedContent])
 
   // SSR-Fallback (statisches Server-HTML aus PostContentView) entfernen,
   // sobald der interaktive Editor mit Inhalt steht — sonst stünde der
