@@ -28,6 +28,8 @@ import { generateAndInsertDraft, lastGenerationFailureWasRetryable } from '@/lib
 import { assignProducts } from '@/lib/glossary/products'
 import { extractVisibleText } from '@/lib/posts/product-mentions'
 import { safeParseJSON } from '@/lib/utils/safe-json'
+import { backfillGlossaryLinks, type BackfillResult } from '@/lib/glossary/backfill'
+import { getMatcherTerms, buildReservedNames, getChartProductNames } from '@/lib/glossary/terms'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -527,4 +529,39 @@ export async function generateCandidates(
     alreadyExisting,
     remainingCandidates: openCandidateCount(candidates, state.excluded, generatedSlugs),
   }
+}
+
+/**
+ * Ein Nachverlinkungs-Durchgang ueber den Bestand.
+ *
+ * Buendelt, was bisher inline im Route-Zweig action=relink stand
+ * (glossary-crawl/route.ts:117-141): Begriffe laden, reservierte Namen bauen,
+ * Cursor lesen und zurueckschreiben. Die Verlinkung selbst steckte schon in
+ * backfillGlossaryLinks — erreichbar war sie vom Cron aber nicht, und genau das
+ * braucht der servergetriebene Lauf.
+ *
+ * @param since UNTERE Zeitgrenze ("verlinke Artikel AB diesem Tag"), wie im
+ *   Panel. null heisst: der ganze Bestand.
+ */
+export async function relinkNextBatch(
+  supabase: AdminClient,
+  opts: { since?: string | null } = {},
+): Promise<BackfillResult> {
+  const terms = await getMatcherTerms('de')
+  if (terms === null) {
+    // Harter Fehler statt leerer Liste: mit null Begriffen wuerde jeder Artikel
+    // als "nichts zu verlinken" abgehakt und der Cursor durch den ganzen
+    // Bestand laufen, ohne etwas zu tun.
+    throw new Error('Begriffsliste nicht ladbar — Nachverlinkung abgebrochen')
+  }
+  const reserved = buildReservedNames(await getChartProductNames())
+  const state = await readCrawlState(supabase)
+
+  const result = await backfillGlossaryLinks(
+    supabase, terms, reserved, state.relinkCursor ?? null, undefined, opts.since ?? null,
+  )
+  // remaining === 0 setzt den Cursor zurueck, damit der naechste Lauf wieder
+  // von vorn prueft statt mitten im Bestand aufzusetzen.
+  await writeRelinkCursor(supabase, result.remaining === 0 ? null : result.cursor)
+  return result
 }

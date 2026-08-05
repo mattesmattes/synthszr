@@ -8,12 +8,11 @@ import {
   resetCrawlState,
   setCandidateExcluded,
   generateMissingIllustrations,
+  relinkNextBatch,
   POSTS_PER_EXTRACTION,
   TERMS_PER_GENERATION,
-  writeRelinkCursor,
 } from '@/lib/glossary/crawl'
-import { backfillGlossaryLinks } from '@/lib/glossary/backfill'
-import { getMatcherTerms, buildReservedNames, getChartProductNames } from '@/lib/glossary/terms'
+import { getMatcherTerms } from '@/lib/glossary/terms'
 
 // Beide Aktionen machen LLM-Calls: Extraktion 10 kurze, Generierung bis zu 3
 // teure. Ohne Deklaration liefe die Route auf dem Plattform-Default — dieselbe
@@ -115,28 +114,22 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'relink') {
-      // Nachverlinkung bestehender Artikel gegen den GANZEN Begriffsbestand.
-      // Cursor im Crawl-State, damit ein abgebrochener Lauf fortsetzt.
-      const terms = await getMatcherTerms('de')
-      if (terms === null) {
-        return NextResponse.json(
-          { error: 'Begriffsliste nicht ladbar — Nachverlinkung abgebrochen' },
-          { status: 503 },
-        )
-      }
-      const reserved = buildReservedNames(await getChartProductNames())
+      // Orchestrierung (Begriffe laden, reservierte Namen, Cursor) steckt jetzt
+      // in relinkNextBatch — dieselbe Funktion, die der Cron aufruft.
       // `from` ist die UNTERE Grenze: "verlinke Artikel AB diesem Tag". Auf
       // 00:00 gesetzt, damit der Tag selbst vollstaendig dabei ist. Default im
       // Panel ist heute — dann laufen nur die heutigen Artikel, nicht alle 219.
       const from = request.nextUrl.searchParams.get('from')
       const since = from ? `${from}T00:00:00.000Z` : null
-      const state = await readCrawlState(supabase)
-
-      const result = await backfillGlossaryLinks(
-        supabase, terms, reserved, state.relinkCursor ?? null, undefined, since,
-      )
-      await writeRelinkCursor(supabase, result.remaining === 0 ? null : result.cursor)
-      return NextResponse.json(result)
+      try {
+        const result = await relinkNextBatch(supabase, { since })
+        return NextResponse.json(result)
+      } catch (err) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : 'Nachverlinkung fehlgeschlagen' },
+          { status: 503 },
+        )
+      }
     }
 
     if (action === 'reset') {
