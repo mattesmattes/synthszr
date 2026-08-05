@@ -54,10 +54,20 @@ export async function ensureConfirmedTermsExist(
   supabase: AdminClient,
   postId: string,
   confirmedSlugs: string[],
+  /**
+   * Wie viele Begriffe dieser Aufruf erzeugt. Default MAX_GENERATE_PER_SAVE (3)
+   * fuer den Speicherpfad — dort ist die Erzeugung eine Zugabe und darf den
+   * Artikel nicht ins Zeitlimit ziehen.
+   *
+   * Der Freigabe-Lauf im Browser ruft mit 1 auf und wiederholt, bis nichts mehr
+   * offen ist: 45-90s je Begriff bleiben so weit unter maxDuration, und der
+   * Operator sieht nach jedem Begriff, dass es weitergeht.
+   */
+  limit: number = MAX_GENERATE_PER_SAVE,
 ): Promise<{ generatedSlugs: string[]; pendingRemainder: GlossaryCandidate[] | null }> {
   if (confirmedSlugs.length === 0) return { generatedSlugs: [], pendingRemainder: null }
   try {
-    return await generateMissingTerms(supabase, postId, confirmedSlugs)
+    return await generateMissingTerms(supabase, postId, confirmedSlugs, Math.max(1, limit))
   } catch (err) {
     // Die Begriffs-Erzeugung ist eine Zugabe zum Speichern des Artikels — sie
     // darf ihn unter keinen Umständen mitnehmen. Beim Verdrahten der Route
@@ -75,6 +85,7 @@ async function generateMissingTerms(
   supabase: AdminClient,
   postId: string,
   confirmedSlugs: string[],
+  limit: number,
 ): Promise<{ generatedSlugs: string[]; pendingRemainder: GlossaryCandidate[] | null }> {
 
   const { data: postRow, error: postError } = await supabase
@@ -122,7 +133,7 @@ async function generateMissingTerms(
   const missing = toGenerate.filter((c) => !alreadyThere.has(c.slug))
   if (missing.length === 0) return { generatedSlugs: [], pendingRemainder: null }
 
-  const batch = missing.slice(0, MAX_GENERATE_PER_SAVE)
+  const batch = missing.slice(0, limit)
   const generatedSlugs: string[] = []
   const failed: GlossaryCandidate[] = []
   for (const candidate of batch) {
@@ -132,7 +143,7 @@ async function generateMissingTerms(
   }
 
   // Übrig bleiben: was der Deckel abgeschnitten hat, plus die Fehlschläge.
-  const remainder = [...failed, ...missing.slice(MAX_GENERATE_PER_SAVE)]
+  const remainder = [...failed, ...missing.slice(limit)]
   if (remainder.length === 0) return { generatedSlugs, pendingRemainder: null }
 
   // Die noch nicht bestätigten Kandidaten gehören ebenfalls in die Liste, die

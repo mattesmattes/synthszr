@@ -565,11 +565,14 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         // veröffentlicht und verlinkt wird.
         const candidates: GlossaryCandidate[] = data.pending_glossary_terms || []
         setGlossaryCandidates(candidates)
-        setConfirmedGlossarySlugs(
-          candidates
-            .filter((c) => c.origin === 'tag' && !c.isNewlyGenerated && !c.needsGeneration)
-            .map((c) => c.slug),
-        )
+        // ALLE vorausgewaehlt (Betreiber-Entscheidung 2026-08-05). Vorher waren
+        // frisch generierte und noch zu erzeugende Kandidaten ausgenommen — der
+        // Grund stand im Panel-Kommentar: ungepruefter LLM-Text sollte nicht
+        // ungelesen live gehen, und jede Bestaetigung mit needsGeneration kostet
+        // beim Speichern bis zu 90s. Der erste Punkt bleibt als Hinweis am
+        // Eintrag sichtbar; der zweite ist entschaerft, weil die Erzeugung jetzt
+        // ueber den Runden-Lauf im Panel laeuft statt im Speicher-Request.
+        setConfirmedGlossarySlugs(candidates.map((c) => c.slug))
 
         // Load applied patterns for highlighting (pass content + ai_model for auto-redetection)
         fetchAppliedPatterns(parsedContent, data.ai_model)
@@ -1007,6 +1010,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
             candidates={glossaryCandidates}
             value={confirmedGlossarySlugs}
             onChange={setConfirmedGlossarySlugs}
+            postId={id}
           />
 
           {/* Collapsible Metadata Section */}
