@@ -129,3 +129,90 @@ export async function getJobStatus(
     .maybeSingle()
   return (data as GlossaryJob | null) ?? null
 }
+
+/**
+ * Der aelteste offene Job, dessen Lease abgelaufen ist.
+ *
+ * Gleiche Bauart wie article-jobs/service.ts:201. `now` ist Parameter, nicht
+ * Date.now() im Rumpf, damit der Lease-Filter testbar bleibt.
+ */
+export async function getNextOpenJob(
+  supabase: AdminClient,
+  now: number = Date.now(),
+): Promise<GlossaryJob | null> {
+  const staleBefore = new Date(now - LEASE_STALE_MS).toISOString()
+  const { data } = await supabase
+    .from('glossary_jobs')
+    .select('*')
+    .in('status', OPEN as unknown as string[])
+    .or(`last_advanced_at.is.null,last_advanced_at.lt.${staleBefore}`)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  return (data as GlossaryJob | null) ?? null
+}
+
+/** Stempelt das Lease und setzt den Job auf 'processing'. */
+export async function stampLease(supabase: AdminClient, id: string): Promise<void> {
+  await supabase
+    .from('glossary_jobs')
+    .update({ status: 'processing', last_advanced_at: new Date().toISOString() })
+    .eq('id', id)
+}
+
+/**
+ * Haengt Protokollzeilen an und erhoeht den Zaehler.
+ *
+ * Read-modify-write auf dem JSONB: der Job wird immer nur von EINEM Tick
+ * bearbeitet (Lease), ein verlorenes Update ist damit ausgeschlossen. Das Lease
+ * wird gleich mitgestempelt, weil eine Protokollzeile beweist, dass der Tick
+ * lebt.
+ */
+export async function appendLog(
+  supabase: AdminClient,
+  job: GlossaryJob,
+  entries: GlossaryJobLogEntry[],
+  doneDelta: number,
+): Promise<void> {
+  await supabase
+    .from('glossary_jobs')
+    .update({
+      log: [...job.log, ...entries],
+      done_count: job.done_count + doneDelta,
+      last_advanced_at: new Date().toISOString(),
+    })
+    .eq('id', job.id)
+  // Der Aufrufer arbeitet mit derselben Job-Kopie weiter.
+  job.log = [...job.log, ...entries]
+  job.done_count = job.done_count + doneDelta
+}
+
+/** Merkt den Abbruchwunsch an. Der naechste Tick wertet ihn aus. */
+export async function requestCancel(supabase: AdminClient, kind: GlossaryJobKind): Promise<void> {
+  await supabase
+    .from('glossary_jobs')
+    .update({ cancel_requested: true })
+    .eq('kind', kind)
+    .in('status', OPEN as unknown as string[])
+}
+
+export async function finishJob(
+  supabase: AdminClient,
+  id: string,
+  status: GlossaryJobStatus,
+  errorMessage?: string,
+): Promise<void> {
+  await supabase
+    .from('glossary_jobs')
+    .update({
+      status,
+      finished_at: new Date().toISOString(),
+      error_message: errorMessage ?? null,
+    })
+    .eq('id', id)
+}
+
+/** Zaehlt erfolglose Ticks; bei Erfolg zurueck auf 0. */
+export async function setAttempts(supabase: AdminClient, id: string, attempts: number): Promise<void> {
+  await supabase.from('glossary_jobs').update({ attempts }).eq('id', id)
+}

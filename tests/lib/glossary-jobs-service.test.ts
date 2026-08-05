@@ -94,3 +94,81 @@ describe('getJobStatus', () => {
     expect(job?.done_count).toBe(47)
   })
 })
+
+describe('getNextOpenJob', () => {
+  it('filtert Jobs mit frischem Lease heraus', async () => {
+    // Der Filter muss "last_advanced_at ist null ODER aelter als die
+    // Lease-Grenze" ausdruecken, sonst greift ein zweiter Minutentick in einen
+    // laufenden Job.
+    const { getNextOpenJob, LEASE_STALE_MS } = await import('@/lib/glossary/jobs/service')
+    const now = Date.parse('2026-08-05T12:00:00Z')
+    state.queues['glossary_jobs'] = [{ data: null, error: null }]
+
+    await getNextOpenJob(client, now)
+
+    const chain = state.chains['glossary_jobs'][0]
+    const expected = new Date(now - LEASE_STALE_MS).toISOString()
+    expect(chain.or).toHaveBeenCalledWith(
+      `last_advanced_at.is.null,last_advanced_at.lt.${expected}`,
+    )
+    expect(chain.in).toHaveBeenCalledWith('status', ['pending', 'processing'])
+  })
+
+  it('nimmt den aeltesten offenen Job', async () => {
+    const { getNextOpenJob } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_jobs'] = [{ data: { ...JOB, id: 'alt' }, error: null }]
+
+    const job = await getNextOpenJob(client, Date.parse('2026-08-05T12:00:00Z'))
+
+    expect(job?.id).toBe('alt')
+    expect(state.chains['glossary_jobs'][0].order).toHaveBeenCalledWith('created_at', { ascending: true })
+  })
+})
+
+describe('appendLog', () => {
+  it('haengt an das bestehende Protokoll an und zaehlt hoch', async () => {
+    const { appendLog } = await import('@/lib/glossary/jobs/service')
+    const job = { ...JOB, log: [{ at: '10:00:00', text: 'A', ok: true }], done_count: 1 } as any
+    state.queues['glossary_jobs'] = [{ data: null, error: null }]
+
+    await appendLog(client, job, [{ at: '10:02:00', text: 'B', ok: true }], 1)
+
+    const chain = state.chains['glossary_jobs'][0]
+    const payload = chain.update.mock.calls[0][0]
+    expect(payload.log).toEqual([
+      { at: '10:00:00', text: 'A', ok: true },
+      { at: '10:02:00', text: 'B', ok: true },
+    ])
+    expect(payload.done_count).toBe(2)
+    // Jede Protokollzeile stempelt das Lease neu: so bleibt der Job auch bei
+    // einem langen Tick als "in Arbeit" erkennbar.
+    expect(payload.last_advanced_at).toBeTypeOf('string')
+  })
+})
+
+describe('requestCancel', () => {
+  it('setzt cancel_requested nur auf offenen Jobs', async () => {
+    const { requestCancel } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_jobs'] = [{ data: null, error: null }]
+
+    await requestCancel(client, 'generate')
+
+    const chain = state.chains['glossary_jobs'][0]
+    expect(chain.update).toHaveBeenCalledWith({ cancel_requested: true })
+    expect(chain.in).toHaveBeenCalledWith('status', ['pending', 'processing'])
+  })
+})
+
+describe('finishJob', () => {
+  it('setzt Status, finished_at und die Fehlermeldung', async () => {
+    const { finishJob } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_jobs'] = [{ data: null, error: null }]
+
+    await finishJob(client, 'j1', 'error', 'Modell dauerhaft ueberlastet')
+
+    const payload = state.chains['glossary_jobs'][0].update.mock.calls[0][0]
+    expect(payload.status).toBe('error')
+    expect(payload.error_message).toBe('Modell dauerhaft ueberlastet')
+    expect(payload.finished_at).toBeTypeOf('string')
+  })
+})
