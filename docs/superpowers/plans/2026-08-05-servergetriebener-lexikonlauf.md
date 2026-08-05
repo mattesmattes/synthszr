@@ -1172,7 +1172,13 @@ export const maxDuration = 300
  * Projekts, damit Vercel den Job nicht als fehlgeschlagen fuehrt.
  */
 export async function GET(request: NextRequest) {
-  if (!verifyCronAuth(request)) {
+  // verifyCronAuth gibt CronAuthResult ({ authorized, method }) zurueck, KEIN
+  // boolean. Ein `if (!verifyCronAuth(request))` waere immer falsy — ein Objekt
+  // ist truthy — und die Pruefung damit wirkungslos: der Endpunkt stuende offen
+  // und jeder koennte Laeufe mit Modellkosten ausloesen. Gleiche Form wie in
+  // app/api/cron/glossary-news/route.ts.
+  const authResult = verifyCronAuth(request)
+  if (!authResult.authorized) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
