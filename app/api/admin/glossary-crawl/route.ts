@@ -125,17 +125,16 @@ export async function POST(request: NextRequest) {
         )
       }
       const reserved = buildReservedNames(await getChartProductNames())
-      // Startdatum: der Lauf geht von NEU nach ALT, das Datum ist also der obere
-      // Rand. Auf das Tagesende gesetzt, damit Artikel DIESES Tages mitlaufen —
-      // mit dem nackten Datum (00:00) waere der eigene Tag ausgeschlossen, was
-      // beim Default "heute" jeden aktuellen Artikel uebersprungen haette.
+      // `from` ist die UNTERE Grenze: "verlinke Artikel AB diesem Tag". Auf
+      // 00:00 gesetzt, damit der Tag selbst vollstaendig dabei ist. Default im
+      // Panel ist heute — dann laufen nur die heutigen Artikel, nicht alle 219.
       const from = request.nextUrl.searchParams.get('from')
+      const since = from ? `${from}T00:00:00.000Z` : null
       const state = await readCrawlState(supabase)
-      const startCursor = from
-        ? `${from}T23:59:59.999Z`
-        : state.relinkCursor ?? null
 
-      const result = await backfillGlossaryLinks(supabase, terms, reserved, startCursor)
+      const result = await backfillGlossaryLinks(
+        supabase, terms, reserved, state.relinkCursor ?? null, undefined, since,
+      )
       await writeRelinkCursor(supabase, result.remaining === 0 ? null : result.cursor)
       return NextResponse.json(result)
     }

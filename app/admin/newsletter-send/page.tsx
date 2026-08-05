@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo, startTransition } from 'react'
-import { Send, FileText, Mail, Loader2, CheckCircle, AlertCircle, Clock, Users, History, Settings, FileEdit, Globe, AlertTriangle, Image, Megaphone, Mic, Lock, Unlock } from 'lucide-react'
+import { Send, FileText, Mail, Loader2, CheckCircle, AlertCircle, Clock, Users, History, Settings, FileEdit, Globe, AlertTriangle, Image, Megaphone, Mic, Lock, Unlock, BookOpen } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -105,6 +105,12 @@ export default function NewsletterSendPage() {
     valid: boolean
   } | null>(null)
   const [checkingThumbnails, setCheckingThumbnails] = useState(false)
+  /** Lexikon-Stand des Posts: erkannt / erzeugt / illustriert / verlinkt. */
+  const [glossaryStatus, setGlossaryStatus] = useState<{
+    detected: number; generated: number; withImage: number; linked: number
+    state: 'ok' | 'pending' | 'unlinked' | 'none'; label: string
+  } | null>(null)
+  const [checkingGlossary, setCheckingGlossary] = useState(false)
 
   // Podigee status state — read straight from post_podcasts (source of
   // truth set by /api/podcast/publish-podigee on success).
@@ -436,18 +442,44 @@ export default function NewsletterSendPage() {
     }
   }, [])
 
+  // Lexikon-Stand pruefen. Eigener Endpunkt statt Rechnen im Client: die
+  // Zaehlung braucht glossary_terms, und die Tabelle ist RLS-gesperrt.
+  const checkGlossaryStatus = useCallback(async (postId: string) => {
+    setCheckingGlossary(true)
+    try {
+      const res = await fetch(`/api/admin/glossary-post-status?postId=${encodeURIComponent(postId)}`,
+        { credentials: 'include' })
+      setGlossaryStatus(res.ok ? await res.json() : null)
+    } catch {
+      setGlossaryStatus(null)
+    } finally {
+      setCheckingGlossary(false)
+    }
+  }, [])
+
+  // Solange die Erzeugung laeuft, alle 20s nachsehen. Das ist der ganze Zweck der
+  // Anzeige: der Operator soll sehen, DASS die Hintergrund-Routine vorankommt,
+  // ohne die Seite neu zu laden. Nur bei 'pending' — ein fertiger Stand aendert
+  // sich nicht von allein, und dauerndes Pollen waere sinnlose Last.
+  useEffect(() => {
+    if (!selectedPostId || glossaryStatus?.state !== 'pending') return
+    const t = setInterval(() => { void checkGlossaryStatus(selectedPostId) }, 20000)
+    return () => clearInterval(t)
+  }, [selectedPostId, glossaryStatus?.state, checkGlossaryStatus])
+
   // Check translations and thumbnails when post selection changes
   useEffect(() => {
     if (selectedPostId) {
       checkTranslationStatus(selectedPostId)
       checkThumbnailStatus(selectedPostId)
       checkPodigeeStatus(selectedPostId)
+      checkGlossaryStatus(selectedPostId)
     }
     // Clear the unlock when switching posts so the lock re-engages on each
     // post; otherwise the user could unlock once and bypass every future post.
     setUnlockedPostId(null)
     setShowUnlockDialog(false)
-  }, [selectedPostId, checkTranslationStatus, checkThumbnailStatus, checkPodigeeStatus])
+  }, [selectedPostId, checkTranslationStatus, checkThumbnailStatus, checkPodigeeStatus, checkGlossaryStatus])
 
   // Find the most recent successful send for the selected post that happened
   // today (Berlin TZ). 'sending' counts too — a half-finished blast still
@@ -736,6 +768,31 @@ export default function NewsletterSendPage() {
                             ? `${thumbnailStatus.missing} von ${thumbnailStatus.articlesInContent} Thumbnails fehlen`
                             : `Alle ${thumbnailStatus.thumbnailsFound} Thumbnails korrekt zugeordnet`}
                     </span>
+                  </div>
+                )}
+
+                {/* Lexikon-Status. Dieselbe Ampel wie Uebersetzungen und Thumbnails:
+                    gruen wenn alles erzeugt, illustriert und verlinkt ist, amber
+                    waehrend die Hintergrund-Routine noch arbeitet ("3 von 12"),
+                    rot wenn Begriffe fertig sind aber keiner verlinkt wurde. */}
+                {selectedPostId && glossaryStatus && glossaryStatus.state !== 'none' && (
+                  <div className={`mb-3 p-2 rounded text-xs flex items-center gap-2 ${
+                    glossaryStatus.state === 'unlinked'
+                      ? 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200'
+                      : glossaryStatus.state === 'pending'
+                        ? 'bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                        : 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200'
+                  }`}>
+                    {checkingGlossary ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : glossaryStatus.state === 'unlinked' ? (
+                      <AlertCircle className="h-3 w-3" />
+                    ) : glossaryStatus.state === 'pending' ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <BookOpen className="h-3 w-3" />
+                    )}
+                    <span>{glossaryStatus.label}</span>
                   </div>
                 )}
 

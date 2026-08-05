@@ -18,6 +18,7 @@
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateTermContent } from '@/lib/glossary/generate'
 import { generateGlossaryIllustration, uploadGlossaryIllustration } from '@/lib/gemini/image-generator'
+import { isRetryableModelError } from '@/lib/glossary/retryable'
 import { assignProducts } from '@/lib/glossary/products'
 import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
 
@@ -37,6 +38,11 @@ type AdminClient = ReturnType<typeof createAdminClient>
  * der bestätigte Kandidat — die Freigabe fände ihn nicht und der Artikel würde
  * auf eine notFound()-Seite verlinken.
  */
+/** Merkt sich, ob der letzte Fehlschlag vorübergehend war (529/429/Netz).
+ *  Modul-Zustand, weil die Funktion sequenziell aufgerufen wird — der Crawl
+ *  arbeitet die Warteschlange einen Begriff nach dem anderen ab. */
+let lastFailureWasRetryable = false
+
 export async function generateAndInsertDraft(
   supabase: AdminClient,
   name: string,
@@ -106,7 +112,31 @@ export async function generateAndInsertDraft(
       summary: generated.summary,
     }
   } catch (err) {
-    console.error(`[Glossary] Begriffs-Generierung für "${name}" fehlgeschlagen:`, err)
+    // Vorübergehende Fehler MARKIEREN, statt sie wie inhaltliche zu behandeln.
+    // Prod-Befund 2026-08-05: ein 529 "Overloaded" (mit x-should-retry: true)
+    // liess den Aufrufer den Begriff als erledigt abhaken — er wurde nie wieder
+    // versucht. lastFailureWasRetryable ist ein Modul-Zustand statt eines
+    // geaenderten Rueckgabetyps: generateAndInsertDraft hat vier Aufrufer, und
+    // ein `null` bedeutet fuer alle dasselbe. Nur wer die Unterscheidung braucht,
+    // fragt sie ab.
+    lastFailureWasRetryable = isRetryableModelError(err)
+    console.error(
+      `[Glossary] Begriffs-Generierung für "${name}" fehlgeschlagen`
+      + (lastFailureWasRetryable ? ' (vorübergehend, bleibt in der Warteschlange)' : '')
+      + ':', err,
+    )
     return null
   }
+}
+
+/**
+ * War der letzte Fehlschlag vorübergehend?
+ *
+ * Wird direkt nach einem `null` von generateAndInsertDraft gelesen. Kein
+ * schöner Vertrag, aber der ehrlichste kleine Eingriff: der Rückgabetyp bleibt
+ * für alle vier Aufrufer gleich, und die Alternative — ein Ergebnisobjekt — hätte
+ * jeden davon anfassen müssen, ohne dass drei davon die Information brauchen.
+ */
+export function lastGenerationFailureWasRetryable(): boolean {
+  return lastFailureWasRetryable
 }

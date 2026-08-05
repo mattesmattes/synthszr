@@ -83,6 +83,15 @@ export async function backfillGlossaryLinks(
   reserved: string[],
   cursor: string | null,
   limit: number = POSTS_PER_BACKFILL,
+  /**
+   * UNTERE Zeitgrenze: nur Artikel ab diesem Zeitpunkt werden angefasst.
+   *
+   * Erste Fassung hatte das Datum als OBERE Grenze — "von diesem Tag rueckwaerts
+   * durch alles". Beim Default "heute" hiess das jedes Mal alle 219 Artikel, was
+   * genau die Beobachtung war. Als untere Grenze bedeutet "heute" die heutigen
+   * Artikel, und wer den ganzen Bestand will, waehlt ein frueheres Datum.
+   */
+  since: string | null = null,
 ): Promise<BackfillResult> {
   let query = supabase
     .from('generated_posts')
@@ -90,7 +99,10 @@ export async function backfillGlossaryLinks(
     .eq('status', 'published')
     .order('created_at', { ascending: false })
     .limit(limit)
+  // cursor traegt den Fortschritt INNERHALB des Fensters (neu → alt), `since`
+  // begrenzt das Fenster nach unten.
   if (cursor) query = query.lt('created_at', cursor)
+  if (since) query = query.gte('created_at', since)
 
   const { data, error } = await query
   if (error) throw new Error(`Artikel nicht ladbar: ${error.message}`)
@@ -120,11 +132,16 @@ export async function backfillGlossaryLinks(
     linked.push(post.slug)
   }
 
-  const { count } = await supabase
+  // Rest NUR im Fenster zaehlen — sonst meldete der Lauf bei einem engen
+  // Zeitraum hunderte "offene" Artikel, die er gar nicht anfassen wird, und die
+  // Browser-Schleife lief bis zum Fensterende weiter.
+  let restQuery = supabase
     .from('generated_posts')
     .select('id', { count: 'exact', head: true })
     .eq('status', 'published')
     .lt('created_at', lastCursor ?? '9999-12-31')
+  if (since) restQuery = restQuery.gte('created_at', since)
+  const { count } = await restQuery
 
   return { linked, unchanged, remaining: count ?? 0, cursor: lastCursor }
 }

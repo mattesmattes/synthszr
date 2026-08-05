@@ -174,6 +174,8 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     stopRequested.current = false
     const stamp = () => new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     let done = 0
+    /** Runden in Folge, die NUR an Modell-Ueberlast gescheitert sind. */
+    let overloadRounds = 0
 
     try {
       for (;;) {
@@ -200,6 +202,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
 
         const generated: Array<{ name: string }> = data.generated ?? []
         const failed: string[] = data.failed ?? []
+        const retryable: string[] = data.retryable ?? []
         const existing: string[] = data.alreadyExisting ?? []
         const remaining: number = data.remainingCandidates ?? 0
 
@@ -219,7 +222,30 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           }])
         }
         for (const f of failed) {
-          setLog((l) => [...l, { text: `${f} — fehlgeschlagen, siehe Server-Log`, ok: false, at: stamp() }])
+          const temporary = retryable.includes(f)
+          setLog((l) => [...l, {
+            text: temporary
+              ? `${f} — Modell überlastet, bleibt in der Warteschlange`
+              : `${f} — fehlgeschlagen, siehe Server-Log`,
+            ok: false, at: stamp(),
+          }])
+        }
+
+        // Aufeinanderfolgende Ueberlast-Runden zaehlen. Transient gescheiterte
+        // Begriffe BLEIBEN in der Warteschlange (damit sie nicht verloren gehen)
+        // — dieselbe Runde wuerde sie also endlos wiederholen, solange die API
+        // ueberlastet ist. Nach drei Versuchen aufhoeren statt Geld zu verbrennen.
+        if (generated.length === 0 && retryable.length > 0) {
+          overloadRounds++
+          if (overloadRounds >= 3) {
+            setError(
+              'Das Modell ist gerade überlastet (529). Abgebrochen nach drei Versuchen — '
+              + 'die Begriffe bleiben in der Warteschlange, der Knopf setzt später fort.',
+            )
+            break
+          }
+        } else {
+          overloadRounds = 0
         }
         setLastResult(`${done} erzeugt · noch ${remaining} offen`)
         onTermsChanged?.()
@@ -274,14 +300,12 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     let totalLinked = 0
     let totalChecked = 0
     try {
-      // Nur die ERSTE Runde nimmt das Datum; danach fuehrt der serverseitige
-      // Cursor weiter, sonst begaenne jede Runde wieder beim Startdatum.
-      let first = true
+      // Das Datum geht in JEDE Runde mit: es begrenzt das Fenster nach unten
+      // ("Artikel ab diesem Tag"), waehrend der Fortschritt innerhalb des
+      // Fensters ueber den serverseitigen Cursor laeuft. Liesse man es weg,
+      // wuerde die zweite Runde wieder ueber den ganzen Bestand laufen.
       for (;;) {
-        const url = first
-          ? `/api/admin/glossary-crawl?action=relink&from=${relinkFrom}`
-          : '/api/admin/glossary-crawl?action=relink'
-        first = false
+        const url = `/api/admin/glossary-crawl?action=relink&from=${relinkFrom}`
         const res = await fetch(url, { method: 'POST', credentials: 'include' })
         const data = await res.json().catch(() => null)
         if (!res.ok) throw new Error(data?.error || `Fehlgeschlagen (HTTP ${res.status})`)
@@ -502,7 +526,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                   onChange={(e) => setRelinkFrom(e.target.value)}
                   disabled={busy !== null}
                   className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
-                  title="Startdatum — der Lauf geht von diesem Tag rückwärts. Heute heißt: alle Artikel."
+                  title="Nur Artikel ab diesem Tag werden nachverlinkt. Heute heißt: nur die heutigen."
                 />
                 <Button size="sm" variant="outline" onClick={runRelink} disabled={busy !== null}>
                   <RefreshCw className="mr-2 h-4 w-4" />

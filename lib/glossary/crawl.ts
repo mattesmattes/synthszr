@@ -24,7 +24,7 @@
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { identifyCandidates, slugify } from '@/lib/glossary/generate'
-import { generateAndInsertDraft } from '@/lib/glossary/draft-writer'
+import { generateAndInsertDraft, lastGenerationFailureWasRetryable } from '@/lib/glossary/draft-writer'
 import { assignProducts } from '@/lib/glossary/products'
 import { extractVisibleText } from '@/lib/posts/product-mentions'
 import { safeParseJSON } from '@/lib/utils/safe-json'
@@ -325,6 +325,12 @@ export async function generateMissingIllustrations(
 export interface GenerationResult {
   generated: Array<{ name: string; slug: string; mentions: number }>
   failed: string[]
+  /** Namen, die VORÜBERGEHEND gescheitert sind (529/429/Netz) und in der
+   *  Warteschlange geblieben sind. Der Aufrufer muss sie von `failed`
+   *  unterscheiden: sie sind kein Grund weiterzulaufen, sondern einer, es später
+   *  erneut zu versuchen — sonst dreht die Schleife bei anhaltender Überlast
+   *  endlos und verbrennt Geld. */
+  retryable: string[]
   /** Kandidaten, die es als Begriff schon gab — kein Fehler, nur nichts zu tun.
    *  Getrennt von `failed`, weil die UI beides unterschiedlich benennen muss:
    *  "existiert bereits" ist ein Aufräumvorgang, "übersprungen" ein Problem. */
@@ -440,6 +446,7 @@ export async function generateCandidates(
 
   const generated: GenerationResult['generated'] = []
   const failed: string[] = []
+  const retryable: string[] = []
   const candidates = { ...state.candidates }
   const generatedSlugs = [...state.generated]
 
@@ -454,9 +461,19 @@ export async function generateCandidates(
     const created = await generateAndInsertDraft(supabase, name, slug)
     if (!created) {
       failed.push(name)
-      // Aus der Liste nehmen UND als erledigt markieren: ein Name, der zweimal
-      // scheitert (zu kurz nach Regel 4, Slug-Kollision), würde sonst bei jedem
-      // Lauf erneut die teuren Calls verbrauchen und die Warteschlange blockieren.
+      // VORÜBERGEHEND gescheitert (529 Overloaded, 429, Netzabbruch)? Dann bleibt
+      // der Begriff in der Warteschlange. Prod-Befund 2026-08-05: ein 529 mit
+      // x-should-retry: true kostete "Feature Engineering" und "Fehlausrichtung"
+      // dauerhaft — sie wurden abgehakt und nie wieder versucht.
+      if (lastGenerationFailureWasRetryable()) {
+        console.warn(`[GlossaryCrawl] "${name}" vorübergehend gescheitert — bleibt in der Warteschlange`)
+        retryable.push(name)
+        continue
+      }
+      // Aus der Liste nehmen UND als erledigt markieren: ein Name, der aus
+      // INHALTLICHEN Gründen scheitert (zu kurz nach Regel 4, Slug-Kollision),
+      // würde sonst bei jedem Lauf erneut die teuren Calls verbrauchen und die
+      // Warteschlange blockieren.
       generatedSlugs.push(slug)
       delete candidates[name]
       continue
@@ -506,6 +523,7 @@ export async function generateCandidates(
   return {
     generated,
     failed,
+    retryable,
     alreadyExisting,
     remainingCandidates: openCandidateCount(candidates, state.excluded, generatedSlugs),
   }
