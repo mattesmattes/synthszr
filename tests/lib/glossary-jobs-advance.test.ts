@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   generate: vi.fn(),
   images: vi.fn(),
   relink: vi.fn(),
+  pendingUnit: vi.fn(),
   appendLog: vi.fn(),
   finishJob: vi.fn(),
   setAttempts: vi.fn(),
@@ -23,6 +24,9 @@ vi.mock('@/lib/glossary/crawl', () => ({
   generateCandidates: mocks.generate,
   generateMissingIllustrations: mocks.images,
   relinkNextBatch: mocks.relink,
+}))
+vi.mock('@/lib/glossary/pending-run', () => ({
+  runPendingUnit: mocks.pendingUnit,
 }))
 vi.mock('@/lib/glossary/jobs/service', () => ({
   appendLog: mocks.appendLog,
@@ -260,6 +264,103 @@ describe('advanceJob (images, relink)', () => {
     const res = await advanceJob(
       client, { ...JOB, kind: 'relink', attempts: 9 }, { now: clock.now, budgetMs: 240_000 },
     )
+
+    expect(res.finished).toBe(true)
+    expect(mocks.finishJob).toHaveBeenCalledWith(
+      client, 'j1', 'error', expect.stringContaining('überlastet'),
+    )
+  })
+})
+
+describe('advanceJob (pending)', () => {
+  const PENDING_JOB = {
+    ...JOB, kind: 'pending' as const,
+    params: { postId: 'p1', confirmedSlugs: ['slop', 'reward-hacking'] },
+  }
+
+  it('reicht postId und confirmedSlugs aus params an runPendingUnit durch', async () => {
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.pendingUnit.mockImplementation(async () => {
+      clock.advance()
+      return { generated: ['Slop'], failed: [], remaining: 1, linked: 0 }
+    })
+
+    await advanceJob(client, { ...PENDING_JOB }, { now: clock.now, budgetMs: 240_000 })
+
+    expect(mocks.pendingUnit).toHaveBeenCalledWith(client, 'p1', ['slop', 'reward-hacking'])
+  })
+
+  it('protokolliert erzeugte und fehlgeschlagene Begriffe und zaehlt done_count hoch', async () => {
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    // Beide mockImplementationOnce MUESSEN in diesem Test verbraucht werden —
+    // sonst leakt der zweite Rueckgabewert in den naechsten Test (vi.clearAllMocks
+    // in beforeEach loescht nur Aufrufdaten, nicht die Once-Warteschlange).
+    mocks.pendingUnit
+      .mockImplementationOnce(async () => { clock.advance(); return { generated: ['Slop'], failed: [], remaining: 1, linked: 0 } })
+      .mockImplementationOnce(async () => { clock.advance(); return { generated: [], failed: ['Reward Hacking'], remaining: 1, linked: 0 } })
+
+    const res = await advanceJob(client, { ...PENDING_JOB, attempts: 0 }, { now: clock.now, budgetMs: 240_000 })
+
+    expect(mocks.appendLog).toHaveBeenCalledWith(
+      client, expect.anything(),
+      [{ at: expect.any(String), text: 'Slop — erzeugt', ok: true }],
+      1,
+    )
+    expect(mocks.appendLog).toHaveBeenCalledWith(
+      client, expect.anything(),
+      [{ at: expect.any(String), text: 'Reward Hacking — fehlgeschlagen, siehe Server-Log', ok: false }],
+      0,
+    )
+    expect(res.units).toBe(2)
+    // Die zweite Einheit ist Ueberlast (nichts erzeugt, aber noch offen) —
+    // der Tick endet dort, ohne den Job abzuschliessen.
+    expect(res.finished).toBe(false)
+  })
+
+  it('endet den Job (exhausted), wenn nach der Einheit nichts mehr offen ist', async () => {
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.pendingUnit.mockImplementation(async () => {
+      clock.advance()
+      return { generated: ['Reward Hacking'], failed: [], remaining: 0, linked: 2 }
+    })
+
+    const res = await advanceJob(client, { ...PENDING_JOB }, { now: clock.now, budgetMs: 240_000 })
+
+    expect(res.finished).toBe(true)
+    expect(mocks.finishJob).toHaveBeenCalledWith(client, 'j1', 'done')
+  })
+
+  it('behandelt "nichts erzeugt, aber noch offen" als Ueberlast (Fortschritt-Null-Erkennung)', async () => {
+    // Gleiche Begruendung wie bei images/relink: ohne dieses Signal wuerde ein
+    // dauerhaft scheiternder Kandidat denselben Versuch wiederholen, bis das
+    // ganze 240s-Budget verbraucht ist, ohne je zu eskalieren.
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.pendingUnit.mockImplementation(async () => {
+      clock.advance()
+      return { generated: [], failed: ['Kaputt'], remaining: 3, linked: 0 }
+    })
+
+    const res = await advanceJob(client, { ...PENDING_JOB }, { now: clock.now, budgetMs: 240_000 })
+
+    expect(mocks.pendingUnit).toHaveBeenCalledTimes(1)
+    expect(res.finished).toBe(false)
+    expect(mocks.setAttempts).toHaveBeenCalledWith(client, 'j1', 1)
+    expect(mocks.releaseLease).toHaveBeenCalledWith(client, 'j1')
+  })
+
+  it('eskaliert nach zehn erfolglosen Durchgaengen zu error', async () => {
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.pendingUnit.mockImplementation(async () => {
+      clock.advance()
+      return { generated: [], failed: ['Kaputt'], remaining: 3, linked: 0 }
+    })
+
+    const res = await advanceJob(client, { ...PENDING_JOB, attempts: 9 }, { now: clock.now, budgetMs: 240_000 })
 
     expect(res.finished).toBe(true)
     expect(mocks.finishJob).toHaveBeenCalledWith(

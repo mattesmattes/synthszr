@@ -7,7 +7,7 @@ import {
 
 export const maxDuration = 60
 
-const KINDS: GlossaryJobKind[] = ['generate', 'images', 'relink']
+const KINDS: GlossaryJobKind[] = ['generate', 'images', 'relink', 'pending']
 
 function parseKind(value: unknown): GlossaryJobKind | null {
   return KINDS.includes(value as GlossaryJobKind) ? (value as GlossaryJobKind) : null
@@ -24,9 +24,21 @@ export async function POST(request: NextRequest) {
 
   // `from` kommt aus dem Panel als Tagesdatum und ist die UNTERE Grenze
   // ("verlinke Artikel AB diesem Tag"), nicht die obere.
-  const params = kind === 'relink' && body?.from
-    ? { since: `${body.from}T00:00:00.000Z` }
-    : {}
+  let params: Record<string, unknown> = {}
+  if (kind === 'relink' && body?.from) {
+    params = { since: `${body.from}T00:00:00.000Z` }
+  } else if (kind === 'pending') {
+    // Anders als die uebrigen Arten ist 'pending' artikelbezogen — ohne
+    // postId/confirmedSlugs koennte advanceJob spaeter nichts verarbeiten
+    // (s. runUnit-Zweig in advance.ts, der ohne postId hart wirft).
+    const postId = typeof body?.postId === 'string' ? body.postId : null
+    const confirmedSlugs = Array.isArray(body?.confirmedSlugs) ? body.confirmedSlugs : null
+    if (!postId) return NextResponse.json({ error: 'postId fehlt' }, { status: 400 })
+    if (!confirmedSlugs || confirmedSlugs.length === 0) {
+      return NextResponse.json({ error: 'confirmedSlugs fehlt' }, { status: 400 })
+    }
+    params = { postId, confirmedSlugs }
+  }
 
   try {
     const job = await createOrGetJob(createAdminClient(), kind, params)

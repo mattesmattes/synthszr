@@ -69,6 +69,41 @@ describe('createOrGetJob', () => {
   })
 })
 
+describe('createOrGetJob (pending)', () => {
+  it('zaehlt nur bestaetigte Kandidaten mit needsGeneration als total', async () => {
+    const { createOrGetJob } = await import('@/lib/glossary/jobs/service')
+    state.queues['generated_posts'] = [{
+      data: {
+        pending_glossary_terms: [
+          { slug: 'a', name: 'A', needsGeneration: true },
+          { slug: 'b', name: 'B', needsGeneration: true },
+          { slug: 'c', name: 'C', needsGeneration: false },
+        ],
+      },
+      error: null,
+    }]
+    state.queues['glossary_jobs'] = [{ data: { ...JOB, kind: 'pending', total: 1 }, error: null }]
+
+    await createOrGetJob(client, 'pending', { postId: 'p1', confirmedSlugs: ['a', 'c'] })
+
+    // 'a': bestaetigt UND braucht Erzeugung → zaehlt. 'b': braucht Erzeugung,
+    // aber nicht bestaetigt → zaehlt nicht. 'c': bestaetigt, aber existiert
+    // schon (needsGeneration=false) → zaehlt nicht.
+    const insertPayload = state.chains['glossary_jobs'][0].insert.mock.calls[0][0]
+    expect(insertPayload.total).toBe(1)
+  })
+
+  it('liefert null als total, wenn postId oder confirmedSlugs fehlen', async () => {
+    const { createOrGetJob } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_jobs'] = [{ data: { ...JOB, kind: 'pending', total: null }, error: null }]
+
+    await createOrGetJob(client, 'pending', {})
+
+    const insertPayload = state.chains['glossary_jobs'][0].insert.mock.calls[0][0]
+    expect(insertPayload.total).toBeNull()
+  })
+})
+
 describe('getJobStatus', () => {
   it('liefert den offenen Job', async () => {
     const { getJobStatus } = await import('@/lib/glossary/jobs/service')

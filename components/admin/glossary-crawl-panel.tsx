@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, RefreshCw, Search, Sparkles, RotateCcw, AlertCircle, Image as ImageIcon } from 'lucide-react'
+import { useJob, JobLog, type JobKind } from '@/components/admin/glossary-job-shared'
 
 interface CrawlStatus {
   postsProcessed: number
@@ -17,100 +18,6 @@ interface CrawlStatus {
   topCandidates: Array<{ name: string; mentions: number; selected: boolean }>
   postsPerExtraction: number
   termsPerGeneration: number
-}
-
-type JobKind = 'generate' | 'images' | 'relink'
-
-interface JobView {
-  status: 'pending' | 'processing' | 'done' | 'error' | 'cancelled'
-  total: number | null
-  done_count: number
-  log: Array<{ at: string; text: string; ok: boolean }>
-  error_message: string | null
-}
-
-/**
- * Liest den Job-Status, solange ein Lauf offen ist.
- *
- * Der Browser TREIBT NICHTS mehr — er zeigt nur. Dieses Polling darf gedrosselt
- * werden, ohne dass ein Lauf langsamer wird: den treibt der Minutentakt-Cron.
- * Genau das war vorher das Problem, als drei for(;;)-Schleifen den Fortschritt
- * an einen aktiven Tab banden.
- */
-function useJob(kind: JobKind) {
-  const [job, setJob] = useState<JobView | null>(null)
-
-  const load = useCallback(async () => {
-    const res = await fetch(`/api/admin/glossary-jobs?kind=${kind}`, { credentials: 'include' })
-    if (!res.ok) return
-    const data = await res.json().catch(() => null)
-    setJob(data?.job ?? null)
-  }, [kind])
-
-  // Einmaliger Initial-Load beim Mount: so erscheint ein bereits laufender Job
-  // mitsamt Protokoll, sobald das Panel geoeffnet wird, ohne dass jemand ihn
-  // gerade erst angestossen haben muss.
-  useEffect(() => { void load() }, [load])
-
-  // Polling nur, solange ein Lauf offen ist — getrennt vom Initial-Load oben.
-  // In einem gemeinsamen Effekt (Abhaengigkeit job?.status) wuerde jeder
-  // Statuswechsel (pending -> processing -> done) einen zusaetzlichen,
-  // sofortigen Fetch ausloesen, weil der Effekt-Koerper load() unbedingt
-  // aufruft, bevor er ueberhaupt prueft, ob noch offen ist.
-  useEffect(() => {
-    const open = job?.status === 'pending' || job?.status === 'processing'
-    if (!open) return
-    const t = setInterval(() => { void load() }, 5000)
-    return () => clearInterval(t)
-  }, [load, job?.status])
-
-  return { job, reload: load }
-}
-
-/**
- * Fortschritt und Protokoll eines Jobs. Eine gemeinsame Funktion fuer alle
- * drei Laeufe (Begriffe/Bilder/Verlinkung), statt den Block dreifach in der
- * Komponente zu wiederholen — die Daten kommen jetzt ausschliesslich vom
- * Server (Job-Tabelle) statt aus lokalem log/current-State, damit sie einen
- * Neuladen der Seite ueberleben.
- */
-function JobLog({ job, unit, verb }: { job: JobView | null; unit: string; verb: string }) {
-  if (!job) return null
-  const open = job.status === 'pending' || job.status === 'processing'
-  // 'pending' getrennt von 'processing': solange der Job wartet, hat noch
-  // keine Einheit gelaufen — "In Arbeit — 0 von N" waere hier gelogen. Seit
-  // dem Serialisierungs-Fix (Befund N1) laeuft je Tick maximal ein
-  // Lexikonlauf; ein zweiter angestossener Lauf bleibt also fuer die Dauer
-  // des ersten in 'pending' stehen.
-  const headline = job.status === 'pending'
-    ? 'Wartet.'
-    : job.status === 'processing'
-      ? `In Arbeit — ${job.done_count}${job.total !== null ? ` von ${job.total}` : ''} ${unit}`
-      : job.status === 'done'
-        ? `Fertig — ${job.done_count} ${unit} ${verb}.`
-        : job.status === 'cancelled'
-          ? `Abgebrochen nach ${job.done_count} ${unit}.`
-          : (job.error_message ?? 'Fehlgeschlagen.')
-  return (
-    <div className="rounded-md border border-border bg-muted/30 p-3">
-      <div className={`mb-2 flex items-center gap-2 font-mono text-xs ${job.status === 'error' ? 'text-destructive' : ''}`}>
-        {open && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-        {headline}
-      </div>
-      {job.log.length > 0 && (
-        <ol className="max-h-56 space-y-1 overflow-y-auto font-mono text-xs">
-          {[...job.log].reverse().map((entry, i) => (
-            <li key={job.log.length - i} className="flex gap-2">
-              <span className="shrink-0 text-muted-foreground/60 tabular-nums">{entry.at}</span>
-              <span className={entry.ok ? 'text-foreground' : 'text-destructive'}>
-                {entry.ok ? '✓' : '×'} {entry.text}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
-  )
 }
 
 /**

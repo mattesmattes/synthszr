@@ -72,6 +72,44 @@ describe('POST /api/admin/glossary-jobs', () => {
       expect.anything(), 'relink', { since: '2020-01-01T00:00:00.000Z' },
     )
   })
+
+  it('weist kind=pending ohne postId mit 400 ab', async () => {
+    const { POST } = await import('@/app/api/admin/glossary-jobs/route')
+
+    const res = await POST(req({ kind: 'pending', confirmedSlugs: ['a'] }))
+
+    expect(res.status).toBe(400)
+    expect(mocks.createOrGet).not.toHaveBeenCalled()
+  })
+
+  it('weist kind=pending ohne confirmedSlugs mit 400 ab', async () => {
+    const { POST } = await import('@/app/api/admin/glossary-jobs/route')
+
+    const res = await POST(req({ kind: 'pending', postId: 'p1' }))
+
+    expect(res.status).toBe(400)
+    expect(mocks.createOrGet).not.toHaveBeenCalled()
+  })
+
+  it('weist kind=pending mit leerem confirmedSlugs mit 400 ab', async () => {
+    const { POST } = await import('@/app/api/admin/glossary-jobs/route')
+
+    const res = await POST(req({ kind: 'pending', postId: 'p1', confirmedSlugs: [] }))
+
+    expect(res.status).toBe(400)
+    expect(mocks.createOrGet).not.toHaveBeenCalled()
+  })
+
+  it('reicht postId und confirmedSlugs fuer pending als params durch', async () => {
+    mocks.createOrGet.mockResolvedValue({ id: 'j3', kind: 'pending', status: 'pending' })
+    const { POST } = await import('@/app/api/admin/glossary-jobs/route')
+
+    await POST(req({ kind: 'pending', postId: 'p1', confirmedSlugs: ['a', 'b'] }))
+
+    expect(mocks.createOrGet).toHaveBeenCalledWith(
+      expect.anything(), 'pending', { postId: 'p1', confirmedSlugs: ['a', 'b'] },
+    )
+  })
 })
 
 describe('GET /api/admin/glossary-jobs', () => {

@@ -5,10 +5,11 @@
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { openCandidateCount, readCrawlState } from '@/lib/glossary/crawl'
+import type { GlossaryCandidate } from '@/lib/glossary/types'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
-export type GlossaryJobKind = 'generate' | 'images' | 'relink'
+export type GlossaryJobKind = 'generate' | 'images' | 'relink' | 'pending'
 export type GlossaryJobStatus = 'pending' | 'processing' | 'done' | 'error' | 'cancelled'
 
 export interface GlossaryJobLogEntry {
@@ -60,7 +61,7 @@ export async function createOrGetJob(
   kind: GlossaryJobKind,
   params: Record<string, unknown> = {},
 ): Promise<GlossaryJob> {
-  const total = await estimateTotal(supabase, kind)
+  const total = await estimateTotal(supabase, kind, params)
 
   const { data, error } = await supabase
     .from('glossary_jobs')
@@ -82,11 +83,32 @@ export async function createOrGetJob(
  * Zahl der noch zu pruefenden Artikel haengt am Cursor und steht nicht vorab
  * fest — die Anzeige muss null als "Anzahl offen" lesen, nicht als Null.
  */
-async function estimateTotal(supabase: AdminClient, kind: GlossaryJobKind): Promise<number | null> {
+async function estimateTotal(
+  supabase: AdminClient,
+  kind: GlossaryJobKind,
+  params: Record<string, unknown>,
+): Promise<number | null> {
   if (kind === 'relink') return null
   if (kind === 'generate') {
     const state = await readCrawlState(supabase)
     return openCandidateCount(state.candidates, state.excluded, state.generated)
+  }
+  if (kind === 'pending') {
+    // Nicht bestimmbar ohne postId/confirmedSlugs (sollte die Admin-Route
+    // schon abgefangen haben) — null heisst hier wie bei relink "Anzahl offen".
+    const postId = params.postId as string | undefined
+    const confirmedSlugs = (params.confirmedSlugs as string[] | undefined) ?? []
+    if (!postId || confirmedSlugs.length === 0) return null
+    const { data } = await supabase
+      .from('generated_posts')
+      .select('pending_glossary_terms')
+      .eq('id', postId)
+      .maybeSingle()
+    const raw = (data as { pending_glossary_terms?: unknown } | null)?.pending_glossary_terms
+    if (!Array.isArray(raw)) return null
+    const confirmed = new Set(confirmedSlugs)
+    return (raw as GlossaryCandidate[])
+      .filter((c) => confirmed.has(c.slug) && c.needsGeneration).length
   }
   const { count } = await supabase
     .from('glossary_terms')

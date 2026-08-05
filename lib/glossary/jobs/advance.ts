@@ -5,6 +5,7 @@
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateCandidates, generateMissingIllustrations, relinkNextBatch } from '@/lib/glossary/crawl'
+import { runPendingUnit } from '@/lib/glossary/pending-run'
 import { appendLog, finishJob, releaseLease, setAttempts, type GlossaryJob, type GlossaryJobLogEntry } from '@/lib/glossary/jobs/service'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -103,6 +104,40 @@ async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOut
         ...r.failed.map((s) => ({ at: stamp(), text: `${s} — Illustration fehlgeschlagen`, ok: false })),
       ],
       doneDelta: r.done.length,
+      exhausted: r.remaining === 0,
+      overloaded: noProgress,
+    }
+  }
+
+  if (job.kind === 'pending') {
+    const postId = job.params.postId as string | undefined
+    const confirmedSlugs = (job.params.confirmedSlugs as string[] | undefined) ?? []
+    if (!postId) {
+      // Sollte die Admin-Route (POST-Validierung) schon abgefangen haben —
+      // hart scheitern statt still nichts zu tun, damit ein Programmierfehler
+      // nicht als Endlos-Idle im Cron-Log verschwindet.
+      throw new Error('pending-Job ohne postId in params')
+    }
+    const r = await runPendingUnit(supabase, postId, confirmedSlugs)
+    const entries: GlossaryJobLogEntry[] = [
+      ...r.generated.map((n) => ({ at: stamp(), text: `${n} — erzeugt`, ok: true })),
+      ...r.failed.map((n) => ({ at: stamp(), text: `${n} — fehlgeschlagen, siehe Server-Log`, ok: false })),
+    ]
+    // Verlinkung/Veroeffentlichung passiert erst bei remaining===0 (die
+    // Injektion laeuft ueber den ganzen Artikeltext, s. pending-run.ts) — eine
+    // eigene Zeile dafuer, sonst waere dieser fuer den Operator wichtigste
+    // Schritt im Protokoll unsichtbar.
+    if (r.remaining === 0 && r.linked > 0) {
+      entries.push({ at: stamp(), text: `${r.linked} Begriffe veröffentlicht und verlinkt`, ok: true })
+    }
+    // Gleiche Begruendung wie bei images/relink: "nichts erzeugt, aber noch
+    // offen" heisst hier ein gescheiterter Erzeugungsversuch (Modell-Fehler
+    // oder -Ueberlast) — ohne diese Erkennung wuerde der Tick denselben
+    // Kandidaten wiederholt versuchen, bis das ganze Budget verbraucht ist.
+    const noProgress = r.generated.length === 0 && r.remaining > 0
+    return {
+      entries,
+      doneDelta: r.generated.length,
       exhausted: r.remaining === 0,
       overloaded: noProgress,
     }
