@@ -26,6 +26,30 @@ function boundaryRegexShort(name: string): RegExp {
 }
 
 /**
+ * Wie matchNameInText, aber mit Wortgrenze auf BEIDEN Seiten — für Namen, bei
+ * denen ein Kompositum-Treffer falsch ist.
+ *
+ * PROD-BEFUND 2026-08-05: auf einer Lexikonseite war in „künstliche Intelligenz"
+ * das Wort „Intel" als Firmenlink ausgezeichnet. Ursache war die Wiederverwendung
+ * von matchNameInText: die verlangt eine Grenze nur DAVOR, weil Glossarbegriffe
+ * in Komposita treffen sollen („Inferenzkosten" → „Inferenz"). Für Firmennamen
+ * gilt das Gegenteil — „Intel" in „Intelligenz", „Meta" in „Metadaten", „Apple"
+ * in „Applet" sind alle falsch.
+ *
+ * Die Grenze bleibt „kein Buchstabe und keine Ziffer", nicht „Leerzeichen":
+ * „Intel." und „Nvidia-Chips" sind legitime Nennungen der Firma.
+ */
+export function matchWholeWordInText(
+  text: string,
+  name: string,
+): { start: number; end: number; matched: string } | null {
+  const m = boundaryRegexShort(name).exec(text)
+  if (!m) return null
+  const start = m.index + m[1].length
+  return { start, end: start + m[2].length, matched: m[2] }
+}
+
+/**
  * Findet die erste Erwähnung eines Namens im Text und gibt ihre Position
  * zurück. Einzige Stelle im System, die entscheidet, was als Treffer gilt —
  * Matcher und Mark-Injektor müssen dieselbe Antwort bekommen.

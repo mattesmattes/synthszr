@@ -22,7 +22,7 @@
 import { KNOWN_COMPANIES } from '@/lib/data/companies'
 import { COMPANY_TICKERS } from '@/lib/data/company-tickers'
 import { EXCLUDED_COMPANY_NAMES } from '@/lib/data/company-exclusions'
-import { matchNameInText } from '@/lib/glossary/mentions'
+import { matchWholeWordInText } from '@/lib/glossary/mentions'
 
 /** Höchstens so viele Firmen pro Erklärtext verlinken. Ein Lexikoneintrag soll
  *  einen Begriff erklären, nicht zur Linkliste werden — dieselbe Erwägung wie
@@ -98,7 +98,9 @@ export function injectStockLinks(content: unknown, lang: string): unknown {
     const text = n.text
     for (const company of companies) {
       if (linked.has(company.key)) continue
-      const hit = matchNameInText(text, company.name)
+      // matchWholeWordInText, NICHT matchNameInText: Firmennamen duerfen nicht
+      // in Komposita treffen. "Intel" in "Intelligenz" war genau dieser Fehler.
+      const hit = matchWholeWordInText(text, company.name)
       if (!hit) continue
       linked.add(company.key)
 

@@ -132,3 +132,37 @@ describe('injectStockLinks', () => {
     expect(plain(result)).toBe(plain(input))
   })
 })
+
+describe('injectStockLinks — Wortgrenzen', () => {
+  it('verlinkt Intel NICHT innerhalb von "Intelligenz"', () => {
+    // PROD-BEFUND 2026-08-05: auf der Lexikonseite "AI Gigafactory" war in
+    // "künstliche Intelligenz" das Wort "Intel" verlinkt. Ursache: die
+    // wiederverwendete matchNameInText verlangt eine Wortgrenze nur DAVOR, damit
+    // Komposita treffen ("Inferenzkosten" → "Inferenz"). Für Begriffe richtig,
+    // für Firmennamen falsch.
+    const result = injectStockLinks(doc('Sie trainieren künstliche Intelligenz.'), 'de')
+    expect(links(result)).toEqual([])
+  })
+
+  it('verlinkt Meta NICHT in "Metadaten"', () => {
+    const result = injectStockLinks(doc('Die Metadaten wurden geprüft.'), 'de')
+    expect(links(result)).toEqual([])
+  })
+
+  it('verlinkt Apple NICHT in "Applet"', () => {
+    const result = injectStockLinks(doc('Ein kleines Applet lief im Browser.'), 'de')
+    expect(links(result)).toEqual([])
+  })
+
+  it('verlinkt den Namen weiterhin, wenn ein Satzzeichen folgt', () => {
+    // Die Grenze darf nicht so streng werden, dass nur noch Leerzeichen zählen.
+    const result = injectStockLinks(doc('Das kam von Intel.'), 'de')
+    expect(links(result).map((l) => l.href)).toEqual(['/de/stocks/intc'])
+  })
+
+  it('verlinkt den Namen weiterhin mit Bindestrich-Anschluss', () => {
+    // "Nvidia-Chips" ist eine legitime Nennung der Firma.
+    const result = injectStockLinks(doc('Die Nvidia-Chips sind knapp.'), 'de')
+    expect(links(result).map((l) => l.href)).toEqual(['/de/stocks/nvda'])
+  })
+})
