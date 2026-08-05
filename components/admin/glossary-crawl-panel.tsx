@@ -373,7 +373,23 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           <JobLog job={relinkJob.job} unit="Artikel" verb="verlinkt" />
 
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => run('extract')} disabled={busy !== null}>
+            {/* Gesperrt auch waehrend termsRunning: extract/generate/reset UND der
+                generate-Job teilen sich denselben ungelockten Crawl-Zustand
+                (settings.glossary_crawl_state, Read-Modify-Write ueber die volle
+                JSONB). Ein gleichzeitiger Klick wuerde den Job-Fortschritt
+                ueberschreiben (lost update) oder an glossary_terms_slug_key
+                scheitern, weil beide Seiten denselben Kandidaten fuer offen
+                halten. images/relink bleiben aussen vor: images ruehrt diesen
+                Zustand ueberhaupt nicht an, relink schreibt nur relinkCursor per
+                eigenem Read-unmittelbar-vor-Write (bewusst so gebaut, siehe
+                writeRelinkCursor) und ist damit kein Aggressor auf candidates/
+                generated/excluded. */}
+            <Button
+              size="sm"
+              onClick={() => run('extract')}
+              disabled={busy !== null || termsRunning}
+              title={termsRunning ? 'Gesperrt, solange der Begriffslauf läuft — beide teilen sich denselben Crawl-Zustand.' : undefined}
+            >
               {busy === 'extract' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
               Nächste{' '}{status?.postsPerExtraction ?? 10}{' '}Artikel lesen
             </Button>
@@ -386,7 +402,8 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               size="sm"
               variant="outline"
               onClick={() => run('generate')}
-              disabled={busy !== null || (status?.selectedCount ?? 0) === 0}
+              disabled={busy !== null || termsRunning || (status?.selectedCount ?? 0) === 0}
+              title={termsRunning ? 'Gesperrt, solange der Begriffslauf läuft — beide teilen sich denselben Crawl-Zustand.' : undefined}
             >
               {busy === 'generate' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
               {status?.termsPerGeneration ?? 3}{' '}Begriffe erzeugen &amp; veröffentlichen
@@ -459,7 +476,13 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               <RefreshCw className="mr-2 h-4 w-4" />
               Neu laden
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => run('reset')} disabled={busy !== null}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => run('reset')}
+              disabled={busy !== null || termsRunning}
+              title={termsRunning ? 'Gesperrt, solange der Begriffslauf läuft — ein Reset würde die laufende Warteschlange löschen.' : undefined}
+            >
               <RotateCcw className="mr-2 h-4 w-4" />
               Fortschritt zurücksetzen
             </Button>
