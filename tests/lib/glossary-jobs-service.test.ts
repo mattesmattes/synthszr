@@ -14,7 +14,7 @@ const state = vi.hoisted(() => ({
 
 function makeChain(table: string) {
   const chain: any = {}
-  for (const m of ['select', 'eq', 'in', 'is', 'or', 'lt', 'order', 'limit', 'range', 'update', 'insert']) {
+  for (const m of ['select', 'eq', 'in', 'is', 'or', 'lt', 'gte', 'order', 'limit', 'range', 'update', 'insert']) {
     chain[m] = vi.fn(() => chain)
   }
   const queue = state.queues[table]
@@ -96,17 +96,24 @@ describe('getJobStatus', () => {
 })
 
 describe('getNextOpenJob', () => {
+  // Jeder Aufruf macht seit dem Serialisierungs-Fix (Befund N1) ZWEI Queries:
+  // zuerst den kind-uebergreifenden Lease-Check, dann erst die eigentliche
+  // Auswahl. Ohne einen zweiten Queue-Eintrag faellt die zweite Query auf
+  // state.fallback ({data:null, error:null}) zurueck — fuer die Tests unten
+  // unschaedlich, aber die Chain-Indizes verschieben sich dadurch auf [1].
   it('filtert Jobs mit frischem Lease heraus', async () => {
     // Der Filter muss "last_advanced_at ist null ODER aelter als die
     // Lease-Grenze" ausdruecken, sonst greift ein zweiter Minutentick in einen
     // laufenden Job.
     const { getNextOpenJob, LEASE_STALE_MS } = await import('@/lib/glossary/jobs/service')
     const now = Date.parse('2026-08-05T12:00:00Z')
-    state.queues['glossary_jobs'] = [{ data: null, error: null }]
+    // Erste Antwort: Lease-Check ("kein anderer Job aktiv"). Zweite: die
+    // eigentliche Auswahl-Query, die hier geprueft wird.
+    state.queues['glossary_jobs'] = [{ data: null, error: null }, { data: null, error: null }]
 
     await getNextOpenJob(client, now)
 
-    const chain = state.chains['glossary_jobs'][0]
+    const chain = state.chains['glossary_jobs'][1]
     const expected = new Date(now - LEASE_STALE_MS).toISOString()
     expect(chain.or).toHaveBeenCalledWith(
       `last_advanced_at.is.null,last_advanced_at.lt.${expected}`,
@@ -116,12 +123,52 @@ describe('getNextOpenJob', () => {
 
   it('nimmt den aeltesten offenen Job', async () => {
     const { getNextOpenJob } = await import('@/lib/glossary/jobs/service')
-    state.queues['glossary_jobs'] = [{ data: { ...JOB, id: 'alt' }, error: null }]
+    state.queues['glossary_jobs'] = [
+      { data: null, error: null },
+      { data: { ...JOB, id: 'alt' }, error: null },
+    ]
 
     const job = await getNextOpenJob(client, Date.parse('2026-08-05T12:00:00Z'))
 
     expect(job?.id).toBe('alt')
-    expect(state.chains['glossary_jobs'][0].order).toHaveBeenCalledWith('created_at', { ascending: true })
+    expect(state.chains['glossary_jobs'][1].order).toHaveBeenCalledWith('created_at', { ascending: true })
+  })
+
+  it('setzt den Tick aus, wenn irgendein offener Job — gleich welcher Art — ein frisches Lease haelt', async () => {
+    // Befund N1: generate und relink teilen sich denselben JSONB-Zustand
+    // (settings.glossary_crawl_state). Liefen beide gleichzeitig, wuerde
+    // relink den Fortschritt von generate ueberschreiben, waehrend dessen
+    // Modell-Ergebnis noch nicht zurueckgeschrieben ist — ein Livelock, der
+    // nie eskaliert. Deshalb genau EIN Lexikonlauf gleichzeitig, quer ueber
+    // alle Arten: haelt irgendein offener Job schon ein frisches Lease,
+    // liefert diese Funktion null, OHNE die Haupt-Query ueberhaupt zu stellen.
+    const { getNextOpenJob } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_jobs'] = [{ data: { id: 'anderer-job' }, error: null }]
+
+    const job = await getNextOpenJob(client, Date.parse('2026-08-05T12:00:00Z'))
+
+    expect(job).toBeNull()
+    expect(state.chains['glossary_jobs'].length).toBe(1)
+  })
+
+  it('loggt einen Lesefehler und liefert null, statt ihn stillschweigend zu verwerfen', async () => {
+    // Befund N4: bis die Migration angewendet ist, waere eine fehlende Tabelle
+    // sonst von "gerade nichts zu tun" nicht zu unterscheiden — der
+    // Minutentakt-Cron antwortet dauerhaft lautlos {ok:true, idle:true}.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { getNextOpenJob } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_jobs'] = [
+      { data: null, error: { message: 'relation "glossary_jobs" does not exist' } },
+    ]
+
+    const job = await getNextOpenJob(client, Date.parse('2026-08-05T12:00:00Z'))
+
+    expect(job).toBeNull()
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('getNextOpenJob'),
+      expect.stringContaining('does not exist'),
+    )
+    errorSpy.mockRestore()
   })
 })
 

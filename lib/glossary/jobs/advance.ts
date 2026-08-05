@@ -24,11 +24,31 @@ const BUDGET_MS = 240_000
  */
 const ASSUMED_FIRST_UNIT_MS = 270_000
 
-/** Erfolglose Ticks in Folge, ab denen der Job aufgibt. */
-const MAX_ATTEMPTS = 10
+/**
+ * Erfolglose Ticks in Folge, ab denen der Job aufgibt. Exportiert, weil die
+ * Cron-Route (Befund N2 des Abschluss-Reviews) denselben Zaehler auch fuer
+ * Exceptions braucht, die advanceJob VERLAESST — sonst zaehlt nur die
+ * Ueberlast INNERHALB dieser Funktion, ein geplatzter Tick (z. B.
+ * relinkNextBatch ohne ladbare Begriffsliste) wuerde nie eskalieren.
+ */
+export const MAX_ATTEMPTS = 10
 
-function stamp(): string {
-  return new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+/**
+ * Exportiert, damit die Cron-Route (Befund N2) fuer ihre eigene Fehler-
+ * Protokollzeile denselben Zeitstempel-Stil verwendet.
+ *
+ * `timeZone: 'Europe/Berlin'` ist Pflicht (Befund N3): ohne sie liest die
+ * Funktion die Serverzeit — auf Vercel UTC. Vorher liefen diese Zeitstempel
+ * im Browser des Betreibers, also in Berliner Zeit; ohne die explizite Zone
+ * verschiebt der Umbau die Bedeutung der Protokollspalte um zwei Stunden,
+ * still. Genau dieses Protokoll belegt in der Design-Spec die 80-Minuten-
+ * Luecke gegen glossary_terms.updated_at — der Vergleich waere beim naechsten
+ * Mal falsch.
+ */
+export function stamp(): string {
+  return new Date().toLocaleTimeString('de-DE', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Berlin',
+  })
 }
 
 interface UnitOutcome {
@@ -169,6 +189,11 @@ export async function advanceJob(
         return { units, finished: true }
       }
       await setAttempts(supabase, job.id, attempts)
+      // Lokale Kopie mitfuehren wie bei appendLog (job.log/done_count oben) —
+      // die Cron-Route liest job.attempts nach einer spaeteren Exception
+      // weiter (Befund N2) und braucht den aktuellen Stand, nicht den von vor
+      // diesem Tick.
+      job.attempts = attempts
       // Tick beenden statt sofort erneut zu versuchen: der naechste Cron
       // kommt in einer Minute. Das stimmt nur, WEIL das Lease jetzt freigegeben
       // wird — sonst haette last_advanced_at (gerade erst von appendLog
@@ -178,7 +203,10 @@ export async function advanceJob(
       return { units, finished: false }
     }
 
-    if (job.attempts > 0) await setAttempts(supabase, job.id, 0)
+    if (job.attempts > 0) {
+      await setAttempts(supabase, job.id, 0)
+      job.attempts = 0
+    }
 
     if (outcome.exhausted) {
       await finishJob(supabase, job.id, 'done')

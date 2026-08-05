@@ -77,13 +77,20 @@ function useJob(kind: JobKind) {
 function JobLog({ job, unit, verb }: { job: JobView | null; unit: string; verb: string }) {
   if (!job) return null
   const open = job.status === 'pending' || job.status === 'processing'
-  const headline = open
-    ? `In Arbeit — ${job.done_count}${job.total !== null ? ` von ${job.total}` : ''} ${unit}`
-    : job.status === 'done'
-      ? `Fertig — ${job.done_count} ${unit} ${verb}.`
-      : job.status === 'cancelled'
-        ? `Abgebrochen nach ${job.done_count} ${unit}.`
-        : (job.error_message ?? 'Fehlgeschlagen.')
+  // 'pending' getrennt von 'processing': solange der Job wartet, hat noch
+  // keine Einheit gelaufen — "In Arbeit — 0 von N" waere hier gelogen. Seit
+  // dem Serialisierungs-Fix (Befund N1) laeuft je Tick maximal ein
+  // Lexikonlauf; ein zweiter angestossener Lauf bleibt also fuer die Dauer
+  // des ersten in 'pending' stehen.
+  const headline = job.status === 'pending'
+    ? 'Wartet.'
+    : job.status === 'processing'
+      ? `In Arbeit — ${job.done_count}${job.total !== null ? ` von ${job.total}` : ''} ${unit}`
+      : job.status === 'done'
+        ? `Fertig — ${job.done_count} ${unit} ${verb}.`
+        : job.status === 'cancelled'
+          ? `Abgebrochen nach ${job.done_count} ${unit}.`
+          : (job.error_message ?? 'Fehlgeschlagen.')
   return (
     <div className="rounded-md border border-border bg-muted/30 p-3">
       <div className={`mb-2 flex items-center gap-2 font-mono text-xs ${job.status === 'error' ? 'text-destructive' : ''}`}>

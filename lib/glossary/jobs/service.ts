@@ -133,6 +133,22 @@ export async function getJobStatus(
 /**
  * Der aelteste offene Job, dessen Lease abgelaufen ist.
  *
+ * Genau EIN Lexikonlauf gleichzeitig, quer ueber ALLE Arten (Befund N1 des
+ * Abschluss-Reviews): generate und relink schreiben beide Read-Modify-Write
+ * auf demselben JSONB (settings.glossary_crawl_state, s. readCrawlState /
+ * writeRelinkCursor). Ein Filter, der nur das Lease DES JOBS prueft, den er
+ * gerade holt, verhindert nicht, dass ZWEI VERSCHIEDENE Arten gleichzeitig
+ * laufen: Tick 1 greift den generate-Job und haelt das Read-Modify-Write-
+ * Fenster 45-270s offen; Tick 2 sieht dessen frisch gestempeltes Lease,
+ * ueberspringt NUR diesen Job und nimmt stattdessen den relink-Job. relink
+ * schreibt dann alle paar Sekunden den vollen Crawl-Zustand zurueck,
+ * darunter den relinkCursor auf dem Stand VOR dem laufenden generate-Aufruf
+ * — meldet dabei "unchanged" statt eines Fehlers und eskaliert nie: ein
+ * Livelock ueber die gesamte Laufzeit des Begriffslaufs.
+ *
+ * Deshalb vor der Auswahl pruefen, ob IRGENDEIN offener Job (gleich welcher
+ * Art) gerade ein frisches Lease haelt, und in dem Fall diesen Tick aussetzen.
+ *
  * Gleiche Bauart wie article-jobs/service.ts:201. `now` ist Parameter, nicht
  * Date.now() im Rumpf, damit der Lease-Filter testbar bleibt.
  */
@@ -141,7 +157,25 @@ export async function getNextOpenJob(
   now: number = Date.now(),
 ): Promise<GlossaryJob | null> {
   const staleBefore = new Date(now - LEASE_STALE_MS).toISOString()
-  const { data } = await supabase
+
+  const { data: leased, error: leaseError } = await supabase
+    .from('glossary_jobs')
+    .select('id')
+    .in('status', OPEN as unknown as string[])
+    .gte('last_advanced_at', staleBefore)
+    .limit(1)
+    .maybeSingle()
+  if (leaseError) {
+    // Befund N4: ohne dieses Log ist eine fehlende Tabelle (Migration noch
+    // nicht angewendet) von "gerade nichts zu tun" nicht zu unterscheiden —
+    // der Minutentakt-Cron antwortet in beiden Faellen lautlos {ok:true,
+    // idle:true}, dauerhaft.
+    console.error('[GlossaryJobs] getNextOpenJob (Lease-Check) fehlgeschlagen:', leaseError.message)
+    return null
+  }
+  if (leased) return null
+
+  const { data, error } = await supabase
     .from('glossary_jobs')
     .select('*')
     .in('status', OPEN as unknown as string[])
@@ -149,6 +183,7 @@ export async function getNextOpenJob(
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
+  if (error) console.error('[GlossaryJobs] getNextOpenJob fehlgeschlagen:', error.message)
   return (data as GlossaryJob | null) ?? null
 }
 
