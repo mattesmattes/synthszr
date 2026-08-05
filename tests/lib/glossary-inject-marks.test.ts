@@ -178,3 +178,34 @@ describe('injectGlossaryMarks — mehrdeutige Aliasse', () => {
     expect(linked(out).map(l => l.slug)).toEqual(['evaluation'])
   })
 })
+
+describe('injectGlossaryMarks — Flexionsendungen', () => {
+  const t = (n: string, s: string) => [{ slug: s, canonicalName: n, aliases: [] }]
+
+  it('nimmt die Pluralendung mit in den Link', () => {
+    // PROD-BEFUND 2026-08-05: "Grafikkarten-Vergleiche" wurde als
+    // "[Grafikkarte]n-Vergleiche" verlinkt — das n stand ausserhalb des Links.
+    const out = injectGlossaryMarks(doc('Die Grafikkarten-Vergleiche zeigen es.'),
+      ['grafikkarte'], t('Grafikkarte', 'grafikkarte'))
+    expect(linked(out)[0].text).toBe('Grafikkarten')
+  })
+
+  it('nimmt ein Genitiv-s mit', () => {
+    const out = injectGlossaryMarks(doc('Des Tokens Wert.'), ['token'], t('Token', 'token'))
+    expect(linked(out)[0].text).toBe('Tokens')
+  })
+
+  it('dehnt NICHT auf ein anderes Wort aus', () => {
+    // "Intelligenz" ist keine Flexion von "Intel" — "ligenz" steht nicht in der
+    // Endungsliste. Der Kompositum-Treffer bleibt, wie er ist.
+    const out = injectGlossaryMarks(doc('Die Intelligenz wuchs.'), ['intel'], t('Intel', 'intel'))
+    expect(linked(out)[0]?.text).toBe('Intel')
+  })
+
+  it('lässt ein Kompositum unangetastet', () => {
+    // "Inferenzkosten": "kosten" ist keine Flexionsendung, der Link umfasst
+    // weiterhin nur den Begriff.
+    const out = injectGlossaryMarks(doc('Die Inferenzkosten sanken.'), ['inferenz'], t('Inferenz', 'inferenz'))
+    expect(linked(out)[0].text).toBe('Inferenz')
+  })
+})

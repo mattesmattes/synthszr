@@ -54,6 +54,39 @@ export function matchWholeWordInText(
  * zurück. Einzige Stelle im System, die entscheidet, was als Treffer gilt —
  * Matcher und Mark-Injektor müssen dieselbe Antwort bekommen.
  */
+/**
+ * Deutsche Flexionsendungen, die zum Treffer GEHOEREN.
+ *
+ * PROD-BEFUND 2026-08-05: "Grafikkarten-Vergleiche" wurde als
+ * "[Grafikkarte]n-Vergleiche" verlinkt — das n stand ausserhalb des Links und sah
+ * wie ein Fehler aus. Die Kompositum-Regel erlaubt den Treffer IM Wort, dehnt ihn
+ * aber nicht auf die Beugung aus.
+ *
+ * Bewusst eine kurze, geschlossene Liste und keine Heuristik: sie darf nur
+ * greifen, wo das Folgende WIRKLICH eine Endung ist. "Intel" + "ligenz" bleibt
+ * damit unberuehrt, und "Inferenzkosten" verlinkt weiterhin nur "Inferenz" —
+ * "kosten" ist keine Endung, sondern ein zweites Wort.
+ *
+ * Laengste zuerst, damit "en" vor "e" und "es" vor "e" greift.
+ */
+const INFLECTIONS = ['en', 'es', 'er', 'em', 'ns', 'n', 's', 'e']
+
+/**
+ * Dehnt einen Treffer um eine Flexionsendung aus, wenn danach eine Wortgrenze
+ * folgt. Ohne diese Bedingung wuerde aus "Token" in "Tokenisierung" ein
+ * "Tokenis"-Treffer.
+ */
+function extendByInflection(text: string, end: number): number {
+  const rest = text.slice(end)
+  for (const suffix of INFLECTIONS) {
+    if (!rest.startsWith(suffix)) continue
+    const after = rest.slice(suffix.length)
+    // Wortgrenze dahinter: Satzende, Leerzeichen, Bindestrich, Satzzeichen.
+    if (after === '' || /^[^\p{L}\p{N}]/u.test(after)) return end + suffix.length
+  }
+  return end
+}
+
 export function matchNameInText(
   text: string,
   name: string,
@@ -64,7 +97,8 @@ export function matchNameInText(
   const m = re.exec(text)
   if (!m) return null
   const start = m.index + m[1].length
-  return { start, end: start + m[2].length, matched: m[2] }
+  const end = extendByInflection(text, start + m[2].length)
+  return { start, end, matched: text.slice(start, end) }
 }
 
 /**
