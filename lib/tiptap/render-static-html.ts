@@ -4,6 +4,7 @@ import Link from '@tiptap/extension-link'
 import { HeadingWithQueueId } from '@/lib/tiptap/heading-with-queue-id'
 import { GlossaryLinkMark } from '@/lib/tiptap/glossary-link-mark'
 import { stripLexTags } from '@/lib/glossary/mentions'
+import { applyTypographicQuotes } from '@/lib/typography/quotes'
 
 /**
  * Rendert TipTap-JSON serverseitig zu statischem HTML — der crawlbare
@@ -17,8 +18,12 @@ import { stripLexTags } from '@/lib/glossary/mentions'
  */
 export function renderStaticArticleHtml(content: Record<string, unknown> | string, lang = 'de'): string {
   try {
-    const json = typeof content === 'string' ? JSON.parse(content) : content
-    if (!json || typeof json !== 'object' || !('type' in json)) return ''
+    const parsed = typeof content === 'string' ? JSON.parse(content) : content
+    if (!parsed || typeof parsed !== 'object' || !('type' in parsed)) return ''
+    // Typografische Anfuehrungszeichen VOR dem Rendern, auf den Textknoten: im
+    // fertigen HTML stehen Anfuehrungszeichen in Attributen (href, class), eine
+    // Ersetzung dort wuerde das Markup zerstoeren.
+    const json = applyTypographicQuotes(parsed, lang)
     const html = generateHTML(json as Parameters<typeof generateHTML>[0], [
       StarterKit.configure({
         heading: false,
