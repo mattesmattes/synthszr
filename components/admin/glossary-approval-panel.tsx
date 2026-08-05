@@ -46,6 +46,14 @@ interface GlossaryApprovalPanelProps {
  * Minutentakt-Cron, unabhängig vom Editor-Tab; das Panel pollt nur noch den
  * Status (useJob, dasselbe Muster wie glossary-crawl-panel.tsx).
  *
+ * `useJob('pending', postId)` reicht den ARTIKEL mit: der Unique-Index
+ * glossary_jobs_one_open_per_kind schlüsselt 'pending' seit dem Review-Fix
+ * nach (kind, postId) statt nur nach kind, ein Job je Artikel statt einer
+ * einzigen systemweiten Sperre. Die Route filtert serverseitig danach —
+ * ohne postId würde sie sonst den offenen ODER zuletzt abgeschlossenen Job
+ * eines FREMDEN Artikels liefern (fremdes „Fertig" im eigenen Panel). Das
+ * Panel braucht deshalb keinen eigenen Fremd-Artikel-Abgleich mehr.
+ *
  * Vorauswahl bewusst NICHT nur nach `origin`: ein {lex:}-Tag kann auf einen in
  * DIESEM Tick frisch generierten Begriff zeigen (`isNewlyGenerated=true`) —
  * ungeprüfter LLM-Text, den noch kein Mensch gelesen hat. Würde man den allein
@@ -57,7 +65,7 @@ interface GlossaryApprovalPanelProps {
  * gewöhnlicher Tag vorausgewählt ist.
  */
 export function GlossaryApprovalPanel({ candidates, value, onChange, postId, runAfterSave }: GlossaryApprovalPanelProps) {
-  const pendingJob = useJob('pending')
+  const pendingJob = useJob('pending', postId)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -67,14 +75,6 @@ export function GlossaryApprovalPanel({ candidates, value, onChange, postId, run
 
   const job = pendingJob.job
   const jobOpen = job?.status === 'pending' || job?.status === 'processing'
-  // Der Unique-Index glossary_jobs_one_open_per_kind laesst nur EINEN offenen
-  // 'pending'-Job systemweit zu — anders als bei generate/images/relink ist
-  // 'pending' aber artikelbezogen (params.postId). Ohne diesen Abgleich wuerde
-  // die Anzeige den Fortschritt eines FREMDEN Artikels als den eigenen
-  // ausgeben, wenn der Operator zwischen zwei Artikeln mit offenen Kandidaten
-  // wechselt.
-  const jobIsForThisPost = jobOpen && job?.params?.postId === postId
-  const lockedByOtherPost = jobOpen && !jobIsForThisPost
 
   if (candidates.length === 0) return null
 
@@ -130,7 +130,6 @@ export function GlossaryApprovalPanel({ candidates, value, onChange, postId, run
   useEffect(() => {
     if (!runAfterSave || !postId || starting) return
     if (openCount === 0) return
-    if (lockedByOtherPost) return
     void startJob()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runAfterSave])
@@ -148,33 +147,27 @@ export function GlossaryApprovalPanel({ candidates, value, onChange, postId, run
 
       {postId && openCount > 0 && (
         <div className="space-y-2">
-          {lockedByOtherPost ? (
-            <p className="text-xs text-muted-foreground">
-              Ein Begriffslauf für einen anderen Artikel läuft gerade — bitte warten, bis er fertig ist.
-            </p>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              {jobOpen ? (
-                <Button size="sm" variant="destructive" onClick={() => void stopJob()}>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Abbrechen
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={startJob}
-                  disabled={starting}
-                  title="Legt einen Job an, den der Minutentakt-Cron abarbeitet. Das Fenster kann geschlossen werden."
-                >
-                  {starting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                  Alle{' '}{openCount}{' '}jetzt erzeugen
-                </Button>
-              )}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {jobOpen ? (
+              <Button size="sm" variant="destructive" onClick={() => void stopJob()}>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Abbrechen
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={startJob}
+                disabled={starting}
+                title="Legt einen Job an, den der Minutentakt-Cron abarbeitet. Das Fenster kann geschlossen werden."
+              >
+                {starting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                Alle{' '}{openCount}{' '}jetzt erzeugen
+              </Button>
+            )}
+          </div>
 
-          {!lockedByOtherPost && <JobLog job={job ?? null} unit="Begriffe" verb="erzeugt" />}
+          <JobLog job={job ?? null} unit="Begriffe" verb="erzeugt" />
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
       )}

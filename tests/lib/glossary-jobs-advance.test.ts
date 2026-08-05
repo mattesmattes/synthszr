@@ -367,4 +367,62 @@ describe('advanceJob (pending)', () => {
       client, 'j1', 'error', expect.stringContaining('überlastet'),
     )
   })
+
+  it('beendet den Job SOFORT als error, wenn beim Abschluss nicht alle bestaetigten Slugs veroeffentlicht wurden', async () => {
+    // Review-Fund: ein 'done' hier waere ein persistenter gruener Endzustand,
+    // den niemand anzweifelt, obwohl ein Begriff nie veroeffentlicht wurde.
+    // Das darf NICHT ueber die 10-Versuche-Eskalation (overloaded) laufen —
+    // ein Retry wuerde denselben deterministischen Fehlschlag (z. B. hidden-
+    // Status) nur verzoegert wiederholen.
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.pendingUnit.mockImplementation(async () => {
+      clock.advance()
+      return { generated: [], failed: [], remaining: 0, linked: 1, publishFailed: ['Reward Hacking'] }
+    })
+
+    const res = await advanceJob(client, { ...PENDING_JOB, attempts: 0 }, { now: clock.now, budgetMs: 240_000 })
+
+    expect(res.finished).toBe(true)
+    expect(mocks.finishJob).toHaveBeenCalledWith(
+      client, 'j1', 'error', expect.stringContaining('Reward Hacking'),
+    )
+    expect(mocks.finishJob).not.toHaveBeenCalledWith(client, 'j1', 'done')
+    // Kein Retry-Pfad: weder Ueberlast-Zaehler noch Lease-Freigabe fuer einen
+    // weiteren Versuch — der Job ist sofort und endgueltig fertig.
+    expect(mocks.setAttempts).not.toHaveBeenCalled()
+    expect(mocks.releaseLease).not.toHaveBeenCalled()
+    // Die ok:false-Protokollzeile muss den Betreiber informieren, dass etwas
+    // als Entwurf liegen bleibt.
+    expect(mocks.appendLog).toHaveBeenCalledWith(
+      client, expect.anything(),
+      expect.arrayContaining([
+        expect.objectContaining({ ok: false, text: expect.stringContaining('konnten nicht veröffentlicht werden') }),
+      ]),
+      0,
+    )
+  })
+
+  it('protokolliert die Abschlusszeile ohne die "verlinkt"-Zusage, wenn alles veroeffentlicht wurde', async () => {
+    // Kosmetik-Fund: applyGlossaryConfirmation kann die Text-Injektion
+    // uebersprungen haben (Parse-Fehler, terms===null) — "veroeffentlicht UND
+    // verlinkt" waere dann eine Behauptung, die pending-run.ts gar nicht
+    // garantieren kann.
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.pendingUnit.mockImplementation(async () => {
+      clock.advance()
+      return { generated: ['Slop'], failed: [], remaining: 0, linked: 1 }
+    })
+
+    await advanceJob(client, { ...PENDING_JOB }, { now: clock.now, budgetMs: 240_000 })
+
+    expect(mocks.appendLog).toHaveBeenCalledWith(
+      client, expect.anything(),
+      expect.arrayContaining([
+        expect.objectContaining({ ok: true, text: '1 Begriffe veröffentlicht' }),
+      ]),
+      1,
+    )
+  })
 })

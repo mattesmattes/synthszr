@@ -12,11 +12,6 @@ export interface JobView {
   done_count: number
   log: Array<{ at: string; text: string; ok: boolean }>
   error_message: string | null
-  /** Nur bei kind='pending' bedeutsam: traegt postId/confirmedSlugs — damit
-   *  ein Aufrufer pruefen kann, ob ein offener Job zu SEINEM Artikel gehoert
-   *  (der Unique-Index laesst nur EINEN offenen 'pending'-Job systemweit zu,
-   *  s. glossary-approval-panel.tsx). */
-  params?: Record<string, unknown>
 }
 
 /**
@@ -30,16 +25,24 @@ export interface JobView {
  *
  * Extrahiert aus glossary-crawl-panel.tsx, damit glossary-approval-panel.tsx
  * (kind='pending') dieselbe Logik nutzt statt sie zu kopieren.
+ *
+ * `postId` ist bei kind='pending' PFLICHT (Review-Fund, artikelweiser
+ * Unique-Index): ohne ihn koennte die Route den Job eines FREMDEN Artikels
+ * liefern. Fuer generate/images/relink bleibt er weg, dort ist der Lauf
+ * global.
  */
-export function useJob(kind: JobKind) {
+export function useJob(kind: JobKind, postId?: string) {
   const [job, setJob] = useState<JobView | null>(null)
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/admin/glossary-jobs?kind=${kind}`, { credentials: 'include' })
+    const url = postId
+      ? `/api/admin/glossary-jobs?kind=${kind}&postId=${encodeURIComponent(postId)}`
+      : `/api/admin/glossary-jobs?kind=${kind}`
+    const res = await fetch(url, { credentials: 'include' })
     if (!res.ok) return
     const data = await res.json().catch(() => null)
     setJob(data?.job ?? null)
-  }, [kind])
+  }, [kind, postId])
 
   // Einmaliger Initial-Load beim Mount: so erscheint ein bereits laufender Job
   // mitsamt Protokoll, sobald das Panel geoeffnet wird, ohne dass jemand ihn

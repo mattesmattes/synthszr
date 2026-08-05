@@ -141,6 +141,64 @@ describe('runPendingUnit', () => {
     // Nur zwei Aufrufe insgesamt (Namen-Lookup + Content-Lookup) — keine
     // weiteren Schreibzugriffe auf generated_posts.
     expect(state.chains['generated_posts'].length).toBe(2)
+    // Review-Fund: der Job darf hier NICHT stillschweigend als erledigt
+    // gelten — publishFailed traegt den Namen des nicht veroeffentlichten
+    // Kandidaten, damit advanceJob den Job als 'error' statt 'done' beendet.
+    expect(result.publishFailed).toEqual(['Slop'])
+  })
+
+  it('meldet publishFailed und leert die Vormerkliste NICHT, wenn nur EIN Teil der bestaetigten Slugs veroeffentlicht wurde', async () => {
+    // Review-Fund (Datenverlust): ensureConfirmedTermsExist kann bei einem
+    // geschluckten Lesefehler pendingRemainder:null liefern, obwohl gar nicht
+    // alles erledigt ist. Landet dieser Zustand hier, darf ein Teilerfolg
+    // (ein Slug veroeffentlicht, ein anderer NICHT) die Vormerkliste nicht
+    // leeren — sonst waere der nicht veroeffentlichte Kandidat unauffindbar
+    // verloren, ohne je erzeugt worden zu sein.
+    const a = candidate('slop', 'Slop')
+    const b = candidate('reward-hacking', 'Reward Hacking')
+    state.queues['generated_posts'] = [
+      { data: { pending_glossary_terms: [a, b] }, error: null }, // Namen-Lookup
+      { data: { content: '{"type":"doc"}' }, error: null }, // Content-Lookup
+      { data: null, error: null }, // Content zurueckschreiben (fuer 'slop' injiziert)
+      // KEIN "Vormerkliste leeren"-Eintrag — darf nicht aufgerufen werden.
+    ]
+    mocks.ensure.mockResolvedValue({ generatedSlugs: ['slop', 'reward-hacking'], pendingRemainder: null })
+    // 'reward-hacking' fehlt in publishedSlugs — z. B. weil der Begriff
+    // inzwischen hidden gesetzt wurde oder das Publish-Update fehlschlug.
+    mocks.confirm.mockResolvedValue({ publishedSlugs: ['slop'], content: '{"type":"doc","injected":true}' })
+
+    const { runPendingUnit } = await import('@/lib/glossary/pending-run')
+    const result = await runPendingUnit(client, 'p1', ['slop', 'reward-hacking'])
+
+    expect(result.linked).toBe(1)
+    expect(result.publishFailed).toEqual(['Reward Hacking'])
+    // Content wird trotzdem geschrieben — der Teilerfolg (slop verlinkt) soll
+    // nicht verloren gehen, nur weil reward-hacking nicht durchkam.
+    expect(state.chains['generated_posts'][2].update).toHaveBeenCalledWith({ content: '{"type":"doc","injected":true}' })
+    // Genau drei Aufrufe — kein vierter fuer "Vormerkliste leeren".
+    expect(state.chains['generated_posts'].length).toBe(3)
+  })
+
+  it('nennt beim Fehlschlag den TATSAECHLICH versuchten Kandidaten, nicht einen bereits vorhandenen', async () => {
+    // Review-Fund: ensure-terms.ts prueft die Existenz ALLER eligiblen
+    // Kandidaten VORAB und filtert bereits vorhandene lautlos heraus, bevor
+    // es den ersten "missing" Kandidaten versucht. Der erste bestaetigte
+    // Kandidat in der Vormerkliste ('a') existiert hier schon und wird daher
+    // NICHT in pendingRemainder auftauchen (lautlos aufgeloest) — der
+    // tatsaechliche Versuch (und Fehlschlag) betraf 'b'.
+    const a = candidate('existiert-schon', 'Existiert Schon')
+    const b = candidate('kaputt', 'Kaputt')
+    state.queues['generated_posts'] = [
+      { data: { pending_glossary_terms: [a, b] }, error: null },
+      { data: null, error: null },
+    ]
+    mocks.ensure.mockResolvedValue({ generatedSlugs: [], pendingRemainder: [b] })
+
+    const { runPendingUnit } = await import('@/lib/glossary/pending-run')
+    const result = await runPendingUnit(client, 'p1', ['existiert-schon', 'kaputt'])
+
+    expect(result.failed).toEqual(['Kaputt'])
+    expect(result.remaining).toBe(1)
   })
 
   it('reicht limit=1 an ensureConfirmedTermsExist durch', async () => {

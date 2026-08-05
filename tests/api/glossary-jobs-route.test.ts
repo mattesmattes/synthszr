@@ -121,7 +121,18 @@ describe('GET /api/admin/glossary-jobs', () => {
     const body = await res.json()
 
     expect(body.job.status).toBe('processing')
-    expect(mocks.status).toHaveBeenCalledWith(expect.anything(), 'images')
+    // Drittes Argument (postId) ist undefined, wenn keiner in der Query steht
+    // — bei generate/images/relink gibt es das ohnehin nicht.
+    expect(mocks.status).toHaveBeenCalledWith(expect.anything(), 'images', undefined)
+  })
+
+  it('reicht postId fuer kind=pending durch (artikelweiser Job-Slot, Review-Fund)', async () => {
+    mocks.status.mockResolvedValue({ id: 'j1', kind: 'pending', status: 'processing' })
+    const { GET } = await import('@/app/api/admin/glossary-jobs/route')
+
+    await GET(req(undefined, 'https://x/api/admin/glossary-jobs?kind=pending&postId=p1'))
+
+    expect(mocks.status).toHaveBeenCalledWith(expect.anything(), 'pending', 'p1')
   })
 
   it('lehnt ohne Session mit 401 ab, ohne die Fachfunktion aufzurufen', async () => {

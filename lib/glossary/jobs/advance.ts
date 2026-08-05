@@ -64,6 +64,14 @@ interface UnitOutcome {
    * mangels retryable-Signal als "keine Fortschritt" erkannt, s. runUnit).
    */
   overloaded: boolean
+  /**
+   * Nicht behebbarer Fehler: der Job wird SOFORT als 'error' beendet, ohne
+   * die 10-Versuche-Eskalation von `overloaded` zu durchlaufen — ein Retry
+   * wuerde denselben deterministischen Fehlschlag nur verzoegert wiederholen.
+   * Bisher nur von 'pending' gesetzt: die Abschluss-Veroeffentlichung hat
+   * nicht ALLE bestaetigten Slugs veroeffentlicht (Review-Fund, s. runUnit).
+   */
+  fatal?: string
 }
 
 async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOutcome> {
@@ -126,10 +134,30 @@ async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOut
     // Verlinkung/Veroeffentlichung passiert erst bei remaining===0 (die
     // Injektion laeuft ueber den ganzen Artikeltext, s. pending-run.ts) — eine
     // eigene Zeile dafuer, sonst waere dieser fuer den Operator wichtigste
-    // Schritt im Protokoll unsichtbar.
+    // Schritt im Protokoll unsichtbar. Wortlaut ohne "und verlinkt"
+    // (Review-Fund, Kosmetik): applyGlossaryConfirmation kann die
+    // Text-Injektion uebersprungen haben (Parse-Fehler, terms===null), die
+    // Zusage waere dann nicht garantiert.
     if (r.remaining === 0 && r.linked > 0) {
-      entries.push({ at: stamp(), text: `${r.linked} Begriffe veröffentlicht und verlinkt`, ok: true })
+      entries.push({ at: stamp(), text: `${r.linked} Begriffe veröffentlicht`, ok: true })
     }
+    // Review-Fund: nicht ALLE bestaetigten Slugs wurden beim Abschluss
+    // veroeffentlicht (transienter Lesefehler im Status-Check, fehlgeschlagenes
+    // Publish-Update, oder ein Slug ist inzwischen hidden/geloescht). Ohne
+    // dieses Signal haette der Job faelschlich 'done' gemeldet — ein
+    // persistenter gruener Endzustand, den niemand anzweifelt, obwohl
+    // Kandidaten nie sichtbar wurden.
+    if (r.publishFailed && r.publishFailed.length > 0) {
+      entries.push({
+        at: stamp(),
+        text: `${r.publishFailed.length} Begriffe konnten nicht veröffentlicht werden, bleiben als Entwurf liegen`,
+        ok: false,
+      })
+    }
+    const fatal = r.publishFailed && r.publishFailed.length > 0
+      ? `Veröffentlichung unvollständig — ${r.publishFailed.join(', ')} blieben Entwurf. `
+        + 'Die Vormerkliste bleibt erhalten, ein neuer Lauf kann sie erneut versuchen.'
+      : undefined
     // Gleiche Begruendung wie bei images/relink: "nichts erzeugt, aber noch
     // offen" heisst hier ein gescheiterter Erzeugungsversuch (Modell-Fehler
     // oder -Ueberlast) — ohne diese Erkennung wuerde der Tick denselben
@@ -138,8 +166,9 @@ async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOut
     return {
       entries,
       doneDelta: r.generated.length,
-      exhausted: r.remaining === 0,
+      exhausted: r.remaining === 0 && !fatal,
       overloaded: noProgress,
+      fatal,
     }
   }
 
@@ -211,6 +240,16 @@ export async function advanceJob(
 
     if (outcome.entries.length > 0 || outcome.doneDelta > 0) {
       await appendLog(supabase, job, outcome.entries, outcome.doneDelta)
+    }
+
+    if (outcome.fatal) {
+      // Sofort und endgueltig 'error' — anders als bei outcome.overloaded KEIN
+      // Retry-Pfad: der Fehler ist deterministisch (ein Slug ist z. B. hidden),
+      // ein weiterer Versuch wuerde denselben Fehlschlag nur verzoegert
+      // wiederholen. Kein releaseLease noetig, der Job ist final (wie beim
+      // cancelled- und beim Ueberlast-Eskalations-Pfad unten).
+      await finishJob(supabase, job.id, 'error', outcome.fatal)
+      return { units, finished: true }
     }
 
     if (outcome.overloaded) {

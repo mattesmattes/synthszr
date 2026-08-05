@@ -50,11 +50,14 @@ const OPEN = ['pending', 'processing'] as const
 const UNIQUE_VIOLATION = '23505'
 
 /**
- * Legt einen Lauf an — oder liefert den bereits offenen derselben Art.
+ * Legt einen Lauf an — oder liefert den bereits offenen derselben Art (bei
+ * 'pending' zusaetzlich: desselben Artikels).
  *
  * Idempotent, weil der partielle Unique-Index glossary_jobs_one_open_per_kind
- * nur einen offenen Job je Art zulaesst. Ein doppelter Klick im Panel soll
- * nicht in einen Fehler laufen, sondern auf den laufenden Lauf zeigen.
+ * nur einen offenen Job je (Art, Artikel) zulaesst — 'pending' ist
+ * artikelbezogen (params.postId), die uebrigen Arten global (postId immer
+ * leer). Ein doppelter Klick im Panel soll nicht in einen Fehler laufen,
+ * sondern auf den laufenden Lauf zeigen.
  */
 export async function createOrGetJob(
   supabase: AdminClient,
@@ -72,7 +75,10 @@ export async function createOrGetJob(
   if (!error && data) return data as GlossaryJob
 
   if (error && error.code === UNIQUE_VIOLATION) {
-    const existing = await getOpenJob(supabase, kind)
+    // params durchreichen: der Unique-Index schluesselt 'pending' nach
+    // (kind, postId) — ohne den Filter in getOpenJob wuerde der Konflikt den
+    // offenen Job eines FREMDEN Artikels liefern (Review-Fund, 2026-08-05).
+    const existing = await getOpenJob(supabase, kind, params)
     if (existing) return existing
   }
   throw new Error(`Job (${kind}) nicht anlegbar: ${error?.message ?? 'unbekannt'}`)
@@ -118,12 +124,25 @@ async function estimateTotal(
   return count ?? null
 }
 
-async function getOpenJob(supabase: AdminClient, kind: GlossaryJobKind): Promise<GlossaryJob | null> {
-  const { data } = await supabase
+async function getOpenJob(
+  supabase: AdminClient,
+  kind: GlossaryJobKind,
+  params: Record<string, unknown> = {},
+): Promise<GlossaryJob | null> {
+  let query = supabase
     .from('glossary_jobs')
     .select('*')
     .eq('kind', kind)
     .in('status', OPEN as unknown as string[])
+  const postId = params.postId as string | undefined
+  if (postId) {
+    // Der Unique-Index schluesselt 'pending' zusaetzlich nach postId (s.
+    // Migration) — ohne diesen Filter liefert ein Konflikt den offenen Job
+    // eines FREMDEN Artikels. Fuer generate/images/relink bleibt postId immer
+    // leer, dieser Zweig greift dort also nie.
+    query = query.eq('params->>postId', postId)
+  }
+  const { data } = await query
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
@@ -134,18 +153,31 @@ async function getOpenJob(supabase: AdminClient, kind: GlossaryJobKind): Promise
  * Lesepfad fuer das Polling im Panel: der offene Job dieser Art, sonst der
  * juengste abgeschlossene. Ohne den zweiten Teil wuerde das Panel in dem
  * Moment leer, in dem der Lauf fertig ist.
+ *
+ * `postId` ist bei kind='pending' PFLICHT: seit dem artikelweisen Unique-
+ * Index (Review-Fund) koennen mehrere 'pending'-Jobs gleichzeitig offen sein
+ * (einer je Artikel) — ohne postId waere "der" pending-Job nicht mehr
+ * eindeutig, und die Fallback-Abfrage unten koennte den zuletzt
+ * abgeschlossenen Job eines FREMDEN Artikels liefern. Deshalb hier ein
+ * fruehes `null` statt einer mehrdeutigen Abfrage — genau der Fund, der
+ * diesen Umbau ausgeloest hat (fremdes "Fertig" im eigenen Panel).
  */
 export async function getJobStatus(
   supabase: AdminClient,
   kind: GlossaryJobKind,
+  postId?: string,
 ): Promise<GlossaryJob | null> {
-  const open = await getOpenJob(supabase, kind)
+  if (kind === 'pending' && !postId) return null
+
+  const open = await getOpenJob(supabase, kind, postId ? { postId } : {})
   if (open) return open
 
-  const { data } = await supabase
+  let query = supabase
     .from('glossary_jobs')
     .select('*')
     .eq('kind', kind)
+  if (postId) query = query.eq('params->>postId', postId)
+  const { data } = await query
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()

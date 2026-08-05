@@ -102,6 +102,44 @@ describe('createOrGetJob (pending)', () => {
     const insertPayload = state.chains['glossary_jobs'][0].insert.mock.calls[0][0]
     expect(insertPayload.total).toBeNull()
   })
+
+  it('liefert bei Unique-Konflikt den offenen Job DESSELBEN Artikels, nicht irgendeinen (artikelweiser Index)', async () => {
+    // Review-Fund: der Unique-Index schluesselt 'pending' jetzt nach
+    // (kind, postId) statt nur nach kind. Der Konflikt-Lookup MUSS deshalb
+    // nach demselben Artikel filtern — sonst liefert er den offenen Job
+    // eines FREMDEN Artikels zurueck.
+    const { createOrGetJob } = await import('@/lib/glossary/jobs/service')
+    state.queues['generated_posts'] = [
+      { data: { pending_glossary_terms: [{ slug: 'a', name: 'A', needsGeneration: true }] }, error: null },
+    ]
+    state.queues['glossary_jobs'] = [
+      { data: null, error: { code: '23505', message: 'duplicate key' } },
+      { data: { ...JOB, kind: 'pending', params: { postId: 'p1', confirmedSlugs: ['a'] } }, error: null },
+    ]
+
+    const job = await createOrGetJob(client, 'pending', { postId: 'p1', confirmedSlugs: ['a'] })
+
+    expect((job.params as { postId: string }).postId).toBe('p1')
+    const conflictChain = state.chains['glossary_jobs'][1]
+    expect(conflictChain.eq).toHaveBeenCalledWith('params->>postId', 'p1')
+  })
+
+  it('filtert den Unique-Konflikt-Lookup NICHT nach postId, wenn keiner in params steht (generate/images/relink)', async () => {
+    // Regressionsschutz: der bestehende Doppelstart-Schutz von
+    // generate/images/relink darf durch den postId-Filter nicht aufgeweicht
+    // werden — in Prod bereits verifiziert (ein zweiter offener generate-Job
+    // scheitert heute mit 23505).
+    const { createOrGetJob } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_jobs'] = [
+      { data: null, error: { code: '23505', message: 'duplicate key' } },
+      { data: { ...JOB, status: 'processing' }, error: null },
+    ]
+
+    await createOrGetJob(client, 'generate', {})
+
+    const conflictChain = state.chains['glossary_jobs'][1]
+    expect(conflictChain.eq).not.toHaveBeenCalledWith('params->>postId', expect.anything())
+  })
 })
 
 describe('getJobStatus', () => {
@@ -127,6 +165,42 @@ describe('getJobStatus', () => {
 
     expect(job?.status).toBe('done')
     expect(job?.done_count).toBe(47)
+  })
+
+  it('liefert null fuer kind=pending ohne postId, ohne die DB abzufragen', async () => {
+    // Review-Fund: seit dem artikelweisen Index ist "der" pending-Job ohne
+    // postId nicht mehr eindeutig — eine Fallback-Abfrage ohne Filter koennte
+    // sonst den Job eines FREMDEN Artikels liefern (genau der Fund, der
+    // diesen Umbau ausgeloest hat).
+    const { getJobStatus } = await import('@/lib/glossary/jobs/service')
+
+    const job = await getJobStatus(client, 'pending')
+
+    expect(job).toBeNull()
+    expect(state.chains['glossary_jobs']).toBeUndefined()
+  })
+
+  it('filtert nach postId, wenn ein offener pending-Job angefragt wird', async () => {
+    const { getJobStatus } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_jobs'] = [{ data: { ...JOB, kind: 'pending', status: 'processing' }, error: null }]
+
+    const job = await getJobStatus(client, 'pending', 'p1')
+
+    expect(job?.status).toBe('processing')
+    expect(state.chains['glossary_jobs'][0].eq).toHaveBeenCalledWith('params->>postId', 'p1')
+  })
+
+  it('filtert auch im Fallback auf den juengsten abgeschlossenen Job nach postId', async () => {
+    const { getJobStatus } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_jobs'] = [
+      { data: null, error: null },
+      { data: { ...JOB, kind: 'pending', status: 'done' }, error: null },
+    ]
+
+    const job = await getJobStatus(client, 'pending', 'p1')
+
+    expect(job?.status).toBe('done')
+    expect(state.chains['glossary_jobs'][1].eq).toHaveBeenCalledWith('params->>postId', 'p1')
   })
 })
 

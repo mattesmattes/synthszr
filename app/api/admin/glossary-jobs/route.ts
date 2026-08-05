@@ -51,7 +51,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/** Lesepfad fuer das Polling im Panel. */
+/**
+ * Lesepfad fuer das Polling im Panel.
+ *
+ * `postId` wird immer durchgereicht, nicht nur fuer kind='pending': das
+ * haelt die Signatur fuer alle Arten gleich, und getJobStatus ignoriert den
+ * Parameter ohnehin fuer generate/images/relink. Fuer 'pending' ist er seit
+ * dem artikelweisen Unique-Index PFLICHT (Review-Fund) — ohne ihn koennte
+ * das Panel den Job eines fremden Artikels angezeigt bekommen.
+ */
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
@@ -62,7 +70,8 @@ export async function GET(request: NextRequest) {
   const kind = parseKind(searchParams.get('kind'))
   if (!kind) return NextResponse.json({ error: 'Unbekannte Lauf-Art' }, { status: 400 })
 
-  const job = await getJobStatus(createAdminClient(), kind)
+  const postId = searchParams.get('postId') ?? undefined
+  const job = await getJobStatus(createAdminClient(), kind, postId)
   return NextResponse.json({ job })
 }
 
