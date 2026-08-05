@@ -65,11 +65,17 @@ export interface CrawlState {
    * jeder neue Kandidat implizit abgewählt und müsste erst zugeschaltet werden.
    */
   excluded: string[]
+  /** Cursor der Nachverlinkung bestehender Artikel (created_at des letzten
+   *  geprueften Posts). null heisst "noch nicht gestartet ODER durch" — der
+   *  Aufrufer setzt ihn nach einem vollstaendigen Durchlauf zurueck, damit ein
+   *  neuer Begriff einen neuen Durchlauf ueber alle Artikel bekommt. */
+  relinkCursor?: string | null
   updatedAt: string | null
 }
 
 const EMPTY_STATE: CrawlState = {
-  cursor: null, postsProcessed: 0, candidates: {}, generated: [], excluded: [], updatedAt: null,
+  cursor: null, postsProcessed: 0, candidates: {}, generated: [], excluded: [],
+  relinkCursor: null, updatedAt: null,
 }
 
 export async function readCrawlState(supabase: AdminClient): Promise<CrawlState> {
@@ -93,6 +99,7 @@ export async function readCrawlState(supabase: AdminClient): Promise<CrawlState>
     candidates: s.candidates && typeof s.candidates === 'object' ? s.candidates : {},
     generated: Array.isArray(s.generated) ? s.generated : [],
     excluded: Array.isArray(s.excluded) ? s.excluded : [],
+    relinkCursor: typeof s.relinkCursor === 'string' ? s.relinkCursor : null,
     updatedAt: typeof s.updatedAt === 'string' ? s.updatedAt : null,
   }
 }
@@ -120,6 +127,17 @@ async function writeCrawlState(supabase: AdminClient, state: CrawlState): Promis
     .from('settings')
     .upsert({ key: STATE_KEY, value: { ...state, updatedAt: new Date().toISOString() } }, { onConflict: 'key' })
   if (error) throw new Error(`State nicht speicherbar: ${error.message}`)
+}
+
+/** Schreibt nur den Nachverlinkungs-Cursor, ohne den restlichen Crawl-Zustand
+ *  anzufassen — die beiden Läufe sind unabhängig und dürfen sich nicht
+ *  gegenseitig zurücksetzen. */
+export async function writeRelinkCursor(
+  supabase: AdminClient,
+  relinkCursor: string | null,
+): Promise<void> {
+  const state = await readCrawlState(supabase)
+  await writeCrawlState(supabase, { ...state, relinkCursor })
 }
 
 /** Setzt den Crawl zurück (Cursor und Kandidaten), ohne Begriffe zu löschen. */

@@ -48,7 +48,13 @@ export async function generateAndInsertDraft(
 
     let illustrationUrl: string | null = null
     let illustrationAlt: string | null = null
-    if (generated.needsIllustration) {
+    // IMMER ein Bild (2026-08-05). Vorher entschied das Modell per
+    // needs_illustration, ob eines entsteht — bei 82 veroeffentlichten Begriffen
+    // hatten dadurch nur 54 eines. Die Weiche brachte keinen Nutzen: eine
+    // Illustration schadet keinem Begriff, und die Luecken mussten hinterher per
+    // Hand ueber "Alle fehlenden Illustrationen erzeugen" geschlossen werden.
+    // Das Feld bleibt im Schema des Modell-Aufrufs, wird hier aber ignoriert.
+    {
       try {
         const img = await generateGlossaryIllustration(generated.canonicalName, generated.summary)
         if (img.success && img.imageBase64) {

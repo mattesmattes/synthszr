@@ -33,7 +33,7 @@ interface CrawlStatus {
 export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => void }) {
   const [status, setStatus] = useState<CrawlStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState<'extract' | 'generate' | 'generate-all' | 'reset' | 'images' | null>(null)
+  const [busy, setBusy] = useState<'extract' | 'generate' | 'generate-all' | 'reset' | 'images' | 'relink' | null>(null)
   /** Abbruchwunsch fuer die Dauerlaeufe. REF, nicht State: die laufende
    *  Schleife sieht einen State-Wert aus ihrer Closure heraus nie aktualisiert. */
   const stopRequested = useRef(false)
@@ -44,6 +44,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
    *  Begriff sieht eine unveraenderte Zahl wie ein Absturz aus. */
   const [log, setLog] = useState<Array<{ text: string; ok: boolean; at: string }>>([])
   const [current, setCurrent] = useState<string | null>(null)
+  /** Startdatum der Nachverlinkung. Default heute: der Lauf geht von neu nach
+   *  alt, "heute" heisst also "alles". Ein aelteres Datum ueberspringt die
+   *  neueren Artikel — nuetzlich, um einen abgebrochenen Lauf gezielt dort
+   *  fortzusetzen, wo er stehen geblieben ist. */
+  const [relinkFrom, setRelinkFrom] = useState(() => new Date().toISOString().slice(0, 10))
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -248,6 +253,74 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     return status?.topCandidates.find((c) => c.selected)?.name ?? null
   }
 
+  /**
+   * Verlinkt bestehende Artikel gegen den GANZEN Begriffsbestand, in Runden.
+   *
+   * WARUM ES DAS BRAUCHT: die Injektion beim Speichern greift nur fuer Begriffe,
+   * die in DIESEM Moment als bestaetigter Kandidat vorlagen. Altposts haben nie
+   * eine Kandidatenliste gesehen, und ein spaeter entstandener Begriff erreicht
+   * keinen aelteren Artikel mehr — an Prod gemessen hatten null von 219 Posts
+   * Marks. Dieser Lauf schliesst die Luecke.
+   *
+   * Keine Modell-Aufrufe, also schnell und ohne Kosten; der Deckel
+   * (POSTS_PER_BACKFILL) haelt nur den Request klein.
+   */
+  async function runRelink() {
+    setBusy('relink')
+    setError(null)
+    setLog([])
+    stopRequested.current = false
+    const stamp = () => new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    let totalLinked = 0
+    let totalChecked = 0
+    try {
+      // Nur die ERSTE Runde nimmt das Datum; danach fuehrt der serverseitige
+      // Cursor weiter, sonst begaenne jede Runde wieder beim Startdatum.
+      let first = true
+      for (;;) {
+        const url = first
+          ? `/api/admin/glossary-crawl?action=relink&from=${relinkFrom}`
+          : '/api/admin/glossary-crawl?action=relink'
+        first = false
+        const res = await fetch(url, { method: 'POST', credentials: 'include' })
+        const data = await res.json().catch(() => null)
+        if (!res.ok) throw new Error(data?.error || `Fehlgeschlagen (HTTP ${res.status})`)
+
+        const linked: string[] = data.linked ?? []
+        const unchanged: number = data.unchanged ?? 0
+        const remaining: number = data.remaining ?? 0
+        totalLinked += linked.length
+        totalChecked += linked.length + unchanged
+
+        for (const slug of linked) {
+          setLog((l) => [...l, { text: `${slug} — Begriffe verlinkt`, ok: true, at: stamp() }])
+        }
+        setLastResult(`${totalLinked} Artikel verlinkt · ${totalChecked} geprueft · noch ${remaining} offen`)
+
+        if (remaining === 0) {
+          setLastResult(`Fertig: ${totalLinked} von ${totalChecked} geprueften Artikeln verlinkt.`)
+          break
+        }
+        if (stopRequested.current) {
+          setLastResult(`Abgebrochen · ${totalLinked} verlinkt · ${remaining} bleiben offen (Cursor gespeichert).`)
+          break
+        }
+        // Ein Lauf ohne einen einzigen geprueften Artikel bewegt den Cursor
+        // nicht — weiterzulaufen waere eine Endlosschleife.
+        if (linked.length === 0 && unchanged === 0) {
+          setError('Kein Fortschritt mehr — abgebrochen.')
+          break
+        }
+      }
+      onTermsChanged?.()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
+    } finally {
+      setBusy(null)
+      stopRequested.current = false
+    }
+  }
+
   async function run(action: 'extract' | 'generate' | 'reset' | 'images') {
     setBusy(action)
     setError(null)
@@ -413,6 +486,30 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               {busy === 'images' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
               Alle fehlenden Illustrationen erzeugen
             </Button>
+            {/* Nachverlinkung mit Startdatum. Getrennter Knopf, weil dieser Lauf
+                KEINE Modell-Aufrufe macht: er ist schnell und kostenlos, ganz
+                anders als die Begriffs- und Bilderzeugung daneben. */}
+            {busy === 'relink' ? (
+              <Button size="sm" variant="destructive" onClick={() => { stopRequested.current = true }}>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Nach dieser Runde stoppen
+              </Button>
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={relinkFrom}
+                  onChange={(e) => setRelinkFrom(e.target.value)}
+                  disabled={busy !== null}
+                  className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
+                  title="Startdatum — der Lauf geht von diesem Tag rückwärts. Heute heißt: alle Artikel."
+                />
+                <Button size="sm" variant="outline" onClick={runRelink} disabled={busy !== null}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Artikel nachverlinken
+                </Button>
+              </span>
+            )}
             <Button size="sm" variant="ghost" onClick={() => void fetchStatus()} disabled={busy !== null}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Neu laden

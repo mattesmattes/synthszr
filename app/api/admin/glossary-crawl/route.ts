@@ -10,8 +10,10 @@ import {
   generateMissingIllustrations,
   POSTS_PER_EXTRACTION,
   TERMS_PER_GENERATION,
+  writeRelinkCursor,
 } from '@/lib/glossary/crawl'
-import { getMatcherTerms } from '@/lib/glossary/terms'
+import { backfillGlossaryLinks } from '@/lib/glossary/backfill'
+import { getMatcherTerms, buildReservedNames, getChartProductNames } from '@/lib/glossary/terms'
 
 // Beide Aktionen machen LLM-Calls: Extraktion 10 kurze, Generierung bis zu 3
 // teure. Ohne Deklaration liefe die Route auf dem Plattform-Default — dieselbe
@@ -67,7 +69,7 @@ export async function GET() {
   })
 }
 
-const ACTIONS = ['extract', 'generate', 'reset', 'toggle', 'images'] as const
+const ACTIONS = ['extract', 'generate', 'reset', 'toggle', 'images', 'relink'] as const
 type Action = (typeof ACTIONS)[number]
 
 /**
@@ -109,6 +111,32 @@ export async function POST(request: NextRequest) {
       // zeigt auf openai/gpt-image-2, und lokal ist OPENAI_API_KEY nur der
       // redigierte Platzhalter aus `vercel env pull`. In dieser Umgebung ist er echt.
       const result = await generateMissingIllustrations(supabase)
+      return NextResponse.json(result)
+    }
+
+    if (action === 'relink') {
+      // Nachverlinkung bestehender Artikel gegen den GANZEN Begriffsbestand.
+      // Cursor im Crawl-State, damit ein abgebrochener Lauf fortsetzt.
+      const terms = await getMatcherTerms('de')
+      if (terms === null) {
+        return NextResponse.json(
+          { error: 'Begriffsliste nicht ladbar — Nachverlinkung abgebrochen' },
+          { status: 503 },
+        )
+      }
+      const reserved = buildReservedNames(await getChartProductNames())
+      // Startdatum: der Lauf geht von NEU nach ALT, das Datum ist also der obere
+      // Rand. Auf das Tagesende gesetzt, damit Artikel DIESES Tages mitlaufen —
+      // mit dem nackten Datum (00:00) waere der eigene Tag ausgeschlossen, was
+      // beim Default "heute" jeden aktuellen Artikel uebersprungen haette.
+      const from = request.nextUrl.searchParams.get('from')
+      const state = await readCrawlState(supabase)
+      const startCursor = from
+        ? `${from}T23:59:59.999Z`
+        : state.relinkCursor ?? null
+
+      const result = await backfillGlossaryLinks(supabase, terms, reserved, startCursor)
+      await writeRelinkCursor(supabase, result.remaining === 0 ? null : result.cursor)
       return NextResponse.json(result)
     }
 

@@ -110,15 +110,21 @@ describe('generateAndInsertDraft', () => {
     expect(state.inserts[0].canonical_name).toBe('Mixture of Experts')
   })
 
-  it('generiert eine Illustration nur, wenn needsIllustration=true ist', async () => {
+  it('generiert IMMER eine Illustration, auch wenn needsIllustration=false ist', async () => {
+    // Umgedreht am 2026-08-05 (vorher: "nur wenn needsIllustration=true"). Die
+    // Weiche ueberliess dem Modell, ob ein Bild entsteht — Ergebnis waren 54 von
+    // 82 veroeffentlichten Begriffen mit Bild, und die Luecken mussten hinterher
+    // per Hand geschlossen werden. Eine Illustration schadet keinem Begriff.
     mocks.generateTermContent.mockResolvedValue(fixtureGenerated({ needsIllustration: false }))
+    mocks.generateGlossaryIllustration.mockResolvedValue({ success: true, imageBase64: 'ZmFrZQ==' })
+    mocks.uploadGlossaryIllustration.mockResolvedValue('https://blob.example/glossary/moe.png')
     const { generateAndInsertDraft } = await import('@/lib/glossary/draft-writer')
     await generateAndInsertDraft(makeSupabase() as never, 'Mixture of Experts')
-    expect(mocks.generateGlossaryIllustration).not.toHaveBeenCalled()
-    expect(state.inserts[0].illustration_url).toBeNull()
+    expect(mocks.generateGlossaryIllustration).toHaveBeenCalledTimes(1)
+    expect(state.inserts[0].illustration_url).toBe('https://blob.example/glossary/moe.png')
   })
 
-  it('lädt eine Illustration hoch und setzt illustration_url, wenn needsIllustration=true ist', async () => {
+  it('lädt die Illustration hoch und setzt illustration_url samt Alt-Text', async () => {
     mocks.generateTermContent.mockResolvedValue(
       fixtureGenerated({ needsIllustration: true, illustrationAlt: 'Schema der Experten-Auswahl' }),
     )
