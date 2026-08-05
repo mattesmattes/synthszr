@@ -72,3 +72,23 @@ describe('linkPostContent', () => {
     expect(r.changed).toBe(false)
   })
 })
+
+describe('linkPostContent — Deckel', () => {
+  it('deckelt die GESETZTEN Marks, nicht die Auswahl der Kandidaten', () => {
+    // PROD-BEFUND 2026-08-05: der Backfill setzte 0 Marks, obwohl 16 Begriffe im
+    // Text standen. Ursache war ein .slice(0, MAX) VOR dem Matching: es nahm die
+    // ersten Begriffe in DB-Reihenfolge, nicht die im Text vorkommenden. Mit 101
+    // Begriffen im Lexikon war keiner der ersten acht im Artikel — Ergebnis null.
+    //
+    // Der Test schiebt 30 nicht vorkommende Begriffe VOR den einen, der im Text
+    // steht. Mit dem alten Verhalten bleibt er unter dem Deckel und wird nie
+    // gesetzt; richtig ist, dass er verlinkt wird.
+    const many = Array.from({ length: 30 }, (_, i) => ({
+      slug: `fehlt-${i}`, canonicalName: `Nichtvorkommend${i}`, aliases: [],
+    }))
+    const withTarget = [...many, { slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }]
+    const r = linkPostContent(doc('Bei der Inferenz rechnet das Modell.'), withTarget, [])
+    expect(r.changed).toBe(true)
+    expect(marks(r.content)).toEqual(['inferenz'])
+  })
+})
