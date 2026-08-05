@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,6 +19,93 @@ interface CrawlStatus {
   termsPerGeneration: number
 }
 
+type JobKind = 'generate' | 'images' | 'relink'
+
+interface JobView {
+  status: 'pending' | 'processing' | 'done' | 'error' | 'cancelled'
+  total: number | null
+  done_count: number
+  log: Array<{ at: string; text: string; ok: boolean }>
+  error_message: string | null
+}
+
+/**
+ * Liest den Job-Status, solange ein Lauf offen ist.
+ *
+ * Der Browser TREIBT NICHTS mehr — er zeigt nur. Dieses Polling darf gedrosselt
+ * werden, ohne dass ein Lauf langsamer wird: den treibt der Minutentakt-Cron.
+ * Genau das war vorher das Problem, als drei for(;;)-Schleifen den Fortschritt
+ * an einen aktiven Tab banden.
+ */
+function useJob(kind: JobKind) {
+  const [job, setJob] = useState<JobView | null>(null)
+
+  const load = useCallback(async () => {
+    const res = await fetch(`/api/admin/glossary-jobs?kind=${kind}`, { credentials: 'include' })
+    if (!res.ok) return
+    const data = await res.json().catch(() => null)
+    setJob(data?.job ?? null)
+  }, [kind])
+
+  // Einmaliger Initial-Load beim Mount: so erscheint ein bereits laufender Job
+  // mitsamt Protokoll, sobald das Panel geoeffnet wird, ohne dass jemand ihn
+  // gerade erst angestossen haben muss.
+  useEffect(() => { void load() }, [load])
+
+  // Polling nur, solange ein Lauf offen ist — getrennt vom Initial-Load oben.
+  // In einem gemeinsamen Effekt (Abhaengigkeit job?.status) wuerde jeder
+  // Statuswechsel (pending -> processing -> done) einen zusaetzlichen,
+  // sofortigen Fetch ausloesen, weil der Effekt-Koerper load() unbedingt
+  // aufruft, bevor er ueberhaupt prueft, ob noch offen ist.
+  useEffect(() => {
+    const open = job?.status === 'pending' || job?.status === 'processing'
+    if (!open) return
+    const t = setInterval(() => { void load() }, 5000)
+    return () => clearInterval(t)
+  }, [load, job?.status])
+
+  return { job, reload: load }
+}
+
+/**
+ * Fortschritt und Protokoll eines Jobs. Eine gemeinsame Funktion fuer alle
+ * drei Laeufe (Begriffe/Bilder/Verlinkung), statt den Block dreifach in der
+ * Komponente zu wiederholen — die Daten kommen jetzt ausschliesslich vom
+ * Server (Job-Tabelle) statt aus lokalem log/current-State, damit sie einen
+ * Neuladen der Seite ueberleben.
+ */
+function JobLog({ job, unit, verb }: { job: JobView | null; unit: string; verb: string }) {
+  if (!job) return null
+  const open = job.status === 'pending' || job.status === 'processing'
+  const headline = open
+    ? `In Arbeit — ${job.done_count}${job.total !== null ? ` von ${job.total}` : ''} ${unit}`
+    : job.status === 'done'
+      ? `Fertig — ${job.done_count} ${unit} ${verb}.`
+      : job.status === 'cancelled'
+        ? `Abgebrochen nach ${job.done_count} ${unit}.`
+        : (job.error_message ?? 'Fehlgeschlagen.')
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-3">
+      <div className={`mb-2 flex items-center gap-2 font-mono text-xs ${job.status === 'error' ? 'text-destructive' : ''}`}>
+        {open && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        {headline}
+      </div>
+      {job.log.length > 0 && (
+        <ol className="max-h-56 space-y-1 overflow-y-auto font-mono text-xs">
+          {[...job.log].reverse().map((entry, i) => (
+            <li key={job.log.length - i} className="flex gap-2">
+              <span className="shrink-0 text-muted-foreground/60 tabular-nums">{entry.at}</span>
+              <span className={entry.ok ? 'text-foreground' : 'text-destructive'}>
+                {entry.ok ? '✓' : '×'} {entry.text}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
 /**
  * Rückwärts-Crawl über veröffentlichte Artikel (lib/glossary/crawl.ts).
  *
@@ -28,27 +115,29 @@ interface CrawlStatus {
  * und unvorhersehbar lange laufen — genau der Defekt, den die entkoppelte
  * lexicon-Phase behoben hat.
  *
- * Kein Auto-Polling: jeder Klick ist eine bewusste, kostenpflichtige Handlung.
+ * Kein Auto-Polling der teuren Einzelaktionen (extract/generate/reset/images)
+ * — jeder Klick bleibt eine bewusste, kostenpflichtige Handlung. Die drei
+ * Dauerlaeufe (generate-all/images/relink) pollen ihren Job-Status derweil
+ * automatisch (useJob); das loest selbst keine weiteren teuren Aufrufe aus,
+ * es liest nur, was der Minutentakt-Cron bereits erledigt hat.
  */
 export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => void }) {
   const [status, setStatus] = useState<CrawlStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<'extract' | 'generate' | 'generate-all' | 'reset' | 'images' | 'relink' | null>(null)
-  /** Abbruchwunsch fuer die Dauerlaeufe. REF, nicht State: die laufende
-   *  Schleife sieht einen State-Wert aus ihrer Closure heraus nie aktualisiert. */
-  const stopRequested = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [lastResult, setLastResult] = useState<string | null>(null)
-  /** Laufendes Protokoll des Batchs — ein Eintrag je Begriff, damit sichtbar
-   *  ist, dass etwas passiert. Ein Zaehler allein reicht nicht: bei 90s je
-   *  Begriff sieht eine unveraenderte Zahl wie ein Absturz aus. */
-  const [log, setLog] = useState<Array<{ text: string; ok: boolean; at: string }>>([])
-  const [current, setCurrent] = useState<string | null>(null)
   /** Startdatum der Nachverlinkung. Default heute: der Lauf geht von neu nach
    *  alt, "heute" heisst also "alles". Ein aelteres Datum ueberspringt die
    *  neueren Artikel — nuetzlich, um einen abgebrochenen Lauf gezielt dort
    *  fortzusetzen, wo er stehen geblieben ist. */
   const [relinkFrom, setRelinkFrom] = useState(() => new Date().toISOString().slice(0, 10))
+  // Die drei frueher hier im Browser getriebenen Dauerlaeufe sind jetzt
+  // Jobs, die der Minutentakt-Cron abarbeitet — jeder Hook pollt nur noch
+  // seinen eigenen Status, solange ein Lauf offen ist (siehe useJob oben).
+  const termsJob = useJob('generate')
+  const imagesJob = useJob('images')
+  const relinkJob = useJob('relink')
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -89,260 +178,87 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   }
 
   /**
-   * Erzeugt ALLE fehlenden Illustrationen — ruft die Route so lange auf, bis
-   * keine mehr offen ist.
+   * Stoesst den Begriffslauf an. Fruehere Fassung trieb ihn hier in einer
+   * for(;;)-Schleife, um maxDuration=300 zu umgehen — der Fortschritt hing
+   * damit am aktiven Tab. Gemessen: der Server war bei "Provenienz" um 14:05:51
+   * fertig, das UI zeigte den Begriff um 15:25:58, 80 Minuten spaeter.
    *
-   * Der Deckel bleibt serverseitig (IMAGES_PER_RUN): gpt-image-2 braucht 10-25s
-   * je Bild, 17 Bilder in EINEM Request würden das 300s-Limit reißen. Getrieben
-   * wird die Schleife deshalb hier im Browser — dasselbe Muster, mit dem
-   * create-article den resumable Artikel-Job vorantreibt.
-   *
-   * Abbruch, wenn eine Runde NICHTS mehr schafft (weder erzeugt noch
-   * fehlgeschlagen): sonst liefe die Schleife bei einem dauerhaften Fehler
-   * endlos und würde bei jedem Durchgang Geld verbrennen.
+   * Ab jetzt: ein Klick legt den Job an, der Minutentakt-Cron arbeitet ihn ab.
+   * Idempotent — ein zweiter Klick liefert den bereits offenen Lauf zurueck.
    */
-  async function runAllImages() {
-    setBusy('images')
-    setError(null)
-    setLastResult(null)
-    let totalDone = 0
-    const totalFailed: string[] = []
-    try {
-      for (let round = 1; ; round++) {
-        const res = await fetch('/api/admin/glossary-crawl?action=images', {
-          method: 'POST',
-          credentials: 'include',
-        })
-        const data = await res.json().catch(() => null)
-        if (!res.ok) throw new Error(data?.error || `Fehlgeschlagen (HTTP ${res.status})`)
-
-        const done: string[] = data.done ?? []
-        const failed: string[] = data.failed ?? []
-        totalDone += done.length
-        totalFailed.push(...failed)
-        setLastResult(
-          `${totalDone} Illustrationen erzeugt` +
-          (data.remaining ? ` · noch ${data.remaining} offen …` : '') +
-          (totalFailed.length ? ` · fehlgeschlagen: ${totalFailed.join(', ')}` : ''),
-        )
-        if (!data.remaining) break
-        if (stopRequested.current) { setLastResult((p) => `${p ?? ''} · abgebrochen`); break }
-        // Abbruch, sobald eine Runde NICHTS GESCHAFFT hat — nicht erst, wenn sie
-        // auch keine Fehler meldet. Gescheiterte Einträge bleiben in `remaining`
-        // und würden erneut versucht: die Schleife liefe endlos und würde bei
-        // jedem Durchgang Geld verbrennen. (Fiel zunächst nicht auf, weil im
-        // ersten Lauf alle Bilder gelangen.)
-        if (done.length === 0) {
-          setError(failed.length > 0
-            ? `Kein Fortschritt — ${failed.length} Fehlschlag/Fehlschläge in Folge, abgebrochen.`
-            : 'Kein Fortschritt mehr — abgebrochen, damit keine Endlosschleife entsteht.')
-          break
-        }
-      }
-      onTermsChanged?.()
-      await fetchStatus()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  /**
-   * Erzeugt ALLE ausgewaehlten Begriffe — EINZELN, mit sichtbarem Protokoll.
-   *
-   * WARUM EINZELN (2026-08-05, nach einem Abbruch in Prod): die Route hat
-   * maxDuration=300. Drei Begriffe brauchen 135-270s plus Uebersetzung und
-   * Produktzuordnung; einer mit Nachforderung nach Regel 4 reisst das Limit. Der
-   * Request stirbt dann als 504 OHNE JSON-Koerper — von aussen ununterscheidbar
-   * von "es passiert einfach nichts mehr". Mit limit=1 bleibt jeder Aufruf bei
-   * 45-90s, weit unter dem Limit.
-   *
-   * WARUM EIN PROTOKOLL: ein Zaehler allein reicht nicht. Bei 90s je Begriff
-   * steht eine unveraenderte Zahl minutenlang still und sieht aus wie ein
-   * Absturz — gerade bei einem Lauf ueber Nacht muss nachvollziehbar sein, WAS
-   * wann fertig wurde und woran es ggf. haengt.
-   *
-   * Das Fenster muss offen bleiben; getrieben wird im Browser, wie beim
-   * resumable Artikel-Job in create-article.
-   */
-  async function runAllTerms() {
+  async function startTermsJob() {
     setBusy('generate-all')
     setError(null)
-    setLastResult(null)
-    setLog([])
-    stopRequested.current = false
-    const stamp = () => new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    let done = 0
-    /** Runden in Folge, die NUR an Modell-Ueberlast gescheitert sind. */
-    let overloadRounds = 0
-
     try {
-      for (;;) {
-        // Naechsten Namen VOR dem Request anzeigen: die Route arbeitet die
-        // Warteschlange in genau dieser Reihenfolge ab (nach Fundstellen
-        // sortiert), also ist der erste offene Kandidat der, der jetzt drankommt.
-        setCurrent(nextCandidateName())
-
-        const res = await fetch('/api/admin/glossary-crawl?action=generate&limit=1', {
-          method: 'POST',
-          credentials: 'include',
-        })
-        const data = await res.json().catch(() => null)
-        if (!res.ok) {
-          // 504 kommt ohne JSON — den Fall ausdruecklich benennen, statt eine
-          // nichtssagende Nummer zu zeigen.
-          throw new Error(
-            data?.error ||
-            (res.status === 504
-              ? 'Zeitlimit der Funktion erreicht (504). Der Begriff war zu langsam.'
-              : `Fehlgeschlagen (HTTP ${res.status})`),
-          )
-        }
-
-        const generated: Array<{ name: string }> = data.generated ?? []
-        const failed: string[] = data.failed ?? []
-        const retryable: string[] = data.retryable ?? []
-        const existing: string[] = data.alreadyExisting ?? []
-        const remaining: number = data.remainingCandidates ?? 0
-
-        for (const g of generated) {
-          done++
-          setLog((l) => [...l, { text: `${g.name} — erzeugt und veroeffentlicht`, ok: true, at: stamp() }])
-        }
-        // Getrennt von den Fehlschlaegen: "gibt es schon" ist Aufraeumen, kein
-        // Problem. Zusammengefasst statt einzeln — bei 40 Altlasten waere jede
-        // eigene Zeile nur Rauschen im Protokoll.
-        if (existing.length > 0) {
-          setLog((l) => [...l, {
-            text: existing.length === 1
-              ? `${existing[0]} — gab es schon, aus der Liste genommen`
-              : `${existing.length} Kandidaten gab es schon, aus der Liste genommen`,
-            ok: true, at: stamp(),
-          }])
-        }
-        for (const f of failed) {
-          const temporary = retryable.includes(f)
-          setLog((l) => [...l, {
-            text: temporary
-              ? `${f} — Modell überlastet, bleibt in der Warteschlange`
-              : `${f} — fehlgeschlagen, siehe Server-Log`,
-            ok: false, at: stamp(),
-          }])
-        }
-
-        // Aufeinanderfolgende Ueberlast-Runden zaehlen. Transient gescheiterte
-        // Begriffe BLEIBEN in der Warteschlange (damit sie nicht verloren gehen)
-        // — dieselbe Runde wuerde sie also endlos wiederholen, solange die API
-        // ueberlastet ist. Nach drei Versuchen aufhoeren statt Geld zu verbrennen.
-        if (generated.length === 0 && retryable.length > 0) {
-          overloadRounds++
-          if (overloadRounds >= 3) {
-            setError(
-              'Das Modell ist gerade überlastet (529). Abgebrochen nach drei Versuchen — '
-              + 'die Begriffe bleiben in der Warteschlange, der Knopf setzt später fort.',
-            )
-            break
-          }
-        } else {
-          overloadRounds = 0
-        }
-        setLastResult(`${done} erzeugt · noch ${remaining} offen`)
-        onTermsChanged?.()
-        await fetchStatus()
-
-        if (remaining === 0) { setLastResult(`Fertig — ${done} Begriffe erzeugt.`); break }
-        if (stopRequested.current) { setLastResult(`Abgebrochen nach ${done} Begriffen · ${remaining} bleiben offen.`); break }
-        // Weder erzeugt noch uebersprungen heisst: die Warteschlange bewegt sich
-        // nicht mehr. Gescheiterte Begriffe werden serverseitig als erledigt
-        // markiert, ein Fehlschlag allein ist also KEIN Grund aufzuhoeren.
-        if (generated.length === 0 && failed.length === 0 && existing.length === 0) {
-          setError('Kein Fortschritt mehr — abgebrochen, damit keine Endlosschleife entsteht.')
-          break
-        }
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Fehlgeschlagen'
-      setError(`${msg} — nach ${done} erzeugten Begriffen. Der Fortschritt ist gespeichert, der Knopf setzt hier fort.`)
-      setLog((l) => [...l, { text: msg, ok: false, at: stamp() }])
-    } finally {
-      setCurrent(null)
-      setBusy(null)
-      stopRequested.current = false
-      await fetchStatus()
-    }
-  }
-
-  /** Der Kandidat, der als naechstes drankommt: erster ausgewaehlter in der
-   *  nach Fundstellen sortierten Liste. Nur fuer die Anzeige. */
-  function nextCandidateName(): string | null {
-    return status?.topCandidates.find((c) => c.selected)?.name ?? null
-  }
-
-  /**
-   * Verlinkt bestehende Artikel gegen den GANZEN Begriffsbestand, in Runden.
-   *
-   * WARUM ES DAS BRAUCHT: die Injektion beim Speichern greift nur fuer Begriffe,
-   * die in DIESEM Moment als bestaetigter Kandidat vorlagen. Altposts haben nie
-   * eine Kandidatenliste gesehen, und ein spaeter entstandener Begriff erreicht
-   * keinen aelteren Artikel mehr — an Prod gemessen hatten null von 219 Posts
-   * Marks. Dieser Lauf schliesst die Luecke.
-   *
-   * Keine Modell-Aufrufe, also schnell und ohne Kosten; der Deckel
-   * (POSTS_PER_BACKFILL) haelt nur den Request klein.
-   */
-  async function runRelink() {
-    setBusy('relink')
-    setError(null)
-    setLog([])
-    stopRequested.current = false
-    const stamp = () => new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    let totalLinked = 0
-    let totalChecked = 0
-    try {
-      // Das Datum geht in JEDE Runde mit: es begrenzt das Fenster nach unten
-      // ("Artikel ab diesem Tag"), waehrend der Fortschritt innerhalb des
-      // Fensters ueber den serverseitigen Cursor laeuft. Liesse man es weg,
-      // wuerde die zweite Runde wieder ueber den ganzen Bestand laufen.
-      for (;;) {
-        const url = `/api/admin/glossary-crawl?action=relink&from=${relinkFrom}`
-        const res = await fetch(url, { method: 'POST', credentials: 'include' })
-        const data = await res.json().catch(() => null)
-        if (!res.ok) throw new Error(data?.error || `Fehlgeschlagen (HTTP ${res.status})`)
-
-        const linked: string[] = data.linked ?? []
-        const unchanged: number = data.unchanged ?? 0
-        const remaining: number = data.remaining ?? 0
-        totalLinked += linked.length
-        totalChecked += linked.length + unchanged
-
-        for (const slug of linked) {
-          setLog((l) => [...l, { text: `${slug} — Begriffe verlinkt`, ok: true, at: stamp() }])
-        }
-        setLastResult(`${totalLinked} Artikel verlinkt · ${totalChecked} geprueft · noch ${remaining} offen`)
-
-        if (remaining === 0) {
-          setLastResult(`Fertig: ${totalLinked} von ${totalChecked} geprueften Artikeln verlinkt.`)
-          break
-        }
-        if (stopRequested.current) {
-          setLastResult(`Abgebrochen · ${totalLinked} verlinkt · ${remaining} bleiben offen (Cursor gespeichert).`)
-          break
-        }
-        // Ein Lauf ohne einen einzigen geprueften Artikel bewegt den Cursor
-        // nicht — weiterzulaufen waere eine Endlosschleife.
-        if (linked.length === 0 && unchanged === 0) {
-          setError('Kein Fortschritt mehr — abgebrochen.')
-          break
-        }
-      }
-      onTermsChanged?.()
+      const res = await fetch('/api/admin/glossary-jobs', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kind: 'generate' }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error ?? `Fehlgeschlagen (HTTP ${res.status})`)
+      await termsJob.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
     } finally {
       setBusy(null)
-      stopRequested.current = false
     }
+  }
+
+  /** Stoesst den Illustrationslauf an. Vorher lief er in Runden im Browser. */
+  async function startImagesJob() {
+    setBusy('images')
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/glossary-jobs', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kind: 'images' }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error ?? `Fehlgeschlagen (HTTP ${res.status})`)
+      await imagesJob.reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /**
+   * Stoesst die Nachverlinkung an. `relinkFrom` ist die UNTERE Datumsgrenze
+   * ("verlinke Artikel AB diesem Tag") und wandert als params.since in den Job.
+   */
+  async function startRelinkJob() {
+    setBusy('relink')
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/glossary-jobs', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kind: 'relink', from: relinkFrom }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error ?? `Fehlgeschlagen (HTTP ${res.status})`)
+      await relinkJob.reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** Abbruchwunsch; der naechste Cron-Tick wertet ihn aus. */
+  async function stopJob(kind: JobKind) {
+    await fetch('/api/admin/glossary-jobs', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind }),
+    })
   }
 
   async function run(action: 'extract' | 'generate' | 'reset' | 'images') {
@@ -402,6 +318,14 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     ? Math.round((status.postsProcessed / status.postsTotal) * 100)
     : 0
 
+  // Ein Lauf gilt als offen, solange der Server ihn noch abarbeitet — das
+  // steuert, ob der Knopf oder der Abbrechen-Knopf zu sehen ist. `busy`
+  // allein reicht nicht mehr: es ist nur waehrend des POST-Requests gesetzt,
+  // der Job selbst laeuft danach unabhaengig vom Tab weiter.
+  const termsRunning = termsJob.job?.status === 'pending' || termsJob.job?.status === 'processing'
+  const imagesRunning = imagesJob.job?.status === 'pending' || imagesJob.job?.status === 'processing'
+  const relinkRunning = relinkJob.job?.status === 'pending' || relinkJob.job?.status === 'processing'
+
   return (
     <div className="space-y-6">
       <Card>
@@ -441,29 +365,12 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
             </span>
           </div>
 
-          {(current || log.length > 0) && (
-            <div className="rounded-md border border-border bg-muted/30 p-3">
-              {current && (
-                <div className="mb-2 flex items-center gap-2 text-sm">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span className="text-muted-foreground">In Arbeit:</span>
-                  <span className="font-medium">{current}</span>
-                </div>
-              )}
-              {/* Neueste zuerst und scrollbar: bei 177 Begriffen soll der Kasten
-                  nicht die Seite sprengen, und interessant ist das Ende. */}
-              <ol className="max-h-56 space-y-1 overflow-y-auto font-mono text-xs">
-                {[...log].reverse().map((entry, i) => (
-                  <li key={log.length - i} className="flex gap-2">
-                    <span className="shrink-0 text-muted-foreground/60 tabular-nums">{entry.at}</span>
-                    <span className={entry.ok ? 'text-foreground' : 'text-destructive'}>
-                      {entry.ok ? '✓' : '×'} {entry.text}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
+          {/* Fortschritt und Protokoll kommen aus den Jobs, nicht mehr aus
+              lokalem State — sie ueberleben damit ein Neuladen der Seite und
+              erscheinen von selbst, wenn hier gerade ein Lauf offen ist. */}
+          <JobLog job={termsJob.job} unit="Begriffe" verb="erzeugt" />
+          <JobLog job={imagesJob.job} unit="Illustrationen" verb="erzeugt" />
+          <JobLog job={relinkJob.job} unit="Artikel" verb="verlinkt" />
 
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => run('extract')} disabled={busy !== null}>
@@ -484,39 +391,47 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               {busy === 'generate' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
               {status?.termsPerGeneration ?? 3}{' '}Begriffe erzeugen &amp; veröffentlichen
             </Button>
-            {busy === 'generate-all' ? (
-              <Button size="sm" variant="destructive" onClick={() => { stopRequested.current = true }}>
+            {termsRunning ? (
+              <Button size="sm" variant="destructive" onClick={() => void stopJob('generate')}>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Nach dieser Runde stoppen
+                Abbrechen
               </Button>
             ) : (
               <Button
                 size="sm"
                 variant="outline"
-                onClick={runAllTerms}
+                onClick={startTermsJob}
                 disabled={busy !== null || (status?.selectedCount ?? 0) === 0}
-                title="Läuft in Runden, bis alle ausgewählten Begriffe erzeugt sind. Das Fenster muss offen bleiben."
+                title="Legt einen Job an, den der Minutentakt-Cron abarbeitet. Das Fenster kann geschlossen werden."
               >
-                <Sparkles className="mr-2 h-4 w-4" />
+                {busy === 'generate-all' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 Alle{' '}{status?.selectedCount ?? 0}{' '}einzeln erzeugen
               </Button>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={runAllImages}
-              disabled={busy !== null || (status?.missingImages ?? 0) === 0}
-            >
-              {busy === 'images' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
-              Alle fehlenden Illustrationen erzeugen
-            </Button>
+            {imagesRunning ? (
+              <Button size="sm" variant="destructive" onClick={() => void stopJob('images')}>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Abbrechen
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={startImagesJob}
+                disabled={busy !== null || (status?.missingImages ?? 0) === 0}
+                title="Legt einen Job an, den der Minutentakt-Cron abarbeitet. Das Fenster kann geschlossen werden."
+              >
+                {busy === 'images' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
+                Alle fehlenden Illustrationen erzeugen
+              </Button>
+            )}
             {/* Nachverlinkung mit Startdatum. Getrennter Knopf, weil dieser Lauf
                 KEINE Modell-Aufrufe macht: er ist schnell und kostenlos, ganz
                 anders als die Begriffs- und Bilderzeugung daneben. */}
-            {busy === 'relink' ? (
-              <Button size="sm" variant="destructive" onClick={() => { stopRequested.current = true }}>
+            {relinkRunning ? (
+              <Button size="sm" variant="destructive" onClick={() => void stopJob('relink')}>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Nach dieser Runde stoppen
+                Abbrechen
               </Button>
             ) : (
               <span className="inline-flex items-center gap-1.5">
@@ -528,8 +443,14 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                   className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
                   title="Nur Artikel ab diesem Tag werden nachverlinkt. Heute heißt: nur die heutigen."
                 />
-                <Button size="sm" variant="outline" onClick={runRelink} disabled={busy !== null}>
-                  <RefreshCw className="mr-2 h-4 w-4" />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={startRelinkJob}
+                  disabled={busy !== null}
+                  title="Legt einen Job an, den der Minutentakt-Cron abarbeitet. Das Fenster kann geschlossen werden."
+                >
+                  {busy === 'relink' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                   Artikel nachverlinken
                 </Button>
               </span>
@@ -547,12 +468,6 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           {busy === 'generate' && (
             <p className="text-xs text-muted-foreground">
               Erzeugen läuft — pro Begriff etwa eine Minute. Fenster offen lassen.
-            </p>
-          )}
-          {busy === 'images' && (
-            <p className="text-xs text-muted-foreground">
-              Bildgenerierung läuft in Runden, bis keine Illustration mehr fehlt — je Bild
-              10-25 Sekunden. Fenster offen lassen, der Fortschritt steht unten.
             </p>
           )}
           {lastResult && <p className="text-sm">{lastResult}</p>}
