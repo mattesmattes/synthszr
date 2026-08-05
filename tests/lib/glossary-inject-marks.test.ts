@@ -209,3 +209,38 @@ describe('injectGlossaryMarks — Flexionsendungen', () => {
     expect(linked(out)[0].text).toBe('Inferenz')
   })
 })
+
+describe('injectGlossaryMarks — Ueberschriften', () => {
+  const terms = [{ slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }]
+
+  function docWithHeading() {
+    return {
+      type: 'doc',
+      content: [
+        { type: 'heading', attrs: { level: 2 },
+          content: [{ type: 'text', text: 'Inferenz wird teurer' }] },
+        { type: 'paragraph',
+          content: [{ type: 'text', text: 'Die Inferenz kostet Rechenzeit.' }] },
+      ],
+    }
+  }
+
+  it('verlinkt NICHT in der Ueberschrift, sondern im Fliesstext', () => {
+    // Ein Link in der Ueberschrift stoert die Typografie — und weil jeder Begriff
+    // nur EINMAL verlinkt wird, war er danach fuer den Fliesstext verbraucht.
+    const out = injectGlossaryMarks(docWithHeading(), ['inferenz'], terms) as {
+      content: Array<{ type: string; content: Array<{ marks?: Array<{ type: string }> }> }>
+    }
+    const heading = out.content[0]
+    const paragraph = out.content[1]
+    expect(heading.content[0].marks ?? []).toEqual([])
+    expect((paragraph.content.find(n => n.marks?.some(m => m.type === 'glossaryLink')))).toBeTruthy()
+  })
+
+  it('laesst den Ueberschriftentext unveraendert', () => {
+    const out = injectGlossaryMarks(docWithHeading(), ['inferenz'], terms) as {
+      content: Array<{ content: Array<{ text?: string }> }>
+    }
+    expect(out.content[0].content.map(n => n.text).join('')).toBe('Inferenz wird teurer')
+  })
+})

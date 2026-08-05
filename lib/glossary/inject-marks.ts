@@ -93,6 +93,13 @@ export function injectGlossaryMarks(
     if (!node || typeof node !== 'object') return node
     const o = node as Node
 
+    // UEBERSCHRIFTEN UEBERSPRINGEN, samt Teilbaum. Zwei Gruende, der zweite ist
+    // der wichtigere: ein Link in der Ueberschrift stoert die Typografie, UND weil
+    // jeder Begriff nur EINMAL verlinkt wird, war er danach fuer den Fliesstext
+    // verbraucht — die Erwaehnung im Text, wo der Leser sie braucht, blieb ohne
+    // Link. `done` bleibt hier unberuehrt, der Begriff ist also weiterhin frei.
+    if ((o as { type?: string }).type === 'heading') return o
+
     if (typeof o.text === 'string') {
       // Quellenlinks gewinnen — in einen bestehenden <a> darf kein zweiter
       // Link geschachtelt werden.
