@@ -307,6 +307,10 @@ export async function generateMissingIllustrations(
 export interface GenerationResult {
   generated: Array<{ name: string; slug: string; mentions: number }>
   failed: string[]
+  /** Kandidaten, die es als Begriff schon gab — kein Fehler, nur nichts zu tun.
+   *  Getrennt von `failed`, weil die UI beides unterschiedlich benennen muss:
+   *  "existiert bereits" ist ein Aufräumvorgang, "übersprungen" ein Problem. */
+  alreadyExisting: string[]
   remainingCandidates: number
 }
 
@@ -322,6 +326,40 @@ export interface GenerationResult {
  * generateTermContent, die bei unter 400 Wörtern nachfordert und danach
  * abbricht — ein zu dünner Eintrag entsteht also gar nicht.
  */
+/**
+ * Trennt die Warteschlange in "muss erzeugt werden" und "gibt es schon".
+ *
+ * PROD-BEFUND 2026-08-05: der Insert scheiterte mit
+ * `duplicate key ... glossary_terms_slug_key` fuer "Advanced Encryption
+ * Standard" — der Begriff lag laengst veroeffentlicht in der Tabelle. Der
+ * Kandidatenfilter prueft nur die crawl-eigene `generated`-Liste; Begriffe, die
+ * NACH der Extraktion auf anderem Weg entstanden sind (Freigabe beim
+ * Artikel-Speichern), bleiben in der Warteschlange stehen.
+ *
+ * Teuer war daran nicht der Fehler, sondern seine Reihenfolge: der Text wurde
+ * voll erzeugt (zwei Opus-Aufrufe, rund 60s) und ERST DANACH scheiterte der
+ * Insert. Deshalb hier vorher aussortieren.
+ *
+ * Faengt zusaetzlich Kandidaten ab, die untereinander auf denselben Slug fallen
+ * ("AES-Standard" und "AES Standard") — der zweite wuerde am selben Constraint
+ * scheitern.
+ */
+export function partitionByExisting(
+  queue: Array<[string, number]>,
+  existingSlugs: Set<string>,
+): { toGenerate: Array<[string, number]>; alreadyExisting: string[] } {
+  const seen = new Set(existingSlugs)
+  const toGenerate: Array<[string, number]> = []
+  const alreadyExisting: string[] = []
+  for (const entry of queue) {
+    const slug = slugify(entry[0])
+    if (seen.has(slug)) { alreadyExisting.push(entry[0]); continue }
+    seen.add(slug)
+    toGenerate.push(entry)
+  }
+  return { toGenerate, alreadyExisting }
+}
+
 /**
  * Wie viele Kandidaten sind noch ECHTE Arbeit — also weder abgewählt noch schon
  * erzeugt (oder endgültig gescheitert, was ebenfalls in `generated` landet)?
@@ -358,18 +396,40 @@ export async function generateCandidates(
   const alreadyGenerated = new Set(state.generated)
   const excluded = new Set(state.excluded)
 
-  const queue = Object.entries(state.candidates)
+  const allOpen = Object.entries(state.candidates)
     // Abgewählte werden übersprungen, bleiben aber in der Liste: der Operator
     // soll seine Entscheidung sehen und zurücknehmen können, statt dass der
     // Begriff verschwindet und beim nächsten Crawl wieder auftaucht.
     .filter(([name]) => !excluded.has(name) && !alreadyGenerated.has(slugify(name)))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, Math.max(1, limit))
+  // Grosszuegiger schneiden als `limit`: aussortierte (weil schon vorhandene)
+  // Kandidaten sollen nicht den ganzen Aufruf verbrauchen. Sonst brauchte ein
+  // Lauf ueber 40 laengst existierende Begriffe 40 Requests, die alle nichts tun.
+  const rawQueue = allOpen.slice(0, Math.max(1, limit) * 20)
+
+  // Bestand aus der DATENBANK, nicht nur aus dem Crawl-State: Begriffe, die nach
+  // der Extraktion auf anderem Weg entstanden sind, stehen sonst weiter in der
+  // Warteschlange und kosten je einen vollen Generierungslauf, bevor der Insert
+  // an ihrem Unique-Constraint scheitert (Prod-Befund 2026-08-05).
+  const { data: existingRows } = await supabase
+    .from('glossary_terms')
+    .select('slug')
+    .in('slug', rawQueue.map(([name]) => slugify(name)))
+  const existingSlugs = new Set((existingRows ?? []).map((r) => r.slug as string))
+
+  const { toGenerate, alreadyExisting } = partitionByExisting(rawQueue, existingSlugs)
+  const queue = toGenerate.slice(0, Math.max(1, limit))
 
   const generated: GenerationResult['generated'] = []
   const failed: string[] = []
   const candidates = { ...state.candidates }
   const generatedSlugs = [...state.generated]
+
+  // Vorhandene sofort abhaken: sie sind erledigt, ohne dass ein Modell laeuft.
+  for (const name of alreadyExisting) {
+    generatedSlugs.push(slugify(name))
+    delete candidates[name]
+  }
 
   for (const [name, mentions] of queue) {
     const slug = slugify(name)
@@ -428,6 +488,7 @@ export async function generateCandidates(
   return {
     generated,
     failed,
+    alreadyExisting,
     remainingCandidates: openCandidateCount(candidates, state.excluded, generatedSlugs),
   }
 }

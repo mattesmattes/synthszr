@@ -195,14 +195,26 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
 
         const generated: Array<{ name: string }> = data.generated ?? []
         const failed: string[] = data.failed ?? []
+        const existing: string[] = data.alreadyExisting ?? []
         const remaining: number = data.remainingCandidates ?? 0
 
         for (const g of generated) {
           done++
           setLog((l) => [...l, { text: `${g.name} — erzeugt und veroeffentlicht`, ok: true, at: stamp() }])
         }
+        // Getrennt von den Fehlschlaegen: "gibt es schon" ist Aufraeumen, kein
+        // Problem. Zusammengefasst statt einzeln — bei 40 Altlasten waere jede
+        // eigene Zeile nur Rauschen im Protokoll.
+        if (existing.length > 0) {
+          setLog((l) => [...l, {
+            text: existing.length === 1
+              ? `${existing[0]} — gab es schon, aus der Liste genommen`
+              : `${existing.length} Kandidaten gab es schon, aus der Liste genommen`,
+            ok: true, at: stamp(),
+          }])
+        }
         for (const f of failed) {
-          setLog((l) => [...l, { text: `${f} — uebersprungen`, ok: false, at: stamp() }])
+          setLog((l) => [...l, { text: `${f} — fehlgeschlagen, siehe Server-Log`, ok: false, at: stamp() }])
         }
         setLastResult(`${done} erzeugt · noch ${remaining} offen`)
         onTermsChanged?.()
@@ -213,7 +225,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
         // Weder erzeugt noch uebersprungen heisst: die Warteschlange bewegt sich
         // nicht mehr. Gescheiterte Begriffe werden serverseitig als erledigt
         // markiert, ein Fehlschlag allein ist also KEIN Grund aufzuhoeren.
-        if (generated.length === 0 && failed.length === 0) {
+        if (generated.length === 0 && failed.length === 0 && existing.length === 0) {
           setError('Kein Fortschritt mehr — abgebrochen, damit keine Endlosschleife entsteht.')
           break
         }
