@@ -64,6 +64,15 @@ export function TermIndexNav({
               <Link
                 href={`/${lang}/glossary#letter-${letter}`}
                 title={`${count}`}
+                // prefetch={false}: die Buchstabenleiste sind rund 26 Links, die
+                // ALLE auf dieselbe Route zeigen — das Fragment (#letter-X) ist
+                // für einen RSC-Prefetch bedeutungslos. Im Netzwerk-Trace der
+                // Begriffsseite waren dadurch sechs Prefetches auf /de/glossary
+                // zu sehen, 57 KB für Prefetches insgesamt, und das während das
+                // LCP-Bild um Bandbreite konkurrierte. Der Verweis auf den
+                // vollen Index unten in dieser Navigation prefetcht weiterhin,
+                // einer genügt.
+                prefetch={false}
                 className="font-mono text-[11px] text-foreground/70 transition-colors hover:text-accent"
               >
                 {letter}

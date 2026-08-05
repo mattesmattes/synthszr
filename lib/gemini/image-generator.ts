@@ -529,6 +529,20 @@ export async function whiteToTransparent(
   }
 
   // Create new image with transparency
+  //
+  // palette: true ist hier KEINE Kompressionsspielerei, sondern folgt direkt
+  // aus der Schleife oben: sie lässt genau zwei Zustände übrig, reines Schwarz
+  // und transparent. Als 8-Bit-RGBA gespeichert kostete das 32 Bit je Pixel für
+  // 1 Bit Information — an der Lexikon-Illustration auf Prod 54.602 Bytes statt
+  // 13.306, bei pixelgleichem Inhalt (verlustfrei, weil nur die Farbtiefe
+  // sinkt, nicht das Raster).
+  //
+  // Das schlägt auf den LCP durch: next/image reicht das Original unverändert
+  // durch, sobald die optimierte Variante größer wäre. Bei einem Dither-Raster
+  // ist das genau für die Breiten der Fall, die ein Retina-Display anfordert
+  // (w=640 und w=750 lieferten das rohe PNG, w=828 dagegen 23 KB AVIF) — das
+  // Herunterskalieren zerstört das regelmäßige Muster und erzeugt Rauschen, das
+  // sich schlecht komprimiert.
   const outputBuffer = await sharp(Buffer.from(pixels), {
     raw: {
       width: info.width,
@@ -536,7 +550,7 @@ export async function whiteToTransparent(
       channels: 4
     }
   })
-    .png()
+    .png({ palette: true, colors: 2 })
     .toBuffer()
 
   return {

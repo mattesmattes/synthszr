@@ -17,9 +17,15 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
+    // Gezielte Spalten statt select('*'): llm_model und backfill_from_date
+    // gingen sonst an jeden Browser, der diesen öffentlichen Endpunkt aufruft —
+    // sie verraten die eingesetzten Modelle und haben im Client keinen Zweck.
+    // Verbliebene Konsumentin ist die Newsletter-Präferenzseite (code,
+    // native_name, name); die beiden Sprachumschalter laden ihre Liste seit dem
+    // Umbau serverseitig über lib/i18n/active-languages.ts.
     const { data, error } = await supabase
       .from('languages')
-      .select('*')
+      .select('code, name, native_name, is_active, is_default')
       .eq('is_active', true)
       .order('is_default', { ascending: false })
       .order('name', { ascending: true })
