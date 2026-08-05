@@ -154,6 +154,9 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   // und im Text verlinkt wird (Task 11, PATCH confirmedGlossarySlugs).
   const [glossaryCandidates, setGlossaryCandidates] = useState<GlossaryCandidate[]>([])
   const [confirmedGlossarySlugs, setConfirmedGlossarySlugs] = useState<string[]>([])
+  /** Wird nach jedem erfolgreichen Speichern erhoeht und startet im
+   *  Freigabe-Panel den Hintergrund-Lauf fuer die fehlenden Erklaertexte. */
+  const [glossaryRunTrigger, setGlossaryRunTrigger] = useState(0)
 
   // Extract article count from TipTap content
   const countArticles = useCallback((tiptapContent: Record<string, unknown>): number => {
@@ -674,6 +677,11 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       return
     }
 
+    // Lexikon-Erklaertexte im Hintergrund nachziehen. Erst NACH dem Speichern:
+    // der Lauf arbeitet auf dem gespeicherten Stand, und ein Speichervorgang darf
+    // nicht auf 90s je Begriff warten. Blockiert die Bearbeitung nicht.
+    setGlossaryRunTrigger((n) => n + 1)
+
     // Mark only the REMAINING queue items as "used" when publishing for the first time
     if (!wasPublished && isNowPublished && currentQueueItems.length > 0) {
       console.log(`[Queue] Publishing post ${id} - marking ${currentQueueItems.length} items as used`)
@@ -1011,6 +1019,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
             value={confirmedGlossarySlugs}
             onChange={setConfirmedGlossarySlugs}
             postId={id}
+            runAfterSave={glossaryRunTrigger}
           />
 
           {/* Collapsible Metadata Section */}

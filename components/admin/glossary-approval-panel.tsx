@@ -1,7 +1,7 @@
 // components/admin/glossary-approval-panel.tsx
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -21,6 +21,13 @@ interface GlossaryApprovalPanelProps {
   onChange: (slugs: string[]) => void
   /** Fuer den Runden-Lauf. Fehlt er, wird der Knopf nicht angeboten. */
   postId?: string
+  /**
+   * Zaehler, der nach jedem erfolgreichen Speichern erhoeht wird. Steigt er,
+   * startet der Lauf VON SELBST — der Operator soll die Begriffe nicht per Hand
+   * nachtriggern muessen. Ein Zaehler statt eines Booleans, weil auch das zweite
+   * Speichern einen Lauf ausloesen soll.
+   */
+  runAfterSave?: number
 }
 
 /**
@@ -39,7 +46,7 @@ interface GlossaryApprovalPanelProps {
  * den „neu generiert"-Hinweis, damit sichtbar bleibt, WARUM er nicht wie ein
  * gewöhnlicher Tag vorausgewählt ist.
  */
-export function GlossaryApprovalPanel({ candidates, value, onChange, postId }: GlossaryApprovalPanelProps) {
+export function GlossaryApprovalPanel({ candidates, value, onChange, postId, runAfterSave }: GlossaryApprovalPanelProps) {
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState<Array<{ text: string; ok: boolean; at: string }>>([])
   const [current, setCurrent] = useState<string | null>(null)
@@ -121,14 +128,34 @@ export function GlossaryApprovalPanel({ candidates, value, onChange, postId }: G
     }
   }
 
+  /**
+   * Startet den Lauf nach dem Speichern automatisch.
+   *
+   * BLOCKIERT NICHTS: die Schleife laeuft asynchron neben der Oberflaeche, der
+   * Operator kann sofort weiterschreiben. Die einzige Kopplung ist der
+   * Artikeltext, und die ist entschaerft — die Verlinkung am Ende ist idempotent
+   * und wird beim naechsten Speichern ohnehin erneut angewandt.
+   *
+   * Absichtlich ohne runAll in den Dependencies: die Funktion wird bei jedem
+   * Render neu erzeugt, sie dort zu fuehren wuerde den Lauf bei jedem Tastendruck
+   * neu starten.
+   */
+  useEffect(() => {
+    if (!runAfterSave || !postId || busy) return
+    if (openCount === 0) return
+    void runAll()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runAfterSave])
+
   return (
     <div className="border rounded-lg p-4 space-y-3">
       <div>
         <h3 className="font-medium text-sm">Lexikon-Begriffe zur Freigabe</h3>
         <p className="text-xs text-muted-foreground">
           Bestätigte Begriffe werden beim Speichern veröffentlicht und im Artikeltext verlinkt.
-          Ein Speichervorgang erzeugt höchstens drei Erklärtexte, damit er nicht ins Zeitlimit
-          läuft — mit „Alle jetzt erzeugen“ laufen sie stattdessen einzeln durch, mit Protokoll.
+          Nach dem Speichern laufen die fehlenden Erklärtexte automatisch im Hintergrund
+          durch — einzeln, mit Protokoll. Weiterschreiben ist währenddessen möglich; die
+          Verlinkung im Artikeltext passiert am Ende des Laufs.
         </p>
       </div>
 
