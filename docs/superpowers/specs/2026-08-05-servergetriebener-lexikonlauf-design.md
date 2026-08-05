@@ -228,3 +228,80 @@ nichts mehr.
   `POSTS_PER_EXTRACTION` Artikel — kein Dauerlauf, also kein Job nötig.
 - **`article_jobs` wird nicht angefasst.** Der Auto-Tagespost behält sein
   browser-getriebenes Modell mit Cron-Fallback.
+
+---
+
+## Nachtrag: Umsetzung und offene Folge-Punkte (2026-08-05)
+
+Umgesetzt in 12 Commits (`57ce7bf`..`dfebc3c`), 1014 Tests grün. Jeder Task
+einzeln geprüft, danach ein Abschluss-Review über den gesamten Branch.
+
+**In Prod verifiziert:** Tabelle samt partiellem Unique-Index angelegt (zweiter
+offener Job derselben Art scheitert mit `23505`), Cron-Route antwortet ohne Auth
+mit 401, und ein `relink`-Lauf über den Bestand lief **ohne offenen Browser** in
+rund vier Minuten durch: 19:11:30 angelegt, 19:15:37 `done`, 218 Artikel neu
+verlinkt, 227 Protokollzeilen, Zeitstempel in Berliner Zeit.
+
+### Was der Review gefunden hat und was daraus folgt
+
+Fünf Fehler stammten aus den Code-Samples des Plans, nicht aus der Umsetzung —
+darunter `if (!verifyCronAuth(request))`: die Funktion gibt ein Objekt zurück,
+die Prüfung wäre also immer falsy gewesen und der Cron-Endpunkt offen. Wer
+künftig aus einem Plan dieser Art implementiert, sollte jede fremde Signatur im
+echten Code prüfen, statt das Sample zu übernehmen.
+
+Zwei Fehler entstanden erst im Zusammenspiel und waren in den Einzel-Reviews
+unsichtbar:
+
+- `getNextOpenJob` filterte nach Lease, nicht nach Art — `generate` und `relink`
+  liefen dadurch parallel und überschrieben sich auf `settings.glossary_crawl_state`.
+  Behoben durch Serialisierung: genau ein Lexikonlauf gleichzeitig.
+- Eine Exception verließ `advanceJob`, die Route fing sie und antwortete
+  `ok: true` — ohne `attempts` zu erhöhen. Endloswiederholung im 6-Minuten-Takt
+  ohne Fehlerstatus. Behoben: Eskalation im `catch`.
+
+### Offene Folge-Punkte (triagiert, keiner blockierend)
+
+**Kleines Bündel, eine Datei:**
+- Das Panel frischt nach Abschluss eines Laufs nichts auf (`onTermsChanged` wird
+  für die drei Läufe nicht mehr gerufen) — Begriffsliste und Zähler bleiben auf
+  dem Stand des Seitenaufrufs, bis jemand neu lädt.
+- `stopJob` prüft `res.ok` nicht und hat kein `try/catch`, anders als die
+  `start*Job`-Funktionen.
+
+**Kosmetik, ein Commit:**
+- Kommentar zu `ASSUMED_FIRST_UNIT_MS` suggeriert Wirkung; der Wert wird nie
+  gelesen — und das ist tragend: wirkte er als Boden, machte jeder Tick nur eine
+  Einheit und der Durchsatz bräche weg.
+- Der Satz „bleibt auch im schlechtesten Fall unter `maxDuration`" trägt nicht:
+  `slowestMs` ist das Maximum *bisheriger* Einheiten, eine spätere darf langsamer
+  sein. Der Fall ist recoverable (Lease läuft ab), aber der Kommentar ist zu stark.
+- Die `finishJob`-Fehlermeldung nennt für alle drei Arten „Modell dauerhaft
+  überlastet"; bei `relink` gibt es keinen Modellaufruf.
+- `cancel_requested` wird in der Tick-Schleife geprüft, aber `job` nie neu
+  gelesen — der Abbruch greift erst beim nächsten Tick. Entweder Flag neu lesen
+  oder den Knopf ehrlicher benennen.
+- Die `open`-Berechnung ist vierfach dupliziert.
+
+**Testschulden:** `estimateTotal`-Zweig für `images`; `requestCancel`-Test prüft
+den `kind`-Filter nicht (ein weggefallenes `.eq('kind', …)` würde Jobs *aller*
+Arten abbrechen, ohne dass ein Test es merkt); `Math.max`-Zweig im Zeitbudget
+(ein `Math.min` würde alle Tests bestehen); `relink` mit `linked: []` und
+`unchanged > 0`; POST-400 ohne `not.toHaveBeenCalled()`.
+
+**Nur wenn Härte gewünscht:** Der Mutex ist Check-then-Act, nicht atomar (das
+Fenster ist von Minuten auf Millisekunden geschrumpft, aber nicht null); ein
+`pending`-Job lässt sich nur über den Cron abbrechen, bei stehendem Cron
+blockiert er den partiellen Index dauerhaft.
+
+**Nicht anfassen:** Der doppelte `readCrawlState` in `relinkNextBatch` ist
+gewollt — er hält das Read-Modify-Write-Fenster kurz; ihn zu sparen vergrößerte
+die Race. `setAttempts(0)` je Einheit ist durch `if (job.attempts > 0)` begrenzt.
+
+### Randnotiz zum Migrationsverlauf
+
+`supabase db push` ist in diesem Projekt nicht benutzbar: 15 lokale Migrationen
+seit dem 04.07. stehen nicht in der Remote-Registry, `db push` verlangt deshalb
+`--include-all` und würde 57 alte Migrationen erneut ausführen, darunter ein
+`DROP`. Gezielt anwenden geht mit
+`npx supabase db query --linked --file <migration>`.
