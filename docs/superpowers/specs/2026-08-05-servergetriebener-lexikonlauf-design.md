@@ -166,13 +166,18 @@ Unkritisch, weil jede Einheit atomar ist — ein Begriff ist erzeugt oder nicht.
 ### 4. Fachlogik entkoppeln
 
 `generateCandidates` und `generateMissingIllustrations` sind schon aufrufbare
-Funktionen in `lib/glossary/crawl.ts`. Die **Nachverlinkung liegt dagegen inline
-im Route-Zweig** `action === 'relink'`
-(`app/api/admin/glossary-crawl/route.ts:117–141`) und ist von außen nicht
-nutzbar. Sie wird nach `lib/glossary/crawl.ts` als `relinkNextBatch(supabase,
-{ since })` extrahiert; der Route-Zweig ruft danach dieselbe Funktion. Der
-Fortschritt hat mit `writeRelinkCursor` (:135) bereits einen persistenten
-Cursor, es entsteht also kein neuer Zustand.
+Funktionen in `lib/glossary/crawl.ts`, und die eigentliche Verlinkungsarbeit
+steckt ebenfalls schon in `backfillGlossaryLinks`
+(`lib/glossary/backfill.ts:80`).
+
+Was bei der Nachverlinkung fehlt, ist nicht die Fachlogik, sondern die
+**Orchestrierung**: Begriffsliste laden, reservierte Namen bauen, Cursor lesen
+und zurückschreiben liegen inline im Route-Zweig `action === 'relink'`
+(`app/api/admin/glossary-crawl/route.ts:117–141`). Diese 25 Zeilen werden als
+`relinkNextBatch(supabase, { since })` nach `lib/glossary/crawl.ts` gezogen; der
+Route-Zweig ruft danach dieselbe Funktion. Der Fortschritt hat mit
+`writeRelinkCursor` (:135) bereits einen persistenten Cursor, es entsteht also
+kein neuer Zustand.
 
 ### 5. Admin-API (`app/api/admin/glossary-jobs/route.ts`)
 
