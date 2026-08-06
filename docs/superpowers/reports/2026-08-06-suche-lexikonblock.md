@@ -125,6 +125,58 @@ $ npm run build
 8. **Zustellungslücke, dann Bestätigung, dann fehlender Kommentar-Wortlaut.** Eine erste Stopp-Nachricht des Team-Leads kam nicht an (Zustellungsfehler, nicht meiner) — dadurch hatte ich die Vereinheitlichung bereits umgesetzt, bevor die Korrektur zu mir durchdrang. Die zweite, vollständige Nachricht kam an und wurde in Commit `536e1c7` umgesetzt. Eine dritte Nachricht bestätigte dieselbe Entscheidung noch einmal (der Betreiber hatte inzwischen entschieden) und wies zusätzlich darauf hin, den Original-Kommentar bei den Companies **wörtlich** wiederherzustellen, falls umformuliert. Das war bei mir der Fall: ich hatte in Commit `536e1c7` nur eine neue, deutsche Erklärung beim `SECTION_ORDER`-Array ergänzt, den englischen Original-Kommentar „Synthszr-Analyse always on top — these are the unique value-add: AI investment ratings the user can't get from Google. Posts come below as supporting context." aber nicht an seiner alten Stelle (direkt beim Companies-Block) wörtlich stehen gelassen. In diesem Commit wörtlich wiederhergestellt (Wortlaut per `git show <commit-vor-meiner-ersten-Änderung>` gegengeprüft), zusätzlich zur — bleibenden — deutschen Erklärung beim Array selbst.
 9. `divide-y`-Optik kurz gegengeprüft, wie vom Team-Lead verlangt: `divide-y` sitzt auf dem äußeren Wrapper-`<div>`, dessen direkte Kinder die `<section>`-Elemente sind (nicht die `<header>`). Border-top landet also auf dem `<section>`, nicht mehr direkt auf dem `<header>` wie im Original — da `<section>` aber ohne eigene Klassen/Padding um `<header>` liegt, ist die Linie pixelgleich an derselben Stelle. Keine optische Abweichung.
 
+## Nachtrag 2026-08-06: Reihenfolge angleichen + Suchbegriff hervorheben
+
+Zwei weitere Aufträge vom Betreiber, nachdem die Commits bereits live waren.
+
+### 1. Reihenfolge in `app/[lang]/search/page.tsx` an das Dropdown angeglichen
+
+Der Betreiber hat entschieden: keine zwei unterschiedlichen Sortierungen mehr (Beobachtung Punkt 7 oben hat das ausgelöst). Neue, für beide Flächen identische Reihenfolge: **Companies → Charts → Lexikon → Posts**.
+
+`app/[lang]/search/page.tsx` bekam dasselbe Muster wie `home-search.tsx`: `SECTION_ORDER: SectionId[]` als einzige Stelle für die Reihenfolge, `renderSection(id)` kennt nur den Inhalt. Die per-Block-Kommentare `{/* 1. Blog Posts */}` etc. sind raus — die hätten bei vier Blöcken sonst vier Stellen, die mit `SECTION_ORDER` synchron gehalten werden müssten, exakt das Problem, das die Konstante lösen soll. Stattdessen ein Doc-Kommentar an `SECTION_ORDER` selbst, der explizit auf die Dropdown-Konstante verweist.
+
+Diff-geprüft: Überschriften-Strings (`tr('search.posts', 'Blogposts')`, `'Lexikon' : 'Glossary'`, `Synthszr Charts`, `Synthszr Stock`), Zählwerte und die leere-Ergebnis-Meldung sind unverändert (`grep` gegen den Stand vor dieser Änderung, siehe Verifikation unten) — nur aus vier separaten `{data.X.length > 0 && (…)}`-Blöcken in einen `switch`-Case innerhalb von `renderSection` verschoben. Jeder Block bleibt seine eigene `<section className="mb-8">`-Box mit eigenem `border`/`rounded-lg` — anders als im Dropdown gibt es hier keine geteilte Trennlinien-Logik, also auch keinen `divide-y`-Umbau nötig.
+
+### 2. Suchbegriff gelb hervorheben
+
+**Geprüft, was es schon gibt, wie gefordert:** `components/post-search-highlight.tsx` passt NICHT. Es ist ein DOM-Mutation-basierter Highlighter (MutationObserver + TreeWalker), der über `document.getElementById(targetId)` an die Artikel-BODY-Root auf der Post-Detailseite bindet (nach Navigation von der Suche mit `?q=`) — ein völlig anderer Einsatzort (Fließtext eines bereits geöffneten Artikels) als das, was hier gebraucht wird (Titel/Auszug-Zeilen INNERHALB der Ergebnisliste, React-JSX-basiert, kein imperativer DOM-Zugriff). Es hätte hier auch technisch nicht gepasst: es erwartet eine Container-ID zum Durchlaufen, keine einzelnen Textfelder.
+
+Was tatsächlich passt und schon existierte: `HighlightedText`, eine private (nicht exportierte) Komponente in `home-search.tsx`, bereits für Posts/Produkte/Lexikon im Dropdown im Einsatz (nur bei Companies fehlte sie — nachgezogen). Extrahiert nach **`components/highlighted-text.tsx`** (neu, kein `'use client'`, keine Hooks — pure Funktion, deshalb sowohl in der Client-Komponente `home-search.tsx` als auch in der Server-Komponente `app/[lang]/search/page.tsx` nutzbar). Escaping (`trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`) und Case-Insensitivität (`'gi'`-Flag) sind unverändert aus dem Original übernommen — beides war schon vorher korrekt implementiert, nichts Neues zu bauen.
+
+**Wichtiger Fund zur Farbe:** Bevor ich `#CCFF00` einfach per Analogie zur bestehenden `bg-neon-cyan/60`-Klasse eingebaut hätte, habe ich die kompilierte CSS-Ausgabe geprüft (`grep -c "neon-cyan" .next/static/chunks/*.css`) — `.bg-neon-cyan` existiert dort NUR ohne Opazitäts-Suffix (`.bg-neon-cyan{background-color:#0ff}`), es gibt KEINE generierte Regel für `.bg-neon-cyan\/60` oder `\/70`. Der Grund: `neon-cyan` ist keine in `@theme` registrierte Farbe, sondern eine handgeschriebene CSS-Klasse in `globals.css` — Tailwind kann für so eine Klasse keinen Opazitäts-Modifier generieren, weil es den Farbwert dafür gar nicht kennt. Das bedeutet: **die bestehenden Marks in `HighlightedText` und `PostSearchHighlight` rendern schon seit ihrer Einführung nicht cyan, sondern mit dem nativen Browser-Default für `<mark>` (Gelb)** — der Klassenname im Markup hat schlicht keine Wirkung. Das ist ein vorbestehender, von mir nicht verursachter Bug, den ich hier NICHT rückwirkend für `post-search-highlight.tsx` behebe (außerhalb des Auftrags — nur als Beobachtung notiert), aber für die neue Implementierung natürlich nicht wiederhole.
+
+Für `#CCFF00` selbst gilt dasselbe Prinzip nicht: die Bracket-Syntax `bg-[#CCFF00]/60` (Tailwinds Arbitrary-Value-Notation) IST bereits im Projekt etabliert und funktionierend (`components/stock-synthszr-layer.tsx`, `app/[lang]/rankings/[slug]/page.tsx` u. a. nutzen exakt dieses Muster mit `/10`, `/20`, `/30`, `/40`). Nach dem Build geprüft: `.bg-\[\#CCFF00\]\/60{background-color:#cf09;background-color:lab(93.9363% -35.8091 88.7913/.6)}` erscheint korrekt im kompilierten CSS. `HighlightedText` nutzt jetzt `bg-[#CCFF00]/60 text-foreground rounded-sm px-0.5` — dieselbe visuelle Gewichtung (60 % Deckkraft, geerbte Textfarbe) wie das ursprünglich GEMEINTE, aber nie wirksame Cyan, nur mit der jetzt tatsächlich greifenden Farbe.
+
+**Wo die Hervorhebung jetzt greift:** Titel und Auszug in allen vier Blöcken, auf beiden Flächen — Posts (Titel + Snippet/Excerpt), Lexikon (Name + Excerpt), Charts (Produktname), Companies (Firmenname) — vorher fehlte sie bei Companies im Dropdown und komplett auf `app/[lang]/search/page.tsx`.
+
+### Verifikation (Nachtrag)
+
+```
+$ npx tsc --noEmit
+(keine Ausgabe — sauber)
+
+$ npx vitest run
+Test Files  127 passed (127)
+     Tests  1054 passed (1054)
+
+$ npm run build
+✓ Compiled successfully
+
+$ grep -il "ccff00" .next/static/chunks/*.css
+.next/static/chunks/2oyth177lti1j.css
+$ grep -o "[^}]*ccff00[^}]*}" .next/static/chunks/2oyth177lti1j.css -i
+.bg-\[\#CCFF00\]\/60{background-color:#cf09;background-color:lab(93.9363% -35.8091 88.7913/.6)}
+… (weitere /10, /20, /30, /40, /90-Varianten, alle bereits vorhanden)
+```
+
+`grep` gegen die Überschriften-Strings in `page.tsx` bestätigt: `tr('search.posts', 'Blogposts')`, `'Lexikon' : 'Glossary'`, `Synthszr Charts`, `Synthszr Stock` — alle unverändert an ihren jeweiligen Textstellen, nur die Reihenfolge der vier `<section>`-Blöcke hat sich verschoben.
+
+### Bedenken (Nachtrag)
+
+10. `post-search-highlight.tsx` (Post-Body-Highlight nach Klick aus der Suche) hat denselben Opazitäts-Bug (`bg-neon-cyan/70` ohne Wirkung, nativer Browser-Gelb-Fallback) — nicht behoben, da außerhalb des Auftrags ("in den Ergebnissen", nicht im Artikeltext). Beobachtung für den Betreiber, analog zur unterschiedlichen Block-Reihenfolge vorher.
+11. `HighlightedText` wandert von `home-search.tsx` (Client-Komponente) nach `components/highlighted-text.tsx` (kein `'use client'`) — geprüft, dass das für BEIDE Konsumenten funktioniert: die Komponente selbst hat keine Hooks/Browser-APIs, ist also in einer Server-Komponente (`page.tsx`) genauso zulässig wie im Client (`home-search.tsx`, das sie jetzt importiert statt lokal zu definieren).
+12. Sortier-Kommentare (`{/* 1. Blog Posts */}` etc.) aus `page.tsx` entfernt, weil sie mit vier verstreuten Nummerierungen genau das Synchronisierungsproblem reproduziert hätten, das `SECTION_ORDER` lösen soll. Falls die Nummern-Kommentare aus anderen Gründen gewünscht waren (z. B. Lesbarkeit beim Diff), bitte Bescheid sagen — leicht nachrüstbar als Kommentar direkt in `SECTION_ORDER`.
+
 ## Nicht committet
 
 Wie gefordert: alle Änderungen liegen als lokaler Commit auf `main`, **nicht gepusht**.

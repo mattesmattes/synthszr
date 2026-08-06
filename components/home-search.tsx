@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Search, Loader2, Building2, FileText, BarChart3, BookOpen } from 'lucide-react'
 import { StockSynthszrLayer } from './stock-synthszr-layer'
+import { HighlightedText } from './highlighted-text'
 
 interface PostHit {
   id: string
@@ -143,33 +144,6 @@ function formatHitDate(iso: string, locale: string): string {
     month: '2-digit',
     year: 'numeric',
   })
-}
-
-/**
- * Wraps each match of `query` inside `text` with a <mark> element so
- * the dropdown shows where the match is. Falls back to plain text if
- * the query is empty or has no match.
- */
-function HighlightedText({ text, query }: { text: string; query: string }) {
-  const trimmed = query.trim()
-  if (!trimmed) return <>{text}</>
-  // Escape regex metacharacters in the query
-  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(`(${escaped})`, 'gi')
-  const parts = text.split(regex)
-  return (
-    <>
-      {parts.map((part, i) =>
-        regex.test(part) ? (
-          <mark key={i} className="bg-neon-cyan/60 text-foreground rounded-sm px-0.5">
-            {part}
-          </mark>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </>
-  )
 }
 
 export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps) {
@@ -369,7 +343,9 @@ export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className="font-medium text-sm truncate">{c.name}</div>
+                          <div className="font-medium text-sm truncate">
+                            <HighlightedText text={c.name} query={query} />
+                          </div>
                           {r?.ticker && (
                             <span className="text-[10px] font-mono uppercase text-muted-foreground/70 tracking-wider shrink-0">
                               {r.ticker}

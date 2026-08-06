@@ -7,6 +7,7 @@ import type { LanguageCode } from '@/lib/types'
 import { SITE_URL } from '@/lib/seo/site'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
 import { SiteFooter } from '@/components/site-footer'
+import { HighlightedText } from '@/components/highlighted-text'
 
 // Suche ist query-abhängig → immer frisch, nicht prerendern/cachen.
 export const dynamic = 'force-dynamic'
@@ -21,6 +22,17 @@ interface CompanyHit { name: string; slug: string; type: 'public' | 'premarket' 
 interface ProductHit { name: string; slug: string; category: string | null; catRank: number }
 interface GlossaryHit { slug: string; canonicalName: string; excerpt: string }
 interface SearchData { posts: PostHit[]; companies: CompanyHit[]; products: ProductHit[]; glossary: GlossaryHit[] }
+
+type SectionId = 'companies' | 'products' | 'glossary' | 'posts'
+
+/**
+ * Reihenfolge der Ergebnisblöcke — einzige Stelle, die eine Umsortierung
+ * braucht (Team-Lead, 2026-08-06). Angeglichen an das Dropdown
+ * (components/home-search.tsx: dieselbe Konstante, derselbe Wert) — beide
+ * Suchflächen zeigen jetzt dieselbe Priorisierung: Companies always on top,
+ * Lexikon direkt vor Posts.
+ */
+const SECTION_ORDER: SectionId[] = ['companies', 'products', 'glossary', 'posts']
 
 export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
   const { lang } = await params
@@ -55,6 +67,104 @@ export default async function SearchPage({ params, searchParams }: PageProps) {
 
   const total = data.posts.length + data.products.length + data.companies.length + data.glossary.length
 
+  // Rendert genau einen Block oder null (kein Treffer). Kennt nur den
+  // Inhalt, nicht die Position — die steht ausschließlich in SECTION_ORDER.
+  function renderSection(id: SectionId): React.ReactNode {
+    switch (id) {
+      case 'posts':
+        if (data.posts.length === 0) return null
+        return (
+          <section key="posts" className="mb-8">
+            <h2 className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">
+              <FileText className="h-3.5 w-3.5" /> {tr('search.posts', 'Blogposts')} ({data.posts.length})
+            </h2>
+            <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+              {data.posts.map((p) => (
+                <li key={p.id}>
+                  <Link href={`/${locale}/posts/${p.slug}?q=${encodeURIComponent(query)}`} className="block px-4 py-3 hover:bg-muted/30 transition-colors">
+                    <div className="font-medium text-sm leading-snug">
+                      <HighlightedText text={p.title} query={query} />
+                    </div>
+                    {(p.snippet || p.excerpt) && (
+                      <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                        <HighlightedText text={p.snippet || p.excerpt || ''} query={query} />
+                      </div>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+
+      case 'glossary':
+        if (data.glossary.length === 0) return null
+        return (
+          <section key="glossary" className="mb-8">
+            <h2 className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">
+              <BookOpen className="h-3.5 w-3.5" /> {locale === 'de' ? 'Lexikon' : 'Glossary'} ({data.glossary.length})
+            </h2>
+            <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+              {data.glossary.map((g) => (
+                <li key={g.slug}>
+                  <Link href={`/${locale}/glossary/${g.slug}`} className="block px-4 py-3 hover:bg-muted/30 transition-colors">
+                    <div className="font-medium text-sm leading-snug">
+                      <HighlightedText text={g.canonicalName} query={query} />
+                    </div>
+                    {g.excerpt && (
+                      <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                        <HighlightedText text={g.excerpt} query={query} />
+                      </div>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+
+      case 'products':
+        if (data.products.length === 0) return null
+        return (
+          <section key="products" className="mb-8">
+            <h2 className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">
+              <BarChart3 className="h-3.5 w-3.5" /> Synthszr Charts ({data.products.length})
+            </h2>
+            <ul className="flex flex-wrap gap-2">
+              {data.products.map((p) => (
+                <li key={p.slug}>
+                  <Link href={`/${locale}/rankings/${p.slug}`} className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-sm hover:bg-secondary transition-colors">
+                    <HighlightedText text={p.name} query={query} />
+                    <span className="text-xs text-muted-foreground">#{p.catRank}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+
+      case 'companies':
+        if (data.companies.length === 0) return null
+        return (
+          <section key="companies" className="mb-8">
+            <h2 className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">
+              <Building2 className="h-3.5 w-3.5" /> Synthszr Stock ({data.companies.length})
+            </h2>
+            <ul className="flex flex-wrap gap-2">
+              {data.companies.map((c) => (
+                <li key={`${c.type}:${c.slug}`}>
+                  <Link href={`/${locale}/companies/${encodeURIComponent(c.slug.toLowerCase())}`} className="inline-flex items-center gap-2 rounded border border-border px-3 py-1.5 text-sm hover:bg-secondary transition-colors">
+                    <HighlightedText text={c.name} query={query} />
+                    <span className="text-[10px] font-mono uppercase text-muted-foreground tracking-wider">{c.type === 'public' ? 'Public' : 'Premarket'}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+    }
+  }
+
   return (
     <>
       <main className="max-w-3xl mx-auto px-4 py-10">
@@ -85,85 +195,7 @@ export default async function SearchPage({ params, searchParams }: PageProps) {
           </p>
         )}
 
-        {/* 1. Blog Posts */}
-        {data.posts.length > 0 && (
-          <section className="mb-8">
-            <h2 className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">
-              <FileText className="h-3.5 w-3.5" /> {tr('search.posts', 'Blogposts')} ({data.posts.length})
-            </h2>
-            <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
-              {data.posts.map((p) => (
-                <li key={p.id}>
-                  <Link href={`/${locale}/posts/${p.slug}?q=${encodeURIComponent(query)}`} className="block px-4 py-3 hover:bg-muted/30 transition-colors">
-                    <div className="font-medium text-sm leading-snug">{p.title}</div>
-                    {(p.snippet || p.excerpt) && (
-                      <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{p.snippet || p.excerpt}</div>
-                    )}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {/* 2. Lexikon */}
-        {data.glossary.length > 0 && (
-          <section className="mb-8">
-            <h2 className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">
-              <BookOpen className="h-3.5 w-3.5" /> {locale === 'de' ? 'Lexikon' : 'Glossary'} ({data.glossary.length})
-            </h2>
-            <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
-              {data.glossary.map((g) => (
-                <li key={g.slug}>
-                  <Link href={`/${locale}/glossary/${g.slug}`} className="block px-4 py-3 hover:bg-muted/30 transition-colors">
-                    <div className="font-medium text-sm leading-snug">{g.canonicalName}</div>
-                    {g.excerpt && (
-                      <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{g.excerpt}</div>
-                    )}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {/* 3. Synthszr Charts */}
-        {data.products.length > 0 && (
-          <section className="mb-8">
-            <h2 className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">
-              <BarChart3 className="h-3.5 w-3.5" /> Synthszr Charts ({data.products.length})
-            </h2>
-            <ul className="flex flex-wrap gap-2">
-              {data.products.map((p) => (
-                <li key={p.slug}>
-                  <Link href={`/${locale}/rankings/${p.slug}`} className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-sm hover:bg-secondary transition-colors">
-                    {p.name}
-                    <span className="text-xs text-muted-foreground">#{p.catRank}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {/* 4. Synthszr Stock (Unternehmen) */}
-        {data.companies.length > 0 && (
-          <section className="mb-8">
-            <h2 className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">
-              <Building2 className="h-3.5 w-3.5" /> Synthszr Stock ({data.companies.length})
-            </h2>
-            <ul className="flex flex-wrap gap-2">
-              {data.companies.map((c) => (
-                <li key={`${c.type}:${c.slug}`}>
-                  <Link href={`/${locale}/companies/${encodeURIComponent(c.slug.toLowerCase())}`} className="inline-flex items-center gap-2 rounded border border-border px-3 py-1.5 text-sm hover:bg-secondary transition-colors">
-                    {c.name}
-                    <span className="text-[10px] font-mono uppercase text-muted-foreground tracking-wider">{c.type === 'public' ? 'Public' : 'Premarket'}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        {SECTION_ORDER.map((id) => renderSection(id))}
       </main>
       <SiteFooter locale={locale} />
     </>
