@@ -282,3 +282,91 @@ Test Files  2 passed (2)
 - `lib/glossary/jobs/service.ts` - `estimateTotal`s `pending`-Zweig nutzt `findMissingFromGlossary`
 - `tests/lib/glossary-ensure-terms.test.ts` - 3 neue Tests fuer `findMissingFromGlossary`
 - `tests/lib/glossary-jobs-service.test.ts` - 1 neuer Test fuer den frischen Existenz-Check in `estimateTotal`
+
+---
+
+## Schreiblauf ausgefuehrt (2026-08-06, 10:03 Uhr)
+
+Freigabe des Betreibers eingeholt, `--apply` gegen Prod ausgefuehrt (frischer
+`vercel env pull --environment=production`, Env-Datei danach geloescht).
+
+**Vorher geprueft, was der Dry-Run nicht zeigt.** Das Skript verlaesst sich
+darauf, dass `linkPostContent` die Mark des Verlierers auf den Gewinner
+umbiegt, weil dessen Name als Alias am Gewinner haengt. `injectGlossaryMarks`
+schliesst aber **mehrdeutige Aliasse** aus (`inject-marks.ts`, Prod-Befund
+2026-08-05): beansprucht mehr als ein Begriff denselben Alias, wird er gar
+nicht verlinkt - nur der kanonische Name ist von der Regel ausgenommen. Beim
+Eval-Paar trifft das auf **jeden** Alias zu, weil `evaluation` und
+`evaluation-eval` denselben Begriffsraum belegen:
+
+```
+Alias "Evals":       auch Alias bei evaluation-eval, evaluation  -> mehrdeutig
+Alias "Evaluation":  auch Alias bei evaluation-eval              -> mehrdeutig
+Alias "Evaluierung": auch Alias bei evaluation-eval, evaluation  -> mehrdeutig
+(...alle 9 Aliasse des zusammengefuehrten "eval" sind mehrdeutig)
+Kanonisch "Eval": bleibt verlinkbar (Regel nimmt canonical_name aus)
+```
+
+Ob die 8 `evals`-Marks dadurch ersatzlos verschwinden oder ueber den
+kanonischen Namen doch auf `eval` landen, laesst sich nicht aus den Aliassen
+ableiten - es haengt am Artikeltext. Deshalb **Trockenprobe der
+Mark-Neuberechnung**: simulierte Begriffsliste (Verlierer raus, Aliasse
+gemergt), `linkPostContent` gegen die echten 11 Artikel, nichts geschrieben.
+Ergebnis: **11 von 11 umgebogen, 0 ersatzlos verloren** - die Artikel nennen
+"Eval" auch im Singular. Die Sorge war unbegruendet, aber erst danach belegt.
+
+**Nebeneffekt, der dabei sichtbar wurde:** `linkPostContent` verlinkt die
+betroffenen Artikel **komplett** neu gegen die heutigen 498 Begriffe, nicht nur
+die Verlierer-Marks. Pro Artikel kamen 1-12 Links dazu (`repository`, `defi`,
+`ssh`, `velocity`, ...), zwei bestehende fielen weg
+(`rekursive-selbstverbesserung`, `memory-ki-agenten` - beide zugunsten
+konkurrierender Begriffe auf derselben Textstelle). Das ist dieselbe Drift, die
+der `relink`-Cron ohnehin erzeugt, kein Effekt des Merges - aber der Lauf ist
+damit weniger chirurgisch als "11 Marks umbiegen" klingt.
+
+**Backup vor dem Schreiben:** die 8 `glossary_terms`-Zeilen (status/aliases)
+und der `content` aller 11 Artikel liegen als JSON im Scratchpad der Session
+(`dedupe-backup-2026-08-06.json`, 347 KB). Der `hidden`-Status ist trivial
+ruecknehmbar, ueberschriebene Artikeltexte sind es ohne Sicherung nicht.
+
+### Ergebnis
+
+```
+versteckt: evals                          -> Alias "Evals" an eval
+versteckt: leveraged-etf                  -> (Name identisch, kein neuer Alias noetig)
+versteckt: pre-training                   -> Alias "Pre-Training" an pretraining
+versteckt: time-series-foundation-models  -> Alias "..." an time-series-foundation-model
+11 von 11 Artikeln neu verlinkt.
+```
+
+Zwei Paare wurden durch das **neue** Kriterium (Verlinkungen vor Inhalt)
+umgedreht: `eval` schlaegt `evals` (30 zu 8 Links), `pretraining` schlaegt
+`pre-training` (12 zu 3). Nach dem alten Kriterium waeren 42 Marks umgebogen
+worden, jetzt waren es 11.
+
+### Verifikation nach dem Lauf
+
+- Erneuter Dry-Run: `498 veroeffentlichte Begriffe geladen / Keine Dubletten gefunden.`
+- DB: alle vier Gewinner `published`, alle vier Verlierer `hidden`, Aliasse gemergt.
+- Verbliebene Marks auf versteckte Slugs: **0** bei allen vier.
+- Marks auf die Gewinner: `eval` 33 Artikel (vorher 30), `pretraining` 12 (unveraendert -
+  die drei `pre-training`-Artikel verlinkten bereits zusaetzlich auf `pretraining`).
+- Prod (HTTP, mit Redirect-Folge): Gewinner-Seiten **200**, Verlierer-Seiten **404**.
+- Stichprobe im Artikel `hugging-face-hack-...`: nur noch `glossary/eval`, kein `glossary/evals`.
+
+Ein Pruefskript meldete faelschlich "Alias fehlt" fuer `leveraged-etfs`: beide
+Zeilen tragen denselben `canonical_name` ("Leveraged ETF"), und `mergeAliases`
+schliesst den eigenen kanonischen Namen des Gewinners bewusst aus. Korrektes
+Verhalten, zu naiver Check.
+
+### Weiterhin offen
+
+- **Der Eval-Cluster ist jetzt dreifach statt vierfach**, nicht einfach:
+  `eval`, `evaluation`, `evaluation-eval` bleiben nebeneinander bestehen. Der
+  Alias-Befund oben zeigt die Kosten davon konkret: **alle neun Aliasse von
+  `eval` sind mehrdeutig und werden nie verlinkt** - nur der kanonische Name
+  "Eval" traegt. Ein Dreier-Merge wuerde diese Aliasse eindeutig machen und die
+  Verlinkungsqualitaet spuerbar heben. Braucht eine inhaltliche Entscheidung
+  (welcher der drei Texte bleibt), keine Automatik.
+- `content_translations` unveraendert - EN-Uebersetzungen koennen weiterhin
+  Marks auf die vier versteckten Slugs tragen.
