@@ -340,6 +340,9 @@ export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps
       case 'companies':
         if (results.companies.length === 0) return null
         return (
+          // Synthszr-Analyse always on top — these are the unique
+          // value-add: AI investment ratings the user can't get
+          // from Google. Posts come below as supporting context.
           <section key="companies">
             <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
               <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
