@@ -9,9 +9,11 @@ import {
   setCandidateExcluded,
   generateMissingIllustrations,
   relinkNextBatch,
+  openCandidateCount,
   POSTS_PER_EXTRACTION,
   TERMS_PER_GENERATION,
 } from '@/lib/glossary/crawl'
+import { slugify } from '@/lib/glossary/generate'
 import { getMatcherTerms } from '@/lib/glossary/terms'
 
 // Beide Aktionen machen LLM-Calls: Extraktion 10 kurze, Generierung bis zu 3
@@ -49,7 +51,16 @@ export async function GET() {
   // Auswahl für den Rest unmöglich (bei 187 Kandidaten waren 121 unsichtbar).
   // Die Namen sind wenige Kilobyte, das trägt die Antwort problemlos.
   const excluded = new Set(state.excluded)
+  // Erzeugte NICHT mehr anzeigen: sie standen bisher weiter in der Warteschlange
+  // und weckten den Verdacht, sie wuerden erneut erzeugt und kosteten erneut.
+  // Sie tun es nicht — slugify bringt "Chain of Thought" und "Chain-of-Thought"
+  // auf denselben Slug, der Kandidat ist damit in `generated` abgehakt und wird
+  // uebersprungen. Die Liste zeigte das nur nicht, und eine Warteschlange, in
+  // der Erledigtes stehen bleibt, ist keine Warteschlange (Betreiber-Befund
+  // 2026-08-06, Beispiel /de/glossary/chain-of-thought).
+  const done = new Set(state.generated)
   const top = Object.entries(state.candidates)
+    .filter(([name]) => !done.has(slugify(name)))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([name, mentions]) => ({ name, mentions, selected: !excluded.has(name) }))
 
@@ -59,6 +70,16 @@ export async function GET() {
     candidateCount: Object.keys(state.candidates).length,
     // Nur die ausgewählten werden erzeugt — die Zahl, die der Operator braucht.
     selectedCount: Object.keys(state.candidates).filter((n) => !excluded.has(n)).length,
+    /**
+     * Die ECHTE offene Arbeit: ausgewählt UND noch nicht erzeugt.
+     *
+     * `selectedCount` allein führt in die Irre, weil abgewählte Namen absichtlich
+     * in der Liste bleiben und erzeugte Begriffe dort ebenfalls stehen — am
+     * 2026-08-06 zeigte das Panel eine zweistellige Zahl, während tatsächlich 301
+     * Kandidaten offen waren. Ein Lauf, der dann Stunden braucht, sieht aus wie
+     * ein Hänger. Dieselbe Zählung wie in generateCandidates und estimateTotal.
+     */
+    openCount: openCandidateCount(state.candidates, state.excluded, state.generated),
     generatedCount: state.generated.length,
     missingImages: missingImages ?? 0,
     updatedAt: state.updatedAt,

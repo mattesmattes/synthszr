@@ -12,6 +12,8 @@ interface CrawlStatus {
   postsTotal: number
   candidateCount: number
   selectedCount: number
+  /** Ausgewaehlt UND noch nicht erzeugt — die echte offene Arbeit. */
+  openCount: number
   generatedCount: number
   missingImages: number
   updatedAt: string | null
@@ -76,6 +78,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
       ...prev,
       topCandidates: prev.topCandidates.map((c) => (c.name === name ? { ...c, selected } : c)),
       selectedCount: prev.selectedCount + (selected ? 1 : -1),
+      // openCount mitführen, sonst zeigt die Kopfzeile nach einem Klick eine
+      // andere Zahl als der Knopf darunter. Ein Kandidat, der hier auftaucht,
+      // ist per Definition noch nicht erzeugt — ab-/zuwählen verschiebt ihn also
+      // eins zu eins zwischen "offen" und "nicht offen".
+      openCount: prev.openCount + (selected ? 1 : -1),
     }))
     try {
       const res = await fetch('/api/admin/glossary-crawl?action=toggle', {
@@ -265,9 +272,17 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           </div>
 
           <div className="flex flex-wrap items-center gap-4 text-sm">
+            {/* OFFEN, nicht "ausgewählt": abgewählte Namen bleiben absichtlich in
+                der Liste, und bereits erzeugte stehen ebenfalls darin. Die
+                Auswahl-Zahl verschwieg dadurch die echte Arbeitsmenge — am
+                2026-08-06 stand hier eine zweistellige Zahl, während 301
+                Kandidaten offen waren, und ein Lauf über Stunden sah aus wie ein
+                Hänger. */}
             <span className="whitespace-nowrap">
-              <span className="font-mono font-bold tabular-nums">{status?.selectedCount ?? 0}</span>
-              <span className="ml-1.5 text-muted-foreground">von {status?.candidateCount ?? 0} ausgewählt</span>
+              <span className="font-mono font-bold tabular-nums">{status?.openCount ?? 0}</span>
+              <span className="ml-1.5 text-muted-foreground">
+                offen{typeof status?.candidateCount === 'number' ? ` von ${status.candidateCount} gefunden` : ''}
+              </span>
             </span>
             <span>
               <span className="font-mono font-bold tabular-nums">{status?.generatedCount ?? 0}</span>
@@ -307,21 +322,17 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               {busy === 'extract' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
               Nächste{' '}{status?.postsPerExtraction ?? 10}{' '}Artikel lesen
             </Button>
-            {/* ZWEI Knoepfe fuer dieselbe Aktion, mit Absicht: der erste erzeugt
-                eine Handvoll und ist in einer Minute durch, der zweite laeuft bei
-                177 Kandidaten Stunden und kostet entsprechend. Beides hinter
-                einem Knopf zu verstecken hiesse, einen dreistuendigen Lauf
-                versehentlich auszuloesen. */}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => run('generate')}
-              disabled={busy !== null || termsRunning || (status?.selectedCount ?? 0) === 0}
-              title={termsRunning ? 'Gesperrt, solange der Begriffslauf läuft — beide teilen sich denselben Crawl-Zustand.' : undefined}
-            >
-              {busy === 'generate' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-              {status?.termsPerGeneration ?? 3}{' '}Begriffe erzeugen &amp; veröffentlichen
-            </Button>
+            {/* NUR NOCH EIN Erzeugen-Knopf. Daneben stand bis zum 2026-08-06 ein
+                zweiter ("3 Begriffe erzeugen & veröffentlichen"), der über
+                run('generate') den alten Inline-Pfad nahm — drei Begriffe in
+                EINEM Request. Der Kommentar dort versprach "in einer Minute
+                durch"; tatsaechlich kostet ein Begriff 45-90s, drei liegen also
+                am 300s-Limit der Function. Der Request starb als 504 ohne JSON,
+                und im Panel sah es aus, als passiere nichts — genau die
+                Beobachtung "Prozess hakt". Seit der Umstellung auf das
+                Job-Modell ist er ueberfluessig: der Cron arbeitet dieselbe
+                Warteschlange ab, ohne Zeitlimit und mit sichtbarem Protokoll,
+                und laesst sich jederzeit abbrechen. */}
             {termsRunning ? (
               <Button size="sm" variant="destructive" onClick={() => void stopJob('generate')}>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -332,11 +343,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                 size="sm"
                 variant="outline"
                 onClick={startTermsJob}
-                disabled={busy !== null || (status?.selectedCount ?? 0) === 0}
+                disabled={busy !== null || (status?.openCount ?? 0) === 0}
                 title="Legt einen Job an, den der Minutentakt-Cron abarbeitet. Das Fenster kann geschlossen werden."
               >
                 {busy === 'generate-all' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Alle{' '}{status?.selectedCount ?? 0}{' '}einzeln erzeugen
+                Alle{' '}{status?.openCount ?? 0}{' '}offenen erzeugen
               </Button>
             )}
             {imagesRunning ? (
