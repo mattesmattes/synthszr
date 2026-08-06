@@ -40,7 +40,7 @@ interface CrawlStatus {
 export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => void }) {
   const [status, setStatus] = useState<CrawlStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState<'extract' | 'generate' | 'generate-all' | 'reset' | 'images' | 'relink' | 'translations' | null>(null)
+  const [busy, setBusy] = useState<'extract' | 'generate' | 'generate-all' | 'reset' | 'images' | 'relink' | 'translations' | 'term-translations' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastResult, setLastResult] = useState<string | null>(null)
   /** Startdatum der Nachverlinkung. Default heute: der Lauf geht von neu nach
@@ -63,6 +63,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   const imagesJob = useJob('images', undefined, handleJobFinished)
   const relinkJob = useJob('relink', undefined, handleJobFinished)
   const translationsJob = useJob('translations', undefined, handleJobFinished)
+  const termTranslationsJob = useJob('term-translations', undefined, handleJobFinished)
 
   // Ref statt direkter Abhaengigkeit: handleJobFinished wird oben deklariert,
   // fetchStatus erst hier — und handleJobFinished darf sich nicht bei jedem
@@ -213,7 +214,35 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     }
   }
 
-  /** Abbruchwunsch; der naechste Cron-Tick wertet ihn aus. */
+  /**
+   * Stoesst die fehlenden Begriffs-Uebersetzungen an.
+   *
+   * KOSTET MODELLAUFRUFE (einen je Begriff) — anders als "Uebersetzungen
+   * nachverlinken" daneben, das nur Marks setzt. Befund 2026-08-06: 134 von 559
+   * veroeffentlichten Begriffen hatten keine englische Fassung, weil eine
+   * Uebersetzung nur bei der Freigabe entsteht und ein dort gescheiterter
+   * Aufruf nie wiederholt wurde.
+   */
+  async function startTermTranslationsJob() {
+    setBusy('term-translations')
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/glossary-jobs', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kind: 'term-translations' }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error ?? `Fehlgeschlagen (HTTP ${res.status})`)
+      await termTranslationsJob.reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   /**
    * Abbruchwunsch. Fehler werden sichtbar gemacht wie bei den start*Job-
    * Funktionen: ohne das schluckt ein 401 (abgelaufene Session) oder ein
@@ -303,6 +332,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   const imagesRunning = isJobOpen(imagesJob.job)
   const relinkRunning = isJobOpen(relinkJob.job)
   const translationsRunning = isJobOpen(translationsJob.job)
+  const termTranslationsRunning = isJobOpen(termTranslationsJob.job)
 
   return (
     <div className="space-y-6">
@@ -316,49 +346,10 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <div className="flex items-baseline justify-between text-sm">
-              <span className="font-medium">
-                {status?.postsProcessed ?? 0} von {status?.postsTotal ?? 0} Artikeln gelesen
-              </span>
-              <span className="font-mono text-xs text-muted-foreground">{pct}%</span>
-            </div>
-            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-sm bg-secondary">
-              <div className="h-full bg-foreground transition-all" style={{ width: `${pct}%` }} />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            {/* OFFEN, nicht "ausgewählt": abgewählte Namen bleiben absichtlich in
-                der Liste, und bereits erzeugte stehen ebenfalls darin. Die
-                Auswahl-Zahl verschwieg dadurch die echte Arbeitsmenge — am
-                2026-08-06 stand hier eine zweistellige Zahl, während 301
-                Kandidaten offen waren, und ein Lauf über Stunden sah aus wie ein
-                Hänger. */}
-            <span className="whitespace-nowrap">
-              <span className="font-mono font-bold tabular-nums">{status?.openCount ?? 0}</span>
-              <span className="ml-1.5 text-muted-foreground">
-                offen{typeof status?.candidateCount === 'number' ? ` von ${status.candidateCount} gefunden` : ''}
-              </span>
-            </span>
-            <span>
-              <span className="font-mono font-bold tabular-nums">{status?.generatedCount ?? 0}</span>
-              <span className="ml-1.5 text-muted-foreground">bereits erzeugt</span>
-            </span>
-            <span className="whitespace-nowrap">
-              <span className="font-mono font-bold tabular-nums">{status?.missingImages ?? 0}</span>
-              <span className="ml-1.5 text-muted-foreground">ohne Illustration</span>
-            </span>
-          </div>
-
-          {/* Fortschritt und Protokoll kommen aus den Jobs, nicht mehr aus
-              lokalem State — sie ueberleben damit ein Neuladen der Seite und
-              erscheinen von selbst, wenn hier gerade ein Lauf offen ist. */}
-          <JobLog job={termsJob.job} unit="Begriffe" verb="erzeugt" />
-          <JobLog job={imagesJob.job} unit="Illustrationen" verb="erzeugt" />
-          <JobLog job={relinkJob.job} unit="Artikel" verb="verlinkt" />
-          <JobLog job={translationsJob.job} unit="Uebersetzungen" verb="verlinkt" />
-
+          {/* Knopfleiste ganz oben, direkt unter der Beschreibung: das sind
+              die Handlungen, und sie sollen ohne Scrollen erreichbar sein —
+              die Protokolle darunter koennen bei einem langen Lauf hunderte
+              Zeilen hoch werden. */}
           <div className="flex flex-wrap gap-2">
             {/* Gesperrt auch waehrend termsRunning: extract/generate/reset UND der
                 generate-Job teilen sich denselben ungelockten Crawl-Zustand
@@ -477,6 +468,27 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                 Übersetzungen nachverlinken
               </Button>
             )}
+            {/* Fehlende Begriffs-Uebersetzungen. Kostet einen Modellaufruf je
+                Begriff — anders als die beiden Nachverlink-Knoepfe daneben, die
+                nur Marks setzen. Die Zahl steht im Text, damit vor dem Klick
+                klar ist, wie viel Arbeit ausgeloest wird. */}
+            {termTranslationsRunning ? (
+              <Button size="sm" variant="destructive" onClick={() => void stopJob('term-translations')}>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Abbrechen
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={startTermTranslationsJob}
+                disabled={busy !== null}
+                title="Übersetzt veröffentlichte Begriffe, denen die englische Fassung fehlt. Ein Modell-Aufruf je Begriff."
+              >
+                {busy === 'term-translations' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                Begriffe übersetzen
+              </Button>
+            )}
             <Button size="sm" variant="ghost" onClick={() => void fetchStatus()} disabled={busy !== null}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Neu laden
@@ -492,6 +504,51 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               Fortschritt zurücksetzen
             </Button>
           </div>
+
+          <div>
+            <div className="flex items-baseline justify-between text-sm">
+              <span className="font-medium">
+                {status?.postsProcessed ?? 0} von {status?.postsTotal ?? 0} Artikeln gelesen
+              </span>
+              <span className="font-mono text-xs text-muted-foreground">{pct}%</span>
+            </div>
+            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-sm bg-secondary">
+              <div className="h-full bg-foreground transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            {/* OFFEN, nicht "ausgewählt": abgewählte Namen bleiben absichtlich in
+                der Liste, und bereits erzeugte stehen ebenfalls darin. Die
+                Auswahl-Zahl verschwieg dadurch die echte Arbeitsmenge — am
+                2026-08-06 stand hier eine zweistellige Zahl, während 301
+                Kandidaten offen waren, und ein Lauf über Stunden sah aus wie ein
+                Hänger. */}
+            <span className="whitespace-nowrap">
+              <span className="font-mono font-bold tabular-nums">{status?.openCount ?? 0}</span>
+              <span className="ml-1.5 text-muted-foreground">
+                offen{typeof status?.candidateCount === 'number' ? ` von ${status.candidateCount} gefunden` : ''}
+              </span>
+            </span>
+            <span>
+              <span className="font-mono font-bold tabular-nums">{status?.generatedCount ?? 0}</span>
+              <span className="ml-1.5 text-muted-foreground">bereits erzeugt</span>
+            </span>
+            <span className="whitespace-nowrap">
+              <span className="font-mono font-bold tabular-nums">{status?.missingImages ?? 0}</span>
+              <span className="ml-1.5 text-muted-foreground">ohne Illustration</span>
+            </span>
+          </div>
+
+          {/* Fortschritt und Protokoll kommen aus den Jobs, nicht mehr aus
+              lokalem State — sie ueberleben damit ein Neuladen der Seite und
+              erscheinen von selbst, wenn hier gerade ein Lauf offen ist. */}
+          <JobLog job={termsJob.job} unit="Begriffe" verb="erzeugt" />
+          <JobLog job={imagesJob.job} unit="Illustrationen" verb="erzeugt" />
+          <JobLog job={relinkJob.job} unit="Artikel" verb="verlinkt" />
+          <JobLog job={translationsJob.job} unit="Uebersetzungen" verb="verlinkt" />
+          <JobLog job={termTranslationsJob.job} unit="Begriffe" verb="uebersetzt" />
+
 
           {busy === 'generate' && (
             <p className="text-xs text-muted-foreground">

@@ -10,7 +10,7 @@ import type { GlossaryCandidate } from '@/lib/glossary/types'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
-export type GlossaryJobKind = 'generate' | 'images' | 'relink' | 'pending' | 'translations'
+export type GlossaryJobKind = 'generate' | 'images' | 'relink' | 'pending' | 'translations' | 'term-translations'
 export type GlossaryJobStatus = 'pending' | 'processing' | 'done' | 'error' | 'cancelled'
 
 export interface GlossaryJobLogEntry {
@@ -98,6 +98,23 @@ async function estimateTotal(
   if (kind === 'relink') return null
   // Wie relink: die Restmenge haengt am Cursor und steht nicht vorab fest.
   if (kind === 'translations') return null
+  if (kind === 'term-translations') {
+    // Veroeffentlichte Begriffe minus die mit Uebersetzung. Zwei schmale
+    // Abfragen statt eines Joins, wie in translateMissingTerms selbst — die
+    // Anzeige muss dieselbe Definition von "offen" verwenden wie die
+    // Abarbeitung, sonst sieht ein normaler Lauf aus wie ein Haenger (genau der
+    // Befund, der estimateTotal fuer 'pending' korrigiert hat).
+    const { count: published } = await supabase
+      .from('glossary_terms')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'published')
+    const { count: translated } = await supabase
+      .from('glossary_term_translations')
+      .select('term_id', { count: 'exact', head: true })
+      .eq('language', 'en')
+    if (published === null || published === undefined) return null
+    return Math.max(0, published - (translated ?? 0))
+  }
   if (kind === 'generate') {
     const state = await readCrawlState(supabase)
     return openCandidateCount(state.candidates, state.excluded, state.generated)

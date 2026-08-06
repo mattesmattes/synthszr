@@ -6,6 +6,7 @@
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateCandidates, generateMissingIllustrations, relinkNextBatch, relinkTranslationsNextBatch } from '@/lib/glossary/crawl'
 import { runPendingUnit } from '@/lib/glossary/pending-run'
+import { translateMissingTerms } from '@/lib/glossary/translate-missing'
 import { appendLog, finishJob, readCancelRequested, releaseLease, setAttempts, type GlossaryJob, type GlossaryJobLogEntry } from '@/lib/glossary/jobs/service'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -160,6 +161,22 @@ async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOut
       exhausted: r.remaining === 0 && !fatal,
       overloaded: noProgress,
       fatal,
+    }
+  }
+
+  if (job.kind === 'term-translations') {
+    const r = await translateMissingTerms(supabase)
+    // Wie bei images: kein retryable-Signal im Ergebnis, "nichts erreicht,
+    // obwohl noch offen" ist deshalb das Ueberlast-Signal.
+    const noProgress = r.done.length === 0 && r.failed.length > 0 && r.remaining > 0
+    return {
+      entries: [
+        ...r.done.map((s2) => ({ at: stamp(), text: `${s2} — uebersetzt`, ok: true })),
+        ...r.failed.map((s2) => ({ at: stamp(), text: `${s2} — Uebersetzung fehlgeschlagen`, ok: false })),
+      ],
+      doneDelta: r.done.length,
+      exhausted: r.remaining === 0 && r.failed.length === 0,
+      overloaded: noProgress,
     }
   }
 
