@@ -10,7 +10,7 @@ import type { GlossaryCandidate } from '@/lib/glossary/types'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
-export type GlossaryJobKind = 'generate' | 'images' | 'relink' | 'pending'
+export type GlossaryJobKind = 'generate' | 'images' | 'relink' | 'pending' | 'translations'
 export type GlossaryJobStatus = 'pending' | 'processing' | 'done' | 'error' | 'cancelled'
 
 export interface GlossaryJobLogEntry {
@@ -96,6 +96,8 @@ async function estimateTotal(
   params: Record<string, unknown>,
 ): Promise<number | null> {
   if (kind === 'relink') return null
+  // Wie relink: die Restmenge haengt am Cursor und steht nicht vorab fest.
+  if (kind === 'translations') return null
   if (kind === 'generate') {
     const state = await readCrawlState(supabase)
     return openCandidateCount(state.candidates, state.excluded, state.generated)

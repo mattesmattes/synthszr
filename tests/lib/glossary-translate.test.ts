@@ -307,6 +307,25 @@ describe('reinjectGlossaryMarksForTranslation', () => {
     expect(linked(result)).toEqual([{ text: 'Inference', slug: 'inferenz' }])
   })
 
+  it('nutzt vorgeladene Listen, statt sie je Aufruf erneut zu laden', async () => {
+    // Fuer den Uebersetzungs-Backfill: der Lauf geht ueber hunderte Zeilen, und
+    // getMatcherTerms/getChartProductNames sind pro Sprache konstant. Ohne
+    // diesen Weg waeren es zwei DB-Abfragen JE ZEILE — bei 743 Zeilen rund
+    // 1500 Roundtrips fuer Daten, die sich waehrend des Laufs nicht aendern.
+    const source = doc('Die Inferenz ist teuer.', { type: 'glossaryLink', attrs: { slug: 'inferenz' } })
+    const translated = doc('Inference is expensive.')
+    const { reinjectGlossaryMarksForTranslation } = await import('@/lib/glossary/translate')
+
+    const result = await reinjectGlossaryMarksForTranslation(source, translated, 'en', {
+      terms: [{ slug: 'inferenz', canonicalName: 'Inference', aliases: [] }],
+      reserved: [],
+    })
+
+    expect(linked(result)).toEqual([{ text: 'Inference', slug: 'inferenz' }])
+    expect(termMocks.getMatcherTerms).not.toHaveBeenCalled()
+    expect(termMocks.getChartProductNames).not.toHaveBeenCalled()
+  })
+
   it('ruft getMatcherTerms nicht auf, wenn der Quell-Content keine Glossar-Marks hat', async () => {
     const source = doc('Kein Fachbegriff hier.')
     const translated = doc('No jargon here.')

@@ -40,7 +40,7 @@ interface CrawlStatus {
 export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => void }) {
   const [status, setStatus] = useState<CrawlStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState<'extract' | 'generate' | 'generate-all' | 'reset' | 'images' | 'relink' | null>(null)
+  const [busy, setBusy] = useState<'extract' | 'generate' | 'generate-all' | 'reset' | 'images' | 'relink' | 'translations' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastResult, setLastResult] = useState<string | null>(null)
   /** Startdatum der Nachverlinkung. Default heute: der Lauf geht von neu nach
@@ -54,6 +54,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   const termsJob = useJob('generate')
   const imagesJob = useJob('images')
   const relinkJob = useJob('relink')
+  const translationsJob = useJob('translations')
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -172,6 +173,31 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     }
   }
 
+  /**
+   * Stoesst die Nachverlinkung UEBERSETZTER Artikel an (content_translations).
+   * Kein Datumsfeld wie bei relink: der Lauf geht per Cursor durch den ganzen
+   * Bestand und setzt sich am Ende selbst zurueck.
+   */
+  async function startTranslationsJob() {
+    setBusy('translations')
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/glossary-jobs', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kind: 'translations' }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error ?? `Fehlgeschlagen (HTTP ${res.status})`)
+      await translationsJob.reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   /** Abbruchwunsch; der naechste Cron-Tick wertet ihn aus. */
   async function stopJob(kind: JobKind) {
     await fetch('/api/admin/glossary-jobs', {
@@ -246,6 +272,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   const termsRunning = termsJob.job?.status === 'pending' || termsJob.job?.status === 'processing'
   const imagesRunning = imagesJob.job?.status === 'pending' || imagesJob.job?.status === 'processing'
   const relinkRunning = relinkJob.job?.status === 'pending' || relinkJob.job?.status === 'processing'
+  const translationsRunning = translationsJob.job?.status === 'pending' || translationsJob.job?.status === 'processing'
 
   return (
     <div className="space-y-6">
@@ -300,6 +327,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           <JobLog job={termsJob.job} unit="Begriffe" verb="erzeugt" />
           <JobLog job={imagesJob.job} unit="Illustrationen" verb="erzeugt" />
           <JobLog job={relinkJob.job} unit="Artikel" verb="verlinkt" />
+          <JobLog job={translationsJob.job} unit="Uebersetzungen" verb="verlinkt" />
 
           <div className="flex flex-wrap gap-2">
             {/* Gesperrt auch waehrend termsRunning: extract/generate/reset UND der
@@ -396,6 +424,28 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                   Artikel nachverlinken
                 </Button>
               </span>
+            )}
+            {/* Uebersetzungen nachverlinken. Eigener Lauf, weil relink
+                ausschliesslich generated_posts anfasst: uebersetzte Artikel
+                bekommen ihre Marks nur bei einer NEUEN Uebersetzung, und die
+                lief bisher immer, bevor der deutsche Quelltext verlinkt war.
+                Ohne diesen Knopf holen sie es nie nach. Kein Modellaufruf. */}
+            {translationsRunning ? (
+              <Button size="sm" variant="destructive" onClick={() => void stopJob('translations')}>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Abbrechen
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={startTranslationsJob}
+                disabled={busy !== null}
+                title="Setzt die Glossar-Links in en/cs/nds/fr neu, anhand des deutschen Quelltexts. Legt einen Job an, den der Minutentakt-Cron abarbeitet."
+              >
+                {busy === 'translations' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                Übersetzungen nachverlinken
+              </Button>
             )}
             <Button size="sm" variant="ghost" onClick={() => void fetchStatus()} disabled={busy !== null}>
               <RefreshCw className="mr-2 h-4 w-4" />

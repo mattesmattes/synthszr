@@ -7,7 +7,7 @@ import {
 
 export const maxDuration = 60
 
-const KINDS: GlossaryJobKind[] = ['generate', 'images', 'relink', 'pending']
+const KINDS: GlossaryJobKind[] = ['generate', 'images', 'relink', 'pending', 'translations']
 
 function parseKind(value: unknown): GlossaryJobKind | null {
   return KINDS.includes(value as GlossaryJobKind) ? (value as GlossaryJobKind) : null

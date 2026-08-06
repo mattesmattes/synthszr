@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   generate: vi.fn(),
   images: vi.fn(),
   relink: vi.fn(),
+  relinkTranslations: vi.fn(),
   pendingUnit: vi.fn(),
   appendLog: vi.fn(),
   finishJob: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock('@/lib/glossary/crawl', () => ({
   generateCandidates: mocks.generate,
   generateMissingIllustrations: mocks.images,
   relinkNextBatch: mocks.relink,
+  relinkTranslationsNextBatch: mocks.relinkTranslations,
 }))
 vi.mock('@/lib/glossary/pending-run', () => ({
   runPendingUnit: mocks.pendingUnit,
@@ -194,6 +196,41 @@ describe('advanceJob (images, relink)', () => {
     )
 
     expect(mocks.relink).toHaveBeenCalledWith(client, { since: '2020-01-01T00:00:00.000Z' })
+  })
+
+  it('translations: verlinkt uebersetzte Artikel nach und endet, wenn nichts mehr offen ist', async () => {
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.relinkTranslations.mockImplementation(async () => {
+      clock.advance()
+      return { linked: ['t1', 't2'], unchanged: 3, remaining: 0, cursor: null }
+    })
+
+    const res = await advanceJob(
+      client, { ...JOB, kind: 'translations' }, { now: clock.now, budgetMs: 240_000 },
+    )
+
+    expect(mocks.relinkTranslations).toHaveBeenCalledWith(client)
+    expect(res.finished).toBe(true)
+    expect(mocks.finishJob).toHaveBeenCalledWith(client, JOB.id, 'done')
+  })
+
+  it('translations: erkennt Stillstand als Ueberlast, statt das Budget zu verbrennen', async () => {
+    // Gleiche Begruendung wie bei images/relink: das Ergebnis hat kein
+    // retryable-Signal. Ohne diese Erkennung liefe derselbe Batch (gleicher
+    // Cursor) im selben Tick immer wieder, bis 240s aufgebraucht sind.
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.relinkTranslations.mockImplementation(async () => {
+      clock.advance()
+      return { linked: [], unchanged: 0, remaining: 5, cursor: 'tc1' }
+    })
+
+    await advanceJob(
+      client, { ...JOB, kind: 'translations' }, { now: clock.now, budgetMs: 240_000 },
+    )
+
+    expect(mocks.relinkTranslations).toHaveBeenCalledTimes(1)
   })
 
   it('images: haengt der Batch dauerhaft fest (done leer, aber Rest offen), endet der Tick nach EINEM Versuch', async () => {

@@ -24,6 +24,7 @@ import { buildTipTapBody, isValidTipTapDoc, type TipTapDoc } from '@/lib/glossar
 import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib/glossary/terms'
 import { injectGlossaryMarks } from '@/lib/glossary/inject-marks'
 import type { LanguageCode } from '@/lib/types'
+import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
 
 // ---------------------------------------------------------------------------
 // translateTerm
@@ -322,9 +323,21 @@ export async function reinjectGlossaryMarksForTranslation(
   sourceContent: unknown,
   translatedContent: unknown,
   targetLang: LanguageCode,
+  /**
+   * Bereits geladene Begriffs- und Reservierungsliste. Beide sind je Sprache
+   * konstant, deshalb kann ein Lauf über viele Zeilen sie einmal laden und
+   * hier durchreichen — ohne das wären es zwei DB-Abfragen JE ZEILE
+   * (Übersetzungs-Backfill, lib/glossary/backfill-translations.ts). Der
+   * reguläre Queue-Pfad übersetzt einen Artikel und lässt das Feld weg.
+   */
+  preloaded?: { terms: GlossaryMatcherTerm[]; reserved: string[] },
 ): Promise<unknown> {
   const slugs = extractLinkedSlugs(sourceContent)
   if (slugs.length === 0) return translatedContent
+
+  if (preloaded) {
+    return finishInjection(translatedContent, slugs, preloaded.terms, preloaded.reserved, targetLang)
+  }
 
   const [rawTerms, chartProductNames] = await Promise.all([
     getMatcherTerms(targetLang),
@@ -345,7 +358,23 @@ export async function reinjectGlossaryMarksForTranslation(
   // Company- und Chart-Produktnamen reservieren, wie applyGlossaryConfirmation
   // (Kollisionsregel: Company > Chart-Produkt > Lexikonbegriff).
   const reserved = buildReservedNames(chartProductNames)
-  const injected = injectGlossaryMarks(translatedContent, slugs, rawTerms, { reserved })
+  return finishInjection(translatedContent, slugs, rawTerms, reserved, targetLang)
+}
+
+/**
+ * Injektion plus Sichtbarkeitsprüfung — der Teil, der für beide Wege identisch
+ * ist (vorgeladene Listen oder selbst geladene). Als eigene Funktion, damit der
+ * Backfill-Pfad nicht die Prüfung unterschlägt: eine Übersetzung, die weniger
+ * Marks bekommt als das Original hatte, muss in beiden Fällen auffallen.
+ */
+function finishInjection(
+  translatedContent: unknown,
+  slugs: string[],
+  terms: GlossaryMatcherTerm[],
+  reserved: string[],
+  targetLang: LanguageCode,
+): unknown {
+  const injected = injectGlossaryMarks(translatedContent, slugs, terms, { reserved })
 
   const actuallyLinked = extractLinkedSlugs(injected).length
   if (actuallyLinked < slugs.length) {

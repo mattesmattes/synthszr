@@ -29,6 +29,7 @@ import { assignProducts } from '@/lib/glossary/products'
 import { extractVisibleText } from '@/lib/posts/product-mentions'
 import { safeParseJSON } from '@/lib/utils/safe-json'
 import { backfillGlossaryLinks, type BackfillResult } from '@/lib/glossary/backfill'
+import { relinkTranslationsBatch, type TranslationBackfillResult } from '@/lib/glossary/backfill-translations'
 import { getMatcherTerms, buildReservedNames, getChartProductNames } from '@/lib/glossary/terms'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -72,12 +73,17 @@ export interface CrawlState {
    *  Aufrufer setzt ihn nach einem vollstaendigen Durchlauf zurueck, damit ein
    *  neuer Begriff einen neuen Durchlauf ueber alle Artikel bekommt. */
   relinkCursor?: string | null
+  /** Cursor der Nachverlinkung ÜBERSETZTER Artikel (id der zuletzt geprüften
+   *  content_translations-Zeile). Eigener Cursor statt relinkCursor: die beiden
+   *  Läufe gehen über verschiedene Tabellen mit verschiedenen Sortierschlüsseln
+   *  (created_at vs. id) und dürfen sich nicht gegenseitig zurücksetzen. */
+  translationsCursor?: string | null
   updatedAt: string | null
 }
 
 const EMPTY_STATE: CrawlState = {
   cursor: null, postsProcessed: 0, candidates: {}, generated: [], excluded: [],
-  relinkCursor: null, updatedAt: null,
+  relinkCursor: null, translationsCursor: null, updatedAt: null,
 }
 
 export async function readCrawlState(supabase: AdminClient): Promise<CrawlState> {
@@ -102,6 +108,7 @@ export async function readCrawlState(supabase: AdminClient): Promise<CrawlState>
     generated: Array.isArray(s.generated) ? s.generated : [],
     excluded: Array.isArray(s.excluded) ? s.excluded : [],
     relinkCursor: typeof s.relinkCursor === 'string' ? s.relinkCursor : null,
+    translationsCursor: typeof s.translationsCursor === 'string' ? s.translationsCursor : null,
     updatedAt: typeof s.updatedAt === 'string' ? s.updatedAt : null,
   }
 }
@@ -140,6 +147,16 @@ export async function writeRelinkCursor(
 ): Promise<void> {
   const state = await readCrawlState(supabase)
   await writeCrawlState(supabase, { ...state, relinkCursor })
+}
+
+/** Schreibt nur den Cursor der Übersetzungs-Nachverlinkung. Gleiche Bauart wie
+ *  writeRelinkCursor: der jeweils andere Lauf darf nicht zurückgesetzt werden. */
+export async function writeTranslationsCursor(
+  supabase: AdminClient,
+  translationsCursor: string | null,
+): Promise<void> {
+  const state = await readCrawlState(supabase)
+  await writeCrawlState(supabase, { ...state, translationsCursor })
 }
 
 /** Setzt den Crawl zurück (Cursor und Kandidaten), ohne Begriffe zu löschen. */
@@ -592,5 +609,22 @@ export async function relinkNextBatch(
   // remaining === 0 setzt den Cursor zurueck, damit der naechste Lauf wieder
   // von vorn prueft statt mitten im Bestand aufzusetzen.
   await writeRelinkCursor(supabase, result.remaining === 0 ? null : result.cursor)
+  return result
+}
+
+/**
+ * Ein Batch der Übersetzungs-Nachverlinkung, mit Cursor-Verwaltung.
+ *
+ * Zwilling von relinkNextBatch für `content_translations`. Die Begriffslisten
+ * lädt relinkTranslationsBatch selbst (je Sprache einmal pro Batch) — anders
+ * als hier, wo relinkNextBatch sie vorab beschafft, weil backfillGlossaryLinks
+ * nur eine einzige, deutsche Liste braucht.
+ */
+export async function relinkTranslationsNextBatch(
+  supabase: AdminClient,
+): Promise<TranslationBackfillResult> {
+  const state = await readCrawlState(supabase)
+  const result = await relinkTranslationsBatch(supabase, state.translationsCursor ?? null)
+  await writeTranslationsCursor(supabase, result.remaining === 0 ? null : result.cursor)
   return result
 }

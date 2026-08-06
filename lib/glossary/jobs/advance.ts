@@ -4,7 +4,7 @@
  * Zeitbudget aufgebraucht oder nichts mehr offen ist.
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
-import { generateCandidates, generateMissingIllustrations, relinkNextBatch } from '@/lib/glossary/crawl'
+import { generateCandidates, generateMissingIllustrations, relinkNextBatch, relinkTranslationsNextBatch } from '@/lib/glossary/crawl'
 import { runPendingUnit } from '@/lib/glossary/pending-run'
 import { appendLog, finishJob, releaseLease, setAttempts, type GlossaryJob, type GlossaryJobLogEntry } from '@/lib/glossary/jobs/service'
 
@@ -169,6 +169,23 @@ async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOut
       exhausted: r.remaining === 0 && !fatal,
       overloaded: noProgress,
       fatal,
+    }
+  }
+
+  if (job.kind === 'translations') {
+    const r = await relinkTranslationsNextBatch(supabase)
+    // Gleiche Ueberlast-Erkennung wie bei images/relink: das Ergebnis hat kein
+    // retryable-Feld, "nichts erreicht, aber noch offen" ist deshalb das
+    // einzige Signal, das einen festhaengenden Batch von echtem Fortschritt
+    // unterscheidet.
+    const noProgress = r.linked.length === 0 && r.unchanged === 0 && r.remaining > 0
+    return {
+      entries: [
+        { at: stamp(), text: `${r.linked.length} Uebersetzungen neu verlinkt, ${r.unchanged} unveraendert, ${r.remaining} offen`, ok: true },
+      ],
+      doneDelta: r.linked.length,
+      exhausted: r.remaining === 0,
+      overloaded: noProgress,
     }
   }
 

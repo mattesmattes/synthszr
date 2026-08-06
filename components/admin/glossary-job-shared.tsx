@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 
-export type JobKind = 'generate' | 'images' | 'relink' | 'pending'
+export type JobKind = 'generate' | 'images' | 'relink' | 'pending' | 'translations'
 
 export interface JobView {
   status: 'pending' | 'processing' | 'done' | 'error' | 'cancelled'
