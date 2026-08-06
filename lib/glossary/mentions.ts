@@ -13,17 +13,59 @@ function escapeRegex(s: string): string {
 /** Wortgrenzen über Unicode-Klassen statt \b: \b bricht bei Umlauten und
  *  Komposita. Diese Funktion erlaubt Komposita (z.B. „Inferenzkosten" soll
  *  „Inferenz" treffen). Gleicher Muster wie in lib/posts/product-mentions.ts. */
-function boundaryRegex(name: string): RegExp {
-  return new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegex(name)})`, 'iu')
+function boundaryRegex(name: string, flags = 'iu'): RegExp {
+  return new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegex(name)})`, flags)
 }
 
 /** Für kurze Namen (< GLOSSARY_MIN_NAME_LENGTH): Grenze auch hinten erforderlich,
  *  um False-Positives zu vermeiden. Z.B. „RAG" in „Ragout" treffen („Rag" gefolgt
  *  von „out"), aber nicht „AI" in „Aida" („Ai" gefolgt von „da"). \p{L} erkennt
  *  Umlaute als Buchstaben, daher wird „Öfen" nicht als „fen" erkannt. */
-function boundaryRegexShort(name: string): RegExp {
-  return new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegex(name)})($|[^\\p{L}\\p{N}])`, 'iu')
+function boundaryRegexShort(name: string, flags = 'iu'): RegExp {
+  return new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegex(name)})($|[^\\p{L}\\p{N}])`, flags)
 }
+
+/**
+ * Ein Name, der GANZ aus Grossbuchstaben besteht, ist eine Abkuerzung und wird
+ * NUR in dieser Schreibung gesucht.
+ *
+ * PROD-BEFUND 2026-08-06 auf /de/glossary/eu-ai-act: im Satz "Es wurde 2024
+ * verabschiedet" war das Pronomen "Es" als Engineering Sample ausgezeichnet.
+ * Der Alias "ES" ist zwei Zeichen lang, hatte also bereits beidseitige
+ * Wortgrenzen — die greifen hier nicht, weil "Es" ein vollstaendiges Wort ist.
+ * Das fehlende Stueck war die Gross-/Kleinschreibung: eine Abkuerzung, die
+ * kleingeschrieben ein Alltagswort ergibt, darf nicht case-insensitiv suchen.
+ *
+ * Von 177 Namen/Aliassen mit hoechstens drei Zeichen kollidiert derzeit genau
+ * einer mit einem deutschen Alltagswort ("ES"), aber die Regel ist bewusst
+ * allgemein statt eine Ausnahme fuer ES: dieselbe Falle steht bei jedem
+ * kuenftigen Kuerzel offen (etwa "IR", "RE", "SO").
+ *
+ * Namen mit gemischter Schreibung ("MoE", "K8s") bleiben case-insensitiv — dort
+ * ist die Kleinschreibung im Fliesstext ueblich und ungefaehrlich.
+ */
+function isAbbreviation(name: string): boolean {
+  return /\p{Lu}/u.test(name) && name === name.toUpperCase()
+}
+
+/**
+ * Begriffe, die NUR als ganzes Wort treffen duerfen, obwohl ihr Name lang genug
+ * fuer die Kompositum-Regel waere.
+ *
+ * PROD-BEFUND 2026-08-06, gleiche Seite: in "Computerprogrammen" war "Compute"
+ * verlinkt — das "rprogrammen" stand ausserhalb des Links und sah aus wie ein
+ * Darstellungsfehler. Die Kompositum-Regel ist hier richtig gedacht und trotzdem
+ * falsch angewandt: "Inferenzkosten" IST ein Kompositum mit "Inferenz" als
+ * Erstglied, "Computerprogramm" ist keines mit "Compute" — "Computer" ist ein
+ * eigenstaendiges Wort, das zufaellig so beginnt.
+ *
+ * Diese Unterscheidung ist ohne Woerterbuch nicht zu berechnen, deshalb eine
+ * gepflegte Liste statt einer Heuristik — gleiches Muster wie
+ * EXCLUDED_COMPANY_NAMES in lib/data/company-exclusions.ts. Hier gehoert ein
+ * Begriff hinein, wenn sein Name das Praefix eines gebraeuchlichen laengeren
+ * Wortes ist. Vergleich in Kleinschreibung.
+ */
+const WHOLE_WORD_ONLY = new Set(['compute'])
 
 /**
  * Wie matchNameInText, aber mit Wortgrenze auf BEIDEN Seiten — für Namen, bei
@@ -91,9 +133,12 @@ export function matchNameInText(
   text: string,
   name: string,
 ): { start: number; end: number; matched: string } | null {
-  const re = name.length < GLOSSARY_MIN_NAME_LENGTH
-    ? boundaryRegexShort(name)
-    : boundaryRegex(name)
+  // Grenze hinten verlangen, wenn der Name zu kurz für die Kompositum-Regel ist
+  // ODER der Begriff nur als ganzes Wort gelten darf (s. WHOLE_WORD_ONLY).
+  const wholeWord = name.length < GLOSSARY_MIN_NAME_LENGTH || WHOLE_WORD_ONLY.has(name.toLowerCase())
+  // Abkürzungen nur in ihrer Schreibung (s. isAbbreviation).
+  const flags = isAbbreviation(name) ? 'u' : 'iu'
+  const re = wholeWord ? boundaryRegexShort(name, flags) : boundaryRegex(name, flags)
   const m = re.exec(text)
   if (!m) return null
   const start = m.index + m[1].length

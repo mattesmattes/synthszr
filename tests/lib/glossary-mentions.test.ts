@@ -48,6 +48,40 @@ describe('findGlossaryMentions', () => {
     expect(findGlossaryMentions('Aida singt.', [aiTerm])).toEqual([])
   })
 
+  // PROD-BEFUND 2026-08-06 auf /de/glossary/eu-ai-act: im Satz "Es wurde 2024
+  // verabschiedet" war das Pronomen "Es" als Engineering Sample verlinkt. Die
+  // Abkürzung ES ist zwei Zeichen lang, hatte also beidseitige Wortgrenzen —
+  // die halfen nicht, weil der Vergleich case-insensitiv lief.
+  const esTerm: GlossaryMatcherTerm = {
+    slug: 'engineering-sample',
+    canonicalName: 'Engineering Sample',
+    aliases: ['ES', 'ES-Chip'],
+  }
+
+  it('Abkürzung trifft nicht das gleichlautende deutsche Wort (Es/ES)', () => {
+    expect(findGlossaryMentions('Es wurde 2024 verabschiedet.', [esTerm])).toEqual([])
+  })
+
+  it('Abkürzung trifft weiterhin in korrekter Schreibung (ES)', () => {
+    const hits = findGlossaryMentions('Das ES kam vor dem Serienchip.', [esTerm])
+    expect(hits.map((h) => h.slug)).toEqual(['engineering-sample'])
+  })
+
+  // PROD-BEFUND 2026-08-06, gleiche Seite: in "Computerprogrammen" war "Compute"
+  // verlinkt, das "rprogrammen" stand ausserhalb des Links. Die Kompositum-Regel
+  // erlaubt Praefix-Treffer ("Inferenzkosten" -> "Inferenz"), aber "Computer" ist
+  // kein Kompositum mit "Compute" als Erstglied, sondern ein eigenes Wort.
+  const computeTerm: GlossaryMatcherTerm = { slug: 'compute', canonicalName: 'Compute', aliases: [] }
+
+  it('trifft nicht als Präfix eines anderen Wortes (Compute/Computerprogramm)', () => {
+    expect(findGlossaryMentions('Programme mit Computerprogrammen.', [computeTerm])).toEqual([])
+  })
+
+  it('trifft weiterhin als eigenständiges Wort (Compute)', () => {
+    const hits = findGlossaryMentions('Dafür braucht es mehr Compute.', [computeTerm])
+    expect(hits.map((h) => h.slug)).toEqual(['compute'])
+  })
+
   it('kurzer Alias trifft mit Bindestrich-Grenze', () => {
     const moeTerm: GlossaryMatcherTerm = { slug: 'moe', canonicalName: 'Mixture of Experts', aliases: ['MoE'] }
     const hits = findGlossaryMentions('Ein MoE-Modell skaliert.', [moeTerm])
