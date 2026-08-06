@@ -37,8 +37,19 @@ export const GlossaryLinkMark = Mark.create<GlossaryLinkOptions>({
 
   renderHTML({ HTMLAttributes }) {
     const slug = HTMLAttributes['data-glossary-slug']
+    // Begriffserklärungen existieren nur auf Deutsch und Englisch
+    // (SUPPORTED_GLOSSARY_LANGS = ['en'], lib/glossary/translate.ts). Ein
+    // Artikel in einer dritten Sprache verlinkte bisher auf sein eigenes
+    // Präfix — /cs/glossary/… — wo der Feld-Fallback greift und der Leser
+    // DEUTSCHEN Text bekommt, obwohl eine englische Fassung existiert.
+    // Betreiber-Entscheidung 2026-08-06: alles außer 'de' zeigt auf 'en'.
+    //
+    // Die Abbildung sitzt hier statt bei den Aufrufern, weil es mehrere gibt
+    // (Client-Renderer und render-static-html für den Prerender-Pfad) und ein
+    // vergessener Aufrufer still die alte, falsche URL erzeugen würde.
+    const lang = this.options.lang === 'de' ? 'de' : 'en'
     return ['a', mergeAttributes(HTMLAttributes, {
-      href: `/${this.options.lang}/glossary/${slug}`,
+      href: `/${lang}/glossary/${slug}`,
       class: 'glossary-link',
     }), 0]
   },

@@ -20,6 +20,19 @@ describe('GlossaryLinkMark', () => {
     expect(html).not.toContain('/de/glossary/')
   })
 
+  it('schickt Leser einer dritten Sprache auf die ENGLISCHE Erklärung, nicht auf ihre eigene', () => {
+    // Begriffserklärungen gibt es nur auf Deutsch und Englisch
+    // (SUPPORTED_GLOSSARY_LANGS = ['en']). Ein cs/nds/fr-Artikel verlinkte
+    // bisher auf /cs/glossary/... — dort greift der Feld-Fallback und der Leser
+    // bekommt DEUTSCHEN Text, obwohl eine englische Fassung existiert.
+    // Betreiber-Entscheidung 2026-08-06: alles ausser 'de' zeigt auf 'en'.
+    for (const lang of ['cs', 'nds', 'fr', 'pt', 'es']) {
+      const html = generateHTML(doc('inferenz'), [StarterKit, GlossaryLinkMark.configure({ lang })])
+      expect(html).toContain('/en/glossary/inferenz')
+      expect(html).not.toContain(`/${lang}/glossary/`)
+    }
+  })
+
   it('fällt ohne konfigurierte Sprache auf "de" zurück', () => {
     // Bestehende Aufrufer, die noch keine Sprache übergeben, dürfen nicht
     // brechen — deshalb Default statt Pflichtoption.
