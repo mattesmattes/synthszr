@@ -18,6 +18,56 @@ const NAV_COLUMNS = 'id, slug, canonical_name'
  *  verschluckt, ohne Fehler und ohne Log. */
 const PAGE_SIZE = 1000
 
+/** Begriffe je Übersetzungs-Abfrage. `.in('term_id', ids)` landet als
+ *  Query-String in der URL, nicht im Body: bei 745 Begriffen sind das rund
+ *  27.500 Zeichen, und PostgREST antwortet mit `Bad Request`. An Prod gemessen
+ *  (2026-08-06): 300 IDs gehen, ab 500 bricht es. 200 hält mit rund 7.400
+ *  Zeichen reichlich Abstand und liefert höchstens 200 Zeilen je Abfrage,
+ *  bleibt also auch unter PAGE_SIZE. Gleiche Blockgröße wie in
+ *  lib/rankings/consolidate.ts. */
+const TRANSLATION_CHUNK = 200
+
+/**
+ * Übersetzungszeilen zu einer Begriffsliste, blockweise geholt.
+ *
+ * DER FILTER MUSS GESTÜCKELT WERDEN, und die Blockgröße ist kein Detail: die
+ * drei Aufrufer unten filterten bis zum 2026-08-06 mit der VOLLEN ID-Liste in
+ * einem `.in()`. Das lief jahrelang, weil die URL passte — bis der Bestand über
+ * rund 400 Begriffe wuchs. Dann schlug die Abfrage komplett fehl, und weil zwei
+ * der drei Aufrufer ihren Fehler still abfangen (`return rows`), zeigte das
+ * gesamte englische Lexikon deutsche Namen, obwohl 745 von 746 Begriffen eine
+ * englische Fassung hatten. Der dritte Aufrufer (getMatcherTerms) gab `null`
+ * zurück und riss damit den translations-Job mit "Begriffsliste (cs) nicht
+ * ladbar" zehnmal in Folge ab.
+ *
+ * Nach `term_id` UND `language` zu filtern statt nur nach `language` bleibt
+ * richtig — der Primary Key ist (term_id, language), ein language-only-Filter
+ * nutzt dessen Präfix nicht. Es muss nur in Blöcken passieren.
+ *
+ * Ein Fehler in EINEM Block macht den ganzen Aufruf ungültig (`error` gesetzt,
+ * keine Zeilen): eine halbe Übersetzungsmenge ist schlimmer als keine, weil sie
+ * pro Begriff still auf den deutschen Namen zurückfällt und damit wie ein
+ * gepflegter Zustand aussieht.
+ */
+async function fetchTranslationsChunked(
+  supabase: ReturnType<typeof createAdminClient>,
+  columns: string,
+  termIds: string[],
+  lang: string,
+): Promise<{ rows: Array<Record<string, unknown>>; error: string | null }> {
+  const rows: Array<Record<string, unknown>> = []
+  for (let i = 0; i < termIds.length; i += TRANSLATION_CHUNK) {
+    const { data, error } = await supabase
+      .from('glossary_term_translations')
+      .select(columns)
+      .in('term_id', termIds.slice(i, i + TRANSLATION_CHUNK))
+      .eq('language', lang)
+    if (error) return { rows: [], error: error.message }
+    rows.push(...((data ?? []) as unknown as Array<Record<string, unknown>>))
+  }
+  return { rows, error: null }
+}
+
 export async function getPublishedTermList(
   lang: string,
   options: { includeSummary?: boolean } = {},
@@ -111,17 +161,19 @@ export async function getMatcherTerms(lang: string): Promise<GlossaryMatcherTerm
 
   // Für die Verlinkung im übersetzten Artikel zählen die Namen der Zielsprache.
   // Wie bei applyTranslations: term_ids statt nur language filtern, sonst nutzt
-  // der Filter den PK (term_id, language) nicht und scannt alle Sprachen.
-  const { data: tr, error: trError } = await supabase
-    .from('glossary_term_translations')
-    .select('term_id, canonical_name, aliases')
-    .in('term_id', base.map((t) => t.id))
-    .eq('language', lang)
+  // der Filter den PK (term_id, language) nicht und scannt alle Sprachen —
+  // blockweise, s. fetchTranslationsChunked.
+  const { rows: tr, error: trError } = await fetchTranslationsChunked(
+    supabase,
+    'term_id, canonical_name, aliases',
+    base.map((t) => t.id),
+    lang,
+  )
   if (trError) {
-    console.error('[Glossary] getMatcherTerms translations:', trError.message)
+    console.error('[Glossary] getMatcherTerms translations:', trError)
     return null
   }
-  const byId = new Map((tr ?? []).map((t) => [t.term_id as string, t]))
+  const byId = new Map(tr.map((t) => [t.term_id as string, t]))
   return base.map((t) => {
     const t9n = byId.get(t.id)
     return {
@@ -289,13 +341,14 @@ async function applySearchTranslations(
   rows: SearchableRow[],
   lang: string,
 ): Promise<SearchableRow[]> {
-  const { data, error } = await supabase
-    .from('glossary_term_translations')
-    .select('term_id, canonical_name, aliases, summary')
-    .in('term_id', rows.map((r) => r.id))
-    .eq('language', lang)
+  const { rows: data, error } = await fetchTranslationsChunked(
+    supabase,
+    'term_id, canonical_name, aliases, summary',
+    rows.map((r) => r.id),
+    lang,
+  )
   if (error) {
-    console.error('[Glossary] searchPublishedTerms translations:', error.message)
+    console.error('[Glossary] searchPublishedTerms translations:', error)
     return rows
   }
   const byId = new Map((data ?? []).map((t) => [t.term_id as string, t]))
@@ -335,18 +388,19 @@ async function applyTranslations<T extends TranslatableRow>(
 ): Promise<T[]> {
   if (rows.length === 0) return rows
   const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('glossary_term_translations')
-    .select('term_id, canonical_name, summary')
-    .in('term_id', rows.map((r) => r.id))
-    .eq('language', lang)
+  const { rows: data, error } = await fetchTranslationsChunked(
+    supabase,
+    'term_id, canonical_name, summary',
+    rows.map((r) => r.id),
+    lang,
+  )
   if (error) {
     // Fehlende Übersetzungen sind kein Grund, die Seite leer zu rendern.
-    console.error('[Glossary] applyTranslations:', error.message)
+    console.error('[Glossary] applyTranslations:', error)
     return rows
   }
   const byId = new Map(
-    (data ?? []).map((t) => [
+    data.map((t) => [
       t.term_id as string,
       { canonicalName: t.canonical_name as string | null, summary: t.summary as string | null },
     ]),
