@@ -57,6 +57,7 @@ function fakeSupabase(opts: {
   posts: Record<string, unknown>
   remaining?: number
   updates: Array<{ id: string; content: unknown }>
+  onPostIds?: (ids: unknown[]) => void
 }) {
   return {
     from(table: string) {
@@ -89,7 +90,12 @@ function fakeSupabase(opts: {
       }
       if (table === 'generated_posts') {
         const self: Record<string, unknown> = {}
-        for (const m of ['select', 'in', 'eq']) self[m] = vi.fn(() => self)
+        for (const m of ['select', 'in', 'eq']) {
+          self[m] = vi.fn((...args: unknown[]) => {
+            if (m === 'in' && args[0] === 'id') opts.onPostIds?.(args[1] as unknown[])
+            return self
+          })
+        }
         ;(self as { then: unknown }).then = (res: (v: unknown) => void) =>
           res({
             data: Object.entries(opts.posts).map(([id, content]) => ({ id, content })),
@@ -198,6 +204,36 @@ describe('relinkTranslationsBatch', () => {
     expect(result.linked).toEqual([])
     expect(result.unchanged).toBe(1)
     expect(updates).toHaveLength(0)
+  })
+
+  it('sprengt den Lauf nicht an Zeilen ohne generated_post_id', async () => {
+    // Prod-Befund 2026-08-06: 12 der 743 Zeilen sind static_page-/ui-
+    // Uebersetzungen und haben generated_post_id = NULL. Ein null in der
+    // .in()-Liste serialisiert PostgREST als Literal "null" — die Abfrage
+    // stirbt mit `invalid input syntax for type uuid: "null"` und riss den
+    // ganzen Tick mit, obwohl diese Zeilen nur uebersprungen werden sollen.
+    const { relinkTranslationsBatch } = await import('@/lib/glossary/backfill-translations')
+    const updates: Array<{ id: string; content: unknown }> = []
+    const supabase = fakeSupabase({
+      translations: [
+        { id: 't1', generated_post_id: null as unknown as string, language_code: 'en', content: doc('Orphan.') },
+        { id: 't2', generated_post_id: 'p1', language_code: 'en', content: doc('Inference is expensive.') },
+      ],
+      posts: {
+        p1: doc('Die Inferenz ist teuer.', { type: 'glossaryLink', attrs: { slug: 'inferenz' } }),
+      },
+      updates,
+      onPostIds: (ids) => {
+        // Der eigentliche Regressionsschutz: kein null/leerer Wert darf in die
+        // Abfrage gelangen.
+        expect(ids.every((v) => typeof v === 'string' && v.length > 0)).toBe(true)
+      },
+    })
+
+    const result = await relinkTranslationsBatch(supabase as never, null)
+
+    expect(result.linked).toEqual(['t2'])
+    expect(result.unchanged).toBe(1)
   })
 
   it('gibt den Cursor der letzten Zeile und die Restmenge zurueck', async () => {

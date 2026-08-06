@@ -86,11 +86,19 @@ export async function relinkTranslationsBatch(
 
   // Quelltexte in EINEM Zug laden: bei vier Sprachen teilen sich bis zu vier
   // Zeilen denselben Artikel, einzeln geladen wäre es viermal derselbe Body.
-  const postIds = [...new Set(rows.map((r) => r.generated_post_id))]
-  const { data: postRows, error: postError } = await supabase
-    .from('generated_posts')
-    .select('id, content')
-    .in('id', postIds)
+  //
+  // `filter(Boolean)` ist nicht kosmetisch: `content_translations` enthält auch
+  // Übersetzungen von static_page und ui, und die haben `generated_post_id`
+  // NULL (in Prod 12 von 743 Zeilen). Ein null in der `.in()`-Liste
+  // serialisiert PostgREST als Literal "null" — die Abfrage stirbt dann mit
+  // `invalid input syntax for type uuid: "null"` und reißt den ganzen Tick mit,
+  // obwohl diese Zeilen bloß übersprungen werden sollen (sie haben keinen
+  // Quelltext, also nichts zu injizieren). Prod-Befund 2026-08-06, nach 59
+  // erfolgreich verlinkten Zeilen.
+  const postIds = [...new Set(rows.map((r) => r.generated_post_id).filter(Boolean))]
+  const { data: postRows, error: postError } = postIds.length > 0
+    ? await supabase.from('generated_posts').select('id, content').in('id', postIds)
+    : { data: [], error: null }
   if (postError) throw new Error(`Quellartikel nicht ladbar: ${postError.message}`)
   const sourceById = new Map(
     ((postRows ?? []) as Array<{ id: string; content: unknown }>).map((p) => [p.id, asDoc(p.content)]),
