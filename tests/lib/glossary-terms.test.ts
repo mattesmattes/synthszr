@@ -238,3 +238,91 @@ describe('getChartProductNames', () => {
     expect(names).toEqual([])
   })
 })
+
+describe('searchPublishedTerms', () => {
+  it('selektiert kein body-JSONB', async () => {
+    const { searchPublishedTerms } = await import('@/lib/glossary/terms')
+    await searchPublishedTerms('mixture', 'de', 6)
+    const cols = state.chains[0].select.mock.calls[0][0] as string
+    expect(cols).not.toContain('body')
+    expect(cols).toContain('summary')
+  })
+
+  it('filtert auf status=published', async () => {
+    const { searchPublishedTerms } = await import('@/lib/glossary/terms')
+    await searchPublishedTerms('mixture', 'de', 6)
+    expect(state.chains[0].eq).toHaveBeenCalledWith('status', 'published')
+  })
+
+  it('findet einen Treffer über den canonical_name', async () => {
+    state.result = {
+      data: [{ id: 't1', slug: 'inferenz', canonical_name: 'Inferenz', aliases: [], summary: 'Kurzfassung' }],
+      error: null,
+    }
+    const { searchPublishedTerms } = await import('@/lib/glossary/terms')
+    const hits = await searchPublishedTerms('infer', 'de', 6)
+    expect(hits).toEqual([{ slug: 'inferenz', canonicalName: 'Inferenz', excerpt: 'Kurzfassung' }])
+  })
+
+  it('findet einen Treffer über einen Alias, auch wenn der canonical_name nicht passt', async () => {
+    state.result = {
+      data: [{ id: 't1', slug: 'mixture-of-experts', canonical_name: 'Mixture of Experts', aliases: ['MoE'], summary: 'S' }],
+      error: null,
+    }
+    const { searchPublishedTerms } = await import('@/lib/glossary/terms')
+    const hits = await searchPublishedTerms('moe', 'de', 6)
+    expect(hits).toEqual([{ slug: 'mixture-of-experts', canonicalName: 'Mixture of Experts', excerpt: 'S' }])
+  })
+
+  it('lässt Begriffe ohne Treffer in Name, Alias oder Summary weg', async () => {
+    state.result = {
+      data: [{ id: 't1', slug: 'irrelevant', canonical_name: 'Etwas Anderes', aliases: ['Sonstiges'], summary: 'Ohne Bezug' }],
+      error: null,
+    }
+    const { searchPublishedTerms } = await import('@/lib/glossary/terms')
+    const hits = await searchPublishedTerms('habermas', 'de', 6)
+    expect(hits).toEqual([])
+  })
+
+  it('übernimmt die Alias-Übersetzung der Zielsprache für den Treffer', async () => {
+    state.queue = [
+      { data: [{ id: 't1', slug: 'mixture-of-experts', canonical_name: 'Mixture of Experts', aliases: ['MoE'], summary: 'S' }], error: null },
+      { data: [{ term_id: 't1', canonical_name: 'Mixture of Experts', aliases: ['gate'], summary: 'EN summary' }], error: null },
+    ]
+    const { searchPublishedTerms } = await import('@/lib/glossary/terms')
+    const hits = await searchPublishedTerms('gate', 'en', 6)
+    expect(hits).toEqual([{ slug: 'mixture-of-experts', canonicalName: 'Mixture of Experts', excerpt: 'EN summary' }])
+  })
+
+  it('übergibt term_ids an die Übersetzungsabfrage statt nur die Sprache', async () => {
+    state.result = { data: [{ id: 't1', slug: 's', canonical_name: 'Name', aliases: [], summary: 'Name im Text' }], error: null }
+    const { searchPublishedTerms } = await import('@/lib/glossary/terms')
+    await searchPublishedTerms('name', 'en', 6)
+    const t9nChain = state.chains[1]
+    expect(t9nChain.in).toHaveBeenCalledWith('term_id', ['t1'])
+    expect(t9nChain.eq).toHaveBeenCalledWith('language', 'en')
+  })
+
+  it('kappt auf das übergebene limit', async () => {
+    state.result = {
+      data: [
+        { id: 't1', slug: 'a', canonical_name: 'Alpha Begriff', aliases: [], summary: '' },
+        { id: 't2', slug: 'b', canonical_name: 'Beta Begriff', aliases: [], summary: '' },
+        { id: 't3', slug: 'c', canonical_name: 'Gamma Begriff', aliases: [], summary: '' },
+      ],
+      error: null,
+    }
+    const { searchPublishedTerms } = await import('@/lib/glossary/terms')
+    const hits = await searchPublishedTerms('begriff', 'de', 2)
+    expect(hits).toHaveLength(2)
+  })
+
+  it('degradiert bei DB-Fehler auf leere Liste statt zu werfen', async () => {
+    state.result = { data: null, error: { message: 'boom' } }
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { searchPublishedTerms } = await import('@/lib/glossary/terms')
+    const hits = await searchPublishedTerms('mixture', 'de', 6)
+    expect(hits).toEqual([])
+    errSpy.mockRestore()
+  })
+})

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
-import { Search, FileText, BarChart3, Building2 } from 'lucide-react'
+import { Search, FileText, BarChart3, Building2, BookOpen } from 'lucide-react'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import type { LanguageCode } from '@/lib/types'
 import { SITE_URL } from '@/lib/seo/site'
@@ -19,7 +19,8 @@ interface PageProps {
 interface PostHit { id: string; title: string; slug: string; excerpt: string | null; snippet: string | null; created_at: string }
 interface CompanyHit { name: string; slug: string; type: 'public' | 'premarket' }
 interface ProductHit { name: string; slug: string; category: string | null; catRank: number }
-interface SearchData { posts: PostHit[]; companies: CompanyHit[]; products: ProductHit[] }
+interface GlossaryHit { slug: string; canonicalName: string; excerpt: string }
+interface SearchData { posts: PostHit[]; companies: CompanyHit[]; products: ProductHit[]; glossary: GlossaryHit[] }
 
 export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
   const { lang } = await params
@@ -41,7 +42,7 @@ export default async function SearchPage({ params, searchParams }: PageProps) {
   const t = await getTranslations(locale)
   const tr = (key: string, fallback: string) => t[key] ?? fallback
 
-  let data: SearchData = { posts: [], companies: [], products: [] }
+  let data: SearchData = { posts: [], companies: [], products: [], glossary: [] }
   if (query.length >= 2) {
     try {
       const res = await fetch(
@@ -52,7 +53,7 @@ export default async function SearchPage({ params, searchParams }: PageProps) {
     } catch { /* Netzfehler → leere Ergebnisse */ }
   }
 
-  const total = data.posts.length + data.products.length + data.companies.length
+  const total = data.posts.length + data.products.length + data.companies.length + data.glossary.length
 
   return (
     <>
@@ -105,7 +106,28 @@ export default async function SearchPage({ params, searchParams }: PageProps) {
           </section>
         )}
 
-        {/* 2. Synthszr Charts */}
+        {/* 2. Lexikon */}
+        {data.glossary.length > 0 && (
+          <section className="mb-8">
+            <h2 className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">
+              <BookOpen className="h-3.5 w-3.5" /> {locale === 'de' ? 'Lexikon' : 'Glossary'} ({data.glossary.length})
+            </h2>
+            <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+              {data.glossary.map((g) => (
+                <li key={g.slug}>
+                  <Link href={`/${locale}/glossary/${g.slug}`} className="block px-4 py-3 hover:bg-muted/30 transition-colors">
+                    <div className="font-medium text-sm leading-snug">{g.canonicalName}</div>
+                    {g.excerpt && (
+                      <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{g.excerpt}</div>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* 3. Synthszr Charts */}
         {data.products.length > 0 && (
           <section className="mb-8">
             <h2 className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">
@@ -124,7 +146,7 @@ export default async function SearchPage({ params, searchParams }: PageProps) {
           </section>
         )}
 
-        {/* 3. Synthszr Stock (Unternehmen) */}
+        {/* 4. Synthszr Stock (Unternehmen) */}
         {data.companies.length > 0 && (
           <section className="mb-8">
             <h2 className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">

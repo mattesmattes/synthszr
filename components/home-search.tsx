@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Search, Loader2, Building2, FileText, BarChart3 } from 'lucide-react'
+import { Search, Loader2, Building2, FileText, BarChart3, BookOpen } from 'lucide-react'
 import { StockSynthszrLayer } from './stock-synthszr-layer'
 
 interface PostHit {
@@ -29,10 +29,17 @@ interface ProductHit {
   catRank: number
 }
 
+interface GlossaryHit {
+  slug: string
+  canonicalName: string
+  excerpt: string
+}
+
 interface SearchResults {
   posts: PostHit[]
   companies: CompanyHit[]
   products: ProductHit[]
+  glossary: GlossaryHit[]
 }
 
 type Vote = 'BUY' | 'HOLD' | 'SELL' | null
@@ -62,6 +69,7 @@ interface SearchStrings {
   postsHeading: (n: number) => string
   companiesHeading: (n: number) => string
   chartsHeading: (n: number) => string
+  glossaryHeading: (n: number) => string
   noResults: (q: string) => string
 }
 
@@ -71,6 +79,7 @@ const STRINGS: Record<string, SearchStrings> = {
     postsHeading: (n) => `Blogposts (${n})`,
     companiesHeading: (n) => `Unternehmen (${n}) — Synthszr-Analyse`,
     chartsHeading: (n) => `Synthszr Charts (${n})`,
+    glossaryHeading: (n) => `Lexikon (${n})`,
     noResults: (q) => `Keine Treffer für „${q}".`,
   },
   en: {
@@ -78,6 +87,7 @@ const STRINGS: Record<string, SearchStrings> = {
     postsHeading: (n) => `Blog posts (${n})`,
     companiesHeading: (n) => `Companies (${n}) — Synthszr analysis`,
     chartsHeading: (n) => `Synthszr Charts (${n})`,
+    glossaryHeading: (n) => `Glossary (${n})`,
     noResults: (q) => `No results for "${q}".`,
   },
   cs: {
@@ -85,6 +95,7 @@ const STRINGS: Record<string, SearchStrings> = {
     postsHeading: (n) => `Blogové příspěvky (${n})`,
     companiesHeading: (n) => `Firmy (${n}) — Synthszr analýza`,
     chartsHeading: (n) => `Synthszr Charts (${n})`,
+    glossaryHeading: (n) => `Slovník (${n})`,
     noResults: (q) => `Žádné výsledky pro „${q}".`,
   },
   nds: {
@@ -92,6 +103,7 @@ const STRINGS: Record<string, SearchStrings> = {
     postsHeading: (n) => `Blog-Bidrägen (${n})`,
     companiesHeading: (n) => `Firmen (${n}) — Synthszr-Analyse`,
     chartsHeading: (n) => `Synthszr Charts (${n})`,
+    glossaryHeading: (n) => `Lexikon (${n})`,
     noResults: (q) => `Keen Drepper för „${q}".`,
   },
 }
@@ -291,7 +303,9 @@ export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps
     return () => aborter.abort()
   }, [results])
 
-  const hasResults = results && (results.posts.length > 0 || results.companies.length > 0 || results.products.length > 0)
+  const hasResults = results && (
+    results.posts.length > 0 || results.companies.length > 0 || results.products.length > 0 || results.glossary.length > 0
+  )
   const showEmpty = query.trim().length >= 2 && !loading && results && !hasResults
 
   // Enter → Voll-Ergebnisseite (gruppiert: Posts / Charts / Stock).
@@ -323,10 +337,124 @@ export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps
         </form>
 
         {hasResults && (
-          <div className="mt-3 rounded-lg border border-border bg-background shadow-sm overflow-hidden">
-            {/* Synthszr-Analyse always on top — these are the unique
-                value-add: AI investment ratings the user can't get
-                from Google. Posts come below as supporting context. */}
+          <div className="mt-3 rounded-lg border border-border bg-background shadow-sm overflow-hidden divide-y divide-border">
+            {/* Reihenfolge der Blöcke: Posts → Lexikon → Charts → Companies,
+                konsistent mit der Volltrefferseite (app/[lang]/search/page.tsx,
+                dort "1. Blog Posts / 2. Lexikon / 3. Synthszr Charts /
+                4. Synthszr Stock"). divide-y auf dem äußeren Wrapper zieht die
+                Trennlinie automatisch zwischen den sichtbaren Blöcken (nie vor
+                dem ersten) — jeder Block-Header trägt deshalb nur noch sein
+                eigenes border-b, kein positionsabhängiges border-t mehr. Eine
+                spätere Umsortierung ist damit nur noch ein Verschieben der
+                jsx-Blöcke, ohne Border-Klassen anfassen zu müssen. */}
+            {results.posts.length > 0 && (
+              <section>
+                <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                    {strings.postsHeading(results.posts.length)}
+                  </span>
+                </header>
+                <ul className="divide-y divide-border">
+                  {results.posts.map((p) => {
+                    // Pass the query through to the post page so the
+                    // article body can highlight matches in place.
+                    const base = locale === 'de' ? `/posts/${p.slug}` : `/${locale}/posts/${p.slug}`
+                    const href = `${base}?q=${encodeURIComponent(query.trim())}`
+                    const previewText = p.snippet || p.excerpt || ''
+                    return (
+                      <li key={p.id}>
+                        <Link
+                          href={href}
+                          className="block px-4 py-3 hover:bg-muted/30 transition-colors"
+                          onClick={() => setQuery('')}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="font-medium text-sm leading-snug min-w-0">
+                              <HighlightedText text={p.title} query={query} />
+                            </div>
+                            <time
+                              dateTime={p.created_at}
+                              className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0 mt-0.5"
+                            >
+                              {formatHitDate(p.created_at, locale)}
+                            </time>
+                          </div>
+                          {previewText && (
+                            <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                              <HighlightedText text={previewText} query={query} />
+                            </div>
+                          )}
+                        </Link>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            )}
+
+            {results.glossary.length > 0 && (
+              <section>
+                <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
+                  <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                    {strings.glossaryHeading(results.glossary.length)}
+                  </span>
+                </header>
+                <ul className="divide-y divide-border">
+                  {results.glossary.map((g) => (
+                    <li key={g.slug}>
+                      <Link
+                        href={`/${locale}/glossary/${g.slug}`}
+                        className="block px-4 py-3 hover:bg-muted/30 transition-colors"
+                        onClick={() => setQuery('')}
+                      >
+                        <div className="font-medium text-sm truncate min-w-0">
+                          <HighlightedText text={g.canonicalName} query={query} />
+                        </div>
+                        {g.excerpt && (
+                          <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                            <HighlightedText text={g.excerpt} query={query} />
+                          </div>
+                        )}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {results.products.length > 0 && (
+              <section>
+                <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
+                  <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                    {strings.chartsHeading(results.products.length)}
+                  </span>
+                </header>
+                <ul className="divide-y divide-border">
+                  {results.products.map((p) => (
+                    <li key={p.slug}>
+                      <Link
+                        href={`/${locale}/rankings/${p.slug}`}
+                        className="block px-4 py-3 hover:bg-muted/30 transition-colors"
+                        onClick={() => setQuery('')}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="font-medium text-sm truncate min-w-0">
+                            <HighlightedText text={p.name} query={query} />
+                          </div>
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0">
+                            #{p.catRank}
+                          </span>
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             {results.companies.length > 0 && (
               <section>
                 <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
@@ -380,83 +508,6 @@ export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps
                             </div>
                           </div>
                         </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </section>
-            )}
-
-            {results.products.length > 0 && (
-              <section>
-                <header className="px-4 py-2 bg-muted/40 border-b border-t border-border flex items-center gap-2">
-                  <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
-                    {strings.chartsHeading(results.products.length)}
-                  </span>
-                </header>
-                <ul className="divide-y divide-border">
-                  {results.products.map((p) => (
-                    <li key={p.slug}>
-                      <Link
-                        href={`/${locale}/rankings/${p.slug}`}
-                        className="block px-4 py-3 hover:bg-muted/30 transition-colors"
-                        onClick={() => setQuery('')}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="font-medium text-sm truncate min-w-0">
-                            <HighlightedText text={p.name} query={query} />
-                          </div>
-                          <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0">
-                            #{p.catRank}
-                          </span>
-                        </div>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {results.posts.length > 0 && (
-              <section>
-                <header className="px-4 py-2 bg-muted/40 border-b border-t border-border flex items-center gap-2">
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
-                    {strings.postsHeading(results.posts.length)}
-                  </span>
-                </header>
-                <ul className="divide-y divide-border">
-                  {results.posts.map((p) => {
-                    // Pass the query through to the post page so the
-                    // article body can highlight matches in place.
-                    const base = locale === 'de' ? `/posts/${p.slug}` : `/${locale}/posts/${p.slug}`
-                    const href = `${base}?q=${encodeURIComponent(query.trim())}`
-                    const previewText = p.snippet || p.excerpt || ''
-                    return (
-                      <li key={p.id}>
-                        <Link
-                          href={href}
-                          className="block px-4 py-3 hover:bg-muted/30 transition-colors"
-                          onClick={() => setQuery('')}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="font-medium text-sm leading-snug min-w-0">
-                              <HighlightedText text={p.title} query={query} />
-                            </div>
-                            <time
-                              dateTime={p.created_at}
-                              className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0 mt-0.5"
-                            >
-                              {formatHitDate(p.created_at, locale)}
-                            </time>
-                          </div>
-                          {previewText && (
-                            <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                              <HighlightedText text={previewText} query={query} />
-                            </div>
-                          )}
-                        </Link>
                       </li>
                     )
                   })}

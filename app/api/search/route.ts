@@ -5,6 +5,7 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies
 import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
 import { embedQuery } from '@/lib/search/embeddings'
 import { rerankPostHits } from '@/lib/search/rerank'
+import { searchPublishedTerms, type GlossarySearchHit } from '@/lib/glossary/terms'
 
 // Search pipeline:
 //   1. Embedding similarity over generated_posts (semantic recall)
@@ -14,7 +15,7 @@ import { rerankPostHits } from '@/lib/search/rerank'
 //      names that embeddings sometimes lose)
 //   3. Merge + de-dupe by slug (manual posts win)
 //   4. LLM re-rank top-N via Claude Haiku for "really relevant first"
-//   5. Return top MAX_POSTS, plus separate company dictionary hits
+//   5. Return top MAX_POSTS, plus separate company/glossary/product hits
 
 interface PostHit {
   id: string
@@ -42,6 +43,7 @@ interface ProductHit {
 const MAX_POSTS = 8
 const MAX_COMPANIES = 6
 const MAX_PRODUCTS = 6
+const MAX_GLOSSARY = 6
 // How many recent posts to scan in Node for substring recall. 500
 // covers years of daily newsletters; raise if/when needed.
 const FETCH_LIMIT = 500
@@ -102,9 +104,10 @@ export async function GET(request: NextRequest) {
   const maxPosts = full ? 30 : MAX_POSTS
   const maxCompanies = full ? 24 : MAX_COMPANIES
   const maxProducts = full ? 24 : MAX_PRODUCTS
+  const maxGlossary = full ? 24 : MAX_GLOSSARY
 
   if (rawQuery.length < 2) {
-    return NextResponse.json({ posts: [], companies: [], products: [] })
+    return NextResponse.json({ posts: [], companies: [], products: [], glossary: [] })
   }
 
   const lowerQuery = rawQuery.toLowerCase()
@@ -186,7 +189,17 @@ export async function GET(request: NextRequest) {
         .ilike('content', likePattern)
         .limit(EMBEDDING_TOP_K)
 
-  const [manualResult, aiResult, embeddingHits, bodyResult] = await Promise.all([
+  // Lexikon-Treffer laufen parallel zu den Post-Lookups mit — eigene Tabelle,
+  // eigener admin-Client (glossary_terms hat kein anon-SELECT, s. Migration
+  // 20260803120000), also kein Konflikt mit den Post-Queries oben.
+  const glossaryPromise: Promise<GlossarySearchHit[]> = searchPublishedTerms(rawQuery, locale, maxGlossary).catch(
+    (err) => {
+      console.warn('[Search] glossary lookup failed:', err)
+      return []
+    },
+  )
+
+  const [manualResult, aiResult, embeddingHits, bodyResult, glossary] = await Promise.all([
     isDefaultLocale
       ? supabase
           .from('posts')
@@ -198,6 +211,7 @@ export async function GET(request: NextRequest) {
     aiCorpusPromise,
     embeddingPromise,
     bodyPromise,
+    glossaryPromise,
   ])
 
   // Normalize translation rows to the same shape as generated_posts.
@@ -441,5 +455,5 @@ export async function GET(request: NextRequest) {
     console.warn('[Search] products lookup failed:', err)
   }
 
-  return NextResponse.json({ posts: finalPosts, companies, products })
+  return NextResponse.json({ posts: finalPosts, companies, products, glossary })
 }

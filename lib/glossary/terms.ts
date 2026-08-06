@@ -178,6 +178,139 @@ export function buildReservedNames(chartProductNames: string[]): string[] {
   ]
 }
 
+export interface GlossarySearchHit {
+  slug: string
+  canonicalName: string
+  excerpt: string
+}
+
+/** Spalten für die Suche (app/api/search/route.ts): canonical_name, aliases
+ *  und summary sind die drei Felder, über die laut Anforderung gesucht wird —
+ *  bewusst NICHT body. body ist ein großes JSONB-Feld, und eine history-JSONB-
+ *  Spalte hat in diesem Projekt schon einmal einen 359-GB-Egress-Overage
+ *  verursacht. */
+const SEARCH_COLUMNS = 'id, slug, canonical_name, aliases, summary'
+
+/** PostgREST kappt eine Abfrage ohne range()/limit() still bei 1000 Zeilen
+ *  (siehe getChartProductNames oben). Bei aktuell gut 300 veröffentlichten
+ *  Begriffen unkritisch für eine Suche mit limit() — wächst die Begriffszahl
+ *  über 1000, braucht diese Funktion Pagination wie getChartProductNames. */
+const SEARCH_FETCH_LIMIT = 1000
+
+/** Kurzer Auszug für den Lexikon-Suchblock — reine Zeichen-Kürzung, keine
+ *  Wortgrenzen-Suche wie buildSnippet in app/api/search/route.ts: der Treffer
+ *  ist eine Vorschau, kein Zitat mit Fundstelle. */
+function truncateSummary(summary: string, maxLen: number): string {
+  if (summary.length <= maxLen) return summary
+  return summary.slice(0, maxLen).trim() + ' …'
+}
+
+interface SearchableRow {
+  id: string
+  slug: string
+  canonicalName: string
+  aliases: string[]
+  summary: string
+}
+
+/**
+ * Sucht veröffentlichte Begriffe über canonical_name, aliases und summary
+ * (Substring, case-insensitive) — für den Lexikon-Block in der Suche.
+ *
+ * Lädt zunächst ALLE veröffentlichten Begriffe (schmale Spalten, kein body)
+ * und filtert danach in Node, weil aliases eine text[]-Spalte ist: ein
+ * `.ilike()` von PostgREST greift nicht auf einzelne Array-Elemente. Bei
+ * einigen hundert Begriffen ist das unkritisch (gleiches Muster wie die
+ * Substring-Suche über Firmennamen weiter unten in der Route).
+ */
+export async function searchPublishedTerms(
+  query: string,
+  lang: string,
+  limit: number,
+): Promise<GlossarySearchHit[]> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('glossary_terms')
+    .select(SEARCH_COLUMNS)
+    .eq('status', 'published')
+    .limit(SEARCH_FETCH_LIMIT)
+  if (error) {
+    console.error('[Glossary] searchPublishedTerms:', error.message)
+    return []
+  }
+  const base: SearchableRow[] = (data ?? []).map((r) => ({
+    id: r.id as string,
+    slug: r.slug as string,
+    canonicalName: r.canonical_name as string,
+    aliases: (r.aliases ?? []) as string[],
+    summary: (r.summary as string | null) ?? '',
+  }))
+  if (base.length === 0) return []
+
+  const resolved = lang === 'de' ? base : await applySearchTranslations(supabase, base, lang)
+
+  const lowerQuery = query.toLowerCase()
+  const matches = resolved.filter(
+    (t) =>
+      t.canonicalName.toLowerCase().includes(lowerQuery) ||
+      t.aliases.some((a) => a.toLowerCase().includes(lowerQuery)) ||
+      t.summary.toLowerCase().includes(lowerQuery),
+  )
+
+  // Exakte Präfix-Treffer im Namen zuerst — gleiche Regel wie bei Companies/
+  // Produkten in app/api/search/route.ts.
+  matches.sort((a, b) => {
+    const aPrefix = a.canonicalName.toLowerCase().startsWith(lowerQuery) ? 0 : 1
+    const bPrefix = b.canonicalName.toLowerCase().startsWith(lowerQuery) ? 0 : 1
+    if (aPrefix !== bPrefix) return aPrefix - bPrefix
+    return a.canonicalName.localeCompare(b.canonicalName)
+  })
+
+  return matches.slice(0, limit).map((t) => ({
+    slug: t.slug,
+    canonicalName: t.canonicalName,
+    excerpt: truncateSummary(t.summary, 160),
+  }))
+}
+
+/**
+ * Übersetzungs-Overlay für die Suche: canonical_name, aliases UND summary
+ * zugleich. Eigenständig statt Wiederverwendung von applyTranslations
+ * (unten) oder der Inline-Logik in getMatcherTerms — beide decken je nur
+ * zwei der drei Felder ab, und sie zu verbreitern hieße, ihre getesteten
+ * Typen für einen Aufrufer aufzuweiten, der den dritten Wert gar nicht
+ * braucht.
+ *
+ * term_ids statt nur language filtern: der Primary Key ist
+ * (term_id, language), ein language-only-Filter nutzt dessen Präfix nicht.
+ */
+async function applySearchTranslations(
+  supabase: ReturnType<typeof createAdminClient>,
+  rows: SearchableRow[],
+  lang: string,
+): Promise<SearchableRow[]> {
+  const { data, error } = await supabase
+    .from('glossary_term_translations')
+    .select('term_id, canonical_name, aliases, summary')
+    .in('term_id', rows.map((r) => r.id))
+    .eq('language', lang)
+  if (error) {
+    console.error('[Glossary] searchPublishedTerms translations:', error.message)
+    return rows
+  }
+  const byId = new Map((data ?? []).map((t) => [t.term_id as string, t]))
+  return rows.map((r) => {
+    const t9n = byId.get(r.id)
+    if (!t9n) return r
+    return {
+      ...r,
+      canonicalName: (t9n.canonical_name as string | null) ?? r.canonicalName,
+      aliases: (t9n.aliases as string[] | null) ?? r.aliases,
+      summary: (t9n.summary as string | null) ?? r.summary,
+    }
+  })
+}
+
 interface TranslatableRow {
   id: string
   slug: string
