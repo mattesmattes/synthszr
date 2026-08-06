@@ -370,3 +370,71 @@ Verhalten, zu naiver Check.
   (welcher der drei Texte bleibt), keine Automatik.
 - `content_translations` unveraendert - EN-Uebersetzungen koennen weiterhin
   Marks auf die vier versteckten Slugs tragen.
+
+---
+
+## Dreier-Merge des Eval-Clusters (2026-08-06, 10:20 Uhr)
+
+Betreiber-Entscheidung nach dem Alias-Befund oben: `evaluation` und
+`evaluation-eval` auf `eval` zusammenführen. Kuratierte Gruppe -
+`normalizeSlugForDedup` sieht sie nicht (andere Wörter, keine
+Schreibvarianten) und soll sie auch nicht sehen; die Regel bleibt eng.
+
+Ausgangslage:
+
+| Begriff | Inhalt | Verlinkungen |
+|---|---|---|
+| **eval** | 3699 Z. | **33** |
+| evaluation | 4080 Z. | 4 |
+| evaluation-eval | 4318 Z. | 0 |
+
+`eval` hat den kürzesten Text und gewinnt trotzdem - nach demselben Kriterium
+wie beim Paar-Merge (Verlinkungen vor Inhalt). Die Texte wurden nicht
+angefasst; wer den inhaltsreicheren Body von `evaluation-eval` übernehmen
+will, muss das separat entscheiden.
+
+Durchgeführt mit denselben Bausteinen (`mergeAliases`, `linkPostContent`),
+Trockenprobe vorab: **4 von 4 Marks auf `eval` umgebogen, 0 verloren**.
+Backup der drei Begriffszeilen und vier Artikel im Session-Scratchpad.
+
+**Wirkung, um die es eigentlich ging:** von den 14 zusammengeführten Aliassen
+sind jetzt **12 eindeutig** - vorher waren es 0 von 9. Nur `Benchmark-Test`
+und `Benchmarking` bleiben mehrdeutig, weil `benchmark` sie ebenfalls
+beansprucht; das ist inhaltlich richtig und soll so bleiben.
+
+Verifiziert: `eval` 200, `evaluation` und `evaluation-eval` 404,
+Stichprobe `claude-opus-5-ist-da-und-ist-fable-haft` zeigt nur noch
+`glossary/eval`.
+
+## content_translations: Befund statt Korrektur
+
+Auftrag war, übersetzte Artikel von Marks auf die inzwischen versteckten Slugs
+zu befreien. **Solche Marks gibt es nicht** - und zwar aus einem größeren
+Grund: von 743 Übersetzungszeilen (en/cs/nds/fr) enthält **keine einzige**
+überhaupt eine `glossaryLink`-Mark.
+
+Erste Messung lief ins Leere, weil `content_translations.content` `jsonb` ist,
+nicht `text` wie bei `generated_posts`: PostgREST-`ilike` scheitert dort mit
+`operator does not exist: jsonb ~~*`, und ein `content::text`-Cast im Filter
+wird nicht angewandt. Gemessen wurde deshalb per SQL über
+`npx supabase db query --linked`. Wer hier künftig sucht: das Muster muss auch
+die jsonb-Serialisierung mit Leerzeichen (`"slug": "..."`) berücksichtigen -
+beide Varianten wurden geprüft, beide 0.
+
+Ursache ist kein Pipeline-Fehler. `reinjectGlossaryMarksForTranslation` nimmt
+die Slugs aus dem **Quelltext**; alle 20 seit dem Lexikon-Start (03.08.)
+erzeugten Übersetzungen liefen, bevor ihr jeweiliger deutscher Artikel
+verlinkt war - die zwölf älteren vor dem großen `relink`-Lauf am 05.08. 19:11,
+die acht von heute für Artikel, deren Begriffe noch nicht freigegeben sind
+(`cron-060826`, `erdbeben-bei-deepmind-...`). Zum Zeitpunkt der Übersetzung
+gab es schlicht nichts zu injizieren.
+
+**Daraus folgt ein offener Punkt, der größer ist als der ursprüngliche:**
+`backfillGlossaryLinks` fasst nur `generated_posts` an. Die Übersetzungen
+holen die Marks nie nach, weil sie nur bei einer *neuen* Übersetzung gesetzt
+werden. EN-, CS-, FR- und NDS-Leser sehen deshalb aktuell **keine
+Lexikon-Links**, während die deutschen Artikel durchgehend verlinkt sind. Ein
+Backfill über `content_translations` (Quelltext lesen,
+`reinjectGlossaryMarksForTranslation`, zurückschreiben) wäre die Entsprechung
+zum `relink`-Lauf - noch nicht gebaut, bewusst nicht im Rahmen dieses Auftrags
+angefangen.
