@@ -64,8 +64,17 @@ function isAbbreviation(name: string): boolean {
  * EXCLUDED_COMPANY_NAMES in lib/data/company-exclusions.ts. Hier gehoert ein
  * Begriff hinein, wenn sein Name das Praefix eines gebraeuchlichen laengeren
  * Wortes ist. Vergleich in Kleinschreibung.
+ *
+ * "branch" kam ueber einen Scan aller Begriffs-Bodies dazu und war der mit
+ * ABSTAND haeufigste Fehltreffer des Lexikons: auf 148 Seiten war das Wort
+ * "Branche" als Git-Branch verlinkt, dazu 19-mal "Branchen". Dieser Fall ist
+ * heimtueckischer als "Compute", weil "e" als Flexionsendung gilt —
+ * extendByInflection dehnte den Treffer ueber das ganze Wort aus, der Link sah
+ * also voellig korrekt aus und fiel nur beim Draufklicken auf. Der Name deckt
+ * alle drei Begriffe ab, die ihn tragen (branch, branch-versionskontrolle,
+ * feature-branch), weil hier NAMEN stehen und keine Slugs.
  */
-const WHOLE_WORD_ONLY = new Set(['compute'])
+const WHOLE_WORD_ONLY = new Set(['compute', 'branch'])
 
 /**
  * Wie matchNameInText, aber mit Wortgrenze auf BEIDEN Seiten — für Namen, bei

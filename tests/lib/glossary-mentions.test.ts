@@ -82,6 +82,25 @@ describe('findGlossaryMentions', () => {
     expect(hits.map((h) => h.slug)).toEqual(['compute'])
   })
 
+  // PROD-SCAN 2026-08-06: haeufigster Fehltreffer im ganzen Lexikon. Auf 148
+  // Seiten war das Wort "Branche" als Git-Branch verlinkt. Perfider als der
+  // Compute-Fall: "e" gilt als Flexionsendung, extendByInflection dehnte den
+  // Treffer deshalb ueber das GANZE Wort aus — der Link sah voellig korrekt aus.
+  const branchTerm: GlossaryMatcherTerm = { slug: 'branch', canonicalName: 'Branch', aliases: [] }
+
+  it('trifft nicht das deutsche Wort Branche (Branch + Flexions-e)', () => {
+    expect(findGlossaryMentions('Die ganze Branche diskutiert das.', [branchTerm])).toEqual([])
+  })
+
+  it('trifft nicht den Plural Branchen', () => {
+    expect(findGlossaryMentions('Andere Branchen folgen bald.', [branchTerm])).toEqual([])
+  })
+
+  it('trifft weiterhin den Git-Branch als eigenständiges Wort', () => {
+    const hits = findGlossaryMentions('Der Branch wurde gemerged.', [branchTerm])
+    expect(hits.map((h) => h.slug)).toEqual(['branch'])
+  })
+
   it('kurzer Alias trifft mit Bindestrich-Grenze', () => {
     const moeTerm: GlossaryMatcherTerm = { slug: 'moe', canonicalName: 'Mixture of Experts', aliases: ['MoE'] }
     const hits = findGlossaryMentions('Ein MoE-Modell skaliert.', [moeTerm])
