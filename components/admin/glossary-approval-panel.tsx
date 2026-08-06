@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
-import { useJob, JobLog } from '@/components/admin/glossary-job-shared'
+import { useJob, JobLog, isJobOpen } from '@/components/admin/glossary-job-shared'
 import type { GlossaryCandidate } from '@/lib/glossary/types'
 
 const ORIGIN_LABELS: Record<GlossaryCandidate['origin'], string> = {
@@ -71,10 +71,19 @@ export function GlossaryApprovalPanel({ candidates, value, onChange, postId, run
 
   // Wie viele bestaetigte Kandidaten muessen noch erzeugt werden? Nur die kostet
   // der Lauf; bereits vorhandene Begriffe werden beim Speichern nur verlinkt.
+  //
+  // Bewusst eine SCHAETZUNG: needsGeneration wird beim Vormerken einmal gesetzt
+  // und nie aktualisiert, wenn der Begriff seither ueber einen anderen Artikel
+  // entstanden ist. Die Zahl kann hier also zu hoch sein. Die verbindliche
+  // Zahl bestimmt der Server (estimateTotal -> findMissingFromGlossary) und
+  // erscheint, sobald der Job laeuft. Ein serverseitiger Zaehler VOR dem Start
+  // waere ein zusaetzlicher Request bei jedem Rendern dieses Panels, fuer eine
+  // Zahl, die nur den Knopftext betrifft — die Folge einer zu hohen Schaetzung
+  // ist ein Job, der sofort als 'done' endet, keine verlorene Arbeit.
   const openCount = candidates.filter((c) => value.includes(c.slug) && c.needsGeneration).length
 
   const job = pendingJob.job
-  const jobOpen = job?.status === 'pending' || job?.status === 'processing'
+  const jobOpen = isJobOpen(job)
 
   if (candidates.length === 0) return null
 

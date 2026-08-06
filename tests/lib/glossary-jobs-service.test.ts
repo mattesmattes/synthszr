@@ -369,6 +369,25 @@ describe('appendLog', () => {
   })
 })
 
+describe('estimateTotal (images)', () => {
+  it('zaehlt veroeffentlichte Begriffe OHNE Illustration', async () => {
+    // Bisher ungetestet: der images-Zweig ist der Fallback am Ende von
+    // estimateTotal, ein falscher Filter (etwa `is not null` statt `is null`)
+    // waere von keinem Test bemerkt worden — die Anzeige haette dann die
+    // FERTIGEN Begriffe als offene Arbeit gemeldet.
+    const { createOrGetJob } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_terms'] = [{ count: 42, error: null }]
+    state.queues['glossary_jobs'] = [{ data: { ...JOB, kind: 'images', total: 42 }, error: null }]
+
+    const job = await createOrGetJob(client, 'images', {})
+
+    expect(job.total).toBe(42)
+    const chain = state.chains['glossary_terms'][0]
+    expect(chain.eq).toHaveBeenCalledWith('status', 'published')
+    expect(chain.is).toHaveBeenCalledWith('illustration_url', null)
+  })
+})
+
 describe('requestCancel', () => {
   it('setzt cancel_requested nur auf offenen Jobs', async () => {
     const { requestCancel } = await import('@/lib/glossary/jobs/service')
@@ -379,6 +398,10 @@ describe('requestCancel', () => {
     const chain = state.chains['glossary_jobs'][0]
     expect(chain.update).toHaveBeenCalledWith({ cancel_requested: true })
     expect(chain.in).toHaveBeenCalledWith('status', ['pending', 'processing'])
+    // Der kind-Filter ist die eigentliche Sicherung: faellt er weg, bricht ein
+    // Klick auf "Abbrechen" im Begriffs-Panel auch den laufenden Bilder- und
+    // Verlinkungs-Job ab, ohne dass es jemandem auffaellt.
+    expect(chain.eq).toHaveBeenCalledWith('kind', 'generate')
   })
 
   it('beendet einen noch nie aufgenommenen Job sofort, statt nur das Flag zu setzen', async () => {

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   setAttempts: vi.fn(),
   stampLease: vi.fn(),
   releaseLease: vi.fn(),
+  readCancelRequested: vi.fn(),
 }))
 
 vi.mock('@/lib/glossary/crawl', () => ({
@@ -36,6 +37,7 @@ vi.mock('@/lib/glossary/jobs/service', () => ({
   setAttempts: mocks.setAttempts,
   stampLease: mocks.stampLease,
   releaseLease: mocks.releaseLease,
+  readCancelRequested: mocks.readCancelRequested,
 }))
 
 const client = {} as any
@@ -45,7 +47,10 @@ const JOB = {
   attempts: 0, params: {}, error_message: null, created_at: '', finished_at: null,
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  mocks.readCancelRequested.mockResolvedValue(false)
+})
 
 /**
  * Uhr, die NUR voranspringt, wenn Arbeit getan wurde — nicht bei jedem
@@ -98,6 +103,27 @@ describe('advanceJob (generate)', () => {
     expect(mocks.releaseLease).toHaveBeenCalledWith(client, 'j1')
   })
 
+  it('rechnet mit der LANGSAMSTEN Einheit, nicht der schnellsten', async () => {
+    // Deckt den Math.max-Zweig ab: ein Math.min waere von allen anderen Tests
+    // unbemerkt geblieben. Erste Einheit 10s, zweite 200s — danach darf keine
+    // dritte mehr starten, weil 210 + 200 ueber dem 240s-Budget liegt. Mit
+    // Math.min waere slowestMs 10s und der Tick haette weitergemacht, direkt in
+    // das Function-Timeout hinein.
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    let t = 0
+    const durations = [10_000, 200_000, 10_000, 10_000]
+    let call = 0
+    mocks.generate.mockImplementation(async () => {
+      t += durations[Math.min(call, durations.length - 1)]
+      call++
+      return ONE_GENERATED
+    })
+
+    const res = await advanceJob(client, { ...JOB }, { now: () => t, budgetMs: 240_000 })
+
+    expect(res.units).toBe(2)
+  })
+
   it('beendet den Job, wenn nichts mehr offen ist', async () => {
     const { advanceJob } = await import('@/lib/glossary/jobs/advance')
     const clock = workClock(1000)
@@ -146,6 +172,26 @@ describe('advanceJob (generate)', () => {
     // Der naechste Cron soll den Job in der naechsten Minute wieder aufgreifen,
     // nicht erst nach LEASE_STALE_MS — daher muss das Lease hier frei werden.
     expect(mocks.releaseLease).toHaveBeenCalledWith(client, 'j1')
+  })
+
+  it('bricht MITTEN im Tick ab, wenn der Abbruch waehrenddessen angefordert wird', async () => {
+    // Vorher wurde cancel_requested nur aus dem job-Objekt gelesen, das der Tick
+    // beim Start bekommen hat — ein Abbruch waehrend eines laufenden Ticks griff
+    // deshalb erst beim naechsten, also bis zu eine Minute (und eine volle
+    // Arbeitseinheit) spaeter. Bei einem Begriffslauf sind das 45-110s, in denen
+    // der Knopf gedrueckt aussieht und trotzdem weiter Geld ausgegeben wird.
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.generate.mockImplementation(async () => { clock.advance(); return ONE_GENERATED })
+    // Die erste Runde liest das Flag noch aus dem uebergebenen Job (false), die
+    // DB wird erst VOR der zweiten Einheit befragt — dort meldet sie den
+    // Abbruchwunsch, der Tick endet also nach genau einer Einheit.
+    mocks.readCancelRequested.mockResolvedValue(true)
+
+    const res = await advanceJob(client, { ...JOB }, { now: clock.now, budgetMs: 240_000 })
+
+    expect(res.units).toBe(1)
+    expect(mocks.finishJob).toHaveBeenCalledWith(client, 'j1', 'cancelled')
   })
 
   it('bricht bei cancel_requested ab, ohne zu arbeiten', async () => {
@@ -284,6 +330,28 @@ describe('advanceJob (images, relink)', () => {
     expect(mocks.relink).toHaveBeenCalledTimes(1)
     expect(res.finished).toBe(false)
     expect(mocks.setAttempts).not.toHaveBeenCalled()
+  })
+
+  it('relink: ein Durchgang ohne Treffer, aber mit gepruefften Artikeln ist FORTSCHRITT, keine Ueberlast', async () => {
+    // unchanged > 0 heisst: der Batch hat Artikel geprueft und keinen Begriff
+    // gefunden — das ist der Normalfall gegen Ende eines Laufs, kein
+    // Fehlschlag. Ohne diesen Test wuerde eine Verwechslung mit dem
+    // Ueberlast-Zweig (linked leer UND unchanged leer) nicht auffallen, und
+    // jeder solche Tick endete nach einer Einheit statt das Budget zu nutzen.
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.relink.mockImplementation(async () => {
+      clock.advance()
+      return { linked: [], unchanged: 25, remaining: 100, cursor: 'c5' }
+    })
+
+    const res = await advanceJob(
+      client, { ...JOB, kind: 'relink' }, { now: clock.now, budgetMs: 240_000 },
+    )
+
+    // Kein Abbruch nach einer Einheit: das Budget wird ausgeschoepft.
+    expect(res.units).toBeGreaterThan(1)
+    expect(mocks.finishJob).not.toHaveBeenCalled()
   })
 
   it('relink: eskaliert nicht selbst, beendet nur den Tick', async () => {

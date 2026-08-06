@@ -1,7 +1,7 @@
 // components/admin/glossary-job-shared.tsx
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 
 export type JobKind = 'generate' | 'images' | 'relink' | 'pending' | 'translations'
@@ -12,6 +12,16 @@ export interface JobView {
   done_count: number
   log: Array<{ at: string; text: string; ok: boolean }>
   error_message: string | null
+}
+
+/**
+ * Ein Lauf ist offen, wenn er noch nicht abgeschlossen ist. Eine Stelle fuer
+ * diese Definition statt vier Kopien im Panel: die Statuswerte kommen aus dem
+ * CHECK-Constraint der Tabelle, und eine spaeter ergaenzte Art wuerde sonst an
+ * einer der Kopien vergessen.
+ */
+export function isJobOpen(job: JobView | null | undefined): boolean {
+  return job?.status === 'pending' || job?.status === 'processing'
 }
 
 /**
@@ -31,7 +41,7 @@ export interface JobView {
  * liefern. Fuer generate/images/relink bleibt er weg, dort ist der Lauf
  * global.
  */
-export function useJob(kind: JobKind, postId?: string) {
+export function useJob(kind: JobKind, postId?: string, onFinished?: () => void) {
   const [job, setJob] = useState<JobView | null>(null)
 
   const load = useCallback(async () => {
@@ -55,11 +65,23 @@ export function useJob(kind: JobKind, postId?: string) {
   // sofortigen Fetch ausloesen, weil der Effekt-Koerper load() unbedingt
   // aufruft, bevor er ueberhaupt prueft, ob noch offen ist.
   useEffect(() => {
-    const open = job?.status === 'pending' || job?.status === 'processing'
-    if (!open) return
+    if (!isJobOpen(job)) return
     const t = setInterval(() => { void load() }, 5000)
     return () => clearInterval(t)
   }, [load, job?.status])
+
+  // Meldet EINMAL, wenn ein offener Lauf endet. Ohne das bleibt die Umgebung
+  // (Begriffsliste, Zaehler) auf dem Stand des Seitenaufrufs stehen, bis jemand
+  // neu laedt — der Lauf ist fertig, aber das Panel zeigt weiter die alte Welt.
+  // Der Vergleich laeuft ueber eine ref statt ueber den Status allein: ein
+  // Job, der schon abgeschlossen war, als das Panel geoeffnet wurde, darf den
+  // Callback nicht feuern.
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    const open = isJobOpen(job)
+    if (wasOpen.current && !open) onFinished?.()
+    wasOpen.current = open
+  }, [job?.status, onFinished, job])
 
   return { job, reload: load }
 }
@@ -73,7 +95,7 @@ export function useJob(kind: JobKind, postId?: string) {
  */
 export function JobLog({ job, unit, verb }: { job: JobView | null; unit: string; verb: string }) {
   if (!job) return null
-  const open = job.status === 'pending' || job.status === 'processing'
+  const open = isJobOpen(job)
   // 'pending' getrennt von 'processing': solange der Job wartet, hat noch
   // keine Einheit gelaufen — "In Arbeit — 0 von N" waere hier gelogen. Seit
   // dem Serialisierungs-Fix laeuft je Tick maximal ein Lexikonlauf; ein

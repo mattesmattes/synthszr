@@ -281,6 +281,26 @@ export async function stampLease(supabase: AdminClient, id: string): Promise<voi
  * Tick-Ende: ein Tick, der Einheiten schafft und DANN im Timeout stirbt, darf
  * den Zähler nicht löschen, sonst wiederholt sich genau dieses Muster endlos.
  */
+/**
+ * Liest NUR das Abbruch-Flag, für die Prüfung zwischen zwei Arbeitseinheiten.
+ *
+ * Eigene, schmale Abfrage statt den ganzen Job neu zu laden: der Tick braucht
+ * hier nichts außer diesem einen Boolean, und `log` kann bei einem langen Lauf
+ * hunderte Einträge groß sein (Egress).
+ *
+ * Ein Lesefehler gilt als „kein Abbruch" — der Lauf soll an einem
+ * DB-Schluckauf nicht abbrechen, und der nächste Tick prüft ohnehin erneut.
+ */
+export async function readCancelRequested(supabase: AdminClient, id: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('glossary_jobs')
+    .select('cancel_requested')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) return false
+  return (data as { cancel_requested?: boolean } | null)?.cancel_requested === true
+}
+
 export async function claimJob(supabase: AdminClient, id: string, attempts: number): Promise<void> {
   await supabase
     .from('glossary_jobs')

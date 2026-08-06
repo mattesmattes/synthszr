@@ -1,11 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, RefreshCw, Search, Sparkles, RotateCcw, AlertCircle, Image as ImageIcon } from 'lucide-react'
-import { useJob, JobLog, type JobKind } from '@/components/admin/glossary-job-shared'
+import { useJob, JobLog, isJobOpen, type JobKind } from '@/components/admin/glossary-job-shared'
 
 interface CrawlStatus {
   postsProcessed: number
@@ -51,10 +51,24 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   // Die drei frueher hier im Browser getriebenen Dauerlaeufe sind jetzt
   // Jobs, die der Minutentakt-Cron abarbeitet — jeder Hook pollt nur noch
   // seinen eigenen Status, solange ein Lauf offen ist (siehe useJob oben).
-  const termsJob = useJob('generate')
-  const imagesJob = useJob('images')
-  const relinkJob = useJob('relink')
-  const translationsJob = useJob('translations')
+  // Ein Lauf, der endet, muss BEIDES auffrischen: die Zaehler und die
+  // Kandidatenliste dieses Panels (fetchStatus) und die Begriffsliste der Seite
+  // darum (onTermsChanged). Ohne das steht nach einem 47-Begriffe-Lauf immer
+  // noch "258 offen" da, bis jemand neu laedt.
+  const handleJobFinished = useCallback(() => {
+    void fetchStatusRef.current?.()
+    onTermsChanged?.()
+  }, [onTermsChanged])
+  const termsJob = useJob('generate', undefined, handleJobFinished)
+  const imagesJob = useJob('images', undefined, handleJobFinished)
+  const relinkJob = useJob('relink', undefined, handleJobFinished)
+  const translationsJob = useJob('translations', undefined, handleJobFinished)
+
+  // Ref statt direkter Abhaengigkeit: handleJobFinished wird oben deklariert,
+  // fetchStatus erst hier — und handleJobFinished darf sich nicht bei jedem
+  // fetchStatus-Wechsel neu erzeugen, sonst laeuft der Effekt in useJob
+  // unnoetig oft.
+  const fetchStatusRef = useRef<(() => Promise<void>) | null>(null)
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -69,6 +83,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     }
   }, [])
 
+  useEffect(() => { fetchStatusRef.current = fetchStatus }, [fetchStatus])
   useEffect(() => { void fetchStatus() }, [fetchStatus])
 
   /** Kandidat ab-/zuwählen. Optimistisch: der Klick soll sofort sichtbar sein,
@@ -199,13 +214,28 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   }
 
   /** Abbruchwunsch; der naechste Cron-Tick wertet ihn aus. */
+  /**
+   * Abbruchwunsch. Fehler werden sichtbar gemacht wie bei den start*Job-
+   * Funktionen: ohne das schluckt ein 401 (abgelaufene Session) oder ein
+   * Netzwerkfehler den Klick stillschweigend, und der Lauf laeuft weiter,
+   * waehrend der Knopf gedrueckt aussieht.
+   */
   async function stopJob(kind: JobKind) {
-    await fetch('/api/admin/glossary-jobs', {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ kind }),
-    })
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/glossary-jobs', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kind }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error ?? `Abbruch fehlgeschlagen (HTTP ${res.status})`)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Abbruch fehlgeschlagen')
+    }
   }
 
   async function run(action: 'extract' | 'generate' | 'reset' | 'images') {
@@ -269,10 +299,10 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   // steuert, ob der Knopf oder der Abbrechen-Knopf zu sehen ist. `busy`
   // allein reicht nicht mehr: es ist nur waehrend des POST-Requests gesetzt,
   // der Job selbst laeuft danach unabhaengig vom Tab weiter.
-  const termsRunning = termsJob.job?.status === 'pending' || termsJob.job?.status === 'processing'
-  const imagesRunning = imagesJob.job?.status === 'pending' || imagesJob.job?.status === 'processing'
-  const relinkRunning = relinkJob.job?.status === 'pending' || relinkJob.job?.status === 'processing'
-  const translationsRunning = translationsJob.job?.status === 'pending' || translationsJob.job?.status === 'processing'
+  const termsRunning = isJobOpen(termsJob.job)
+  const imagesRunning = isJobOpen(imagesJob.job)
+  const relinkRunning = isJobOpen(relinkJob.job)
+  const translationsRunning = isJobOpen(translationsJob.job)
 
   return (
     <div className="space-y-6">

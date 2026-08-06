@@ -49,6 +49,22 @@ describe('POST /api/admin/glossary-jobs', () => {
     const res = await POST(req({ kind: 'unsinn' }))
 
     expect(res.status).toBe(400)
+    // Der Status allein genuegt nicht: eine Route, die 400 zurueckgibt UND
+    // trotzdem einen Job anlegt, wuerde diesen Test sonst bestehen.
+    expect(mocks.createOrGet).not.toHaveBeenCalled()
+  })
+
+  it('akzeptiert kind=translations ohne weitere Parameter', async () => {
+    // Der Uebersetzungs-Backfill braucht keine params: er geht per Cursor durch
+    // den ganzen Bestand. Faellt die Art aus KINDS heraus, antwortet die Route
+    // mit 400 und sowohl der Panel-Knopf als auch der 07:00-Cron sind still tot.
+    mocks.createOrGet.mockResolvedValue({ id: 'j9', kind: 'translations', status: 'pending' })
+    const { POST } = await import('@/app/api/admin/glossary-jobs/route')
+
+    const res = await POST(req({ kind: 'translations' }))
+
+    expect(res.status).toBe(200)
+    expect(mocks.createOrGet).toHaveBeenCalledWith(expect.anything(), 'translations', {})
   })
 
   it('legt einen Job an', async () => {

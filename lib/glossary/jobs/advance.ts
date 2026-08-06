@@ -6,7 +6,7 @@
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateCandidates, generateMissingIllustrations, relinkNextBatch, relinkTranslationsNextBatch } from '@/lib/glossary/crawl'
 import { runPendingUnit } from '@/lib/glossary/pending-run'
-import { appendLog, finishJob, releaseLease, setAttempts, type GlossaryJob, type GlossaryJobLogEntry } from '@/lib/glossary/jobs/service'
+import { appendLog, finishJob, readCancelRequested, releaseLease, setAttempts, type GlossaryJob, type GlossaryJobLogEntry } from '@/lib/glossary/jobs/service'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -15,15 +15,6 @@ type AdminClient = ReturnType<typeof createAdminClient>
  * das Schreiben des Protokolls nicht in den Timeout laeuft.
  */
 const BUDGET_MS = 240_000
-
-/**
- * Annahme fuer die Dauer der ERSTEN Einheit, fuer die es noch keinen Messwert
- * gibt. 270s ist die im Route-Kommentar belegte Obergrenze (ein Begriff mit
- * Nachforderung nach Regel 4, app/api/admin/glossary-crawl/route.ts:157). Die
- * erste Einheit laeuft trotzdem immer, sonst kaeme der Job nie voran; jede
- * weitere nur bei ausreichendem Rest.
- */
-const ASSUMED_FIRST_UNIT_MS = 270_000
 
 /**
  * Erfolglose Ticks in Folge, ab denen der Job aufgibt. Exportiert, weil die
@@ -220,14 +211,26 @@ export async function advanceJob(
   const started = now()
   let units = 0
   /**
-   * Die langsamste bisher gemessene Einheit dieses Ticks. Vor der ersten Einheit
-   * gibt es keinen Messwert — dort gilt die Annahme aus
-   * ASSUMED_FIRST_UNIT_MS, die aber nie in die Messung eingeht.
+   * Die langsamste bisher gemessene Einheit dieses Ticks. Startwert 0, und das
+   * ist bewusst kein Schaetzwert: der Budget-Check unten laeuft erst ab der
+   * ZWEITEN Einheit (`units > 0`), bis dahin wird slowestMs nie gelesen. Eine
+   * Annahme als Startwert (frueher 270_000) waere entweder wirkungslos — so wie
+   * sie es war — oder, wenn sie als Untergrenze wirkte, schaedlich: dann passte
+   * nach der ersten Einheit nie eine zweite ins Budget und der Durchsatz braeche
+   * auf eine Einheit je Minutentick ein.
    */
-  let slowestMs = ASSUMED_FIRST_UNIT_MS
+  let slowestMs = 0
 
   for (;;) {
-    if (job.cancel_requested) {
+    // Vor der ERSTEN Einheit reicht das Flag aus dem uebergebenen Job (die
+    // Cron-Route hat ihn gerade geladen); vor jeder weiteren wird es FRISCH
+    // gelesen. Ohne das griff ein Abbruch erst beim naechsten Tick — bei einem
+    // Begriffslauf also erst nach einer weiteren Einheit von 45-110s, in denen
+    // der Knopf gedrueckt aussieht und trotzdem Geld ausgegeben wird.
+    const cancelled = units === 0
+      ? job.cancel_requested
+      : await readCancelRequested(supabase, job.id)
+    if (cancelled) {
       await finishJob(supabase, job.id, 'cancelled')
       return { units, finished: true }
     }

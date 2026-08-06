@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/glossary-jobs",
       "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/cron/glossary-translations",
+      "schedule": "0 7 * * *"
     }
   ],
   "headers": [
