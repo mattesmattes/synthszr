@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   ])),
   getChartProductNames: vi.fn(() => Promise.resolve([] as string[])),
   generateAndInsertDraft: vi.fn(),
+  createOrGetJob: vi.fn(),
 }))
 
 vi.mock('@/lib/auth/session', () => ({ getSession: mocks.getSession }))
@@ -25,6 +26,12 @@ vi.mock('@/lib/auth/session', () => ({ getSession: mocks.getSession }))
 // nicht das Verhalten eines Mocks.
 vi.mock('@/lib/glossary/draft-writer', () => ({
   generateAndInsertDraft: mocks.generateAndInsertDraft,
+}))
+// Seit 2026-08-06 erzeugt die Route selbst keine Begriffe mehr synchron —
+// sie legt nur noch einen 'pending'-Job an. createOrGetJob als Blackbox
+// gemockt (kein .insert()/.single() im Fake-Client unten, s. makeChain).
+vi.mock('@/lib/glossary/jobs/service', () => ({
+  createOrGetJob: mocks.createOrGetJob,
 }))
 // buildReservedNames bleibt die ECHTE Implementierung (importOriginal) — pur,
 // seit Fix-Runde 1 (Task 16) mit reinjectGlossaryMarksForTranslation geteilt
@@ -101,6 +108,8 @@ beforeEach(() => {
   mocks.generateAndInsertDraft.mockImplementation(async (_sb: unknown, name: string, slug: string) => ({
     slug, canonicalName: name, aliases: [], summary: `Kurzfassung von ${name}.`,
   }))
+  mocks.createOrGetJob.mockReset()
+  mocks.createOrGetJob.mockResolvedValue({ id: 'job1', kind: 'pending', status: 'pending' })
 })
 
 describe('PATCH /api/admin/generated-posts mit Glossar-Slugs', () => {
@@ -150,29 +159,52 @@ describe('PATCH /api/admin/generated-posts mit Glossar-Slugs', () => {
     expect(finalUpdate().pending_glossary_terms).toBeNull()
   })
 
-  it('erzeugt einen bestätigten, noch nicht existierenden Begriff VOR der Freigabe', async () => {
-    // Entkopplung 2026-08-04 (Befund B): die lexicon-Phase merkt Begriffe nur
-    // vor, erzeugt wird beim Speichern — und nur, was bestätigt wurde.
+  it('ruft beim Speichern keine synchrone Begriffs-Erzeugung mehr auf, veröffentlicht aber bereits existierende bestätigte Begriffe', async () => {
+    // Umbau 2026-08-06: die Erzeugung fehlender Begriffe lief bis heute
+    // SYNCHRON im Speicherpfad (bis zu MAX_GENERATE_PER_SAVE=3 Begriffe à
+    // 45-90s, macht bis zu 270s direkt am 300s-Limit der Function — haengender
+    // Speichern-Knopf, im schlechten Fall ein 504). generateAndInsertDraft darf
+    // von dieser Route ab jetzt UNTER KEINEN UMSTÄNDEN mehr direkt aufgerufen
+    // werden — das ist jetzt Aufgabe des servergetriebenen 'pending'-Jobs.
     state.queues = {
-      generated_posts: [
-        // ensure-terms lädt die Kandidatenliste
-        { data: { pending_glossary_terms: [{
-          slug: 'speculative-decoding', name: 'Speculative Decoding', origin: 'new',
-          matchedText: null, isNewlyGenerated: false, needsGeneration: true,
-        }] }, error: null },
-      ],
+      // Meine neue Pruefung "braucht irgendein bestaetigter Slug noch eine
+      // Erzeugung?" liest die Vormerkliste — hier leer: 'inferenz' existiert
+      // schon als Draft, es gibt nichts zu erzeugen.
+      generated_posts: [{ data: { pending_glossary_terms: null }, error: null }],
       glossary_terms: [
-        { data: [], error: null },                                  // Existenzprüfung: fehlt noch
-        { error: null },                                            // publish-Update
-        { data: [{ slug: 'speculative-decoding' }], error: null },  // Status-Check
+        { error: null },                                    // publish-Update
+        { data: [{ slug: 'inferenz' }], error: null },       // Status-Check
       ],
     }
-    // Once, nicht dauerhaft: das beforeEach dieser Datei macht mockClear()
-    // (nicht mockReset(), das den in vi.hoisted definierten Default löschen
-    // würde) — eine dauerhafte Implementierung würde in die Folgetests lecken.
-    mocks.getMatcherTerms.mockResolvedValueOnce([
-      { slug: 'speculative-decoding', canonicalName: 'Speculative Decoding', aliases: [] },
-    ])
+    const { PATCH } = await import('@/app/api/admin/generated-posts/route')
+    await PATCH(patch({
+      id: 'p1',
+      content: doc('Die Inferenz ist teuer.'),
+      confirmedGlossarySlugs: ['inferenz'],
+    }) as never)
+
+    expect(mocks.generateAndInsertDraft).not.toHaveBeenCalled()
+    // Nichts musste erzeugt werden → auch kein Job noetig (gleiche Regel wie
+    // openCount im Freigabe-Panel, glossary-approval-panel.tsx:74).
+    expect(mocks.createOrGetJob).not.toHaveBeenCalled()
+    // Trotzdem weiterhin veroeffentlicht und verlinkt — genau das verspricht
+    // der Panel-Text: "Bestätigte Begriffe werden beim Speichern
+    // veröffentlicht und im Artikeltext verlinkt."
+    const saved = finalUpdate()
+    expect(saved.content).toContain('glossaryLink')
+    expect(saved.pending_glossary_terms).toBeNull()
+  })
+
+  it('legt bei einem bestätigten, noch nicht existierenden Begriff einen pending-Job an, statt ihn synchron zu erzeugen', async () => {
+    state.queues = {
+      generated_posts: [{
+        data: { pending_glossary_terms: [{
+          slug: 'speculative-decoding', name: 'Speculative Decoding', origin: 'new',
+          matchedText: null, isNewlyGenerated: false, needsGeneration: true,
+        }] },
+        error: null,
+      }],
+    }
     const { PATCH } = await import('@/app/api/admin/generated-posts/route')
     await PATCH(patch({
       id: 'p1',
@@ -180,15 +212,54 @@ describe('PATCH /api/admin/generated-posts mit Glossar-Slugs', () => {
       confirmedGlossarySlugs: ['speculative-decoding'],
     }) as never)
 
-    expect(mocks.generateAndInsertDraft).toHaveBeenCalledWith(
-      expect.anything(), 'Speculative Decoding', 'speculative-decoding',
+    expect(mocks.generateAndInsertDraft).not.toHaveBeenCalled()
+    expect(mocks.createOrGetJob).toHaveBeenCalledWith(
+      expect.anything(), 'pending', { postId: 'p1', confirmedSlugs: ['speculative-decoding'] },
     )
-    // Reihenfolge ist der Kern: erst erzeugen, dann freigeben — sonst fände
-    // applyGlossaryConfirmation keinen Draft und der Artikel verlinkte auf eine
-    // notFound()-Seite.
+    // Der Begriff existiert noch nicht → applyGlossaryConfirmation kann nichts
+    // veröffentlichen, der Content bleibt ohne Mark.
     const saved = finalUpdate()
+    expect(saved.content ?? '').not.toContain('glossaryLink')
+  })
+
+  it('lässt pending_glossary_terms unangetastet, wenn EIN bestätigter Begriff schon veröffentlicht wird, ein ANDERER aber noch erzeugt werden muss', async () => {
+    // Der Kern des Auftrags: die Vormerkliste darf NICHT verfrüht geleert
+    // werden — sonst verschwindet der Kandidat, ohne je erzeugt worden zu
+    // sein. Nur runPendingUnit darf sie leeren, und nur wenn AUSNAHMSLOS ALLE
+    // bestätigten Slugs tatsächlich veröffentlicht sind (pending-run.ts).
+    //
+    // Gemischtes Szenario mit Absicht: 'inferenz' existiert schon und WIRD
+    // hier erfolgreich veröffentlicht (publishedSlugs.length > 0) —
+    // trotzdem darf die Liste nicht geleert werden, weil 'speculative-
+    // decoding' noch offen ist. Ein Test mit nur einem offenen Kandidaten
+    // würde nicht zeigen, dass die Entscheidung an "irgendein bestätigter
+    // Slug braucht noch Erzeugung" hängt und NICHT an "publishedSlugs leer".
+    state.queues = {
+      generated_posts: [{
+        data: { pending_glossary_terms: [{
+          slug: 'speculative-decoding', name: 'Speculative Decoding', origin: 'new',
+          matchedText: null, isNewlyGenerated: false, needsGeneration: true,
+        }] },
+        error: null,
+      }],
+      glossary_terms: [
+        { error: null },                                // publish-Update (nur inferenz existiert als Draft)
+        { data: [{ slug: 'inferenz' }], error: null },   // Status-Check: nur inferenz wirklich published
+      ],
+    }
+    const { PATCH } = await import('@/app/api/admin/generated-posts/route')
+    await PATCH(patch({
+      id: 'p1',
+      content: doc('Die Inferenz und Speculative Decoding.'),
+      confirmedGlossarySlugs: ['inferenz', 'speculative-decoding'],
+    }) as never)
+
+    const saved = finalUpdate()
+    // inferenz wurde tatsaechlich veroeffentlicht+verlinkt ...
     expect(saved.content).toContain('glossaryLink')
-    expect(saved.pending_glossary_terms).toBeNull()
+    // ... trotzdem bleibt die Vormerkliste unangetastet. undefined, nicht
+    // null: der Schlüssel darf im Update-Payload gar nicht erst auftauchen.
+    expect(saved.pending_glossary_terms).toBeUndefined()
   })
 
   it('lässt pending_glossary_terms unangetastet, wenn die Freigabe komplett fehlschlägt', async () => {
@@ -221,12 +292,14 @@ describe('PATCH /api/admin/generated-posts mit Glossar-Slugs', () => {
         { data: [{ slug: 'inferenz' }], error: null },
       ],
       generated_posts: [
-        // Seit der Entkopplung läuft ensureConfirmedTermsExist VOR der Freigabe
-        // und fragt zuerst die Kandidatenliste ab — hier leer, es gibt nichts
-        // zu erzeugen. Ohne diesen Eintrag griffe sich die Kandidaten-Abfrage
-        // die Antwort des Content-Fallbacks (FIFO pro Tabelle).
-        { data: { pending_glossary_terms: null }, error: null },
+        // Reihenfolge seit dem Umbau 2026-08-06: applyGlossaryConfirmation
+        // läuft ZUERST und lädt den Content selbst nach (kein content im
+        // Body) — erst DANACH liest die Route pending_glossary_terms für die
+        // needsGeneration-Prüfung. Ohne diesen Fallback-Eintrag zuerst griffe
+        // sich die needsGeneration-Prüfung die falsche Antwort (FIFO pro
+        // Tabelle).
         { data: { content: doc('Die Inferenz ist teuer.') }, error: null }, // Fallback-Fetch
+        { data: { pending_glossary_terms: null }, error: null },
       ],
     }
     const { PATCH } = await import('@/app/api/admin/generated-posts/route')

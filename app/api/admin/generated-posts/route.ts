@@ -7,15 +7,16 @@ import { queueTranslations } from '@/lib/translations/queue'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
 import { embedPostContent, upsertPostEmbedding } from '@/lib/search/embeddings'
 import { applyGlossaryConfirmation } from '@/lib/glossary/confirm'
-import { ensureConfirmedTermsExist } from '@/lib/glossary/ensure-terms'
+import { createOrGetJob } from '@/lib/glossary/jobs/service'
+import type { GlossaryCandidate } from '@/lib/glossary/types'
 
-// Der PATCH-Pfad erzeugt seit der Lexikon-Entkopplung (2026-08-04) bei einer
-// Freigabe bis zu MAX_GENERATE_PER_SAVE Begriffe, also LLM-Calls plus
-// Bildgenerierung. Ohne diese Deklaration liefe die Route auf dem Plattform-
-// Default — dieselbe latente Lücke, die der Task-18-Review für
-// app/api/admin/glossary/route.ts gemeldet hat: ein Bedien-Einstieg macht aus
-// einer theoretischen Laufzeitfrage eine reale.
-export const maxDuration = 300
+// maxDuration=300 ist raus (Umbau 2026-08-06): das war ausschliesslich fuer
+// die synchrone Begriffs-Erzeugung im PATCH-Pfad da (bis zu drei Begriffe a
+// 45-90s, also bis zu 270s direkt am 300s-Limit — der Betreiber sah einen
+// haengenden Speichern-Knopf, im schlechten Fall einen 504). Diese Erzeugung
+// laeuft jetzt im servergetriebenen 'pending'-Job (s. PATCH unten), der PATCH-
+// Pfad selbst macht nur noch schnelle DB-Updates. Der Vercel-Plattform-Default
+// reicht dafuer.
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -207,35 +208,68 @@ export async function PATCH(request: NextRequest) {
     // serverseitig, nicht im Client — der Browser hat keinen Service-Role-
     // Zugriff, und dieselbe Injektion muss auch die Übersetzungs- und
     // Backfill-Pfade bedienen, die nie über den Editor laufen.
-    if (Array.isArray(body.confirmedGlossarySlugs)) {
-      // Reihenfolge ist zwingend: bestätigte Begriffe, die es noch nicht gibt,
-      // werden ERST erzeugt (Entkopplung 2026-08-04, Befund B — die
-      // lexicon-Phase merkt nur vor). Danach findet applyGlossaryConfirmation
-      // den Draft vor und kann ihn veröffentlichen; ohne diesen Schritt
-      // verlinkte der Artikel auf eine notFound()-Seite.
-      const ensured = await ensureConfirmedTermsExist(supabase, id, body.confirmedGlossarySlugs)
+    if (Array.isArray(body.confirmedGlossarySlugs) && body.confirmedGlossarySlugs.length > 0) {
+      const confirmedSlugs = body.confirmedGlossarySlugs as string[]
 
+      // Umbau 2026-08-06: hier wird NICHTS mehr erzeugt. Bestätigte Begriffe,
+      // die schon als Draft existieren, werden weiterhin synchron
+      // veröffentlicht und im Artikeltext verlinkt (applyGlossaryConfirmation)
+      // — das verspricht der Panel-Text wörtlich ("Bestätigte Begriffe werden
+      // beim Speichern veröffentlicht und im Artikeltext verlinkt"). Begriffe,
+      // die es noch nicht gibt, findet applyGlossaryConfirmation einfach
+      // nicht (der .eq('status','draft')-Filter trifft nichts) — ihre
+      // Erzeugung übernimmt weiter unten der 'pending'-Job.
       const result = await applyGlossaryConfirmation(
         supabase,
         id,
-        body.confirmedGlossarySlugs,
+        confirmedSlugs,
         updateData.content as string | undefined,
       )
       if (result.content !== undefined) updateData.content = result.content
-      // Nur leeren, wenn die Freigabe für mindestens einen Slug tatsächlich
-      // gegriffen hat — sonst bleibt die Kandidatenliste erhalten, statt bei
-      // z.B. einem kurzzeitigen DB-Fehler spurlos zu verschwinden, während
-      // der Begriff weiterhin unveröffentlicht bleibt.
-      //
-      // pendingRemainder hat Vorrang vor dem Leeren: hat der Deckel
-      // (MAX_GENERATE_PER_SAVE) Kandidaten abgeschnitten oder ist eine
-      // Generierung fehlgeschlagen, wird die gekürzte Liste geschrieben statt
-      // null. Sonst müsste der Operator die Begriffe neu identifizieren lassen
-      // — ein LLM-Call, um Information wiederzubeschaffen, die wir gerade
-      // gelöscht hätten.
-      if (ensured.pendingRemainder !== null) {
-        updateData.pending_glossary_terms = ensured.pendingRemainder
+
+      // Braucht mindestens einer der bestätigten Slugs noch eine Erzeugung?
+      // Gleiche Regel wie openCount im Freigabe-Panel
+      // (glossary-approval-panel.tsx:74) — ohne diese Prüfung würde JEDES
+      // Speichern mit ausschließlich bereits vorhandenen bestätigten
+      // Begriffen einen leeren, sich selbst sofort schließenden Job anlegen.
+      const { data: postRow } = await supabase
+        .from('generated_posts')
+        .select('pending_glossary_terms')
+        .eq('id', id)
+        .maybeSingle()
+      const pendingTerms = ((postRow as { pending_glossary_terms?: unknown } | null)
+        ?.pending_glossary_terms ?? []) as GlossaryCandidate[]
+      const confirmedSet = new Set(confirmedSlugs)
+      const needsGeneration = pendingTerms.some(
+        (c) => confirmedSet.has(c.slug) && c.needsGeneration,
+      )
+
+      if (needsGeneration) {
+        // pending_glossary_terms bleibt hier UNANGETASTET — das ist der Kern
+        // dieses Umbaus. Sie wird ausschließlich von runPendingUnit geleert,
+        // und zwar erst, wenn AUSNAHMSLOS ALLE bestätigten Slugs tatsächlich
+        // veröffentlicht wurden (Review-Fund 2026-08-05, pending-run.ts). Ein
+        // Leeren hier — unabhängig davon, ob result.publishedSlugs für andere,
+        // schon existierende Slugs nicht-leer ist — wäre genau der
+        // Datenverlust-Pfad, der gestern geschlossen wurde: ein noch nicht
+        // erzeugter Kandidat würde spurlos aus der Liste verschwinden.
+        //
+        // createOrGetJob ist idempotent (glossary_jobs_one_open_per_kind,
+        // geschlüsselt nach (kind, postId)) — ein zweites Speichern liefert
+        // den bereits laufenden Job zurück statt zu scheitern.
+        try {
+          await createOrGetJob(supabase, 'pending', { postId: id, confirmedSlugs })
+        } catch (err) {
+          // Das Anlegen des Jobs ist eine Zugabe zum Speichern des Artikels —
+          // sie darf ihn unter keinen Umständen mitnehmen (gleiches Prinzip
+          // wie vorher bei ensureConfirmedTermsExist). Ein erneuter
+          // Speicherversuch oder ein Klick im Freigabe-Panel kann es
+          // nachholen.
+          console.error(`[Glossary] Pending-Job für Post ${id} nicht anlegbar:`, err)
+        }
       } else if (result.publishedSlugs.length > 0) {
+        // Nichts musste erzeugt werden — derselbe Endzustand wie vor diesem
+        // Umbau: die Liste ist abgearbeitet, sie kann geleert werden.
         updateData.pending_glossary_terms = null
       }
     }
