@@ -23,7 +23,7 @@
  * nach dem Crawl wieder verschwinden.
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
-import { identifyCandidates, slugify } from '@/lib/glossary/generate'
+import { identifyCandidates, slugify, normalizeSlugForDedup } from '@/lib/glossary/generate'
 import { generateAndInsertDraft, lastGenerationFailureWasRetryable } from '@/lib/glossary/draft-writer'
 import { assignProducts } from '@/lib/glossary/products'
 import { extractVisibleText } from '@/lib/posts/product-mentions'
@@ -370,17 +370,27 @@ export interface GenerationResult {
  * ("AES-Standard" und "AES Standard") — der zweite wuerde am selben Constraint
  * scheitern.
  */
+/**
+ * Vergleicht ueber den NORMALISIERTEN Slug (normalizeSlugForDedup), nicht nur
+ * ueber den exakten. Ein exakter Treffer ist ein Sonderfall eines
+ * normalisierten Treffers (ein Slug normalisiert immer zu sich selbst gleich),
+ * die bisherige Faehigkeit bleibt also erhalten - zusaetzlich faengt es jetzt
+ * Schreibvarianten wie "Eval"/"Evals" oder "Pretraining"/"Pre-Training" ab, die
+ * exakte Gleichheit nicht sieht (Befund 2026-08-06: vier solche Paare in Prod,
+ * jedes einmal generiert UND bezahlt, weil sie zwei verschiedene Slugs ergeben).
+ */
 export function partitionByExisting(
   queue: Array<[string, number]>,
   existingSlugs: Set<string>,
 ): { toGenerate: Array<[string, number]>; alreadyExisting: string[] } {
-  const seen = new Set(existingSlugs)
+  const seen = new Set([...existingSlugs].map(normalizeSlugForDedup))
   const toGenerate: Array<[string, number]> = []
   const alreadyExisting: string[] = []
   for (const entry of queue) {
     const slug = slugify(entry[0])
-    if (seen.has(slug)) { alreadyExisting.push(entry[0]); continue }
-    seen.add(slug)
+    const key = normalizeSlugForDedup(slug)
+    if (seen.has(key)) { alreadyExisting.push(entry[0]); continue }
+    seen.add(key)
     toGenerate.push(entry)
   }
   return { toGenerate, alreadyExisting }
@@ -437,11 +447,30 @@ export async function generateCandidates(
   // der Extraktion auf anderem Weg entstanden sind, stehen sonst weiter in der
   // Warteschlange und kosten je einen vollen Generierungslauf, bevor der Insert
   // an ihrem Unique-Constraint scheitert (Prod-Befund 2026-08-05).
-  const { data: existingRows } = await supabase
-    .from('glossary_terms')
-    .select('slug')
-    .in('slug', rawQueue.map(([name]) => slugify(name)))
-  const existingSlugs = new Set((existingRows ?? []).map((r) => r.slug as string))
+  //
+  // GANZER Bestand, nicht nur die exakten Slugs der aktuellen Warteschlange
+  // (frueher: .in('slug', rawQueue...)): partitionByExisting vergleicht seit
+  // Befund 2026-08-06 normalisiert (ohne Bindestriche, ohne End-"s"), und eine
+  // normalisierte Kollision kann gegen JEDEN vorhandenen Slug auftreten, nicht
+  // nur gegen einen exakt gleich geschriebenen. "Eval" haette gegen die enge
+  // Abfrage nie "evals" gesehen, weil "eval" != "evals" als Suchstring. Kein
+  // Status-Filter: ein Insert scheitert am Unique-Constraint unabhaengig davon,
+  // ob die bestehende Zeile published/draft/hidden ist. Nur die schmale Spalte
+  // (kein body/summary), paginiert - PostgREST kappt sonst still bei 1000 Zeilen.
+  const existingSlugs = new Set<string>()
+  for (let offset = 0; ; offset += 1000) {
+    const { data: existingRows, error: existingError } = await supabase
+      .from('glossary_terms')
+      .select('slug')
+      .range(offset, offset + 999)
+    if (existingError) {
+      console.error('[GlossaryCrawl] Bestand nicht ladbar:', existingError.message)
+      break
+    }
+    if (!existingRows?.length) break
+    for (const r of existingRows) existingSlugs.add(r.slug as string)
+    if (existingRows.length < 1000) break
+  }
 
   const { toGenerate, alreadyExisting } = partitionByExisting(rawQueue, existingSlugs)
   const queue = toGenerate.slice(0, Math.max(1, limit))

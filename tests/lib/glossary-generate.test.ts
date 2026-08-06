@@ -49,6 +49,59 @@ describe('slugify', () => {
   })
 })
 
+describe('normalizeSlugForDedup', () => {
+  it('entfernt Bindestriche', async () => {
+    const { normalizeSlugForDedup } = await import('@/lib/glossary/generate')
+    expect(normalizeSlugForDedup('pre-training')).toBe('pretraining')
+  })
+
+  it('entfernt genau einen End-"s"', async () => {
+    const { normalizeSlugForDedup } = await import('@/lib/glossary/generate')
+    expect(normalizeSlugForDedup('evals')).toBe('eval')
+    // Nur EINEN End-"s", kein rekursives Strippen.
+    expect(normalizeSlugForDedup('kubernetes')).toBe('kubernete')
+  })
+
+  it('fasst die vier in Prod gefundenen Dubletten-Paare zusammen (2026-08-06)', async () => {
+    const { normalizeSlugForDedup } = await import('@/lib/glossary/generate')
+    const pairs: Array<[string, string]> = [
+      ['eval', 'evals'],
+      ['leveraged-etf', 'leveraged-etfs'],
+      ['pre-training', 'pretraining'],
+      ['time-series-foundation-model', 'time-series-foundation-models'],
+    ]
+    for (const [a, b] of pairs) {
+      expect(normalizeSlugForDedup(a)).toBe(normalizeSlugForDedup(b))
+    }
+  })
+
+  it('wirft inhaltlich verschiedene Begriffe nicht zusammen, an den echten Daten geprueft', async () => {
+    // Snapshot aller 471 am 2026-08-06 veroeffentlichten Slugs (Prod). Wenn diese
+    // Regel jemals zu aggressiv wird, faellt es hier auf - nicht erst am naechsten
+    // False-Positive in Prod. Die vier Paare oben sind die EINZIGEN Kollisionen in
+    // diesem Bestand; alle anderen 463 Slugs bleiben nach der Normalisierung
+    // eindeutig.
+    const { normalizeSlugForDedup } = await import('@/lib/glossary/generate')
+    const slugs = (await import('../fixtures/glossary-slugs-2026-08-06.json')).default as string[]
+    expect(slugs.length).toBe(471)
+
+    const groups = new Map<string, string[]>()
+    for (const slug of slugs) {
+      const key = normalizeSlugForDedup(slug)
+      const g = groups.get(key) ?? []
+      g.push(slug)
+      groups.set(key, g)
+    }
+    const collisions = [...groups.values()].filter((g) => g.length > 1)
+    expect(collisions.sort()).toEqual([
+      ['eval', 'evals'],
+      ['leveraged-etf', 'leveraged-etfs'],
+      ['pre-training', 'pretraining'],
+      ['time-series-foundation-model', 'time-series-foundation-models'],
+    ])
+  })
+})
+
 describe('identifyCandidates', () => {
   it('schlägt neue Begriffe aus dem Artikeltext vor', async () => {
     mocks.create.mockResolvedValueOnce(toolUse({ candidates: ['Retrieval-Augmented Generation'] }))

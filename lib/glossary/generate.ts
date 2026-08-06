@@ -34,6 +34,30 @@ export function slugify(name: string): string {
   return s
 }
 
+/**
+ * Normalisiert einen Slug für den Dubletten-Vergleich: ohne Bindestriche und
+ * ohne einen einzelnen End-"s". Exakte Slug-Gleichheit übersieht Schreibvarianten
+ * wie "Eval"/"Evals" (Singular/Plural) oder "Pretraining"/"Pre-Training"
+ * (Bindestrich) - beide ergeben unterschiedliche Slugs und wurden in Prod als
+ * zwei getrennte Begriffe erzeugt (Befund 2026-08-06, vier solche Paare unter
+ * 471 veröffentlichten Begriffen, je einmal voll bezahlt: zwei Opus-Aufrufe pro
+ * Begriff).
+ *
+ * Geprüft an genau diesem Bestand (tests/fixtures/glossary-published-slugs.ts):
+ * die Regel erzeugt dort KEINE Kollision zwischen inhaltlich verschiedenen
+ * Begriffen - nur die vier tatsächlichen Dubletten normalisieren gleich, alle
+ * übrigen 463 bleiben eindeutig.
+ *
+ * Rein syntaktisch und bewusst eng: erkennt keine echten Synonyme, bei denen
+ * Wortstamm oder Sprache wechselt (z.B. "Evaluation"/"Eval" - beobachtet im
+ * selben Bestand, aber ein anderes Wort, kein Schreibfehler; "Foundation
+ * Model"/"Fundamentmodell" bräuchte Embeddings). Dafür ist diese Funktion nicht
+ * gedacht - sie fängt nur die Bindestrich-/Pluralvariante DESSELBEN Worts.
+ */
+export function normalizeSlugForDedup(slug: string): string {
+  return slug.replace(/-/g, '').replace(/s$/, '')
+}
+
 // ---------------------------------------------------------------------------
 // TipTap-Body
 // ---------------------------------------------------------------------------
