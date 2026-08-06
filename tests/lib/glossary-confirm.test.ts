@@ -14,6 +14,14 @@ import { KNOWN_COMPANIES } from '@/lib/data/companies'
 const mocks = vi.hoisted(() => ({
   getMatcherTerms: vi.fn(),
   getChartProductNames: vi.fn(() => Promise.resolve([] as string[])),
+  translatePublishedTerms: vi.fn(() => Promise.resolve({ translated: 0, failed: 0 })),
+}))
+
+// translatePublishedTerms macht pro Begriff einen echten Modellaufruf und wird
+// in confirm.ts dynamisch importiert. Gemockt, um zu pruefen WELCHE Begriffe
+// uebersetzt werden — das ist der Kern des Prod-Haengers vom 2026-08-06.
+vi.mock('@/lib/glossary/translate', () => ({
+  translatePublishedTerms: mocks.translatePublishedTerms,
 }))
 
 // buildReservedNames bleibt die ECHTE Implementierung (importOriginal) — sie
@@ -87,6 +95,54 @@ beforeEach(() => {
   ])
   mocks.getChartProductNames.mockClear()
   mocks.getChartProductNames.mockResolvedValue([])
+  mocks.translatePublishedTerms.mockClear()
+})
+
+describe('applyGlossaryConfirmation — Uebersetzung nach Freigabe', () => {
+  it('uebersetzt nur die in DIESEM Aufruf frisch veroeffentlichten Begriffe', async () => {
+    // Prod-Haenger 2026-08-06: ein Artikel mit 109 bestaetigten Begriffen liess
+    // den pending-Job endlos im 6-Minuten-Takt neu starten. Ursache war hier —
+    // uebersetzt wurde nicht die frische Freigabe ("typisch 1-3", so der
+    // Kommentar), sondern JEDER bestaetigte Slug, der published ist: 106
+    // Modellaufrufe pro Tick, weit ueber maxDuration=300. Der Tick starb, bevor
+    // er Fortschritt, Protokoll oder attempts schreiben konnte.
+    const { applyGlossaryConfirmation } = await import('@/lib/glossary/confirm')
+    const supabase = fakeSupabase({
+      glossary_terms: [
+        // publish-Update: NUR 'frisch' wechselt von draft auf published und
+        // kommt deshalb aus dem .select() zurueck.
+        { data: [{ id: 'id-frisch' }], error: null },
+        // Status-Check: beide sind published (einer war es schon vorher).
+        { data: [{ slug: 'frisch' }, { slug: 'laengst-da' }], error: null },
+      ],
+    })
+
+    await applyGlossaryConfirmation(
+      supabase as never, 'p1', ['frisch', 'laengst-da'], JSON.stringify(doc('Ein Text.')),
+    )
+
+    expect(mocks.translatePublishedTerms).toHaveBeenCalledTimes(1)
+    expect(mocks.translatePublishedTerms).toHaveBeenCalledWith(['id-frisch'])
+  })
+
+  it('ruft die Uebersetzung gar nicht, wenn kein Begriff frisch veroeffentlicht wurde', async () => {
+    // Der wiederholte Abschluss eines Jobs (jeder Tick ruft applyGlossary-
+    // Confirmation erneut) darf keine einzige Uebersetzung ausloesen, sonst
+    // bezahlt man dieselbe Arbeit bei jedem Durchlauf neu.
+    const { applyGlossaryConfirmation } = await import('@/lib/glossary/confirm')
+    const supabase = fakeSupabase({
+      glossary_terms: [
+        { data: [], error: null },
+        { data: [{ slug: 'laengst-da' }], error: null },
+      ],
+    })
+
+    await applyGlossaryConfirmation(
+      supabase as never, 'p1', ['laengst-da'], JSON.stringify(doc('Ein Text.')),
+    )
+
+    expect(mocks.translatePublishedTerms).not.toHaveBeenCalled()
+  })
 })
 
 describe('applyGlossaryConfirmation', () => {

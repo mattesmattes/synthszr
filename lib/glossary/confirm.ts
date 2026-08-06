@@ -44,14 +44,19 @@ export async function applyGlossaryConfirmation(
 
   // Bestätigte Drafts veröffentlichen — erst damit wird die Lexikonseite
   // erreichbar und landet in der Sitemap.
-  const { error: publishError } = await supabase
+  // `.select()` liefert GENAU die Zeilen zurück, die dieses Update getroffen
+  // hat — also die in diesem Aufruf frisch von draft auf published gewechselten.
+  // Diese Menge (und nur sie) wird unten übersetzt.
+  const { data: freshRows, error: publishError } = await supabase
     .from('glossary_terms')
     .update({ status: 'published', updated_at: new Date().toISOString() })
     .in('slug', confirmedSlugs)
     .eq('status', 'draft')
+    .select('id')
   if (publishError) {
     console.error(`[Glossary] Freigabe fehlgeschlagen für Post ${postId}:`, publishError.message)
   }
+  const freshlyPublishedIds = ((freshRows ?? []) as Array<{ id: string }>).map((r) => r.id)
 
   const { data: statusRows, error: statusError } = await supabase
     .from('glossary_terms')
@@ -65,17 +70,22 @@ export async function applyGlossaryConfirmation(
   if (publishedSlugs.length === 0) return { publishedSlugs }
 
   // Frisch veröffentlichte Begriffe gleich übersetzen — sonst bleiben sie auf
-  // /en/glossary/* deutsch. Die Menge ist durch die Freigabe des Operators
-  // begrenzt (typisch 1-3), nicht durch die Zahl aller Kandidaten.
-  // translatePublishedTerms wirft nie: eine fehlende Übersetzung darf das
-  // Speichern des Artikels nicht kosten.
+  // /en/glossary/* deutsch. translatePublishedTerms wirft nie: eine fehlende
+  // Übersetzung darf das Speichern des Artikels nicht kosten.
+  //
+  // NUR die frische Freigabe, nicht `publishedSlugs`: das ist die Liste ALLER
+  // bestätigten Slugs, die published sind — bei einem Artikel mit vielen
+  // Begriffen also fast alle, und translateTerm prüft nicht, ob schon eine
+  // Übersetzung existiert, sondern ruft immer das Modell. Prod-Hänger
+  // 2026-08-06: ein Artikel mit 109 bestätigten Begriffen erzeugte hier 106
+  // Modellaufrufe pro Durchlauf, weit über maxDuration=300. Der pending-Job
+  // starb dadurch in jedem Tick, bevor er Fortschritt, Protokoll oder
+  // attempts schreiben konnte — Endlosschleife im 6-Minuten-Lease-Takt ohne
+  // jeden Hinweis im Panel.
   try {
-    const { data: idRows } = await supabase
-      .from('glossary_terms').select('id').in('slug', publishedSlugs)
-    const ids = ((idRows ?? []) as Array<{ id: string }>).map((r) => r.id)
-    if (ids.length > 0) {
+    if (freshlyPublishedIds.length > 0) {
       const { translatePublishedTerms } = await import('@/lib/glossary/translate')
-      await translatePublishedTerms(ids)
+      await translatePublishedTerms(freshlyPublishedIds)
     }
   } catch (err) {
     console.error(`[Glossary] Übersetzung nach Freigabe für Post ${postId} fehlgeschlagen:`, err)
