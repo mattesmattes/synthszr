@@ -380,6 +380,33 @@ describe('requestCancel', () => {
     expect(chain.update).toHaveBeenCalledWith({ cancel_requested: true })
     expect(chain.in).toHaveBeenCalledWith('status', ['pending', 'processing'])
   })
+
+  it('beendet einen noch nie aufgenommenen Job sofort, statt nur das Flag zu setzen', async () => {
+    // Prod-Fall 2026-08-06: ein relink-Job stand 2h45 auf 'pending' mit
+    // cancel_requested=true. Das Flag wird nur INNERHALB von advanceJob
+    // ausgewertet - ein Job, den der Cron wegen der Serialisierung nie
+    // aufnimmt, wartet also darauf, drankommen zu duerfen, um sich
+    // abzubrechen. Ein pending-Job hat keine laufende Arbeitseinheit und
+    // darf deshalb sofort beendet werden.
+    const { requestCancel } = await import('@/lib/glossary/jobs/service')
+    state.queues['glossary_jobs'] = [
+      { data: null, error: null },
+      { data: null, error: null },
+    ]
+
+    await requestCancel(client, 'relink')
+
+    const chains = state.chains['glossary_jobs']
+    expect(chains).toHaveLength(2)
+    const payload = chains[1].update.mock.calls[0][0]
+    expect(payload.status).toBe('cancelled')
+    expect(payload.finished_at).toBeTypeOf('string')
+    expect(chains[1].eq).toHaveBeenCalledWith('kind', 'relink')
+    // Atomar: hat der Cron den Job zwischen beiden Updates auf 'processing'
+    // gehoben, darf dieses hier nicht mehr greifen - dann uebernimmt der
+    // Flag-Pfad, der die laufende Einheit zu Ende laufen laesst.
+    expect(chains[1].eq).toHaveBeenCalledWith('status', 'pending')
+  })
 })
 
 describe('finishJob', () => {

@@ -317,6 +317,21 @@ export async function requestCancel(supabase: AdminClient, kind: GlossaryJobKind
     .update({ cancel_requested: true })
     .eq('kind', kind)
     .in('status', OPEN as unknown as string[])
+
+  // Ein Job in 'pending' wurde noch nie aufgenommen und hat keine laufende
+  // Arbeitseinheit — er darf sofort enden. Ohne das haengt er, solange ein
+  // anderer Lauf den seriellen Slot haelt: cancel_requested wird nur
+  // INNERHALB von advanceJob geprueft, ein nie aufgenommener Job sieht das
+  // Flag also nie und wartet darauf, drankommen zu duerfen, um sich
+  // abzubrechen (Prod-Fall 2026-08-06: relink stand 2h45 so da).
+  // Das .eq('status','pending') macht es atomar — hat der Cron ihn inzwischen
+  // auf 'processing' gehoben, greift dieses Update nicht mehr und der
+  // Flag-Pfad oben beendet ihn sauber zwischen zwei Einheiten.
+  await supabase
+    .from('glossary_jobs')
+    .update({ status: 'cancelled', finished_at: new Date().toISOString() })
+    .eq('kind', kind)
+    .eq('status', 'pending')
 }
 
 export async function finishJob(
