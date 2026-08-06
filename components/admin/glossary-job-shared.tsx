@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export type JobKind = 'generate' | 'images' | 'relink' | 'pending' | 'translations' | 'term-translations'
 
@@ -84,6 +85,44 @@ export function useJob(kind: JobKind, postId?: string, onFinished?: () => void) 
   }, [job?.status, onFinished, job])
 
   return { job, reload: load }
+}
+
+/**
+ * Abbrechen-Knopf eines offenen Laufs — mit dem NAMEN des Laufs und seinem
+ * Fortschritt auf dem Knopf.
+ *
+ * Vorher stand an allen sechs Stellen nur "Abbrechen". Bei mehreren gleichzeitig
+ * offenen Laeufen war damit nicht erkennbar, WELCHER noch laeuft: der Knopf sass
+ * in der Leiste oben, sein Protokollblock aber weit unten (die Leiste wurde
+ * bewusst nach oben gezogen, s. glossary-crawl-panel). Ein aktiver Lauf sah
+ * dadurch wie ein Haenger aus — beobachtet am 2026-08-06, als
+ * term-translations mit 43 von 133 arbeitete, waehrend im sichtbaren
+ * Protokollblock darueber "Fertig — 249 Begriffe erzeugt." des generate-Laufs
+ * stand. Der Fortschritt gehoert deshalb an den Knopf, nicht nur ins Protokoll.
+ */
+export function JobCancelButton({
+  job,
+  label,
+  onCancel,
+}: {
+  job: JobView | null
+  label: string
+  onCancel: () => void
+}) {
+  // total ist bei relink NULL (die Zahl der zu pruefenden Artikel haengt am
+  // Cursor und steht nicht vorab fest) — dann nur den Zaehler zeigen, sonst
+  // stuende dort "5/null".
+  const progress = !job
+    ? ''
+    : job.total !== null
+      ? ` (${job.done_count}/${job.total})`
+      : ` (${job.done_count})`
+  return (
+    <Button size="sm" variant="destructive" onClick={onCancel}>
+      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      {label} abbrechen{progress}
+    </Button>
+  )
 }
 
 /**

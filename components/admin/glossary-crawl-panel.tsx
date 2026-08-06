@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, RefreshCw, Search, Sparkles, RotateCcw, AlertCircle, Image as ImageIcon } from 'lucide-react'
-import { useJob, JobLog, isJobOpen, type JobKind } from '@/components/admin/glossary-job-shared'
+import { useJob, JobLog, JobCancelButton, isJobOpen, type JobKind } from '@/components/admin/glossary-job-shared'
 
 interface CrawlStatus {
   postsProcessed: number
@@ -383,10 +383,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                 Warteschlange ab, ohne Zeitlimit und mit sichtbarem Protokoll,
                 und laesst sich jederzeit abbrechen. */}
             {termsRunning ? (
-              <Button size="sm" variant="destructive" onClick={() => void stopJob('generate')}>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Abbrechen
-              </Button>
+              <JobCancelButton
+                job={termsJob.job}
+                label="Erzeugen"
+                onCancel={() => void stopJob('generate')}
+              />
             ) : (
               <Button
                 size="sm"
@@ -400,10 +401,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
               </Button>
             )}
             {imagesRunning ? (
-              <Button size="sm" variant="destructive" onClick={() => void stopJob('images')}>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Abbrechen
-              </Button>
+              <JobCancelButton
+                job={imagesJob.job}
+                label="Illustrationen"
+                onCancel={() => void stopJob('images')}
+              />
             ) : (
               <Button
                 size="sm"
@@ -420,10 +422,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                 KEINE Modell-Aufrufe macht: er ist schnell und kostenlos, ganz
                 anders als die Begriffs- und Bilderzeugung daneben. */}
             {relinkRunning ? (
-              <Button size="sm" variant="destructive" onClick={() => void stopJob('relink')}>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Abbrechen
-              </Button>
+              <JobCancelButton
+                job={relinkJob.job}
+                label="Nachverlinken"
+                onCancel={() => void stopJob('relink')}
+              />
             ) : (
               <span className="inline-flex items-center gap-1.5">
                 <input
@@ -452,10 +455,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                 lief bisher immer, bevor der deutsche Quelltext verlinkt war.
                 Ohne diesen Knopf holen sie es nie nach. Kein Modellaufruf. */}
             {translationsRunning ? (
-              <Button size="sm" variant="destructive" onClick={() => void stopJob('translations')}>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Abbrechen
-              </Button>
+              <JobCancelButton
+                job={translationsJob.job}
+                label="Übersetzungen verlinken"
+                onCancel={() => void stopJob('translations')}
+              />
             ) : (
               <Button
                 size="sm"
@@ -473,10 +477,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                 nur Marks setzen. Die Zahl steht im Text, damit vor dem Klick
                 klar ist, wie viel Arbeit ausgeloest wird. */}
             {termTranslationsRunning ? (
-              <Button size="sm" variant="destructive" onClick={() => void stopJob('term-translations')}>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Abbrechen
-              </Button>
+              <JobCancelButton
+                job={termTranslationsJob.job}
+                label="Begriffe übersetzen"
+                onCancel={() => void stopJob('term-translations')}
+              />
             ) : (
               <Button
                 size="sm"

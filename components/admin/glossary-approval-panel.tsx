@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
-import { useJob, JobLog, isJobOpen } from '@/components/admin/glossary-job-shared'
+import { useJob, JobLog, JobCancelButton, isJobOpen } from '@/components/admin/glossary-job-shared'
 import type { GlossaryCandidate } from '@/lib/glossary/types'
 
 const ORIGIN_LABELS: Record<GlossaryCandidate['origin'], string> = {
@@ -158,10 +158,11 @@ export function GlossaryApprovalPanel({ candidates, value, onChange, postId, run
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             {jobOpen ? (
-              <Button size="sm" variant="destructive" onClick={() => void stopJob()}>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Abbrechen
-              </Button>
+              <JobCancelButton
+                job={job ?? null}
+                label="Erzeugen"
+                onCancel={() => void stopJob()}
+              />
             ) : (
               <Button
                 size="sm"
