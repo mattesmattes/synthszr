@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { appendLog, finishJob, getNextOpenJob, releaseLease, setAttempts, stampLease } from '@/lib/glossary/jobs/service'
+import { appendLog, claimJob, finishJob, getNextOpenJob, releaseLease } from '@/lib/glossary/jobs/service'
 import { advanceJob, MAX_ATTEMPTS, stamp } from '@/lib/glossary/jobs/advance'
 
 export const maxDuration = 300
@@ -24,7 +24,25 @@ export async function GET(request: NextRequest) {
   const job = await getNextOpenJob(supabase)
   if (!job) return NextResponse.json({ ok: true, idle: true })
 
-  await stampLease(supabase, job.id)
+  // Aufgeben, BEVOR gearbeitet wird: hat der Job MAX_ATTEMPTS Ticks hinter
+  // sich, ohne dass einer davon Fortschritt gemeldet hat, ist er hin. Dieser
+  // Check ist der einzige Ausweg aus einem Tick, der ins Function-Timeout
+  // laeuft — ein hart beendeter Prozess kann selbst nichts mehr schreiben
+  // (Befund 2026-08-06, s. claimJob).
+  if (job.attempts >= MAX_ATTEMPTS) {
+    await finishJob(
+      supabase, job.id, 'error',
+      `Nach ${MAX_ATTEMPTS} Durchgaengen ohne Fortschritt aufgegeben. Haeufigste Ursache: eine `
+      + 'Arbeitseinheit laeuft ins Zeitlimit der Function (300s) und wird hart beendet. '
+      + 'Server-Log des letzten Ticks pruefen.',
+    )
+    return NextResponse.json({ ok: false, kind: job.kind, error: 'max attempts' })
+  }
+
+  // Versuch zaehlen und Lease stempeln in EINEM Update, vor der Arbeit.
+  const attempt = job.attempts + 1
+  await claimJob(supabase, job.id, attempt)
+  job.attempts = attempt
 
   try {
     const result = await advanceJob(supabase, job)
@@ -46,16 +64,16 @@ export async function GET(request: NextRequest) {
     // schlechter werden.
     await appendLog(supabase, job, [{ at: stamp(), text: `Tick fehlgeschlagen: ${message}`, ok: false }], 0)
 
-    const attempts = job.attempts + 1
-    if (attempts >= MAX_ATTEMPTS) {
-      await finishJob(supabase, job.id, 'error', `Tick wiederholt fehlgeschlagen: ${message}`)
-    } else {
-      await setAttempts(supabase, job.id, attempts)
-      // Lease freigeben: sonst nimmt der naechste Cron den Job erst nach
-      // LEASE_STALE_MS (6 Minuten) wieder auf statt in der naechsten Minute —
-      // gleiche Begruendung wie releaseLease im Ueberlast-Pfad von advanceJob.
-      await releaseLease(supabase, job.id)
-    }
+    // Nicht mehr hier zaehlen: claimJob hat den Versuch schon beim Aufnehmen
+    // persistiert, und der Check oben eskaliert beim naechsten Tick. Ein
+    // zweites Hochzaehlen an dieser Stelle wuerde eine Exception doppelt
+    // gewichten gegenueber einem Timeout — der Grenzfall, dessen ungleiche
+    // Behandlung den Hänger vom 2026-08-06 ueberhaupt erst unsichtbar machte.
+    //
+    // Lease freigeben: sonst nimmt der naechste Cron den Job erst nach
+    // LEASE_STALE_MS (6 Minuten) wieder auf statt in der naechsten Minute —
+    // gleiche Begruendung wie releaseLease im Ueberlast-Pfad von advanceJob.
+    await releaseLease(supabase, job.id)
 
     // ok:false statt wie vorher ok:true — sonst sieht man dem Cron-Log nicht
     // an, dass der Tick geplatzt ist. Statuscode bleibt 200, weil Vercel den

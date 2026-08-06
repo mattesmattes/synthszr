@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   verifyCronAuth: vi.fn(),
   getNextOpenJob: vi.fn(),
   stampLease: vi.fn(),
+  claimJob: vi.fn(),
   appendLog: vi.fn(),
   finishJob: vi.fn(),
   setAttempts: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({}) }))
 vi.mock('@/lib/glossary/jobs/service', () => ({
   getNextOpenJob: mocks.getNextOpenJob,
   stampLease: mocks.stampLease,
+  claimJob: mocks.claimJob,
   appendLog: mocks.appendLog,
   finishJob: mocks.finishJob,
   setAttempts: mocks.setAttempts,
@@ -46,6 +48,44 @@ vi.mock('@/lib/glossary/jobs/advance', () => ({
 function req() {
   return new NextRequest('https://x/api/cron/glossary-jobs')
 }
+
+describe('Tick-Zaehlung beim Aufnehmen (Timeout-Blindheit)', () => {
+  // Befund 2026-08-06, in Prod 2,5 Stunden lang unbemerkt: ein Tick, der ins
+  // Function-Timeout (300s) laeuft, wird von der Plattform hart beendet. Er
+  // kann danach NICHTS mehr schreiben — kein attempts, kein Protokoll, keinen
+  // Fehlerstatus. Der catch-Pfad unten wird ebenfalls nie erreicht. Solange
+  // nur der catch und der Ueberlast-Zweig zaehlen, eskaliert ein gekillter
+  // Tick also NIE: der naechste Cron nimmt den Job nach Lease-Ablauf wieder
+  // auf, fuer immer, und im Panel steht unveraendert "Wartet.".
+  // Deshalb wird der Versuch VOR der Arbeit gezaehlt.
+  it('stempelt den Versuch, bevor advanceJob laeuft', async () => {
+    mocks.verifyCronAuth.mockReturnValue({ authorized: true, method: 'bearer' })
+    mocks.getNextOpenJob.mockResolvedValue({ ...JOB, attempts: 2 })
+    mocks.advanceJob.mockResolvedValue({ units: 1, finished: false })
+
+    const { GET } = await import('@/app/api/cron/glossary-jobs/route')
+    await GET(req())
+
+    expect(mocks.claimJob).toHaveBeenCalledWith({}, JOB.id, 3)
+    const claimOrder = mocks.claimJob.mock.invocationCallOrder[0]
+    const advanceOrder = mocks.advanceJob.mock.invocationCallOrder[0]
+    expect(claimOrder).toBeLessThan(advanceOrder)
+  })
+
+  it('gibt einen Job auf, der das Limit erreicht hat, ohne ihn noch einmal laufen zu lassen', async () => {
+    // Das ist der Ausweg aus der Endlosschleife: nach MAX_ATTEMPTS gekillten
+    // Ticks endet der Job als 'error' — sichtbar im Panel, statt still weiter
+    // Geld zu verbrennen.
+    mocks.verifyCronAuth.mockReturnValue({ authorized: true, method: 'bearer' })
+    mocks.getNextOpenJob.mockResolvedValue({ ...JOB, attempts: 10 })
+
+    const { GET } = await import('@/app/api/cron/glossary-jobs/route')
+    await GET(req())
+
+    expect(mocks.advanceJob).not.toHaveBeenCalled()
+    expect(mocks.finishJob).toHaveBeenCalledWith({}, JOB.id, 'error', expect.stringContaining('10'))
+  })
+})
 
 const JOB = {
   id: 'j1', kind: 'relink' as const, status: 'processing' as const, total: null,
@@ -88,12 +128,23 @@ describe('GET /api/cron/glossary-jobs — Fehler-Eskalation (Befund N2)', () => 
       [expect.objectContaining({ ok: false, text: expect.stringContaining('Begriffsliste nicht ladbar') })],
       0,
     )
-    expect(mocks.setAttempts).toHaveBeenCalledWith(expect.anything(), 'j1', 3)
+    // Die Zaehlung ist seit 2026-08-06 an den Tick-START verlagert (claimJob),
+    // damit auch ein ins Timeout gelaufener Tick zaehlt — der kann selbst nichts
+    // mehr schreiben. Der catch-Pfad zaehlt deshalb NICHT mehr zusaetzlich;
+    // die Eigenschaft aus Befund N2 (eine Exception bleibt nicht ungezaehlt)
+    // ist dadurch erfuellt, nur an anderer Stelle.
+    expect(mocks.claimJob).toHaveBeenCalledWith(expect.anything(), 'j1', 3)
+    expect(mocks.setAttempts).not.toHaveBeenCalled()
     expect(mocks.releaseLease).toHaveBeenCalledWith(expect.anything(), 'j1')
     expect(mocks.finishJob).not.toHaveBeenCalled()
   })
 
-  it('gibt nach MAX_ATTEMPTS auf und setzt den Job auf error, statt fuer immer alle sechs Minuten neu zu versuchen', async () => {
+  it('laesst den Zaehler beim zehnten Fehlschlag stehen — der naechste Tick gibt auf', async () => {
+    // Bei attempts=9 laeuft der zehnte Versuch: claimJob stempelt 10, die
+    // Exception wird protokolliert, das Lease wird frei. Aufgegeben wird beim
+    // ELFTEN Aufnehmen (Test oben: attempts=10 → finishJob('error') ohne
+    // advanceJob). So zaehlt jeder Tick-Start genau einmal, egal ob er mit
+    // einer Exception endet oder von der Plattform hart beendet wird.
     mocks.getNextOpenJob.mockResolvedValue({ ...JOB, attempts: 9 })
     mocks.advanceJob.mockRejectedValue(new Error('Upsert fehlgeschlagen'))
 
@@ -103,11 +154,8 @@ describe('GET /api/cron/glossary-jobs — Fehler-Eskalation (Befund N2)', () => 
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(false)
-    expect(mocks.finishJob).toHaveBeenCalledWith(
-      expect.anything(), 'j1', 'error', expect.stringContaining('Upsert fehlgeschlagen'),
-    )
-    // Der Job ist mit 'error' nicht mehr offen — eine zusaetzliche
-    // Lease-Freigabe waere hier ueberfluessig (gleiche Logik wie advanceJob).
-    expect(mocks.releaseLease).not.toHaveBeenCalled()
+    expect(mocks.claimJob).toHaveBeenCalledWith(expect.anything(), 'j1', 10)
+    expect(mocks.finishJob).not.toHaveBeenCalled()
+    expect(mocks.releaseLease).toHaveBeenCalledWith(expect.anything(), 'j1')
   })
 })

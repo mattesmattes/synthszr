@@ -265,6 +265,30 @@ export async function stampLease(supabase: AdminClient, id: string): Promise<voi
 }
 
 /**
+ * Nimmt einen Job für diesen Tick an: Lease stempeln UND den Versuch zählen,
+ * in einem Update, BEVOR gearbeitet wird.
+ *
+ * Warum vorher zählen (Befund 2026-08-06, in Prod 2,5 Stunden unbemerkt): ein
+ * Tick, der ins Function-Timeout (300s) läuft, wird von der Plattform hart
+ * beendet und kann danach NICHTS mehr schreiben — kein `attempts`, kein
+ * Protokoll, keinen Fehlerstatus, und auch der `catch` der Cron-Route läuft
+ * nicht mehr. Zählte nur der Fehlerpfad, eskalierte ein gekillter Tick deshalb
+ * nie: der nächste Cron nahm den Job nach Lease-Ablauf wieder auf, für immer,
+ * während im Panel unverändert „Wartet." stand. Der Zähler muss also in dem
+ * Moment persistiert sein, in dem der Tick beginnt.
+ *
+ * Zurückgesetzt wird er nur nach echtem Fortschritt (advanceJob) — nicht am
+ * Tick-Ende: ein Tick, der Einheiten schafft und DANN im Timeout stirbt, darf
+ * den Zähler nicht löschen, sonst wiederholt sich genau dieses Muster endlos.
+ */
+export async function claimJob(supabase: AdminClient, id: string, attempts: number): Promise<void> {
+  await supabase
+    .from('glossary_jobs')
+    .update({ status: 'processing', last_advanced_at: new Date().toISOString(), attempts })
+    .eq('id', id)
+}
+
+/**
  * Gibt das Lease frei, ohne den Status zu aendern.
  *
  * NUR aufrufen, nachdem die letzte Einheit eines Ticks abgeschlossen und ihr

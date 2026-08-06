@@ -115,7 +115,7 @@ describe('advanceJob (generate)', () => {
     expect(mocks.releaseLease).not.toHaveBeenCalled()
   })
 
-  it('eskaliert nach zehn erfolglosen Durchgaengen zu error', async () => {
+  it('eskaliert bei Ueberlast NICHT selbst — nur Tick beenden, die Cron-Route gibt auf', async () => {
     const { advanceJob } = await import('@/lib/glossary/jobs/advance')
     const clock = workClock(1000)
     mocks.generate.mockImplementation(async () => {
@@ -125,11 +125,9 @@ describe('advanceJob (generate)', () => {
 
     const res = await advanceJob(client, { ...JOB, attempts: 9 }, { now: clock.now, budgetMs: 240_000 })
 
-    expect(res.finished).toBe(true)
-    expect(mocks.finishJob).toHaveBeenCalledWith(
-      client, 'j1', 'error', expect.stringContaining('überlastet'),
-    )
-    expect(mocks.releaseLease).not.toHaveBeenCalled()
+    expect(res.finished).toBe(false)
+    expect(mocks.finishJob).not.toHaveBeenCalled()
+    expect(mocks.releaseLease).toHaveBeenCalledWith(client, 'j1')
   })
 
   it('bleibt bei Ueberlast unter zehn Versuchen offen und beendet nur den Tick', async () => {
@@ -143,7 +141,7 @@ describe('advanceJob (generate)', () => {
     const res = await advanceJob(client, { ...JOB, attempts: 2 }, { now: clock.now, budgetMs: 240_000 })
 
     expect(res.finished).toBe(false)
-    expect(mocks.setAttempts).toHaveBeenCalledWith(client, 'j1', 3)
+    expect(mocks.setAttempts).not.toHaveBeenCalled()
     expect(mocks.finishJob).not.toHaveBeenCalled()
     // Der naechste Cron soll den Job in der naechsten Minute wieder aufgreifen,
     // nicht erst nach LEASE_STALE_MS — daher muss das Lease hier frei werden.
@@ -252,10 +250,10 @@ describe('advanceJob (images, relink)', () => {
 
     expect(mocks.images).toHaveBeenCalledTimes(1)
     expect(res.finished).toBe(false)
-    expect(mocks.setAttempts).toHaveBeenCalledWith(client, 'j1', 1)
+    expect(mocks.setAttempts).not.toHaveBeenCalled()
   })
 
-  it('images eskaliert nach zehn erfolglosen Durchgaengen zu error', async () => {
+  it('images: eskaliert nicht selbst, beendet nur den Tick', async () => {
     const { advanceJob } = await import('@/lib/glossary/jobs/advance')
     const clock = workClock(1000)
     mocks.images.mockImplementation(async () => {
@@ -267,10 +265,8 @@ describe('advanceJob (images, relink)', () => {
       client, { ...JOB, kind: 'images', attempts: 9 }, { now: clock.now, budgetMs: 240_000 },
     )
 
-    expect(res.finished).toBe(true)
-    expect(mocks.finishJob).toHaveBeenCalledWith(
-      client, 'j1', 'error', expect.stringContaining('überlastet'),
-    )
+    expect(res.finished).toBe(false)
+    expect(mocks.finishJob).not.toHaveBeenCalled()
   })
 
   it('relink: findet ein Durchgang nichts (weder verlinkt noch unveraendert), endet der Tick nach EINEM Versuch', async () => {
@@ -287,10 +283,10 @@ describe('advanceJob (images, relink)', () => {
 
     expect(mocks.relink).toHaveBeenCalledTimes(1)
     expect(res.finished).toBe(false)
-    expect(mocks.setAttempts).toHaveBeenCalledWith(client, 'j1', 1)
+    expect(mocks.setAttempts).not.toHaveBeenCalled()
   })
 
-  it('relink eskaliert nach zehn erfolglosen Durchgaengen zu error', async () => {
+  it('relink: eskaliert nicht selbst, beendet nur den Tick', async () => {
     const { advanceJob } = await import('@/lib/glossary/jobs/advance')
     const clock = workClock(1000)
     mocks.relink.mockImplementation(async () => {
@@ -302,10 +298,8 @@ describe('advanceJob (images, relink)', () => {
       client, { ...JOB, kind: 'relink', attempts: 9 }, { now: clock.now, budgetMs: 240_000 },
     )
 
-    expect(res.finished).toBe(true)
-    expect(mocks.finishJob).toHaveBeenCalledWith(
-      client, 'j1', 'error', expect.stringContaining('überlastet'),
-    )
+    expect(res.finished).toBe(false)
+    expect(mocks.finishJob).not.toHaveBeenCalled()
   })
 })
 
@@ -385,11 +379,11 @@ describe('advanceJob (pending)', () => {
 
     expect(mocks.pendingUnit).toHaveBeenCalledTimes(1)
     expect(res.finished).toBe(false)
-    expect(mocks.setAttempts).toHaveBeenCalledWith(client, 'j1', 1)
+    expect(mocks.setAttempts).not.toHaveBeenCalled()
     expect(mocks.releaseLease).toHaveBeenCalledWith(client, 'j1')
   })
 
-  it('eskaliert nach zehn erfolglosen Durchgaengen zu error', async () => {
+  it('eskaliert bei Ueberlast NICHT selbst — nur Tick beenden, die Cron-Route gibt auf', async () => {
     const { advanceJob } = await import('@/lib/glossary/jobs/advance')
     const clock = workClock(1000)
     mocks.pendingUnit.mockImplementation(async () => {
@@ -399,10 +393,8 @@ describe('advanceJob (pending)', () => {
 
     const res = await advanceJob(client, { ...PENDING_JOB, attempts: 9 }, { now: clock.now, budgetMs: 240_000 })
 
-    expect(res.finished).toBe(true)
-    expect(mocks.finishJob).toHaveBeenCalledWith(
-      client, 'j1', 'error', expect.stringContaining('überlastet'),
-    )
+    expect(res.finished).toBe(false)
+    expect(mocks.finishJob).not.toHaveBeenCalled()
   })
 
   it('beendet den Job SOFORT als error, wenn beim Abschluss nicht alle bestaetigten Slugs veroeffentlicht wurden', async () => {
@@ -421,8 +413,12 @@ describe('advanceJob (pending)', () => {
     const res = await advanceJob(client, { ...PENDING_JOB, attempts: 0 }, { now: clock.now, budgetMs: 240_000 })
 
     expect(res.finished).toBe(true)
+    // Der fatal-Pfad ist von der Zaehler-Verlagerung UNBERUEHRT: er eskaliert
+    // weiterhin sofort und selbst, weil der Fehler deterministisch ist (ein
+    // bestaetigter Slug ist hidden) — ein Retry wuerde ihn nur verzoegert
+    // wiederholen. Nur der Ueberlast-Pfad zaehlt nicht mehr selbst.
     expect(mocks.finishJob).toHaveBeenCalledWith(
-      client, 'j1', 'error', expect.stringContaining('Reward Hacking'),
+      client, 'j1', 'error', expect.stringContaining('Veröffentlichung unvollständig'),
     )
     expect(mocks.finishJob).not.toHaveBeenCalledWith(client, 'j1', 'done')
     // Kein Retry-Pfad: weder Ueberlast-Zaehler noch Lease-Freigabe fuer einen

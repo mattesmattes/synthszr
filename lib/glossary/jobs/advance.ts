@@ -270,21 +270,13 @@ export async function advanceJob(
     }
 
     if (outcome.overloaded) {
-      const attempts = job.attempts + 1
-      if (attempts >= MAX_ATTEMPTS) {
-        await finishJob(
-          supabase, job.id, 'error',
-          `Modell dauerhaft überlastet — nach ${MAX_ATTEMPTS} erfolglosen Durchgaengen aufgegeben. `
-          + 'Die Begriffe bleiben in der Warteschlange, ein neuer Lauf setzt fort.',
-        )
-        return { units, finished: true }
-      }
-      await setAttempts(supabase, job.id, attempts)
-      // Lokale Kopie mitfuehren wie bei appendLog (job.log/done_count oben) —
-      // die Cron-Route liest job.attempts nach einer spaeteren Exception
-      // weiter (Befund N2) und braucht den aktuellen Stand, nicht den von vor
-      // diesem Tick.
-      job.attempts = attempts
+      // Nicht mehr selbst zaehlen und nicht mehr selbst eskalieren: claimJob
+      // hat den Versuch beim Aufnehmen persistiert, und die Cron-Route gibt den
+      // Job beim naechsten Tick auf, wenn MAX_ATTEMPTS erreicht ist. Ein
+      // Zaehler an drei Stellen (hier, im catch der Route, und gar nicht beim
+      // Timeout) war genau die Ungleichbehandlung, die den Haenger vom
+      // 2026-08-06 unsichtbar machte — jetzt zaehlt nur der Tick-Start.
+      //
       // Tick beenden statt sofort erneut zu versuchen: der naechste Cron
       // kommt in einer Minute. Das stimmt nur, WEIL das Lease jetzt freigegeben
       // wird — sonst haette last_advanced_at (gerade erst von appendLog
@@ -294,7 +286,11 @@ export async function advanceJob(
       return { units, finished: false }
     }
 
-    if (job.attempts > 0) {
+    // Zaehler NUR nach echtem Fortschritt zuruecksetzen. Nicht am Tick-Ende und
+    // nicht bei blossem "die Einheit lief durch": ein Tick, der Einheiten
+    // schafft und DANN im Timeout stirbt, wuerde den Zaehler sonst jedes Mal
+    // loeschen und sich endlos wiederholen, ohne je zu eskalieren.
+    if (job.attempts > 0 && outcome.doneDelta > 0) {
       await setAttempts(supabase, job.id, 0)
       job.attempts = 0
     }
