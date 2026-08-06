@@ -438,3 +438,67 @@ Backfill über `content_translations` (Quelltext lesen,
 `reinjectGlossaryMarksForTranslation`, zurückschreiben) wäre die Entsprechung
 zum `relink`-Lauf - noch nicht gebaut, bewusst nicht im Rahmen dieses Auftrags
 angefangen.
+
+---
+
+## Übersetzungs-Backfill (2026-08-06, 12:31 Uhr)
+
+Der oben als offen notierte Punkt ist umgesetzt: neue Job-Art `translations`,
+Zwilling von `relink` für `content_translations`.
+
+**Ergebnis: von 0 auf 720 verlinkte Übersetzungszeilen.**
+
+| Sprache | Zeilen | mit Marks | ohne Artikel |
+|---|---|---|---|
+| en | 224 | 218 | 3 |
+| cs | 224 | 217 | 3 |
+| nds | 223 | 217 | 3 |
+| fr | 72 | 68 | 3 |
+
+Prod-verifiziert: `/en/posts/shake-up-at-deepmind-…` zeigt 57 Glossar-Links,
+`/en/posts/white-house-makes-ai-safety-…` 31 — vorher jeweils null.
+Laufzeit 7 Minuten für 661 Zeilen (der erste, abgebrochene Lauf hatte 59
+geschafft, die blieben erhalten).
+
+### Aufbau
+
+- `lib/glossary/backfill-translations.ts` — `relinkTranslationsBatch`,
+  cursorbasiert wie `backfillGlossaryLinks`, 20 Zeilen je Batch.
+- `relinkTranslationsNextBatch` in `crawl.ts` neben `relinkNextBatch`, mit
+  **eigenem** Cursor (`translationsCursor`): die beiden Läufe gehen über
+  verschiedene Tabellen mit verschiedenen Sortierschlüsseln und dürfen sich
+  nicht gegenseitig zurücksetzen. Cursor über die Zeilen-`id` statt eines
+  Zeitstempels — `translated_at` kann null sein, und bei `updated_at` schöbe
+  der Lauf seinen eigenen Fortschritt vor sich her.
+- Keine neue Mark-Schreib-Logik: die Injektion läuft über
+  `reinjectGlossaryMarksForTranslation`, dieselbe Funktion wie in der
+  Übersetzungs-Queue. Sie nimmt jetzt optional vorgeladene Listen — ohne das
+  wären es zwei DB-Abfragen je Zeile für Daten, die je Sprache konstant sind
+  (bei 743 Zeilen rund 1500 Roundtrips).
+- Migration `20260806120000`, Panel-Knopf „Übersetzungen nachverlinken".
+
+### Zwei Fallen, die den Zwilling von der Vorlage unterscheiden
+
+**`content_translations.content` ist `jsonb`**, `generated_posts.content`
+dagegen serialisierter Text in einer `text`-Spalte. Ein aus der Vorlage
+kopiertes `JSON.stringify` hätte einen String IN die jsonb-Spalte gelegt:
+gültiges JSON, aber der Renderer bekommt einen String statt eines Dokuments und
+zeigt nichts an. Eigener Test dagegen.
+
+**`generated_post_id` ist bei 12 der 743 Zeilen NULL** (Übersetzungen von
+static_page und ui). Das hat den ersten Lauf nach 59 Zeilen zerlegt: ein `null`
+in der `.in()`-Liste serialisiert PostgREST als Literal `"null"`, die Abfrage
+stirbt mit `invalid input syntax for type uuid: "null"`, und der Wurf riss den
+ganzen Tick mit. Kein `is null`-Filter kann das abfangen — der Wert wird erst
+beim Serialisieren zum String. Behoben durch Filtern der IDs vor der Abfrage;
+die Zeilen laufen durch den bestehenden „kein Quelltext"-Zweig.
+
+### Was der Lauf NICHT heilt
+
+Die Ursache bleibt: eine Übersetzung, die vor der Begriffs-Freigabe ihres
+Artikels entsteht, ist weiterhin linkfrei, bis dieser Lauf sie einholt. Er ist
+deshalb wiederholbar gebaut (Cursor setzt sich am Ende selbst zurück) und
+gehört nach jedem größeren Freigabe- oder relink-Durchgang angestoßen. Die
+Wurzel-Lösung wäre, die Übersetzungen direkt in `applyGlossaryConfirmation`
+mitzuziehen — nicht gebaut, weil das den Freigabe-Pfad wieder verlängert, und
+genau daran hing der Hänger von heute Morgen.
