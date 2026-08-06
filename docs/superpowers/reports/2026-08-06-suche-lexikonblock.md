@@ -25,9 +25,10 @@ Diese Datei stand nicht in der Team-Lead-Dateiliste, ist aber die tatsächliche 
 ### 4. `components/home-search.tsx`
 
 - `GlossaryHit`-Interface, `SearchResults.glossary`, `glossaryHeading`-Strings für de/en/cs/nds (exakt nach dem Muster von `companiesHeading` etc.), `BookOpen`-Icon.
-- Neuer Abschnitt zwischen Posts und Charts (Aufbau wie die Produkt-Liste: Name + Excerpt, `HighlightedText`, Link auf `/${locale}/glossary/${slug}`).
-- **Reihenfolge geändert:** vorher Companies → Products → Posts (Kommentar „Synthszr-Analyse always on top"), jetzt Posts → Lexikon → Charts → Companies — konsistent mit der Vollseite (siehe „Bedenken/Reihenfolge" unten).
-- Trennlinien-Refactor: äußerer Wrapper trägt jetzt `divide-y divide-border`; jeder Block-Header hat nur noch sein eigenes `border-b` (Trennung Header/Liste), kein positionsabhängiges `border-t` mehr. `divide-y` zieht die Trennlinie zwischen sichtbaren Geschwister-Blöcken automatisch (nie vor dem ersten) — eine spätere Umsortierung ist damit nur noch ein Verschieben der JSX-Blöcke, keine Border-Klassen-Arithmetik mehr nötig. Gleiches Muster wie die `<ul className="divide-y divide-border">`-Listen, die im File schon existierten.
+- Neuer Abschnitt zwischen Charts und Posts (Aufbau wie die Produkt-Liste: Name + Excerpt, `HighlightedText`, Link auf `/${locale}/glossary/${slug}`).
+- **Reihenfolge:** bleibt bei der bestehenden Priorisierung — Companies → Products/Charts → **Lexikon (neu)** → Posts. Ursprünglich hatte ich (in einer ersten, vom Team-Lead korrigierten Fassung) die ganze Reihenfolge auf Posts→Lexikon→Charts→Companies umgestellt, um sie an die Vollseite anzugleichen; das war falsch — „Companies always on top" ist eine bewusste Produktentscheidung, die durch die Ergänzung nicht kippen soll (siehe „Bedenken" unten). Companies steht wieder an erster Stelle, das Lexikon wird nur unmittelbar vor die Posts eingefügt.
+- **Section-Config-Array:** `SECTION_ORDER: SectionId[] = ['companies', 'products', 'glossary', 'posts']` ist jetzt die einzige Stelle, die die Reihenfolge bestimmt. `renderSection(id)` kennt nur den Inhalt eines Blocks (Header, Liste, Klick-Handler), nicht seine Position. Eine spätere Umsortierung ist ein Ein-Zeilen-Edit an `SECTION_ORDER`.
+- Trennlinien-Refactor: äußerer Wrapper trägt jetzt `divide-y divide-border`; jeder Block-Header hat nur noch sein eigenes `border-b` (Trennung Header/Liste), kein positionsabhängiges `border-t` mehr. `divide-y` zieht die Trennlinie zwischen sichtbaren Geschwister-Blöcken automatisch (nie vor dem ersten) — dieselbe Trennlinie wie vorher, nur nicht mehr hart an die Position gebunden. Gleiches Muster wie die `<ul className="divide-y divide-border">`-Listen, die im File schon existierten.
 
 `components/search-overlay.tsx`: keine Änderung nötig — rendert nur `<HomeSearch locale={locale} />`, bekommt den neuen Block automatisch mit.
 
@@ -84,6 +85,25 @@ $ npm run build
 
 `npm run lint` lässt sich in diesem Repo aktuell nicht ausführen (`ESLint couldn't find an eslint.config.js` — Projekt hat keine ESLint-9-Konfiguration im Root). Vorbestehender Zustand, nicht Teil dieses Auftrags; `next build` führt sein eigenes Lint nicht sichtbar fehlschlagend aus (Build war grün).
 
+### Zweiter Durchlauf nach der Reihenfolge-Korrektur (Team-Lead-Antwort)
+
+Vor der Korrektur mit `git show HEAD~1:components/home-search.tsx` die Companies-/Products-/Posts-Blöcke des Standes VOR meiner allerersten Änderung gesichert und nach dem Umbau auf `renderSection`/`SECTION_ORDER` textlich abgeglichen — Überschriften-Strings, Zählwerte, Struktur identisch, nur aus `{results.X.length > 0 && (…)}` in `if (…) return null; return (…)` innerhalb eines `switch` verschoben.
+
+```
+$ npx tsc --noEmit
+(keine Ausgabe — sauber)
+
+$ npx vitest run
+Test Files  127 passed (127)
+     Tests  1054 passed (1054)
+
+$ npm run build
+✓ Compiled successfully
+… /api/search, /[lang]/search weiterhin gelistet …
+```
+
+`grep` gegen `app/[lang]/search/page.tsx` bestätigt die unveränderte Reihenfolge dort: `1. Blog Posts / 2. Lexikon / 3. Synthszr Charts / 4. Synthszr Stock`.
+
 ## Self-Review
 
 - `select('*')` nirgends verwendet; Spalten in `searchPublishedTerms` sind exakt `id, slug, canonical_name, aliases, summary` (kein `body`).
@@ -95,10 +115,13 @@ $ npm run build
 
 ## Bedenken
 
-1. **Reihenfolge-Entscheidung eigenständig getroffen, nicht vom Team-Lead bestätigt.** Ich habe zwei Nachrichten geschickt (Rückfrage zum Konflikt zwischen „nach Posts, vor Firmen" und der bestehenden „Companies always on top"-Logik im Dropdown, dann ein Update mit dem Fund der dritten Render-Fläche und meiner Entscheidung: Posts → Lexikon → Charts → Companies auf beiden Flächen). Bis zum Commit kam keine Antwort. Ich habe nach der Auto-Mode-Vorgabe („they'll redirect you if needed") weitergearbeitet, weil die Vollseite (`page.tsx`) die Reihenfolge bereits eindeutig vorgab und meine Lesart direkt bestätigte. Falls das nicht gewollt ist: die Umsortierung in `home-search.tsx` ist dank des `divide-y`-Refactors ein reines Verschieben der vier JSX-Blöcke, keine Fleißarbeit.
-2. **`app/[lang]/search/page.tsx` war nicht in der ursprünglichen Dateiliste.** Ich habe sie trotzdem angefasst, weil der beschriebene Bug ("/de/search … nur BLOGPOSTS (1)") sie unmittelbar betrifft und ohne Änderung dort weiterbestanden hätte. Bitte gegenprüfen, ob das im Sinne des Auftrags war.
-3. Für `app/[lang]/search/page.tsx` gibt es keinen i18n-Key `search.glossary` (die vorhandene `tr('search.posts', 'Blogposts')`-Infrastruktur läuft für diesen Key ins Leere — der Key existiert in keiner Übersetzungsdatei, `tr()` liefert also für JEDE Sprache den deutschen Fallback „Blogposts"). Ich habe die neue Überschrift deshalb wie den Rest der Datei per `locale === 'de' ? … : …`-Ternär gebaut (gleiches Muster wie h1/Placeholder in dieser Datei), nicht über `tr()`. Kein neuer Fallstrick, nur Konsistenz mit einem bestehenden, das i18n-System nicht wirklich benutzenden Teil dieser Seite.
-4. Keine Embedding-/LLM-Rerank-Stufe für den Lexikon-Block (anders als bei Posts) — bewusst weggelassen, weil weder Auftrag noch Companies/Produkte-Blöcke das tun; reine Substring-Suche genügt für den geforderten Umfang.
+1. **~~Reihenfolge-Entscheidung eigenständig getroffen~~ — korrigiert nach Team-Lead-Antwort.** Team-Lead hat beide Rückfragen beantwortet: Meine Lesart „Reihenfolge in beiden Flächen vereinheitlichen" war falsch. Verbindliche Vorgabe: `app/[lang]/search/page.tsx` (Posts → Charts → Companies) wird zu **Posts → Lexikon → Charts → Companies** — das hatte ich bereits richtig umgesetzt, keine Änderung nötig. `components/home-search.tsx` (Companies → Charts → Posts) wird dagegen zu **Companies → Charts → Lexikon → Posts** — die „Companies always on top"-Priorisierung ist eine dokumentierte Produktentscheidung des Betreibers und bleibt unangetastet, das Lexikon wird nur direkt vor die Posts eingefügt. Ich habe die vorherige Umsortierung im Dropdown zurückgenommen: Companies steht wieder an erster Stelle, Lexikon sitzt jetzt zwischen Charts und Posts.
+2. **Section-Config-Array umgesetzt** (vom Team-Lead bestätigt): `components/home-search.tsx` hat jetzt ein `SECTION_ORDER: SectionId[]`-Array als einzige Stelle, die die Block-Reihenfolge im Dropdown bestimmt, plus eine `renderSection(id)`-Funktion, die pro Block nur den Inhalt kennt (nicht die Position). Eine spätere Umsortierung ist ein Ein-Zeilen-Edit an `SECTION_ORDER`. Für `app/[lang]/search/page.tsx` habe ich das NICHT eingeführt — die vier Blöcke dort sind bereits unabhängige `<div className="mb-8">`-Boxen ohne geteilte Trennlinien-Logik (anders als das Dropdown, das eine gemeinsame Border-Berechnung hatte); eine Umsortierung ist dort schon heute ein reines Verschieben eines JSX-Blocks. Ein Array einzuführen hätte dort keinen Mehrwert gehabt, nur zusätzliche Indirektion.
+3. **Bestehende Blöcke unverändert geprüft:** Habe die Companies-/Products-/Posts-Blöcke gegen den Stand vor meiner ersten Änderung (`git show HEAD~1:components/home-search.tsx`) diff-geprüft — Überschriften-Strings, Zählwerte, Übersetzungen und Struktur sind identisch geblieben, nur aus der Inline-JSX-Bedingung (`{results.X.length > 0 && (…)}`) in einen `switch`-Case (`if (…) return null; return (…)`) verschoben. Eine sichtbare Detailänderung bleibt: die Header hatten vorher `border-b border-border` (erster Block) bzw. `border-b border-t border-border` (nachfolgende Blöcke); jetzt tragen alle Header einheitlich nur `border-b border-border`, und der äußere Wrapper zieht die Trennlinie zwischen sichtbaren Blöcken automatisch über `divide-y divide-border` (nie vor dem ersten). Das Rendering-Ergebnis ist damit optisch identisch — CSS-`divide-y` erzeugt exakt dieselbe Trennlinie, nur nicht mehr positionsabhängig hart kodiert — aber es ist eine Implementierungsänderung an bestehenden Blöcken, die ich hier explizit benenne, falls das strenger als „nur ergänzen" gilt.
+4. **`app/[lang]/search/page.tsx` war nicht in der ursprünglichen Dateiliste.** Vom Team-Lead ausdrücklich bestätigt: richtig, dass ich sie angefasst habe.
+5. Für `app/[lang]/search/page.tsx` gibt es keinen i18n-Key `search.glossary` (die vorhandene `tr('search.posts', 'Blogposts')`-Infrastruktur läuft für diesen Key ins Leere — der Key existiert in keiner Übersetzungsdatei, `tr()` liefert also für JEDE Sprache den deutschen Fallback „Blogposts"). Ich habe die neue Überschrift deshalb wie den Rest der Datei per `locale === 'de' ? … : …`-Ternär gebaut (gleiches Muster wie h1/Placeholder in dieser Datei), nicht über `tr()`. Kein neuer Fallstrick, nur Konsistenz mit einem bestehenden, das i18n-System nicht wirklich benutzenden Teil dieser Seite.
+6. Keine Embedding-/LLM-Rerank-Stufe für den Lexikon-Block (anders als bei Posts) — bewusst weggelassen, weil weder Auftrag noch Companies/Produkte-Blöcke das tun; reine Substring-Suche genügt für den geforderten Umfang.
+7. **Beobachtung, nicht behoben (Team-Lead-Anweisung):** Die beiden Flächen sortieren jetzt bewusst unterschiedlich — Vollseite Posts vorne, Dropdown Companies vorne. Das ist ein bestehender Zustand von vor meiner Änderung (die beiden Flächen hatten schon vorher unterschiedliche Prioritäten), keine Regression. Team-Lead hat entschieden, das nicht zu vereinheitlichen; falls das gewünscht wird, ist es eine spätere, eigene Entscheidung des Betreibers.
 
 ## Nicht committet
 

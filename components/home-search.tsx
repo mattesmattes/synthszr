@@ -120,6 +120,21 @@ const DATE_LOCALE: Record<string, string> = {
   nds: 'de-DE',
 }
 
+type SectionId = 'companies' | 'products' | 'glossary' | 'posts'
+
+/**
+ * Reihenfolge der Ergebnisblöcke im Dropdown — einzige Stelle, die eine
+ * Umsortierung braucht (Team-Lead, 2026-08-06). Bewusst NICHT identisch mit
+ * der Volltrefferseite (app/[lang]/search/page.tsx: dort Posts vorne) —
+ * „Companies always on top" ist eine dokumentierte Produktentscheidung des
+ * Betreibers (Synthszr-Analyse als unique value-add, Posts nur als Kontext
+ * dahinter) und bleibt hier bestehen. Das Lexikon wird nur ergänzt, direkt
+ * vor die Posts (beide sind „eigene Inhalte", ein Begriff beantwortet "was
+ * heißt das" direkter als ein Artikel Kontext liefert) — die bestehende
+ * Priorisierung der drei anderen Blöcke ändert sich nicht.
+ */
+const SECTION_ORDER: SectionId[] = ['companies', 'products', 'glossary', 'posts']
+
 function formatHitDate(iso: string, locale: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
@@ -316,6 +331,190 @@ export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps
     router.push(`/${locale}/search?q=${encodeURIComponent(q)}`)
   }
 
+  // Rendert genau einen Block oder null (kein Treffer). Die Reihenfolge der
+  // Blöcke selbst steht ausschließlich in SECTION_ORDER — diese Funktion
+  // weiß nichts von Position, nur vom Inhalt.
+  function renderSection(id: SectionId): React.ReactNode {
+    if (!results) return null
+    switch (id) {
+      case 'companies':
+        if (results.companies.length === 0) return null
+        return (
+          <section key="companies">
+            <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
+              <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                {strings.companiesHeading(results.companies.length)}
+              </span>
+            </header>
+            <ul className="divide-y divide-border">
+              {results.companies.map((c) => {
+                const r = ratings.get(c.name.toLowerCase())
+                const pctText = typeof r?.changePercent === 'number'
+                  ? `${r.changePercent >= 0 ? '+' : ''}${r.changePercent.toFixed(2)}%`
+                  : null
+                const pctColor =
+                  r?.direction === 'up' ? 'text-emerald-600 dark:text-emerald-400'
+                    : r?.direction === 'down' ? 'text-red-600 dark:text-red-400'
+                    : 'text-muted-foreground'
+                return (
+                  <li key={`${c.type}:${c.slug}`}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenCompany(c)}
+                      className="block w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="font-medium text-sm truncate">{c.name}</div>
+                          {r?.ticker && (
+                            <span className="text-[10px] font-mono uppercase text-muted-foreground/70 tracking-wider shrink-0">
+                              {r.ticker}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {pctText && (
+                            <span className={`text-[11px] font-mono ${pctColor}`}>
+                              {pctText}
+                            </span>
+                          )}
+                          {r?.rating && (
+                            <span
+                              className={`text-[10px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${VOTE_COLOR[r.rating]}`}
+                            >
+                              {r.rating}
+                            </span>
+                          )}
+                          <span className="text-[10px] font-mono uppercase text-muted-foreground tracking-wider">
+                            {c.type === 'public' ? 'Public' : 'Premarket'}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )
+
+      case 'products':
+        if (results.products.length === 0) return null
+        return (
+          <section key="products">
+            <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
+              <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                {strings.chartsHeading(results.products.length)}
+              </span>
+            </header>
+            <ul className="divide-y divide-border">
+              {results.products.map((p) => (
+                <li key={p.slug}>
+                  <Link
+                    href={`/${locale}/rankings/${p.slug}`}
+                    className="block px-4 py-3 hover:bg-muted/30 transition-colors"
+                    onClick={() => setQuery('')}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-medium text-sm truncate min-w-0">
+                        <HighlightedText text={p.name} query={query} />
+                      </div>
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0">
+                        #{p.catRank}
+                      </span>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+
+      case 'glossary':
+        if (results.glossary.length === 0) return null
+        return (
+          <section key="glossary">
+            <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
+              <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                {strings.glossaryHeading(results.glossary.length)}
+              </span>
+            </header>
+            <ul className="divide-y divide-border">
+              {results.glossary.map((g) => (
+                <li key={g.slug}>
+                  <Link
+                    href={`/${locale}/glossary/${g.slug}`}
+                    className="block px-4 py-3 hover:bg-muted/30 transition-colors"
+                    onClick={() => setQuery('')}
+                  >
+                    <div className="font-medium text-sm truncate min-w-0">
+                      <HighlightedText text={g.canonicalName} query={query} />
+                    </div>
+                    {g.excerpt && (
+                      <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                        <HighlightedText text={g.excerpt} query={query} />
+                      </div>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+
+      case 'posts':
+        if (results.posts.length === 0) return null
+        return (
+          <section key="posts">
+            <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
+              <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                {strings.postsHeading(results.posts.length)}
+              </span>
+            </header>
+            <ul className="divide-y divide-border">
+              {results.posts.map((p) => {
+                // Pass the query through to the post page so the
+                // article body can highlight matches in place.
+                const base = locale === 'de' ? `/posts/${p.slug}` : `/${locale}/posts/${p.slug}`
+                const href = `${base}?q=${encodeURIComponent(query.trim())}`
+                const previewText = p.snippet || p.excerpt || ''
+                return (
+                  <li key={p.id}>
+                    <Link
+                      href={href}
+                      className="block px-4 py-3 hover:bg-muted/30 transition-colors"
+                      onClick={() => setQuery('')}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="font-medium text-sm leading-snug min-w-0">
+                          <HighlightedText text={p.title} query={query} />
+                        </div>
+                        <time
+                          dateTime={p.created_at}
+                          className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0 mt-0.5"
+                        >
+                          {formatHitDate(p.created_at, locale)}
+                        </time>
+                      </div>
+                      {previewText && (
+                        <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                          <HighlightedText text={previewText} query={query} />
+                        </div>
+                      )}
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )
+    }
+  }
+
   return (
     <>
       <div className="mb-8">
@@ -338,182 +537,7 @@ export function HomeSearch({ locale = 'de', autoFocus = false }: HomeSearchProps
 
         {hasResults && (
           <div className="mt-3 rounded-lg border border-border bg-background shadow-sm overflow-hidden divide-y divide-border">
-            {/* Reihenfolge der Blöcke: Posts → Lexikon → Charts → Companies,
-                konsistent mit der Volltrefferseite (app/[lang]/search/page.tsx,
-                dort "1. Blog Posts / 2. Lexikon / 3. Synthszr Charts /
-                4. Synthszr Stock"). divide-y auf dem äußeren Wrapper zieht die
-                Trennlinie automatisch zwischen den sichtbaren Blöcken (nie vor
-                dem ersten) — jeder Block-Header trägt deshalb nur noch sein
-                eigenes border-b, kein positionsabhängiges border-t mehr. Eine
-                spätere Umsortierung ist damit nur noch ein Verschieben der
-                jsx-Blöcke, ohne Border-Klassen anfassen zu müssen. */}
-            {results.posts.length > 0 && (
-              <section>
-                <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
-                    {strings.postsHeading(results.posts.length)}
-                  </span>
-                </header>
-                <ul className="divide-y divide-border">
-                  {results.posts.map((p) => {
-                    // Pass the query through to the post page so the
-                    // article body can highlight matches in place.
-                    const base = locale === 'de' ? `/posts/${p.slug}` : `/${locale}/posts/${p.slug}`
-                    const href = `${base}?q=${encodeURIComponent(query.trim())}`
-                    const previewText = p.snippet || p.excerpt || ''
-                    return (
-                      <li key={p.id}>
-                        <Link
-                          href={href}
-                          className="block px-4 py-3 hover:bg-muted/30 transition-colors"
-                          onClick={() => setQuery('')}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="font-medium text-sm leading-snug min-w-0">
-                              <HighlightedText text={p.title} query={query} />
-                            </div>
-                            <time
-                              dateTime={p.created_at}
-                              className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0 mt-0.5"
-                            >
-                              {formatHitDate(p.created_at, locale)}
-                            </time>
-                          </div>
-                          {previewText && (
-                            <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                              <HighlightedText text={previewText} query={query} />
-                            </div>
-                          )}
-                        </Link>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </section>
-            )}
-
-            {results.glossary.length > 0 && (
-              <section>
-                <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
-                  <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
-                    {strings.glossaryHeading(results.glossary.length)}
-                  </span>
-                </header>
-                <ul className="divide-y divide-border">
-                  {results.glossary.map((g) => (
-                    <li key={g.slug}>
-                      <Link
-                        href={`/${locale}/glossary/${g.slug}`}
-                        className="block px-4 py-3 hover:bg-muted/30 transition-colors"
-                        onClick={() => setQuery('')}
-                      >
-                        <div className="font-medium text-sm truncate min-w-0">
-                          <HighlightedText text={g.canonicalName} query={query} />
-                        </div>
-                        {g.excerpt && (
-                          <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                            <HighlightedText text={g.excerpt} query={query} />
-                          </div>
-                        )}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {results.products.length > 0 && (
-              <section>
-                <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
-                  <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
-                    {strings.chartsHeading(results.products.length)}
-                  </span>
-                </header>
-                <ul className="divide-y divide-border">
-                  {results.products.map((p) => (
-                    <li key={p.slug}>
-                      <Link
-                        href={`/${locale}/rankings/${p.slug}`}
-                        className="block px-4 py-3 hover:bg-muted/30 transition-colors"
-                        onClick={() => setQuery('')}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="font-medium text-sm truncate min-w-0">
-                            <HighlightedText text={p.name} query={query} />
-                          </div>
-                          <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0">
-                            #{p.catRank}
-                          </span>
-                        </div>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {results.companies.length > 0 && (
-              <section>
-                <header className="px-4 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
-                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
-                    {strings.companiesHeading(results.companies.length)}
-                  </span>
-                </header>
-                <ul className="divide-y divide-border">
-                  {results.companies.map((c) => {
-                    const r = ratings.get(c.name.toLowerCase())
-                    const pctText = typeof r?.changePercent === 'number'
-                      ? `${r.changePercent >= 0 ? '+' : ''}${r.changePercent.toFixed(2)}%`
-                      : null
-                    const pctColor =
-                      r?.direction === 'up' ? 'text-emerald-600 dark:text-emerald-400'
-                        : r?.direction === 'down' ? 'text-red-600 dark:text-red-400'
-                        : 'text-muted-foreground'
-                    return (
-                      <li key={`${c.type}:${c.slug}`}>
-                        <button
-                          type="button"
-                          onClick={() => setOpenCompany(c)}
-                          className="block w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="font-medium text-sm truncate">{c.name}</div>
-                              {r?.ticker && (
-                                <span className="text-[10px] font-mono uppercase text-muted-foreground/70 tracking-wider shrink-0">
-                                  {r.ticker}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {pctText && (
-                                <span className={`text-[11px] font-mono ${pctColor}`}>
-                                  {pctText}
-                                </span>
-                              )}
-                              {r?.rating && (
-                                <span
-                                  className={`text-[10px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${VOTE_COLOR[r.rating]}`}
-                                >
-                                  {r.rating}
-                                </span>
-                              )}
-                              <span className="text-[10px] font-mono uppercase text-muted-foreground tracking-wider">
-                                {c.type === 'public' ? 'Public' : 'Premarket'}
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </section>
-            )}
+            {SECTION_ORDER.map((id) => renderSection(id))}
           </div>
         )}
 
