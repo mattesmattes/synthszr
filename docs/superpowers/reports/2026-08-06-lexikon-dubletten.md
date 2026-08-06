@@ -144,3 +144,141 @@ $ npx vitest run tests/lib/glossary-crawl-existing.test.ts tests/lib/glossary-ge
 - `tests/lib/glossary-crawl-existing.test.ts` - normalisierte Kollisionsfaelle fuer `partitionByExisting`
 - `tests/lib/glossary-crawl-dedupe.test.ts` - neu, End-to-End-Nachweis fuer `generateCandidates`
 - `tests/fixtures/glossary-slugs-2026-08-06.json` - neu, Snapshot der 471 Slugs fuer den Regressionstest
+
+---
+
+# Nachtrag 2026-08-06: Kriterium umgedreht + Panel-Zaehlung korrigiert
+
+Zwei Nachbesserungen nach eurem Review des ersten Dry-Runs.
+
+## 1. Gewinner-Kriterium: Verlinkungen vor Inhalt vor Alter
+
+### Was geaendert wurde
+
+Neue Datei `lib/glossary/dedupe.ts` mit der reinen Entscheidungslogik, ausgelagert aus dem Skript. Grund fuer die Auslagerung: das Skript ruft `main()` beim Import unbedingt auf (echter DB-Verbindungsversuch, `process.exit` bei Fehlern) - eine direkt im Skript definierte Funktion ist deshalb nicht sinnvoll importierbar/testbar. `lib/glossary/dedupe.ts` hat keinen eigenen Supabase-Client und keine Nebeneffekte.
+
+`decidePair(rows, linkCounts: Map<string, number>)` sortiert jetzt nach:
+1. **Mehr eingehende Verlinkungen** (fehlende Eintraege in `linkCounts` gelten als 0).
+2. Bei Gleichstand: mehr Inhalt (unveraendert: `summary.length + extractPlainText(body).length`).
+3. Bei erneutem Gleichstand: der AELTERE (`created_at`).
+
+Liefert zusaetzlich `decidingCriterion: 'Verlinkungen' | 'Inhaltslaenge' | 'Alter'` - der Vergleich zwischen Platz 1 und Platz 2 (der knappste, aussagekraeftigste), gedruckt in der Skript-Ausgabe je Paar.
+
+`scripts/dedupe-glossary-terms.ts` prueft jetzt die Verlinkungen fuer JEDE Zeile jeder Gruppe VOR der Entscheidung (vorher nur fuer den nach Inhalt vermuteten Verlierer - das war zu wenig, weil das neue Kriterium die Zahlen beider Seiten braucht, um ueberhaupt zu entscheiden). Die tatsaechlichen Mark-Aenderungen (nur die Links der ENDGUELTIGEN Verlierer) werden separat und explizit gezaehlt und ausgegeben.
+
+### Ergebnis am echten Bestand (Dry-Run gegen Prod, `vercel env pull --environment=production`, erneut frisch gepullt)
+
+```
+Paar: eval, evals - entschieden durch: Verlinkungen
+  GEWINNER eval ("Eval"): 30 Verlinkung(en), 3699 Zeichen Inhalt
+  versteckt  evals ("Evals"): 8 Verlinkung(en), 3972 Zeichen Inhalt
+
+Paar: leveraged-etfs, leveraged-etf - entschieden durch: Inhaltslaenge
+  GEWINNER leveraged-etfs: 0 Verlinkung(en), 4367 Zeichen
+  versteckt  leveraged-etf: 0 Verlinkung(en), 4000 Zeichen
+
+Paar: pretraining, pre-training - entschieden durch: Verlinkungen
+  GEWINNER pretraining ("Pretraining"): 12 Verlinkung(en), 3933 Zeichen
+  versteckt  pre-training ("Pre-Training"): 3 Verlinkung(en), 4179 Zeichen
+
+Paar: time-series-foundation-model, time-series-foundation-models - entschieden durch: Inhaltslaenge
+  GEWINNER time-series-foundation-model: 0 Verlinkung(en), 4722 Zeichen
+  versteckt  time-series-foundation-models: 0 Verlinkung(en), 4377 Zeichen
+
+11 Mark-Aenderung(en) waeren durch diese Entscheidung noetig.
+```
+
+Gewinner sind jetzt `eval`, `leveraged-etfs`, `pretraining`, `time-series-foundation-model` - **eval und pretraining bleiben, exakt wie erwartet.**
+
+**Aber: 11 Mark-Aenderungen, nicht 0.** Das ist eine echte Abweichung von der genannten Erwartung, kein Bug in der neuen Logik - und der Grund ist eine Luecke im ERSTEN Dry-Run: der hatte Verlinkungen nur fuer die damaligen (inhaltsbasierten) Verlierer geprueft (`eval`: 30, `leveraged-etf`: 0, `pretraining`: 12, `time-series-foundation-models`: 0) und NIE fuer deren Gegenstuecke (`evals`, `leveraged-etfs`, `pre-training`, `time-series-foundation-model`). Jetzt, mit beiden Seiten geprueft, zeigt sich: **`evals` hat selbst 8 eingehende Verlinkungen, `pre-training` hat 3.** Die Erwartung "0 Mark-Aenderungen" waere nur eingetroffen, wenn die (jetzt gewinnenden) staerker verlinkten Slugs schon vorher Gewinner gewesen waeren UND ihre Gegenstuecke komplett unverlinkt waeren - beides trifft auf `evals` (8 Links) und `pre-training` (3 Links) nicht zu. Die 11 Aenderungen sind also real und noetig, sobald `eval`/`pretraining` gewinnen sollen: 8 Artikel, die auf `evals` verlinken, und 3, die auf `pre-training` verlinken, muessten auf den jeweils anderen Slug umgebogen werden. Bitte das vor einem `--apply`-Lauf zur Kenntnis nehmen - ich habe die Zahl nicht "auf 0 gebogen", sondern wie gefordert **explizit ausgegeben und hier gemeldet.**
+
+### TDD-Nachweis
+
+**RED:**
+```
+$ npx vitest run tests/lib/glossary-dedupe.test.ts
+Error: Cannot find package '@/lib/glossary/dedupe'
+Test Files  1 failed (1)
+```
+
+**GREEN** (nach Implementierung von `lib/glossary/dedupe.ts`):
+```
+$ npx vitest run tests/lib/glossary-dedupe.test.ts
+Test Files  1 passed (1)
+     Tests  6 passed (6)
+```
+
+6 Tests: staerker verlinkt gewinnt trotz weniger Inhalt (der Kern-Fall); Gleichstand bei Verlinkungen faellt auf Inhaltslaenge zurueck; Gleichstand bei beidem faellt auf Alter zurueck; die beiden unveraenderten Paare (Leveraged ETF, Time Series Foundation Model) bleiben beim Inhalts-Kriterium; eine fehlende Verlinkungszahl gilt als 0; `reasoning` nennt Verlinkung/Inhalt/Datum je Zeile.
+
+## 2. Panel-Zaehlung: `total` bei Job-Anlage korrigiert (nicht die Anzeige)
+
+### Ursache gefunden
+
+`estimateTotal` (`lib/glossary/jobs/service.ts`, Zweig `kind==='pending'`) zaehlte bestaetigte Kandidaten mit `needsGeneration===true` - aber dieser Flag wird beim Vormerken EINMAL gesetzt (`lib/glossary/candidates.ts`) und NIE aktualisiert, wenn derselbe Begriff seither ueber einen ANDEREN Artikel entstanden ist. `estimateTotal` vertraute diesem veralteten Flag blind, ohne (wie der tatsaechliche Worker `ensureConfirmedTermsExist`/`generateMissingTerms` es laengst tat) frisch gegen `glossary_terms` zu pruefen, ob der Begriff nicht doch schon existiert. Daher "37" (alle jemals mit needsGeneration vorgemerkten, seit ueberholten Kandidaten) statt "1" (tatsaechlich offen).
+
+`total` war also die falsche Zahl - genau wie ihr vermutet habt. Die Korrektur sitzt entsprechend dort, nicht in der Anzeige (`JobLog`/`glossary-approval-panel.tsx` bleiben unveraendert - sie zeigen nur `job.total`/`job.done_count` an, die jetzt korrekt ankommen).
+
+### Was geaendert wurde
+
+- **`lib/glossary/ensure-terms.ts`**: neue exportierte Funktion `findMissingFromGlossary(supabase, candidates)` - die frische Existenzpruefung, die vorher inline in `generateMissingTerms` steckte, jetzt herausgezogen und geteilt. `generateMissingTerms` ruft sie jetzt auf statt die Pruefung zu duplizieren (verhaltensgleich - siehe Verifikation).
+- **`lib/glossary/jobs/service.ts`**: `estimateTotal`s `pending`-Zweig ruft jetzt `findMissingFromGlossary` mit den bestaetigten+needsGeneration-Kandidaten auf und zaehlt nur die, die WIRKLICH noch fehlen - dieselbe Definition von "offen" wie der Worker selbst verwendet (und wie `openCandidateCount` es fuer `kind='generate'` schon vormacht, s. Auftrag) - keine dritte Zaehlweise.
+
+Bewusst NICHT angefasst: `components/admin/glossary-approval-panel.tsx`s `openCount` (der PRE-Start-Knopftext "Alle N jetzt erzeugen") bleibt eine grobe Schaetzung aus rein clientseitigen Props, mit demselben theoretischen Staleness-Risiko - eine Korrektur dort waere ein zusaetzlicher API-Roundtrip und explizit "Anzeige", nicht "Anlage". Sobald ein Job existiert, zeigt `JobLog` sofort die jetzt korrekte serverseitige Zahl. Flagge das hier als moegliche Folgearbeit, falls euch das PRE-Start-Verhalten auch stoert.
+
+### Gepruefte Signaturen
+
+- `ensureConfirmedTermsExist(supabase, postId, confirmedSlugs, limit)` - Signatur unveraendert.
+- `generateMissingTerms` (intern, nicht exportiert) - Ablauf unveraendert, nur der Existenz-Check-Block durch den Aufruf der neuen Funktion ersetzt.
+- `estimateTotal(supabase, kind, params): Promise<number | null>` - Signatur unveraendert, nur der `pending`-Zweig.
+- `GlossaryCandidate` (`lib/glossary/types.ts`) - `slug`, `needsGeneration?: boolean` - unveraendert genutzt.
+
+### TDD-Nachweis
+
+**RED** (`findMissingFromGlossary` existiert noch nicht):
+```
+$ npx vitest run tests/lib/glossary-ensure-terms.test.ts
+ × behält nur Kandidaten, die es in glossary_terms noch NICHT gibt
+ × liefert eine leere Liste ohne DB-Zugriff, wenn keine Kandidaten übergeben werden
+ × liefert null bei einem Lesefehler, nicht eine leere Liste
+TypeError: findMissingFromGlossary is not a function
+Tests  3 failed | 8 passed (11)
+```
+
+**RED** (`estimateTotal` vertraut noch dem Flag - Reproduktion der Panel-Beobachtung mit 3 Kandidaten, wovon 2 laengst existieren):
+```
+$ npx vitest run tests/lib/glossary-jobs-service.test.ts
+ × prueft needsGeneration-Kandidaten FRISCH gegen glossary_terms, statt dem Flag blind zu vertrauen
+   AssertionError: expected 3 to be 1
+```
+
+**GREEN** (nach beiden Aenderungen):
+```
+$ npx vitest run tests/lib/glossary-ensure-terms.test.ts tests/lib/glossary-jobs-service.test.ts
+Test Files  2 passed (2)
+     Tests  32 passed (32)
+```
+
+## Verifikation (Nachtrag)
+
+- `npx tsc --noEmit`: sauber.
+- Volle Suite: `1077 passed (1077)`, `129 Test-Dateien` (1067 vorheriger Stand + 10 neue Tests: 6 in `glossary-dedupe.test.ts`, 3 in `glossary-ensure-terms.test.ts`, 1 in `glossary-jobs-service.test.ts`). Keine Fehlschlaege, keine Regressionen in bestehenden Tests.
+- `npm run build`: Exit 0 (`.next` vorher aus dem Dropbox-Pfad geschoben).
+- Dry-Run erneut gegen Prod ausgefuehrt (frischer `vercel env pull`) - Ergebnis oben. **Weiterhin nicht angewendet.**
+
+## Self-Review (Nachtrag)
+
+- Wurde die alte Inhalts-Logik dupliziert statt wiederverwendet? Nein - `contentLength`/`mergeAliases` sind jetzt in `lib/glossary/dedupe.ts`, das Skript importiert sie, keine zweite Kopie.
+- Pruefe ich Verlinkungen jetzt fuer ALLE vier Slugs pro Paar, nicht nur fuer die vermuteten Verlierer? Ja - sonst haette `decidePair` gar keine Datenbasis fuer Kriterium 1 gehabt.
+- Habe ich die "0 Mark-Aenderungen"-Erwartung stillschweigend erfuellt, indem ich z.B. nur die Loser-Verlinkungen der GLEICHEN Slugs wie vorher gezaehlt haette? Nein, ausdruecklich gegengeprueft und die Abweichung (11 statt 0) klar benannt statt sie zu verstecken.
+- Zweite Zaehlweise fuer 'pending'-Jobs eingefuehrt statt die bestehende zu nutzen? Nein - `findMissingFromGlossary` ist dieselbe Pruefung, die `generateMissingTerms` schon immer machte, nur herausgezogen; `estimateTotal` ruft jetzt dieselbe Funktion statt einer eigenen Kopie.
+- Panel-Anzeige (`glossary-approval-panel.tsx`, `JobLog`) angefasst? Nein, wie ausdruecklich gefordert ("Korrektur gehoert dorthin [total], nicht in die Anzeige").
+
+## Dateien (Nachtrag)
+
+- `lib/glossary/dedupe.ts` - neu: `decidePair`, `mergeAliases`, `contentLength`, `DedupeRow`/`DedupeDecision`/`DedupeCriterion`
+- `scripts/dedupe-glossary-terms.ts` - Verlinkungs-Check fuer alle Kandidaten vor der Entscheidung, `decidePair`/`mergeAliases` importiert statt lokal definiert, explizite Mark-Aenderungs-Zahl
+- `tests/lib/glossary-dedupe.test.ts` - neu
+- `lib/glossary/ensure-terms.ts` - neu: `findMissingFromGlossary` (exportiert), `generateMissingTerms` nutzt sie
+- `lib/glossary/jobs/service.ts` - `estimateTotal`s `pending`-Zweig nutzt `findMissingFromGlossary`
+- `tests/lib/glossary-ensure-terms.test.ts` - 3 neue Tests fuer `findMissingFromGlossary`
+- `tests/lib/glossary-jobs-service.test.ts` - 1 neuer Test fuer den frischen Existenz-Check in `estimateTotal`

@@ -81,6 +81,41 @@ export async function ensureConfirmedTermsExist(
   }
 }
 
+/**
+ * Von den übergebenen Kandidaten die, die es in glossary_terms noch NICHT
+ * gibt — frisch gegen die DB geprüft, nicht nur über den im Kandidaten selbst
+ * gespeicherten `needsGeneration`-Flag. Der wird beim Vormerken EINMAL gesetzt
+ * (candidates.ts) und nie aktualisiert, wenn derselbe Begriff seither über
+ * einen ANDEREN Artikel oder einen früheren Speicherversuch entstanden ist.
+ *
+ * Geteilt zwischen generateMissingTerms (das den Deckel zieht und den Rest
+ * generiert) und estimateTotal in jobs/service.ts (das nur die Zahl braucht,
+ * für job.total) — beide MÜSSEN dieselbe Definition von „offen" verwenden.
+ * Betreiber-Befund 2026-08-06: das Freigabe-Panel zeigte „30 von 37", obwohl
+ * zuletzt nur EIN Begriff wirklich fehlte — estimateTotal vertraute bis dahin
+ * blind dem gespeicherten needsGeneration-Flag, ohne die 36 längst
+ * existierenden Kandidaten abzuziehen; ein normal laufender Job sah dadurch
+ * aus wie ein Hänger.
+ *
+ * `null` bei einem Lesefehler, NICHT `[]`: ein Lesefehler ist kein „nichts
+ * fehlt" — der Aufrufer entscheidet selbst, wie konservativ er damit umgeht
+ * (generateMissingTerms: nichts generieren, lieber vorsichtig als doppelt
+ * bezahlen; estimateTotal: total unbestimmt, wie bei relink).
+ */
+export async function findMissingFromGlossary(
+  supabase: AdminClient,
+  candidates: GlossaryCandidate[],
+): Promise<GlossaryCandidate[] | null> {
+  if (candidates.length === 0) return []
+  const { data: existingRows, error } = await supabase
+    .from('glossary_terms')
+    .select('slug')
+    .in('slug', candidates.map((c) => c.slug))
+  if (error) return null
+  const alreadyThere = new Set(((existingRows ?? []) as Array<{ slug: string }>).map((r) => r.slug))
+  return candidates.filter((c) => !alreadyThere.has(c.slug))
+}
+
 async function generateMissingTerms(
   supabase: AdminClient,
   postId: string,
@@ -117,20 +152,15 @@ async function generateMissingTerms(
   // anderen Artikel oder einen früheren Speicherversuch angelegt worden sein.
   // glossary_terms.slug ist unique, ein zweiter Insert würde scheitern — und
   // vorher trotzdem den vollen Content-Call plus Bild bezahlen.
-  const { data: existingRows, error: existingError } = await supabase
-    .from('glossary_terms')
-    .select('slug')
-    .in('slug', toGenerate.map((c) => c.slug))
-  if (existingError) {
+  const missing = await findMissingFromGlossary(supabase, toGenerate)
+  if (missing === null) {
     // Hier NICHT degradieren: ohne diese Liste würden bereits vorhandene
     // Begriffe erneut generiert (teuer) und der Insert stirbt am
     // Unique-Constraint. Nichts tun ist die günstigere Fehlreaktion, und der
     // nächste Speicherversuch kann es heilen.
-    console.error(`[Glossary] Existenzprüfung fehlgeschlagen für Post ${postId}:`, existingError.message)
+    console.error(`[Glossary] Existenzprüfung fehlgeschlagen für Post ${postId}`)
     return { generatedSlugs: [], pendingRemainder: candidates }
   }
-  const alreadyThere = new Set(((existingRows ?? []) as Array<{ slug: string }>).map((r) => r.slug))
-  const missing = toGenerate.filter((c) => !alreadyThere.has(c.slug))
   if (missing.length === 0) return { generatedSlugs: [], pendingRemainder: null }
 
   const batch = missing.slice(0, limit)

@@ -5,6 +5,7 @@
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { openCandidateCount, readCrawlState } from '@/lib/glossary/crawl'
+import { findMissingFromGlossary } from '@/lib/glossary/ensure-terms'
 import type { GlossaryCandidate } from '@/lib/glossary/types'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -113,8 +114,20 @@ async function estimateTotal(
     const raw = (data as { pending_glossary_terms?: unknown } | null)?.pending_glossary_terms
     if (!Array.isArray(raw)) return null
     const confirmed = new Set(confirmedSlugs)
-    return (raw as GlossaryCandidate[])
-      .filter((c) => confirmed.has(c.slug) && c.needsGeneration).length
+    const toGenerate = (raw as GlossaryCandidate[])
+      .filter((c) => confirmed.has(c.slug) && c.needsGeneration)
+    if (toGenerate.length === 0) return 0
+    // FRISCH gegen glossary_terms prüfen statt dem needsGeneration-Flag allein
+    // zu vertrauen: er wird beim Vormerken EINMAL gesetzt und nie
+    // aktualisiert, wenn der Begriff seither über einen ANDEREN Artikel
+    // entstanden ist. Ohne diese Prüfung zeigte total() z.B. 37 (alle jemals
+    // vorgemerkten, seit überholten Kandidaten), während tatsächlich nur ein
+    // einziger offen war (Betreiber-Befund 2026-08-06) — ein normal laufender
+    // Job sah dadurch aus wie ein Hänger. Dieselbe Funktion wie
+    // generateMissingTerms (ensure-terms.ts), damit Anzeige und tatsächliche
+    // Abarbeitung nie eine andere Definition von "offen" verwenden.
+    const missing = await findMissingFromGlossary(supabase, toGenerate)
+    return missing === null ? null : missing.length
   }
   const { count } = await supabase
     .from('glossary_terms')

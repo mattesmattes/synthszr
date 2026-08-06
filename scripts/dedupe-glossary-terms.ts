@@ -15,9 +15,14 @@
  * ohne einen einzelnen End-"s" gleich ist (normalizeSlugForDedup,
  * lib/glossary/generate.ts).
  *
- * Kriterium je Paar: der Begriff mit mehr Inhalt (Zeichenlaenge von summary +
- * extrahiertem body-Text) bleibt, bei Gleichstand der AELTERE. Der andere wird
- * auf status='hidden' gesetzt, sein canonical_name UND seine eigenen Aliasse
+ * KRITERIUM je Paar (lib/glossary/dedupe.ts, decidePair), in dieser Reihenfolge:
+ *   1. Mehr eingehende Verlinkungen (Artikel mit glossaryLink-Mark auf den Slug).
+ *   2. Bei Gleichstand: mehr Inhalt (Zeichenlaenge von summary + body).
+ *   3. Bei erneutem Gleichstand: der AELTERE Begriff (created_at).
+ * Urspruenglich nur Kriterium 2 - Betreiber-Korrektur 2026-08-06, nachdem der
+ * erste Dry-Run zeigte, dass reine Inhaltslaenge in zwei von vier Paaren den
+ * Slug ohne jede Verlinkung gewinnen liess (s. Report). Der Verlierer wird auf
+ * status='hidden' gesetzt, sein canonical_name UND seine eigenen Aliasse
  * wandern als Alias an den verbleibenden Begriff (aliases ist text[], s.
  * lib/glossary/detail.ts/terms.ts) - damit finden Suche und Verlinkung ihn
  * weiter.
@@ -48,7 +53,8 @@
  */
 import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
-import { normalizeSlugForDedup, isValidTipTapDoc, extractPlainText } from '@/lib/glossary/generate'
+import { normalizeSlugForDedup } from '@/lib/glossary/generate'
+import { decidePair, mergeAliases, type DedupeRow } from '@/lib/glossary/dedupe'
 import { linkPostContent } from '@/lib/glossary/backfill'
 import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib/glossary/terms'
 import { safeParseJSON } from '@/lib/utils/safe-json'
@@ -72,11 +78,7 @@ interface SlugRow {
   created_at: string
 }
 
-interface FullRow extends SlugRow {
-  aliases: string[]
-  summary: string
-  body: unknown
-}
+type FullRow = DedupeRow
 
 /** Schmale Spalten, ALLE veroeffentlichten Begriffe - paginiert, PostgREST
  *  kappt sonst still bei 1000 Zeilen (aktuell ~470, aber das Lexikon waechst). */
@@ -95,56 +97,6 @@ async function loadPublishedSlugs(): Promise<SlugRow[]> {
     if (data.length < 1000) break
   }
   return rows
-}
-
-/** Inhaltslaenge fuer die Gewinner-Entscheidung: summary + extrahierter
- *  Klartext des body. extractPlainText statt roher JSON-Laenge, sonst zaehlt
- *  Struktur-Overhead (Knoten-Verschachtelung) statt tatsaechlichem Inhalt mit. */
-function contentLength(summary: string, body: unknown): number {
-  if (isValidTipTapDoc(body)) return summary.length + extractPlainText(body).length
-  return summary.length + JSON.stringify(body ?? '').length
-}
-
-/** Merged Aliasse zweier Begriffe: Aliasse des Gewinners + Aliasse des
- *  Verlierers + der canonical_name des Verlierers selbst (der explizit
- *  geforderte Teil - er ist unter diesem Namen bekannt und gesucht worden).
- *  Case-insensitive dedupliziert, der eigene canonical_name des Gewinners
- *  fliegt raus (er ist ueber canonical_name selbst schon abgedeckt). */
-function mergeAliases(
-  winner: { canonical_name: string; aliases: string[] },
-  loser: { canonical_name: string; aliases: string[] },
-): string[] {
-  const canonLower = winner.canonical_name.trim().toLowerCase()
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const raw of [...winner.aliases, ...loser.aliases, loser.canonical_name]) {
-    const alias = raw.trim()
-    if (!alias) continue
-    const key = alias.toLowerCase()
-    if (key === canonLower || seen.has(key)) continue
-    seen.add(key)
-    out.push(alias)
-  }
-  return out
-}
-
-interface Decision {
-  winner: FullRow
-  losers: FullRow[]
-  reasoning: string[]
-}
-
-function decidePair(rows: FullRow[]): Decision {
-  const scored = rows
-    .map((row) => ({ row, len: contentLength(row.summary, row.body) }))
-    .sort((a, b) => b.len - a.len || (a.row.created_at < b.row.created_at ? -1 : 1))
-  const winner = scored[0].row
-  const losers = scored.slice(1).map((s) => s.row)
-  const reasoning = scored.map((s, i) =>
-    `${i === 0 ? 'GEWINNER' : 'versteckt '} ${s.row.slug} ("${s.row.canonical_name}"): ` +
-    `${s.len} Zeichen Inhalt, erstellt ${s.row.created_at}`,
-  )
-  return { winner, losers, reasoning }
 }
 
 /** Artikel, die per glossaryLink-Mark auf `slug` zeigen. ilike filtert auf der
@@ -195,35 +147,54 @@ async function main() {
   if (fullErr) throw new Error(`Volle Begriffsdaten nicht ladbar: ${fullErr.message}`)
   const bySlug = new Map(((fullRows ?? []) as FullRow[]).map((r) => [r.slug, r]))
 
-  const decisions: Decision[] = []
+  // Verlinkungen sind das ERSTE Kriterium (lib/glossary/dedupe.ts) - deshalb
+  // fuer JEDE Zeile jeder Gruppe geprueft, nicht nur fuer den nach Inhalt
+  // vermuteten Verlierer. Wer hier wie viele Links hat, entscheidet erst
+  // decidePair - nicht diese Schleife.
+  console.log('Verlinkungs-Check (alle Kandidaten, vor der Entscheidung):')
+  const linkedArticlesBySlug = new Map<string, Array<{ id: string; slug: string }>>()
   for (const group of dupeGroups) {
-    const rows = group.map((g) => bySlug.get(g.slug)).filter((r): r is FullRow => Boolean(r))
-    if (rows.length < 2) continue
-    decisions.push(decidePair(rows))
-  }
-
-  console.log('Entscheidungen:\n')
-  for (const d of decisions) {
-    console.log(`Paar (normalisiert gleich): ${d.winner.slug}, ${d.losers.map((l) => l.slug).join(', ')}`)
-    for (const line of d.reasoning) console.log(`  ${line}`)
-    console.log('')
-  }
-
-  console.log('Verlinkungs-Check (Artikel mit glossaryLink-Mark auf den zu versteckenden Slug):')
-  const linkedArticlesByLoser = new Map<string, Array<{ id: string; slug: string }>>()
-  let totalLinkedArticles = 0
-  for (const d of decisions) {
-    for (const loser of d.losers) {
-      const posts = await findLinkingArticles(loser.slug)
-      linkedArticlesByLoser.set(loser.slug, posts)
-      totalLinkedArticles += posts.length
+    for (const g of group) {
+      const posts = await findLinkingArticles(g.slug)
+      linkedArticlesBySlug.set(g.slug, posts)
       console.log(
-        `  ${loser.slug}: ${posts.length} Artikel` +
+        `  ${g.slug}: ${posts.length} Artikel` +
         (posts.length ? ` - ${posts.map((p) => p.slug).join(', ')}` : ''),
       )
     }
   }
-  console.log(`\n${totalLinkedArticles} Artikel-Verlinkungen insgesamt betroffen (auf zu versteckende Slugs).`)
+  const linkCounts = new Map(
+    [...linkedArticlesBySlug.entries()].map(([slug, posts]) => [slug, posts.length]),
+  )
+
+  const decisions = []
+  for (const group of dupeGroups) {
+    const rows = group.map((g) => bySlug.get(g.slug)).filter((r): r is FullRow => Boolean(r))
+    if (rows.length < 2) continue
+    decisions.push(decidePair(rows, linkCounts))
+  }
+
+  console.log('\nEntscheidungen:\n')
+  for (const d of decisions) {
+    console.log(
+      `Paar (normalisiert gleich): ${d.winner.slug}, ${d.losers.map((l) => l.slug).join(', ')} ` +
+      `- entschieden durch: ${d.decidingCriterion}`,
+    )
+    for (const line of d.reasoning) console.log(`  ${line}`)
+    console.log('')
+  }
+
+  // Die tatsaechlich anfallenden Mark-Aenderungen sind NUR die Links der
+  // ENDGUELTIGEN Verlierer - nicht mehr alle vier Slugs von oben. Explizit
+  // gezaehlt, weil dieser Wert die Risikoabschaetzung des Kriteriums ist: 0
+  // heisst "niemand verlinkte auf den Verlierer", jede andere Zahl bedeutet
+  // tatsaechliches Umbiegen bestehender Artikel-Verlinkungen.
+  let totalMarkChanges = 0
+  for (const d of decisions) {
+    for (const loser of d.losers) totalMarkChanges += linkCounts.get(loser.slug) ?? 0
+  }
+  console.log(`${totalMarkChanges} Mark-Aenderung(en) waeren durch diese Entscheidung noetig ` +
+    '(Summe der Verlinkungen auf die jeweiligen Verlierer).')
 
   if (!APPLY) {
     console.log('\nNichts geschrieben. Mit --apply erneut aufrufen.')
@@ -267,8 +238,10 @@ async function main() {
   // Begriffsliste MUSS NACH den obigen Updates geladen werden - sie filtert auf
   // status=published und enthaelt die frisch zusammengefuehrten Aliasse.
   const affectedPosts = new Map<string, { id: string; slug: string }>()
-  for (const posts of linkedArticlesByLoser.values()) {
-    for (const p of posts) affectedPosts.set(p.id, p)
+  for (const d of decisions) {
+    for (const loser of d.losers) {
+      for (const p of linkedArticlesBySlug.get(loser.slug) ?? []) affectedPosts.set(p.id, p)
+    }
   }
 
   if (affectedPosts.size === 0) {

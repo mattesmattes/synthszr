@@ -93,6 +93,36 @@ describe('createOrGetJob (pending)', () => {
     expect(insertPayload.total).toBe(1)
   })
 
+  it('prueft needsGeneration-Kandidaten FRISCH gegen glossary_terms, statt dem Flag blind zu vertrauen', async () => {
+    // Betreiber-Befund 2026-08-06: das Panel zeigte "30 von 37", obwohl
+    // zuletzt nur EIN Begriff wirklich fehlte. Ursache war genau das: der
+    // needsGeneration-Flag der Kandidatenliste wird beim Vormerken EINMAL
+    // gesetzt und nie aktualisiert, wenn der Begriff seither ueber einen
+    // ANDEREN Artikel entstanden ist. estimateTotal muss deshalb denselben
+    // frischen Existenz-Check machen wie generateMissingTerms
+    // (findMissingFromGlossary), nicht nur den Flag zaehlen.
+    const { createOrGetJob } = await import('@/lib/glossary/jobs/service')
+    state.queues['generated_posts'] = [{
+      data: {
+        pending_glossary_terms: [
+          { slug: 'a', name: 'A', needsGeneration: true },
+          { slug: 'b', name: 'B', needsGeneration: true },
+          { slug: 'c', name: 'C', needsGeneration: true },
+        ],
+      },
+      error: null,
+    }]
+    // 'b' und 'c' existieren laengst (ueber andere Artikel entstanden), nur
+    // 'a' fehlt wirklich.
+    state.queues['glossary_terms'] = [{ data: [{ slug: 'b' }, { slug: 'c' }], error: null }]
+    state.queues['glossary_jobs'] = [{ data: { ...JOB, kind: 'pending', total: 1 }, error: null }]
+
+    await createOrGetJob(client, 'pending', { postId: 'p1', confirmedSlugs: ['a', 'b', 'c'] })
+
+    const insertPayload = state.chains['glossary_jobs'][0].insert.mock.calls[0][0]
+    expect(insertPayload.total).toBe(1)
+  })
+
   it('liefert null als total, wenn postId oder confirmedSlugs fehlen', async () => {
     const { createOrGetJob } = await import('@/lib/glossary/jobs/service')
     state.queues['glossary_jobs'] = [{ data: { ...JOB, kind: 'pending', total: null }, error: null }]

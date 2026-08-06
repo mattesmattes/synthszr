@@ -155,3 +155,40 @@ describe('ensureConfirmedTermsExist', () => {
     expect(result.pendingRemainder?.map((c) => c.slug)).toEqual(['kaputt'])
   })
 })
+
+describe('findMissingFromGlossary', () => {
+  // Betreiber-Befund 2026-08-06: estimateTotal (jobs/service.ts) vertraute
+  // bisher blind dem needsGeneration-Flag der Kandidatenliste, ohne gegen den
+  // AKTUELLEN Bestand zu prüfen — das Panel zeigte "30 von 37", obwohl zuletzt
+  // nur EIN Begriff wirklich fehlte. Diese Funktion ist die frische Prüfung,
+  // die generateMissingTerms schon immer machte, jetzt geteilt.
+  it('behält nur Kandidaten, die es in glossary_terms noch NICHT gibt', async () => {
+    state.existingSlugs = [{ slug: 'b' }]
+    const { findMissingFromGlossary } = await import('@/lib/glossary/ensure-terms')
+    const result = await findMissingFromGlossary(
+      fakeSupabase() as never,
+      [pending('a', 'A'), pending('b', 'B'), pending('c', 'C')],
+    )
+    expect(result?.map((c) => c.slug)).toEqual(['a', 'c'])
+  })
+
+  it('liefert eine leere Liste ohne DB-Zugriff, wenn keine Kandidaten übergeben werden', async () => {
+    const calls: string[] = []
+    const client = { from: (t: string) => { calls.push(t); return { select: () => ({ in: () => ({}) }) } } }
+    const { findMissingFromGlossary } = await import('@/lib/glossary/ensure-terms')
+    const result = await findMissingFromGlossary(client as never, [])
+    expect(result).toEqual([])
+    expect(calls).toEqual([])
+  })
+
+  it('liefert null bei einem Lesefehler, nicht eine leere Liste (Unterschied ist fürs Aufrufverhalten wichtig)', async () => {
+    const client = {
+      from: () => ({
+        select: () => ({ in: () => ({ then: (res: (v: unknown) => void) => res({ data: null, error: { message: 'kaputt' } }) }) }),
+      }),
+    }
+    const { findMissingFromGlossary } = await import('@/lib/glossary/ensure-terms')
+    const result = await findMissingFromGlossary(client as never, [pending('a', 'A')])
+    expect(result).toBeNull()
+  })
+})
