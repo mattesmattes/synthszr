@@ -45,7 +45,11 @@ export function injectGlossaryMarks(
   content: unknown,
   slugs: string[],
   terms: GlossaryMatcherTerm[],
-  opts: { reserved?: string[] } = {},
+  // `lang` steuert die Kompositum-Regel: nur im Deutschen darf ein Begriff im
+  // Wortinneren treffen (s. matchNameInText). Default 'de', weil die Artikel
+  // im Original deutsch sind — die Uebersetzungspfade reichen ihre Zielsprache
+  // durch.
+  opts: { reserved?: string[]; lang?: string } = {},
 ): unknown {
   const cleaned = stripMarks(content)
   // `reserved` sind Company- und Chart-Produktnamen. Die Kollisionsregel kann
@@ -117,7 +121,7 @@ export function injectGlossaryMarks(
           .sort((a, b) => b.length - a.length)
         if (names.length === 0) continue
         for (const name of names) {
-          const pos = matchNameInText(o.text as string, name)
+          const pos = matchNameInText(o.text as string, name, opts.lang ?? 'de')
           if (!pos) continue
           done.add(term.slug)
           const before = (o.text as string).slice(0, pos.start)

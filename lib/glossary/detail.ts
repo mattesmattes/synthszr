@@ -209,7 +209,9 @@ async function linkRelatedTerms(
   // Serverseitig, weil diese Seite ihren Text über renderStaticArticleHtml
   // rendert: die DOM-Prozessoren, die Firmennamen in ARTIKELN verlinken, laufen
   // client-seitig und kommen hier nie zum Zug.
-  const withGlossary = injectGlossaryMarks(term.body, slugs, candidates)
+  // lang mitgeben: auf /en/glossary/* ist der Text englisch, dort darf die
+  // deutsche Kompositum-Regel nicht greifen (s. matchNameInText).
+  const withGlossary = injectGlossaryMarks(term.body, slugs, candidates, { lang })
   const body = injectStockLinks(withGlossary, lang)
 
   const fromText = candidates

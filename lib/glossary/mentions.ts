@@ -73,8 +73,13 @@ function isAbbreviation(name: string): boolean {
  * also voellig korrekt aus und fiel nur beim Draufklicken auf. Der Name deckt
  * alle drei Begriffe ab, die ihn tragen (branch, branch-versionskontrolle,
  * feature-branch), weil hier NAMEN stehen und keine Slugs.
+ *
+ * "diff" kam am 2026-08-07 dazu: im Artikeltext war "The diff|erence sounds
+ * technical" verlinkt. Der Name hat GENAU vier Zeichen und faellt damit knapp
+ * auf die Kompositum-Seite der Laengenregel (`4 < 4` ist falsch) — im Deutschen
+ * kollidiert er zusaetzlich mit "Differenz" und "Diffusion".
  */
-const WHOLE_WORD_ONLY = new Set(['compute', 'branch'])
+const WHOLE_WORD_ONLY = new Set(['compute', 'branch', 'diff'])
 
 /**
  * Wie matchNameInText, aber mit Wortgrenze auf BEIDEN Seiten — für Namen, bei
@@ -141,10 +146,18 @@ function extendByInflection(text: string, end: number): number {
 export function matchNameInText(
   text: string,
   name: string,
+  lang = 'de',
 ): { start: number; end: number; matched: string } | null {
   // Grenze hinten verlangen, wenn der Name zu kurz für die Kompositum-Regel ist
   // ODER der Begriff nur als ganzes Wort gelten darf (s. WHOLE_WORD_ONLY).
-  const wholeWord = name.length < GLOSSARY_MIN_NAME_LENGTH || WHOLE_WORD_ONLY.has(name.toLowerCase())
+  // Ausserhalb des Deutschen gibt es die Zusammenschreibung nicht, auf der die
+  // Kompositum-Ausnahme beruht: "difference" ist kein "diff"+"erence",
+  // "tokenizer" kein "token"+"izer". Dort ist ein Treffer im Wortinneren
+  // IMMER ein Fehlgriff — die Einzelfall-Liste unten waere fuer fremde Sprachen
+  // ein Fass ohne Boden.
+  const wholeWord = lang !== 'de'
+    || name.length < GLOSSARY_MIN_NAME_LENGTH
+    || WHOLE_WORD_ONLY.has(name.toLowerCase())
   // Abkürzungen nur in ihrer Schreibung (s. isAbbreviation).
   const flags = isAbbreviation(name) ? 'u' : 'iu'
   const re = wholeWord ? boundaryRegexShort(name, flags) : boundaryRegex(name, flags)
@@ -166,6 +179,7 @@ export function findGlossaryMentions(
   text: string,
   terms: GlossaryMatcherTerm[],
   max = Number.MAX_SAFE_INTEGER,
+  lang = 'de',
 ): GlossaryMention[] {
   const hits: GlossaryMention[] = []
   for (const term of terms) {
@@ -175,7 +189,7 @@ export function findGlossaryMentions(
     const namesToTry = allNames.sort((a, b) => b.length - a.length)
 
     for (const name of namesToTry) {
-      const hit = matchNameInText(text, name)
+      const hit = matchNameInText(text, name, lang)
       if (hit) {
         hits.push({ slug: term.slug, matchedText: hit.matched })
         break

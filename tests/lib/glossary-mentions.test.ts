@@ -101,6 +101,49 @@ describe('findGlossaryMentions', () => {
     expect(hits.map((h) => h.slug)).toEqual(['branch'])
   })
 
+  // PROD-BEFUND 2026-08-07: im ENGLISCHEN Artikeltext war "The diff|erence
+  // sounds technical" verlinkt — "Diff" hat genau 4 Zeichen und faellt damit
+  // knapp auf die Kompositum-Seite der Laengenregel (4 < 4 ist falsch).
+  const diffTerm: GlossaryMatcherTerm = { slug: 'diff', canonicalName: 'Diff', aliases: [] }
+
+  it('trifft nicht das Wortinnere von "difference"', () => {
+    expect(findGlossaryMentions('The difference sounds technical.', [diffTerm])).toEqual([])
+  })
+
+  it('trifft nicht das deutsche "Differenz"', () => {
+    expect(findGlossaryMentions('Die Differenz ist gering.', [diffTerm])).toEqual([])
+  })
+
+  it('trifft "Diff" weiterhin als eigenständiges Wort', () => {
+    const hits = findGlossaryMentions('Der Diff zeigt zwei Zeilen.', [diffTerm])
+    expect(hits.map((h) => h.slug)).toEqual(['diff'])
+  })
+
+  // Die Kompositum-Regel ist eine DEUTSCHE Regel: "Inferenzkosten" ist ein
+  // zusammengesetztes Wort mit "Inferenz" als Erstglied. Im Englischen gibt es
+  // diese Zusammenschreibung nicht — dort ist ein Treffer im Wortinneren immer
+  // ein Fehlgriff, und die Liste einzelner Ausnahmen (WHOLE_WORD_ONLY) waere
+  // ein Fass ohne Boden.
+  describe('Kompositum-Regel nur für Deutsch', () => {
+    const inferenz: GlossaryMatcherTerm = { slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }
+
+    it('trifft im deutschen Text weiterhin im Kompositum', () => {
+      const hits = findGlossaryMentions('Die Inferenzkosten sinken.', [inferenz], undefined, 'de')
+      expect(hits.map((h) => h.slug)).toEqual(['inferenz'])
+    })
+
+    it('trifft im englischen Text NICHT im Wortinneren', () => {
+      const token: GlossaryMatcherTerm = { slug: 'token', canonicalName: 'Token', aliases: [] }
+      expect(findGlossaryMentions('The tokenizer splits words.', [token], undefined, 'en')).toEqual([])
+    })
+
+    it('trifft im englischen Text weiterhin das ganze Wort', () => {
+      const token: GlossaryMatcherTerm = { slug: 'token', canonicalName: 'Token', aliases: [] }
+      const hits = findGlossaryMentions('Each token costs money.', [token], undefined, 'en')
+      expect(hits.map((h) => h.slug)).toEqual(['token'])
+    })
+  })
+
   it('kurzer Alias trifft mit Bindestrich-Grenze', () => {
     const moeTerm: GlossaryMatcherTerm = { slug: 'moe', canonicalName: 'Mixture of Experts', aliases: ['MoE'] }
     const hits = findGlossaryMentions('Ein MoE-Modell skaliert.', [moeTerm])

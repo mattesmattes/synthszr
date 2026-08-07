@@ -374,7 +374,10 @@ function finishInjection(
   reserved: string[],
   targetLang: LanguageCode,
 ): unknown {
-  const injected = injectGlossaryMarks(translatedContent, slugs, terms, { reserved })
+  // targetLang mitgeben: in der Uebersetzung darf die deutsche Kompositum-Regel
+  // nicht greifen. Prod-Befund 2026-08-07: im englischen Text war "The
+  // diff|erence sounds technical" als Begriff "Diff" verlinkt.
+  const injected = injectGlossaryMarks(translatedContent, slugs, terms, { reserved, lang: targetLang })
 
   const actuallyLinked = extractLinkedSlugs(injected).length
   if (actuallyLinked < slugs.length) {
