@@ -623,14 +623,29 @@ function AudioPage() {
   const [podigeePublishDate, setPodigeePublishDate] = useState('')
   const [coverModalOpen, setCoverModalOpen] = useState(false)
   // Latest recording from history (used when no recording was generated in this session)
-  const [latestEpisode, setLatestEpisode] = useState<{
+  // Die letzten Aufnahmen als AUSWAHL statt nur der jüngsten.
+  //
+  // Vorher hielt der Tab genau eine Episode — `episodes[0]` — und nahm damit
+  // blind die zuletzt erzeugte Aufnahme, egal zu welchem Artikel sie gehörte.
+  // Am 2026-08-07 lag die jüngste Aufnahme (06:05) bei einem inzwischen
+  // ARCHIVIERTEN Artikel ohne Cover, die eigentlich zu veröffentlichende (05:51)
+  // eine Position dahinter. Ergebnis: kaputtes Cover-Vorschaubild und die
+  // falsche Episode im Publish-Formular, ohne jede Möglichkeit, das zu ändern.
+  const [podigeeEpisodes, setPodigeeEpisodes] = useState<Array<{
+    id: string
     post_id: string
     audio_url: string
     title: string | null
     script: string | null
     created_at: string
-  } | null>(null)
+  }>>([])
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState<string>('')
   const [latestEpisodeLoading, setLatestEpisodeLoading] = useState(false)
+
+  // Die gewählte Episode — Default ist die zuletzt erzeugte (Index 0), das
+  // bisherige Verhalten. Der Fallback auf [0] greift, solange noch nichts
+  // gewählt ist.
+  const latestEpisode = podigeeEpisodes.find((e) => e.id === selectedEpisodeId) ?? podigeeEpisodes[0] ?? null
 
   // Effective values: prefer current session recording, fall back to latest history
   const effectiveAudioUrl = podcastAudioUrl || latestEpisode?.audio_url || null
@@ -669,16 +684,20 @@ function AudioPage() {
     }
   }, [activeTab])
 
-  // Fetch latest recording when Podigee tab becomes active (only once)
+  // Die letzten 10 Aufnahmen laden, wenn der Podigee-Tab aktiv wird (einmalig).
+  // Zehn statt einer, damit eine verwaiste jüngste Aufnahme nicht mehr die
+  // einzige Wahl ist (s. Kommentar an podigeeEpisodes).
   useEffect(() => {
     if (activeTab !== 'podigee') return
-    if (latestEpisode || latestEpisodeLoading) return
+    if (podigeeEpisodes.length > 0 || latestEpisodeLoading) return
     setLatestEpisodeLoading(true)
     fetch('/api/admin/podcast-history')
       .then(res => res.json())
       .then(data => {
-        const ep = data.episodes?.[0] ?? null
-        setLatestEpisode(ep)
+        const eps = (data.episodes ?? []).slice(0, 10)
+        setPodigeeEpisodes(eps)
+        // Default: die zuletzt erzeugte Audio-Datei.
+        setSelectedEpisodeId(eps[0]?.id ?? '')
       })
       .catch(() => {})
       .finally(() => setLatestEpisodeLoading(false))
@@ -2181,6 +2200,45 @@ function AudioPage() {
                 </p>
               ) : (
                 <div className="space-y-4 max-w-lg">
+                  {/* Episodenauswahl. Ohne sie gewann immer die zuletzt erzeugte
+                      Aufnahme — auch wenn deren Artikel längst archiviert war
+                      und kein Cover hatte (s. podigeeEpisodes). Beim Wechsel
+                      werden die übersetzten Metadaten geleert, damit der
+                      Auto-Translate-Effekt sie für die neue Episode neu holt;
+                      sonst bliebe der Titel der vorigen stehen. */}
+                  {podigeeEpisodes.length > 1 && !podcastAudioUrl && (
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Episode</label>
+                      <Select
+                        value={selectedEpisodeId}
+                        onValueChange={(id) => {
+                          setSelectedEpisodeId(id)
+                          setPodigeeTitle('')
+                          setPodigeeSubtitle('')
+                          setPodigeeDescription('')
+                          setPodigeeEpisodeUrl(null)
+                          setPodigeeError(null)
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Episode wählen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {podigeeEpisodes.map((ep, i) => (
+                            <SelectItem key={ep.id} value={ep.id}>
+                              {new Intl.DateTimeFormat('de-DE', {
+                                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                                timeZone: 'Europe/Berlin',
+                              }).format(new Date(ep.created_at))}
+                              {' — '}
+                              {(ep.title ?? 'Ohne Titel').slice(0, 60)}
+                              {i === 0 ? ' (neueste)' : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   {(podigeeTranslating || latestEpisodeLoading) ? (
                     <p className="text-sm text-muted-foreground flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
