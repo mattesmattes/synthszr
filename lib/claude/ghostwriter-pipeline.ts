@@ -847,7 +847,20 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
     cacheableUserPrefix: context.cacheableUserPrefix,
     thinking: true,
     effort: context.effort ?? 'high',
-    maxTokens: 16000,
+    // 32000 statt 16000 wie in writeSection — hier ist beides größer: der Input
+    // trägt ALLE Quellen des Bündels (im Prod-Fall vom 2026-08-07 rund 34.000
+    // Zeichen gegenüber einer einzelnen Quelle), und der erlaubte Output ist mit
+    // 25 Sätzen plus Take der längste der Pipeline. Bei adaptivem Thinking deckt
+    // max_tokens Denken UND Text gemeinsam ab, 16000 war für diese Kombination
+    // knapp bemessen.
+    //
+    // ANNAHME, nicht bewiesen: dass genau dieses Budget die leere Antwort jenes
+    // Laufs verursacht hat. Die Alternative ist eine Verweigerung beim damaligen
+    // Thema (KI entwirft Viren). Der stop_reason, den
+    // assertNonEmptyModelOutput jetzt mitmeldet, unterscheidet beide Fälle beim
+    // nächsten Auftreten — bis dahin ist die Erhöhung die risikoarme Seite:
+    // ungenutztes Budget kostet nichts, Opus 5 liefert deutlich mehr als 16k.
+    maxTokens: 32000,
   })
 
   // Heading sicherstellen + Längen-Durchsetzung (vor der Marker-Injektion, damit
@@ -876,6 +889,39 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
 // ─────────────────────────────────────────────────────────────────────────────
 // Non-streaming model call
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Eine leere Modellantwort ist in dieser Pipeline IMMER ein Fehler, nie ein
+ * Ergebnis — und muss laut scheitern statt still durchzulaufen.
+ *
+ * PROD-BEFUND 2026-08-07: Im Tages-Artikel fehlte das Hauptthema. Fünf als
+ * "Thema des Tages" markierte Quellen (KI entwirft Viren) lagen korrekt in der
+ * Pipeline, der Bündel-Call lieferte aber leeren Text. Der lief unbemerkt durch
+ * die gesamte Nachbearbeitung — `trimmed.startsWith('##')` ergänzte eine
+ * Überschrift, der Satz-Cap kappte den leeren Rest — und landete als `"\n\n"`
+ * im Artikel. Ergebnis: ein fertig aussehender Artikel ohne sein wichtigstes
+ * Thema, ohne Fehlermeldung und ohne Logzeile.
+ *
+ * Der Wurf ist hier das gewünschte Verhalten: der Aufrufer in writeUnits
+ * ersetzt einen gescheiterten Abschnitt durch "*Fehler: …*", was beim
+ * Gegenlesen sofort auffällt.
+ *
+ * `stopReason` unterscheidet die zwei plausiblen Ursachen, die man der leeren
+ * Antwort sonst nicht ansieht: 'max_tokens' heißt, das gemeinsame Budget von
+ * Thinking UND Text war aufgebraucht (der Bündel-Prompt trägt alle Quellen des
+ * Bündels und ist damit um ein Vielfaches größer als bei einer normalen
+ * Section); 'refusal' heißt, das Modell hat die Antwort verweigert — beim
+ * damaligen Thema (Virendesign) keine abwegige Möglichkeit.
+ */
+export function assertNonEmptyModelOutput(
+  text: string,
+  context: string,
+  stopReason?: string | null,
+): string {
+  if (text.trim().length > 0) return text
+  const reason = stopReason ? ` (stop_reason: ${stopReason})` : ''
+  throw new Error(`Modell lieferte eine leere Antwort für ${context}${reason}`)
+}
 
 async function callModelNonStreaming(
   prompt: string,
@@ -972,22 +1018,33 @@ async function callModelNonStreaming(
     // und die Schleife verwirft thinking_delta sauber (nur text_delta zählt).
     if (tokenLimit > 16384 || prompt.length > 30000 || options?.thinking) {
       let result = ''
+      // stop_reason mitschneiden: bei einer leeren Antwort ist er der einzige
+      // Hinweis darauf, WARUM nichts kam (Budget aufgebraucht vs. Verweigerung).
+      // Er kommt im message_delta-Event, nicht in den content_block_deltas.
+      let stopReason: string | null = null
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const stream = anthropic.messages.stream(params as any)
       for await (const event of stream) {
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
           result += event.delta.text
+        } else if (event.type === 'message_delta') {
+          stopReason = event.delta.stop_reason ?? stopReason
         }
       }
-      return result
+      // Thinking-Deltas zaehlen bewusst nicht als Ausgabe (s. Schleife oben) —
+      // eine Antwort, die NUR aus Thinking bestand, ist hier also leer und muss
+      // scheitern statt einen leeren Abschnitt zu liefern.
+      return assertNonEmptyModelOutput(result, `${model} (streaming)`, stopReason)
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const response = (await anthropic.messages.create(params as any)) as Anthropic.Message
     for (const block of response.content) {
-      if (block.type === 'text') return block.text
+      if (block.type === 'text') {
+        return assertNonEmptyModelOutput(block.text, `${model}`, response.stop_reason)
+      }
     }
-    return ''
+    return assertNonEmptyModelOutput('', `${model} (kein Text-Block)`, response.stop_reason)
   }
 
   if (resolved?.provider === 'openai') {
