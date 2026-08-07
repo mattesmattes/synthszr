@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   ListTodo,
   Loader2,
@@ -153,6 +153,14 @@ export default function NewsQueuePage() {
   const [manualUrl, setManualUrl] = useState('')
   const [manualTitle, setManualTitle] = useState('')
   const [manualText, setManualText] = useState('')
+  // Zähler und Fehler der laufenden Erfassungs-Sitzung. Der Dialog bleibt nach
+  // dem Speichern offen (Betreiber-Wunsch 2026-08-07), damit mehrere Artikel
+  // hintereinander eingetragen werden können — beide Werte gelten deshalb für
+  // die Sitzung, nicht für einen einzelnen Artikel, und werden beim Schließen
+  // zurückgesetzt.
+  const [manualAddedCount, setManualAddedCount] = useState(0)
+  const [manualError, setManualError] = useState<string | null>(null)
+  const manualUrlRef = useRef<HTMLInputElement>(null)
 
   // Filter tags
   interface FilterTag { id: string; label: string; color: string; sort_order: number }
@@ -460,15 +468,28 @@ export default function NewsQueuePage() {
       })
       if (res.ok) {
         const data = await res.json()
-        alert(`${data.added} Artikel hinzugefügt`)
-        setShowManualAddDialog(false)
+        // Kein alert und kein Schliessen mehr: der Dialog IST der Arbeitsplatz
+        // fuer eine Serie von Artikeln. Frueher unterbrach ein Bestaetigungs-
+        // Popup nach jedem einzelnen, und der Dialog musste danach neu geoeffnet
+        // werden — drei Klicks je Artikel, von denen keiner etwas beitrug.
+        // Stattdessen Felder leeren und den Fokus zurueck in die URL: der
+        // naechste Artikel laesst sich sofort einfuegen.
         setManualUrl('')
         setManualTitle('')
         setManualText('')
+        setManualAddedCount((n) => n + (data.added ?? 1))
+        manualUrlRef.current?.focus()
         fetchData()
+      } else {
+        // OHNE Erfolgsmeldung MUSS der Fehlerfall sichtbar sein, sonst sieht ein
+        // Fehlschlag genauso aus wie ein Erfolg — nur dass der eingefuegte Text
+        // noch im Formular steht. Die Felder bleiben hier absichtlich gefuellt,
+        // damit nichts verloren geht und der Knopf erneut gedrueckt werden kann.
+        setManualError(`Nicht gespeichert (HTTP ${res.status}). Der Text bleibt stehen.`)
       }
     } catch (error) {
       console.error('Manual add failed:', error)
+      setManualError('Nicht gespeichert (Netzwerkfehler). Der Text bleibt stehen.')
     }
     setActionLoading(null)
   }
@@ -1550,7 +1571,19 @@ export default function NewsQueuePage() {
       </Dialog>
 
       {/* Manual Add Dialog */}
-      <Dialog open={showManualAddDialog} onOpenChange={setShowManualAddDialog}>
+      <Dialog
+        open={showManualAddDialog}
+        onOpenChange={(open) => {
+          setShowManualAddDialog(open)
+          // Zähler und Fehler gehören zur Erfassungs-Sitzung, nicht zum Dialog
+          // selbst: beim Schließen zurücksetzen, damit das nächste Öffnen nicht
+          // mit „3 hinzugefügt" von vorhin beginnt.
+          if (!open) {
+            setManualAddedCount(0)
+            setManualError(null)
+          }
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-sm flex items-center gap-2">
@@ -1558,13 +1591,31 @@ export default function NewsQueuePage() {
               Artikel hinzufügen
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Artikel direkt per URL und Text zur Queue hinzufügen
+              Artikel direkt per URL und Text zur Queue hinzufügen. Das Fenster
+              bleibt nach dem Speichern offen — der nächste Artikel kann sofort
+              eingefügt werden.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            {/* Ersetzt das frühere Bestätigungs-Popup: sichtbar genug, um das
+                Speichern zu quittieren, aber ohne den Ablauf zu unterbrechen. */}
+            {manualAddedCount > 0 && !manualError && (
+              <p className="rounded border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                {manualAddedCount === 1
+                  ? '1 Artikel hinzugefügt.'
+                  : `${manualAddedCount} Artikel hinzugefügt.`}{' '}
+                Bereit für den nächsten.
+              </p>
+            )}
+            {manualError && (
+              <p className="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {manualError}
+              </p>
+            )}
             <div>
               <label className="text-xs font-medium mb-1 block">URL</label>
               <input
+                ref={manualUrlRef}
                 type="url"
                 value={manualUrl}
                 onChange={(e) => setManualUrl(e.target.value)}
@@ -1597,9 +1648,15 @@ export default function NewsQueuePage() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setShowManualAddDialog(false)}
+              onClick={() => {
+                setShowManualAddDialog(false)
+                setManualAddedCount(0)
+                setManualError(null)
+              }}
             >
-              Abbrechen
+              {/* Nach dem ersten Speichern ist „Abbrechen" irreführend — es gibt
+                  nichts mehr abzubrechen, die Artikel sind in der Queue. */}
+              {manualAddedCount > 0 ? 'Fertig' : 'Abbrechen'}
             </Button>
             <Button
               size="sm"
