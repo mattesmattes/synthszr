@@ -22,6 +22,10 @@
       "schedule": "*/1 * * * *"
     },
     {
+      "path": "/api/cron/glossary-relink",
+      "schedule": "0 6 * * *"
+    },
+    {
       "path": "/api/cron/glossary-translations",
       "schedule": "0 7 * * *"
     }
