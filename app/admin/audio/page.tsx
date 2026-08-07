@@ -649,7 +649,24 @@ function AudioPage() {
 
   // Effective values: prefer current session recording, fall back to latest history
   const effectiveAudioUrl = podcastAudioUrl || latestEpisode?.audio_url || null
-  const effectivePostId = selectedPostId || latestEpisode?.post_id || ''
+
+  // Der Artikel MUSS zu der Aufnahme gehören, die hier veröffentlicht wird —
+  // sonst laufen Cover und Audio auseinander.
+  //
+  // Vorher hatte `selectedPostId` Vorrang. Der wird beim Laden der Seite
+  // automatisch auf den NEUESTEN Artikel gesetzt (fetchRecentPosts, inkl.
+  // Entwürfe), hat mit der abgespielten Aufnahme aber nichts zu tun. Am
+  // 2026-08-07 war der neueste Artikel ein archivierter ohne Cover, während
+  // Titel, Shownotes und MP3 aus der History-Episode eines anderen Artikels
+  // kamen: das Publish-Formular zeigte korrekte Metadaten und ein kaputtes
+  // Cover-Vorschaubild, weil die Cover-Route für den falschen Artikel suchte
+  // und 404 lieferte.
+  //
+  // Läuft eine Session-Aufnahme, gilt weiterhin selectedPostId — für DEN
+  // Artikel wurde ja gerade aufgenommen.
+  const effectivePostId = podcastAudioUrl
+    ? selectedPostId
+    : (latestEpisode?.post_id || selectedPostId || '')
 
   // Job-based podcast generation state
   const [podcastJobId, setPodcastJobId] = useState<string | null>(null)
