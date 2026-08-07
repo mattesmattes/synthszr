@@ -136,7 +136,13 @@ describe('buildCandidateList', () => {
     const published = [{ slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }]
     const result = await buildCandidateList(makeSupabase() as never, published, ['Inferenz'], [], [])
     expect(result).toEqual([
-      { slug: 'inferenz', name: 'Inferenz', origin: 'tag', matchedText: null, isNewlyGenerated: false, summary: 'Kurzfassung von Inferenz.' },
+      {
+        slug: 'inferenz', name: 'Inferenz', origin: 'tag', matchedText: null,
+        isNewlyGenerated: false, summary: 'Kurzfassung von Inferenz.',
+        // Der Begriff steht in `published` — das Panel blendet ihn deshalb aus
+        // und bestätigt ihn still, damit die Verlinkung bleibt.
+        alreadyPublished: true,
+      },
     ])
     expect(mocks.generateTermContent).not.toHaveBeenCalled()
     // Die claim ist nicht nur "irgendeine summary kam zurück", sondern dass
@@ -156,6 +162,9 @@ describe('buildCandidateList', () => {
       {
         slug: 'inferenz', name: 'Inferenz', origin: 'match', matchedText: 'Inferenzkosten',
         isNewlyGenerated: false, summary: 'Kurzfassung von Inferenz.',
+        // Matcher-Treffer laufen per Konstruktion nur gegen veröffentlichte
+        // Begriffe — dieser Kandidat ist also immer schon im Lexikon.
+        alreadyPublished: true,
       },
     ])
   })
@@ -277,5 +286,43 @@ describe('buildCandidateList — Generierung ist entkoppelt', () => {
     expect(result).toHaveLength(1)
     expect(result[0].slug).toBe('mixture-of-experts')
     expect(result[0].needsGeneration).toBeFalsy()
+  })
+
+  // Betreiber-Wunsch 2026-08-07: die Freigabeliste soll nur noch Begriffe
+  // zeigen, die es im Lexikon NOCH NICHT gibt. Das Panel braucht dafür ein
+  // verlässliches Kennzeichen — needsGeneration reicht nicht, weil ein DRAFT
+  // zwar existiert, aber noch nicht im Lexikon steht und die Freigabe braucht.
+  describe('alreadyPublished', () => {
+    it('markiert einen Matcher-Treffer als bereits veröffentlicht', async () => {
+      state.summaryRows = [{ slug: 'inferenz', summary: 'Kurzfassung.' }]
+      const { buildCandidateList } = await import('@/lib/glossary/candidates')
+      const published = [{ slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }]
+      const result = await buildCandidateList(
+        makeSupabase() as never, published, [], [{ slug: 'inferenz', matchedText: 'Inferenzkosten' }], [],
+      )
+      expect(result[0].alreadyPublished).toBe(true)
+    })
+
+    it('markiert einen {lex:}-Tag auf einen veröffentlichten Begriff als bereits veröffentlicht', async () => {
+      state.summaryRows = [{ slug: 'inferenz', summary: 'Kurzfassung.' }]
+      const { buildCandidateList } = await import('@/lib/glossary/candidates')
+      const published = [{ slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }]
+      const result = await buildCandidateList(makeSupabase() as never, published, ['Inferenz'], [], [])
+      expect(result[0].alreadyPublished).toBe(true)
+    })
+
+    it('markiert einen DRAFT NICHT als veröffentlicht — er braucht die Freigabe', async () => {
+      state.draftRows = [{ slug: 'mixture-of-experts', canonical_name: 'Mixture of Experts', aliases: ['MoE'] }]
+      const { buildCandidateList } = await import('@/lib/glossary/candidates')
+      const result = await buildCandidateList(makeSupabase() as never, [], ['MoE'], [], [])
+      expect(result[0].slug).toBe('mixture-of-experts')
+      expect(result[0].alreadyPublished).toBeFalsy()
+    })
+
+    it('markiert einen noch zu erzeugenden Begriff NICHT als veröffentlicht', async () => {
+      const { buildCandidateList } = await import('@/lib/glossary/candidates')
+      const result = await buildCandidateList(makeSupabase() as never, [], [], [], ['Große Sprachmodelle'])
+      expect(result[0].alreadyPublished).toBeFalsy()
+    })
   })
 })

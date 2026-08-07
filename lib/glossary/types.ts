@@ -67,4 +67,24 @@ export interface GlossaryCandidate {
    *  vor dem Umbau geschrieben wurden, führen das Feld nicht, und dort ist
    *  „fehlt" gleichbedeutend mit „Begriff existiert schon". */
   needsGeneration?: boolean
+  /** true, wenn der Begriff im Lexikon bereits VERÖFFENTLICHT ist. Dann gibt es
+   *  nichts freizugeben: er wird beim Speichern nur noch verlinkt.
+   *
+   *  Betreiber-Wunsch 2026-08-07: das Freigabe-Panel blendet solche Kandidaten
+   *  aus, damit die Liste nur noch das zeigt, worüber wirklich zu entscheiden
+   *  ist — bei einem Artikel mit 29 Einträgen waren die meisten längst im
+   *  Lexikon. Bestätigt bleiben sie trotzdem, sonst verlöre der Artikel ihre
+   *  Verlinkung (applyGlossaryConfirmation injiziert Marks NUR für bestätigte
+   *  Slugs).
+   *
+   *  Abgrenzung zu `needsGeneration`: das Feld dort heißt „es existiert noch gar
+   *  kein Begriff". Dazwischen liegt der DRAFT — existiert, ist aber noch nicht
+   *  im Lexikon und braucht genau diese Freigabe. Ein Draft hat deshalb weder
+   *  needsGeneration noch alreadyPublished und bleibt sichtbar.
+   *
+   *  Optional aus demselben Grund wie die Felder darüber: `pending_glossary_terms`
+   *  ist schemaloses JSON, ältere Listen führen es nicht. „Fehlt" bedeutet
+   *  „nicht als veröffentlicht bekannt" — solche Kandidaten werden weiterhin
+   *  angezeigt, das Panel verliert also nichts, was es früher zeigte. */
+  alreadyPublished?: boolean
 }

@@ -70,6 +70,12 @@ export async function buildCandidateList(
 
   const knownTerms: GlossaryMatcherTerm[] = [...publishedTerms, ...existingTerms]
 
+  // Genau die Slugs, zu denen es schon eine VERÖFFENTLICHTE Lexikonseite gibt.
+  // `existingTerms` gehört bewusst nicht dazu: das sind draft/hidden, und ein
+  // Draft ist der Fall, der die Freigabe noch braucht (s. alreadyPublished in
+  // types.ts).
+  const publishedSlugs = new Set(publishedTerms.map((t) => t.slug))
+
   const bySlug = new Map<string, GlossaryCandidate>()
   // Erste Quelle gewinnt bei Kollision: tag (explizite Ghostwriter-Direktive)
   // vor match vor new, entsprechend der Verarbeitungsreihenfolge unten.
@@ -78,7 +84,12 @@ export async function buildCandidateList(
     isNewlyGenerated: boolean, summary: string | undefined,
   ) => {
     if (bySlug.has(slug)) return
-    bySlug.set(slug, { slug, name, origin, matchedText, isNewlyGenerated, summary })
+    const candidate: GlossaryCandidate = { slug, name, origin, matchedText, isNewlyGenerated, summary }
+    // Nur setzen, wenn zutreffend: ein Feld, das überall `false` mitschleppt,
+    // bläht die JSON-Spalte pending_glossary_terms ohne Aussagegewinn auf, und
+    // „fehlt" ist als „nicht veröffentlicht" definiert.
+    if (publishedSlugs.has(slug)) candidate.alreadyPublished = true
+    bySlug.set(slug, candidate)
   }
 
   /**

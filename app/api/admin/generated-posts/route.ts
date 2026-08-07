@@ -18,6 +18,54 @@ import type { GlossaryCandidate } from '@/lib/glossary/types'
 // Pfad selbst macht nur noch schnelle DB-Updates. Der Vercel-Plattform-Default
 // reicht dafuer.
 
+/**
+ * Setzt `alreadyPublished` in der Kandidatenliste eines Artikels auf den
+ * AKTUELLEN Stand. Das Freigabe-Panel blendet damit alles aus, was schon im
+ * Lexikon steht (Betreiber-Wunsch 2026-08-07).
+ *
+ * Warum hier und nicht nur in buildCandidateList: die Liste liegt als
+ * schemaloses JSON in `pending_glossary_terms` und ist eine MOMENTAUFNAHME vom
+ * Zeitpunkt ihrer Erzeugung. Ein Begriff, der seitdem veröffentlicht wurde —
+ * durch einen anderen Artikel, den Crawl oder den Cron —, stünde dort weiterhin
+ * als offen. Ausserdem tragen alle vor dieser Änderung geschriebenen Listen das
+ * Feld gar nicht, und genau die liegen gerade in den offenen Artikeln.
+ *
+ * Fehler degradieren bewusst zum alten Verhalten (Liste unverändert, Panel
+ * zeigt alles): eine nicht gefilterte Liste ist unbequem, eine faelschlich
+ * gefilterte verschluckt eine echte Freigabe-Entscheidung.
+ */
+async function withGlossaryPublishState(
+  supabase: ReturnType<typeof createAdminClient>,
+  row: unknown,
+): Promise<unknown> {
+  const candidates = (row as { pending_glossary_terms?: unknown } | null)?.pending_glossary_terms
+  if (!Array.isArray(candidates) || candidates.length === 0) return row
+  const slugs = (candidates as GlossaryCandidate[]).map((c) => c?.slug).filter(Boolean)
+  if (slugs.length === 0) return row
+
+  // Ein `.in()` mit der vollen Slug-Liste ist hier unbedenklich: der groesste
+  // bekannte Artikel hatte 109 Begriffe, das sind rund 2.700 Zeichen im
+  // Query-String. Die Grenze liegt bei ueber 11.000 (s. TRANSLATION_CHUNK in
+  // lib/glossary/terms.ts) — bei Listen dieser Groessenordnung waere zu
+  // stueckeln.
+  const { data, error } = await supabase
+    .from('glossary_terms')
+    .select('slug')
+    .in('slug', slugs)
+    .eq('status', 'published')
+  if (error) {
+    console.error('[Glossary] Freigabe-Status nicht ladbar:', error.message)
+    return row
+  }
+  const published = new Set((data ?? []).map((r) => (r as { slug: string }).slug))
+  return {
+    ...(row as Record<string, unknown>),
+    pending_glossary_terms: (candidates as GlossaryCandidate[]).map((c) =>
+      published.has(c.slug) ? { ...c, alreadyPublished: true } : c,
+    ),
+  }
+}
+
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) {
@@ -48,7 +96,7 @@ export async function GET(request: NextRequest) {
           .eq('id', id)
           .single()
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-        return NextResponse.json(data)
+        return NextResponse.json(await withGlossaryPublishState(supabase, data))
       }
 
       let query = supabase

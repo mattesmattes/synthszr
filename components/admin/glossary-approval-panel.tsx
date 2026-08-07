@@ -82,10 +82,26 @@ export function GlossaryApprovalPanel({ candidates, value, onChange, postId, run
   // ist ein Job, der sofort als 'done' endet, keine verlorene Arbeit.
   const openCount = candidates.filter((c) => value.includes(c.slug) && c.needsGeneration).length
 
+  // Begriffe, die es im Lexikon schon gibt, gehoeren NICHT in eine Freigabeliste:
+  // an ihnen ist nichts freizugeben, sie werden beim Speichern nur verlinkt. Sie
+  // machten aber den Grossteil der Liste aus (Betreiber-Beobachtung 2026-08-07:
+  // 29 Eintraege, davon die meisten laengst vorhanden), sodass die wenigen
+  // echten Entscheidungen darin untergingen.
+  //
+  // Sie bleiben in `value` und werden weiterhin mitbestaetigt — nur unsichtbar.
+  // Das ist wesentlich und kein Detail: applyGlossaryConfirmation injiziert die
+  // Marks NUR fuer bestaetigte Slugs. Wuerde man sie einfach weglassen, verloere
+  // der Artikel genau die Verlinkungen zu den Begriffen, die es schon gibt.
+  const visibleCandidates = candidates.filter((c) => !c.alreadyPublished)
+  const hiddenCount = candidates.length - visibleCandidates.length
+
   const job = pendingJob.job
   const jobOpen = isJobOpen(job)
 
-  if (candidates.length === 0) return null
+  // Erst pruefen, wenn NICHTS mehr zu zeigen ist — nicht schon bei leerer
+  // Kandidatenliste: sind alle Begriffe bereits veroeffentlicht, gibt es keine
+  // Freigabe mehr, und ein Panel mit null Eintraegen waere nur Rauschen.
+  if (visibleCandidates.length === 0) return null
 
   function toggle(slug: string, checked: boolean) {
     onChange(checked ? [...value, slug] : value.filter((s) => s !== slug))
@@ -152,6 +168,17 @@ export function GlossaryApprovalPanel({ candidates, value, onChange, postId, run
           Die fehlenden Erklärtexte erzeugt danach ein Hintergrund-Job — er läuft serverseitig
           weiter, auch wenn dieses Fenster geschlossen wird, und verlinkt am Ende automatisch.
         </p>
+        {/* Sichtbar machen, dass die Liste gefiltert ist. Ohne diesen Satz wirkt
+            es wie ein Fehler, wenn ein im Text erwähnter Begriff hier fehlt —
+            und es bliebe unklar, dass er trotzdem verlinkt wird. */}
+        {hiddenCount > 0 && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {hiddenCount === 1
+              ? '1 Begriff steht bereits im Lexikon und wird nur verlinkt.'
+              : `${hiddenCount} Begriffe stehen bereits im Lexikon und werden nur verlinkt.`}{' '}
+            Hier steht nur, was neu ist.
+          </p>
+        )}
       </div>
 
       {postId && openCount > 0 && (
@@ -183,7 +210,7 @@ export function GlossaryApprovalPanel({ candidates, value, onChange, postId, run
       )}
 
       <div className="space-y-1.5">
-        {candidates.map((c) => (
+        {visibleCandidates.map((c) => (
           <div key={c.slug} className="flex items-start gap-3 p-2 bg-muted/50 rounded">
             <Checkbox
               id={`glossary-${c.slug}`}
