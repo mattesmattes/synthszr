@@ -70,7 +70,7 @@ function workClock(stepMs: number) {
 /** Ein Ergebnis, bei dem ein Begriff erzeugt wurde und weitere offen sind. */
 const ONE_GENERATED = {
   generated: [{ name: 'Transformer', slug: 't', mentions: 3 }],
-  failed: [] as string[], retryable: [] as string[], alreadyExisting: [] as string[],
+  failed: [] as string[], retryable: [] as string[], configFailed: [] as string[], alreadyExisting: [] as string[],
 }
 
 describe('advanceJob (generate)', () => {
@@ -129,7 +129,7 @@ describe('advanceJob (generate)', () => {
     const clock = workClock(1000)
     mocks.generate.mockImplementation(async () => {
       clock.advance()
-      return { generated: [], failed: [], retryable: [], alreadyExisting: [] }
+      return { generated: [], failed: [], retryable: [], configFailed: [], alreadyExisting: [] }
     })
 
     const res = await advanceJob(client, { ...JOB }, { now: clock.now, budgetMs: 240_000 })
@@ -146,7 +146,7 @@ describe('advanceJob (generate)', () => {
     const clock = workClock(1000)
     mocks.generate.mockImplementation(async () => {
       clock.advance()
-      return { generated: [], failed: [], retryable: ['Transformer'], alreadyExisting: [] }
+      return { generated: [], failed: [], retryable: ['Transformer'], configFailed: [], alreadyExisting: [] }
     })
 
     const res = await advanceJob(client, { ...JOB, attempts: 9 }, { now: clock.now, budgetMs: 240_000 })
@@ -161,7 +161,7 @@ describe('advanceJob (generate)', () => {
     const clock = workClock(1000)
     mocks.generate.mockImplementation(async () => {
       clock.advance()
-      return { generated: [], failed: [], retryable: ['Transformer'], alreadyExisting: [] }
+      return { generated: [], failed: [], retryable: ['Transformer'], configFailed: [], alreadyExisting: [] }
     })
 
     const res = await advanceJob(client, { ...JOB, attempts: 2 }, { now: clock.now, budgetMs: 240_000 })

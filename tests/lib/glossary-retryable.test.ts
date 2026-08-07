@@ -12,7 +12,7 @@
  * richtig, bei einer vorübergehenden Überlast kostet sie den Begriff dauerhaft.
  */
 import { describe, expect, it } from 'vitest'
-import { isRetryableModelError } from '@/lib/glossary/retryable'
+import { isRetryableModelError, isRequestConfigError } from '@/lib/glossary/retryable'
 
 function apiError(status: number, message = 'boom'): Error {
   const e = new Error(`${status} ${message}`) as Error & { status?: number }
@@ -67,4 +67,33 @@ describe('isRetryableModelError', () => {
     expect(isRetryableModelError(null)).toBe(false)
     expect(isRetryableModelError('irgendwas')).toBe(false)
   })
+
+// PROD-BEFUND 2026-08-07: ein HTTP 400 wegen eines falschen Request-Parameters
+// (thinking.type.disabled bei Fable 5) kam mit x-should-retry:false und galt
+// deshalb als endgueltiger Fehlschlag DES BEGRIFFS. generateCandidates hakte
+// daraufhin 100 einwandfreie Kandidaten als erledigt ab und nahm sie aus der
+// Warteschlange — sie waeren ohne manuelles Zuruecksetzen nie wieder erzeugt
+// worden. "Nicht wiederholbar" heisst eben nicht "Begriff untauglich".
+describe('isRequestConfigError', () => {
+  it('erkennt einen 400 invalid_request_error', () => {
+    expect(isRequestConfigError({ status: 400, error: { error: { type: 'invalid_request_error' } } })).toBe(true)
+  })
+
+  it('erkennt ihn auch, wenn nur die Meldung durchgereicht wurde', () => {
+    expect(isRequestConfigError(new Error('400 {"type":"error","error":{"type":"invalid_request_error"}}'))).toBe(true)
+  })
+
+  it('haelt eine Ueberlast NICHT fuer einen Konfigurationsfehler', () => {
+    expect(isRequestConfigError({ status: 529 })).toBe(false)
+  })
+
+  it('haelt einen inhaltlichen Fehlschlag NICHT dafuer — der Begriff bleibt untauglich', () => {
+    expect(isRequestConfigError(new Error('Begriff zu kurz nach Regel 4'))).toBe(false)
+  })
+
+  it('verkraftet null und Nicht-Fehler', () => {
+    expect(isRequestConfigError(null)).toBe(false)
+    expect(isRequestConfigError('irgendwas')).toBe(false)
+  })
+})
 })

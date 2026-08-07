@@ -24,7 +24,7 @@
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { identifyCandidates, slugify, normalizeSlugForDedup } from '@/lib/glossary/generate'
-import { generateAndInsertDraft, lastGenerationFailureWasRetryable } from '@/lib/glossary/draft-writer'
+import { generateAndInsertDraft, lastGenerationFailureWasRetryable, lastGenerationFailureWasConfigError } from '@/lib/glossary/draft-writer'
 import { assignProducts } from '@/lib/glossary/products'
 import { extractVisibleText } from '@/lib/posts/product-mentions'
 import { safeParseJSON } from '@/lib/utils/safe-json'
@@ -350,6 +350,13 @@ export interface GenerationResult {
    *  erneut zu versuchen — sonst dreht die Schleife bei anhaltender Überlast
    *  endlos und verbrennt Geld. */
   retryable: string[]
+  /** Namen, die an der REQUEST-/Modellkonfiguration gescheitert sind (HTTP 400)
+   *  und deshalb ebenfalls in der Warteschlange bleiben. Getrennt von
+   *  `retryable`, weil ein sofortiger zweiter Versuch hier nichts bringt: erst
+   *  muss die Konfiguration korrigiert werden. Die UI benennt beides
+   *  unterschiedlich, damit „Modell überlastet“ nicht für einen Parameterfehler
+   *  steht. */
+  configFailed: string[]
   /** Kandidaten, die es als Begriff schon gab — kein Fehler, nur nichts zu tun.
    *  Getrennt von `failed`, weil die UI beides unterschiedlich benennen muss:
    *  "existiert bereits" ist ein Aufräumvorgang, "übersprungen" ein Problem. */
@@ -495,6 +502,9 @@ export async function generateCandidates(
   const generated: GenerationResult['generated'] = []
   const failed: string[] = []
   const retryable: string[] = []
+  /** An der Request-/Modellkonfiguration gescheitert — bleibt in der Warteschlange,
+   *  aber ein sofortiger zweiter Versuch hilft nicht (s. unten). */
+  const configFailed: string[] = []
   const candidates = { ...state.candidates }
   const generatedSlugs = [...state.generated]
 
@@ -516,6 +526,21 @@ export async function generateCandidates(
       if (lastGenerationFailureWasRetryable()) {
         console.warn(`[GlossaryCrawl] "${name}" vorübergehend gescheitert — bleibt in der Warteschlange`)
         retryable.push(name)
+        continue
+      }
+      // HTTP 400: der REQUEST war falsch, nicht der Begriff. Prod-Befund
+      // 2026-08-07: claude-fable-5 lehnte thinking.type.disabled ab, und weil ein
+      // 400 `x-should-retry: false` trägt, galt jeder Fehlschlag als endgültig —
+      // 100 einwandfreie Kandidaten wurden abgehakt und mussten von Hand
+      // zurückgesetzt werden.
+      //
+      // Wie bei `retryable` bleibt der Begriff in der Warteschlange. Dass der
+      // Lauf dadurch nicht ewig kreist, sichert die bestehende Eskalation: nach
+      // zehn Durchgängen ohne Fortschritt gibt der Job auf — sichtbar im
+      // Protokoll, statt still Kandidaten zu verbrauchen.
+      if (lastGenerationFailureWasConfigError()) {
+        console.warn(`[GlossaryCrawl] "${name}" an der Request-/Modellkonfiguration gescheitert — bleibt in der Warteschlange`)
+        configFailed.push(name)
         continue
       }
       // Aus der Liste nehmen UND als erledigt markieren: ein Name, der aus
@@ -572,6 +597,7 @@ export async function generateCandidates(
     generated,
     failed,
     retryable,
+    configFailed,
     alreadyExisting,
     remainingCandidates: openCandidateCount(candidates, state.excluded, generatedSlugs),
   }

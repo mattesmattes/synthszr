@@ -55,6 +55,40 @@ const ACCEPTS_SAMPLING = [
   /^claude-sonnet-4-6/,
 ]
 
+/**
+ * Modelle, die `thinking: { type: 'disabled' }` NICHT kennen — bei ihnen muss
+ * das thinking-Feld ganz wegbleiben, dann greift der adaptive Default.
+ *
+ * PROD-BEFUND 2026-08-07: claude-fable-5 antwortete auf jeden Aufruf mit
+ *   "thinking.type.disabled is not supported for this model. Thinking defaults
+ *    to adaptive mode when not specified"
+ * und riss 100 Begriffs-Generierungen in Serie ab. Der Code hatte von
+ * `adaptiveThinking: true` darauf geschlossen, dass sich Thinking auch
+ * ABSCHALTEN lässt — zwei verschiedene Fähigkeiten: Opus 5 kann beides,
+ * Fable 5 nur adaptiv.
+ *
+ * ⚠️ ANDERS ALS DIE DREI LISTEN OBEN ist ein unbekanntes Modell hier NICHT
+ * automatisch auf der sicheren Seite, und das ist eine bewusste Abwägung.
+ * Beide Richtungen können wehtun:
+ *
+ *   disabled fälschlich gesetzt    -> HTTP 400, gar kein Text
+ *   disabled fälschlich weggelassen -> Modell denkt; bei knappem max_tokens
+ *                                      frisst das Denken das Budget und der
+ *                                      sichtbare Text bleibt leer
+ *
+ * Der zweite Fall trifft nur Aufrufe mit kleinem Budget, der erste jeden
+ * einzelnen. Deshalb bleibt der Default „unterstützt disabled" und neue
+ * Modelle gehören bei Bedarf HIER eingetragen. Seit assertNonEmptyModelOutput
+ * (ghostwriter-pipeline.ts) fallen beide Fälle wenigstens sofort auf, statt
+ * still leeren Text zu liefern.
+ */
+// Nur belegte Fälle. claude-mythos-5 stand hier zwischenzeitlich auf Verdacht
+// („gleiche Generation") — dafür gibt es keine Messung, und geraten wird hier
+// nicht: ein falscher Eintrag nimmt einem Modell grundlos das Abschalten.
+const NO_DISABLED_THINKING = [
+  /^claude-fable-5/,
+]
+
 const matches = (patterns: RegExp[], id: string) => patterns.some((p) => p.test(id))
 
 export interface ModelCapabilities {
@@ -64,6 +98,9 @@ export interface ModelCapabilities {
   supportsEffort: boolean
   /** `temperature` & Co. würden mit HTTP 400 abgelehnt. */
   rejectsSampling: boolean
+  /** `thinking: { type: 'disabled' }` wird akzeptiert. Wenn nicht, muss das
+   *  Feld weggelassen werden — s. NO_DISABLED_THINKING. */
+  supportsDisabledThinking: boolean
 }
 
 export function getModelCapabilities(modelId: string): ModelCapabilities {
@@ -71,5 +108,6 @@ export function getModelCapabilities(modelId: string): ModelCapabilities {
     adaptiveThinking: !matches(LEGACY_BUDGET_THINKING, modelId),
     supportsEffort: !matches(NO_EFFORT_SUPPORT, modelId),
     rejectsSampling: !matches(ACCEPTS_SAMPLING, modelId),
+    supportsDisabledThinking: !matches(NO_DISABLED_THINKING, modelId),
   }
 }

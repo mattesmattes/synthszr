@@ -18,7 +18,7 @@
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateTermContent } from '@/lib/glossary/generate'
 import { generateGlossaryIllustration, uploadGlossaryIllustration } from '@/lib/gemini/image-generator'
-import { isRetryableModelError } from '@/lib/glossary/retryable'
+import { isRetryableModelError, isRequestConfigError } from '@/lib/glossary/retryable'
 import { assignProducts } from '@/lib/glossary/products'
 import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
 
@@ -42,6 +42,7 @@ type AdminClient = ReturnType<typeof createAdminClient>
  *  Modul-Zustand, weil die Funktion sequenziell aufgerufen wird — der Crawl
  *  arbeitet die Warteschlange einen Begriff nach dem anderen ab. */
 let lastFailureWasRetryable = false
+let lastFailureWasConfigError = false
 
 export async function generateAndInsertDraft(
   supabase: AdminClient,
@@ -120,9 +121,15 @@ export async function generateAndInsertDraft(
     // ein `null` bedeutet fuer alle dasselbe. Nur wer die Unterscheidung braucht,
     // fragt sie ab.
     lastFailureWasRetryable = isRetryableModelError(err)
+    // Ein 400 liegt am REQUEST, nicht am Begriff — er darf ihn nicht kosten.
+    // Prod-Befund 2026-08-07: claude-fable-5 lehnte thinking.type.disabled mit
+    // 400 und x-should-retry:false ab; der Aufrufer hakte daraufhin 100
+    // einwandfreie Kandidaten als erledigt ab.
+    lastFailureWasConfigError = isRequestConfigError(err)
     console.error(
       `[Glossary] Begriffs-Generierung für "${name}" fehlgeschlagen`
       + (lastFailureWasRetryable ? ' (vorübergehend, bleibt in der Warteschlange)' : '')
+      + (lastFailureWasConfigError ? ' (Request-/Modellkonfiguration, bleibt in der Warteschlange)' : '')
       + ':', err,
     )
     return null
@@ -139,4 +146,15 @@ export async function generateAndInsertDraft(
  */
 export function lastGenerationFailureWasRetryable(): boolean {
   return lastFailureWasRetryable
+}
+
+/**
+ * Lag der letzte Fehlschlag am Request statt am Begriff (HTTP 400)?
+ *
+ * Gleiche Bauart und gleicher Grund wie lastGenerationFailureWasRetryable —
+ * der Kandidat muss in der Warteschlange bleiben, aber anders als bei einer
+ * Ueberlast hilft kein sofortiger zweiter Versuch, sondern nur ein Fix.
+ */
+export function lastGenerationFailureWasConfigError(): boolean {
+  return lastFailureWasConfigError
 }

@@ -412,7 +412,12 @@ export async function generateTermContent(name: string): Promise<GeneratedTerm> 
   const callContent = (extraInstruction?: string) => client.messages.create({
     model: contentModel, max_tokens: 8192, tools: [CONTENT_TOOL],
     tool_choice: { type: 'tool', name: CONTENT_TOOL.name },
-    ...(caps.adaptiveThinking ? { thinking: { type: 'disabled' as const } } : {}),
+    // supportsDisabledThinking statt adaptiveThinking: die beiden fielen bis zum
+    // 2026-08-07 zusammen, bis claude-fable-5 auftauchte — adaptiv ja, aber
+    // `disabled` mit HTTP 400 abgelehnt. Das kostete 100 Begriffe in Serie.
+    ...(caps.adaptiveThinking && caps.supportsDisabledThinking
+      ? { thinking: { type: 'disabled' as const } }
+      : {}),
     system: [{ type: 'text', text: GENERATE_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
     messages: [{
       role: 'user' as const,

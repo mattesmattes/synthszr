@@ -76,7 +76,12 @@ async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOut
         at: stamp(),
         text: r.retryable.includes(n)
           ? `${n} — Modell überlastet, bleibt in der Warteschlange`
-          : `${n} — fehlgeschlagen, siehe Server-Log`,
+          // Eigener Text statt „überlastet": ein 400 ist ein Parameterfehler
+          // unsererseits, und die falsche Beschriftung hat am 2026-08-07 die
+          // Suche in die Irre geführt (s. isRequestConfigError).
+          : r.configFailed.includes(n)
+            ? `${n} — Modell-/Request-Konfiguration fehlerhaft, bleibt in der Warteschlange`
+            : `${n} — fehlgeschlagen, siehe Server-Log`,
         ok: false,
       })),
     ]
@@ -85,7 +90,10 @@ async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOut
       entries,
       doneDelta: r.generated.length,
       exhausted: nothingHappened,
-      overloaded: r.generated.length === 0 && r.retryable.length > 0,
+      // configFailed zählt wie überlastet: der Lauf kommt nicht voran, und nach
+      // zehn Durchgängen gibt der Job sichtbar auf — statt Kandidaten zu
+      // verbrauchen, die niemand angefasst hat.
+      overloaded: r.generated.length === 0 && (r.retryable.length > 0 || r.configFailed.length > 0),
     }
   }
 

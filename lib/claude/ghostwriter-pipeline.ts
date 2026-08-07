@@ -987,7 +987,7 @@ async function callModelNonStreaming(
     // Vorher war es umgekehrt, und claude-opus-5 fiel am 2026-08-04 in Prod
     // durch das Raster — jeder Abschnitt des Tages-Artikels wurde durch die
     // HTTP-400-Meldung ersetzt. Neue Modelle brauchen hier jetzt KEINE Pflege.
-    const { adaptiveThinking, supportsEffort, rejectsSampling } = getModelCapabilities(id)
+    const { adaptiveThinking, supportsEffort, rejectsSampling, supportsDisabledThinking } = getModelCapabilities(id)
 
     // SDK 0.71 typisiert adaptive/output_config noch nicht; die Felder werden zur
     // Laufzeit korrekt weitergereicht (gegen Production verifiziert), daher das `any`.
@@ -1012,7 +1012,13 @@ async function callModelNonStreaming(
       // leer oder abgeschnitten. Deshalb hier explizit abschalten.
       // Bei Opus 5 ist `disabled` nur bis effort 'high' erlaubt — wir setzen in diesem
       // Zweig kein output_config, also greift der Default 'high'. Passt.
-      if (adaptiveThinking) params.thinking = { type: 'disabled' }
+      //
+      // NICHT jedes adaptive Modell laesst sich abschalten: claude-fable-5 lehnt
+      // `disabled` mit HTTP 400 ab (Prod 2026-08-07, im Glossar-Pfad). Fehlt das
+      // Feld, denkt das Modell — bei knappem max_tokens bleibt der Text dann leer,
+      // was assertNonEmptyModelOutput unten aber sichtbar macht statt still
+      // durchzulassen.
+      if (adaptiveThinking && supportsDisabledThinking) params.thinking = { type: 'disabled' }
       if (options?.temperature !== undefined && !rejectsSampling) {
         params.temperature = options.temperature
       }
