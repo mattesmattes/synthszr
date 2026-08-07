@@ -38,4 +38,29 @@ describe('assertNonEmptyModelOutput', () => {
   it('nennt den stop_reason, wenn bekannt — unterscheidet Budget-Ende von Verweigerung', () => {
     expect(() => assertNonEmptyModelOutput('', 'bundle', 'max_tokens')).toThrow(/max_tokens/)
   })
+
+  // An Prod gemessen 2026-08-07: der Buendel-Call fuer die fuenf Quellen zum
+  // Thema "KI entwirft Viren" kommt mit stop_reason='refusal' und 0 Zeichen
+  // Text zurueck — reproduzierbar, waehrend derselbe Aufruf bei anderen Themen
+  // 3348 Zeichen liefert. Das ist kein Budget- und kein Bug-Fall, sondern eine
+  // inhaltliche Entscheidung des Modells. Sie braucht eine Meldung, die man
+  // ohne Kenntnis der API-Interna versteht.
+  describe('Verweigerung', () => {
+    it('benennt eine Verweigerung als solche statt als "leere Antwort"', () => {
+      expect(() => assertNonEmptyModelOutput('', 'Bündel', 'refusal'))
+        .toThrow(/verweigert/i)
+    })
+
+    it('sagt dazu, was zu tun ist — der Abschnitt landet so im Artikel', () => {
+      expect(() => assertNonEmptyModelOutput('', 'Bündel', 'refusal'))
+        .toThrow(/manuell|von Hand/i)
+    })
+
+    it('meldet eine Verweigerung auch dann, wenn das Modell noch etwas Text geliefert hat', () => {
+      // Ein angefangener und dann abgebrochener Abschnitt ist schlimmer als
+      // gar keiner: er sieht vollstaendig aus.
+      expect(() => assertNonEmptyModelOutput('## Überschrift\n\nHalber Satz', 'Bündel', 'refusal'))
+        .toThrow(/verweigert/i)
+    })
+  })
 })

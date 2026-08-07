@@ -847,20 +847,7 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
     cacheableUserPrefix: context.cacheableUserPrefix,
     thinking: true,
     effort: context.effort ?? 'high',
-    // 32000 statt 16000 wie in writeSection — hier ist beides größer: der Input
-    // trägt ALLE Quellen des Bündels (im Prod-Fall vom 2026-08-07 rund 34.000
-    // Zeichen gegenüber einer einzelnen Quelle), und der erlaubte Output ist mit
-    // 25 Sätzen plus Take der längste der Pipeline. Bei adaptivem Thinking deckt
-    // max_tokens Denken UND Text gemeinsam ab, 16000 war für diese Kombination
-    // knapp bemessen.
-    //
-    // ANNAHME, nicht bewiesen: dass genau dieses Budget die leere Antwort jenes
-    // Laufs verursacht hat. Die Alternative ist eine Verweigerung beim damaligen
-    // Thema (KI entwirft Viren). Der stop_reason, den
-    // assertNonEmptyModelOutput jetzt mitmeldet, unterscheidet beide Fälle beim
-    // nächsten Auftreten — bis dahin ist die Erhöhung die risikoarme Seite:
-    // ungenutztes Budget kostet nichts, Opus 5 liefert deutlich mehr als 16k.
-    maxTokens: 32000,
+    maxTokens: 16000,
   })
 
   // Heading sicherstellen + Längen-Durchsetzung (vor der Marker-Injektion, damit
@@ -918,6 +905,23 @@ export function assertNonEmptyModelOutput(
   context: string,
   stopReason?: string | null,
 ): string {
+  // Verweigerung ZUERST prüfen, unabhängig davon, ob Text kam: bricht das
+  // Modell mittendrin ab, ist der angefangene Abschnitt schlimmer als gar
+  // keiner — er sieht vollständig aus und fällt beim Gegenlesen nicht auf.
+  //
+  // An Prod gemessen 2026-08-07: der Bündel-Call für die fünf Quellen zum Thema
+  // "KI entwirft Viren" (Ars Technica, NYT, Axios, WSJ, Engadget) kommt
+  // reproduzierbar mit stop_reason='refusal' und null Zeichen zurück, während
+  // derselbe Aufruf bei anderen Themen 3348 Zeichen liefert. Das ist kein
+  // Budget-Problem und kein Bug in der Pipeline, sondern eine inhaltliche
+  // Entscheidung des Modells — sie braucht eine Meldung, die man ohne Kenntnis
+  // der API-Interna versteht und die sagt, was zu tun ist.
+  if (stopReason === 'refusal') {
+    throw new Error(
+      `Modell hat die Antwort für ${context} verweigert (stop_reason: refusal). ` +
+      `Das Thema wird inhaltlich blockiert — Abschnitt manuell schreiben oder die Quelle abwählen.`,
+    )
+  }
   if (text.trim().length > 0) return text
   const reason = stopReason ? ` (stop_reason: ${stopReason})` : ''
   throw new Error(`Modell lieferte eine leere Antwort für ${context}${reason}`)
