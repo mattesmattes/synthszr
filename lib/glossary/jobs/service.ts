@@ -10,7 +10,7 @@ import type { GlossaryCandidate } from '@/lib/glossary/types'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
-export type GlossaryJobKind = 'generate' | 'images' | 'relink' | 'pending' | 'translations' | 'term-translations'
+export type GlossaryJobKind = 'generate' | 'images' | 'relink' | 'pending' | 'translations' | 'term-translations' | 'extract'
 export type GlossaryJobStatus = 'pending' | 'processing' | 'done' | 'error' | 'cancelled'
 
 export interface GlossaryJobLogEntry {
@@ -95,6 +95,14 @@ async function estimateTotal(
   kind: GlossaryJobKind,
   params: Record<string, unknown>,
 ): Promise<number | null> {
+  // Das Ziel steht bei 'extract' fest — der Betreiber waehlt es im Panel.
+  // Gedeckelt auf den tatsaechlichen Restbestand waere schoener, kostet aber
+  // eine Zaehlabfrage; ein zu hohes total endet ohnehin sauber, weil der Lauf
+  // auch bei leerem Bestand stoppt (s. extractExhausted).
+  if (kind === 'extract') {
+    const target = params.targetPosts
+    return typeof target === 'number' && target > 0 ? target : null
+  }
   if (kind === 'relink') return null
   // Wie relink: die Restmenge haengt am Cursor und steht nicht vorab fest.
   if (kind === 'translations') return null

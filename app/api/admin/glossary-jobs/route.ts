@@ -7,7 +7,7 @@ import {
 
 export const maxDuration = 60
 
-const KINDS: GlossaryJobKind[] = ['generate', 'images', 'relink', 'pending', 'translations', 'term-translations']
+const KINDS: GlossaryJobKind[] = ['generate', 'images', 'relink', 'pending', 'translations', 'term-translations', 'extract']
 
 function parseKind(value: unknown): GlossaryJobKind | null {
   return KINDS.includes(value as GlossaryJobKind) ? (value as GlossaryJobKind) : null
@@ -25,7 +25,15 @@ export async function POST(request: NextRequest) {
   // `from` kommt aus dem Panel als Tagesdatum und ist die UNTERE Grenze
   // ("verlinke Artikel AB diesem Tag"), nicht die obere.
   let params: Record<string, unknown> = {}
-  if (kind === 'relink' && body?.from) {
+  if (kind === 'extract') {
+    // Zehnerschritte 10..100. Serverseitig geprueft und nicht nur im Dropdown:
+    // jeder Artikel kostet einen Modellaufruf, ein manipulierter Wert waere
+    // teuer. Ausserhalb des Rasters wird auf 10 zurueckgefallen statt zu
+    // scheitern — der Lauf soll starten, nur nicht unbegrenzt.
+    const raw = Number(body?.targetPosts)
+    const valid = Number.isFinite(raw) && raw >= 10 && raw <= 100 && raw % 10 === 0
+    params = { targetPosts: valid ? raw : 10 }
+  } else if (kind === 'relink' && body?.from) {
     params = { since: `${body.from}T00:00:00.000Z` }
   } else if (kind === 'pending') {
     // Anders als die uebrigen Arten ist 'pending' artikelbezogen — ohne

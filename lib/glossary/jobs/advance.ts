@@ -4,7 +4,8 @@
  * Zeitbudget aufgebraucht oder nichts mehr offen ist.
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
-import { generateCandidates, generateMissingIllustrations, relinkNextBatch, relinkTranslationsNextBatch } from '@/lib/glossary/crawl'
+import { extractCandidates, generateCandidates, generateMissingIllustrations, relinkNextBatch, relinkTranslationsNextBatch } from '@/lib/glossary/crawl'
+import { getMatcherTerms } from '@/lib/glossary/terms'
 import { runPendingUnit } from '@/lib/glossary/pending-run'
 import { translateMissingTerms } from '@/lib/glossary/translate-missing'
 import { appendLog, finishJob, readCancelRequested, releaseLease, setAttempts, type GlossaryJob, type GlossaryJobLogEntry } from '@/lib/glossary/jobs/service'
@@ -66,7 +67,66 @@ interface UnitOutcome {
   fatal?: string
 }
 
+/**
+ * Ist der Lese-Lauf fertig?
+ *
+ * ZWEI unabhaengige Gruende, und beide muessen greifen:
+ *   1. Das Ziel ist erreicht — der Betreiber hat im Panel z. B. 50 gewaehlt.
+ *      Ein Tick liest immer POSTS_PER_EXTRACTION Artikel, das Ziel kann also
+ *      uebersprungen werden; deshalb `>=` und nicht `===`.
+ *   2. Der Bestand ist durch (`allRead`). Ohne diesen Fall wuerde ein Ziel von
+ *      100 bei nur 60 verbleibenden Artikeln den Job im Minutentakt leere Runden
+ *      drehen lassen, bis die 10-Versuche-Eskalation ihn abraeumt.
+ *
+ * Der Lauf kostet einen Modellaufruf JE ARTIKEL — ein Job, der nicht
+ * zuverlaessig stoppt, verbrennt ueber Nacht Geld. Deshalb steht die Bedingung
+ * hier als eigene, getestete Funktion statt inline im Zweig unten.
+ */
+export function extractExhausted(
+  doneCount: number,
+  postsRead: number,
+  target: number | null,
+  allRead: boolean,
+): boolean {
+  if (allRead) return true
+  if (target === null) return false
+  return doneCount + postsRead >= target
+}
+
 async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOutcome> {
+  if (job.kind === 'extract') {
+    // knownSlugs wie in der Admin-Route: ohne sie schlaegt das Modell Begriffe
+    // vor, die es laengst gibt. `null` heisst Lesefehler — dann abbrechen statt
+    // mit leerer Liste zu arbeiten und Dubletten zu erzeugen.
+    const terms = await getMatcherTerms('de')
+    if (terms === null) {
+      return {
+        entries: [{ at: stamp(), text: 'Begriffsliste nicht ladbar — Lauf uebersprungen', ok: false }],
+        doneDelta: 0,
+        exhausted: false,
+        overloaded: true,
+      }
+    }
+    const r = await extractCandidates(supabase, terms.map((t) => t.slug))
+    const target = job.total
+    const finished = extractExhausted(job.done_count, r.postsRead, target, r.done)
+    return {
+      entries: [{
+        at: stamp(),
+        text: r.postsRead === 0
+          ? 'Keine weiteren Artikel'
+          : `${r.postsRead} Artikel gelesen — ${r.newCandidates} neue Begriffe gefunden (${r.totalCandidates} gesamt)`,
+        ok: true,
+      }],
+      doneDelta: r.postsRead,
+      exhausted: finished,
+      // Ein Tick ohne gelesenen Artikel, obwohl der Bestand nicht durch ist:
+      // dasselbe Signal wie bei den anderen Arten, damit die Eskalation greift
+      // statt endlos zu drehen.
+      overloaded: r.postsRead === 0 && !r.done,
+    }
+  }
+
   if (job.kind === 'generate') {
     const r = await generateCandidates(supabase, 1)
     const entries: GlossaryJobLogEntry[] = [

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-export type JobKind = 'generate' | 'images' | 'relink' | 'pending' | 'translations' | 'term-translations'
+export type JobKind = 'generate' | 'images' | 'relink' | 'pending' | 'translations' | 'term-translations' | 'extract'
 
 export interface JobView {
   status: 'pending' | 'processing' | 'done' | 'error' | 'cancelled'

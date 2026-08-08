@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2, RefreshCw, Search, Sparkles, RotateCcw, AlertCircle, Image as ImageIcon } from 'lucide-react'
 import { useJob, JobLog, JobCancelButton, isJobOpen, type JobKind } from '@/components/admin/glossary-job-shared'
 
@@ -48,6 +49,9 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
    *  neueren Artikel — nuetzlich, um einen abgebrochenen Lauf gezielt dort
    *  fortzusetzen, wo er stehen geblieben ist. */
   const [relinkFrom, setRelinkFrom] = useState(() => new Date().toISOString().slice(0, 10))
+  // Zielzahl des Lese-Laufs. Default 10 wie bisher — wer mehr will, waehlt es
+  // bewusst, denn jeder Artikel kostet einen Modellaufruf.
+  const [extractTarget, setExtractTarget] = useState('10')
   // Die drei frueher hier im Browser getriebenen Dauerlaeufe sind jetzt
   // Jobs, die der Minutentakt-Cron abarbeitet — jeder Hook pollt nur noch
   // seinen eigenen Status, solange ein Lauf offen ist (siehe useJob oben).
@@ -59,6 +63,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     void fetchStatusRef.current?.()
     onTermsChanged?.()
   }, [onTermsChanged])
+  const extractJob = useJob('extract', undefined, handleJobFinished)
   const termsJob = useJob('generate', undefined, handleJobFinished)
   const imagesJob = useJob('images', undefined, handleJobFinished)
   const relinkJob = useJob('relink', undefined, handleJobFinished)
@@ -112,6 +117,37 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Auswahl nicht gespeichert')
       await fetchStatus()
+    }
+  }
+
+  /**
+   * Stoesst den LESE-Lauf an (Artikel lesen, Kandidaten sammeln).
+   *
+   * Bis zum 2026-08-08 lief das synchron in der Admin-Route: ein Klick las genau
+   * 10 Artikel. Die 10 waren nicht gewaehlt, sondern das Zeitlimit —
+   * identifyCandidates macht einen Modellaufruf JE ARTIKEL, die Route hat
+   * maxDuration=300. Seit der Betreiber bis zu 100 Artikel am Stueck lesen
+   * koennen soll ("auch mal ueber Nacht"), geht das nur als Job: der
+   * Minutentakt-Cron liest je Tick 10 Artikel, bis das Ziel erreicht ist.
+   */
+  async function startExtractJob() {
+    setBusy('extract')
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/glossary-jobs', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kind: 'extract', targetPosts: Number(extractTarget) }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error ?? `Fehlgeschlagen (HTTP ${res.status})`)
+      await extractJob.reload()
+      await fetchStatus()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -267,7 +303,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     }
   }
 
-  async function run(action: 'extract' | 'generate' | 'reset' | 'images') {
+  async function run(action: 'generate' | 'reset' | 'images') {
     setBusy(action)
     setError(null)
     setLastResult(null)
@@ -279,12 +315,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.error || `Fehlgeschlagen (HTTP ${res.status})`)
 
-      if (action === 'extract') {
-        setLastResult(
-          `${data.postsRead} Artikel gelesen, ${data.newCandidates} neue Begriffe gefunden` +
-          (data.done ? ' — alle Artikel durch.' : ` · noch ${data.postsRemaining} offen`),
-        )
-      } else if (action === 'generate') {
+      if (action === 'generate') {
         const names = (data.generated ?? []).map((g: { name: string }) => g.name)
         setLastResult(
           names.length > 0
@@ -328,6 +359,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   // steuert, ob der Knopf oder der Abbrechen-Knopf zu sehen ist. `busy`
   // allein reicht nicht mehr: es ist nur waehrend des POST-Requests gesetzt,
   // der Job selbst laeuft danach unabhaengig vom Tab weiter.
+  const extractRunning = isJobOpen(extractJob.job)
   const termsRunning = isJobOpen(termsJob.job)
   const imagesRunning = isJobOpen(imagesJob.job)
   const relinkRunning = isJobOpen(relinkJob.job)
@@ -362,15 +394,42 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                 eigenem Read-unmittelbar-vor-Write (bewusst so gebaut, siehe
                 writeRelinkCursor) und ist damit kein Aggressor auf candidates/
                 generated/excluded. */}
-            <Button
-              size="sm"
-              onClick={() => run('extract')}
-              disabled={busy !== null || termsRunning}
-              title={termsRunning ? 'Gesperrt, solange der Begriffslauf läuft — beide teilen sich denselben Crawl-Zustand.' : undefined}
-            >
-              {busy === 'extract' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-              Nächste{' '}{status?.postsPerExtraction ?? 10}{' '}Artikel lesen
-            </Button>
+            {/* Lesen: Zielzahl waehlbar in Zehnerschritten. Der Lauf ist seit
+                2026-08-08 ein Job — 100 Artikel sind 100 Modellaufrufe und
+                sprengen die 300s der Route um ein Vielfaches, und "ueber Nacht"
+                heisst ohnehin ohne offenen Browser. Der Minutentakt-Cron liest
+                je Tick 10 Artikel weiter. */}
+            {extractRunning ? (
+              <JobCancelButton
+                job={extractJob.job}
+                label="Lesen"
+                onCancel={() => void stopJob('extract')}
+              />
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <Select value={extractTarget} onValueChange={setExtractTarget} disabled={busy !== null || termsRunning}>
+                  <SelectTrigger className="h-8 w-[5.5rem]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 10 }, (_, i) => String((i + 1) * 10)).map((n) => (
+                      <SelectItem key={n} value={n}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  onClick={startExtractJob}
+                  disabled={busy !== null || termsRunning}
+                  title={termsRunning
+                    ? 'Gesperrt, solange der Begriffslauf läuft — beide teilen sich denselben Crawl-Zustand.'
+                    : 'Legt einen Job an, den der Minutentakt-Cron abarbeitet. Das Fenster kann geschlossen werden.'}
+                >
+                  {busy === 'extract' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                  Artikel lesen
+                </Button>
+              </span>
+            )}
             {/* NUR NOCH EIN Erzeugen-Knopf. Daneben stand bis zum 2026-08-06 ein
                 zweiter ("3 Begriffe erzeugen & veröffentlichen"), der über
                 run('generate') den alten Inline-Pfad nahm — drei Begriffe in
@@ -548,6 +607,7 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           {/* Fortschritt und Protokoll kommen aus den Jobs, nicht mehr aus
               lokalem State — sie ueberleben damit ein Neuladen der Seite und
               erscheinen von selbst, wenn hier gerade ein Lauf offen ist. */}
+          <JobLog job={extractJob.job} unit="Artikel" verb="gelesen" />
           <JobLog job={termsJob.job} unit="Begriffe" verb="erzeugt" />
           <JobLog job={imagesJob.job} unit="Illustrationen" verb="erzeugt" />
           <JobLog job={relinkJob.job} unit="Artikel" verb="verlinkt" />
