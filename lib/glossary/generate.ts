@@ -142,18 +142,49 @@ const CANDIDATES_TOOL = {
   },
 }
 
-function buildCandidatesPrompt(articleText: string, knownSlugs: string[]): string {
+/**
+ * Auswahlkriterium der Kandidaten.
+ *
+ * BETREIBER-VORGABE 2026-08-08: Das Lexikon erklärt technische, Finanz- und
+ * KI-Fachbegriffe. Allgemeinverständliche deutsche Wörter gehören nicht hinein.
+ *
+ * Die vorige Fassung nannte als Ausschluss nur „KEINE Allgemeinbegriffe, die
+ * jeder kennt" und als Domäne nur „KI/Tech". Beides war zu schwach: aus EINER
+ * Kandidatenliste mussten 39 Begriffe von Hand gestrichen werden — darunter
+ * „Gabelstapler", „Baugenehmigung", „Grünstreifen", „Stallgeruch",
+ * „Eintrittspreis" und „Wettbewerbsvorteil". Im Kontext eines Artikels hält das
+ * Modell solche Wörter offenbar für erklärungswürdig; eine abstrakte Regel
+ * ändert das nicht, konkrete Negativ-Beispiele schon. Finanzbegriffe fehlten
+ * als Domäne ganz, obwohl das Lexikon sie führt.
+ *
+ * Die zweite gestrichene Gruppe waren Ad-hoc-Formulierungen des Autors
+ * („API-Mauern", „Bürokratisches Niemandsland", „Digitalisierungsrendite") —
+ * Wörter, die außerhalb dieses einen Artikels niemand nachschlägt. Auch dafür
+ * steht jetzt eine eigene Regel im Prompt.
+ */
+export function buildCandidatesPrompt(articleText: string, knownSlugs: string[]): string {
   const known = knownSlugs.length ? knownSlugs.join(', ') : '(keine)'
-  return `Im folgenden Artikeltext kommen möglicherweise Fachbegriffe aus KI/Tech vor, die ein Leser ohne Vorwissen nicht versteht (z. B. Modellarchitekturen, Trainings- oder Inferenzverfahren, Fachjargon).
+  return `Im folgenden Artikeltext kommen möglicherweise Fachbegriffe vor, die ein Leser ohne Vorwissen nicht versteht.
 
-Identifiziere NUR Begriffe, die eine eigene Lexikon-Erklärung verdienen. KEINE Firmennamen, KEINE Produktnamen, KEINE Allgemeinbegriffe, die jeder kennt.
+DAS LEXIKON ERKLÄRT GENAU DREI ARTEN VON BEGRIFFEN:
+1. Technik/IT — z. B. Kubernetes, Syscall, Microservices, Disassembler
+2. KI — z. B. Modellarchitekturen, Trainings- und Inferenzverfahren, Benchmarks
+3. Finanzen/Kapitalmarkt — z. B. Investment-Grade-Anleihe, Streubesitz, Verbriefung
+
+NICHT AUFNEHMEN — das ist genauso wichtig wie die Auswahl:
+- Allgemeinverständliche deutsche Wörter, auch wenn sie im Artikel eine Rolle spielen. Test: Würde ein Erwachsener ohne Fachwissen das Wort verstehen? Dann NICHT vorschlagen. Beispiele für Wörter, die NICHT ins Lexikon gehören: Gabelstapler, Baugenehmigung, Grünstreifen, Eintrittspreis, Aufmerksamkeitsspanne, Wettbewerbsvorteil, Marktanteil, Anleihe, Präzedenzfall, Trojanisches Pferd.
+- Ad-hoc-Wortschöpfungen und eigene Formulierungen des Autors, die nur in diesem Text vorkommen. Beispiele: „API-Mauern", „Bürokratisches Niemandsland", „Digitalisierungsrendite", „Konsumtreiber".
+- KEINE Firmennamen, KEINE Produktnamen (die stehen in den Synthszr Charts, nicht im Lexikon).
+- Keine Eigennamen von Ereignissen, Orten oder Personen.
+
+Ein Begriff gehört nur dann in die Liste, wenn jemand ihn ernsthaft nachschlagen würde, weil er ihn nicht kennt — und wenn er auch in anderen Artikeln wieder vorkommt.
 
 BEREITS IM GLOSSAR (nicht erneut vorschlagen): ${known}
 
 ARTIKELTEXT:
 ${articleText}
 
-Antworte via Tool mit candidates: einer Liste der Begriffsnamen in kanonischer Schreibweise, ohne Duplikate. Wenn kein Begriff eine Erklärung braucht, eine leere Liste.`
+Antworte via Tool mit candidates: einer Liste der Begriffsnamen in kanonischer Schreibweise, ohne Duplikate. Lieber wenige gute Begriffe als viele zweifelhafte — eine leere Liste ist ein gültiges Ergebnis.`
 }
 
 /** Welche Begriffe im Artikeltext eine Glossar-Erklärung brauchen und noch
