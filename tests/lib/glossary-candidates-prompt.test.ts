@@ -57,13 +57,28 @@ describe('buildCandidatesPrompt — Auswahlkriterium', () => {
     expect(prompt).toMatch(/ohne Vorwissen|Vorwissen/)
   })
 
-  it('behaelt den Ausschluss von Firmen- und Produktnamen', () => {
+  it('behaelt den Ausschluss von Firmen- und Markenprodukten', () => {
+    // Formulierung 2026-08-08 von "Produktnamen" auf "Markenprodukte" geschaerft:
+    // der weitere Begriff schloss auch benannte Technologien aus (s. unten).
     expect(prompt).toMatch(/KEINE Firmennamen/)
-    expect(prompt).toMatch(/KEINE Produktnamen/)
+    expect(prompt).toMatch(/KEINE Markenprodukte/)
   })
 
   it('reicht bekannte Slugs und den Artikeltext weiter', () => {
     expect(prompt).toContain('inferenz')
     expect(prompt).toContain('Beliebiger Artikeltext.')
+  })
+
+  // NACHTRAG 2026-08-08: Die erste Fassung liess "KEINE Produktnamen" unqualifiziert
+  // stehen. Beim Bereinigen der Kandidatenliste stellte sich heraus, dass das zu
+  // weit greift: Axion, gVisor, Graviton und GKE sind BENANNTE TECHNOLOGIEN mit
+  // eigenem Erklaergehalt — ein ARM-Chip fuer KI-Inferenz gehoert ins Lexikon,
+  // egal wessen Name draufsteht. Gemeint sind reine Firmen- und Markennennungen.
+  it('grenzt Produktnamen gegen benannte Technologien ab', () => {
+    expect(prompt).toMatch(/benannte Technologie|Technologie mit Namen/i)
+  })
+
+  it('nennt eine benannte Technologie als Positiv-Beispiel', () => {
+    expect(prompt).toMatch(/gVisor|Graviton|Axion/)
   })
 })

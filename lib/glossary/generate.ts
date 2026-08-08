@@ -174,8 +174,8 @@ DAS LEXIKON ERKLÄRT GENAU DREI ARTEN VON BEGRIFFEN:
 NICHT AUFNEHMEN — das ist genauso wichtig wie die Auswahl:
 - Allgemeinverständliche deutsche Wörter, auch wenn sie im Artikel eine Rolle spielen. Test: Würde ein Erwachsener ohne Fachwissen das Wort verstehen? Dann NICHT vorschlagen. Beispiele für Wörter, die NICHT ins Lexikon gehören: Gabelstapler, Baugenehmigung, Grünstreifen, Eintrittspreis, Aufmerksamkeitsspanne, Wettbewerbsvorteil, Marktanteil, Anleihe, Präzedenzfall, Trojanisches Pferd.
 - Ad-hoc-Wortschöpfungen und eigene Formulierungen des Autors, die nur in diesem Text vorkommen. Beispiele: „API-Mauern", „Bürokratisches Niemandsland", „Digitalisierungsrendite", „Konsumtreiber".
-- KEINE Firmennamen, KEINE Produktnamen (die stehen in den Synthszr Charts, nicht im Lexikon).
-- Keine Eigennamen von Ereignissen, Orten oder Personen.
+- KEINE Firmennamen, KEINE Markenprodukte (die stehen in den Synthszr Charts, nicht im Lexikon). Beispiele: Hugging Face, Red Hat, Cursor, Railway.
+  AUSGENOMMEN sind BENANNTE TECHNOLOGIEN mit eigenem Erklärgehalt — die gehören ins Lexikon, auch wenn der Name von einer Firma stammt. Beispiele, die AUFGENOMMEN werden sollen: gVisor, Graviton-Prozessoren, Axion, Kubernetes. Prüfe: Erklärt man damit, WIE etwas funktioniert (dann aufnehmen), oder nennt man nur WER es anbietet (dann nicht)?
 
 Ein Begriff gehört nur dann in die Liste, wenn jemand ihn ernsthaft nachschlagen würde, weil er ihn nicht kennt — und wenn er auch in anderen Artikeln wieder vorkommt.
 
