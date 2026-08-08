@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { TrendingUp, Eye, Headphones, MousePointerClick, Loader2, Users, Database, Workflow, Clock, AlertTriangle, BarChart3 } from 'lucide-react'
+import { TrendingUp, Eye, Headphones, MousePointerClick, Loader2, Users, Database, Workflow, Clock, AlertTriangle, BarChart3, BookOpen } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   ResponsiveContainer,
@@ -61,6 +61,7 @@ interface EventData {
   date: string
   page_views: number
   rankings_page_views: number
+  glossary_page_views: number
   stock_ticker_clicks: number
   synthszr_vote_clicks: number
   podcast_plays: number
@@ -69,6 +70,7 @@ interface EventData {
 interface Totals {
   page_views: number
   rankings_page_views: number
+  glossary_page_views: number
   stock_ticker_clicks: number
   synthszr_vote_clicks: number
   podcast_plays: number
@@ -133,6 +135,9 @@ function formatChange(current: number, previous: number): { value: string; posit
 const SUMMARY_CARDS = [
   { title: 'Page Views', key: 'page_views' as keyof Totals, icon: Eye, color: '#3B82F6' },
   { title: 'Charts Views', key: 'rankings_page_views' as keyof Totals, icon: BarChart3, color: '#00785a' },
+  // Lexikon direkt neben den Charts: beides sind Aufrufe eines eigenstaendigen
+  // Bereichs und werden gegeneinander gelesen (30 Tage: 1.760 zu 7.876).
+  { title: 'Lexikon Views', key: 'glossary_page_views' as keyof Totals, icon: BookOpen, color: '#CCFF00' },
   { title: 'Podcast Plays', key: 'podcast_plays' as keyof Totals, icon: Headphones, color: '#EF4444' },
   { title: 'Ticker Clicks', key: 'stock_ticker_clicks' as keyof Totals, icon: TrendingUp, color: '#F59E0B' },
   { title: 'Vote Clicks', key: 'synthszr_vote_clicks' as keyof Totals, icon: MousePointerClick, color: '#8B5CF6' },
@@ -342,6 +347,38 @@ export default function StatisticsPage() {
                     dataKey="page_views"
                     name="Page Views"
                     stroke="#3B82F6"
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Line Chart: Lexikon-Aufrufe (/glossary) — gleiche Bauart wie der
+              Charts-Verlauf darunter. Eigener Chart statt einer zweiten Linie im
+              Gesamt-Diagramm: die Groessenordnungen liegen weit auseinander
+              (30 Tage: 1.760 Lexikon zu 19.974 gesamt), eine gemeinsame Y-Achse
+              druecke die kleinere Kurve auf die Grundlinie. */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <BookOpen className="h-4 w-4" style={{ color: '#00785a' }} />
+                Lexikon Views (/glossary)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="glossary_page_views"
+                    name="Lexikon Views"
+                    stroke="#00785a"
                     dot={false}
                     strokeWidth={2}
                   />

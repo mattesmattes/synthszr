@@ -20,6 +20,17 @@ function isRankingsPath(path: string | null | undefined): boolean {
   return !!path && /\/rankings(\/|$)/.test(path)
 }
 
+// Page-View im Lexikon (/[lang]/glossary…). Matcht die Übersicht und die
+// Begriffsseiten in jeder Sprache, aber nicht /de/xglossary oder /de/glossaryx.
+//
+// `/admin/` ist ausgenommen: /admin/glossary ist das Redaktionswerkzeug, keine
+// Leser-Nutzung — sonst schriebe sich der Betreiber selbst in die Zahlen.
+// isRankingsPath braucht diese Ausnahme nicht, weil es unter /admin keine
+// Rankings-Ansicht gibt.
+export function isGlossaryPath(path: string | null | undefined): boolean {
+  return !!path && !path.startsWith('/admin/') && /\/glossary(\/|$)/.test(path)
+}
+
 // Returns "YYYY-MM-DD" string in Europe/Berlin local time
 function toBerlinDateStr(d: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: BERLIN_TZ }).format(d)
@@ -161,13 +172,14 @@ export async function GET(request: NextRequest) {
     type BucketData = {
       page_views: number
       rankings_page_views: number
+      glossary_page_views: number
       stock_ticker_clicks: number
       synthszr_vote_clicks: number
       podcast_plays: number
     }
     const countsMap = new Map<string, BucketData>()
     for (const b of buckets) {
-      countsMap.set(b, { page_views: 0, rankings_page_views: 0, stock_ticker_clicks: 0, synthszr_vote_clicks: 0, podcast_plays: 0 })
+      countsMap.set(b, { page_views: 0, rankings_page_views: 0, glossary_page_views: 0, stock_ticker_clicks: 0, synthszr_vote_clicks: 0, podcast_plays: 0 })
     }
 
     // Aggregate analytics_events
@@ -178,6 +190,7 @@ export async function GET(request: NextRequest) {
       if (event.event_type === 'page_view') {
         bucket.page_views++
         if (isRankingsPath(event.path)) bucket.rankings_page_views++
+        if (isGlossaryPath(event.path)) bucket.glossary_page_views++
       }
       else if (event.event_type === 'stock_ticker_click') bucket.stock_ticker_clicks++
       else if (event.event_type === 'synthszr_vote_click') bucket.synthszr_vote_clicks++
@@ -199,17 +212,19 @@ export async function GET(request: NextRequest) {
       (acc, e) => ({
         page_views: acc.page_views + e.page_views,
         rankings_page_views: acc.rankings_page_views + e.rankings_page_views,
+        glossary_page_views: acc.glossary_page_views + e.glossary_page_views,
         stock_ticker_clicks: acc.stock_ticker_clicks + e.stock_ticker_clicks,
         synthszr_vote_clicks: acc.synthszr_vote_clicks + e.synthszr_vote_clicks,
         podcast_plays: acc.podcast_plays + e.podcast_plays,
       }),
-      { page_views: 0, rankings_page_views: 0, stock_ticker_clicks: 0, synthszr_vote_clicks: 0, podcast_plays: 0 }
+      { page_views: 0, rankings_page_views: 0, glossary_page_views: 0, stock_ticker_clicks: 0, synthszr_vote_clicks: 0, podcast_plays: 0 }
     )
 
     // Previous period totals (for % comparison)
     const previous_totals = {
       page_views: prevAnalyticsData.filter(e => e.event_type === 'page_view').length,
       rankings_page_views: prevAnalyticsData.filter(e => e.event_type === 'page_view' && isRankingsPath(e.path)).length,
+      glossary_page_views: prevAnalyticsData.filter(e => e.event_type === 'page_view' && isGlossaryPath(e.path)).length,
       stock_ticker_clicks: prevAnalyticsData.filter(e => e.event_type === 'stock_ticker_click').length,
       synthszr_vote_clicks: prevAnalyticsData.filter(e => e.event_type === 'synthszr_vote_click').length,
       podcast_plays: prevPodcastData.length,
