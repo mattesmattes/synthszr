@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { TrendingUp, Eye, Headphones, MousePointerClick, Loader2, Users, Database, Workflow, Clock, AlertTriangle, BarChart3, BookOpen } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
@@ -137,7 +138,10 @@ const SUMMARY_CARDS = [
   { title: 'Charts Views', key: 'rankings_page_views' as keyof Totals, icon: BarChart3, color: '#00785a' },
   // Lexikon direkt neben den Charts: beides sind Aufrufe eines eigenstaendigen
   // Bereichs und werden gegeneinander gelesen (30 Tage: 1.760 zu 7.876).
-  { title: 'Lexikon Views', key: 'glossary_page_views' as keyof Totals, icon: BookOpen, color: '#CCFF00' },
+  // drilldown: die einzige Karte mit einer Detailansicht (Top-40-Begriffe im
+  // Layer). Als Flag statt einer Sonderabfrage auf den key, damit weitere
+  // Karten spaeter dasselbe koennen, ohne die Render-Schleife anzufassen.
+  { title: 'Lexikon Views', key: 'glossary_page_views' as keyof Totals, icon: BookOpen, color: '#0891B2', drilldown: true },
   { title: 'Podcast Plays', key: 'podcast_plays' as keyof Totals, icon: Headphones, color: '#EF4444' },
   { title: 'Ticker Clicks', key: 'stock_ticker_clicks' as keyof Totals, icon: TrendingUp, color: '#F59E0B' },
   { title: 'Vote Clicks', key: 'synthszr_vote_clicks' as keyof Totals, icon: MousePointerClick, color: '#8B5CF6' },
@@ -158,6 +162,34 @@ export default function StatisticsPage() {
   const [languages, setLanguages] = useState<{ code: string; name: string; native_name: string | null; count: number }[]>([])
   const [languagesTotal, setLanguagesTotal] = useState(0)
   const [languagesLoading, setLanguagesLoading] = useState(true)
+
+  // Top-Begriffe des Lexikons — erst beim Oeffnen des Layers geladen, nicht mit
+  // der Seite. Die Liste sieht meistens niemand an; im Aggregat-Endpunkt haette
+  // sie jeden Seitenaufruf verteuert (399 verschiedene Begriffe ueber 1.569
+  // Page-View-Zeilen, an Prod gemessen).
+  const [topTermsOpen, setTopTermsOpen] = useState(false)
+  const [topTerms, setTopTerms] = useState<{
+    terms: { slug: string; name: string; views: number }[]
+    total: number
+    distinctTerms: number
+  } | null>(null)
+  const [topTermsLoading, setTopTermsLoading] = useState(false)
+
+  // Neu laden, wenn der Layer geoeffnet wird ODER der Zeitraum wechselt —
+  // sonst zeigte er nach einem Wechsel weiter die Zahlen der vorigen Periode,
+  // waehrend die Karten daneben schon die neuen zeigen.
+  useEffect(() => {
+    if (!topTermsOpen) return
+    setTopTermsLoading(true)
+    setTopTerms(null)
+    fetch(`/api/admin/stats/glossary-top?period=${period}`)
+      .then(res => res.json())
+      .then(data => {
+        setTopTerms(data?.error ? null : data)
+        setTopTermsLoading(false)
+      })
+      .catch(() => setTopTermsLoading(false))
+  }, [topTermsOpen, period])
 
   useEffect(() => {
     setLoading(true)
@@ -300,13 +332,30 @@ export default function StatisticsPage() {
       ) : (
         <>
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
             {SUMMARY_CARDS.map(card => {
               const value = stats?.totals[card.key] ?? 0
               const prevValue = stats?.previous_totals[card.key] ?? 0
               const change = formatChange(value, prevValue)
+              const drilldown = 'drilldown' in card && card.drilldown
               return (
-                <Card key={card.key}>
+                <Card
+                  key={card.key}
+                  // Nur die Drilldown-Karte reagiert auf Klicks. Die uebrigen
+                  // behalten den Cursor und die Optik von vorher — eine Karte,
+                  // die wie ein Knopf aussieht, aber nichts tut, ist schlimmer
+                  // als eine, die still bleibt.
+                  onClick={drilldown ? () => setTopTermsOpen(true) : undefined}
+                  role={drilldown ? 'button' : undefined}
+                  tabIndex={drilldown ? 0 : undefined}
+                  onKeyDown={drilldown ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setTopTermsOpen(true)
+                    }
+                  } : undefined}
+                  className={drilldown ? 'cursor-pointer transition-colors hover:border-accent' : undefined}
+                >
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                       <card.icon className="h-4 w-4" style={{ color: card.color }} />
@@ -323,6 +372,9 @@ export default function StatisticsPage() {
                       </p>
                     ) : (
                       <p className="text-xs mt-1 text-muted-foreground">Kein Vergleich</p>
+                    )}
+                    {drilldown && (
+                      <p className="mt-1 text-xs text-muted-foreground">Top 40 anzeigen →</p>
                     )}
                   </CardContent>
                 </Card>
@@ -363,7 +415,7 @@ export default function StatisticsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <BookOpen className="h-4 w-4" style={{ color: '#00785a' }} />
+                <BookOpen className="h-4 w-4" style={{ color: '#0891B2' }} />
                 Lexikon Views (/glossary)
               </CardTitle>
             </CardHeader>
@@ -378,7 +430,7 @@ export default function StatisticsPage() {
                     type="monotone"
                     dataKey="glossary_page_views"
                     name="Lexikon Views"
-                    stroke="#00785a"
+                    stroke="#0891B2"
                     dot={false}
                     strokeWidth={2}
                   />
@@ -758,6 +810,71 @@ export default function StatisticsPage() {
           <NewsPipelineDiagnostics />
         </>
       )}
+
+      {/* Top-Begriffe des Lexikons. Layer statt einer weiteren Karte auf der
+          Seite: 40 Zeilen wuerden die Uebersicht dominieren, und die Frage
+          "welche Begriffe laufen?" stellt sich punktuell, nicht bei jedem
+          Aufruf. */}
+      <Dialog open={topTermsOpen} onOpenChange={setTopTermsOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <BookOpen className="h-4 w-4" style={{ color: '#0891B2' }} />
+              Meistgelesene Lexikonbegriffe
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {topTerms
+                ? `Top ${topTerms.terms.length} von ${topTerms.distinctTerms.toLocaleString('de-DE')} aufgerufenen Begriffen — ${topTerms.total.toLocaleString('de-DE')} Aufrufe im gewählten Zeitraum.`
+                : 'Aufrufe je Begriffsseite im gewählten Zeitraum, über alle Sprachen zusammengefasst.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {topTermsLoading ? (
+            <p className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Lade Begriffe…
+            </p>
+          ) : !topTerms || topTerms.terms.length === 0 ? (
+            <p className="py-8 text-sm text-muted-foreground">
+              Keine Aufrufe im gewählten Zeitraum.
+            </p>
+          ) : (
+            <ol className="max-h-[60vh] space-y-1 overflow-y-auto pr-1">
+              {topTerms.terms.map((t, i) => {
+                // Balkenbreite relativ zum Spitzenreiter: die Verteilung ist
+                // stark schief (Platz 1 hat rund doppelt so viele Aufrufe wie
+                // Platz 10), das sieht man in einer reinen Zahlenspalte nicht.
+                const pct = Math.round((t.views / topTerms.terms[0].views) * 100)
+                return (
+                  <li key={t.slug} className="flex items-center gap-3 text-sm">
+                    <span className="w-6 shrink-0 text-right font-mono text-xs text-muted-foreground">
+                      {i + 1}.
+                    </span>
+                    <a
+                      href={`/de/glossary/${t.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-56 shrink-0 truncate hover:text-accent hover:underline"
+                      title={t.name}
+                    >
+                      {t.name}
+                    </a>
+                    <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                      <span
+                        className="block h-full rounded-full"
+                        style={{ width: `${pct}%`, backgroundColor: '#0891B2' }}
+                      />
+                    </span>
+                    <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums">
+                      {t.views.toLocaleString('de-DE')}
+                    </span>
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
