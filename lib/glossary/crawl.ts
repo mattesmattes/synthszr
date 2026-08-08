@@ -138,6 +138,54 @@ async function writeCrawlState(supabase: AdminClient, state: CrawlState): Promis
   if (error) throw new Error(`State nicht speicherbar: ${error.message}`)
 }
 
+/**
+ * Baut den zu schreibenden Zustand aus einem VERALTETEN Snapshot, der aktuellen
+ * Auswahl und den Aenderungen dieses Laufs.
+ *
+ * PROD-BEFUND 2026-08-08: Waehrend ein Erzeugen-Job lief, wurden 78 Kandidaten
+ * abgewaehlt — beim naechsten Tick waren sie wieder da. Fortschritt und Auswahl
+ * liegen in DERSELBEN JSONB-Spalte. Der Job liest den ganzen Zustand zu Beginn
+ * seines Ticks, arbeitet 45-90 Sekunden an einem Begriff und schrieb am Ende
+ * `{ ...state, candidates, generated }` zurueck. Das `...state` trug das ALTE
+ * `excluded` mit, jede Abwahl in diesem Zeitfenster war verloren — ohne Fehler
+ * und ohne Meldung.
+ *
+ * Das trifft nicht nur Skripte: der Operator waehlt im Panel waehrend eines
+ * laufenden Laufs ab, und seine Entscheidung verschwindet. Das Panel sperrt
+ * extract/generate/reset waehrend `termsRunning`, die Abwahl-Checkboxen aber
+ * nicht — und soll es auch nicht, denn Abwaehlen ist genau das, was man tut,
+ * waehrend man den Lauf beobachtet.
+ *
+ * Die Regel dahinter: wer FORTSCHRITT schreibt, darf die AUSWAHL nicht
+ * mitschreiben. Sie ist die Entscheidung eines Menschen und immer juenger als
+ * der Snapshot.
+ */
+export function mergeProgressState(
+  staleState: CrawlState,
+  currentExcluded: string[],
+  changes: Partial<CrawlState>,
+): CrawlState {
+  return { ...staleState, ...changes, excluded: currentExcluded }
+}
+
+/**
+ * Schreibt den Fortschritt eines Laufs und uebernimmt dabei die AKTUELLE
+ * Auswahl aus der Datenbank statt der aus dem uebergebenen Snapshot.
+ *
+ * Kein Ersatz fuer eine echte Transaktion — zwischen Lesen und Schreiben bleibt
+ * ein Fenster von Millisekunden. Das entscheidende Fenster war aber ein anderes:
+ * die 45-90 Sekunden, die ein Tick an einem Begriff arbeitet. Genau die schliesst
+ * diese Funktion.
+ */
+async function writeCrawlProgress(
+  supabase: AdminClient,
+  staleState: CrawlState,
+  changes: Partial<CrawlState>,
+): Promise<void> {
+  const current = await readCrawlState(supabase)
+  await writeCrawlState(supabase, mergeProgressState(staleState, current.excluded, changes))
+}
+
 /** Schreibt nur den Nachverlinkungs-Cursor, ohne den restlichen Crawl-Zustand
  *  anzufassen — die beiden Läufe sind unabhängig und dürfen sich nicht
  *  gegenseitig zurücksetzen. */
@@ -239,8 +287,7 @@ export async function extractCandidates(
   }
 
   const postsProcessed = state.postsProcessed + rows.length
-  await writeCrawlState(supabase, {
-    ...state,
+  await writeCrawlProgress(supabase, state, {
     cursor: rows[rows.length - 1].created_at,
     postsProcessed,
     candidates,
@@ -589,7 +636,7 @@ export async function generateCandidates(
     delete candidates[name]
   }
 
-  await writeCrawlState(supabase, { ...state, candidates, generated: generatedSlugs })
+  await writeCrawlProgress(supabase, state, { candidates, generated: generatedSlugs })
 
   // NUR offene Arbeit zählen, nicht alle Kandidaten: abgewählte bleiben in der
   // Liste stehen und hätten den Batch-Lauf endlos weiterlaufen lassen.
