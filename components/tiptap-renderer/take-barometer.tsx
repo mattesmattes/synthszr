@@ -91,31 +91,38 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
 
   const total = counts.agree + counts.disagree
   const hasVotes = total > 0
-  const tie = hasVotes && counts.agree === counts.disagree
+  // Führende Seite bestimmt die Färbung.
+  const lead: 'up' | 'down' | 'tie' | 'none' = !hasVotes
+    ? 'none'
+    : counts.agree > counts.disagree ? 'up'
+    : counts.disagree > counts.agree ? 'down'
+    : 'tie'
   const de = locale === 'de'
   const agreeLabel = de ? 'Sehe ich auch so' : 'Agree'
   const disagreeLabel = de ? 'Sehe ich anders' : 'Disagree'
 
-  // Farb-/Füll-Logik (Betreiber-Wunsch 2026-08-09):
-  //  - keine Votes: beide Thumbs als Outline (nur Rahmen).
-  //  - Votes vorhanden: gefüllt — Daumen hoch grün, runter rot.
-  //  - Gleichstand: beide gelb.
-  // Der eigene Vote bekommt zusätzlich einen Ring, damit erkennbar bleibt, was
-  // man selbst gewählt hat.
-  const thumbClass = (kind: 'up' | 'down') => {
-    const base = 'inline-flex items-center gap-1 rounded px-2 py-1 transition-colors'
-    const own = ownVote === (kind === 'up' ? 'agree' : 'disagree')
-      ? ' ring-2 ring-offset-1 ring-foreground'
-      : ''
-    if (!hasVotes) return `${base} border border-border text-muted-foreground hover:border-foreground${own}`
-    if (tie) return `${base} border border-transparent bg-yellow-400 text-black${own}`
-    return kind === 'up'
-      ? `${base} border border-transparent bg-green-600 text-white${own}`
-      : `${base} border border-transparent bg-red-600 text-white${own}`
+  // Betreiber-Wunsch 2026-08-09: NUR die Hand (das Icon) wird eingefärbt, der
+  // Button bleibt immer eine transparente Outline. Eingefärbt wird die FÜHRENDE
+  // Seite (Daumen hoch grün, runter rot); bei Gleichstand beide gelb; die
+  // unterlegene bzw. votelose Seite bleibt Outline (nur Rahmen). Die Zahl in
+  // Klammern steht an beiden Thumbs, sobald überhaupt eine Stimme da ist.
+  const thumb = (kind: 'up' | 'down'): { text: string; filled: boolean } => {
+    if (lead === 'tie') return { text: 'text-yellow-500 dark:text-yellow-400', filled: true }
+    if (lead === kind) {
+      return kind === 'up'
+        ? { text: 'text-green-600 dark:text-green-400', filled: true }
+        : { text: 'text-red-600 dark:text-red-400', filled: true }
+    }
+    return { text: 'text-muted-foreground', filled: false }
   }
+  const up = thumb('up')
+  const down = thumb('down')
+  const btnBase = 'inline-flex items-center gap-1 rounded border border-border px-2 py-1 transition-colors hover:border-foreground'
 
   return (
-    <div className="my-3 rounded-md border border-border bg-muted/30 px-3 py-2 font-sans">
+    // Transparent auf dem Seitenhintergrund — kein grauer Kasten mehr. Ohne
+    // Votes stehen die beiden Outline-Thumbs unauffällig da.
+    <div className="my-3 font-sans">
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <button
           type="button"
@@ -123,9 +130,9 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
           disabled={busy}
           aria-label={agreeLabel}
           aria-pressed={ownVote === 'agree'}
-          className={thumbClass('up')}
+          className={`${btnBase} ${up.text}`}
         >
-          <ThumbsUp className="h-4 w-4" fill={hasVotes ? 'currentColor' : 'none'} />
+          <ThumbsUp className="h-4 w-4" fill={up.filled ? 'currentColor' : 'none'} />
           {/* Zahlen nur, wenn mindestens eine Stimme abgegeben wurde. */}
           {hasVotes && <span className="tabular-nums">({counts.agree})</span>}
         </button>
@@ -135,9 +142,9 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
           disabled={busy}
           aria-label={disagreeLabel}
           aria-pressed={ownVote === 'disagree'}
-          className={thumbClass('down')}
+          className={`${btnBase} ${down.text}`}
         >
-          <ThumbsDown className="h-4 w-4" fill={hasVotes ? 'currentColor' : 'none'} />
+          <ThumbsDown className="h-4 w-4" fill={down.filled ? 'currentColor' : 'none'} />
           {hasVotes && <span className="tabular-nums">({counts.disagree})</span>}
         </button>
         {/* „Deinen Take dazu schreiben" erscheint ERST nach dem Voten — das
