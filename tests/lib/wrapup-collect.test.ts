@@ -76,4 +76,36 @@ describe('pickTopicFromPost', () => {
     const doc = { type: 'doc', content: [heading('Thema', 'topic'), para('Text.')] }
     expect(pickTopicFromPost(JSON.stringify(doc))?.headline).toBe('Thema')
   })
+
+  // KORREKTUR 2026-08-09: Der Bericht wird 1:1 uebernommen, nicht neu
+  // formuliert. Grund sind die Marks: Quellenlinks stecken ausschliesslich in
+  // den link-Marks des Originals, ihre URLs waeren nach einer Neuformulierung
+  // unwiederbringlich. Deshalb liefert die Funktion jetzt die ROHEN KNOTEN.
+  describe('rohe Knoten fuer die Uebernahme', () => {
+    it('trennt Bericht-Absaetze vom Synthszr Take', () => {
+      const doc = { type: 'doc', content: [
+        heading('Thema', 'topic'),
+        para('Bericht eins.'),
+        para('Bericht zwei.'),
+        para('Synthszr Take: Die Pointe.'),
+      ] }
+      const r = pickTopicFromPost(doc)
+      expect(r?.bodyNodes).toHaveLength(2)
+      expect(r?.takeText).toContain('Die Pointe.')
+    })
+
+    it('gibt den Heading-Knoten mit seinen Attributen zurueck', () => {
+      // queueItemId und bundleType haengen daran und sollen erhalten bleiben.
+      const doc = { type: 'doc', content: [heading('Thema', 'topic'), para('Text.')] }
+      const r = pickTopicFromPost(doc)
+      expect((r?.headingNode?.attrs as Record<string, unknown>).bundleType).toBe('topic')
+    })
+
+    it('kommt ohne Take zurecht — dann sind alle Absaetze Bericht', () => {
+      const doc = { type: 'doc', content: [heading('Thema'), para('Nur Bericht.')] }
+      const r = pickTopicFromPost(doc)
+      expect(r?.bodyNodes).toHaveLength(1)
+      expect(r?.takeText).toBe('')
+    })
+  })
 })

@@ -3,9 +3,16 @@
  *
  * QUELLE SIND DIE FERTIGEN ARTIKEL-ABSCHNITTE, nicht die Roh-Items der
  * news_queue (Betreiber-Entscheidung 2026-08-09). Sie sind redigiert,
- * freigegeben und tragen die Original-Headline; das Modell formuliert um, statt
- * neu zu schreiben. Ein Wrap-up, der inhaltlich vom veröffentlichten Artikel
- * abweicht, wäre schlimmer als keiner.
+ * freigegeben und tragen die Original-Headline.
+ *
+ * DER BERICHT WIRD 1:1 ÜBERNOMMEN, nicht neu formuliert (Korrektur vom selben
+ * Tag). Der Grund sind die Marks: Quellenlinks stecken ausschließlich in den
+ * `link`-Marks der Original-Knoten, ihre URLs wären nach einer Neuformulierung
+ * unwiederbringlich. Lexikon-Verlinkungen ließen sich zwar neu injizieren, die
+ * Quellen nicht — und beide gehören zum Erscheinungsbild eines Newsartikels.
+ *
+ * Neu geschrieben wird deshalb nur, was es im Original nicht gibt: der Vorlauf
+ * der Woche, die gekürzten Takes und dort, wo es sie gibt, ein Bezugs-Absatz.
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
 
@@ -17,7 +24,20 @@ export interface WrapupTopic {
   /** "YYYY-MM-DD" in Berliner Zeit */
   date: string
   headline: string
+  /** Volltext des Berichts — nur als KONTEXT für das Modell, nicht für die
+   *  Ausgabe. Der Bericht selbst wird über `bodyNodes` übernommen. */
   body: string
+  /** Der Original-Take als Text. Kontext für die gekürzte Neufassung. */
+  takeText: string
+  /** Der Heading-Knoten des Originals, samt queueItemId und bundleType. */
+  headingNode: Record<string, unknown> | null
+  /** Die Bericht-Absätze als ROHE TipTap-Knoten — mit allen Marks.
+   *
+   *  DAS IST DER KERN DER KORREKTUR vom 2026-08-09: Quellenlinks stecken
+   *  ausschließlich in den `link`-Marks dieser Knoten. Würde das Modell den
+   *  Bericht neu formulieren, wären ihre URLs unwiederbringlich weg — die
+   *  Lexikon-Verlinkung ließe sich neu injizieren, die Quellen nicht. */
+  bodyNodes: Record<string, unknown>[]
   postSlug: string
 }
 
@@ -41,7 +61,13 @@ function textOf(node: unknown): string {
  * Wrap-up den halben Artikel mit und das Modell bekäme Material, das gar nicht
  * zum Thema des Tages gehört.
  */
-export function pickTopicFromPost(content: unknown): { headline: string; body: string } | null {
+export function pickTopicFromPost(content: unknown): {
+  headline: string
+  body: string
+  takeText: string
+  headingNode: Record<string, unknown> | null
+  bodyNodes: Record<string, unknown>[]
+} | null {
   // generated_posts.content kommt je nach Schreibpfad als String oder als
   // Objekt — dasselbe Muster wie in der Edit-Page.
   const parsed = typeof content === 'string'
@@ -61,13 +87,27 @@ export function pickTopicFromPost(content: unknown): { headline: string; body: s
   const chosen = topic ?? headings[0]
 
   const nextHeadingPos = headings.find((x) => x.i > chosen.i)?.i ?? nodes.length
-  const body = nodes
-    .slice(chosen.i + 1, nextHeadingPos)
+  const sectionNodes = nodes.slice(chosen.i + 1, nextHeadingPos) as Record<string, unknown>[]
+
+  // Take vom Bericht trennen. Der Take ist im Tagesartikel ein eigener Absatz,
+  // der mit „Synthszr Take:" beginnt — er wird im Wrap-up durch eine gekürzte
+  // Fassung ersetzt, der Bericht dagegen unverändert übernommen.
+  const takeIdx = sectionNodes.findIndex((n) => textOf(n).trimStart().startsWith('Synthszr Take:'))
+  const bodyNodes = takeIdx === -1 ? sectionNodes : sectionNodes.slice(0, takeIdx)
+  const takeText = takeIdx === -1 ? '' : textOf(sectionNodes[takeIdx]).trim()
+
+  const body = bodyNodes
     .map(textOf)
     .filter((t) => t.trim().length > 0)
     .join('\n\n')
 
-  return { headline: textOf(chosen.node).trim(), body }
+  return {
+    headline: textOf(chosen.node).trim(),
+    body,
+    takeText,
+    headingNode: chosen.node,
+    bodyNodes,
+  }
 }
 
 /**
@@ -108,6 +148,9 @@ export async function collectWeekTopics(
       date,
       headline: picked.headline,
       body: picked.body,
+      takeText: picked.takeText,
+      headingNode: picked.headingNode,
+      bodyNodes: picked.bodyNodes,
       postSlug: row.slug,
     })
   }
