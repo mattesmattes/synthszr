@@ -26,6 +26,7 @@
  * Bailout: die Liste steht im HTML, der Token wird erst zur Laufzeit gelesen.
  */
 import { FormEvent, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { PublicComment } from '@/lib/comments/service'
 
 interface EureTakesSectionProps {
@@ -52,9 +53,9 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
   const [email, setEmail] = useState('')
   const [needsEmail, setNeedsEmail] = useState(false)
   const [sectionRef, setSectionRef] = useState<CommentSectionRefEvent | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'ok' | 'info' | 'error'; text: string } | null>(null)
-  const formRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const de = locale === 'de'
@@ -83,37 +84,48 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
     return () => { cancelled = true }
   }, [postSource, postId])
 
-  // Brücke vom Take-Barometer: Abschnitts-Bezug setzen und zur Schreibbox führen.
+  // Brücke vom Take-Barometer: Klick auf „Deinen Take dazu schreiben" öffnet das
+  // Schreib-Overlay mit dem Abschnitts-Bezug.
   //
-  // BUGFIX 2026-08-09 (zwei bestätigte Ursachen, im Browser verifiziert):
-  //  1. Der „Deinen Take dazu schreiben"-Button sitzt INNERHALB des
-  //     ProseMirror-Editors (die Barometer werden in den Artikel-DOM injiziert).
-  //     Beim Klick nimmt der Editor den Fokus an sich — ein focus() auf die
-  //     Textarea wird sofort überschrieben (activeElement landet auf <body>).
-  //  2. element.scrollIntoView({behavior:'smooth'}) über die ~9400px zur ganz
-  //     unten liegenden Box war unzuverlässig (Smooth-Drosselung, Layout-Shift
-  //     durch die Barometer-Injektion, verschachtelte Scroll-Container).
-  //
-  // Deshalb JETZT ein expliziter, SOFORTIGER window.scrollTo auf die berechnete
-  // Zielposition. Das bewegt den Viewport garantiert (im Browser verifiziert:
-  // scrollY 0 → 9425), unabhängig von Fokus-Wettstreit, rAF und Smooth-Verhalten.
-  // Der Fokus-Versuch bleibt als Bonus (preventScroll, damit er nicht doppelt
-  // springt), darf aber fehlschlagen — die sichtbare Reaktion ist der Scroll.
+  // REDESIGN 2026-08-09: Früher wurde ~9400px zur Box am Seitenende gescrollt —
+  // fragil (Smooth-Drosselung, Layout-Shift, Fokus-Wettstreit mit dem
+  // ProseMirror-Editor, in dem der Button sitzt) und für den Nutzer verwirrend.
+  // Jetzt öffnet sich ein Overlay direkt dort, wo man ist. Kein Scrollen, keine
+  // Distanz, keine Fokus-Konkurrenz (das Modal hängt an document.body, außerhalb
+  // des Editors).
   useEffect(() => {
     function onRef(e: Event) {
       const detail = (e as CustomEvent<CommentSectionRefEvent>).detail
       if (!detail?.anchor) return
       setSectionRef(detail)
-      const box = formRef.current
-      if (box) {
-        const y = box.getBoundingClientRect().top + window.scrollY - 100
-        window.scrollTo({ top: Math.max(0, y), behavior: 'auto' })
-      }
-      textareaRef.current?.focus({ preventScroll: true })
+      setNotice(null)
+      setModalOpen(true)
     }
     window.addEventListener('synthszr:comment-ref', onRef)
     return () => window.removeEventListener('synthszr:comment-ref', onRef)
   }, [])
+
+  // Modal-Verhalten: Textarea fokussieren (jetzt zuverlässig, weil außerhalb des
+  // Editors), Body-Scroll sperren, Escape schließt.
+  useEffect(() => {
+    if (!modalOpen) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const t = window.setTimeout(() => textareaRef.current?.focus(), 40)
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setModalOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.clearTimeout(t)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [modalOpen])
+
+  const openBlankModal = () => {
+    setSectionRef(null)
+    setNotice(null)
+    setModalOpen(true)
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -186,79 +198,24 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
 
   return (
     <section id="eure-takes" className="mt-16 border-t border-border pt-8">
-      <h2 className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
-        {de ? 'Eure Takes' : 'Your Takes'}
-      </h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {de
-          ? 'Der Synthszr hat eine Haltung. Jetzt bist du dran.'
-          : 'The Synthszr has an opinion. Your turn.'}
-      </p>
-
-      <div ref={formRef} className="mt-6">
-        <form onSubmit={submit} className="space-y-3">
-          {sectionRef && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="rounded-full border border-border px-2 py-0.5">
-                {de ? 'zu' : 're'}: {sectionRef.headline.slice(0, 80)}
-              </span>
-              <button type="button" className="underline" onClick={() => setSectionRef(null)}>
-                {de ? 'entfernen' : 'remove'}
-              </button>
-            </div>
-          )}
-          <textarea
-            ref={textareaRef}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder={de ? 'Was ist dein Take?' : 'What is your take?'}
-            rows={4}
-            maxLength={4000}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-          />
-          {/* Honeypot: für Menschen unsichtbar, Bots füllen es. */}
-          <input
-            type="text"
-            name="website"
-            tabIndex={-1}
-            autoComplete="off"
-            aria-hidden="true"
-            className="absolute -left-[9999px] h-0 w-0 opacity-0"
-            onChange={() => { /* absichtlich ignoriert */ }}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder={de ? 'Dein Name' : 'Your name'}
-              maxLength={80}
-              className="w-44 rounded-md border border-border bg-background px-3 py-1.5 text-sm"
-            />
-            {needsEmail && (
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder={de ? 'Newsletter-Adresse' : 'Newsletter address'}
-                maxLength={320}
-                className="w-64 rounded-md border border-border bg-background px-3 py-1.5 text-sm"
-              />
-            )}
-            <button
-              type="submit"
-              disabled={busy || !body.trim() || !displayName.trim() || (needsEmail && !email.trim())}
-              className="rounded-md bg-foreground px-4 py-1.5 text-sm text-background disabled:opacity-50"
-            >
-              {busy ? (de ? 'Sende…' : 'Sending…') : (de ? 'Take abgeben' : 'Post take')}
-            </button>
-          </div>
-          {notice && (
-            <p className={`text-xs ${notice.kind === 'error' ? 'text-red-600' : notice.kind === 'ok' ? 'text-green-700' : 'text-muted-foreground'}`}>
-              {notice.text}
-            </p>
-          )}
-        </form>
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <h2 className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+            {de ? 'Eure Takes' : 'Your Takes'}
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {de
+              ? 'Der Synthszr hat eine Haltung. Jetzt bist du dran.'
+              : 'The Synthszr has an opinion. Your turn.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={openBlankModal}
+          className="rounded-md bg-foreground px-4 py-2 text-sm text-background"
+        >
+          {de ? 'Deinen Take schreiben' : 'Write your take'}
+        </button>
       </div>
 
       {comments.length > 0 && (
@@ -285,6 +242,100 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
             </li>
           ))}
         </ol>
+      )}
+
+      {/* Schreib-Overlay als echter Top-Layer (Portal an document.body, außerhalb
+          des Artikel-/Editor-DOM). Nur clientseitig gerendert (modalOpen startet
+          false, wird per Nutzeraktion gesetzt). */}
+      {modalOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={de ? 'Deinen Take schreiben' : 'Write your take'}
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 font-sans"
+        >
+          <div className="absolute inset-0 bg-black/50" onClick={() => setModalOpen(false)} />
+          <div className="relative z-10 w-full max-w-lg rounded-lg border border-border bg-background p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <h3 className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+                {de ? 'Dein Take' : 'Your take'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                aria-label={de ? 'Schließen' : 'Close'}
+                className="-mr-1 -mt-1 rounded p-1 text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={submit} className="mt-3 space-y-3">
+              {sectionRef && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="rounded-full border border-border px-2 py-0.5">
+                    {de ? 'zu' : 're'}: {sectionRef.headline.slice(0, 80)}
+                  </span>
+                  <button type="button" className="underline" onClick={() => setSectionRef(null)}>
+                    {de ? 'entfernen' : 'remove'}
+                  </button>
+                </div>
+              )}
+              <textarea
+                ref={textareaRef}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder={de ? 'Was ist dein Take?' : 'What is your take?'}
+                rows={5}
+                maxLength={4000}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+              {/* Honeypot: für Menschen unsichtbar, Bots füllen es. */}
+              <input
+                type="text"
+                name="website"
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                className="absolute -left-[9999px] h-0 w-0 opacity-0"
+                onChange={() => { /* absichtlich ignoriert */ }}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder={de ? 'Dein Name' : 'Your name'}
+                  maxLength={80}
+                  className="w-44 rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                />
+                {needsEmail && (
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder={de ? 'Newsletter-Adresse' : 'Newsletter address'}
+                    maxLength={320}
+                    className="w-64 rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                )}
+                <button
+                  type="submit"
+                  disabled={busy || !body.trim() || !displayName.trim() || (needsEmail && !email.trim())}
+                  className="ml-auto rounded-md bg-foreground px-4 py-1.5 text-sm text-background disabled:opacity-50"
+                >
+                  {busy ? (de ? 'Sende…' : 'Sending…') : (de ? 'Take abgeben' : 'Post take')}
+                </button>
+              </div>
+              {notice && (
+                <p className={`text-xs ${notice.kind === 'error' ? 'text-red-600' : notice.kind === 'ok' ? 'text-green-700' : 'text-muted-foreground'}`}>
+                  {notice.text}
+                </p>
+              )}
+            </form>
+          </div>
+        </div>,
+        document.body,
       )}
     </section>
   )

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   FileText,
@@ -255,6 +256,23 @@ interface AdminNavProps {
 export function AdminNav({ onNavigate }: AdminNavProps) {
   const pathname = usePathname()
 
+  // Zahl der Kommentare in der Freigabe-Queue → rot blinkendes „Eure Takes"-Icon.
+  // Poll alle 60s; bei jedem Navigieren (pathname-Wechsel) frisch, damit die Zahl
+  // nach dem Bearbeiten der Queue sofort stimmt.
+  const [pendingComments, setPendingComments] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    const load = () => {
+      fetch('/api/admin/comments/pending-count', { credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (!cancelled && typeof d?.count === 'number') setPendingComments(d.count) })
+        .catch(() => {})
+    }
+    load()
+    const id = window.setInterval(load, 60_000)
+    return () => { cancelled = true; window.clearInterval(id) }
+  }, [pathname])
+
   return (
     <div className="space-y-6">
       {navGroups.map((group) => (
@@ -270,6 +288,10 @@ export function AdminNav({ onNavigate }: AdminNavProps) {
                 : item.exact === true
                   ? pathname === item.href
                   : pathname.startsWith(item.href)
+
+              // „Eure Takes": rot pulsierendes Icon + Zähler, solange Kommentare
+              // auf Freigabe warten.
+              const alertsPending = item.href === '/admin/comments' && pendingComments > 0
 
               return (
                 <li key={item.href}>
@@ -288,12 +310,18 @@ export function AdminNav({ onNavigate }: AdminNavProps) {
                     <span
                       className={cn(
                         'flex h-6 w-6 shrink-0 items-center justify-center rounded',
-                        item.highlight && 'bg-[#CCFF00] text-black'
+                        item.highlight && 'bg-[#CCFF00] text-black',
+                        alertsPending && 'animate-pulse bg-red-600 text-white'
                       )}
                     >
                       <item.icon className="h-4 w-4" />
                     </span>
                     {item.label}
+                    {alertsPending && (
+                      <span className="ml-auto animate-pulse rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+                        {pendingComments}
+                      </span>
+                    )}
                     {isExternal && (
                       <span className="ml-auto text-xs text-muted-foreground">↗</span>
                     )}

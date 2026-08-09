@@ -96,6 +96,11 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
 
   return (
     <div className="my-3 rounded-md border border-border bg-muted/30 px-3 py-2 font-sans">
+      {/* Button-Zeile: bleibt STABIL, egal ob schon gevotet wurde. Die
+          Prozent-Leiste kommt in eine EIGENE Zeile darunter — vorher stand sie
+          per ml-auto in derselben flex-wrap-Zeile und schob nach dem Voten den
+          „Deinen Take dazu schreiben"-Button weg, sodass man daneben klickte
+          (Betreiber-Befund 2026-08-09). */}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <button
           type="button"
@@ -121,9 +126,9 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
         >
           {disagreeLabel}
         </button>
-        {/* Brücke zur Kommentarbox: setzt den Abschnitts-Bezug und scrollt
-            hin. CustomEvent, weil Barometer (Portal im Renderer-Baum) und
-            Kommentarbox (eigener Baum) keinen gemeinsamen State haben. */}
+        {/* Öffnet das Kommentar-Overlay. CustomEvent, weil Barometer (Portal im
+            Renderer-Baum) und Kommentarbereich (eigener Baum) keinen
+            gemeinsamen State haben. */}
         <button
           type="button"
           className="text-muted-foreground underline-offset-2 hover:underline"
@@ -135,19 +140,17 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
         >
           {locale === 'de' ? 'Deinen Take dazu schreiben →' : 'Write your take →'}
         </button>
-        {/* Verteilung erst NACH eigener Stimme oder ab 5 Voten: eine 100%-Zahl
-            aus einer einzigen Stimme sähe nach Manipulation aus. */}
-        {pct !== null && (ownVote !== null || total >= 5) && (
-          <span className="ml-auto flex items-center gap-2 text-muted-foreground">
-            <span className="inline-block h-1.5 w-24 overflow-hidden rounded-full bg-border">
-              <span className="block h-full bg-foreground" style={{ width: `${pct}%` }} />
-            </span>
-            {de
-              ? `${pct} % stimmen dem Take zu`
-              : `${pct}% agree with the take`}
-          </span>
-        )}
       </div>
+      {/* Verteilung erst NACH eigener Stimme oder ab 5 Voten: eine 100%-Zahl
+          aus einer einzigen Stimme sähe nach Manipulation aus. */}
+      {pct !== null && (ownVote !== null || total >= 5) && (
+        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="inline-block h-1.5 w-24 overflow-hidden rounded-full bg-border">
+            <span className="block h-full bg-foreground" style={{ width: `${pct}%` }} />
+          </span>
+          {de ? `${pct} % stimmen dem Take zu` : `${pct}% agree with the take`}
+        </div>
+      )}
     </div>
   )
 }
