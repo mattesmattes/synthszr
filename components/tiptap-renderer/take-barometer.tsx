@@ -117,13 +117,20 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
   }
   const up = thumb('up')
   const down = thumb('down')
-  const btnBase = 'inline-flex items-center gap-1 rounded border border-border px-2 py-1 transition-colors hover:border-foreground'
+  // KEIN Button-Kasten mehr (Betreiber-Wunsch): nur Icon + Zahl, transparent.
+  const btnBase = 'inline-flex items-center gap-1 py-1 transition-opacity hover:opacity-70'
+  // Gefüllte Hand: solide Farbe, aber der STROKE bleibt in Hintergrundfarbe.
+  // Dadurch bleibt die Kragen-Linie (Trennung Hemdkragen/Hand) als
+  // Aussparung sichtbar — sonst wird das gefüllte Icon ein unlesbarer Klumpen.
+  // Die äußere Kontur in Hintergrundfarbe verschwindet auf dem Seitenhintergrund.
+  const filledIconProps = { fill: 'currentColor', stroke: 'var(--background)', strokeWidth: 2 }
+  const outlineIconProps = { fill: 'none' as const }
 
   return (
     // Transparent auf dem Seitenhintergrund — kein grauer Kasten mehr. Ohne
     // Votes stehen die beiden Outline-Thumbs unauffällig da.
     <div className="my-3 font-sans">
-      <div className="flex flex-wrap items-center gap-2 text-xs">
+      <div className="flex flex-wrap items-center gap-3 text-xs">
         <button
           type="button"
           onClick={() => vote('agree')}
@@ -132,7 +139,7 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
           aria-pressed={ownVote === 'agree'}
           className={`${btnBase} ${up.text}`}
         >
-          <ThumbsUp className="h-4 w-4" fill={up.filled ? 'currentColor' : 'none'} />
+          <ThumbsUp className="h-5 w-5" {...(up.filled ? filledIconProps : outlineIconProps)} />
           {/* Zahlen nur, wenn mindestens eine Stimme abgegeben wurde. */}
           {hasVotes && <span className="tabular-nums">({counts.agree})</span>}
         </button>
@@ -144,7 +151,7 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
           aria-pressed={ownVote === 'disagree'}
           className={`${btnBase} ${down.text}`}
         >
-          <ThumbsDown className="h-4 w-4" fill={down.filled ? 'currentColor' : 'none'} />
+          <ThumbsDown className="h-5 w-5" {...(down.filled ? filledIconProps : outlineIconProps)} />
           {hasVotes && <span className="tabular-nums">({counts.disagree})</span>}
         </button>
         {/* „Deinen Take dazu schreiben" erscheint ERST nach dem Voten — das
