@@ -38,19 +38,22 @@ export function insertTakeBarometers(container: HTMLElement): TakeBarometerPorta
     const headline = found?.headline ?? ''
     index++
 
-    // Idempotenz: existiert der Platzhalter schon, nur einsammeln — die
-    // Portale müssen bei jedem Prozessorlauf zurückgegeben werden, sonst
-    // verlöre ein Re-Render die gemounteten Widgets.
-    const existing = p.nextElementSibling
+    // Idempotenz: existiert der Platzhalter schon (jetzt IM Absatz), nur
+    // einsammeln — die Portale müssen bei jedem Prozessorlauf zurückgegeben
+    // werden, sonst verlöre ein Re-Render die gemounteten Widgets.
+    const existing = p.querySelector(':scope > [data-take-barometer]')
     if (existing instanceof HTMLElement && existing.dataset.takeBarometer) {
       portals.push({ anchor: existing.dataset.takeBarometer, headline, element: existing })
       return
     }
 
-    const slot = document.createElement('div')
+    // Inline ANS ENDE des Take-Absatzes hängen (Betreiber-Wunsch: direkt hinter
+    // den letzten Satz), nicht als Block darunter. <span>, damit es gültiges
+    // HTML in einem <p> bleibt (ein <div> würde den Absatz aufbrechen).
+    const slot = document.createElement('span')
     slot.dataset.takeBarometer = anchor
-    slot.className = 'take-barometer-slot not-prose'
-    p.after(slot)
+    slot.className = 'take-barometer-slot'
+    p.appendChild(slot)
     portals.push({ anchor, headline, element: slot })
   })
 

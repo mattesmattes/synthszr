@@ -277,7 +277,7 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
           {/* Box faded + zoomt leicht rein. */}
           <div className="relative z-10 w-full max-w-lg rounded-lg border border-border bg-background p-5 shadow-xl animate-in fade-in-0 zoom-in-95 duration-200">
             <div className="flex items-start justify-between gap-4">
-              <h2 className="text-base font-bold uppercase tracking-wide">
+              <h2 className="text-lg font-bold tracking-tight">
                 {de ? 'Dein Take' : 'Your take'}
               </h2>
               <button

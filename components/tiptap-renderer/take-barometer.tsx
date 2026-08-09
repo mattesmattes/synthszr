@@ -116,30 +116,30 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
   }
 
   return (
-    // Transparent auf dem Seitenhintergrund — kein grauer Kasten.
-    <div className="my-3 font-sans">
-      {/* Emoji-Thumbs: beide immer sichtbar. Zahlen erst, wenn es Stimmen gibt;
-          bei 0 Stimmen leicht gedimmt als Abstimm-Hinweis. */}
-      <div className={`flex flex-wrap items-center gap-3 text-xs ${total === 0 ? 'opacity-60' : ''}`}>
-        {thumbButton('up', total > 0 ? counts.agree : null)}
-        {thumbButton('down', total > 0 ? counts.disagree : null)}
+    // INLINE direkt hinter dem letzten Satz des Takes (Betreiber-Wunsch): span
+    // statt div, damit es gültiges HTML im <p> bleibt. Kleiner Abstand links.
+    // Emoji-Thumbs immer sichtbar; Zahlen erst bei Stimmen, bei 0 leicht gedimmt.
+    <span
+      className={`ml-2 inline-flex flex-wrap items-center gap-2 align-middle text-xs font-sans ${total === 0 ? 'opacity-60' : ''}`}
+    >
+      {thumbButton('up', total > 0 ? counts.agree : null)}
+      {thumbButton('down', total > 0 ? counts.disagree : null)}
 
-        {/* „Deinen Take dazu schreiben" erst NACH dem Voten. Öffnet das
-            Kommentar-Overlay per CustomEvent. */}
-        {ownVote !== null && (
-          <button
-            type="button"
-            className="text-muted-foreground underline-offset-2 hover:underline"
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent('synthszr:comment-ref', {
-                detail: { anchor, headline: headline ?? '' },
-              }))
-            }}
-          >
-            {de ? 'Deinen Take dazu schreiben →' : 'Write your take →'}
-          </button>
-        )}
-      </div>
-    </div>
+      {/* „Deinen Take dazu schreiben" erst NACH dem Voten. Öffnet das
+          Kommentar-Overlay per CustomEvent. */}
+      {ownVote !== null && (
+        <button
+          type="button"
+          className="text-muted-foreground underline-offset-2 hover:underline"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('synthszr:comment-ref', {
+              detail: { anchor, headline: headline ?? '' },
+            }))
+          }}
+        >
+          {de ? 'Deinen Take dazu schreiben →' : 'Write your take →'}
+        </button>
+      )}
+    </span>
   )
 }
