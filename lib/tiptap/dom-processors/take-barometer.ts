@@ -38,13 +38,23 @@ export function insertTakeBarometers(container: HTMLElement): TakeInjectionResul
   const sectionComments: TakeBarometerPortal[] = []
   const paragraphs = container.querySelectorAll('p')
   let index = 0
+  // Zählt, wie oft ein Basis-Anker schon vorkam. Im Wochenrückblick können zwei
+  // gebündelte News DIESELBE queueItemId tragen — dann teilten sich beide Takes
+  // Barometer-Votes UND Kommentare, und der Take erschiene unter dem falschen
+  // Abschnitt (Betreiber-Befund 2026-08-10). Erst-Vorkommen behält den bloßen
+  // Anker (bestehende Daten matchen weiter), 2.+ bekommt ein #n-Suffix.
+  const seen = new Map<string, number>()
 
   paragraphs.forEach((p) => {
     if (!TAKE_RE.test(p.textContent ?? '')) return
     const found = findAnchor(p)
-    const anchor = found?.id ?? `idx:${index}`
+    const base = found?.id ?? `idx:${index}`
     const headline = found?.headline ?? ''
     index++
+    const occ = (seen.get(base) ?? 0) + 1
+    seen.set(base, occ)
+    // URL-sicheres Trennzeichen (~), falls der Anker je in eine Query wandert.
+    const anchor = occ > 1 ? `${base}~${occ}` : base
 
     // --- Inline-Barometer INNERHALB des Take-Absatzes (hinter dem letzten Satz).
     // <span>, damit es gültiges HTML im <p> bleibt. Idempotent über das
