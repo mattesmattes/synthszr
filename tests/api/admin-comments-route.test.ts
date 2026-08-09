@@ -82,3 +82,27 @@ describe('PATCH /api/admin/comments', () => {
     expect(mocks.del).not.toHaveBeenCalled()
   })
 })
+
+describe('PATCH /api/admin/comments — Sichtbarkeit & Bearbeiten', () => {
+  it('hide setzt den Status auf rejected (unsichtbar), kein Delete', async () => {
+    const { PATCH } = await import('@/app/api/admin/comments/route')
+    const res = await PATCH(patch({ id: '11111111-1111-1111-1111-111111111111', action: 'hide' }))
+    expect(res.status).toBe(200)
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'rejected' }))
+    expect(mocks.del).not.toHaveBeenCalled()
+  })
+
+  it('edit aktualisiert nur den Kommentartext', async () => {
+    const { PATCH } = await import('@/app/api/admin/comments/route')
+    const res = await PATCH(patch({ id: '11111111-1111-1111-1111-111111111111', action: 'edit', body: 'Korrigierter Take' }))
+    expect(res.status).toBe(200)
+    expect(mocks.update).toHaveBeenCalledWith({ body: 'Korrigierter Take' })
+  })
+
+  it('edit ohne body wird abgewiesen (400)', async () => {
+    const { PATCH } = await import('@/app/api/admin/comments/route')
+    const res = await PATCH(patch({ id: '11111111-1111-1111-1111-111111111111', action: 'edit' }))
+    expect(res.status).toBe(400)
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
+})

@@ -8,31 +8,52 @@ import { revalidatePostPaths, type PostSource } from '@/lib/comments/service'
 /**
  * Moderations-Queue für „Eure Takes".
  *
- * GET  ?status=pending  → Liste (Default: pending, die Freigabe-Queue)
- * PATCH { id, action: approve|reject|delete }
- *
- * approve veröffentlicht und revalidiert die Artikelseite; reject ist eine
- * inhaltliche Ablehnung (Status bleibt zur Rechenschaft erhalten). delete ist
- * der DSGVO-Fall (Art. 17): der Beitrag wird WIRKLICH aus der Tabelle entfernt
- * — Klarname, Text und subscriber_id verschwinden. Ein bloßes status='deleted'
- * wäre kein Löschen, sondern nur ein Ausblenden (Review-Befund 10).
+ * GET  ?status=pending|published|rejected|pending_verify|recent  &q=Suchbegriff
+ *   - status = ein echter Status ODER 'recent' (alle Takes der letzten 3 Tage,
+ *     statusübergreifend).
+ *   - q = Volltextsuche über Kommentartext UND Anzeigename (optional, kombinierbar).
+ * PATCH { id, action: approve|hide|reject|delete|edit, body? }
+ *   - approve → published (sichtbar), hide/reject → rejected (unsichtbar),
+ *     delete → Hard-Delete (DSGVO Art. 17, entfernt die Zeile wirklich),
+ *     edit → Kommentartext ändern (body).
  */
+const SELECT_COLS =
+  'id, post_source, post_id, display_name, body, section_headline, status, moderation_verdict, moderation_reason, created_at, published_at'
+
+const RECENT_DAYS = 3
+
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
-  const status = new URL(request.url).searchParams.get('status') ?? 'pending'
-  if (!['pending', 'published', 'rejected', 'pending_verify'].includes(status)) {
+  const params = new URL(request.url).searchParams
+  const status = params.get('status') ?? 'pending'
+  const rawQ = params.get('q') ?? ''
+  // In der PostgREST-.or()-Filtersyntax haben , ( ) und der Backslash Bedeutung;
+  // aus dem Suchbegriff entfernen, damit er den Filter nicht sprengt. % ist mein
+  // Wildcard-Rahmen und wird ebenfalls entfernt.
+  const q = rawQ.replace(/[,()\\%*]/g, ' ').trim().slice(0, 100)
+
+  if (!['pending', 'published', 'rejected', 'pending_verify', 'recent'].includes(status)) {
     return NextResponse.json({ error: 'Ungültiger Status' }, { status: 400 })
   }
 
   const supabase = createAdminClient()
-  const { data, error } = await supabase
+  let query = supabase
     .from('post_comments')
-    .select('id, post_source, post_id, display_name, body, section_headline, status, moderation_verdict, moderation_reason, created_at')
-    .eq('status', status)
+    .select(SELECT_COLS)
     .order('created_at', { ascending: false })
-    .limit(100)
+    .limit(200)
+
+  if (status === 'recent') {
+    const since = new Date(Date.now() - RECENT_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    query = query.gte('created_at', since)
+  } else {
+    query = query.eq('status', status)
+  }
+  if (q) query = query.or(`body.ilike.%${q}%,display_name.ilike.%${q}%`)
+
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Artikel-Titel nachschlagen, damit die Queue lesbar ist. Zwei kleine
@@ -58,7 +79,8 @@ export async function GET(request: NextRequest) {
 
 const patchSchema = z.object({
   id: z.string().uuid(),
-  action: z.enum(['approve', 'reject', 'delete']),
+  action: z.enum(['approve', 'hide', 'reject', 'delete', 'edit']),
+  body: z.string().min(1).max(4000).optional(),
 }).strict()
 
 export async function PATCH(request: NextRequest) {
@@ -70,10 +92,10 @@ export async function PATCH(request: NextRequest) {
   const originError = requireValidOrigin(request)
   if (originError) return originError
 
-  const body = await request.json().catch(() => null)
-  const parsed = patchSchema.safeParse(body)
+  const raw = await request.json().catch(() => null)
+  const parsed = patchSchema.safeParse(raw)
   if (!parsed.success) return NextResponse.json({ error: 'Ungültige Eingabe' }, { status: 400 })
-  const { id, action } = parsed.data
+  const { id, action, body } = parsed.data
 
   const supabase = createAdminClient()
 
@@ -89,6 +111,26 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, status: 'deleted' })
   }
 
+  // Text bearbeiten: nur der Kommentartext ändert sich, der Status bleibt.
+  if (action === 'edit') {
+    if (!body || !body.trim()) {
+      return NextResponse.json({ error: 'Leerer Text' }, { status: 400 })
+    }
+    const { data: updated, error } = await supabase
+      .from('post_comments')
+      .update({ body: body.trim() })
+      .eq('id', id)
+      .select('post_source, post_id, status')
+      .maybeSingle()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!updated) return NextResponse.json({ error: 'Kommentar nicht gefunden' }, { status: 404 })
+    const row = updated as { post_source: PostSource; post_id: string; status: string }
+    // Nur wenn der Kommentar öffentlich sichtbar ist, ändert sich die Seite.
+    if (row.status === 'published') await revalidatePostPaths(supabase, row.post_source, row.post_id)
+    return NextResponse.json({ ok: true, status: row.status })
+  }
+
+  // Sichtbarkeit: approve → published (sichtbar), hide/reject → rejected (unsichtbar).
   const nextStatus = action === 'approve' ? 'published' : 'rejected'
   const { data: updated, error } = await supabase
     .from('post_comments')
@@ -103,7 +145,7 @@ export async function PATCH(request: NextRequest) {
   if (!updated) return NextResponse.json({ error: 'Kommentar nicht gefunden' }, { status: 404 })
 
   const row = updated as { post_source: PostSource; post_id: string }
-  // Freigabe UND Ablehnung ändern die sichtbare Seite — beide revalidieren.
+  // Sichtbar-Machen UND Ausblenden ändern die öffentliche Seite — beide revalidieren.
   await revalidatePostPaths(supabase, row.post_source, row.post_id)
   return NextResponse.json({ ok: true, status: nextStatus })
 }
