@@ -55,6 +55,7 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'ok' | 'info' | 'error'; text: string } | null>(null)
   const formRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const de = locale === 'de'
 
@@ -82,14 +83,30 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
     return () => { cancelled = true }
   }, [postSource, postId])
 
-  // Brücke vom Take-Barometer: Abschnitts-Bezug setzen und zur Box scrollen.
+  // Brücke vom Take-Barometer: Abschnitts-Bezug setzen und zur Box führen.
+  //
+  // WICHTIG (Bugfix 2026-08-09): Der Klick auf „Deinen Take dazu schreiben"
+  // sitzt mitten im Artikel, die Schreibbox aber ganz unten (~9400px tiefer).
+  // Die frühere einzige Rückmeldung — ein smooth scrollIntoView — konnte über
+  // diese Distanz ausbleiben (u.a. weil Layout-Verschiebungen beim Injizieren
+  // der Barometer das Ziel verschieben) und wirkte dann wie „keine Reaktion".
+  // Deshalb JETZT: den Cursor in die Textarea setzen. focus() bringt die Box
+  // zuverlässig in den Viewport (auch über große Distanz) UND ist ein
+  // eindeutiges „hier weiterschreiben"-Signal.
   useEffect(() => {
     function onRef(e: Event) {
       const detail = (e as CustomEvent<CommentSectionRefEvent>).detail
-      if (detail?.anchor) {
-        setSectionRef(detail)
-        formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }
+      if (!detail?.anchor) return
+      setSectionRef(detail)
+      requestAnimationFrame(() => {
+        const ta = textareaRef.current
+        // focus() allein: bringt die Box zuverlässig in den Viewport UND setzt
+        // den Cursor. KEIN zusätzliches smooth scrollIntoView davor — das
+        // erzeugte einen Doppelsprung, und der Smooth-Anteil konnte über die
+        // große Distanz ganz ausbleiben (der ursprüngliche „keine Reaktion"-Bug).
+        if (ta) ta.focus()
+        else formRef.current?.scrollIntoView({ block: 'center' })
+      })
     }
     window.addEventListener('synthszr:comment-ref', onRef)
     return () => window.removeEventListener('synthszr:comment-ref', onRef)
@@ -188,6 +205,7 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
             </div>
           )}
           <textarea
+            ref={textareaRef}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder={de ? 'Was ist dein Take?' : 'What is your take?'}
