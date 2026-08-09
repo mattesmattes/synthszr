@@ -108,7 +108,7 @@ export default function NewsletterSendPage() {
   /** Lexikon-Stand des Posts: erkannt / erzeugt / illustriert / verlinkt. */
   const [glossaryStatus, setGlossaryStatus] = useState<{
     detected: number; generated: number; withImage: number; linked: number
-    state: 'ok' | 'pending' | 'unlinked' | 'none'; label: string
+    state: 'ok' | 'pending' | 'images_pending' | 'unlinked' | 'none'; label: string
   } | null>(null)
   const [checkingGlossary, setCheckingGlossary] = useState(false)
 
@@ -459,8 +459,12 @@ export default function NewsletterSendPage() {
 
   // Solange die Erzeugung laeuft, alle 20s nachsehen. Das ist der ganze Zweck der
   // Anzeige: der Operator soll sehen, DASS die Hintergrund-Routine vorankommt,
-  // ohne die Seite neu zu laden. Nur bei 'pending' — ein fertiger Stand aendert
-  // sich nicht von allein, und dauerndes Pollen waere sinnlose Last.
+  // ohne die Seite neu zu laden.
+  //
+  // NUR bei 'pending', nicht bei 'images_pending': dort arbeitet nichts, was
+  // sich in 20 Sekunden aendern koennte — die Illustrationen holt der
+  // 08:00-Cron nach. Bis zum 2026-08-09 teilten sich beide Faelle denselben
+  // Zustand, und die Seite pollte tagelang gegen einen unveraenderlichen Stand.
   useEffect(() => {
     if (!selectedPostId || glossaryStatus?.state !== 'pending') return
     const t = setInterval(() => { void checkGlossaryStatus(selectedPostId) }, 20000)
@@ -779,7 +783,7 @@ export default function NewsletterSendPage() {
                   <div className={`mb-3 p-2 rounded text-xs flex items-center gap-2 ${
                     glossaryStatus.state === 'unlinked'
                       ? 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200'
-                      : glossaryStatus.state === 'pending'
+                      : glossaryStatus.state === 'pending' || glossaryStatus.state === 'images_pending'
                         ? 'bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
                         : 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200'
                   }`}>
@@ -789,10 +793,23 @@ export default function NewsletterSendPage() {
                       <AlertCircle className="h-3 w-3" />
                     ) : glossaryStatus.state === 'pending' ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : glossaryStatus.state === 'images_pending' ? (
+                      /* KEIN Spinner: hier arbeitet nichts, der 08:00-Cron holt
+                         die Illustrationen nach. Ein drehendes Rad hiesse
+                         "warte kurz" — tatsaechlich waere es bis morgen. */
+                      <Image className="h-3 w-3" />
                     ) : (
                       <BookOpen className="h-3 w-3" />
                     )}
                     <span>{glossaryStatus.label}</span>
+                    {glossaryStatus.state === 'images_pending' && (
+                      <a
+                        href="/admin/glossary"
+                        className="ml-auto shrink-0 underline underline-offset-2 hover:no-underline"
+                      >
+                        jetzt erzeugen
+                      </a>
+                    )}
                   </div>
                 )}
 

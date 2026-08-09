@@ -32,7 +32,13 @@ export interface GlossaryPostStatus {
    *  'pending' — Erzeugung läuft noch (es fehlen Begriffe oder Bilder).
    *  'unlinked' — alles erzeugt, aber im Text nicht verlinkt.
    *  'none' — im Artikel wurde kein Begriff erkannt. */
-  state: 'ok' | 'pending' | 'unlinked' | 'none'
+  /** 'pending' heisst: ein Lauf ARBEITET gerade — die Anzeige darf pollen.
+   *  'images_pending' heisst: es fehlt etwas, das der 08:00-Cron nachholt —
+   *  gerade laeuft nichts, worauf sich Warten lohnt. Die Unterscheidung ist
+   *  nicht kosmetisch: bis zum 2026-08-09 teilten sich beide Faelle 'pending',
+   *  und die UI zeigte fuer den zweiten einen Spinner mit 20s-Polling. 284
+   *  Begriffe standen so tagelang da, waehrend die Anzeige Arbeit vortaeuschte. */
+  state: 'ok' | 'pending' | 'images_pending' | 'unlinked' | 'none'
   /** Fertige Meldung für die Anzeige, deutsch. */
   label: string
 }
@@ -59,8 +65,11 @@ export function computeGlossaryPostStatus(input: GlossaryPostStatusInput): Gloss
   }
 
   if (withImage < detected) {
-    return { detected, generated, withImage, linked, state: 'pending',
-      label: `${detected} Begriffe erzeugt, ${detected - withImage} ohne Illustration` }
+    // KEIN 'pending': hier arbeitet nichts. Der images-Job wird vom 08:00-Cron
+    // angelegt (app/api/cron/glossary-images) — bis dahin bleibt der Stand, wie
+    // er ist. Ein Spinner waere eine Falschaussage.
+    return { detected, generated, withImage, linked, state: 'images_pending',
+      label: `${detected} Begriffe erzeugt, ${detected - withImage} ohne Illustration — wird nachgeholt` }
   }
 
   if (linked === 0) {

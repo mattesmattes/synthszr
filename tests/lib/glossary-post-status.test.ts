@@ -24,7 +24,8 @@ describe('computeGlossaryPostStatus', () => {
     const s = computeGlossaryPostStatus({
       detectedSlugs: all(5), publishedSlugs: all(5), withImageSlugs: all(2), linkedSlugs: all(5),
     })
-    expect(s.state).toBe('pending')
+    // Seit 2026-08-09 ein EIGENER Zustand statt 'pending' — s. unten.
+    expect(s.state).toBe('images_pending')
     expect(s.label).toContain('3 ohne Illustration')
   })
 
@@ -83,5 +84,47 @@ describe('computeGlossaryPostStatus', () => {
       detectedSlugs: [], publishedSlugs: all(3), withImageSlugs: all(3), linkedSlugs: [],
     })
     expect(s.state).toBe('none')
+  })
+
+  // KORREKTUR 2026-08-09: Fehlende Illustrationen hatten denselben Zustand wie
+  // eine laufende Erzeugung ('pending') — die UI machte daraus einen Spinner mit
+  // 20-Sekunden-Polling. Das war irrefuehrend: der images-Job wurde von nichts
+  // angelegt, der Zustand aenderte sich also nie von allein. 284 Begriffe
+  // standen so tagelang da, waehrend die Anzeige "arbeitet" signalisierte.
+  //
+  // Seit dem 08:00-Cron holt ein Lauf sie taeglich nach. Der Zustand heisst
+  // deshalb jetzt 'images_pending': etwas fehlt und wird nachgeholt — aber
+  // gerade laeuft nichts, worauf sich Warten lohnt.
+  describe('fehlende Illustrationen sind kein laufender Lauf', () => {
+    it('meldet einen EIGENEN Zustand, nicht pending', () => {
+      const s = computeGlossaryPostStatus({
+        detectedSlugs: all(12), publishedSlugs: all(12), withImageSlugs: all(11), linkedSlugs: all(12),
+      })
+      expect(s.state).toBe('images_pending')
+      expect(s.state).not.toBe('pending')
+    })
+
+    it('nennt die Zahl der fehlenden Illustrationen', () => {
+      const s = computeGlossaryPostStatus({
+        detectedSlugs: all(12), publishedSlugs: all(12), withImageSlugs: all(9), linkedSlugs: all(12),
+      })
+      expect(s.label).toContain('3 ohne Illustration')
+    })
+
+    it('sagt, dass es nachgeholt wird — nicht dass es laeuft', () => {
+      const s = computeGlossaryPostStatus({
+        detectedSlugs: all(2), publishedSlugs: all(2), withImageSlugs: all(1), linkedSlugs: all(2),
+      })
+      expect(s.label).toMatch(/nachgeholt|wird ergänzt/i)
+      expect(s.label).not.toMatch(/läuft im Hintergrund/)
+    })
+
+    it('bleibt bei pending, solange die ERZEUGUNG laeuft', () => {
+      // Der echte Wartefall: da arbeitet tatsaechlich ein Job.
+      const s = computeGlossaryPostStatus({
+        detectedSlugs: all(12), publishedSlugs: all(3), withImageSlugs: all(3), linkedSlugs: [],
+      })
+      expect(s.state).toBe('pending')
+    })
   })
 })
