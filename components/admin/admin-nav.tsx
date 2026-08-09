@@ -98,6 +98,11 @@ const navGroups: NavGroup[] = [
         icon: Library
       },
       {
+        label: 'Eure Takes',
+        href: '/admin/comments',
+        icon: MessageSquare
+      },
+      {
         label: 'Why',
         href: '/admin/why',
         icon: HelpCircle

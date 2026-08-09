@@ -5,6 +5,8 @@ import { renderStaticArticleHtml } from "@/lib/tiptap/render-static-html"
 interface PostContentViewProps {
   content: Record<string, unknown>
   postId?: string
+  /** Quelltabelle — s. TiptapRendererProps.postSource. */
+  postSource?: 'posts' | 'generated_posts'
   queueItemIds?: string[]
   originalContent?: Record<string, unknown> // Original German content for company detection in translations
   /** Route-Locale für sprachabhängige Bündel-Labels ("Thema des Tages" / "Nachlese"). */
@@ -22,7 +24,7 @@ interface PostContentViewProps {
  * zur nächsten Suspense-Boundary. Ohne innere Boundary fiele das statische
  * DIV mit aus dem Prerender-HTML (genau der Bug, den dieser Hybrid fixt).
  */
-export function PostContentView({ content, postId, queueItemIds, originalContent, locale }: PostContentViewProps) {
+export function PostContentView({ content, postId, postSource, queueItemIds, originalContent, locale }: PostContentViewProps) {
   const staticHtml = renderStaticArticleHtml(content, locale)
   const ssrId = postId ? `post-ssr-${postId}` : `post-ssr-static`
   return (
@@ -39,6 +41,7 @@ export function PostContentView({ content, postId, queueItemIds, originalContent
         <TiptapRenderer
           content={content}
           postId={postId}
+          postSource={postSource}
           queueItemIds={queueItemIds}
           originalContent={originalContent}
           ssrFallbackId={staticHtml ? ssrId : undefined}

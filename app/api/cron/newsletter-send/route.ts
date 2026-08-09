@@ -264,7 +264,9 @@ export async function GET(request: NextRequest) {
 
       // Build locale-aware post URL
       const localePrefix = locale !== 'de' ? `/${locale}` : ''
-      const localizedPostUrl = `${BASE_URL}${localePrefix}/posts/${post.slug}`
+      // ?ct= — „Eure Takes": wer aus der Mail klickt, kommentiert ohne weitere
+      // Bestätigung. Platzhalter, wird pro Empfänger ersetzt wie REFERRAL_TOKEN.
+      const localizedPostUrl = `${BASE_URL}${localePrefix}/posts/${post.slug}?ct={{COMMENT_TOKEN}}`
 
       // Pre-render HTML once per locale with placeholders for subscriber-specific URLs
       const baseHtml = await render(
@@ -317,6 +319,7 @@ export async function GET(request: NextRequest) {
             .replace('{{UNSUBSCRIBE_URL}}', unsubscribeUrl)
             .replace('{{PREFERENCES_URL}}', preferencesUrl)
             .replaceAll('{{REFERRAL_TOKEN}}', tokens.referral.rawToken)
+            .replaceAll('{{COMMENT_TOKEN}}', tokens.comment.rawToken)
 
           return {
             from: FROM_EMAIL,

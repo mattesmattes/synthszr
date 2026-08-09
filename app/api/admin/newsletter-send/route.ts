@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
     // If testEmail, send only to that address (default German locale for test)
     if (testEmail) {
       const testLocale = 'de'
-      const testPostUrl = `${BASE_URL}/posts/${post.slug}`
+      const testPostUrl = `${BASE_URL}/posts/${post.slug}?ct={{COMMENT_TOKEN}}`
 
       // Generate email content with Synthszr Vote badges, stock tickers, and thumbnails
       const emailContent = await generateEmailContentWithVotes(
@@ -166,6 +166,7 @@ export async function POST(request: NextRequest) {
       let unsubscribeUrl = `${BASE_URL}/newsletter/unsubscribe?confirm=1&token=test-preview`
       let preferencesUrl = `${BASE_URL}/newsletter/preferences?token=test-preview`
       let referralToken = 'test-preview'
+      let commentToken = 'test-preview'
 
       if (testSubscriber) {
         const { bySubscriber, rows } = mintNewsletterLinkTokens([testSubscriber.id])
@@ -182,6 +183,7 @@ export async function POST(request: NextRequest) {
         unsubscribeUrl = `${BASE_URL}/newsletter/unsubscribe?confirm=1&token=${tokens.unsubscribe.rawToken}`
         preferencesUrl = `${BASE_URL}/newsletter/preferences?token=${tokens.preferences.rawToken}`
         referralToken = tokens.referral.rawToken
+        commentToken = tokens.comment.rawToken
       }
 
       const baseTestHtml = await render(
@@ -201,7 +203,9 @@ export async function POST(request: NextRequest) {
           locale: testLocale,
         })
       )
-      const html = baseTestHtml.replaceAll('{{REFERRAL_TOKEN}}', referralToken)
+      const html = baseTestHtml
+        .replaceAll('{{REFERRAL_TOKEN}}', referralToken)
+        .replaceAll('{{COMMENT_TOKEN}}', commentToken)
 
       await getResend().emails.send({
         from: FROM_EMAIL,
@@ -325,7 +329,7 @@ export async function POST(request: NextRequest) {
 
       // Build locale-aware post URL
       const localePrefix = locale !== 'de' ? `/${locale}` : ''
-      const localizedPostUrl = `${BASE_URL}${localePrefix}/posts/${post.slug}`
+      const localizedPostUrl = `${BASE_URL}${localePrefix}/posts/${post.slug}?ct={{COMMENT_TOKEN}}`
 
       // Pre-render HTML once per locale (same content for all subscribers in this locale)
       // We'll use a placeholder for subscriber-specific URLs and replace them per email
@@ -379,6 +383,7 @@ export async function POST(request: NextRequest) {
             .replace('{{UNSUBSCRIBE_URL}}', unsubscribeUrl)
             .replace('{{PREFERENCES_URL}}', preferencesUrl)
             .replaceAll('{{REFERRAL_TOKEN}}', tokens.referral.rawToken)
+            .replaceAll('{{COMMENT_TOKEN}}', tokens.comment.rawToken)
 
           return {
             from: FROM_EMAIL,

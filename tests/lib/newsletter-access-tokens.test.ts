@@ -167,8 +167,8 @@ describe('newsletter batch minting', () => {
 
     const { bySubscriber, rows } = mintNewsletterLinkTokens(recipients)
 
-    // three purposes per recipient, all in one insert payload
-    expect(rows).toHaveLength(recipients.length * 3)
+    // four purposes per recipient (comment seit 2026-08-09), ein Insert-Payload
+    expect(rows).toHaveLength(recipients.length * 4)
     expect(bySubscriber.size).toBe(3)
 
     const first = bySubscriber.get('sub-1')!
@@ -201,5 +201,30 @@ describe('newsletter batch minting', () => {
 
     const serialized = JSON.stringify(rows)
     for (const raw of raws) expect(serialized).not.toContain(raw)
+  })
+})
+
+// „Eure Takes" (2026-08-09): Newsletter-Links tragen einen comment-Token —
+// wer aus der Mail klickt, kommentiert ohne weitere Bestätigung. Der Token
+// gehört in DENSELBEN Batch-Mint wie die drei bestehenden: ein vierter
+// Roundtrip pro Empfänger würde die Versandzeit dominieren (gleiche
+// Begründung wie im Modul-Kommentar von mintNewsletterLinkTokens).
+describe('comment-Token im Newsletter-Batch', () => {
+  it('muenzt vier Tokens je Empfaenger, inklusive purpose comment', async () => {
+    const { mintNewsletterLinkTokens } = await import('@/lib/newsletter/access-tokens')
+    const { bySubscriber, rows } = mintNewsletterLinkTokens(['sub-1'])
+    const tokens = bySubscriber.get('sub-1')!
+    expect(tokens.comment.row.purpose).toBe('comment')
+    expect(rows).toHaveLength(4)
+    expect(rows.map((r) => r.purpose).sort()).toEqual(['comment', 'preferences', 'referral', 'unsubscribe'])
+  })
+
+  it('comment-Token laeuft nach 7 Tagen ab — kurz, weil er in der URL steht', async () => {
+    const { mintNewsletterLinkTokens } = await import('@/lib/newsletter/access-tokens')
+    const { bySubscriber } = mintNewsletterLinkTokens(['sub-1'])
+    const expires = new Date(bySubscriber.get('sub-1')!.comment.row.expires_at).getTime()
+    const days = (expires - Date.now()) / 86400_000
+    expect(days).toBeGreaterThan(6.9)
+    expect(days).toBeLessThan(7.1)
   })
 })

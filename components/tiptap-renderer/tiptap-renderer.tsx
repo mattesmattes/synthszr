@@ -18,6 +18,8 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies
 
 // DOM processors
 import { processMattesSyntheseText } from "@/lib/tiptap/dom-processors/synthese-text"
+import { insertTakeBarometers, type TakeBarometerPortal } from "@/lib/tiptap/dom-processors/take-barometer"
+import { TakeBarometer } from "./take-barometer"
 import { injectProductLinks, appendProductVoteBlock, type ProductLinkData } from "@/lib/tiptap/dom-processors/product-links"
 import { processNewsHeadings } from "@/lib/tiptap/dom-processors/news-headings"
 import { processBundleLabels } from "@/lib/tiptap/dom-processors/bundle-label"
@@ -36,7 +38,7 @@ import { ArticleThumbnailPortal } from "./article-thumbnail"
 import type { TiptapRendererProps, PublicPortal, PremarketPortal } from "./types"
 import type { ArticleThumbnail, ThumbnailPortal } from "@/lib/tiptap/dom-processors/news-headings"
 
-export function TiptapRenderer({ content, postId, queueItemIds, originalContent, ssrFallbackId, locale = 'de' }: TiptapRendererProps) {
+export function TiptapRenderer({ content, postId, queueItemIds, originalContent, ssrFallbackId, locale = 'de', postSource = 'generated_posts' }: TiptapRendererProps) {
   /**
    * Typografische Anfuehrungszeichen VOR dem Setzen ins Dokument.
    *
@@ -60,8 +62,25 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
   const [premarketRatingPortals, setPremarketRatingPortals] = useState<PremarketPortal[]>([])
   const [articleThumbnails, setArticleThumbnails] = useState<ArticleThumbnail[]>([])
   const [thumbnailPortals, setThumbnailPortals] = useState<ThumbnailPortal[]>([])
+  const [takeBarometerPortals, setTakeBarometerPortals] = useState<TakeBarometerPortal[]>([])
+  // Aggregat aller Takes des Artikels — EIN Fetch, verteilt auf die Widgets.
+  const [takeCounts, setTakeCounts] = useState<Record<string, { agree: number; disagree: number }>>({})
   const [tipPromo, setTipPromo] = useState<TipPromo | null>(null)
   const [tipPromoSlot, setTipPromoSlot] = useState<HTMLElement | null>(null)
+
+  // Barometer-Aggregate laden, sobald Widgets im DOM stehen. Ein Request für
+  // alle Takes des Artikels statt einem je Widget.
+  useEffect(() => {
+    if (!postId || takeBarometerPortals.length === 0) return
+    let cancelled = false
+    fetch(`/api/take-feedback?source=${postSource}&postId=${postId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.sections) setTakeCounts(data.sections)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [postId, postSource, takeBarometerPortals.length])
 
   // Auto-open dialog state from URL params (for newsletter links)
   const [autoOpenStock, setAutoOpenStock] = useState<string | null>(null)
@@ -264,6 +283,14 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
       // 3. Style Synthszr Take markers
       processMattesSyntheseText(container)
 
+      // 3b. Take-Barometer unter jedem Take — NACH dem Styling (3.), damit
+      // die Take-Absätze bereits markiert sind, und idempotent wie alle
+      // Prozessoren. Nur mit postId: ohne sie gibt es kein Vote-Ziel.
+      if (postId) {
+        const barometerPortals = insertTakeBarometers(container)
+        if (barometerPortals.length > 0) setTakeBarometerPortals(barometerPortals)
+      }
+
       // 4. {Company}-Tags ausblenden
       hideExplicitCompanyTags(container)
 
@@ -297,6 +324,22 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
   return (
     <div ref={containerRef}>
       <EditorContent editor={editor} />
+
+      {/* Take-Barometer unter jedem Synthszr Take */}
+      {postId && takeBarometerPortals.map((portal) =>
+        createPortal(
+          <TakeBarometer
+            postSource={postSource}
+            postId={postId}
+            anchor={portal.anchor}
+            headline={portal.headline}
+            initialCounts={takeCounts[portal.anchor]}
+            locale={locale}
+          />,
+          portal.element,
+          `take-barometer-${portal.anchor}`
+        )
+      )}
 
       {/* Public company rating portals */}
       {ratingPortals.map((portal, index) =>

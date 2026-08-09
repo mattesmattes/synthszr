@@ -19,7 +19,9 @@
 import { createHash, randomBytes } from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export type SubscriberTokenPurpose = 'confirm' | 'preferences' | 'unsubscribe' | 'referral'
+// 'comment' seit 2026-08-09: Magic-Link zur Kommentar-Verifizierung und
+// Kommentar-Ausweis in Newsletter-Links (mehrfach nutzbar, 7 Tage TTL).
+export type SubscriberTokenPurpose = 'confirm' | 'preferences' | 'unsubscribe' | 'referral' | 'comment'
 
 export interface SubscriberTokenRow {
   subscriber_id: string
@@ -67,12 +69,19 @@ const NEWSLETTER_TOKEN_TTL_DAYS = {
   preferences: 7,
   referral: 30,
   unsubscribe: 90,
+  // Kurz, weil der Token in der Artikel-URL steht (?ct=) und damit in
+  // Mail-Clients und Referer-Headern landet. Er trägt ohnehin nur das Recht,
+  // einen Kommentar ZUR MODERATION einzureichen.
+  comment: 7,
 } as const
 
 export interface RecipientLinkTokens {
   preferences: MintedSubscriberToken
   unsubscribe: MintedSubscriberToken
   referral: MintedSubscriberToken
+  /** „Eure Takes": Artikel-Link trägt ?ct= — aus der Mail heraus kommentieren
+   *  ohne weitere Bestätigung. */
+  comment: MintedSubscriberToken
 }
 
 /**
@@ -97,9 +106,10 @@ export function mintNewsletterLinkTokens(subscriberIds: string[]): {
       preferences: mintSubscriberToken(subscriberId, 'preferences', expiry(NEWSLETTER_TOKEN_TTL_DAYS.preferences)),
       unsubscribe: mintSubscriberToken(subscriberId, 'unsubscribe', expiry(NEWSLETTER_TOKEN_TTL_DAYS.unsubscribe)),
       referral: mintSubscriberToken(subscriberId, 'referral', expiry(NEWSLETTER_TOKEN_TTL_DAYS.referral)),
+      comment: mintSubscriberToken(subscriberId, 'comment', expiry(NEWSLETTER_TOKEN_TTL_DAYS.comment)),
     }
     bySubscriber.set(subscriberId, tokens)
-    rows.push(tokens.preferences.row, tokens.unsubscribe.row, tokens.referral.row)
+    rows.push(tokens.preferences.row, tokens.unsubscribe.row, tokens.referral.row, tokens.comment.row)
   }
 
   return { bySubscriber, rows }

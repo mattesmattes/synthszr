@@ -14,6 +14,10 @@ export interface TiptapRendererProps {
   /** Route-Locale für sprachabhängige Bündel-Labels ("Thema des Tages" / "Nachlese").
    *  Default 'de' für Aufrufer ohne Locale-Kontext (z.B. Admin-Vorschau). */
   locale?: string
+  /** Quelltabelle des Posts — das Take-Barometer bindet Voten an
+   *  (post_source, post_id). Default 'generated_posts', der dominante Fall;
+   *  die Seite reicht bei manuellen Posts 'posts' durch. */
+  postSource?: 'posts' | 'generated_posts'
 }
 
 export interface SynthszrRatingLinkProps {

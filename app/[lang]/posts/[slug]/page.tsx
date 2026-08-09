@@ -22,6 +22,8 @@ import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata, cleanMetaDescription } from "@/lib/i18n/metadata"
 import { formatUpdateDate, LOCALE_STRINGS } from "@/lib/i18n/config"
 import { SITE_URL, safeJsonLd } from "@/lib/seo/site"
+import { EureTakesSection } from "@/components/comments/eure-takes-section"
+import { listPublishedComments, type PostSource } from "@/lib/comments/service"
 import { AUTHOR } from "@/lib/data/author"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
@@ -195,6 +197,11 @@ export default async function PostPage({ params }: PageProps) {
     .eq("published", true)
     .single()
 
+  // Quelltabelle für Kommentare und Take-Barometer: beide binden an
+  // (post_source, post_id), weil Slugs pro Sprache verschieden sind und es
+  // zwei Post-Tabellen gibt.
+  const postSource: PostSource = post ? 'posts' : 'generated_posts'
+
   // If not found, try AI-generated posts
   if (!post) {
     // First try by original slug
@@ -312,6 +319,23 @@ export default async function PostPage({ params }: PageProps) {
   // Client für dieselbe Anfrage wäre nur Overhead.
   const mentionedCompanies = await getCompanyMentionsForPost(adminDb, post.id)
 
+  // „Eure Takes": SSR-Liste für Crawler (im HTML!) und als Startzustand des
+  // Client-Widgets. Zähler für JSON-LD gleich mit — eine Count-Abfrage statt
+  // die 50er-Liste als Zähler zu missbrauchen.
+  const publishedComments = await listPublishedComments(adminDb, postSource, post.id)
+  const { count: commentCount } = await adminDb
+    .from('post_comments')
+    .select('id', { count: 'exact', head: true })
+    .eq('post_source', postSource)
+    .eq('post_id', post.id)
+    .eq('status', 'published')
+  const { count: takeAgreeCount } = await adminDb
+    .from('take_feedback')
+    .select('id', { count: 'exact', head: true })
+    .eq('post_source', postSource)
+    .eq('post_id', post.id)
+    .eq('vote', 'agree')
+
   // Fetch adjacent posts for navigation
   const currentDate = post.created_at
 
@@ -348,13 +372,50 @@ export default async function PostPage({ params }: PageProps) {
     })
   }
 
+  // Frische-Signal (Design 2026-08-09): neue Kommentare ändern die Seite real —
+  // dateModified spiegelt das. Der jüngere von Artikel-Update und neuestem
+  // freigegebenen Kommentar gewinnt.
+  const newestCommentAt = publishedComments[0]?.publishedAt
+  const dateModified = [post.updated_at, newestCommentAt]
+    .filter((d): d is string => !!d)
+    .sort()
+    .pop()
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: post.title,
     mainEntityOfPage: `${SITE_URL}/${locale}/posts/${slug}`,
     datePublished: post.created_at,
-    ...(post.updated_at && { dateModified: post.updated_at }),
+    ...(dateModified && { dateModified }),
+    // Engagement-Markup NUR aus hochintegren Signalen (verifizierte
+    // Abonnenten-Kommentare) — die anonymen Barometer-Klicks liefern nur den
+    // LikeAction-Zähler, nie ein Rating. BEWUSST KEIN aggregateRating:
+    // Article ist für Review-Snippets nicht zugelassen, und
+    // rankings/[slug]/page.tsx:101 dokumentiert das Manual-Action-Risiko.
+    ...((commentCount ?? 0) > 0 && {
+      commentCount: commentCount,
+      comment: publishedComments.slice(0, 20).map((c) => ({
+        '@type': 'Comment',
+        text: c.body.length > 500 ? `${c.body.slice(0, 500)}…` : c.body,
+        dateCreated: c.publishedAt,
+        author: { '@type': 'Person', name: c.displayName },
+      })),
+    }),
+    ...(((commentCount ?? 0) > 0 || (takeAgreeCount ?? 0) > 0) && {
+      interactionStatistic: [
+        ...((commentCount ?? 0) > 0 ? [{
+          '@type': 'InteractionCounter',
+          interactionType: 'https://schema.org/CommentAction',
+          userInteractionCount: commentCount,
+        }] : []),
+        ...((takeAgreeCount ?? 0) > 0 ? [{
+          '@type': 'InteractionCounter',
+          interactionType: 'https://schema.org/LikeAction',
+          userInteractionCount: takeAgreeCount,
+        }] : []),
+      ],
+    }),
     author: { '@type': 'Person', name: AUTHOR.name, url: `${SITE_URL}/${locale}/author/${AUTHOR.slug}` },
     publisher: {
       '@type': 'Organization',
@@ -511,6 +572,7 @@ export default async function PostPage({ params }: PageProps) {
             <PostContentView
               content={post.content}
               postId={post.id}
+              postSource={postSource}
               queueItemIds={post.pending_queue_item_ids || undefined}
               originalContent={post.originalContent}
               locale={locale}
@@ -519,6 +581,16 @@ export default async function PostPage({ params }: PageProps) {
         </article>
 
         <PostProductLinks content={post.content as Record<string, unknown>} locale={locale} />
+
+        {/* „Eure Takes": SSR-Liste steht im HTML (Crawler + LLM-Crawler sehen
+            sie); das Client-Widget übernimmt sie als Startzustand und frischt
+            live auf. */}
+        <EureTakesSection
+          postSource={postSource}
+          postId={post.id}
+          locale={locale}
+          initialComments={publishedComments}
+        />
 
         <nav className="mt-16 border-t border-border pt-8">
           <div className="flex justify-between items-center">
