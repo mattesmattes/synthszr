@@ -89,6 +89,7 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
     }
   }
 
+  const total = counts.agree + counts.disagree
   const lead: 'up' | 'down' | 'tie' = counts.agree > counts.disagree
     ? 'up'
     : counts.disagree > counts.agree ? 'down' : 'tie'
@@ -136,12 +137,13 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
     // Transparent auf dem Seitenhintergrund — kein grauer Kasten.
     <div className="my-3 font-sans">
       <div className="flex flex-wrap items-center gap-3 text-xs">
-        {/* VOR der eigenen Stimme: beide Outline-Thumbs zum Abstimmen, keine
-            Zahlen. NACH der Stimme: nur der Mehrheits-Thumb (👍 grün bei mehr
+        {/* GESAMT-Kopplung (Betreiber-Wunsch): bei 0 Votes beide Outline-Thumbs,
+            sobald es Stimmen gibt nur der Mehrheits-Thumb (👍 grün bei mehr
             Positiven, 👎 rot bei mehr Negativen); bei Gleichstand beide gelb.
-            (Betreiber-Wunsch 2026-08-09: „bei 0 outline, bei up/down zeigen wir
-            den Mehrheits-Thumb mit Zahl".) */}
-        {ownVote === null ? (
+            Der Mehrheits-Thumb zeigt sich für ALLE, auch vor der eigenen Stimme.
+            Trade-off: solange ein Vorsprung besteht, ist nur die Mehrheitsrichtung
+            wählbar — bewusst so gewünscht. */}
+        {total === 0 ? (
           <>
             {thumbButton('up', MUTED, false, null)}
             {thumbButton('down', MUTED, false, null)}
