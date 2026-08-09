@@ -47,7 +47,14 @@ export function buildHeading(topic: WrapupTopic): Node {
  * Fehlt zu einem Thema ein Take in der Modellantwort, bleibt der Abschnitt ohne
  * — besser als ein leerer „Synthszr Take:"-Absatz, der wie ein Fehler aussieht.
  */
-export function assembleWrapupDoc(topics: WrapupTopic[], parts: WrapupParts): Node {
+// Engerer Typ als WrapupParts: der Zusammenbau braucht die Excerpt-Bullets
+// nicht — die gehen ins excerpt-Feld des Posts, nicht ins Dokument. Der
+// schmale Parameter macht das sichtbar und haelt die Tests frei von Feldern,
+// die hier nichts bewirken.
+export function assembleWrapupDoc(
+  topics: WrapupTopic[],
+  parts: Pick<WrapupParts, 'intro' | 'sections'>,
+): Node {
   const byWeekday = new Map(
     (parts.sections ?? []).map((s) => [s.weekday.trim().toLowerCase(), s]),
   )
@@ -75,4 +82,23 @@ export function assembleWrapupDoc(topics: WrapupTopic[], parts: WrapupParts): No
   }
 
   return { type: 'doc', content }
+}
+
+/**
+ * SEO-Beschreibung aus den Excerpt-Bullets des Modells.
+ *
+ * Format wie im Tagesartikel: „• " je Zeile, durch Zeilenumbrüche getrennt
+ * (s. excerptLines in ghostwriter-pipeline.ts). Ohne dieselbe Form sähe die
+ * Beschreibung des Rückblicks in Artikelliste und Suchergebnissen anders aus
+ * als bei allen anderen Beiträgen.
+ *
+ * `null` statt eines leeren Strings bei fehlenden Bullets: die Spalte ist
+ * nullable, und ein „•" ohne Text wäre schlimmer als gar keine Beschreibung.
+ */
+export function formatExcerpt(bullets: string[] | undefined): string | null {
+  const lines = (bullets ?? [])
+    .map((b) => b.trim())
+    .filter((b) => b.length > 0)
+    .map((b) => (b.startsWith('•') ? b : `• ${b}`))
+  return lines.length > 0 ? lines.join('\n') : null
 }

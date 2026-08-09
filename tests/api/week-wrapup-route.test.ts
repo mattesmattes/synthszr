@@ -53,7 +53,11 @@ beforeEach(() => {
   ])
   mocks.generateWrapupParts.mockResolvedValue({
     title: 'AI-Week Wrap-up: 3.–8. August 2026',
-    parts: { intro: 'Vorlauf.', sections: [{ weekday: 'Montag', take: 'Kurz.' }] },
+    parts: {
+      intro: 'Vorlauf.',
+      excerptBullets: ['Erste Zeile', 'Zweite Zeile', 'Dritte Zeile'],
+      sections: [{ weekday: 'Montag', take: 'Kurz.' }],
+    },
   })
   mocks.insertSingle.mockResolvedValue({ data: { id: 'post-1' }, error: null })
 })

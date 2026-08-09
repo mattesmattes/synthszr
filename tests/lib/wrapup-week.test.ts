@@ -39,14 +39,24 @@ describe('lastCompleteWeek', () => {
       .toBeGreaterThan(new Date('2026-08-08T21:00:00Z').getTime())
   })
 
-  it('bildet ein lesbares Label', () => {
+  // Titel-Muster, Betreiber-Vorgabe 2026-08-09:
+  //   "Die AI-Themen der Woche vom 3. bis 9. August 2026"
+  // Das Label nennt also die volle KALENDERWOCHE Mo–So, obwohl der Inhalt bis
+  // Sonnabend reicht. Der Rueckblick erscheint fruehestens am Sonntag; der
+  // Zeitraum im Titel ist die Woche als Ganzes, nicht die Liste der Beitraege.
+  it('bildet das Label ueber die volle Kalenderwoche bis Sonntag', () => {
     const w = lastCompleteWeek(new Date('2026-08-09T10:00:00Z'))
-    expect(w.label).toBe('3.–8. August 2026')
+    expect(w.label).toBe('3. bis 9. August 2026')
   })
 
   it('verkraftet einen Monatswechsel im Label', () => {
-    // Woche vom 29. Juni bis 4. Juli 2026
+    // Woche vom 29. Juni bis 5. Juli 2026
     const w = lastCompleteWeek(new Date('2026-07-05T10:00:00Z'))
-    expect(w.label).toBe('29. Juni – 4. Juli 2026')
+    expect(w.label).toBe('29. Juni bis 5. Juli 2026')
+  })
+
+  it('nennt den Monat nur einmal, wenn die Woche nicht wechselt', () => {
+    const w = lastCompleteWeek(new Date('2026-08-09T10:00:00Z'))
+    expect(w.label.match(/August/g)).toHaveLength(1)
   })
 })

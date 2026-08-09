@@ -25,6 +25,9 @@ import type { WrapupTopic } from '@/lib/wrapup/collect'
 export interface WrapupParts {
   /** 3-4 Zeilen über die große Linie der Woche. */
   intro: string
+  /** Genau drei Mini-Headlines für die SEO-Beschreibung, je max 65 Zeichen —
+   *  dasselbe Format wie plan.excerptBullets im Tagesartikel. */
+  excerptBullets: string[]
   sections: Array<{
     weekday: string
     /** Gekürzter Take, 2-3 Sätze. */
@@ -44,7 +47,9 @@ WICHTIG: Die BERICHTE werden unverändert übernommen. Du schreibst sie NICHT ne
 
 2. take — je Nachricht eine GEKÜRZTE Fassung ihres Synthszr Take: 2-3 Sätze statt der ursprünglichen 5-7. Sehr pointiert, klare Haltung, kein Referat des Berichts. Beginne NICHT mit "Synthszr Take:" — die Markierung wird automatisch gesetzt. Der Kern des Original-Takes bleibt erhalten, nur schärfer und kürzer.
 
-3. bridge — NUR wo es einen ECHTEN Bezug zu einem anderen Tag dieser Woche gibt: ein einzelner Satz, der ihn benennt. Etwa wenn ein Thema am Mittwoch die Entwicklung vom Montag fortsetzt oder ihr widerspricht.
+3. excerptBullets — GENAU DREI eigenständige Mini-Headlines für die SEO-Beschreibung, je höchstens 65 Zeichen, auf DEUTSCH. Jede soll für sich stehen und neugierig machen; zusammen decken sie die Woche ab. Keine Aufzählungszeichen davorsetzen.
+
+4. bridge — NUR wo es einen ECHTEN Bezug zu einem anderen Tag dieser Woche gibt: ein einzelner Satz, der ihn benennt. Etwa wenn ein Thema am Mittwoch die Entwicklung vom Montag fortsetzt oder ihr widerspricht.
    ERFINDE KEINE BEZÜGE. Zwei Nachrichten über KI-Firmen haben nicht automatisch miteinander zu tun. Im Zweifel lässt du bridge leer — das ist der Normalfall, nicht die Ausnahme. Ein aufgesetzter Bezug ist schlimmer als keiner.
 
 REGELN:
@@ -59,6 +64,11 @@ const WRAPUP_TOOL = {
     type: 'object' as const,
     properties: {
       intro: { type: 'string', description: '3-4 Zeilen über die große Linie der Woche' },
+      excerptBullets: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Genau drei Mini-Headlines für die SEO-Beschreibung, je max 65 Zeichen, ohne Aufzählungszeichen',
+      },
       sections: {
         type: 'array',
         items: {
@@ -72,7 +82,7 @@ const WRAPUP_TOOL = {
         },
       },
     },
-    required: ['intro', 'sections'],
+    required: ['intro', 'excerptBullets', 'sections'],
   },
 }
 
@@ -88,7 +98,7 @@ Diese ${topics.length} Nachrichten sind in dieser Woche erschienen, in dieser Re
 ${blocks}
 </nachrichten>
 
-Liefere über das Tool: den Vorlauf, und je Nachricht einen gekürzten Take sowie — nur wo ein echter Bezug besteht — einen Bezugssatz. Die Wochentage in deiner Antwort lauten exakt: ${topics.map((t) => t.weekday).join(', ')}.`
+Liefere über das Tool: den Vorlauf, drei Excerpt-Bullets, und je Nachricht einen gekürzten Take sowie — nur wo ein echter Bezug besteht — einen Bezugssatz. Die Wochentage in deiner Antwort lauten exakt: ${topics.map((t) => t.weekday).join(', ')}.`
 }
 
 /**
@@ -135,5 +145,5 @@ export async function generateWrapupParts(
     throw new Error('Antwort des Modells unvollständig: intro oder sections fehlen')
   }
 
-  return { title: `AI-Week Wrap-up: ${weekLabel}`, parts }
+  return { title: `Die AI-Themen der Woche vom ${weekLabel}`, parts }
 }

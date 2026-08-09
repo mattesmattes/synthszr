@@ -67,11 +67,21 @@ const MONTHS = [
   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
 ]
 
-function formatLabel(mondayStr: string, saturdayStr: string): string {
+/**
+ * Zeitraum für den Titel, Betreiber-Muster 2026-08-09:
+ *   „Die AI-Themen der Woche vom 3. bis 9. August 2026"
+ *
+ * Das Label nennt die volle KALENDERWOCHE bis Sonntag, obwohl der Inhalt bis
+ * Sonnabend reicht: der Rückblick erscheint frühestens am Sonntag, und der
+ * Zeitraum im Titel benennt die Woche als Ganzes, nicht die Liste der Beiträge.
+ *
+ * Der Monat steht nur einmal, solange die Woche ihn nicht wechselt.
+ */
+function formatLabel(mondayStr: string, sundayStr: string): string {
   const [my, mm, md] = mondayStr.split('-').map(Number)
-  const [sy, sm, sd] = saturdayStr.split('-').map(Number)
-  if (mm === sm && my === sy) return `${md}.–${sd}. ${MONTHS[sm - 1]} ${sy}`
-  return `${md}. ${MONTHS[mm - 1]} – ${sd}. ${MONTHS[sm - 1]} ${sy}`
+  const [sy, sm, sd] = sundayStr.split('-').map(Number)
+  if (mm === sm && my === sy) return `${md}. bis ${sd}. ${MONTHS[sm - 1]} ${sy}`
+  return `${md}. ${MONTHS[mm - 1]} bis ${sd}. ${MONTHS[sm - 1]} ${sy}`
 }
 
 export interface WrapupWeek {
@@ -105,6 +115,7 @@ export function lastCompleteWeek(now: Date): WrapupWeek {
     saturdayEndIso: berlinMidnightIso(addDays(monday, 6)),
     mondayDate: monday,
     saturdayDate: saturday,
-    label: formatLabel(monday, saturday),
+    // Label ueber Mo–So (nicht Mo–Sa): s. formatLabel.
+    label: formatLabel(monday, addDays(monday, 6)),
   }
 }

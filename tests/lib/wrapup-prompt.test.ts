@@ -90,4 +90,14 @@ describe('WRAPUP_SYSTEM_PROMPT', () => {
     expect(WRAPUP_SYSTEM_PROMPT).toMatch(/\{Company\}/)
     expect(WRAPUP_SYSTEM_PROMPT).toMatch(/\{lex:\}/)
   })
+
+  // Betreiber-Hinweis 2026-08-09: die SEO-Beschreibung fehlte. Der Tagesartikel
+  // erzeugt sie als DREI Bullets à max 65 Zeichen (plan.excerptBullets in
+  // ghostwriter-pipeline.ts) — der Wrap-up muss dasselbe Format liefern, sonst
+  // sieht die Beschreibung in der Artikelliste anders aus als bei allen anderen.
+  it('verlangt drei Excerpt-Bullets fuer die SEO-Beschreibung', () => {
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/excerptBullets/)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/[Dd]rei|3 /)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/65 Zeichen/)
+  })
 })

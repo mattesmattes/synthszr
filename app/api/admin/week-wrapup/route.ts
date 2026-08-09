@@ -5,7 +5,7 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 import { lastCompleteWeek } from '@/lib/wrapup/week'
 import { collectWeekTopics } from '@/lib/wrapup/collect'
 import { generateWrapupParts } from '@/lib/wrapup/generate'
-import { assembleWrapupDoc } from '@/lib/wrapup/assemble'
+import { assembleWrapupDoc, formatExcerpt } from '@/lib/wrapup/assemble'
 import { buildUniqueSlug } from '@/lib/article-jobs/unique-slug'
 
 /**
@@ -95,7 +95,10 @@ export async function POST(request: NextRequest) {
       .insert({
         title,
         slug,
-        excerpt: `Der Rückblick auf die Woche vom ${week.label}.`,
+        // SEO-Beschreibung vom Modell, im Format des Tagesartikels. Fällt sie
+        // aus, bleibt die Spalte leer statt mit einem Platzhalter belegt — der
+        // würde in den Suchergebnissen stehen.
+        excerpt: formatExcerpt(parts.excerptBullets),
         category: 'AI & Tech',
         content: JSON.stringify(tiptap),
         word_count: JSON.stringify(tiptap).replace(/<[^>]*>/g, ' ').split(/\s+/).length,
