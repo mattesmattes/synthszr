@@ -13,7 +13,6 @@
  * hervorheben soll — der Cookie ist für JS unlesbar (und soll es bleiben).
  */
 import { useEffect, useState } from 'react'
-import { ThumbsUp, ThumbsDown } from 'lucide-react'
 
 interface TakeBarometerProps {
   postSource: 'posts' | 'generated_posts'
@@ -90,26 +89,14 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
   }
 
   const total = counts.agree + counts.disagree
-  const lead: 'up' | 'down' | 'tie' = counts.agree > counts.disagree
-    ? 'up'
-    : counts.disagree > counts.agree ? 'down' : 'tie'
   const de = locale === 'de'
   const agreeLabel = de ? 'Sehe ich auch so' : 'Agree'
   const disagreeLabel = de ? 'Sehe ich anders' : 'Disagree'
 
-  // KEIN Button-Kasten (Betreiber-Wunsch): nur Icon + Zahl, transparent auf dem
-  // Seitenhintergrund.
-  const btnBase = 'inline-flex items-center gap-1 py-1 transition-opacity hover:opacity-70'
-  // Gefüllte Hand: solide Farbe, aber der STROKE bleibt in Hintergrundfarbe.
-  // Dadurch bleibt die Kragen-Linie (Trennung Hemdkragen/Hand) als Aussparung
-  // sichtbar — sonst wird das gefüllte Icon ein unlesbarer Klumpen. Die äußere
-  // Kontur in Hintergrundfarbe verschwindet auf dem Seitenhintergrund.
-  // WICHTIG: fill/stroke als inline-STYLE, nicht als Attribut — var(--background)
-  // wird in SVG-Präsentationsattributen NICHT aufgelöst (nur in CSS-Properties).
-  const filledIconProps = { strokeWidth: 2, style: { fill: 'currentColor', stroke: 'var(--background)' } }
-  const outlineIconProps = { fill: 'none' as const }
+  // KEIN Button-Kasten (Betreiber-Wunsch): nur Emoji + Zahl, transparent.
+  const btnBase = 'inline-flex items-center gap-1 py-1 leading-none transition-opacity hover:opacity-70'
 
-  const thumbButton = (kind: 'up' | 'down', colorClass: string, filled: boolean, count: number | null) => {
+  const thumbButton = (kind: 'up' | 'down', count: number | null) => {
     const isUp = kind === 'up'
     return (
       <button
@@ -118,46 +105,24 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
         disabled={busy}
         aria-label={isUp ? agreeLabel : disagreeLabel}
         aria-pressed={ownVote === (isUp ? 'agree' : 'disagree')}
-        className={`${btnBase} ${colorClass}`}
+        className={btnBase}
       >
-        {isUp
-          ? <ThumbsUp className="h-5 w-5" {...(filled ? filledIconProps : outlineIconProps)} />
-          : <ThumbsDown className="h-5 w-5" {...(filled ? filledIconProps : outlineIconProps)} />}
-        {count !== null && <span className="tabular-nums">({count})</span>}
+        {/* Echtes Emoji statt SVG-Icon: immer eindeutig als Daumen erkennbar,
+            keine Färbungs- oder Kragen-Probleme (Betreiber-Wunsch 2026-08-09). */}
+        <span className="text-base" aria-hidden="true">{isUp ? '👍' : '👎'}</span>
+        {count !== null && <span className="tabular-nums text-muted-foreground">({count})</span>}
       </button>
     )
   }
 
-  const MUTED = 'text-muted-foreground'
-  const GREEN = 'text-green-600 dark:text-green-400'
-  const RED = 'text-red-600 dark:text-red-400'
-  const YELLOW = 'text-yellow-500 dark:text-yellow-400'
-
   return (
     // Transparent auf dem Seitenhintergrund — kein grauer Kasten.
     <div className="my-3 font-sans">
-      <div className="flex flex-wrap items-center gap-3 text-xs">
-        {/* GESAMT-Kopplung (Betreiber-Wunsch): bei 0 Votes beide Outline-Thumbs,
-            sobald es Stimmen gibt nur der Mehrheits-Thumb (👍 grün bei mehr
-            Positiven, 👎 rot bei mehr Negativen); bei Gleichstand beide gelb.
-            Der Mehrheits-Thumb zeigt sich für ALLE, auch vor der eigenen Stimme.
-            Trade-off: solange ein Vorsprung besteht, ist nur die Mehrheitsrichtung
-            wählbar — bewusst so gewünscht. */}
-        {total === 0 ? (
-          <>
-            {thumbButton('up', MUTED, false, null)}
-            {thumbButton('down', MUTED, false, null)}
-          </>
-        ) : lead === 'tie' ? (
-          <>
-            {thumbButton('up', YELLOW, true, counts.agree)}
-            {thumbButton('down', YELLOW, true, counts.disagree)}
-          </>
-        ) : lead === 'up' ? (
-          thumbButton('up', GREEN, true, counts.agree)
-        ) : (
-          thumbButton('down', RED, true, counts.disagree)
-        )}
+      {/* Emoji-Thumbs: beide immer sichtbar. Zahlen erst, wenn es Stimmen gibt;
+          bei 0 Stimmen leicht gedimmt als Abstimm-Hinweis. */}
+      <div className={`flex flex-wrap items-center gap-3 text-xs ${total === 0 ? 'opacity-60' : ''}`}>
+        {thumbButton('up', total > 0 ? counts.agree : null)}
+        {thumbButton('down', total > 0 ? counts.disagree : null)}
 
         {/* „Deinen Take dazu schreiben" erst NACH dem Voten. Öffnet das
             Kommentar-Overlay per CustomEvent. */}
