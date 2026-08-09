@@ -4,6 +4,12 @@
  * Geprueft werden die Wege, die schiefgehen koennen und fuer die der Betreiber
  * eine klare Meldung braucht: keine Anmeldung, leere Woche, Verweigerung des
  * Modells. Der Erfolgsfall ist der einfachste.
+ *
+ * DIE MARKDOWN-KONVERTIERUNG IST BEWUSST NICHT GEMOCKT. Genau dieser Mock hat
+ * am 2026-08-09 den Prod-Fehler verdeckt: die Route benutzte die CLIENT-Fassung
+ * markdownToTiptap, die serverseitig mit "there is no window object" wirft — der
+ * Test lief gruen, der Knopf im Admin nicht. Die Tests laufen in
+ * environment: 'node', der Aufruf muss also echt durchgehen.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
@@ -20,9 +26,6 @@ vi.mock('@/lib/auth/session', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/wrapup/collect', () => ({ collectWeekTopics: mocks.collectWeekTopics }))
 vi.mock('@/lib/wrapup/generate', () => ({ generateWrapup: mocks.generateWrapup }))
 vi.mock('@/lib/ai/model-config', () => ({ getModelForUseCase: mocks.getModelForUseCase }))
-vi.mock('@/lib/utils/markdown-to-tiptap', () => ({
-  markdownToTiptap: () => ({ type: 'doc', content: [] }),
-}))
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: () => ({

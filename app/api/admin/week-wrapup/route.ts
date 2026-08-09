@@ -5,7 +5,7 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 import { lastCompleteWeek } from '@/lib/wrapup/week'
 import { collectWeekTopics } from '@/lib/wrapup/collect'
 import { generateWrapup } from '@/lib/wrapup/generate'
-import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
+import { markdownToTiptapServer } from '@/lib/utils/markdown-to-tiptap-server'
 import { buildUniqueSlug } from '@/lib/article-jobs/unique-slug'
 
 /**
@@ -54,7 +54,9 @@ export async function POST(request: NextRequest) {
     const model = (body.model as string) || (await getModelForUseCase('ghostwriter'))
     const { title, markdown } = await generateWrapup(topics, week.label, model)
 
-    const tiptap = markdownToTiptap(markdown)
+    // Server-Variante: markdownToTiptap ruft TipTaps generateJSON und braucht
+    // ein DOM — in einer Route wirft das ("there is no window object").
+    const tiptap = await markdownToTiptapServer(markdown)
     const slug = await buildUniqueSlug(
       slugify(`ai-week-wrap-up-${week.mondayDate}`),
       async (s) => {

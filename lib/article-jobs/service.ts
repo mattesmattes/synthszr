@@ -295,49 +295,6 @@ export async function markJobError(id: string, message: string): Promise<void> {
 }
 
 /**
- * Server-safe markdown → TipTap JSON.
- *
- * @tiptap's generateJSON() calls elementFromString(), which hard-throws
- * "[tiptap error]: there is no window object". markdown-to-tiptap.ts is also
- * imported by the client (create-article), so Turbopack dead-code-eliminates the
- * runtime `typeof window` guard in the server chunk — a global jsdom shim does
- * NOT help there. We therefore bypass elementFromString entirely: build the HTML
- * with marked, parse it with a jsdom DOM + prosemirror's DOMParser, using the
- * SAME extension schema (via getSchema) as markdownToTiptap. getSchema and
- * prosemirror DOMParser don't touch `window`, so this works in the cron.
- *
- * Marker handling mirrors markdownToTiptap (lib/utils/markdown-to-tiptap.ts):
- * `<!-- data-bundle-type:X -->` on a heading line is stripped before marked()
- * runs (HTML comments don't survive DOM parsing) and re-applied as a
- * `bundleType` attr on the matching heading node afterwards — reusing the
- * same extract/apply helpers since both paths produce an equivalent TipTap
- * JSON tree, just via different parsers.
- */
-async function markdownToTiptapServer(markdown: string): Promise<Record<string, unknown>> {
-  const { marked } = await import('marked')
-  const { getSchema } = await import('@tiptap/core')
-  const { DOMParser: PMDOMParser } = await import('@tiptap/pm/model')
-  const StarterKit = (await import('@tiptap/starter-kit')).default
-  const Link = (await import('@tiptap/extension-link')).default
-  const { HeadingWithQueueId } = await import('@/lib/tiptap/heading-with-queue-id')
-  const { normalizeQuotes } = await import('@/lib/utils/typography')
-  const { JSDOM } = await import('jsdom')
-  const { extractBundleMarkers, applyBundleMarkers } = await import('@/lib/utils/markdown-to-tiptap')
-
-  const { cleaned, markers } = extractBundleMarkers(normalizeQuotes(markdown, 'de'))
-  const html = marked.parse(cleaned, { async: false }) as string
-  const schema = getSchema([
-    StarterKit.configure({ heading: false }),
-    HeadingWithQueueId.configure({ levels: [1, 2, 3, 4, 5, 6] }),
-    Link.configure({ openOnClick: false }),
-  ])
-  const dom = new JSDOM(`<body>${html}</body>`)
-  const json = PMDOMParser.fromSchema(schema).parse(dom.window.document.body).toJSON() as Record<string, unknown>
-  applyBundleMarkers(json, markers)
-  return json
-}
-
-/**
  * Inserts the assembled markdown as a draft generated_post. Mirrors the manual
  * saveAsDraft flow (parse frontmatter → markdown→TipTap → URL sanitize).
  * Returns the new post id.
@@ -367,6 +324,7 @@ async function persistDraftPost(supabase: AdminClient, job: ArticleJob, fullMark
   const { metadata, body } = parseArticleContent(fullMarkdown)
   const title = metadata.title || `Artikel`
 
+  const { markdownToTiptapServer } = await import('@/lib/utils/markdown-to-tiptap-server')
   let tiptap = await markdownToTiptapServer(body)
 
   // Embed queue item IDs into H2 headings for stable thumbnail matching (mirrors
