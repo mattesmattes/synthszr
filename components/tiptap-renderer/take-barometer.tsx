@@ -13,6 +13,7 @@
  * hervorheben soll — der Cookie ist für JS unlesbar (und soll es bleiben).
  */
 import { useEffect, useState } from 'react'
+import { ThumbsUp, ThumbsDown } from 'lucide-react'
 
 interface TakeBarometerProps {
   postSource: 'posts' | 'generated_posts'
@@ -89,68 +90,74 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
   }
 
   const total = counts.agree + counts.disagree
-  const pct = total > 0 ? Math.round((counts.agree / total) * 100) : null
+  const hasVotes = total > 0
+  const tie = hasVotes && counts.agree === counts.disagree
   const de = locale === 'de'
   const agreeLabel = de ? 'Sehe ich auch so' : 'Agree'
   const disagreeLabel = de ? 'Sehe ich anders' : 'Disagree'
 
+  // Farb-/Füll-Logik (Betreiber-Wunsch 2026-08-09):
+  //  - keine Votes: beide Thumbs als Outline (nur Rahmen).
+  //  - Votes vorhanden: gefüllt — Daumen hoch grün, runter rot.
+  //  - Gleichstand: beide gelb.
+  // Der eigene Vote bekommt zusätzlich einen Ring, damit erkennbar bleibt, was
+  // man selbst gewählt hat.
+  const thumbClass = (kind: 'up' | 'down') => {
+    const base = 'inline-flex items-center gap-1 rounded px-2 py-1 transition-colors'
+    const own = ownVote === (kind === 'up' ? 'agree' : 'disagree')
+      ? ' ring-2 ring-offset-1 ring-foreground'
+      : ''
+    if (!hasVotes) return `${base} border border-border text-muted-foreground hover:border-foreground${own}`
+    if (tie) return `${base} border border-transparent bg-yellow-400 text-black${own}`
+    return kind === 'up'
+      ? `${base} border border-transparent bg-green-600 text-white${own}`
+      : `${base} border border-transparent bg-red-600 text-white${own}`
+  }
+
   return (
     <div className="my-3 rounded-md border border-border bg-muted/30 px-3 py-2 font-sans">
-      {/* Button-Zeile: bleibt STABIL, egal ob schon gevotet wurde. Die
-          Prozent-Leiste kommt in eine EIGENE Zeile darunter — vorher stand sie
-          per ml-auto in derselben flex-wrap-Zeile und schob nach dem Voten den
-          „Deinen Take dazu schreiben"-Button weg, sodass man daneben klickte
-          (Betreiber-Befund 2026-08-09). */}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <button
           type="button"
           onClick={() => vote('agree')}
           disabled={busy}
-          className={`rounded px-2 py-1 transition-colors ${
-            ownVote === 'agree'
-              ? 'bg-foreground text-background'
-              : 'border border-border hover:border-foreground'
-          }`}
+          aria-label={agreeLabel}
+          aria-pressed={ownVote === 'agree'}
+          className={thumbClass('up')}
         >
-          {agreeLabel}
+          <ThumbsUp className="h-4 w-4" fill={hasVotes ? 'currentColor' : 'none'} />
+          {/* Zahlen nur, wenn mindestens eine Stimme abgegeben wurde. */}
+          {hasVotes && <span className="tabular-nums">({counts.agree})</span>}
         </button>
         <button
           type="button"
           onClick={() => vote('disagree')}
           disabled={busy}
-          className={`rounded px-2 py-1 transition-colors ${
-            ownVote === 'disagree'
-              ? 'bg-foreground text-background'
-              : 'border border-border hover:border-foreground'
-          }`}
+          aria-label={disagreeLabel}
+          aria-pressed={ownVote === 'disagree'}
+          className={thumbClass('down')}
         >
-          {disagreeLabel}
+          <ThumbsDown className="h-4 w-4" fill={hasVotes ? 'currentColor' : 'none'} />
+          {hasVotes && <span className="tabular-nums">({counts.disagree})</span>}
         </button>
-        {/* Öffnet das Kommentar-Overlay. CustomEvent, weil Barometer (Portal im
-            Renderer-Baum) und Kommentarbereich (eigener Baum) keinen
-            gemeinsamen State haben. */}
-        <button
-          type="button"
-          className="text-muted-foreground underline-offset-2 hover:underline"
-          onClick={() => {
-            window.dispatchEvent(new CustomEvent('synthszr:comment-ref', {
-              detail: { anchor, headline: headline ?? '' },
-            }))
-          }}
-        >
-          {locale === 'de' ? 'Deinen Take dazu schreiben →' : 'Write your take →'}
-        </button>
+        {/* „Deinen Take dazu schreiben" erscheint ERST nach dem Voten — das
+            Abstimmen ist die Eintrittskarte zum eigenen Take. Öffnet das
+            Kommentar-Overlay per CustomEvent (Barometer und Kommentarbereich
+            sind getrennte React-Bäume). */}
+        {ownVote !== null && (
+          <button
+            type="button"
+            className="text-muted-foreground underline-offset-2 hover:underline"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('synthszr:comment-ref', {
+                detail: { anchor, headline: headline ?? '' },
+              }))
+            }}
+          >
+            {de ? 'Deinen Take dazu schreiben →' : 'Write your take →'}
+          </button>
+        )}
       </div>
-      {/* Verteilung erst NACH eigener Stimme oder ab 5 Voten: eine 100%-Zahl
-          aus einer einzigen Stimme sähe nach Manipulation aus. */}
-      {pct !== null && (ownVote !== null || total >= 5) && (
-        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="inline-block h-1.5 w-24 overflow-hidden rounded-full bg-border">
-            <span className="block h-full bg-foreground" style={{ width: `${pct}%` }} />
-          </span>
-          {de ? `${pct} % stimmen dem Take zu` : `${pct}% agree with the take`}
-        </div>
-      )}
     </div>
   )
 }
