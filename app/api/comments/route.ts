@@ -131,12 +131,24 @@ export async function POST(request: NextRequest) {
         const { verifyMail } = await submitUnverifiedComment(supabase, email, input)
         if (!verifyMail) return
         const verifyUrl = `${BASE_URL}/api/comments/verify?token=${encodeURIComponent(verifyMail.rawToken)}`
+        // Transparenz (Betreiber-Wunsch): die Mail zeigt den Take im Klartext
+        // plus Artikel und Abschnitt, damit klar ist, WAS da veröffentlicht wird.
+        // Alles HTML-escaped — es ist Nutzer-Eingabe in einer HTML-Mail.
+        const esc = (s: string) => s
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+        const takeHtml = esc(input.body).replace(/\n/g, '<br>')
+        const sectionLine = input.sectionHeadline
+          ? `<p style="margin:0 0 4px;color:#666;font-size:13px">Zum Abschnitt: <em>${esc(input.sectionHeadline)}</em></p>`
+          : ''
         await getResend().emails.send({
           from: FROM_EMAIL,
           to: email,
           subject: 'Deinen Take bestätigen',
-          html: `<p>Du hast auf synthszr.com einen Take hinterlassen. Ein Klick, und er geht in die Veröffentlichung:</p>
-<p><a href="${verifyUrl}">Take bestätigen</a></p>
+          html: `<p>Du hast auf synthszr.com einen Take hinterlassen. Ein Klick bestätigt ihn und stellt ihn zur Veröffentlichung.</p>
+<p style="margin:0 0 4px;color:#666;font-size:13px">Zum Artikel: <strong>${esc(verifyMail.articleTitle || '—')}</strong></p>
+${sectionLine}
+<blockquote style="border-left:3px solid #CCFF00;margin:12px 0;padding:8px 14px;color:#222;background:#fafafa">${takeHtml}</blockquote>
+<p><a href="${verifyUrl}" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Take bestätigen</a></p>
 <p style="color:#666;font-size:13px">Der Link gilt 7 Tage. Danach kannst du 90 Tage lang ohne erneute Bestätigung kommentieren.<br>
 Falls du das nicht warst, ignoriere diese Mail — ohne Bestätigung erscheint nichts.</p>`,
         })

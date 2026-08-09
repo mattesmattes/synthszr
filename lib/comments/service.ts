@@ -185,7 +185,7 @@ export async function submitUnverifiedComment(
   supabase: AdminClient,
   email: string,
   input: CommentInput,
-): Promise<{ verifyMail: { subscriberId: string; rawToken: string } | null }> {
+): Promise<{ verifyMail: { subscriberId: string; rawToken: string; articleTitle: string } | null }> {
   const { data: subscriber } = await supabase
     .from('subscribers')
     .select('id, status')
@@ -232,7 +232,11 @@ export async function submitUnverifiedComment(
   })
   if (error) throw new Error(`Kommentar nicht speicherbar: ${error.message}`)
 
-  return { verifyMail: { subscriberId: sub.id, rawToken: minted.rawToken } }
+  // Titel für die Bestätigungsmail — damit dort transparent steht, zu welchem
+  // Artikel der Take gehört (Betreiber-Wunsch: den Take im Klartext + Bezug
+  // zeigen, nicht nur „du hast einen Take geschrieben").
+  const articleTitle = await postTitle(supabase, input.postSource, input.postId)
+  return { verifyMail: { subscriberId: sub.id, rawToken: minted.rawToken, articleTitle } }
 }
 
 /**
