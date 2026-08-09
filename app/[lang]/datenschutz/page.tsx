@@ -102,7 +102,7 @@ export default async function DatenschutzPage({ params }: PageProps) {
           </section>
 
           <div className="mt-8 pt-6 border-t text-xs text-muted-foreground">
-            <p>Stand: Januar 2026</p>
+            <p>{locale === 'de' ? 'Stand: August 2026' : 'Last updated: August 2026'}</p>
           </div>
         </article>
       </main>
