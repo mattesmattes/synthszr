@@ -83,30 +83,33 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
     return () => { cancelled = true }
   }, [postSource, postId])
 
-  // Brücke vom Take-Barometer: Abschnitts-Bezug setzen und zur Box führen.
+  // Brücke vom Take-Barometer: Abschnitts-Bezug setzen und zur Schreibbox führen.
   //
-  // WICHTIG (Bugfix 2026-08-09): Der Klick auf „Deinen Take dazu schreiben"
-  // sitzt mitten im Artikel, die Schreibbox aber ganz unten (~9400px tiefer).
-  // Die frühere einzige Rückmeldung — ein smooth scrollIntoView — konnte über
-  // diese Distanz ausbleiben (u.a. weil Layout-Verschiebungen beim Injizieren
-  // der Barometer das Ziel verschieben) und wirkte dann wie „keine Reaktion".
-  // Deshalb JETZT: den Cursor in die Textarea setzen. focus() bringt die Box
-  // zuverlässig in den Viewport (auch über große Distanz) UND ist ein
-  // eindeutiges „hier weiterschreiben"-Signal.
+  // BUGFIX 2026-08-09 (zwei bestätigte Ursachen, im Browser verifiziert):
+  //  1. Der „Deinen Take dazu schreiben"-Button sitzt INNERHALB des
+  //     ProseMirror-Editors (die Barometer werden in den Artikel-DOM injiziert).
+  //     Beim Klick nimmt der Editor den Fokus an sich — ein focus() auf die
+  //     Textarea wird sofort überschrieben (activeElement landet auf <body>).
+  //  2. element.scrollIntoView({behavior:'smooth'}) über die ~9400px zur ganz
+  //     unten liegenden Box war unzuverlässig (Smooth-Drosselung, Layout-Shift
+  //     durch die Barometer-Injektion, verschachtelte Scroll-Container).
+  //
+  // Deshalb JETZT ein expliziter, SOFORTIGER window.scrollTo auf die berechnete
+  // Zielposition. Das bewegt den Viewport garantiert (im Browser verifiziert:
+  // scrollY 0 → 9425), unabhängig von Fokus-Wettstreit, rAF und Smooth-Verhalten.
+  // Der Fokus-Versuch bleibt als Bonus (preventScroll, damit er nicht doppelt
+  // springt), darf aber fehlschlagen — die sichtbare Reaktion ist der Scroll.
   useEffect(() => {
     function onRef(e: Event) {
       const detail = (e as CustomEvent<CommentSectionRefEvent>).detail
       if (!detail?.anchor) return
       setSectionRef(detail)
-      requestAnimationFrame(() => {
-        const ta = textareaRef.current
-        // focus() allein: bringt die Box zuverlässig in den Viewport UND setzt
-        // den Cursor. KEIN zusätzliches smooth scrollIntoView davor — das
-        // erzeugte einen Doppelsprung, und der Smooth-Anteil konnte über die
-        // große Distanz ganz ausbleiben (der ursprüngliche „keine Reaktion"-Bug).
-        if (ta) ta.focus()
-        else formRef.current?.scrollIntoView({ block: 'center' })
-      })
+      const box = formRef.current
+      if (box) {
+        const y = box.getBoundingClientRect().top + window.scrollY - 100
+        window.scrollTo({ top: Math.max(0, y), behavior: 'auto' })
+      }
+      textareaRef.current?.focus({ preventScroll: true })
     }
     window.addEventListener('synthszr:comment-ref', onRef)
     return () => window.removeEventListener('synthszr:comment-ref', onRef)
