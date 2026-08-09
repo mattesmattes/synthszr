@@ -55,6 +55,9 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
   const [sectionRef, setSectionRef] = useState<CommentSectionRefEvent | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Nach erfolgreichem Absenden zeigt das Modal NUR noch die zentrierte Meldung
+  // (kein Formular mehr) — Betreiber-Wunsch.
+  const [submitted, setSubmitted] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'ok' | 'info' | 'error'; text: string } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -99,6 +102,7 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
       if (!detail?.anchor) return
       setSectionRef(detail)
       setNotice(null)
+      setSubmitted(false)
       setModalOpen(true)
     }
     window.addEventListener('synthszr:comment-ref', onRef)
@@ -124,6 +128,7 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
   const openBlankModal = () => {
     setSectionRef(null)
     setNotice(null)
+    setSubmitted(false)
     setModalOpen(true)
   }
 
@@ -201,6 +206,9 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
       } else {
         setNotice({ kind: 'info', text: de ? 'Dein Take ist eingegangen.' : 'Your take was received.' })
       }
+      // Erfolg (published / pending / verify_sent / eingegangen): Formular
+      // ausblenden, nur noch die zentrierte Meldung zeigen.
+      setSubmitted(true)
       setBody('')
       setSectionRef(null)
       setNeedsEmail(false)
@@ -277,7 +285,9 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
           {/* Box faded + zoomt leicht rein. */}
           <div className="relative z-10 w-full max-w-lg rounded-lg border border-border bg-background p-5 shadow-xl animate-in fade-in-0 zoom-in-95 duration-200">
             <div className="flex items-start justify-between gap-4">
-              <h2 className="text-lg font-bold tracking-tight">
+              {/* Nach dem Absenden: Titel visuell weg (nur die zentrierte
+                  Meldung soll bleiben), bleibt aber für Screenreader erhalten. */}
+              <h2 className={submitted ? 'sr-only' : 'text-lg font-bold tracking-tight'}>
                 {de ? 'Dein Take' : 'Your take'}
               </h2>
               <button
@@ -290,6 +300,14 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
               </button>
             </div>
 
+            {submitted ? (
+              /* Nach erfolgreichem Absenden: NUR die zentrierte Meldung, sonst
+                 nichts (Betreiber-Wunsch). */
+              <p className="px-2 py-8 text-center text-sm text-foreground">
+                {notice?.text}
+              </p>
+            ) : (
+              <>
             {/* Von Anfang an klar, dass Kommentieren an ein Newsletter-Abo
                 gebunden ist — damit anonyme Leser:innen nicht erst nach dem
                 Absenden davon erfahren. */}
@@ -365,6 +383,8 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
                 </p>
               )}
             </form>
+              </>
+            )}
           </div>
         </div>,
         document.body,
