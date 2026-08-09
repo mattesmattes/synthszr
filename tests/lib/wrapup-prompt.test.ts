@@ -10,8 +10,10 @@ import { buildWrapupPrompt, WRAPUP_SYSTEM_PROMPT } from '@/lib/wrapup/generate'
 import type { WrapupTopic } from '@/lib/wrapup/collect'
 
 const topics: WrapupTopic[] = [
-  { weekday: 'Montag', date: '2026-08-03', headline: 'Alibaba stellt Qwen vor', body: 'Text Mo.', postSlug: 'a' },
-  { weekday: 'Mittwoch', date: '2026-08-05', headline: 'Weisses Haus setzt auf Geheimhaltung', body: 'Text Mi.', postSlug: 'b' },
+  { weekday: 'Montag', date: '2026-08-03', headline: 'Alibaba stellt Qwen vor', body: 'Text Mo.',
+    takeText: 'Synthszr Take: Langer Original-Take Mo.', headingNode: null, bodyNodes: [], postSlug: 'a' },
+  { weekday: 'Mittwoch', date: '2026-08-05', headline: 'Weisses Haus setzt auf Geheimhaltung', body: 'Text Mi.',
+    takeText: 'Synthszr Take: Langer Original-Take Mi.', headingNode: null, bodyNodes: [], postSlug: 'b' },
 ]
 const prompt = buildWrapupPrompt(topics, '3.–8. August 2026')
 
@@ -32,12 +34,16 @@ describe('buildWrapupPrompt', () => {
     expect(prompt).toContain('3.–8. August 2026')
   })
 
-  it('gibt die Ueberschriften woertlich vor', () => {
-    // Die Form "Wochentag — Original-Headline" ist Betreiber-Vorgabe. Als
-    // Aufzaehlung im Prompt statt nur als Regel: das Modell soll nichts
-    // umformulieren muessen.
-    expect(prompt).toContain('## Montag — Alibaba stellt Qwen vor')
-    expect(prompt).toContain('## Mittwoch — Weisses Haus setzt auf Geheimhaltung')
+  it('gibt die Wochentage vor, auf die sich die Antwort beziehen muss', () => {
+    // Die Ueberschriften baut die Route aus den Original-Knoten — das Modell
+    // liefert nur Takes und Bezuege und muss sie ueber den Wochentag zuordnen.
+    expect(prompt).toContain('Montag, Mittwoch')
+  })
+
+  it('gibt den urspruenglichen Take als Kontext mit', () => {
+    // Ohne ihn schriebe das Modell einen NEUEN Take statt einer gekuerzten
+    // Fassung — der Kern soll erhalten bleiben.
+    expect(prompt).toContain('Langer Original-Take Mo.')
   })
 
   it('nennt die tatsaechliche Zahl der Nachrichten', () => {
@@ -55,25 +61,27 @@ describe('WRAPUP_SYSTEM_PROMPT', () => {
     expect(WRAPUP_SYSTEM_PROMPT).toMatch(/große Linie/)
   })
 
-  it('verlangt Querbezuege zwischen den Themen', () => {
-    // Der eigentliche Zweck des Ein-Aufruf-Designs: ohne diese Anweisung
-    // entstuenden sechs unverbundene Zusammenfassungen.
-    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/QUERBEZÜGE|aufeinander/)
+  it('kennt den Bezugs-Absatz als eigenes Feld', () => {
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/bridge/)
   })
 
-  it('verlangt eine reflektiertere Fassung statt einer Kopie', () => {
-    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/NEU FORMULIERT/)
-    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/REFLEKTIERTER/)
+  it('stellt klar, dass die Berichte NICHT umgeschrieben werden', () => {
+    // Kern der Korrektur: der Bericht wird uebernommen, damit Quellenlinks und
+    // Lexikon-Verlinkungen erhalten bleiben.
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/unverändert übernommen/)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/kürzt sie NICHT/)
   })
 
-  it('verbietet erfundene Bezuege ausdruecklich', () => {
-    // Die Kehrseite der Querbezugs-Anweisung: ein Modell, das Zusammenhang
-    // liefern soll, erfindet ihn notfalls.
-    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/Erfinde keine Bezüge/)
+  it('macht den fehlenden Bezug zum Normalfall, nicht zur Ausnahme', () => {
+    // Ein Modell, das Zusammenhang liefern soll, erfindet ihn sonst.
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/ERFINDE KEINE BEZÜGE/)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/Normalfall/)
   })
 
-  it('behaelt die Synthszr-Take-Markierung bei', () => {
-    expect(WRAPUP_SYSTEM_PROMPT).toContain('Synthszr Take:')
+  it('verbietet die Take-Vorsilbe in der Modellantwort', () => {
+    // Die Markierung setzt die Route deterministisch — sonst stuende sie
+    // doppelt da, wenn das Modell sie mitliefert.
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/Beginne NICHT mit "Synthszr Take:"/)
   })
 
   it('verbietet Company- und lex-Tags', () => {

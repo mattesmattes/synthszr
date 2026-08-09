@@ -1,52 +1,85 @@
 /**
- * Erzeugt den Wochenrückblick aus den Themen der Woche.
+ * Erzeugt die NEUEN Teile des Wochenrückblicks.
  *
- * EIN Modellaufruf über alle Themen, nicht einer je Thema. Das ist die zentrale
- * Entscheidung des Designs und folgt direkt aus der Anforderung, dass sich die
- * Themen aufeinander beziehen sollen: Querbezüge entstehen nur, wenn das Modell
- * alle gleichzeitig sieht. Sechs getrennte Aufrufe könnten das strukturell
- * nicht — und wären dazu teurer.
+ * Das Modell schreibt hier NICHT den Bericht — der wird aus dem Tagesartikel
+ * 1:1 übernommen, samt Quellenlinks und Lexikon-Verlinkungen (s. collect.ts).
+ * Neu entsteht nur, was es im Original nicht gibt:
  *
- * Die Kehrseite: es gibt kein Teilergebnis. Das ist vertretbar, weil ein
- * Wrap-up ohne Zusammenhang seinen Zweck verfehlt.
+ *   1. der Vorlauf über die große Linie der Woche,
+ *   2. je Thema ein auf die Hälfte gekürzter Take,
+ *   3. je Thema OPTIONAL ein Bezugs-Absatz, wenn es einen echten Bezug zu
+ *      einem anderen Tag gibt.
+ *
+ * EIN Aufruf über alle Themen, nicht einer je Thema: Punkt 3 ist nur möglich,
+ * wenn das Modell die ganze Woche gleichzeitig sieht.
+ *
+ * Strukturierte Ausgabe über ein Tool statt Fließtext-Markdown: die Teile
+ * müssen einzeln in den TipTap-Baum eingesetzt werden, zwischen die
+ * übernommenen Original-Knoten. Ein Markdown-Block ließe sich dafür nur über
+ * Zeichenkettensuche wieder zerlegen.
  */
 import Anthropic from '@anthropic-ai/sdk'
 import { getModelCapabilities } from '@/lib/claude/model-capabilities'
-import { assertNonEmptyModelOutput } from '@/lib/claude/ghostwriter-pipeline'
 import type { WrapupTopic } from '@/lib/wrapup/collect'
+
+export interface WrapupParts {
+  /** 3-4 Zeilen über die große Linie der Woche. */
+  intro: string
+  sections: Array<{
+    weekday: string
+    /** Gekürzter Take, 2-3 Sätze. */
+    take: string
+    /** Optionaler Bezugs-Absatz. Leer, wenn es keinen echten Bezug gibt. */
+    bridge?: string
+  }>
+}
 
 export const WRAPUP_SYSTEM_PROMPT = `Du schreibst den Wochenrückblick des KI-Newsletters Synthszr auf DEUTSCH.
 
-Du bekommst die wichtigsten Nachrichten einer Woche, je eine pro Wochentag, im Volltext. Sie sind bereits erschienen. Deine Aufgabe ist NICHT, sie zu wiederholen, sondern sie aus dem Abstand einer Woche neu zu erzählen und miteinander zu verbinden.
+Du bekommst die wichtigsten Nachrichten einer Woche, je eine pro Wochentag, im Volltext samt ihrem ursprünglichen Synthszr Take.
 
-AUFBAU — genau in dieser Reihenfolge:
+WICHTIG: Die BERICHTE werden unverändert übernommen. Du schreibst sie NICHT neu und kürzt sie NICHT. Du lieferst ausschließlich drei Dinge:
 
-1. VORLAUF: 3-4 Zeilen ohne Überschrift. Sie benennen die große Linie der Woche — was sich in der Summe verschoben hat. Keine Aufzählung der Themen, keine Ankündigung ("In dieser Woche lesen Sie…"), sondern eine These.
+1. intro — 3-4 Zeilen über die große Linie der Woche. Was hat sich in der Summe verschoben? Keine Aufzählung der Themen, keine Ankündigung ("In dieser Woche lesen Sie…"), sondern eine These. Diese Zeilen stehen ganz oben, vor allen Nachrichten.
 
-2. Danach je Nachricht ein Abschnitt in der vorgegebenen Reihenfolge:
-   - Überschrift exakt wie vorgegeben ("## Wochentag — Original-Headline"). Nicht umformulieren, nicht kürzen.
-   - 4-6 Sätze Bericht. NEU FORMULIERT und REFLEKTIERTER als das Original: Was am Tag selbst eine Meldung war, ist eine Woche später eine Entwicklung. Stelle QUERBEZÜGE zu den anderen Tagen her, wo es sie gibt — genau dafür siehst du alle Nachrichten gleichzeitig. Erfinde keine Bezüge, wo keine sind.
-   - "Synthszr Take:" + 2-3 Sätze. SEHR kurz, sehr pointiert, eine klare Haltung. Kein Referat des Berichts darüber.
+2. take — je Nachricht eine GEKÜRZTE Fassung ihres Synthszr Take: 2-3 Sätze statt der ursprünglichen 5-7. Sehr pointiert, klare Haltung, kein Referat des Berichts. Beginne NICHT mit "Synthszr Take:" — die Markierung wird automatisch gesetzt. Der Kern des Original-Takes bleibt erhalten, nur schärfer und kürzer.
+
+3. bridge — NUR wo es einen ECHTEN Bezug zu einem anderen Tag dieser Woche gibt: ein einzelner Satz, der ihn benennt. Etwa wenn ein Thema am Mittwoch die Entwicklung vom Montag fortsetzt oder ihr widerspricht.
+   ERFINDE KEINE BEZÜGE. Zwei Nachrichten über KI-Firmen haben nicht automatisch miteinander zu tun. Im Zweifel lässt du bridge leer — das ist der Normalfall, nicht die Ausnahme. Ein aufgesetzter Bezug ist schlimmer als keiner.
 
 REGELN:
-- Keine Zwischenüberschriften außer den vorgegebenen. Keine Bullet Points.
 - Keine Zahlen, Namen oder Fakten erfinden. Alles steht in den Quelltexten.
-- Der Take ist der einzige Ort für Wertung. Der Bericht bleibt Bericht.
-- KEINE {Company}-Tags und KEINE {lex:}-Tags setzen — der Wrap-up verweist über die Originalartikel, doppelte Auszeichnung würde Ratings und Lexikonseiten erneut auslösen.`
+- KEINE {Company}-Tags und KEINE {lex:}-Tags setzen. Die Verlinkung stammt aus den übernommenen Originaltexten.
+- Keine Überschriften, keine Bullet Points, keine Markdown-Auszeichnung.`
 
-/**
- * Baut den User-Prompt.
- *
- * Die Überschriften stehen WÖRTLICH als Liste im Prompt, nicht nur als Regel.
- * Das Modell soll sie übernehmen, nicht aus einer Beschreibung rekonstruieren —
- * die Form „Wochentag — Original-Headline" ist Betreiber-Vorgabe und muss exakt
- * stimmen, damit der Rückblick für Leser des Tagesartikels wiedererkennbar ist.
- */
+const WRAPUP_TOOL = {
+  name: 'report_wrapup',
+  description: 'Vorlauf, gekürzte Takes und optionale Bezüge für den Wochenrückblick melden',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      intro: { type: 'string', description: '3-4 Zeilen über die große Linie der Woche' },
+      sections: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            weekday: { type: 'string', description: 'Wochentag, exakt wie vorgegeben' },
+            take: { type: 'string', description: 'Gekürzter Take, 2-3 Sätze, ohne die Vorsilbe "Synthszr Take:"' },
+            bridge: { type: 'string', description: 'Ein Satz zum Bezug auf einen anderen Tag. LEER lassen, wenn es keinen echten Bezug gibt.' },
+          },
+          required: ['weekday', 'take'],
+        },
+      },
+    },
+    required: ['intro', 'sections'],
+  },
+}
+
 export function buildWrapupPrompt(topics: WrapupTopic[], weekLabel: string): string {
   const blocks = topics
-    .map((t) => `### ${t.weekday} — ${t.headline}\n\n${t.body}`)
+    .map((t) => `### ${t.weekday} — ${t.headline}\n\nBERICHT:\n${t.body}\n\nURSPRÜNGLICHER TAKE:\n${t.takeText || '(keiner)'}`)
     .join('\n\n---\n\n')
-  const outline = topics.map((t) => `## ${t.weekday} — ${t.headline}`).join('\n')
   return `WOCHENRÜCKBLICK für den Zeitraum ${weekLabel}.
 
 Diese ${topics.length} Nachrichten sind in dieser Woche erschienen, in dieser Reihenfolge:
@@ -55,55 +88,52 @@ Diese ${topics.length} Nachrichten sind in dieser Woche erschienen, in dieser Re
 ${blocks}
 </nachrichten>
 
-Schreibe den Rückblick. Die Überschriften lauten EXAKT so, in dieser Reihenfolge:
-
-${outline}
-
-Beginne mit dem Vorlauf (3-4 Zeilen, keine Überschrift), dann die Abschnitte.`
+Liefere über das Tool: den Vorlauf, und je Nachricht einen gekürzten Take sowie — nur wo ein echter Bezug besteht — einen Bezugssatz. Die Wochentage in deiner Antwort lauten exakt: ${topics.map((t) => t.weekday).join(', ')}.`
 }
 
 /**
- * Ruft das Modell und liefert Titel und Markdown.
+ * Ruft das Modell und liefert die neu zu schreibenden Teile.
  *
  * Der Titel entsteht aus dem Zeitraum, nicht aus dem Modell: bei einem
- * Wochenrückblick ist er vorhersagbar, ein eigener Aufruf dafür wäre
- * verschwendet.
+ * Wochenrückblick ist er vorhersagbar.
  */
-export async function generateWrapup(
+export async function generateWrapupParts(
   topics: WrapupTopic[],
   weekLabel: string,
   model: string,
-): Promise<{ title: string; markdown: string }> {
+): Promise<{ title: string; parts: WrapupParts }> {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const { adaptiveThinking, supportsDisabledThinking } = getModelCapabilities(model)
 
   const params: Record<string, unknown> = {
     model,
-    max_tokens: 16000,
+    max_tokens: 8000,
+    tools: [WRAPUP_TOOL],
+    tool_choice: { type: 'tool', name: WRAPUP_TOOL.name },
     system: [{ type: 'text', text: WRAPUP_SYSTEM_PROMPT }],
     messages: [{ role: 'user', content: buildWrapupPrompt(topics, weekLabel) }],
   }
-  // Thinking bewusst AUS: die Aufgabe ist Umformulieren mit Querbezügen, kein
-  // Reasoning-Problem — und bei adaptivem Thinking deckt max_tokens Denken UND
-  // Text gemeinsam ab. Nur setzen, wo das Modell es verträgt: claude-fable-5
-  // lehnt 'disabled' mit HTTP 400 ab (s. model-capabilities.ts).
+  // Thinking aus, wo das Modell es verträgt: die Aufgabe ist Kürzen und
+  // Verbinden, kein Reasoning-Problem — und bei adaptivem Thinking deckt
+  // max_tokens Denken UND Ausgabe gemeinsam ab. claude-fable-5 lehnt
+  // 'disabled' mit HTTP 400 ab (s. model-capabilities.ts).
   if (adaptiveThinking && supportsDisabledThinking) params.thinking = { type: 'disabled' }
 
-  let text = ''
-  let stopReason: string | null = null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const stream = anthropic.messages.stream(params as any)
-  for await (const event of stream) {
-    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-      text += event.delta.text
-    } else if (event.type === 'message_delta') {
-      stopReason = event.delta.stop_reason ?? stopReason
-    }
+  const res = await anthropic.messages.create(params as any)
+  const block = res.content.find((b: { type: string }) => b.type === 'tool_use')
+  if (!block || block.type !== 'tool_use') {
+    // Kein Tool-Block heißt: das Modell hat nicht geantwortet oder verweigert.
+    // Beim Wrap-up hängt der ganze Post daran, deshalb hart scheitern statt
+    // einen Entwurf ohne Takes anzulegen.
+    throw new Error(
+      `Modell lieferte keine verwertbare Antwort für den Wochenrückblick (stop_reason: ${res.stop_reason ?? 'unbekannt'})`,
+    )
   }
-  // Ein Wrap-up hängt an EINEM Aufruf — ohne diese Prüfung landete eine
-  // Verweigerung als leerer Entwurf in der Datenbank. Genau dieser Fall ist am
-  // 2026-08-07 im Ghostwriter aufgetreten (s. reference_modell_verweigerung).
-  assertNonEmptyModelOutput(text, `Wochenrückblick (${model})`, stopReason)
+  const parts = block.input as WrapupParts
+  if (!parts?.intro || !Array.isArray(parts.sections)) {
+    throw new Error('Antwort des Modells unvollständig: intro oder sections fehlen')
+  }
 
-  return { title: `AI-Week Wrap-up: ${weekLabel}`, markdown: text.trim() }
+  return { title: `AI-Week Wrap-up: ${weekLabel}`, parts }
 }

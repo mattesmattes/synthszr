@@ -4,8 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { lastCompleteWeek } from '@/lib/wrapup/week'
 import { collectWeekTopics } from '@/lib/wrapup/collect'
-import { generateWrapup } from '@/lib/wrapup/generate'
-import { markdownToTiptapServer } from '@/lib/utils/markdown-to-tiptap-server'
+import { generateWrapupParts } from '@/lib/wrapup/generate'
+import { assembleWrapupDoc } from '@/lib/wrapup/assemble'
 import { buildUniqueSlug } from '@/lib/article-jobs/unique-slug'
 
 /**
@@ -52,11 +52,35 @@ export async function POST(request: NextRequest) {
     }
 
     const model = (body.model as string) || (await getModelForUseCase('ghostwriter'))
-    const { title, markdown } = await generateWrapup(topics, week.label, model)
+    // Das Modell schreibt NUR Vorlauf, Takes und Bezüge — die Berichte kommen
+    // als Original-Knoten aus den Tagesartikeln (s. collect.ts/assemble.ts).
+    const { title, parts } = await generateWrapupParts(topics, week.label, model)
+    let tiptap = assembleWrapupDoc(topics, parts) as Record<string, unknown>
 
-    // Server-Variante: markdownToTiptap ruft TipTaps generateJSON und braucht
-    // ein DOM — in einer Route wirft das ("there is no window object").
-    const tiptap = await markdownToTiptapServer(markdown)
+    // Lexikon-Links über das FERTIGE Dokument ziehen: die übernommenen Absätze
+    // tragen ihre Marks schon, die neu geschriebenen (Vorlauf, Bezug, Take)
+    // noch nicht. injectGlossaryMarks strippt nur glossaryLink — die
+    // Quellenlinks der Originaltexte bleiben unangetastet (s. stripMarks).
+    // Fehlschlag ist unkritisch: dann fehlen Lexikon-Links, der Text steht.
+    try {
+      const { getMatcherTerms, buildReservedNames, getChartProductNames } =
+        await import('@/lib/glossary/terms')
+      const { injectGlossaryMarks } = await import('@/lib/glossary/inject-marks')
+      const [terms, chartNames] = await Promise.all([
+        getMatcherTerms('de'),
+        getChartProductNames(),
+      ])
+      if (terms && terms.length > 0) {
+        tiptap = injectGlossaryMarks(
+          tiptap,
+          terms.map((t) => t.slug),
+          terms,
+          { reserved: buildReservedNames(chartNames), lang: 'de' },
+        ) as Record<string, unknown>
+      }
+    } catch (err) {
+      console.error('[WeekWrapup] Lexikon-Verlinkung fehlgeschlagen:', err)
+    }
     const slug = await buildUniqueSlug(
       slugify(`ai-week-wrap-up-${week.mondayDate}`),
       async (s) => {
@@ -74,7 +98,7 @@ export async function POST(request: NextRequest) {
         excerpt: `Der Rückblick auf die Woche vom ${week.label}.`,
         category: 'AI & Tech',
         content: JSON.stringify(tiptap),
-        word_count: markdown.split(/\s+/).length,
+        word_count: JSON.stringify(tiptap).replace(/<[^>]*>/g, ' ').split(/\s+/).length,
         status: 'draft',
         ai_model: model,
       })
