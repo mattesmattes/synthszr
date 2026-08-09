@@ -326,13 +326,15 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
                 onChange={() => { /* absichtlich ignoriert */ }}
               />
               <div className="flex flex-wrap items-center gap-2">
+                {/* Unterstrich-Linie statt Kasten (Betreiber-Wunsch): nur eine
+                    Schreiblinie, kein quadratisches Feld. */}
                 <input
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder={de ? 'Dein Name' : 'Your name'}
                   maxLength={80}
-                  className="w-44 rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                  className="w-44 appearance-none rounded-none border-0 border-b border-border bg-transparent px-1 py-1 text-sm focus:border-foreground focus:outline-none"
                 />
                 {needsEmail && (
                   <input
@@ -341,7 +343,7 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder={de ? 'Newsletter-Adresse' : 'Newsletter address'}
                     maxLength={320}
-                    className="w-64 rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                    className="w-64 appearance-none rounded-none border-0 border-b border-border bg-transparent px-1 py-1 text-sm focus:border-foreground focus:outline-none"
                   />
                 )}
                 <button
