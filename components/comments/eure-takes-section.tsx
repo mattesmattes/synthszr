@@ -295,14 +295,15 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
             </p>
 
             <form onSubmit={submit} className="mt-3 space-y-3">
+              {/* Reiner Kontext-Hinweis, KEIN „entfernen": wer über „Deinen Take
+                  dazu schreiben" reinkommt, kommentiert genau zu diesem Abschnitt
+                  — den Bezug zu lösen wäre sinnlos. Ohne Bezug (Button unten am
+                  Bereich) erscheint der Chip gar nicht. */}
               {sectionRef && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="rounded-full border border-border px-2 py-0.5">
+                <div className="text-xs text-muted-foreground">
+                  <span className="inline-block rounded-full border border-border px-2 py-0.5">
                     {de ? 'zu' : 're'}: {sectionRef.headline.slice(0, 80)}
                   </span>
-                  <button type="button" className="underline" onClick={() => setSectionRef(null)}>
-                    {de ? 'entfernen' : 'remove'}
-                  </button>
                 </div>
               )}
               <textarea
