@@ -269,12 +269,17 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
           aria-label={de ? 'Deinen Take schreiben' : 'Write your take'}
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 font-sans"
         >
-          <div className="absolute inset-0 bg-black/50" onClick={() => setModalOpen(false)} />
-          <div className="relative z-10 w-full max-w-lg rounded-lg border border-border bg-background p-5 shadow-xl">
+          {/* Hintergrund abdunkeln UND blurren, eingeblendet. */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in-0"
+            onClick={() => setModalOpen(false)}
+          />
+          {/* Box faded + zoomt leicht rein. */}
+          <div className="relative z-10 w-full max-w-lg rounded-lg border border-border bg-background p-5 shadow-xl animate-in fade-in-0 zoom-in-95 duration-200">
             <div className="flex items-start justify-between gap-4">
-              <h3 className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+              <h2 className="text-base font-bold uppercase tracking-wide">
                 {de ? 'Dein Take' : 'Your take'}
-              </h3>
+              </h2>
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
