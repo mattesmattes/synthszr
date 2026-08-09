@@ -27,8 +27,7 @@ import {
   Megaphone,
   ClipboardEdit,
   Wallet,
-  Library
-} from 'lucide-react'
+  Library, CalendarRange } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
 interface NavItem {
@@ -65,6 +64,13 @@ const navGroups: NavGroup[] = [
         href: '/admin/create-article',
         icon: Wand2,
         highlight: true
+      },
+      {
+        // highlight bleibt beim Tagesartikel: der ist die taegliche Handlung,
+        // das Wrap-up die woechentliche.
+        label: 'AI-Week Wrap-up',
+        href: '/admin/week-wrapup',
+        icon: CalendarRange
       },
       {
         label: 'Ghostwriter-Prompts',
