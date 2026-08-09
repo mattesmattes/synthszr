@@ -123,7 +123,10 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
   // Dadurch bleibt die Kragen-Linie (Trennung Hemdkragen/Hand) als
   // Aussparung sichtbar — sonst wird das gefüllte Icon ein unlesbarer Klumpen.
   // Die äußere Kontur in Hintergrundfarbe verschwindet auf dem Seitenhintergrund.
-  const filledIconProps = { fill: 'currentColor', stroke: 'var(--background)', strokeWidth: 2 }
+  //
+  // WICHTIG: stroke/fill als inline-STYLE, nicht als Attribut — var(--background)
+  // wird in SVG-Präsentationsattributen NICHT aufgelöst (nur in CSS-Properties).
+  const filledIconProps = { strokeWidth: 2, style: { fill: 'currentColor', stroke: 'var(--background)' } }
   const outlineIconProps = { fill: 'none' as const }
 
   return (
