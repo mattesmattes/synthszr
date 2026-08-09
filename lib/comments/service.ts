@@ -55,6 +55,7 @@ export interface PublicComment {
   id: string
   displayName: string
   body: string
+  sectionAnchor: string | null
   sectionHeadline: string | null
   publishedAt: string
 }
@@ -300,19 +301,25 @@ export async function listPublishedComments(
   source: PostSource,
   postId: string,
   limit = 50,
+  sectionAnchor?: string,
 ): Promise<PublicComment[]> {
-  const { data } = await supabase
+  let query = supabase
     .from('post_comments')
-    .select('id, display_name, body, section_headline, published_at')
+    .select('id, display_name, body, section_anchor, section_headline, published_at')
     .eq('post_source', source)
     .eq('post_id', postId)
     .eq('status', 'published')
     .order('published_at', { ascending: false })
     .limit(limit)
+  // Optional auf einen Abschnitt eingegrenzt — für die Anzeige direkt unter dem
+  // jeweiligen Take.
+  if (sectionAnchor) query = query.eq('section_anchor', sectionAnchor)
+  const { data } = await query
   return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
     id: r.id as string,
     displayName: r.display_name as string,
     body: r.body as string,
+    sectionAnchor: (r.section_anchor as string | null) ?? null,
     sectionHeadline: (r.section_headline as string | null) ?? null,
     publishedAt: r.published_at as string,
   }))

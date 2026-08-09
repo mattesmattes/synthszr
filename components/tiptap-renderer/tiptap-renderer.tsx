@@ -20,6 +20,7 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from "@/lib/data/companies
 import { processMattesSyntheseText } from "@/lib/tiptap/dom-processors/synthese-text"
 import { insertTakeBarometers, type TakeBarometerPortal } from "@/lib/tiptap/dom-processors/take-barometer"
 import { TakeBarometer } from "./take-barometer"
+import { SectionComments } from "./section-comments"
 import { injectProductLinks, appendProductVoteBlock, type ProductLinkData } from "@/lib/tiptap/dom-processors/product-links"
 import { processNewsHeadings } from "@/lib/tiptap/dom-processors/news-headings"
 import { processBundleLabels } from "@/lib/tiptap/dom-processors/bundle-label"
@@ -63,6 +64,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
   const [articleThumbnails, setArticleThumbnails] = useState<ArticleThumbnail[]>([])
   const [thumbnailPortals, setThumbnailPortals] = useState<ThumbnailPortal[]>([])
   const [takeBarometerPortals, setTakeBarometerPortals] = useState<TakeBarometerPortal[]>([])
+  const [sectionCommentPortals, setSectionCommentPortals] = useState<TakeBarometerPortal[]>([])
   // Aggregat aller Takes des Artikels — EIN Fetch, verteilt auf die Widgets.
   const [takeCounts, setTakeCounts] = useState<Record<string, { agree: number; disagree: number }>>({})
   const [tipPromo, setTipPromo] = useState<TipPromo | null>(null)
@@ -283,12 +285,13 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
       // 3. Style Synthszr Take markers
       processMattesSyntheseText(container)
 
-      // 3b. Take-Barometer unter jedem Take — NACH dem Styling (3.), damit
-      // die Take-Absätze bereits markiert sind, und idempotent wie alle
-      // Prozessoren. Nur mit postId: ohne sie gibt es kein Vote-Ziel.
+      // 3b. Take-Barometer (inline) UND Kommentar-Block (darunter) je Take —
+      // NACH dem Styling (3.), damit die Take-Absätze markiert sind; idempotent.
+      // Nur mit postId: ohne sie gibt es kein Vote-/Kommentar-Ziel.
       if (postId) {
-        const barometerPortals = insertTakeBarometers(container)
-        if (barometerPortals.length > 0) setTakeBarometerPortals(barometerPortals)
+        const { barometers, sectionComments } = insertTakeBarometers(container)
+        if (barometers.length > 0) setTakeBarometerPortals(barometers)
+        if (sectionComments.length > 0) setSectionCommentPortals(sectionComments)
       }
 
       // 4. {Company}-Tags ausblenden
@@ -341,6 +344,20 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
           // queueItemId als anchor — ohne den Index kollidierten die React-Keys.
           // Der anchor bleibt der Vote-Bindungsschlüssel (Votes je Abschnitt).
           `take-barometer-${portal.anchor}-${i}`
+        )
+      )}
+
+      {/* „Eure Takes" direkt unter dem jeweiligen Take-Abschnitt */}
+      {postId && sectionCommentPortals.map((portal, i) =>
+        createPortal(
+          <SectionComments
+            postSource={postSource}
+            postId={postId}
+            anchor={portal.anchor}
+            locale={locale}
+          />,
+          portal.element,
+          `section-comments-${portal.anchor}-${i}`
         )
       )}
 

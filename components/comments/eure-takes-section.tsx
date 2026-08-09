@@ -27,13 +27,11 @@
  */
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { PublicComment } from '@/lib/comments/service'
 
 interface EureTakesSectionProps {
   postSource: 'posts' | 'generated_posts'
   postId: string
   locale: string
-  initialComments: PublicComment[]
 }
 
 /** Event, mit dem das Take-Barometer den Abschnitts-Bezug setzt. */
@@ -44,10 +42,19 @@ export interface CommentSectionRefEvent {
 
 const NAME_KEY = 'synthszr_display_name'
 
-export function EureTakesSection({ postSource, postId, locale, initialComments }: EureTakesSectionProps) {
+/**
+ * Schreib-Overlay für „Eure Takes" — reiner Modal-Host (Betreiber-Wunsch
+ * 2026-08-09: die veröffentlichten Takes hängen jetzt direkt unter dem
+ * jeweiligen Abschnitt via <SectionComments>, NICHT mehr gepoolt hier).
+ *
+ * Diese Komponente rendert nichts Sichtbares außer dem Modal: sie lauscht auf
+ * `synthszr:comment-ref` (öffnet das Overlay mit Abschnitts-Bezug) und feuert
+ * nach dem Veröffentlichen `synthszr:comment-published`, damit der passende
+ * Abschnitts-Block den neuen Take sofort zeigt.
+ */
+export function EureTakesSection({ postSource, postId, locale }: EureTakesSectionProps) {
   const [commentToken, setCommentToken] = useState<string | null>(null)
 
-  const [comments, setComments] = useState<PublicComment[]>(initialComments)
   const [body, setBody] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
@@ -74,18 +81,7 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
     if (ct) setCommentToken(ct)
   }, [])
 
-  // Live-Auffrischung nach der Hydration: das SSR-HTML kann bis zu ~6 Minuten
-  // alt sein (ISR + Edge-Cache) — die Leser sollen den aktuellen Stand sehen.
-  useEffect(() => {
-    let cancelled = false
-    fetch(`/api/comments?source=${postSource}&postId=${postId}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && Array.isArray(data?.comments)) setComments(data.comments)
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [postSource, postId])
+  // (Die veröffentlichten Takes lädt jetzt jeder Abschnitts-Block selbst.)
 
   // Brücke vom Take-Barometer: Klick auf „Deinen Take dazu schreiben" öffnet das
   // Schreib-Overlay mit dem Abschnitts-Bezug.
@@ -124,13 +120,6 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
       window.removeEventListener('keydown', onKey)
     }
   }, [modalOpen])
-
-  const openBlankModal = () => {
-    setSectionRef(null)
-    setNotice(null)
-    setSubmitted(false)
-    setModalOpen(true)
-  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -190,14 +179,23 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
       }
 
       if (data.status === 'published') {
-        // Sofort sichtbar machen — die Server-Liste zieht beim nächsten Fetch nach.
-        setComments((prev) => [{
-          id: `local-${Date.now()}`,
-          displayName: displayName.trim(),
-          body: body.trim(),
-          sectionHeadline: sectionRef?.headline ?? null,
-          publishedAt: new Date().toISOString(),
-        }, ...prev])
+        // Sofort sichtbar machen: den passenden Abschnitts-Block per Event
+        // informieren, damit der neue Take direkt dort unter dem Take erscheint.
+        if (sectionRef?.anchor) {
+          window.dispatchEvent(new CustomEvent('synthszr:comment-published', {
+            detail: {
+              anchor: sectionRef.anchor,
+              comment: {
+                id: `local-${Date.now()}`,
+                displayName: displayName.trim(),
+                body: body.trim(),
+                sectionAnchor: sectionRef.anchor,
+                sectionHeadline: sectionRef.headline ?? null,
+                publishedAt: new Date().toISOString(),
+              },
+            },
+          }))
+        }
         setNotice({ kind: 'ok', text: de ? 'Dein Take ist live.' : 'Your take is live.' })
       } else if (data.status === 'pending') {
         setNotice({ kind: 'info', text: de ? 'Dein Take ist in der Redaktionsprüfung und erscheint nach Freigabe.' : 'Your take is under review and will appear once approved.' })
@@ -220,53 +218,7 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
   }
 
   return (
-    <section id="eure-takes" className="mt-16 border-t border-border pt-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <h2 className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
-            {de ? 'Eure Takes' : 'Your Takes'}
-          </h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {de
-              ? 'Der Synthszr hat eine Haltung. Jetzt bist du dran.'
-              : 'The Synthszr has an opinion. Your turn.'}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={openBlankModal}
-          className="rounded-md bg-foreground px-4 py-2 text-sm text-background"
-        >
-          {de ? 'Deinen Take schreiben' : 'Write your take'}
-        </button>
-      </div>
-
-      {comments.length > 0 && (
-        <ol className="mt-8 space-y-6">
-          {comments.map((c) => (
-            <li key={c.id} className="text-sm">
-              <div className="flex flex-wrap items-baseline gap-2">
-                <span className="font-medium">{c.displayName}</span>
-                {c.sectionHeadline && (
-                  <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-                    {de ? 'zu' : 're'}: {c.sectionHeadline.slice(0, 60)}
-                  </span>
-                )}
-                <time dateTime={c.publishedAt} className="font-mono text-xs text-muted-foreground">
-                  {/* Feste timeZone: die Liste rendert server- UND client-seitig
-                      (Review-Befund 7 behoben) — ohne sie driften SSR und
-                      Hydration je nach Server-Zeitzone auseinander. */}
-                  {new Date(c.publishedAt).toLocaleDateString(de ? 'de-DE' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' })}
-                </time>
-              </div>
-              {/* Plain-Text: React escaped — und gespeichert wird ohnehin kein
-                  Markup. whitespace-pre-line erhält Absätze. */}
-              <p className="mt-1 whitespace-pre-line leading-relaxed">{c.body}</p>
-            </li>
-          ))}
-        </ol>
-      )}
-
+    <>
       {/* Schreib-Overlay als echter Top-Layer (Portal an document.body, außerhalb
           des Artikel-/Editor-DOM). Nur clientseitig gerendert (modalOpen startet
           false, wird per Nutzeraktion gesetzt). */}
@@ -389,6 +341,6 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
         </div>,
         document.body,
       )}
-    </section>
+    </>
   )
 }

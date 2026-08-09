@@ -176,10 +176,12 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const source = searchParams.get('source')
   const postId = searchParams.get('postId')
+  // Optionaler Abschnitts-Filter (Anzeige direkt unter dem jeweiligen Take).
+  const sectionAnchor = searchParams.get('sectionAnchor')?.slice(0, 200) || undefined
   if ((source !== 'posts' && source !== 'generated_posts') || !postId || !z.string().uuid().safeParse(postId).success) {
     return NextResponse.json({ error: 'Ungültige Parameter' }, { status: 400 })
   }
-  const comments = await listPublishedComments(createAdminClient(), source, postId)
+  const comments = await listPublishedComments(createAdminClient(), source, postId, 50, sectionAnchor)
   return NextResponse.json(
     { comments },
     // Kurzer CDN-Cache: nimmt Lastspitzen, ohne die Frische spürbar zu kosten.

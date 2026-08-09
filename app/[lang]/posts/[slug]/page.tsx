@@ -575,14 +575,14 @@ export default async function PostPage({ params }: PageProps) {
 
         <PostProductLinks content={post.content as Record<string, unknown>} locale={locale} />
 
-        {/* „Eure Takes": SSR-Liste steht im HTML (Crawler + LLM-Crawler sehen
-            sie); das Client-Widget übernimmt sie als Startzustand und frischt
-            live auf. */}
+        {/* „Eure Takes": Schreib-Overlay-Host. Die veröffentlichten Takes selbst
+            erscheinen direkt unter dem jeweiligen Take-Abschnitt (SectionComments),
+            nicht mehr gepoolt hier. Fürs SEO-Markup dienen die comment-JSON-LD
+            oben (aus publishedComments). */}
         <EureTakesSection
           postSource={postSource}
           postId={post.id}
           locale={locale}
-          initialComments={publishedComments}
         />
 
         <nav className="mt-16 border-t border-border pt-8">

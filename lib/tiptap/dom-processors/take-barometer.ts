@@ -13,6 +13,13 @@ export interface TakeBarometerPortal {
   element: HTMLElement
 }
 
+/** Ergebnis der Injektion: pro Take ein inline-Barometer UND ein Block darunter
+ *  für die Kommentare genau dieses Abschnitts. */
+export interface TakeInjectionResult {
+  barometers: TakeBarometerPortal[]
+  sectionComments: TakeBarometerPortal[]
+}
+
 const TAKE_RE = /^\s*(Synthszr Take|Mattes Synthese)\s*:/i
 
 /**
@@ -26,8 +33,9 @@ const TAKE_RE = /^\s*(Synthszr Take|Mattes Synthese)\s*:/i
  * entfernt werden — dann verschieben sich die Zähler auf den Nachbar-Take,
  * was bei einem UI-Signal ohne Markup-Wirkung verkraftbar ist.
  */
-export function insertTakeBarometers(container: HTMLElement): TakeBarometerPortal[] {
-  const portals: TakeBarometerPortal[] = []
+export function insertTakeBarometers(container: HTMLElement): TakeInjectionResult {
+  const barometers: TakeBarometerPortal[] = []
+  const sectionComments: TakeBarometerPortal[] = []
   const paragraphs = container.querySelectorAll('p')
   let index = 0
 
@@ -38,26 +46,36 @@ export function insertTakeBarometers(container: HTMLElement): TakeBarometerPorta
     const headline = found?.headline ?? ''
     index++
 
-    // Idempotenz: existiert der Platzhalter schon (jetzt IM Absatz), nur
-    // einsammeln — die Portale müssen bei jedem Prozessorlauf zurückgegeben
-    // werden, sonst verlöre ein Re-Render die gemounteten Widgets.
-    const existing = p.querySelector(':scope > [data-take-barometer]')
-    if (existing instanceof HTMLElement && existing.dataset.takeBarometer) {
-      portals.push({ anchor: existing.dataset.takeBarometer, headline, element: existing })
-      return
+    // --- Inline-Barometer INNERHALB des Take-Absatzes (hinter dem letzten Satz).
+    // <span>, damit es gültiges HTML im <p> bleibt. Idempotent über das
+    // dataset-Flag: bei Re-Läufen nur einsammeln.
+    const existingBar = p.querySelector(':scope > [data-take-barometer]')
+    if (existingBar instanceof HTMLElement && existingBar.dataset.takeBarometer) {
+      barometers.push({ anchor: existingBar.dataset.takeBarometer, headline, element: existingBar })
+    } else {
+      const slot = document.createElement('span')
+      slot.dataset.takeBarometer = anchor
+      slot.className = 'take-barometer-slot'
+      p.appendChild(slot)
+      barometers.push({ anchor, headline, element: slot })
     }
 
-    // Inline ANS ENDE des Take-Absatzes hängen (Betreiber-Wunsch: direkt hinter
-    // den letzten Satz), nicht als Block darunter. <span>, damit es gültiges
-    // HTML in einem <p> bleibt (ein <div> würde den Absatz aufbrechen).
-    const slot = document.createElement('span')
-    slot.dataset.takeBarometer = anchor
-    slot.className = 'take-barometer-slot'
-    p.appendChild(slot)
-    portals.push({ anchor, headline, element: slot })
+    // --- Kommentar-BLOCK direkt UNTER dem Take-Absatz. Zeigt die Takes genau
+    // dieses Abschnitts (Betreiber-Wunsch: direkt am News-Artikel, nicht
+    // gepoolt am Seitenende). <div> als Block, per p.after() als Geschwister.
+    const existingComments = p.nextElementSibling
+    if (existingComments instanceof HTMLElement && existingComments.dataset.sectionComments) {
+      sectionComments.push({ anchor: existingComments.dataset.sectionComments, headline, element: existingComments })
+    } else {
+      const cslot = document.createElement('div')
+      cslot.dataset.sectionComments = anchor
+      cslot.className = 'section-comments-slot not-prose'
+      p.after(cslot)
+      sectionComments.push({ anchor, headline, element: cslot })
+    }
   })
 
-  return portals
+  return { barometers, sectionComments }
 }
 
 /** Nächste vorangehende Überschrift — über Geschwister aufwärts. Liefert die
