@@ -12,6 +12,7 @@
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { moderateComment } from '@/lib/comments/moderation'
+import { AUTHOR } from '@/lib/data/author'
 import {
   hashSubscriberToken,
   mintSubscriberToken,
@@ -19,6 +20,25 @@ import {
 } from '@/lib/newsletter/access-tokens'
 
 type AdminClient = ReturnType<typeof createAdminClient>
+
+/**
+ * Verhindert, dass ein Kommentar sich als der Seiten-Autor ausgibt. Der
+ * angezeigte Name ist frei wählbar (Pseudonyme sind ok), aber er landet im
+ * schema.org-Person-Author des JSON-LD — ein Kommentar unter „Matthias
+ * Schrader" ließe die strukturierten Daten eine Identität bezeugen, die nie
+ * verifiziert wurde (Review-Befund 2). Kollisionen (auch mit Zusätzen wie
+ * „Matthias Schrader (Team)") werden mit einem sichtbaren Marker entschärft,
+ * statt den Kommentar zu blockieren.
+ */
+export function guardDisplayName(name: string): string {
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
+  const author = norm(AUTHOR.name)
+  const candidate = norm(name)
+  if (candidate === author || candidate.includes(author)) {
+    return `${name.trim()} (Leser:in)`
+  }
+  return name.trim()
+}
 
 export type PostSource = 'posts' | 'generated_posts'
 
@@ -59,9 +79,16 @@ export async function postExists(supabase: AdminClient, source: PostSource, post
 }
 
 /**
- * ISR-Kopien der Artikelseite erneuern, in allen Sprachen. Der deutsche Slug
- * steht am Post, die übersetzten in content_translations — Slugs unterscheiden
- * sich je Sprache, deshalb reicht EIN revalidatePath nicht.
+ * ISR-Kopien der Artikelseite erneuern — über ALLE öffentlichen Locales
+ * (Review-Befund 8). Die Seite ist unter jedem Locale erreichbar, nicht nur
+ * unter /de:
+ *  - Manuelle Posts (source 'posts') tragen denselben Slug in jeder Sprache.
+ *  - Generierte Posts sind unter ihrem deutschen Slug in JEDEM Locale
+ *    erreichbar (die Seite fällt ohne Übersetzung auf den deutschen Inhalt
+ *    zurück), UND zusätzlich unter dem je Sprache abweichenden Übersetzungs-
+ *    Slug.
+ * Ein einzelnes revalidatePath('/de/…') ließe die übrigen Locale-Kopien bis zu
+ * 60 s mit veraltetem Kommentarstand stehen.
  *
  * Best-effort: schlägt die Revalidation fehl, läuft die ISR-Uhr (60 s) sie
  * ohnehin ein — der Kommentar erscheint dann eine Minute später im SSR-HTML.
@@ -73,23 +100,29 @@ export async function revalidatePostPaths(
 ): Promise<void> {
   try {
     const { revalidatePath } = await import('next/cache')
+    const { PUBLIC_LOCALES } = await import('@/lib/i18n/config')
+
+    const paths = new Set<string>()
     if (source === 'posts') {
       const { data } = await supabase.from('posts').select('slug').eq('id', postId).maybeSingle()
       const slug = (data as { slug?: string } | null)?.slug
-      if (slug) revalidatePath(`/de/posts/${slug}`)
-      return
+      if (slug) for (const locale of PUBLIC_LOCALES) paths.add(`/${locale}/posts/${slug}`)
+    } else {
+      const { data } = await supabase.from('generated_posts').select('slug').eq('id', postId).maybeSingle()
+      const slug = (data as { slug?: string } | null)?.slug
+      // Der deutsche Slug rendert unter JEDEM Locale (Fallback auf DE-Inhalt).
+      if (slug) for (const locale of PUBLIC_LOCALES) paths.add(`/${locale}/posts/${slug}`)
+      // Zusätzlich die je Sprache abweichenden Übersetzungs-Slugs.
+      const { data: translations } = await supabase
+        .from('content_translations')
+        .select('slug, language_code')
+        .eq('generated_post_id', postId)
+        .eq('translation_status', 'completed')
+      for (const t of (translations ?? []) as Array<{ slug: string | null; language_code: string }>) {
+        if (t.slug) paths.add(`/${t.language_code}/posts/${t.slug}`)
+      }
     }
-    const { data } = await supabase.from('generated_posts').select('slug').eq('id', postId).maybeSingle()
-    const slug = (data as { slug?: string } | null)?.slug
-    if (slug) revalidatePath(`/de/posts/${slug}`)
-    const { data: translations } = await supabase
-      .from('content_translations')
-      .select('slug, language_code')
-      .eq('generated_post_id', postId)
-      .eq('translation_status', 'completed')
-    for (const t of (translations ?? []) as Array<{ slug: string | null; language_code: string }>) {
-      if (t.slug) revalidatePath(`/${t.language_code}/posts/${t.slug}`)
-    }
+    for (const path of paths) revalidatePath(path)
   } catch (err) {
     console.error('[Comments] Revalidation fehlgeschlagen (unkritisch):', err)
   }
@@ -115,7 +148,7 @@ export async function submitVerifiedComment(
     post_source: input.postSource,
     post_id: input.postId,
     subscriber_id: subscriberId,
-    display_name: input.displayName,
+    display_name: guardDisplayName(input.displayName),
     body: input.body,
     section_anchor: input.sectionAnchor,
     section_headline: input.sectionHeadline,
@@ -142,6 +175,12 @@ export async function submitVerifiedComment(
  * wäre ein Spam-Vektor über unseren Absender. Die Abo-Einladung übernimmt die
  * UI für alle ohne Cookie.
  */
+/** Frist, innerhalb derer einem Abonnenten keine zweite Bestätigungsmail
+ *  geschickt wird. Bremst das Mail-Bombing über bekannte Abo-Adressen: ohne
+ *  sie feuert jeder Web-Flow-Request eine Mail über unseren Absender, per-IP
+ *  gedrosselt aber per-Ziel unbegrenzt (Review-Befund 1/5). */
+const VERIFY_MAIL_COOLDOWN_MS = 10 * 60 * 1000
+
 export async function submitUnverifiedComment(
   supabase: AdminClient,
   email: string,
@@ -156,6 +195,23 @@ export async function submitUnverifiedComment(
   const sub = subscriber as { id: string; status: string } | null
   if (!sub || sub.status !== 'active') return { verifyMail: null }
 
+  // Throttle je ZIEL-Abonnent (nicht je IP): existiert bereits ein frischer,
+  // noch unbestätigter Kommentar dieses Abonnenten, wird kein weiterer geparkt
+  // und keine weitere Mail ausgelöst. So kann ein Angreifer die Adresse eines
+  // Abonnenten nicht mit Bestätigungsmails fluten.
+  const { data: recent } = await supabase
+    .from('post_comments')
+    .select('created_at')
+    .eq('subscriber_id', sub.id)
+    .eq('status', 'pending_verify')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const recentAt = (recent as { created_at?: string } | null)?.created_at
+  if (recentAt && Date.now() - new Date(recentAt).getTime() < VERIFY_MAIL_COOLDOWN_MS) {
+    return { verifyMail: null }
+  }
+
   const minted = mintSubscriberToken(sub.id, 'comment', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
   const { error: tokenError } = await supabase.from('subscriber_action_tokens').insert(minted.row)
   if (tokenError) throw new Error(`Token nicht speicherbar: ${tokenError.message}`)
@@ -164,10 +220,14 @@ export async function submitUnverifiedComment(
     post_source: input.postSource,
     post_id: input.postId,
     subscriber_id: sub.id,
-    display_name: input.displayName,
+    display_name: guardDisplayName(input.displayName),
     body: input.body,
     section_anchor: input.sectionAnchor,
     section_headline: input.sectionHeadline,
+    // Bindet DIESEN Kommentar an DIESEN Magic-Link: verifyAndPublishComments
+    // veröffentlicht nur den Kommentar mit passendem Hash, nicht pauschal alle
+    // pending_verify des Abonnenten (Review-Befund 6).
+    verify_token_hash: minted.row.token_hash,
     status: 'pending_verify',
   })
   if (error) throw new Error(`Kommentar nicht speicherbar: ${error.message}`)
@@ -196,6 +256,12 @@ export async function verifyAndPublishComments(
     .select('id, post_source, post_id, body')
     .eq('subscriber_id', resolved.subscriberId)
     .eq('status', 'pending_verify')
+    // NUR die Kommentare, die MIT DIESEM Token geparkt wurden — nicht alle
+    // pending_verify des Abonnenten. Sonst würden fremd untergeschobene
+    // Kommentare bei der Verifizierung mit veröffentlicht (Review-Befund 6).
+    // Newsletter-?ct=-Token tragen keinen geparkten Kommentar → matcht nichts,
+    // die Einlösung eines solchen Tokens veröffentlicht damit gar nichts.
+    .eq('verify_token_hash', hashSubscriberToken(rawToken))
     .order('created_at', { ascending: true })
     .limit(10)
 

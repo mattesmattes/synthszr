@@ -17,12 +17,15 @@
  * antwortet der Server `email_required`, klappt das E-Mail-Feld auf. Kein
  * Zustand, der lügen kann.
  *
- * Der ?ct=-Token (Newsletter-Link) wird CLIENT-seitig gelesen
- * (useSearchParams): im Server-Component würde er die Seite dynamisch machen
- * und das ISR (revalidate=60) aushebeln.
+ * Der ?ct=-Token (Newsletter-Link) wird NACH der Hydration aus
+ * window.location gelesen, NICHT über useSearchParams. Grund (Review-Befund 7):
+ * useSearchParams erzwingt im statischen Prerender einen Bailout auf den
+ * Suspense-Fallback — die komplette Kommentar-Sektion samt SSR-Liste fiele
+ * dann aus dem statischen HTML, und genau diese Liste ist der SEO-Sinn des
+ * Features. window.location im useEffect ist client-only, ohne Prerender-
+ * Bailout: die Liste steht im HTML, der Token wird erst zur Laufzeit gelesen.
  */
-import { FormEvent, Suspense, useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import type { PublicComment } from '@/lib/comments/service'
 
 interface EureTakesSectionProps {
@@ -40,9 +43,8 @@ export interface CommentSectionRefEvent {
 
 const NAME_KEY = 'synthszr_display_name'
 
-function EureTakesInner({ postSource, postId, locale, initialComments }: EureTakesSectionProps) {
-  const searchParams = useSearchParams()
-  const commentToken = searchParams.get('ct')
+export function EureTakesSection({ postSource, postId, locale, initialComments }: EureTakesSectionProps) {
+  const [commentToken, setCommentToken] = useState<string | null>(null)
 
   const [comments, setComments] = useState<PublicComment[]>(initialComments)
   const [body, setBody] = useState('')
@@ -56,12 +58,15 @@ function EureTakesInner({ postSource, postId, locale, initialComments }: EureTak
 
   const de = locale === 'de'
 
-  // Namen aus dem letzten Besuch vorbelegen.
+  // Namen aus dem letzten Besuch vorbelegen und ?ct=-Token aus der URL lesen —
+  // beides client-only nach der Hydration, damit die Sektion statisch bleibt.
   useEffect(() => {
     try {
       const saved = localStorage.getItem(NAME_KEY)
       if (saved) setDisplayName(saved)
     } catch { /* Private Mode */ }
+    const ct = new URLSearchParams(window.location.search).get('ct')
+    if (ct) setCommentToken(ct)
   }, [])
 
   // Live-Auffrischung nach der Hydration: das SSR-HTML kann bis zu ~6 Minuten
@@ -247,7 +252,10 @@ function EureTakesInner({ postSource, postId, locale, initialComments }: EureTak
                   </span>
                 )}
                 <time dateTime={c.publishedAt} className="font-mono text-xs text-muted-foreground">
-                  {new Date(c.publishedAt).toLocaleDateString(de ? 'de-DE' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                  {/* Feste timeZone: die Liste rendert server- UND client-seitig
+                      (Review-Befund 7 behoben) — ohne sie driften SSR und
+                      Hydration je nach Server-Zeitzone auseinander. */}
+                  {new Date(c.publishedAt).toLocaleDateString(de ? 'de-DE' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' })}
                 </time>
               </div>
               {/* Plain-Text: React escaped — und gespeichert wird ohnehin kein
@@ -258,16 +266,5 @@ function EureTakesInner({ postSource, postId, locale, initialComments }: EureTak
         </ol>
       )}
     </section>
-  )
-}
-
-/** useSearchParams verlangt eine Suspense-Grenze — bekannte Falle dieser
- *  Codebase (s. Erkundung 2026-08-09: neue Client-Komponenten mit
- *  useSearchParams brauchen die Boundary). */
-export function EureTakesSection(props: EureTakesSectionProps) {
-  return (
-    <Suspense fallback={null}>
-      <EureTakesInner {...props} />
-    </Suspense>
   )
 }

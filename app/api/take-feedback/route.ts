@@ -130,6 +130,12 @@ async function aggregate(
 /** Aggregate aller Takes eines Posts — das Barometer lädt sie nach der
  *  Hydration in einem Rutsch. */
 export async function GET(request: NextRequest) {
+  // Rate-Limit trotz CDN-Cache: ein Cache-Buster-Query umginge den Edge-Cache
+  // und träfe die (bis zu 1000 Zeilen aggregierende) DB-Abfrage direkt.
+  const ip = getClientIP(request)
+  const rl = await checkRateLimit(`take-feedback-get:${ip}`, limiter ?? undefined)
+  if (!rl.success) return rateLimitResponse(rl)
+
   const { searchParams } = new URL(request.url)
   const source = searchParams.get('source')
   const postId = searchParams.get('postId')

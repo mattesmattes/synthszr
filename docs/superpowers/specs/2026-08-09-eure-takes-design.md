@@ -98,6 +98,38 @@ ODER gültiges Token) vor der Moderation.
 - Migration muss manuell im SQL-Editor laufen (CLI-Historie nicht synchron,
   s. Session 2026-08-08).
 
+## Sicherheits-Nachschärfungen (Review 2026-08-09)
+
+Eine adversariale 5-Dimensionen-Review nach der ersten Umsetzung fand 11
+bestätigte Punkte, alle behoben:
+
+- **Mail-Bombing / Amplifikation:** Web-Flow drosselt jetzt je Ziel-Abonnent
+  (10-Min-Cooldown über frische pending_verify), nicht nur je IP.
+- **Kommentar-Unterschiebung:** Geparkte Kommentare tragen `verify_token_hash`;
+  ein Magic-Link veröffentlicht nur den zugehörigen Kommentar, nicht alle
+  pending_verify des Abonnenten.
+- **Timing-Orakel:** Web-Flow-Arbeit läuft in `after()`; beide Zweige
+  (Abonnent/Unbekannt) antworten sofort identisch.
+- **SEO-Regression:** `?ct=` wird aus `window.location` gelesen statt über
+  `useSearchParams` — die SSR-Kommentarliste steht wieder im statischen HTML.
+- **Doktrin-Bruch:** Barometer-Votes (`take_feedback`) NICHT mehr im JSON-LD —
+  nur der Kommentar-Zähler (CommentAction) bleibt.
+- **Revalidation:** über alle `PUBLIC_LOCALES`, nicht nur `/de`.
+- **DSGVO:** Admin-`delete` ist ein echter Hard-Delete; Origin-Check auf der
+  Admin-PATCH-Route; Klarname-Kollision mit dem Seiten-Autor entschärft.
+- **Hydration:** feste `timeZone` in der Kommentar-Datumsausgabe.
+
+## OFFEN — Betreiberaufgabe (nicht im Code lösbar)
+
+**Datenschutzerklärung nachziehen** (static_pages, „Stand: Januar 2026"):
+Das Feature führt drei meldepflichtige Punkte ein, die die DSE noch nicht nennt:
+1. Kommentartext + Artikeltitel gehen zur Moderation an die **Anthropic-API**
+   (US-Auftragsverarbeiter) — Art. 13/28, Drittlandtransfer.
+2. **Öffentlicher Klarname** unter dem Kommentar.
+3. Neue Cookies: `synthszr_reader` (90 T), `synthszr_tb` (365 T) + localStorage.
+Bis zur Anpassung ist das Feature datenschutzrechtlich unvollständig
+dokumentiert. Bewusst NICHT automatisch generiert — Rechtstext gehört geprüft.
+
 ## Phase 2 (nicht in diesem Build)
 
 „Leser-Take der Woche": Admin markiert einen Kommentar als featured, der

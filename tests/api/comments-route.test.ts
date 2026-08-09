@@ -19,7 +19,19 @@ const mocks = vi.hoisted(() => ({
   resolveCommentToken: vi.fn(),
   openReaderSession: vi.fn(),
   sendMail: vi.fn(),
+  afterCallbacks: [] as Array<() => Promise<void> | void>,
 }))
+
+// `after` sammelt die Hintergrund-Arbeit; runAfter() spielt sie im Test ab, wie
+// es die Runtime nach der Response täte. So bleibt der Mail-Pfad prüfbar.
+vi.mock('next/server', async () => {
+  const actual = await vi.importActual<typeof import('next/server')>('next/server')
+  return { ...actual, after: (cb: () => Promise<void> | void) => { mocks.afterCallbacks.push(cb) } }
+})
+async function runAfter() {
+  for (const cb of mocks.afterCallbacks) await cb()
+  mocks.afterCallbacks.length = 0
+}
 
 vi.mock('@/lib/security/origin-check', () => ({ requireValidOrigin: mocks.requireValidOrigin }))
 vi.mock('@/lib/rate-limit', () => ({
@@ -68,6 +80,7 @@ function post(body: unknown, cookie?: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.afterCallbacks.length = 0
   mocks.requireValidOrigin.mockReturnValue(null)
   mocks.checkRateLimit.mockResolvedValue({ success: true })
   mocks.postExists.mockResolvedValue(true)
@@ -143,27 +156,37 @@ describe('POST /api/comments — Identität', () => {
 })
 
 describe('POST /api/comments — Anti-Enumeration', () => {
-  it('antwortet fuer Abonnent und Unbekannt IDENTISCH', async () => {
+  it('antwortet fuer Abonnent und Unbekannt IDENTISCH und SOFORT (kein await auf die Mail)', async () => {
     const { POST } = await import('@/app/api/comments/route')
 
-    // Abonnent: Mail wird verschickt.
+    // Abonnent: Mail-Arbeit ist zur Antwortzeit noch NICHT gelaufen (after).
     mocks.submitUnverifiedComment.mockResolvedValue({ verifyMail: { subscriberId: 's', rawToken: 't' } })
     const subscriber = await POST(post({ ...VALID, email: 'abo@example.com' }))
     const subscriberBody = await subscriber.json()
+    // Response steht, bevor submitUnverifiedComment überhaupt lief — das ist der
+    // ganze Punkt: kein Timing-Pfad, der den Abo-Status verrät.
+    expect(mocks.submitUnverifiedComment).not.toHaveBeenCalled()
 
-    // Unbekannte Adresse: nichts passiert — aber die Antwort ist dieselbe.
     mocks.submitUnverifiedComment.mockResolvedValue({ verifyMail: null })
     const stranger = await POST(post({ ...VALID, email: 'fremd@example.com' }))
     const strangerBody = await stranger.json()
 
     expect(subscriber.status).toBe(stranger.status)
     expect(subscriberBody).toEqual(strangerBody)
+    expect(subscriberBody).toEqual({ status: 'verify_sent' })
   })
 
-  it('mailt nur an Abonnenten — nie an unbekannte Adressen', async () => {
-    mocks.submitUnverifiedComment.mockResolvedValue({ verifyMail: null })
+  it('mailt im Hintergrund nur an Abonnenten — nie an unbekannte Adressen', async () => {
     const { POST } = await import('@/app/api/comments/route')
+
+    mocks.submitUnverifiedComment.mockResolvedValue({ verifyMail: null })
     await POST(post({ ...VALID, email: 'fremd@example.com' }))
+    await runAfter()
     expect(mocks.sendMail).not.toHaveBeenCalled()
+
+    mocks.submitUnverifiedComment.mockResolvedValue({ verifyMail: { subscriberId: 's', rawToken: 't' } })
+    await POST(post({ ...VALID, email: 'abo@example.com' }))
+    await runAfter()
+    expect(mocks.sendMail).toHaveBeenCalledTimes(1)
   })
 })

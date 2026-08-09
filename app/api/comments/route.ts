@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { readJsonBody, BoundedBodyError } from '@/lib/security/bounded-body'
@@ -120,21 +120,30 @@ export async function POST(request: NextRequest) {
     if (!data.email) {
       return NextResponse.json({ error: 'email_required' }, { status: 401 })
     }
-    const { verifyMail } = await submitUnverifiedComment(supabase, data.email, input)
-    if (verifyMail) {
-      const verifyUrl = `${BASE_URL}/api/comments/verify?token=${encodeURIComponent(verifyMail.rawToken)}`
-      await getResend().emails.send({
-        from: FROM_EMAIL,
-        to: data.email,
-        subject: 'Deinen Take bestätigen',
-        html: `<p>Du hast auf synthszr.com einen Take hinterlassen. Ein Klick, und er geht in die Veröffentlichung:</p>
+    // ANTI-ENUMERATION mit gleichem TIMING: die gesamte „ist das ein Abonnent,
+    // dann parken + mailen"-Arbeit läuft NACH der Antwort (after). Beide Fälle
+    // — Abonnent und Unbekannt — kehren sofort mit derselben Antwort zurück; es
+    // gibt keinen await-Pfad mehr, dessen Dauer den Abo-Status verriете
+    // (Review-Befund 4). Der Mailversand ist ohnehin fire-and-forget.
+    const email = data.email
+    after(async () => {
+      try {
+        const { verifyMail } = await submitUnverifiedComment(supabase, email, input)
+        if (!verifyMail) return
+        const verifyUrl = `${BASE_URL}/api/comments/verify?token=${encodeURIComponent(verifyMail.rawToken)}`
+        await getResend().emails.send({
+          from: FROM_EMAIL,
+          to: email,
+          subject: 'Deinen Take bestätigen',
+          html: `<p>Du hast auf synthszr.com einen Take hinterlassen. Ein Klick, und er geht in die Veröffentlichung:</p>
 <p><a href="${verifyUrl}">Take bestätigen</a></p>
 <p style="color:#666;font-size:13px">Der Link gilt 7 Tage. Danach kannst du 90 Tage lang ohne erneute Bestätigung kommentieren.<br>
 Falls du das nicht warst, ignoriere diese Mail — ohne Bestätigung erscheint nichts.</p>`,
-      })
-    }
-    // ANTI-ENUMERATION: identische Antwort, ob die Adresse Abonnent ist oder
-    // nicht. Kein Timing-Pfad verrät den Unterschied auf Response-Ebene.
+        })
+      } catch (err) {
+        console.error('[Comments] Hintergrund-Verifizierung fehlgeschlagen:', err)
+      }
+    })
     return NextResponse.json({ status: 'verify_sent' })
   } catch (err) {
     console.error('[Comments] POST fehlgeschlagen:', err)
@@ -145,6 +154,13 @@ Falls du das nicht warst, ignoriere diese Mail — ohne Bestätigung erscheint n
 /** Veröffentlichte Kommentare — Client-Auffrischung nach der Hydration.
  *  Dieselbe Auswahl wie das SSR, damit beide dasselbe zeigen. */
 export async function GET(request: NextRequest) {
+  // Rate-Limit trotz CDN-Cache: ein Cache-Buster-Query (?_=random) umginge den
+  // Edge-Cache und träfe die DB direkt. Der Lesepfad soll nicht als
+  // Last-Verstärker missbraucht werden können.
+  const ip = getClientIP(request)
+  const rl = await checkRateLimit(`comments-get:${ip}`, rateLimiters.relaxed() ?? undefined)
+  if (!rl.success) return rateLimitResponse(rl)
+
   const { searchParams } = new URL(request.url)
   const source = searchParams.get('source')
   const postId = searchParams.get('postId')

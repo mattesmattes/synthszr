@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth/session'
+import { requireValidOrigin } from '@/lib/security/origin-check'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePostPaths, type PostSource } from '@/lib/comments/service'
 
@@ -10,11 +11,11 @@ import { revalidatePostPaths, type PostSource } from '@/lib/comments/service'
  * GET  ?status=pending  → Liste (Default: pending, die Freigabe-Queue)
  * PATCH { id, action: approve|reject|delete }
  *
- * approve veröffentlicht und revalidiert die Artikelseite; reject und delete
- * sind endgültige Redaktionsentscheidungen. delete existiert getrennt von
- * reject für den DSGVO-Fall: ein Leser will seinen Beitrag entfernt haben —
- * das ist keine inhaltliche Ablehnung und soll in der Statistik nicht so
- * aussehen.
+ * approve veröffentlicht und revalidiert die Artikelseite; reject ist eine
+ * inhaltliche Ablehnung (Status bleibt zur Rechenschaft erhalten). delete ist
+ * der DSGVO-Fall (Art. 17): der Beitrag wird WIRKLICH aus der Tabelle entfernt
+ * — Klarname, Text und subscriber_id verschwinden. Ein bloßes status='deleted'
+ * wäre kein Löschen, sondern nur ein Ausblenden (Review-Befund 10).
  */
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -64,13 +65,31 @@ export async function PATCH(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
+  // CSRF: auch die Admin-Schreibroute folgt dem Hausmuster (Origin-Check vor
+  // jeder Zustandsänderung), obwohl sie hinter der Session sitzt.
+  const originError = requireValidOrigin(request)
+  if (originError) return originError
+
   const body = await request.json().catch(() => null)
   const parsed = patchSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: 'Ungültige Eingabe' }, { status: 400 })
   const { id, action } = parsed.data
 
   const supabase = createAdminClient()
-  const nextStatus = action === 'approve' ? 'published' : action === 'reject' ? 'rejected' : 'deleted'
+
+  // DSGVO-Löschung: Zeile wirklich entfernen. Vorher post-Referenz holen, damit
+  // danach noch revalidiert werden kann.
+  if (action === 'delete') {
+    const { data: target } = await supabase
+      .from('post_comments').select('post_source, post_id').eq('id', id).maybeSingle()
+    const { error: delError } = await supabase.from('post_comments').delete().eq('id', id)
+    if (delError) return NextResponse.json({ error: delError.message }, { status: 500 })
+    const row = target as { post_source: PostSource; post_id: string } | null
+    if (row) await revalidatePostPaths(supabase, row.post_source, row.post_id)
+    return NextResponse.json({ ok: true, status: 'deleted' })
+  }
+
+  const nextStatus = action === 'approve' ? 'published' : 'rejected'
   const { data: updated, error } = await supabase
     .from('post_comments')
     .update({
@@ -84,9 +103,7 @@ export async function PATCH(request: NextRequest) {
   if (!updated) return NextResponse.json({ error: 'Kommentar nicht gefunden' }, { status: 404 })
 
   const row = updated as { post_source: PostSource; post_id: string }
-  // Freigabe UND Entfernen ändern die sichtbare Seite — beide revalidieren.
-  if (action === 'approve' || action === 'delete' || action === 'reject') {
-    await revalidatePostPaths(supabase, row.post_source, row.post_id)
-  }
+  // Freigabe UND Ablehnung ändern die sichtbare Seite — beide revalidieren.
+  await revalidatePostPaths(supabase, row.post_source, row.post_id)
   return NextResponse.json({ ok: true, status: nextStatus })
 }

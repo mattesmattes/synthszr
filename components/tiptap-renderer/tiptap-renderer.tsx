@@ -326,7 +326,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
       <EditorContent editor={editor} />
 
       {/* Take-Barometer unter jedem Synthszr Take */}
-      {postId && takeBarometerPortals.map((portal) =>
+      {postId && takeBarometerPortals.map((portal, i) =>
         createPortal(
           <TakeBarometer
             postSource={postSource}
@@ -337,7 +337,10 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
             locale={locale}
           />,
           portal.element,
-          `take-barometer-${portal.anchor}`
+          // Index im Key: zwei Takes im selben Abschnitt teilen sich die
+          // queueItemId als anchor — ohne den Index kollidierten die React-Keys.
+          // Der anchor bleibt der Vote-Bindungsschlüssel (Votes je Abschnitt).
+          `take-barometer-${portal.anchor}-${i}`
         )
       )}
 

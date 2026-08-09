@@ -21,8 +21,15 @@ create table if not exists public.post_comments (
   body text not null check (char_length(body) between 1 and 4000),
   -- Abschnitts-Bezug („zu: …"). Headline denormalisiert, damit der Chip
   -- Content-Edits überlebt.
-  section_anchor text,
+  section_anchor text check (section_anchor is null or char_length(section_anchor) <= 200),
   section_headline text check (section_headline is null or char_length(section_headline) <= 200),
+  -- SHA-256 des Verify-Tokens, mit dem dieser (und NUR dieser) geparkte
+  -- Kommentar veröffentlicht wird. Ein Magic-Link gibt genau den Kommentar
+  -- frei, für den er ausgestellt wurde — nicht pauschal alle pending_verify
+  -- desselben Abonnenten. Ohne diese Bindung könnte ein Angreifer fremde
+  -- Kommentare unter der Identität eines Abonnenten parken und sie würden bei
+  -- dessen nächster legitimer Verifizierung mit veröffentlicht.
+  verify_token_hash text,
   -- pending_verify: wartet auf den Magic-Link (Web-Flow).
   -- pending: wartet auf Admin-Freigabe (Moderations-Verdict 'review').
   status text not null default 'pending_verify'

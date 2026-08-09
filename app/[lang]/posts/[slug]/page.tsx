@@ -320,21 +320,20 @@ export default async function PostPage({ params }: PageProps) {
   const mentionedCompanies = await getCompanyMentionsForPost(adminDb, post.id)
 
   // „Eure Takes": SSR-Liste für Crawler (im HTML!) und als Startzustand des
-  // Client-Widgets. Zähler für JSON-LD gleich mit — eine Count-Abfrage statt
-  // die 50er-Liste als Zähler zu missbrauchen.
-  const publishedComments = await listPublishedComments(adminDb, postSource, post.id)
-  const { count: commentCount } = await adminDb
-    .from('post_comments')
-    .select('id', { count: 'exact', head: true })
-    .eq('post_source', postSource)
-    .eq('post_id', post.id)
-    .eq('status', 'published')
-  const { count: takeAgreeCount } = await adminDb
-    .from('take_feedback')
-    .select('id', { count: 'exact', head: true })
-    .eq('post_source', postSource)
-    .eq('post_id', post.id)
-    .eq('vote', 'agree')
+  // Client-Widgets, plus exakter Zähler fürs JSON-LD. Beide Abfragen parallel —
+  // sie hängen nicht voneinander ab und laufen bei jedem ISR-Rebuild.
+  // KEIN take_feedback-Zähler mehr: die anonymen Barometer-Votes gehören nicht
+  // ins Markup (Review-Befund 3/9), also braucht die Seite sie hier nicht.
+  const [publishedComments, commentCountResult] = await Promise.all([
+    listPublishedComments(adminDb, postSource, post.id),
+    adminDb
+      .from('post_comments')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_source', postSource)
+      .eq('post_id', post.id)
+      .eq('status', 'published'),
+  ])
+  const commentCount = commentCountResult.count
 
   // Fetch adjacent posts for navigation
   const currentDate = post.created_at
@@ -388,11 +387,14 @@ export default async function PostPage({ params }: PageProps) {
     mainEntityOfPage: `${SITE_URL}/${locale}/posts/${slug}`,
     datePublished: post.created_at,
     ...(dateModified && { dateModified }),
-    // Engagement-Markup NUR aus hochintegren Signalen (verifizierte
-    // Abonnenten-Kommentare) — die anonymen Barometer-Klicks liefern nur den
-    // LikeAction-Zähler, nie ein Rating. BEWUSST KEIN aggregateRating:
-    // Article ist für Review-Snippets nicht zugelassen, und
-    // rankings/[slug]/page.tsx:101 dokumentiert das Manual-Action-Risiko.
+    // Engagement-Markup NUR aus hochintegren Signalen: verifizierte
+    // Abonnenten-Kommentare. Die anonymen Barometer-Klicks (take_feedback) sind
+    // per Design ein UI-Signal ohne Identität — trivial fälschbar (Cookie
+    // löschen → neue Stimme) — und wandern deshalb NIE ins Schema-Markup. Ein
+    // aufblasbarer LikeAction-Zähler wäre genau das spammy-structured-markup,
+    // das ein Manual-Action-Risiko trägt (Review-Befund 3/9). BEWUSST KEIN
+    // aggregateRating: Article ist für Review-Snippets nicht zugelassen, und
+    // rankings/[slug]/page.tsx:101 dokumentiert dasselbe Risiko.
     ...((commentCount ?? 0) > 0 && {
       commentCount: commentCount,
       comment: publishedComments.slice(0, 20).map((c) => ({
@@ -401,20 +403,11 @@ export default async function PostPage({ params }: PageProps) {
         dateCreated: c.publishedAt,
         author: { '@type': 'Person', name: c.displayName },
       })),
-    }),
-    ...(((commentCount ?? 0) > 0 || (takeAgreeCount ?? 0) > 0) && {
-      interactionStatistic: [
-        ...((commentCount ?? 0) > 0 ? [{
-          '@type': 'InteractionCounter',
-          interactionType: 'https://schema.org/CommentAction',
-          userInteractionCount: commentCount,
-        }] : []),
-        ...((takeAgreeCount ?? 0) > 0 ? [{
-          '@type': 'InteractionCounter',
-          interactionType: 'https://schema.org/LikeAction',
-          userInteractionCount: takeAgreeCount,
-        }] : []),
-      ],
+      interactionStatistic: {
+        '@type': 'InteractionCounter',
+        interactionType: 'https://schema.org/CommentAction',
+        userInteractionCount: commentCount,
+      },
     }),
     author: { '@type': 'Person', name: AUTHOR.name, url: `${SITE_URL}/${locale}/author/${AUTHOR.slug}` },
     publisher: {
