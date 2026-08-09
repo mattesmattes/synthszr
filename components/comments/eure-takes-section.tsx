@@ -129,7 +129,22 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    if (busy || !body.trim() || !displayName.trim()) return
+    if (busy) return
+    // Kein stiller Abbruch mehr: fehlende Pflichtfelder werden als Hinweis
+    // gemeldet, statt den Button nur zu deaktivieren. Sonst passierte beim Klick
+    // scheinbar nichts (Betreiber-Befund: „anonym klicke passiert nichts").
+    if (!body.trim()) {
+      setNotice({ kind: 'info', text: de ? 'Schreib zuerst deinen Take.' : 'Write your take first.' })
+      return
+    }
+    if (!displayName.trim()) {
+      setNotice({ kind: 'info', text: de ? 'Gib noch deinen Namen an.' : 'Add your name.' })
+      return
+    }
+    if (needsEmail && !email.trim()) {
+      setNotice({ kind: 'info', text: de ? 'Gib deine Newsletter-Adresse ein.' : 'Enter your newsletter address.' })
+      return
+    }
     setBusy(true)
     setNotice(null)
     try {
@@ -159,8 +174,8 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
         setNotice({
           kind: 'info',
           text: de
-            ? 'Kommentieren ist ein Abo-Privileg: Trag deine Newsletter-Adresse ein — du bekommst einen Bestätigungslink.'
-            : 'Commenting is a subscriber perk: enter your newsletter address to receive a confirmation link.',
+            ? 'Kommentieren ist Newsletter-Abonnent:innen vorbehalten. Trag deine Abo-Adresse ein — du bekommst einen Login-Link, und dein Take geht dann live. Noch kein Abo? Dann melde dich zuerst zum Newsletter an.'
+            : 'Commenting is for newsletter subscribers. Enter your subscription email — you get a login link and your take goes live. Not subscribed yet? Sign up for the newsletter first.',
         })
         return
       }
@@ -270,6 +285,15 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
               </button>
             </div>
 
+            {/* Von Anfang an klar, dass Kommentieren an ein Newsletter-Abo
+                gebunden ist — damit anonyme Leser:innen nicht erst nach dem
+                Absenden davon erfahren. */}
+            <p className="mt-2 text-xs text-muted-foreground">
+              {de
+                ? 'Kommentieren ist Newsletter-Abonnent:innen vorbehalten. Anonym abstimmen kannst du jederzeit über das Barometer.'
+                : 'Commenting is for newsletter subscribers. You can always vote anonymously via the barometer.'}
+            </p>
+
             <form onSubmit={submit} className="mt-3 space-y-3">
               {sectionRef && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -321,7 +345,7 @@ export function EureTakesSection({ postSource, postId, locale, initialComments }
                 )}
                 <button
                   type="submit"
-                  disabled={busy || !body.trim() || !displayName.trim() || (needsEmail && !email.trim())}
+                  disabled={busy}
                   className="ml-auto rounded-md bg-foreground px-4 py-1.5 text-sm text-background disabled:opacity-50"
                 >
                   {busy ? (de ? 'Sende…' : 'Sending…') : (de ? 'Take abgeben' : 'Post take')}
