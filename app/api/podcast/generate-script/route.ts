@@ -26,6 +26,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth/session'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
 import { getPersonalityState, buildPersonalityBrief, stripMomentsSection } from '@/lib/podcast/personality'
+import { isWeekWrapup, wrapupPromptSection } from '@/lib/podcast/wrapup-mode'
 import { retrieveMemory, buildMemoryBrief, shouldAnnounceMemoryAwakening } from '@/lib/podcast/memory'
 import { ensureIntermezzoMarker } from '@/lib/podcast/intermezzo'
 import Anthropic from '@anthropic-ai/sdk'
@@ -438,17 +439,23 @@ export async function POST(request: NextRequest) {
     let postTitle = ''
     let postContent = ''
     let postCreatedAt = ''
+    let isWrapup = false
 
     // Try generated_posts first
     const { data: generatedPost } = await supabase
       .from('generated_posts')
-      .select('title, content, created_at')
+      .select('title, slug, content, created_at')
       .eq('id', body.postId)
       .single()
 
     if (generatedPost) {
       postTitle = generatedPost.title
       postCreatedAt = generatedPost.created_at
+      // Wochenrückblick-Erkennung mit dem DEUTSCHEN Titel und dem Slug, BEVOR
+      // eine Übersetzung postTitle überschreibt: der englische Titel enthält
+      // das deutsche Muster nicht, die Erkennung liefe sonst bei jedem
+      // fremdsprachigen Podcast ins Leere.
+      isWrapup = isWeekWrapup(generatedPost.slug, generatedPost.title)
 
       // If not German, try to get translation
       if (locale !== 'de') {
@@ -515,6 +522,15 @@ export async function POST(request: NextRequest) {
       .replaceAll('{content}', postContent)
       .replaceAll('{weekday}', weekday)
       .replaceAll('{date}', date)
+
+    // Wochenrückblick: Haltung der beiden Stimmen anpassen. Angehängt statt in
+    // die Vorlage geschrieben, weil das Grundgerüst (Länge, Format,
+    // Sprecherwechsel, Personality) unverändert gelten soll — nur die Haltung
+    // kommt dazu. Dasselbe Muster wie beim Smalltalk-Abschnitt darunter.
+    if (isWrapup) {
+      prompt = prompt + wrapupPromptSection(ttsLang)
+      console.log(`[Podcast Script] Wochenrückblick erkannt — reflektierender Modus (${ttsLang})`)
+    }
 
     // Inject optional smalltalk section
     if (body.smalltalkTopic?.trim()) {
