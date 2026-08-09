@@ -89,78 +89,76 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
     }
   }
 
-  const total = counts.agree + counts.disagree
-  const hasVotes = total > 0
-  // Führende Seite bestimmt die Färbung.
-  const lead: 'up' | 'down' | 'tie' | 'none' = !hasVotes
-    ? 'none'
-    : counts.agree > counts.disagree ? 'up'
-    : counts.disagree > counts.agree ? 'down'
-    : 'tie'
+  const lead: 'up' | 'down' | 'tie' = counts.agree > counts.disagree
+    ? 'up'
+    : counts.disagree > counts.agree ? 'down' : 'tie'
   const de = locale === 'de'
   const agreeLabel = de ? 'Sehe ich auch so' : 'Agree'
   const disagreeLabel = de ? 'Sehe ich anders' : 'Disagree'
 
-  // Betreiber-Wunsch 2026-08-09: NUR die Hand (das Icon) wird eingefärbt, der
-  // Button bleibt immer eine transparente Outline. Eingefärbt wird die FÜHRENDE
-  // Seite (Daumen hoch grün, runter rot); bei Gleichstand beide gelb; die
-  // unterlegene bzw. votelose Seite bleibt Outline (nur Rahmen). Die Zahl in
-  // Klammern steht an beiden Thumbs, sobald überhaupt eine Stimme da ist.
-  const thumb = (kind: 'up' | 'down'): { text: string; filled: boolean } => {
-    if (lead === 'tie') return { text: 'text-yellow-500 dark:text-yellow-400', filled: true }
-    if (lead === kind) {
-      return kind === 'up'
-        ? { text: 'text-green-600 dark:text-green-400', filled: true }
-        : { text: 'text-red-600 dark:text-red-400', filled: true }
-    }
-    return { text: 'text-muted-foreground', filled: false }
-  }
-  const up = thumb('up')
-  const down = thumb('down')
-  // KEIN Button-Kasten mehr (Betreiber-Wunsch): nur Icon + Zahl, transparent.
+  // KEIN Button-Kasten (Betreiber-Wunsch): nur Icon + Zahl, transparent auf dem
+  // Seitenhintergrund.
   const btnBase = 'inline-flex items-center gap-1 py-1 transition-opacity hover:opacity-70'
   // Gefüllte Hand: solide Farbe, aber der STROKE bleibt in Hintergrundfarbe.
-  // Dadurch bleibt die Kragen-Linie (Trennung Hemdkragen/Hand) als
-  // Aussparung sichtbar — sonst wird das gefüllte Icon ein unlesbarer Klumpen.
-  // Die äußere Kontur in Hintergrundfarbe verschwindet auf dem Seitenhintergrund.
-  //
-  // WICHTIG: stroke/fill als inline-STYLE, nicht als Attribut — var(--background)
+  // Dadurch bleibt die Kragen-Linie (Trennung Hemdkragen/Hand) als Aussparung
+  // sichtbar — sonst wird das gefüllte Icon ein unlesbarer Klumpen. Die äußere
+  // Kontur in Hintergrundfarbe verschwindet auf dem Seitenhintergrund.
+  // WICHTIG: fill/stroke als inline-STYLE, nicht als Attribut — var(--background)
   // wird in SVG-Präsentationsattributen NICHT aufgelöst (nur in CSS-Properties).
   const filledIconProps = { strokeWidth: 2, style: { fill: 'currentColor', stroke: 'var(--background)' } }
   const outlineIconProps = { fill: 'none' as const }
 
+  const thumbButton = (kind: 'up' | 'down', colorClass: string, filled: boolean, count: number | null) => {
+    const isUp = kind === 'up'
+    return (
+      <button
+        type="button"
+        onClick={() => vote(isUp ? 'agree' : 'disagree')}
+        disabled={busy}
+        aria-label={isUp ? agreeLabel : disagreeLabel}
+        aria-pressed={ownVote === (isUp ? 'agree' : 'disagree')}
+        className={`${btnBase} ${colorClass}`}
+      >
+        {isUp
+          ? <ThumbsUp className="h-5 w-5" {...(filled ? filledIconProps : outlineIconProps)} />
+          : <ThumbsDown className="h-5 w-5" {...(filled ? filledIconProps : outlineIconProps)} />}
+        {count !== null && <span className="tabular-nums">({count})</span>}
+      </button>
+    )
+  }
+
+  const MUTED = 'text-muted-foreground'
+  const GREEN = 'text-green-600 dark:text-green-400'
+  const RED = 'text-red-600 dark:text-red-400'
+  const YELLOW = 'text-yellow-500 dark:text-yellow-400'
+
   return (
-    // Transparent auf dem Seitenhintergrund — kein grauer Kasten mehr. Ohne
-    // Votes stehen die beiden Outline-Thumbs unauffällig da.
+    // Transparent auf dem Seitenhintergrund — kein grauer Kasten.
     <div className="my-3 font-sans">
       <div className="flex flex-wrap items-center gap-3 text-xs">
-        <button
-          type="button"
-          onClick={() => vote('agree')}
-          disabled={busy}
-          aria-label={agreeLabel}
-          aria-pressed={ownVote === 'agree'}
-          className={`${btnBase} ${up.text}`}
-        >
-          <ThumbsUp className="h-5 w-5" {...(up.filled ? filledIconProps : outlineIconProps)} />
-          {/* Zahlen nur, wenn mindestens eine Stimme abgegeben wurde. */}
-          {hasVotes && <span className="tabular-nums">({counts.agree})</span>}
-        </button>
-        <button
-          type="button"
-          onClick={() => vote('disagree')}
-          disabled={busy}
-          aria-label={disagreeLabel}
-          aria-pressed={ownVote === 'disagree'}
-          className={`${btnBase} ${down.text}`}
-        >
-          <ThumbsDown className="h-5 w-5" {...(down.filled ? filledIconProps : outlineIconProps)} />
-          {hasVotes && <span className="tabular-nums">({counts.disagree})</span>}
-        </button>
-        {/* „Deinen Take dazu schreiben" erscheint ERST nach dem Voten — das
-            Abstimmen ist die Eintrittskarte zum eigenen Take. Öffnet das
-            Kommentar-Overlay per CustomEvent (Barometer und Kommentarbereich
-            sind getrennte React-Bäume). */}
+        {/* VOR der eigenen Stimme: beide Outline-Thumbs zum Abstimmen, keine
+            Zahlen. NACH der Stimme: nur der Mehrheits-Thumb (👍 grün bei mehr
+            Positiven, 👎 rot bei mehr Negativen); bei Gleichstand beide gelb.
+            (Betreiber-Wunsch 2026-08-09: „bei 0 outline, bei up/down zeigen wir
+            den Mehrheits-Thumb mit Zahl".) */}
+        {ownVote === null ? (
+          <>
+            {thumbButton('up', MUTED, false, null)}
+            {thumbButton('down', MUTED, false, null)}
+          </>
+        ) : lead === 'tie' ? (
+          <>
+            {thumbButton('up', YELLOW, true, counts.agree)}
+            {thumbButton('down', YELLOW, true, counts.disagree)}
+          </>
+        ) : lead === 'up' ? (
+          thumbButton('up', GREEN, true, counts.agree)
+        ) : (
+          thumbButton('down', RED, true, counts.disagree)
+        )}
+
+        {/* „Deinen Take dazu schreiben" erst NACH dem Voten. Öffnet das
+            Kommentar-Overlay per CustomEvent. */}
         {ownVote !== null && (
           <button
             type="button"
