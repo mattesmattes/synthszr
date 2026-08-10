@@ -59,8 +59,25 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
     if (initialCounts) setCounts(initialCounts)
   }, [initialCounts])
 
+  /** Öffnet das Schreib-Overlay mit dem Bezug auf genau diesen Abschnitt. */
+  function openTakeOverlay() {
+    window.dispatchEvent(new CustomEvent('synthszr:comment-ref', {
+      detail: { anchor, headline: headline ?? '' },
+    }))
+  }
+
   async function vote(v: 'agree' | 'disagree') {
-    if (busy || ownVote === v) return
+    if (busy) return
+    // Der Daumen-Klick lädt SOFORT zum Take ein (Betreiber-Wunsch 2026-08-10):
+    // vor dem Netzwerk-Request, damit der Layer ohne Latenz steht — die Stimme
+    // zählt unabhängig davon weiter, das Overlay hängt an document.body und
+    // nicht an diesem Baum.
+    //
+    // Auch beim erneuten Klick auf dieselbe Seite: dann entfällt nur die neue
+    // Stimme, das Overlay öffnet trotzdem. Sonst wäre dieser Klick tot — genau
+    // das Symptom („klicke, es passiert nichts"), das den Layer erst nötig machte.
+    openTakeOverlay()
+    if (ownVote === v) return
     setBusy(true)
     // Optimistisch: Umstimmen verschiebt, Erststimme addiert.
     setCounts((c) => ({
@@ -125,17 +142,14 @@ export function TakeBarometer({ postSource, postId, anchor, headline, initialCou
       {thumbButton('up', total > 0 ? counts.agree : null)}
       {thumbButton('down', total > 0 ? counts.disagree : null)}
 
-      {/* „Deinen Take dazu schreiben" erst NACH dem Voten. Öffnet das
-          Kommentar-Overlay per CustomEvent. */}
+      {/* „Deinen Take dazu schreiben" erst NACH dem Voten — seit der Layer
+          direkt beim Daumen-Klick aufgeht, ist das der Weg ZURÜCK für alle, die
+          ihn erst weggeklickt haben. */}
       {ownVote !== null && (
         <button
           type="button"
           className="text-muted-foreground underline-offset-2 hover:underline"
-          onClick={() => {
-            window.dispatchEvent(new CustomEvent('synthszr:comment-ref', {
-              detail: { anchor, headline: headline ?? '' },
-            }))
-          }}
+          onClick={openTakeOverlay}
         >
           {de ? 'Deinen Take dazu schreiben →' : 'Write your take →'}
         </button>

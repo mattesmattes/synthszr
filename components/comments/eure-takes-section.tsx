@@ -335,6 +335,19 @@ export function EureTakesSection({ postSource, postId, locale }: EureTakesSectio
                 </p>
               )}
             </form>
+
+            {/* Ausstieg ohne Kommentar. Seit der Layer AUTOMATISCH nach jedem
+                Daumen-Klick aufgeht (Betreiber-Wunsch 2026-08-10), braucht wer
+                nur abstimmen wollte einen sichtbaren Weg heraus — ✕ und Escape
+                allein sind zu versteckt für einen ungefragt erscheinenden Layer.
+                type="button" ist Pflicht: sonst würde er das Formular abschicken. */}
+            <button
+              type="button"
+              onClick={() => setModalOpen(false)}
+              className="mt-4 w-full text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
+            >
+              {de ? 'Weiter ohne eigenen Take weitermachen' : 'Continue without your own take'}
+            </button>
               </>
             )}
           </div>
