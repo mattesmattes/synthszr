@@ -21,6 +21,7 @@ import { processMattesSyntheseText } from "@/lib/tiptap/dom-processors/synthese-
 import { insertTakeBarometers, type TakeBarometerPortal } from "@/lib/tiptap/dom-processors/take-barometer"
 import { TakeBarometer } from "./take-barometer"
 import { SectionComments } from "./section-comments"
+import { EureTakesSection } from "../comments/eure-takes-section"
 import { injectProductLinks, appendProductVoteBlock, type ProductLinkData } from "@/lib/tiptap/dom-processors/product-links"
 import { processNewsHeadings } from "@/lib/tiptap/dom-processors/news-headings"
 import { processBundleLabels } from "@/lib/tiptap/dom-processors/bundle-label"
@@ -352,6 +353,22 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
   return (
     <div ref={containerRef}>
       <EditorContent editor={editor} />
+
+      {/* Schreib-Overlay fuer „Eure Takes".
+       *
+       * GEHOERT HIERHER, nicht in die Seite: das Barometer oeffnet den Layer per
+       * `synthszr:comment-ref`-Event, und ein Event ohne Zuhoerer verpufft
+       * lautlos. Frueher stand der Host allein in der Artikel-Detailseite —
+       * auf der STARTSEITE rendert <FeaturedArticle> denselben Artikel samt
+       * postId (also samt Barometer), aber ohne Host. Dort zaehlte der
+       * Daumen-Klick brav die Stimme, und der Layer ging nie auf; dasselbe galt
+       * fuer „Deinen Take dazu schreiben" (Betreiber-Befund 2026-08-10).
+       *
+       * An den Renderer gebunden, kann keine Seite ihn mehr vergessen: wer
+       * Barometer rendert, bekommt den Host automatisch mit. Genau EIN Host je
+       * Renderer — deshalb ist er aus der Detailseite entfernt, zwei Hosts
+       * haetten zwei Listener und damit zwei uebereinanderliegende Layer. */}
+      {postId && <EureTakesSection postSource={postSource} postId={postId} locale={locale} />}
 
       {/* Take-Barometer unter jedem Synthszr Take */}
       {postId && takeBarometerPortals.map((portal, i) =>

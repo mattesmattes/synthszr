@@ -22,7 +22,6 @@ import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata, cleanMetaDescription } from "@/lib/i18n/metadata"
 import { formatUpdateDate, LOCALE_STRINGS } from "@/lib/i18n/config"
 import { SITE_URL, safeJsonLd } from "@/lib/seo/site"
-import { EureTakesSection } from "@/components/comments/eure-takes-section"
 import { listPublishedComments, type PostSource } from "@/lib/comments/service"
 import { AUTHOR } from "@/lib/data/author"
 import type { LanguageCode } from "@/lib/types"
@@ -575,15 +574,13 @@ export default async function PostPage({ params }: PageProps) {
 
         <PostProductLinks content={post.content as Record<string, unknown>} locale={locale} />
 
-        {/* „Eure Takes": Schreib-Overlay-Host. Die veröffentlichten Takes selbst
-            erscheinen direkt unter dem jeweiligen Take-Abschnitt (SectionComments),
-            nicht mehr gepoolt hier. Fürs SEO-Markup dienen die comment-JSON-LD
-            oben (aus publishedComments). */}
-        <EureTakesSection
-          postSource={postSource}
-          postId={post.id}
-          locale={locale}
-        />
+        {/* Der „Eure Takes"-Schreib-Host sitzt jetzt im TiptapRenderer, direkt bei
+            den Barometern, die ihn per Event öffnen — sonst fehlt er überall dort,
+            wo ein Artikel AUSSERHALB dieser Seite gerendert wird (die Startseite
+            tut genau das über <FeaturedArticle>). Hier stünde er ein zweites Mal
+            und brächte einen zweiten Listener mit. Die veröffentlichten Takes
+            erscheinen unter dem jeweiligen Abschnitt (SectionComments); fürs
+            SEO-Markup dienen die comment-JSON-LD oben (aus publishedComments). */}
 
         <nav className="mt-16 border-t border-border pt-8">
           <div className="flex justify-between items-center">
