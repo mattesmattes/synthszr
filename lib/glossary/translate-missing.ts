@@ -32,6 +32,37 @@ type AdminClient = ReturnType<typeof createAdminClient>
  */
 export const TERMS_PER_TRANSLATION_UNIT = 1
 
+/**
+ * Zeilenzahl je PostgREST-Seite. PostgREST liefert ohne `range()` still nur die
+ * ersten 1000 Zeilen — genau die Grenze, an der der ungefensterte Voll-Scan hier
+ * ab ~1000 Begriffen Phantom-„Fehlende" erfand und der Übersetzungs-Job endlos
+ * dieselben Begriffe neu übersetzte (Betreiber-Befund 2026-08-10: 2132 Begriffe,
+ * done_count über 3800, remaining klebte bei ~30). Deshalb IMMER paginieren.
+ */
+const PAGE_SIZE = 1000
+
+/**
+ * Holt eine ganze Tabelle seitenweise, statt sich auf PostgRESTs stilles Kappen
+ * bei 1000 Zeilen zu verlassen. `apply` setzt Filter/Sortierung; das Fenster
+ * kommt aus dieser Funktion, damit der Aufrufer die 1000-Grenze nicht kennen muss.
+ */
+async function fetchAllRows<T>(
+  build: () => { range: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }> },
+  label: string,
+): Promise<T[]> {
+  const out: T[] = []
+  let from = 0
+  for (;;) {
+    const { data, error } = await build().range(from, from + PAGE_SIZE - 1)
+    if (error) throw new Error(`${label}: ${error.message}`)
+    const rows = data ?? []
+    out.push(...rows)
+    if (rows.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return out
+}
+
 export interface MissingTranslationResult {
   /** Slugs der in dieser Einheit übersetzten Begriffe. */
   done: string[]
@@ -58,24 +89,21 @@ export async function translateMissingTerms(
   // Ein Begriff gilt als übersetzt, sobald er für diese Sprache eine Zeile hat.
   const lang = SUPPORTED_GLOSSARY_LANGS[0]
 
-  const { data: termRows, error: termError } = await supabase
-    .from('glossary_terms')
-    .select('id, slug')
-    .eq('status', 'published')
-    .order('slug')
-  if (termError) throw new Error(`Begriffe nicht ladbar: ${termError.message}`)
-
-  const { data: trRows, error: trError } = await supabase
-    .from('glossary_term_translations')
-    .select('term_id')
-    .eq('language', lang)
-  if (trError) throw new Error(`Übersetzungen nicht ladbar: ${trError.message}`)
-
-  const translated = new Set(
-    ((trRows ?? []) as Array<{ term_id: string }>).map((r) => r.term_id),
+  // Beide Listen VOLLSTÄNDIG (paginiert) laden: bei >1000 Begriffen lieferte der
+  // ungefensterte Scan nur die ersten 1000 je Tabelle, und die Differenz in Node
+  // erfand Phantom-„Fehlende", die schon übersetzt waren (s. fetchAllRows/PAGE_SIZE).
+  const termRows = await fetchAllRows<{ id: string; slug: string }>(
+    () => supabase.from('glossary_terms').select('id, slug').eq('status', 'published').order('slug'),
+    'Begriffe nicht ladbar',
   )
-  const missing = ((termRows ?? []) as Array<{ id: string; slug: string }>)
-    .filter((t) => !translated.has(t.id))
+
+  const trRows = await fetchAllRows<{ term_id: string }>(
+    () => supabase.from('glossary_term_translations').select('term_id').eq('language', lang),
+    'Übersetzungen nicht ladbar',
+  )
+
+  const translated = new Set(trRows.map((r) => r.term_id))
+  const missing = termRows.filter((t) => !translated.has(t.id))
 
   const batch = missing.slice(0, limit)
   const done: string[] = []

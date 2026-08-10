@@ -27,23 +27,53 @@ vi.mock('@/lib/glossary/translate', async (importOriginal) => {
 
 interface Row { id: string; slug: string }
 
+/**
+ * PostgREST kappt eine Zeilen-Abfrage OHNE `.range()` still bei 1000 Zeilen —
+ * genau die Grenze, an der translateMissingTerms Phantom-„Fehlende" erfand
+ * (Betreiber-Befund 2026-08-10: 2132 Begriffe, done_count lief endlos hoch,
+ * remaining klebte bei ~30). Der alte Mock loeste `.then` sofort mit ALLEN
+ * Zeilen auf und bildete diese Grenze nie ab — deshalb rutschte der Bug durch.
+ *
+ * Dieser Mock bildet sie nach: `.order(col)` sortiert, `.range(from,to)` liefert
+ * genau das Fenster, ohne `.range()` gibt es hoechstens PAGE_LIMIT Zeilen.
+ */
+const PAGE_LIMIT = 1000
+
 function fakeSupabase(opts: {
   published: Row[]
+  /** term_ids mit EN-Uebersetzung, in Speicherreihenfolge (unsortiert wie in Prod). */
   translatedIds: string[]
-  captured?: { selects: string[] }
 }) {
   return {
     from(table: string) {
+      let orderCol: string | null = null
+      let rangeFrom: number | null = null
+      let rangeTo: number | null = null
       const self: Record<string, unknown> = {}
-      for (const m of ['select', 'eq', 'order', 'limit', 'in', 'is']) {
-        self[m] = vi.fn(() => self)
-      }
+      self.select = vi.fn(() => self)
+      self.eq = vi.fn(() => self)
+      self.limit = vi.fn(() => self)
+      self.in = vi.fn(() => self)
+      self.is = vi.fn(() => self)
+      self.order = vi.fn((col: string) => { orderCol = col; return self })
+      self.range = vi.fn((from: number, to: number) => { rangeFrom = from; rangeTo = to; return self })
       ;(self as { then: unknown }).then = (res: (v: unknown) => void) => {
-        if (table === 'glossary_terms') return res({ data: opts.published, error: null })
-        if (table === 'glossary_term_translations') {
-          return res({ data: opts.translatedIds.map((id) => ({ term_id: id })), error: null })
+        let rows: Array<Record<string, unknown>> =
+          table === 'glossary_terms'
+            ? opts.published.map((r) => ({ ...r }))
+            : table === 'glossary_term_translations'
+              ? opts.translatedIds.map((id) => ({ term_id: id }))
+              : []
+        if (orderCol) {
+          rows = [...rows].sort((a, b) =>
+            String(a[orderCol!]).localeCompare(String(b[orderCol!])))
         }
-        return res({ data: [], error: null })
+        // Mit range(): genau das Fenster. Ohne range(): PostgRESTs stilles
+        // Kappen bei PAGE_LIMIT.
+        rows = rangeFrom !== null && rangeTo !== null
+          ? rows.slice(rangeFrom, rangeTo + 1)
+          : rows.slice(0, PAGE_LIMIT)
+        return res({ data: rows, error: null })
       }
       return self
     },
@@ -97,6 +127,28 @@ describe('translateMissingTerms', () => {
 
     expect(r.failed).toEqual(['kaputt'])
     expect(r.done).toEqual(['ok'])
+  })
+
+  it('erfindet keine Phantom-Fehlenden ueber der 1000-Zeilen-Grenze', async () => {
+    // 1200 Begriffe, ALLE uebersetzt. Die Uebersetzungen liegen in umgekehrter
+    // Reihenfolge im Speicher (wie in Prod unsortiert) — ohne Pagination laedt
+    // die Funktion nur die ersten 1000 Begriffe (nach slug) und die ersten 1000
+    // Uebersetzungen (t1199..t0200), haelt also t0000..t0199 faelschlich fuer
+    // fehlend und uebersetzt sie endlos neu. Mit Pagination ist nichts offen.
+    const N = 1200
+    const published: Row[] = Array.from({ length: N }, (_, i) => ({
+      id: `t${String(i).padStart(4, '0')}`,
+      slug: `s${String(i).padStart(4, '0')}`,
+    }))
+    const translatedIds = published.map((r) => r.id).reverse()
+    const { translateMissingTerms } = await import('@/lib/glossary/translate-missing')
+    const supabase = fakeSupabase({ published, translatedIds })
+
+    const r = await translateMissingTerms(supabase as never, 1)
+
+    expect(r.done).toEqual([])
+    expect(r.remaining).toBe(0)
+    expect(mocks.translateTerm).not.toHaveBeenCalled()
   })
 
   it('meldet remaining 0 und nichts zu tun, wenn alle uebersetzt sind', async () => {
