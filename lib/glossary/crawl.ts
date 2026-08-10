@@ -50,8 +50,22 @@ export const POSTS_PER_EXTRACTION = 10
 export const TERMS_PER_GENERATION = 3
 
 export interface CrawlState {
-  /** created_at des zuletzt verarbeiteten Artikels; Cursor für den nächsten Lauf. */
+  /** created_at des zuletzt verarbeiteten Artikels; Cursor für den nächsten Lauf.
+   *  `null` heißt „Bestand durchgearbeitet" — dann übernimmt `newestRead`. */
   cursor: string | null
+  /**
+   * created_at des NEUESTEN je gelesenen Artikels — die Hochwassermarke.
+   *
+   * BETREIBER-BEFUND 2026-08-10: Das Panel meldete „30 von 225 Artikeln gelesen",
+   * obwohl alles längst durchgearbeitet war. Der Cursor lief nur ABWÄRTS; war der
+   * Bestand einmal durch, blieb er am ältesten Artikel stehen, und jeder NEUE
+   * Artikel war neuer als der Cursor — fiel also dauerhaft aus der Abfrage. Der
+   * einzige Ausweg war „Fortschritt zurücksetzen", was alle 225 erneut las.
+   *
+   * Mit dieser Marke liest der Crawl nach einem vollständigen Durchlauf nur noch,
+   * was seither dazukam (s. crawlPhase).
+   */
+  newestRead?: string | null
   /** Wie viele Artikel insgesamt schon gelesen wurden. */
   postsProcessed: number
   /** Gefundene Begriffe: Name → Zahl der Artikel, in denen er vorkam. */
@@ -82,8 +96,28 @@ export interface CrawlState {
 }
 
 const EMPTY_STATE: CrawlState = {
-  cursor: null, postsProcessed: 0, candidates: {}, generated: [], excluded: [],
+  cursor: null, newestRead: null, postsProcessed: 0, candidates: {}, generated: [], excluded: [],
   relinkCursor: null, translationsCursor: null, updatedAt: null,
+}
+
+/**
+ * In welcher Phase steht der Crawl?
+ *
+ * - `erstlauf`   — nichts gelesen: von den neuesten Artikeln rückwärts starten.
+ * - `aufholen`   — ein Cursor steht: rückwärts weiter durch den Altbestand.
+ * - `nachfuehren`— Bestand durch (Cursor gelöst, Marke gesetzt): nur noch lesen,
+ *                  was NEUER ist als die Marke. Ohne diese Phase blieb der Crawl
+ *                  am ältesten Artikel hängen und sah neue Artikel nie wieder.
+ *
+ * Eine fehlende Marke gilt bewusst als Erstlauf: Zustände aus der Zeit vor
+ * diesem Feld dürfen nicht in die Nachführ-Phase fallen, sonst läse der Crawl
+ * gar nichts mehr.
+ */
+export function crawlPhase(
+  state: { cursor: string | null; newestRead?: string | null },
+): 'erstlauf' | 'aufholen' | 'nachfuehren' {
+  if (state.cursor) return 'aufholen'
+  return state.newestRead ? 'nachfuehren' : 'erstlauf'
 }
 
 export async function readCrawlState(supabase: AdminClient): Promise<CrawlState> {
@@ -107,6 +141,7 @@ export async function readCrawlState(supabase: AdminClient): Promise<CrawlState>
     candidates: s.candidates && typeof s.candidates === 'object' ? s.candidates : {},
     generated: Array.isArray(s.generated) ? s.generated : [],
     excluded: Array.isArray(s.excluded) ? s.excluded : [],
+    newestRead: typeof s.newestRead === 'string' ? s.newestRead : null,
     relinkCursor: typeof s.relinkCursor === 'string' ? s.relinkCursor : null,
     translationsCursor: typeof s.translationsCursor === 'string' ? s.translationsCursor : null,
     updatedAt: typeof s.updatedAt === 'string' ? s.updatedAt : null,
@@ -234,14 +269,23 @@ export async function extractCandidates(
 ): Promise<ExtractionResult> {
   const state = await readCrawlState(supabase)
 
+  const phase = crawlPhase(state)
+
   let query = supabase
     .from('generated_posts')
     .select('id, title, content, created_at')
     .eq('status', 'published')
-    .order('created_at', { ascending: false })
     .limit(POSTS_PER_EXTRACTION)
-  // Cursor: strikt älter als der letzte verarbeitete Artikel.
-  if (state.cursor) query = query.lt('created_at', state.cursor)
+  if (phase === 'nachfuehren') {
+    // Bestand ist durch — nur noch, was seit der Hochwassermarke dazukam,
+    // aufsteigend (aelteste zuerst), damit die Marke lueckenlos weiterwandert.
+    query = query.order('created_at', { ascending: true }).gt('created_at', state.newestRead!)
+  } else {
+    // Erstlauf/Aufholen: von den neuesten rueckwaerts, Cursor strikt aelter als
+    // der zuletzt verarbeitete Artikel.
+    query = query.order('created_at', { ascending: false })
+    if (state.cursor) query = query.lt('created_at', state.cursor)
+  }
 
   const { data: posts, error } = await query
   if (error) throw new Error(`Artikel nicht ladbar: ${error.message}`)
@@ -253,6 +297,26 @@ export async function extractCandidates(
 
   const rows = (posts ?? []) as Array<{ id: string; content: unknown; created_at: string }>
   if (rows.length === 0) {
+    // DURCHLAUF BEENDET. Cursor lösen und die Hochwassermarke auf den neuesten
+    // Artikel setzen: bis hierher ist alles gelesen. Erst dadurch wechselt der
+    // nächste Lauf in die Nachführ-Phase und liest nur noch Neues — vorher blieb
+    // der Cursor am ältesten Artikel stehen und neue Artikel kamen nie dran.
+    //
+    // Die Marke kommt aus dem Bestand statt aus den gelesenen Zeilen: beim
+    // Aufholen wandert der Cursor abwärts, das Maximum der ZULETZT gelesenen
+    // Zeilen wäre also viel zu niedrig und würde den halben Bestand erneut in
+    // die Nachführ-Phase holen. Deckt zugleich Altzustände ohne Marke ab.
+    if (phase !== 'nachfuehren') {
+      const { data: neuester } = await supabase
+        .from('generated_posts')
+        .select('created_at')
+        .eq('status', 'published')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      const marke = (neuester as { created_at: string } | null)?.created_at ?? state.newestRead ?? null
+      await writeCrawlProgress(supabase, state, { cursor: null, newestRead: marke })
+    }
     return {
       postsRead: 0,
       newCandidates: 0,
@@ -286,14 +350,41 @@ export async function extractCandidates(
     }
   }
 
-  const postsProcessed = state.postsProcessed + rows.length
+  // Hochwassermarke mitziehen: das Neueste, was je gelesen wurde.
+  const marke = rows.reduce(
+    (max, r) => (r.created_at > max ? r.created_at : max),
+    state.newestRead ?? '',
+  )
+
+  // In der Nachführ-Phase BLEIBT der Cursor gelöst — wir laufen vorwärts durch
+  // die neuen Artikel und dürfen nicht zurück in den Altbestand fallen.
+  const nachfuehren = phase === 'nachfuehren'
+
+  // Offene Artikel: beim Aufholen der Rest des Bestands, beim Nachführen nur,
+  // was neuer ist als die Marke (im Regelfall der Artikel von heute).
+  let remaining: number
+  let postsProcessed: number
+  if (nachfuehren) {
+    const { count: offen } = await supabase
+      .from('generated_posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'published')
+      .gt('created_at', marke)
+    remaining = offen ?? 0
+    // „X von N gelesen" bleibt so aussagekräftig: gelesen ist alles bis auf die
+    // offenen. Der kumulative Zähler liefe sonst über die Bestandsgröße hinaus.
+    postsProcessed = Math.max(0, (totalPosts ?? 0) - remaining)
+  } else {
+    postsProcessed = state.postsProcessed + rows.length
+    remaining = Math.max(0, (totalPosts ?? 0) - postsProcessed)
+  }
+
   await writeCrawlProgress(supabase, state, {
-    cursor: rows[rows.length - 1].created_at,
+    cursor: nachfuehren ? null : rows[rows.length - 1].created_at,
+    newestRead: marke || null,
     postsProcessed,
     candidates,
   })
-
-  const remaining = Math.max(0, (totalPosts ?? 0) - postsProcessed)
   return {
     postsRead: rows.length,
     newCandidates,
