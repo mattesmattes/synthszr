@@ -143,6 +143,42 @@ function extendByInflection(text: string, end: number): number {
   return end
 }
 
+/** Beginnt der Text mit einem Grossbuchstaben? \p{Lu} statt [A-Z], damit auch
+ *  Umlaute und Akzente zaehlen ("Übertragung", "École"). */
+function startsUpper(s: string): boolean {
+  return /^\p{Lu}/u.test(s)
+}
+
+/**
+ * Erkennt einen Kompositum-Fehltreffer ueber die deutsche Rechtschreibung.
+ *
+ * PROD-BEFUND 2026-08-10 (Betreiber): im Partizip "genommen" war der Begriff
+ * "Genom" verlinkt, das "men" stand ausserhalb des Links — derselbe Schaden wie
+ * frueher bei "Compute|rprogrammen" und "Branch|e".
+ *
+ * Bisher wurde jeder solche Fall einzeln in WHOLE_WORD_ONLY nachgetragen. Diese
+ * Liste faengt aber immer nur den bereits ENTDECKTEN Fall und waechst endlos —
+ * jeder neue Begriff bringt potenziell den naechsten Fehltreffer mit.
+ *
+ * Die allgemeine Regel: ein deutsches Substantiv-Kompositum wird IMMER
+ * grossgeschrieben ("Genomsequenzierung", "Inferenzkosten"). Steht ein
+ * grossgeschriebener Begriff am Anfang eines KLEINgeschriebenen Wortes, ist es
+ * folglich kein Kompositum mit ihm als Erstglied, sondern ein Verb oder Adjektiv,
+ * das zufaellig so beginnt ("genommen", "genomisch", "tokenisiert").
+ *
+ * Die Bedingung "das Wort geht weiter" ist entscheidend und kein Beiwerk: als
+ * GANZES Wort ist Kleinschreibung unverdaechtig — englische Fachbegriffe stehen
+ * im deutschen Fliesstext oft klein ("deep learning", "prompt engineering"), und
+ * die duerfen weiter treffen.
+ *
+ * Bleibt bewusst blind fuer kleingeschriebene Begriffsnamen ("diff", "branch"):
+ * dort gibt die Schreibung keinen Hinweis her, dafuer ist WHOLE_WORD_ONLY da.
+ */
+function isCompositionMismatch(text: string, name: string, hit: string, end: number): boolean {
+  if (!startsUpper(name) || startsUpper(hit)) return false
+  return /^[\p{L}\p{N}]/u.test(text.slice(end))
+}
+
 export function matchNameInText(
   text: string,
   name: string,
@@ -159,13 +195,26 @@ export function matchNameInText(
     || name.length < GLOSSARY_MIN_NAME_LENGTH
     || WHOLE_WORD_ONLY.has(name.toLowerCase())
   // Abkürzungen nur in ihrer Schreibung (s. isAbbreviation).
-  const flags = isAbbreviation(name) ? 'u' : 'iu'
+  const flags = (isAbbreviation(name) ? 'u' : 'iu') + 'g'
   const re = wholeWord ? boundaryRegexShort(name, flags) : boundaryRegex(name, flags)
-  const m = re.exec(text)
-  if (!m) return null
-  const start = m.index + m[1].length
-  const end = extendByInflection(text, start + m[2].length)
-  return { start, end, matched: text.slice(start, end) }
+  // Schleife statt eines einzelnen exec: ein abgelehnter Fehltreffer darf die
+  // ECHTE Erwaehnung weiter hinten im Text nicht verdecken ("In Kauf genommen.
+  // Das Genom ist entschluesselt." muss auf dem zweiten Vorkommen landen) —
+  // sonst waere der Begriff im ganzen Artikel unverlinkt, ein stiller Verlust.
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    const start = m.index + m[1].length
+    const end = extendByInflection(text, start + m[2].length)
+    if (!wholeWord && isCompositionMismatch(text, name, m[2], end)) {
+      // Ab dem Zeichen NACH dem Treffer-Anfang weitersuchen. re.lastIndex steht
+      // hinter den Grenzgruppen und wuerde einen direkt anschliessenden Treffer
+      // ueberspringen; start+1 waechst streng monoton, die Schleife terminiert.
+      re.lastIndex = start + 1
+      continue
+    }
+    return { start, end, matched: text.slice(start, end) }
+  }
+  return null
 }
 
 /**

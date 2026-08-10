@@ -144,6 +144,60 @@ describe('findGlossaryMentions', () => {
     })
   })
 
+  // PROD-BEFUND 2026-08-10 (Betreiber): im Partizip "genommen" war der Begriff
+  // "Genom" verlinkt — 5 Zeichen, also ueber der Ganzwort-Schwelle und damit auf
+  // der Kompositum-Seite. Die Endung "men" stand ausserhalb des Links.
+  //
+  // Der Fix ist BEWUSST keine weitere Zeile in WHOLE_WORD_ONLY: diese Liste
+  // waechst sonst mit jedem Fund (compute, branch, diff, genom, …) und faengt
+  // immer nur den bereits entdeckten Fall. Stattdessen greift eine allgemeine
+  // Regel des Deutschen — ein Substantiv-Kompositum wird IMMER grossgeschrieben.
+  // Trifft ein grossgeschriebener Begriff am Anfang eines KLEINgeschriebenen
+  // Wortes, das noch weitergeht, ist es kein Kompositum, sondern ein Verb oder
+  // Adjektiv, das zufaellig so beginnt.
+  describe('grossgeschriebene Begriffe treffen nicht in kleingeschriebenen Woertern', () => {
+    const genom: GlossaryMatcherTerm = { slug: 'genom', canonicalName: 'Genom', aliases: [] }
+
+    it('trifft nicht im Partizip "genommen"', () => {
+      expect(findGlossaryMentions('Das wurde in Kauf genommen.', [genom])).toEqual([])
+    })
+
+    it('trifft nicht im Adjektiv "genomische"', () => {
+      expect(findGlossaryMentions('Die genomische Analyse laeuft.', [genom])).toEqual([])
+    })
+
+    it('trifft weiterhin im echten Kompositum "Genomsequenzierung"', () => {
+      const hits = findGlossaryMentions('Die Genomsequenzierung ist teuer.', [genom])
+      expect(hits.map((h) => h.slug)).toEqual(['genom'])
+    })
+
+    it('trifft weiterhin als eigenstaendiges Wort', () => {
+      const hits = findGlossaryMentions('Das Genom ist entschluesselt.', [genom])
+      expect(hits.map((h) => h.matchedText)).toEqual(['Genom'])
+    })
+
+    it('findet die ECHTE Erwaehnung, wenn davor ein Fehltreffer steht', () => {
+      // Ohne Weitersuchen bliebe es beim abgelehnten ersten Treffer, und der
+      // Begriff waere im ganzen Artikel unverlinkt — ein stiller Verlust.
+      const hits = findGlossaryMentions('In Kauf genommen. Das Genom ist entschluesselt.', [genom])
+      expect(hits.map((h) => h.matchedText)).toEqual(['Genom'])
+    })
+
+    it('gilt fuer die ganze Klasse, nicht nur fuer Genom (Token/tokenisierte)', () => {
+      const token: GlossaryMatcherTerm = { slug: 'token', canonicalName: 'Token', aliases: [] }
+      expect(findGlossaryMentions('Die tokenisierte Eingabe.', [token])).toEqual([])
+    })
+
+    // REGRESSIONSSCHUTZ: englische Fachbegriffe stehen im deutschen Fliesstext
+    // oft klein ("deep learning"). Als GANZES Wort muessen sie weiter treffen —
+    // die Regel darf nur greifen, wenn das Wort nach dem Treffer weitergeht.
+    it('trifft kleingeschriebene Begriffe weiterhin als ganzes Wort', () => {
+      const dl: GlossaryMatcherTerm = { slug: 'deep-learning', canonicalName: 'Deep Learning', aliases: [] }
+      const hits = findGlossaryMentions('Moderne Systeme nutzen deep learning intensiv.', [dl])
+      expect(hits.map((h) => h.slug)).toEqual(['deep-learning'])
+    })
+  })
+
   it('kurzer Alias trifft mit Bindestrich-Grenze', () => {
     const moeTerm: GlossaryMatcherTerm = { slug: 'moe', canonicalName: 'Mixture of Experts', aliases: ['MoE'] }
     const hits = findGlossaryMentions('Ein MoE-Modell skaliert.', [moeTerm])
