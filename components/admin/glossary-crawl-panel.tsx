@@ -13,6 +13,8 @@ interface CrawlStatus {
   postsTotal: number
   /** Erstlauf/Aufholen = rückwärts durch den Altbestand, Nachführen = nur Neues. */
   phase?: 'erstlauf' | 'aufholen' | 'nachfuehren'
+  /** GEMESSENE offene Artikel (nicht aus postsProcessed abgeleitet). */
+  postsOpen?: number
   candidateCount: number
   selectedCount: number
   /** Ausgewaehlt UND noch nicht erzeugt — die echte offene Arbeit. */
@@ -353,8 +355,14 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
     )
   }
 
+  // Gelesen = Gesamt minus GEMESSENE offene Artikel. Aus postsProcessed
+  // abgeleitet stimmte es nach einem Zuruecksetzen nicht mehr (Zaehler 0, aber
+  // per Hochwassermarke war fast alles erledigt). postsOpen fehlt nur bei einer
+  // Antwort aus aelterem Code — dann der alte Weg als Rueckfall.
+  const postsOpen = status?.postsOpen ?? Math.max(0, (status?.postsTotal ?? 0) - (status?.postsProcessed ?? 0))
+  const postsDone = Math.max(0, (status?.postsTotal ?? 0) - postsOpen)
   const pct = status && status.postsTotal > 0
-    ? Math.round((status.postsProcessed / status.postsTotal) * 100)
+    ? Math.round((postsDone / status.postsTotal) * 100)
     : 0
 
   // Ein Lauf gilt als offen, solange der Server ihn noch abarbeitet — das
@@ -580,11 +588,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                   Nachfuehren zaehlen ausschliesslich NEUE Artikel. */}
               <span className="font-medium">
                 {status?.phase === 'nachfuehren' ? (
-                  (status?.postsTotal ?? 0) - (status?.postsProcessed ?? 0) > 0
-                    ? `Bestand durchgearbeitet · ${(status?.postsTotal ?? 0) - (status?.postsProcessed ?? 0)} neue Artikel offen`
+                  postsOpen > 0
+                    ? `Bestand durchgearbeitet · ${postsOpen} ${postsOpen === 1 ? 'neuer Artikel' : 'neue Artikel'} offen`
                     : `Bestand durchgearbeitet · alle ${status?.postsTotal ?? 0} Artikel gelesen`
                 ) : (
-                  `${status?.postsProcessed ?? 0} von ${status?.postsTotal ?? 0} Artikeln gelesen${
+                  `${postsDone} von ${status?.postsTotal ?? 0} Artikeln gelesen${
                     status?.phase === 'aufholen' ? ' (Altbestand wird aufgeholt)' : ''
                   }`
                 )}

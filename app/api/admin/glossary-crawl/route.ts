@@ -36,6 +36,26 @@ export async function GET() {
     .select('id', { count: 'exact', head: true })
     .eq('status', 'published')
 
+  // OFFENE Artikel MESSEN, nicht aus postsProcessed ableiten.
+  //
+  // `postsTotal - postsProcessed` war falsch, sobald der Fortschritt
+  // zurueckgesetzt wurde: postsProcessed stand auf 0, und das Panel meldete
+  // „Bestand durchgearbeitet · 225 neue Artikel offen" — beides zugleich, was
+  // sich widerspricht (Betreiber-Befund 2026-08-10). In der Nachfuehr-Phase ist
+  // die einzige verlaessliche Zahl eine echte Zaehlung gegen die Hochwassermarke.
+  const phase = crawlPhase(state)
+  let postsOpen: number
+  if (phase === 'nachfuehren' && state.newestRead) {
+    const { count } = await supabase
+      .from('generated_posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'published')
+      .gt('created_at', state.newestRead)
+    postsOpen = count ?? 0
+  } else {
+    postsOpen = Math.max(0, (totalPosts ?? 0) - state.postsProcessed)
+  }
+
   // Wie viele veröffentlichte Begriffe haben kein Bild? Ohne diese Zahl war im
   // Panel nicht erkennbar, dass ein Klick nur einen Teil erledigt — die Bilder
   // entstehen alphabetisch, ein Begriff weiter hinten blieb scheinbar grundlos leer.
@@ -96,7 +116,9 @@ export async function GET() {
     // Phase mitliefern, damit „X von Y gelesen" nicht in die Irre führt: ist der
     // Bestand durch, zählt nur noch, was NEU dazukam (Betreiber: „die Anzeige
     // 30/225 ist misleading").
-    phase: crawlPhase(state),
+    phase,
+    /** Gemessene offene Artikel — die Zahl, auf die sich die Anzeige verlässt. */
+    postsOpen,
     candidateCount: Object.keys(state.candidates).length,
     // Nur die ausgewählten werden erzeugt — die Zahl, die der Operator braucht.
     selectedCount: Object.keys(state.candidates).filter((n) => !excluded.has(n)).length,
