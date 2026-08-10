@@ -64,11 +64,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ term: data })
   }
 
-  const { data, error } = await supabase
-    .from('glossary_terms')
-    .select('id, slug, canonical_name, status, review_state, last_reviewed_at')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ terms: data ?? [] })
+  // SEITENWEISE laden. PostgREST kappt eine Abfrage ohne `range()` still bei 1000
+  // Zeilen — kein Fehler, kein Log. Bei 2217 Begriffen zeigte die Liste deshalb
+  // "Alle (1000)" mit "Veröffentlicht (994) + Verborgen (6)", und es sah aus, als
+  // seien ueber tausend Begriffe verschwunden (Betreiber-Befund 2026-08-10).
+  // Dieselbe Falle wie in lib/glossary/translate-missing.ts.
+  const PAGE = 1000
+  const terms: unknown[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('glossary_terms')
+      .select('id, slug, canonical_name, status, review_state, last_reviewed_at')
+      .order('slug')
+      .range(from, from + PAGE - 1)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const rows = data ?? []
+    terms.push(...rows)
+    if (rows.length < PAGE) break
+  }
+  return NextResponse.json({ terms })
 }
 
 export async function PATCH(request: NextRequest) {
