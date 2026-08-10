@@ -239,7 +239,10 @@ export function EureTakesSection({ postSource, postId, locale }: EureTakesSectio
             <div className="flex items-start justify-between gap-4">
               {/* Nach dem Absenden: Titel visuell weg (nur die zentrierte
                   Meldung soll bleiben), bleibt aber für Screenreader erhalten. */}
-              <h2 className={submitted ? 'sr-only' : 'text-lg font-bold tracking-tight'}>
+              {/* font-serif: dieselbe Schrift wie die Artikel-Headline
+                  (Betreiber-Wunsch). Das Overlay steht sonst komplett auf
+                  font-sans, die Überschrift muss hier ausbrechen. */}
+              <h2 className={submitted ? 'sr-only' : 'font-serif text-2xl font-bold tracking-tight'}>
                 {de ? 'Dein Take' : 'Your take'}
               </h2>
               <button
@@ -262,25 +265,21 @@ export function EureTakesSection({ postSource, postId, locale }: EureTakesSectio
               <>
             {/* Von Anfang an klar, dass Kommentieren an ein Newsletter-Abo
                 gebunden ist — damit anonyme Leser:innen nicht erst nach dem
-                Absenden davon erfahren. */}
+                Absenden davon erfahren. Einladend statt abweisend formuliert
+                (Betreiber-Wunsch): der Hinweis auf das anonyme Barometer entfällt,
+                man kommt ohnehin gerade von dort. */}
             <p className="mt-2 text-xs text-muted-foreground">
               {de
-                ? 'Kommentieren ist Newsletter-Abonnent:innen vorbehalten. Anonym abstimmen kannst du jederzeit über das Barometer.'
-                : 'Commenting is for newsletter subscribers. You can always vote anonymously via the barometer.'}
+                ? 'Als Newsletter-Abonnent:in kannst Du hier auch selbst kommentieren'
+                : 'As a newsletter subscriber, you can also comment here yourself'}
             </p>
 
             <form onSubmit={submit} className="mt-3 space-y-3">
-              {/* Reiner Kontext-Hinweis, KEIN „entfernen": wer über „Deinen Take
-                  dazu schreiben" reinkommt, kommentiert genau zu diesem Abschnitt
-                  — den Bezug zu lösen wäre sinnlos. Ohne Bezug (Button unten am
-                  Bereich) erscheint der Chip gar nicht. */}
-              {sectionRef && (
-                <div className="text-xs text-muted-foreground">
-                  <span className="inline-block rounded-full border border-border px-2 py-0.5">
-                    {de ? 'zu' : 're'}: {sectionRef.headline.slice(0, 80)}
-                  </span>
-                </div>
-              )}
+              {/* KEIN Abschnitts-Chip mehr (Betreiber-Wunsch): der Layer geht
+                  direkt am Take auf, der Bezug ist also ohnehin klar — die
+                  wiederholte Headline war nur Wiederholung. `sectionRef` bleibt
+                  im Zustand, es liefert weiterhin sectionAnchor/sectionHeadline
+                  beim Absenden. */}
               <textarea
                 ref={textareaRef}
                 value={body}
