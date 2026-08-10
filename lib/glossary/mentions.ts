@@ -171,12 +171,18 @@ function startsUpper(s: string): boolean {
  * im deutschen Fliesstext oft klein ("deep learning", "prompt engineering"), und
  * die duerfen weiter treffen.
  *
+ * `rawEnd` ist das Ende des ROHEN Treffers, NICHT das flexions-erweiterte: bei
+ * "prompte Antwort" macht die Endung "e" aus dem Praefix ein vollstaendiges Wort
+ * mit Wortgrenze dahinter. Wer erst danach prueft, haelt den Fehltreffer fuer
+ * eine ganze Nennung und laesst ihn durch — genau der Mechanismus, der den
+ * "Branch|e"-Fall so lange unsichtbar gemacht hat (der Link sah korrekt aus).
+ *
  * Bleibt bewusst blind fuer kleingeschriebene Begriffsnamen ("diff", "branch"):
  * dort gibt die Schreibung keinen Hinweis her, dafuer ist WHOLE_WORD_ONLY da.
  */
-function isCompositionMismatch(text: string, name: string, hit: string, end: number): boolean {
+function isCompositionMismatch(text: string, name: string, hit: string, rawEnd: number): boolean {
   if (!startsUpper(name) || startsUpper(hit)) return false
-  return /^[\p{L}\p{N}]/u.test(text.slice(end))
+  return /^[\p{L}\p{N}]/u.test(text.slice(rawEnd))
 }
 
 export function matchNameInText(
@@ -204,8 +210,9 @@ export function matchNameInText(
   let m: RegExpExecArray | null
   while ((m = re.exec(text)) !== null) {
     const start = m.index + m[1].length
-    const end = extendByInflection(text, start + m[2].length)
-    if (!wholeWord && isCompositionMismatch(text, name, m[2], end)) {
+    const rawEnd = start + m[2].length
+    const end = extendByInflection(text, rawEnd)
+    if (!wholeWord && isCompositionMismatch(text, name, m[2], rawEnd)) {
       // Ab dem Zeichen NACH dem Treffer-Anfang weitersuchen. re.lastIndex steht
       // hinter den Grenzgruppen und wuerde einen direkt anschliessenden Treffer
       // ueberspringen; start+1 waechst streng monoton, die Schleife terminiert.

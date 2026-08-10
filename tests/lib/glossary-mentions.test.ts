@@ -188,6 +188,29 @@ describe('findGlossaryMentions', () => {
       expect(findGlossaryMentions('Die tokenisierte Eingabe.', [token])).toEqual([])
     })
 
+    // PROD-SCAN 2026-08-10: "DeFi" war 20-mal in "definieren" verlinkt — der
+    // haeufigste Fehltreffer im Bestand.
+    it('trifft nicht im Verb "definieren" (DeFi)', () => {
+      const defi: GlossaryMatcherTerm = { slug: 'defi', canonicalName: 'DeFi', aliases: [] }
+      expect(findGlossaryMentions('Das laesst sich nur schwer definieren.', [defi])).toEqual([])
+    })
+
+    // Die Pruefung muss am ROHEN Treffer ansetzen, nicht am flexions-erweiterten:
+    // bei "prompte" macht die Endung "e" aus dem Praefix ein vollstaendiges Wort,
+    // hinter dem eine Wortgrenze steht. Wer erst danach prueft, haelt den
+    // Fehltreffer faelschlich fuer eine ganze Nennung — genau die Falle, die den
+    // "Branche"-Fall so lange verdeckt hat.
+    it('trifft nicht im Adjektiv "prompte" (Flexions-e vervollstaendigt das Wort)', () => {
+      const prompt: GlossaryMatcherTerm = { slug: 'prompt', canonicalName: 'Prompt', aliases: [] }
+      expect(findGlossaryMentions('Eine prompte Antwort kam sofort.', [prompt])).toEqual([])
+    })
+
+    it('trifft "Prompt" weiterhin gross geschrieben mit Flexion', () => {
+      const prompt: GlossaryMatcherTerm = { slug: 'prompt', canonicalName: 'Prompt', aliases: [] }
+      const hits = findGlossaryMentions('Die Prompts wurden angepasst.', [prompt])
+      expect(hits.map((h) => h.matchedText)).toEqual(['Prompts'])
+    })
+
     // REGRESSIONSSCHUTZ: englische Fachbegriffe stehen im deutschen Fliesstext
     // oft klein ("deep learning"). Als GANZES Wort muessen sie weiter treffen —
     // die Regel darf nur greifen, wenn das Wort nach dem Treffer weitergeht.
