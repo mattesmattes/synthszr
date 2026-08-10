@@ -11,6 +11,8 @@ import { useJob, JobLog, JobCancelButton, isJobOpen, type JobKind } from '@/comp
 interface CrawlStatus {
   postsProcessed: number
   postsTotal: number
+  /** Erstlauf/Aufholen = rückwärts durch den Altbestand, Nachführen = nur Neues. */
+  phase?: 'erstlauf' | 'aufholen' | 'nachfuehren'
   candidateCount: number
   selectedCount: number
   /** Ausgewaehlt UND noch nicht erzeugt — die echte offene Arbeit. */
@@ -571,8 +573,21 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
 
           <div>
             <div className="flex items-baseline justify-between text-sm">
+              {/* „30 von 225 gelesen" allein ist irrefuehrend (Betreiber-Befund
+                  2026-08-10): es liest sich wie „195 Artikel offen", obwohl der
+                  Bestand laengst durchgearbeitet war und nur der Fortschritt
+                  zurueckgesetzt wurde. Deshalb die Phase benennen — beim
+                  Nachfuehren zaehlen ausschliesslich NEUE Artikel. */}
               <span className="font-medium">
-                {status?.postsProcessed ?? 0} von {status?.postsTotal ?? 0} Artikeln gelesen
+                {status?.phase === 'nachfuehren' ? (
+                  (status?.postsTotal ?? 0) - (status?.postsProcessed ?? 0) > 0
+                    ? `Bestand durchgearbeitet · ${(status?.postsTotal ?? 0) - (status?.postsProcessed ?? 0)} neue Artikel offen`
+                    : `Bestand durchgearbeitet · alle ${status?.postsTotal ?? 0} Artikel gelesen`
+                ) : (
+                  `${status?.postsProcessed ?? 0} von ${status?.postsTotal ?? 0} Artikeln gelesen${
+                    status?.phase === 'aufholen' ? ' (Altbestand wird aufgeholt)' : ''
+                  }`
+                )}
               </span>
               <span className="font-mono text-xs text-muted-foreground">{pct}%</span>
             </div>

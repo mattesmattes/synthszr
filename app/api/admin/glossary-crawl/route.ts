@@ -9,7 +9,9 @@ import {
   setCandidateExcluded,
   generateMissingIllustrations,
   relinkNextBatch,
-  openCandidateCount,
+  loadExistingSlugs,
+  partitionByExisting,
+  crawlPhase,
   POSTS_PER_EXTRACTION,
   TERMS_PER_GENERATION,
 } from '@/lib/glossary/crawl'
@@ -59,14 +61,42 @@ export async function GET() {
   // der Erledigtes stehen bleibt, ist keine Warteschlange (Betreiber-Befund
   // 2026-08-06, Beispiel /de/glossary/chain-of-thought).
   const done = new Set(state.generated)
+
+  // Bestand aus der DATENBANK, exakt wie generateCandidates ihn liest.
+  //
+  // BETREIBER-BEFUND 2026-08-10: Das Panel meldete „260 offen, 0 bereits erzeugt",
+  // obwohl 44 dieser Kandidaten längst im Lexikon standen. Grund: die Zählung
+  // kannte nur die crawl-eigene `generated`-Liste, und die ist nach einem
+  // Zurücksetzen leer — der tatsächliche Bestand von 2217 Begriffen kam darin
+  // nicht vor. Die ERZEUGUNG glich schon immer korrekt ab und hätte die 44
+  // übersprungen; nur die Anzeige behauptete Arbeit, die keine war.
+  //
+  // Sortiert VOR partitionByExisting, damit die Anzeige dieselbe
+  // Dedup-Entscheidung trifft wie die Abarbeitung (die Funktion verwirft auch
+  // Kandidaten, die untereinander auf denselben Slug fallen).
+  const existingSlugs = await loadExistingSlugs(supabase)
+  const offeneAuswahl = Object.entries(state.candidates)
+    .filter(([name]) => !excluded.has(name) && !done.has(slugify(name)))
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  const { toGenerate, alreadyExisting } = partitionByExisting(offeneAuswahl, existingSlugs)
+  const openCount = toGenerate.length
+  const generatedCount = state.generated.length + alreadyExisting.length
+
+  // Was es schon gibt, ist keine Warteschlange mehr — raus aus der Liste, wie
+  // bei den bereits erzeugten (sonst weckt es den Verdacht erneuter Kosten).
+  const bereitsVorhanden = new Set(alreadyExisting)
   const top = Object.entries(state.candidates)
-    .filter(([name]) => !done.has(slugify(name)))
+    .filter(([name]) => !done.has(slugify(name)) && !bereitsVorhanden.has(name))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([name, mentions]) => ({ name, mentions, selected: !excluded.has(name) }))
 
   return NextResponse.json({
     postsProcessed: state.postsProcessed,
     postsTotal: totalPosts ?? 0,
+    // Phase mitliefern, damit „X von Y gelesen" nicht in die Irre führt: ist der
+    // Bestand durch, zählt nur noch, was NEU dazukam (Betreiber: „die Anzeige
+    // 30/225 ist misleading").
+    phase: crawlPhase(state),
     candidateCount: Object.keys(state.candidates).length,
     // Nur die ausgewählten werden erzeugt — die Zahl, die der Operator braucht.
     selectedCount: Object.keys(state.candidates).filter((n) => !excluded.has(n)).length,
@@ -79,8 +109,8 @@ export async function GET() {
      * Kandidaten offen waren. Ein Lauf, der dann Stunden braucht, sieht aus wie
      * ein Hänger. Dieselbe Zählung wie in generateCandidates und estimateTotal.
      */
-    openCount: openCandidateCount(state.candidates, state.excluded, state.generated),
-    generatedCount: state.generated.length,
+    openCount,
+    generatedCount,
     missingImages: missingImages ?? 0,
     updatedAt: state.updatedAt,
     topCandidates: top,

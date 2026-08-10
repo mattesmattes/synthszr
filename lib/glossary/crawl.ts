@@ -541,6 +541,39 @@ export interface GenerationResult {
  * exakte Gleichheit nicht sieht (Befund 2026-08-06: vier solche Paare in Prod,
  * jedes einmal generiert UND bezahlt, weil sie zwei verschiedene Slugs ergeben).
  */
+/**
+ * Alle vorhandenen Begriffs-Slugs — die Grundlage jedes „gibt es schon?"-Abgleichs.
+ *
+ * Nur die schmale Spalte und PAGINIERT: PostgREST kappt ohne `range()` still bei
+ * 1000 Zeilen, bei 2217 Begriffen gälte der Rest als nicht vorhanden.
+ *
+ * Kein Status-Filter: ein Insert scheitert am Unique-Constraint unabhängig davon,
+ * ob die bestehende Zeile published/draft/hidden ist.
+ *
+ * Ausgelagert, damit ANZEIGE und ABARBEITUNG dieselbe Antwort bekommen. Genau
+ * daran hing der Betreiber-Befund 2026-08-10: das Panel meldete „260 offen, 0
+ * bereits erzeugt", weil es nur die crawl-eigene `generated`-Liste kannte (nach
+ * einem Zurücksetzen leer) — während die Erzeugung längst korrekt gegen die
+ * Datenbank abglich und 44 davon übersprungen hätte.
+ */
+export async function loadExistingSlugs(supabase: AdminClient): Promise<Set<string>> {
+  const slugs = new Set<string>()
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await supabase
+      .from('glossary_terms')
+      .select('slug')
+      .range(offset, offset + 999)
+    if (error) {
+      console.error('[GlossaryCrawl] Bestand nicht ladbar:', error.message)
+      break
+    }
+    if (!data?.length) break
+    for (const r of data) slugs.add(r.slug as string)
+    if (data.length < 1000) break
+  }
+  return slugs
+}
+
 export function partitionByExisting(
   queue: Array<[string, number]>,
   existingSlugs: Set<string>,
@@ -619,20 +652,7 @@ export async function generateCandidates(
   // Status-Filter: ein Insert scheitert am Unique-Constraint unabhaengig davon,
   // ob die bestehende Zeile published/draft/hidden ist. Nur die schmale Spalte
   // (kein body/summary), paginiert - PostgREST kappt sonst still bei 1000 Zeilen.
-  const existingSlugs = new Set<string>()
-  for (let offset = 0; ; offset += 1000) {
-    const { data: existingRows, error: existingError } = await supabase
-      .from('glossary_terms')
-      .select('slug')
-      .range(offset, offset + 999)
-    if (existingError) {
-      console.error('[GlossaryCrawl] Bestand nicht ladbar:', existingError.message)
-      break
-    }
-    if (!existingRows?.length) break
-    for (const r of existingRows) existingSlugs.add(r.slug as string)
-    if (existingRows.length < 1000) break
-  }
+  const existingSlugs = await loadExistingSlugs(supabase)
 
   const { toGenerate, alreadyExisting } = partitionByExisting(rawQueue, existingSlugs)
   const queue = toGenerate.slice(0, Math.max(1, limit))
