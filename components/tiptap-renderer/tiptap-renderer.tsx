@@ -39,6 +39,32 @@ import { ArticleThumbnailPortal } from "./article-thumbnail"
 import type { TiptapRendererProps, PublicPortal, PremarketPortal } from "./types"
 import type { ArticleThumbnail, ThumbnailPortal } from "@/lib/tiptap/dom-processors/news-headings"
 
+/**
+ * Meldet „das gerenderte DOM steht" — mit setTimeout als Netz unter dem
+ * requestAnimationFrame.
+ *
+ * BEFUND 2026-08-10 (an Prod gemessen): In einem Tab, der beim Laden nicht
+ * sichtbar ist (`document.visibilityState === 'hidden'`), feuert rAF GAR NICHT —
+ * der Callback bleibt ausstehend, `setTimeout` laeuft dagegen normal weiter.
+ * Dann blieb `editorReady` false, und damit fiel alles aus, was daran haengt:
+ * Take-Barometer, Kommentar-Bloecke, Produktlinks, Tip-Promo — und der
+ * SSR-Fallback wurde nicht entfernt, der Artikel stand doppelt im DOM. Die Seite
+ * sah dabei voellig normal aus und war trotzdem komplett tot (gemessen: 6 Takes
+ * im Editor + 6 im Fallback, 0 Barometer).
+ *
+ * Das ist kein Laborfall: Link im Hintergrund-Tab geoeffnet, App-Wechsel
+ * waehrend des Ladens, iOS Low Power Mode, Rueckkehr aus dem bfcache. iOS Safari
+ * drosselt aggressiver als Desktop-Chrome — von dort kam die Meldung
+ * („Klick auf Thumbs zeigt keine Reaktion").
+ *
+ * Wer zuerst kommt, gewinnt; `setReady(true)` ist idempotent. Steht das DOM
+ * wider Erwarten noch nicht, greift der hasContent-Retry im Verarbeitungs-Effekt.
+ */
+function markEditorReady(setReady: (ready: boolean) => void) {
+  requestAnimationFrame(() => setReady(true))
+  setTimeout(() => setReady(true), 100)
+}
+
 export function TiptapRenderer({ content, postId, queueItemIds, originalContent, ssrFallbackId, locale = 'de', postSource = 'generated_posts' }: TiptapRendererProps) {
   /**
    * Typografische Anfuehrungszeichen VOR dem Setzen ins Dokument.
@@ -203,9 +229,7 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
       },
     },
     onCreate: () => {
-      requestAnimationFrame(() => {
-        setEditorReady(true)
-      })
+      markEditorReady(setEditorReady)
     },
   })
 
@@ -217,7 +241,8 @@ export function TiptapRenderer({ content, postId, queueItemIds, originalContent,
       if (currentContent !== newContent) {
         setEditorReady(false)
         editor.commands.setContent(typedContent)
-        requestAnimationFrame(() => setEditorReady(true))
+        // Gleiches Netz wie in onCreate: rAF allein haengt in versteckten Tabs.
+        markEditorReady(setEditorReady)
       }
     }
   }, [editor, typedContent])
