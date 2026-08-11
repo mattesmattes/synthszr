@@ -15,6 +15,31 @@ import { PODCAST_APPLE, PODCAST_SPOTIFY } from '@/lib/podcast/platform-links'
 import { applyDateToHeadline } from '@/lib/tip-promos/headline'
 import { bundleLabel, type BundleType } from '@/lib/i18n/bundle-labels'
 
+/**
+ * Macht einen relativen Pfad absolut.
+ *
+ * BETREIBER-BEFUND 2026-08-11: Im Newsletter standen Glossar-Links als
+ * "http:///de/glossary/…" — mit LEEREM Host. Eine E-Mail hat keine Base-URL, an
+ * der ein relativer Pfad aufgelöst werden könnte; Clients bauen daraus dieses
+ * kaputte Konstrukt. An Prod gemessen: 36 solcher Links in den letzten zwölf
+ * Artikeln, ausnahmslos Glossar-Links.
+ *
+ * Warum sie überhaupt entstehen: Die dedizierte `glossaryLink`-Mark baut ihre URL
+ * absolut (s. unten). Wird derselbe Link aber über den Editor als gewöhnlicher
+ * <a href="/de/…"> serialisiert und wieder eingelesen, liegt er danach als
+ * normale `link`-Mark mit relativem href im Dokument — und lief bis hier
+ * ungeprüft durch.
+ *
+ * Bewusst für JEDEN internen Pfad, nicht nur Glossar: dieselbe Falle steht bei
+ * jedem internen Link offen. Protokollrelative URLs ("//host/x") und Anker
+ * bleiben unberührt — erstere sind bereits absolut, letztere haben in einer
+ * E-Mail ohnehin kein Ziel.
+ */
+function absolutizeHref(href: string): string {
+  if (href.startsWith('/') && !href.startsWith('//')) return `${SITE_URL}${href}`
+  return href
+}
+
 export interface TiptapNode {
   type: string
   content?: TiptapNode[]
@@ -1155,7 +1180,7 @@ function applyMarks(text: string, marks?: Array<{ type: string; attrs?: Record<s
         case 'link': {
           const rawHref = mark.attrs?.href || '#'
           const cleanHref = sanitizeUrl(rawHref) || rawHref
-          result = `<a href="${cleanHref}">${result}</a>`
+          result = `<a href="${absolutizeHref(cleanHref)}">${result}</a>`
           break
         }
         case 'glossaryLink': {
@@ -1301,7 +1326,7 @@ function renderContent(content?: TiptapNode[], lang: string = 'de'): string {
             case 'link': {
               const rawHref = mark.attrs?.href || '#'
               const cleanHref = sanitizeUrl(rawHref) || rawHref
-              text = `<a href="${cleanHref}">${text}</a>`
+              text = `<a href="${absolutizeHref(cleanHref)}">${text}</a>`
               break
             }
             case 'glossaryLink': {
