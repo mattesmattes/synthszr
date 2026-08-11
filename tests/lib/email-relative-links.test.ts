@@ -63,3 +63,69 @@ describe('convertTiptapToHtml — relative Links', () => {
     expect(html).not.toContain('synthszr.com#')
   })
 })
+
+/**
+ * BETREIBER-BEFUND 2026-08-11: In den fr/en/cs-Newslettern zeigten die
+ * Glossar-Links auf das DEUTSCHE Lexikon — im Web dagegen korrekt aufs
+ * englische.
+ *
+ * Begriffserklärungen gibt es nur auf Deutsch und Englisch
+ * (SUPPORTED_GLOSSARY_LANGS = ['en']). Das Web löst das seit Commit d8baf9d mit
+ * `lang === 'de' ? 'de' : 'en'` (lib/tiptap/glossary-link-mark.ts:50); im
+ * Newsletter fehlte dieselbe Regel. Ein französischer Artikel darf weder auf
+ * /de/ (falsche Sprache) noch auf /fr/glossary (existiert nicht) zeigen.
+ */
+describe('convertTiptapToHtml — Glossar-Sprache', () => {
+  function docWithGlossaryMark(slug: string) {
+    return {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Begriff', marks: [{ type: 'glossaryLink', attrs: { slug } }] },
+          ],
+        },
+      ],
+    }
+  }
+
+  it('verlinkt im deutschen Newsletter auf /de/glossary', () => {
+    const html = convertTiptapToHtml(docWithGlossaryMark('kontextfenster'), 'de')
+    expect(html).toContain('/de/glossary/kontextfenster')
+  })
+
+  it('verlinkt im englischen Newsletter auf /en/glossary', () => {
+    const html = convertTiptapToHtml(docWithGlossaryMark('kontextfenster'), 'en')
+    expect(html).toContain('/en/glossary/kontextfenster')
+    expect(html).not.toContain('/de/glossary/')
+  })
+
+  it('verlinkt im franzoesischen Newsletter auf /en/glossary, nicht /fr', () => {
+    const html = convertTiptapToHtml(docWithGlossaryMark('kontextfenster'), 'fr')
+    expect(html).toContain('/en/glossary/kontextfenster')
+    expect(html).not.toContain('/fr/glossary/')
+    expect(html).not.toContain('/de/glossary/')
+  })
+
+  it('verlinkt im tschechischen Newsletter auf /en/glossary', () => {
+    const html = convertTiptapToHtml(docWithGlossaryMark('kontextfenster'), 'cs')
+    expect(html).toContain('/en/glossary/kontextfenster')
+    expect(html).not.toContain('/cs/glossary/')
+  })
+
+  it('schreibt einen relativen /de/glossary-Link in der Uebersetzung um', () => {
+    // Relative Links tragen ihr Sprachpraefix aus dem deutschen Original mit —
+    // absolut gemacht zeigten sie sonst sauber auf die falsche Sprache.
+    const html = convertTiptapToHtml(docWithLink('/de/glossary/kontextfenster'), 'en')
+    expect(html).toContain('https://www.synthszr.com/en/glossary/kontextfenster')
+    expect(html).not.toContain('/de/glossary/')
+  })
+
+  it('fasst andere relative Pfade sprachlich nicht an', () => {
+    // Nur Glossar-Pfade werden umgeschrieben: ein Artikel-Link hat seine eigene
+    // Uebersetzung unter demselben Praefix und darf nicht verbogen werden.
+    const html = convertTiptapToHtml(docWithLink('/en/posts/mein-artikel'), 'en')
+    expect(html).toContain('https://www.synthszr.com/en/posts/mein-artikel')
+  })
+})

@@ -35,9 +35,29 @@ import { bundleLabel, type BundleType } from '@/lib/i18n/bundle-labels'
  * bleiben unberührt — erstere sind bereits absolut, letztere haben in einer
  * E-Mail ohnehin kein Ziel.
  */
-function absolutizeHref(href: string): string {
-  if (href.startsWith('/') && !href.startsWith('//')) return `${SITE_URL}${href}`
-  return href
+function absolutizeHref(href: string, locale: string = 'de'): string {
+  if (!href.startsWith('/') || href.startsWith('//')) return href
+  // Glossar-Pfade zusätzlich auf die richtige Sprache ziehen: ein relativer Link
+  // trägt das Präfix des DEUTSCHEN Originals mit, im übersetzten Newsletter
+  // zeigte er damit sauber auf die falsche Sprache.
+  const fixed = href.replace(/^\/[a-z]{2,3}\/glossary\//i, `/${glossaryLangFor(locale)}/glossary/`)
+  return `${SITE_URL}${fixed}`
+}
+
+/**
+ * Sprache der Begriffserklärung für eine Artikel-Locale.
+ *
+ * Erklärungen gibt es nur auf Deutsch und Englisch (SUPPORTED_GLOSSARY_LANGS =
+ * ['en']). Ein Artikel in einer dritten Sprache verlinkt deshalb auf die
+ * englische Fassung — /fr/glossary oder /cs/glossary existieren nicht.
+ *
+ * BETREIBER-BEFUND 2026-08-11: Im Web galt diese Regel längst
+ * (lib/tiptap/glossary-link-mark.ts:50, Commit d8baf9d), im Newsletter fehlte
+ * sie — fr/cs zeigten auf nicht existierende Pfade, und relative Links landeten
+ * auf dem deutschen Lexikon.
+ */
+function glossaryLangFor(locale: string): string {
+  return locale === 'de' ? 'de' : 'en'
 }
 
 export interface TiptapNode {
@@ -1180,14 +1200,14 @@ function applyMarks(text: string, marks?: Array<{ type: string; attrs?: Record<s
         case 'link': {
           const rawHref = mark.attrs?.href || '#'
           const cleanHref = sanitizeUrl(rawHref) || rawHref
-          result = `<a href="${absolutizeHref(cleanHref)}">${result}</a>`
+          result = `<a href="${absolutizeHref(cleanHref, lang)}">${result}</a>`
           break
         }
         case 'glossaryLink': {
           const slug = mark.attrs?.slug
           if (!slug) break
           // Absolute URL: relative Pfade funktionieren in E-Mail-Clients nicht.
-          result = `<a href="${SITE_URL}/${lang}/glossary/${slug}" style="color: inherit; text-decoration: underline dotted; text-underline-offset: 2px;">${result}</a>`
+          result = `<a href="${SITE_URL}/${glossaryLangFor(lang)}/glossary/${slug}" style="color: inherit; text-decoration: underline dotted; text-underline-offset: 2px;">${result}</a>`
           break
         }
       }
@@ -1326,14 +1346,14 @@ function renderContent(content?: TiptapNode[], lang: string = 'de'): string {
             case 'link': {
               const rawHref = mark.attrs?.href || '#'
               const cleanHref = sanitizeUrl(rawHref) || rawHref
-              text = `<a href="${absolutizeHref(cleanHref)}">${text}</a>`
+              text = `<a href="${absolutizeHref(cleanHref, lang)}">${text}</a>`
               break
             }
             case 'glossaryLink': {
               const slug = mark.attrs?.slug
               if (!slug) break
               // Absolute URL: relative Pfade funktionieren in E-Mail-Clients nicht.
-              text = `<a href="${SITE_URL}/${lang}/glossary/${slug}" style="color: inherit; text-decoration: underline dotted; text-underline-offset: 2px;">${text}</a>`
+              text = `<a href="${SITE_URL}/${glossaryLangFor(lang)}/glossary/${slug}" style="color: inherit; text-decoration: underline dotted; text-underline-offset: 2px;">${text}</a>`
               break
             }
           }

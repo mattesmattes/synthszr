@@ -142,15 +142,33 @@ export async function getPublishedTermList(
  */
 export async function getMatcherTerms(lang: string): Promise<GlossaryMatcherTerm[] | null> {
   const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('glossary_terms')
-    .select('id, slug, canonical_name, aliases')
-    .eq('status', 'published')
-  if (error) {
-    console.error('[Glossary] getMatcherTerms:', error.message)
-    return null
+  // SEITENWEISE laden. PostgREST kappt eine Abfrage ohne `range()` still bei 1000
+  // Zeilen — kein Fehler, kein Log.
+  //
+  // PROD-BEFUND 2026-08-11: Bei 2504 veröffentlichten Begriffen fehlten dem
+  // Matcher 1504, darunter ALLE 60 zuletzt erzeugten. Ein neuer Begriff konnte
+  // damit grundsätzlich nicht verlinkt werden: „Voight-Kampff-Test" (10.08.)
+  // fehlte im Artikel vom 26.07., obwohl der Nachverlink-Lauf desselben Morgens
+  // 218 Artikel angefasst hatte und der Matcher den Namen im Text zweifelsfrei
+  // findet. Diese Funktion ist die EINZIGE Quelle der Begriffsliste für
+  // Verlinkung und Nachverlinkung — die Kappung wirkte deshalb überall zugleich.
+  const PAGE = 1000
+  const rows: Array<Record<string, unknown>> = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('glossary_terms')
+      .select('id, slug, canonical_name, aliases')
+      .eq('status', 'published')
+      .range(from, from + PAGE - 1)
+    if (error) {
+      console.error('[Glossary] getMatcherTerms:', error.message)
+      return null
+    }
+    const page = data ?? []
+    rows.push(...page)
+    if (page.length < PAGE) break
   }
-  const base = (data ?? []).map((r) => ({
+  const base = rows.map((r) => ({
     id: r.id as string,
     slug: r.slug as string,
     canonicalName: r.canonical_name as string,

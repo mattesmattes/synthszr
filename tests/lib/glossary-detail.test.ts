@@ -20,7 +20,9 @@ const state = vi.hoisted(() => ({
 
 function makeChain(table: string) {
   const chain: any = {}
-  for (const m of ['select', 'eq', 'in', 'is', 'gt', 'order', 'limit', 'update', 'insert', 'delete']) {
+  // 'range' ist nötig, seit getMatcherTerms seitenweise lädt (PostgREST kappt
+  // ohne range() still bei 1000 Zeilen — s. lib/glossary/terms.ts).
+  for (const m of ['select', 'eq', 'in', 'is', 'gt', 'order', 'limit', 'range', 'update', 'insert', 'delete']) {
     chain[m] = vi.fn(() => chain)
   }
   const queue = state.queues[table]

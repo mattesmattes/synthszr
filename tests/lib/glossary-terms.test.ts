@@ -117,6 +117,46 @@ describe('getMatcherTerms', () => {
     expect(state.chains[0].eq).toHaveBeenCalledWith('status', 'published')
   })
 
+  /**
+   * PROD-BEFUND 2026-08-11: Im Artikel vom 26.07. fehlte der Link auf
+   * „Voight-Kampff-Test" (Begriff vom 10.08.), obwohl der Matcher den Namen im
+   * Text zweifelsfrei findet UND der Nachverlink-Lauf desselben Morgens 218
+   * Artikel angefasst hatte.
+   *
+   * Ursache: diese Abfrage lief ohne `range()`. PostgREST kappt dann still bei
+   * 1000 Zeilen — bei 2504 veröffentlichten Begriffen fehlten 1504, darunter
+   * ALLE 60 zuletzt erzeugten. Neue Begriffe konnten damit grundsätzlich nicht
+   * verlinkt werden, und zwar lautlos: kein Fehler, kein Log.
+   */
+  it('laedt die Begriffe seitenweise (PostgREST kappt sonst bei 1000)', async () => {
+    const seite1 = Array.from({ length: 1000 }, (_, i) => ({
+      id: `id${i}`, slug: `slug-${i}`, canonical_name: `Name ${i}`, aliases: [],
+    }))
+    const seite2 = [{
+      id: 'idX', slug: 'voight-kampff-test', canonical_name: 'Voight-Kampff-Test', aliases: [],
+    }]
+    // Volle erste Seite ⇒ es MUSS eine zweite geholt werden.
+    state.queue.push({ data: seite1, error: null }, { data: seite2, error: null })
+
+    const { getMatcherTerms } = await import('@/lib/glossary/terms')
+    const rows = await getMatcherTerms('de')
+
+    expect(rows).toHaveLength(1001)
+    expect(rows?.some((t) => t.slug === 'voight-kampff-test')).toBe(true)
+    expect(state.chains[0].range).toHaveBeenCalled()
+  })
+
+  it('hoert auf zu blaettern, sobald eine Seite nicht mehr voll ist', async () => {
+    // Nur EINE Antwort in der Queue: eine unvollständige Seite beendet die
+    // Schleife: sonst liefe sie bis zur ersten leeren Antwort weiter und
+    // verursachte pro Aufruf eine überflüssige Abfrage.
+    state.queue.push({ data: [{ id: 'a', slug: 's', canonical_name: 'N', aliases: [] }], error: null })
+    const { getMatcherTerms } = await import('@/lib/glossary/terms')
+    const rows = await getMatcherTerms('de')
+    expect(rows).toHaveLength(1)
+    expect(state.chains).toHaveLength(1)
+  })
+
   it('gibt für lang=de keine id zurück', async () => {
     state.result = { data: [{ id: 't1', slug: 's', canonical_name: 'N', aliases: ['n'] }], error: null }
     const { getMatcherTerms } = await import('@/lib/glossary/terms')
