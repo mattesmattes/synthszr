@@ -52,7 +52,16 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
    *  alt, "heute" heisst also "alles". Ein aelteres Datum ueberspringt die
    *  neueren Artikel — nuetzlich, um einen abgebrochenen Lauf gezielt dort
    *  fortzusetzen, wo er stehen geblieben ist. */
-  const [relinkFrom, setRelinkFrom] = useState(() => new Date().toISOString().slice(0, 10))
+  /**
+   * Untere Datumsgrenze der Nachverlinkung. LEER = ganzer Bestand.
+   *
+   * Der Default war „heute" — und machte den Knopf damit fuer seinen eigentlichen
+   * Zweck wirkungslos: Ein neu erzeugter Begriff soll in ALTE Artikel kommen, und
+   * genau die schloss die Grenze aus. Beobachtet am 2026-08-11: „Voight-Kampff-Test"
+   * (Begriff vom 10.08.) fehlte im Artikel vom 26.07., waehrend ein Lauf mit
+   * Default-Datum brav 1 Artikel verlinkte — den heutigen.
+   */
+  const [relinkFrom, setRelinkFrom] = useState('')
   // Zielzahl des Lese-Laufs. Default 10 wie bisher — wer mehr will, waehlt es
   // bewusst, denn jeder Artikel kostet einen Modellaufruf.
   const [extractTarget, setExtractTarget] = useState('10')
@@ -504,8 +513,11 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
                   onChange={(e) => setRelinkFrom(e.target.value)}
                   disabled={busy !== null}
                   className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
-                  title="Nur Artikel ab diesem Tag werden nachverlinkt. Heute heißt: nur die heutigen."
+                  title="Untere Grenze: nur Artikel ab diesem Tag werden nachverlinkt. LEER LASSEN heißt: ganzer Bestand — das ist der Regelfall, wenn ein neuer Begriff in alte Artikel soll."
                 />
+                {!relinkFrom && (
+                  <span className="font-mono text-[11px] text-muted-foreground">ganzer Bestand</span>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
