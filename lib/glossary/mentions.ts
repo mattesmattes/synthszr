@@ -185,11 +185,52 @@ function isCompositionMismatch(text: string, name: string, hit: string, rawEnd: 
   return /^[\p{L}\p{N}]/u.test(text.slice(rawEnd))
 }
 
+/**
+ * Kleingeschriebene Fassung des zuletzt geprüften Textes.
+ *
+ * Der Vorfilter unten braucht sie bei JEDEM Namen; ohne Merker liefe
+ * `toLowerCase()` über denselben Absatz 16.000-mal. Ein Ein-Element-Cache
+ * genügt, weil die Aufrufe textweise gebündelt kommen: findGlossaryMentions
+ * prüft alle Begriffe gegen denselben Text, injectGlossaryMarks alle gegen
+ * denselben Textknoten.
+ */
+let lowerCacheKey = ''
+let lowerCacheValue = ''
+function lowerOf(text: string): string {
+  if (text !== lowerCacheKey) {
+    lowerCacheKey = text
+    lowerCacheValue = text.toLowerCase()
+  }
+  return lowerCacheValue
+}
+
 export function matchNameInText(
   text: string,
   name: string,
   lang = 'de',
 ): { start: number; end: number; matched: string } | null {
+  // BILLIGER VORFILTER vor der teuren Unicode-Regex.
+  //
+  // PROD-BEFUND 2026-08-12: Eine Lexikonseite brauchte bis zu 10s. Gemessen
+  // entfielen davon 2589ms allein auf dieses Matching — gegen 2527 Begriffe mit
+  // zusammen 16.398 Namen und Aliassen, von denen ganze 17 im Text vorkamen.
+  // Für jeden Namen wurde eine Regex gebaut UND ausgeführt; die Kompilierung
+  // dominierte. Mit 1000 Begriffen (Stand vor der Paginierung) waren es 23ms —
+  // die Kosten wachsen also weit stärker als der Bestand.
+  //
+  // Der Filter ist verlustfrei: die Regex sucht den escapeten Namen wörtlich,
+  // nur mit Wortgrenzen drumherum. Kommt der Name nicht einmal als Teilstring
+  // vor, kann sie unmöglich treffen. indexOf ist dabei um Größenordnungen
+  // billiger als RegExp-Konstruktion.
+  //
+  // Abkürzungen werden case-sensitiv gesucht (s. isAbbreviation) — der Vorfilter
+  // muss dieselbe Unterscheidung treffen, sonst verwürfe er "ES" in "Das ES",
+  // weil er gegen "es" prüft.
+  if (isAbbreviation(name)) {
+    if (!text.includes(name)) return null
+  } else if (!lowerOf(text).includes(name.toLowerCase())) {
+    return null
+  }
   // Grenze hinten verlangen, wenn der Name zu kurz für die Kompositum-Regel ist
   // ODER der Begriff nur als ganzes Wort gelten darf (s. WHOLE_WORD_ONLY).
   // Ausserhalb des Deutschen gibt es die Zusammenschreibung nicht, auf der die
