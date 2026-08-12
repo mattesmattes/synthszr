@@ -12,6 +12,7 @@
  * Projekt nachweislich stabil.
  */
 import { z } from 'zod'
+import { isExcludedGlossaryTerm } from '@/lib/data/glossary-exclusions'
 
 // ---------------------------------------------------------------------------
 // Slug
@@ -166,13 +167,15 @@ export function buildCandidatesPrompt(articleText: string, knownSlugs: string[])
   const known = knownSlugs.length ? knownSlugs.join(', ') : '(keine)'
   return `Im folgenden Artikeltext kommen möglicherweise Fachbegriffe vor, die ein Leser ohne Vorwissen nicht versteht.
 
-DAS LEXIKON ERKLÄRT GENAU DREI ARTEN VON BEGRIFFEN:
+DAS LEXIKON ERKLÄRT GENAU VIER ARTEN VON BEGRIFFEN:
 1. Technik/IT — z. B. Kubernetes, Syscall, Microservices, Disassembler
 2. KI — z. B. Modellarchitekturen, Trainings- und Inferenzverfahren, Benchmarks
 3. Finanzen/Kapitalmarkt — z. B. Investment-Grade-Anleihe, Streubesitz, Verbriefung
+4. Mathematik/Wissenschaft, soweit sie in KI-Artikeln vorkommt — z. B. Riemann-Hypothese, Nullstelle, formale Verifikation, Beweisassistent
 
 NICHT AUFNEHMEN — das ist genauso wichtig wie die Auswahl:
-- Allgemeinverständliche deutsche Wörter, auch wenn sie im Artikel eine Rolle spielen. Test: Würde ein Erwachsener ohne Fachwissen das Wort verstehen? Dann NICHT vorschlagen. Beispiele für Wörter, die NICHT ins Lexikon gehören: Gabelstapler, Baugenehmigung, Grünstreifen, Eintrittspreis, Aufmerksamkeitsspanne, Wettbewerbsvorteil, Marktanteil, Anleihe, Präzedenzfall, Trojanisches Pferd.
+- Allgemeinverständliche deutsche Wörter, auch wenn sie im Artikel eine Rolle spielen. Test: Würde ein Erwachsener ohne Fachwissen das Wort verstehen? Dann NICHT vorschlagen. Beispiele für Wörter, die NICHT ins Lexikon gehören: Anbieter, Rechner, Büroarbeit, Fehlerbehebung, Gabelstapler, Baugenehmigung, Grünstreifen, Eintrittspreis, Aufmerksamkeitsspanne, Wettbewerbsvorteil, Marktanteil, Anleihe, Präzedenzfall, Trojanisches Pferd.
+  Achtung, das gilt auch für Alltagswörter mit technischem Beiklang: „Rechner" ist der deutsche Alltagsname für einen Computer und kein Fachbegriff, „Fehlerbehebung" beschreibt bloß eine Tätigkeit. Ein Fachbegriff wäre stattdessen das benannte Verfahren dahinter (etwa Root-Cause-Analyse).
 - Ad-hoc-Wortschöpfungen und eigene Formulierungen des Autors, die nur in diesem Text vorkommen. Beispiele: „API-Mauern", „Bürokratisches Niemandsland", „Digitalisierungsrendite", „Konsumtreiber".
 - KEINE Firmennamen, KEINE Markenprodukte (die stehen in den Synthszr Charts, nicht im Lexikon). Beispiele: Hugging Face, Red Hat, Cursor, Railway.
   AUSGENOMMEN sind BENANNTE TECHNOLOGIEN mit eigenem Erklärgehalt — die gehören ins Lexikon, auch wenn der Name von einer Firma stammt. Beispiele, die AUFGENOMMEN werden sollen: gVisor, Graviton-Prozessoren, Axion, Kubernetes. Prüfe: Erklärt man damit, WIE etwas funktioniert (dann aufnehmen), oder nennt man nur WER es anbietet (dann nicht)?
@@ -213,6 +216,11 @@ export async function identifyCandidates(articleText: string, knownSlugs: string
     for (const raw of parsed.data.candidates) {
       const name = raw.trim()
       if (!name) continue
+      // Gesperrte Allgemeinwörter hier raus, nicht erst bei der Erzeugung: der
+      // Prompt schließt sie zwar aus, aber Modelle befolgen das nicht
+      // zuverlässig — „Anbieter", „Rechner", „Büroarbeit" und „Fehlerbehebung"
+      // standen trotz der Regel in der Warteschlange (Betreiber 2026-08-12).
+      if (isExcludedGlossaryTerm(name)) continue
       const slug = slugify(name)
       if (known.has(slug) || seen.has(slug)) continue
       seen.add(slug)

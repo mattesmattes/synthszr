@@ -31,6 +31,7 @@ import { safeParseJSON } from '@/lib/utils/safe-json'
 import { backfillGlossaryLinks, type BackfillResult } from '@/lib/glossary/backfill'
 import { relinkTranslationsBatch, type TranslationBackfillResult } from '@/lib/glossary/backfill-translations'
 import { getMatcherTerms, buildReservedNames, getChartProductNames } from '@/lib/glossary/terms'
+import { isExcludedGlossaryTerm } from '@/lib/data/glossary-exclusions'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -631,7 +632,11 @@ export async function generateCandidates(
     // Abgewählte werden übersprungen, bleiben aber in der Liste: der Operator
     // soll seine Entscheidung sehen und zurücknehmen können, statt dass der
     // Begriff verschwindet und beim nächsten Crawl wieder auftaucht.
-    .filter(([name]) => !excluded.has(name) && !alreadyGenerated.has(slugify(name)))
+    // Gesperrte Allgemeinwörter fliegen auch dann raus, wenn sie schon als
+    // Kandidat im Zustand stehen — die Liste kam nach ihrer Aufnahme
+    // (Betreiber 2026-08-12), ein reiner Filter beim Einsammeln würde sie nie
+    // mehr erwischen.
+    .filter(([name]) => !excluded.has(name) && !isExcludedGlossaryTerm(name) && !alreadyGenerated.has(slugify(name)))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   // Grosszuegiger schneiden als `limit`: aussortierte (weil schon vorhandene)
   // Kandidaten sollen nicht den ganzen Aufruf verbrauchen. Sonst brauchte ein

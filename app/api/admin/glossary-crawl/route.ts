@@ -17,6 +17,7 @@ import {
 } from '@/lib/glossary/crawl'
 import { slugify } from '@/lib/glossary/generate'
 import { getMatcherTerms } from '@/lib/glossary/terms'
+import { isExcludedGlossaryTerm } from '@/lib/data/glossary-exclusions'
 
 // Beide Aktionen machen LLM-Calls: Extraktion 10 kurze, Generierung bis zu 3
 // teure. Ohne Deklaration liefe die Route auf dem Plattform-Default — dieselbe
@@ -96,7 +97,7 @@ export async function GET() {
   // Kandidaten, die untereinander auf denselben Slug fallen).
   const existingSlugs = await loadExistingSlugs(supabase)
   const offeneAuswahl = Object.entries(state.candidates)
-    .filter(([name]) => !excluded.has(name) && !done.has(slugify(name)))
+    .filter(([name]) => !excluded.has(name) && !isExcludedGlossaryTerm(name) && !done.has(slugify(name)))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   const { toGenerate, alreadyExisting } = partitionByExisting(offeneAuswahl, existingSlugs)
   const openCount = toGenerate.length
@@ -106,7 +107,7 @@ export async function GET() {
   // bei den bereits erzeugten (sonst weckt es den Verdacht erneuter Kosten).
   const bereitsVorhanden = new Set(alreadyExisting)
   const top = Object.entries(state.candidates)
-    .filter(([name]) => !done.has(slugify(name)) && !bereitsVorhanden.has(name))
+    .filter(([name]) => !done.has(slugify(name)) && !bereitsVorhanden.has(name) && !isExcludedGlossaryTerm(name))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([name, mentions]) => ({ name, mentions, selected: !excluded.has(name) }))
 
