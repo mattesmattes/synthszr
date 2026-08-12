@@ -130,6 +130,48 @@ export async function revalidatePostPaths(
 }
 
 /**
+ * Merkt sich den zuletzt gewählten Anzeigenamen AM ABO, nicht nur im Browser.
+ *
+ * Bisher lag er allein in localStorage: Wer auf dem Telefon las und später am
+ * Rechner schrieb, musste ihn erneut eintippen — und tippte ihn erfahrungsgemäß
+ * anders, was denselben Menschen unter zwei Namen erscheinen ließ.
+ *
+ * Gespeichert wird der bereits geprüfte Name (guardDisplayName), nie die rohe
+ * Eingabe: sonst landete eine abgewehrte Namensanmaßung über diesen Umweg doch
+ * im Abo.
+ *
+ * Best-effort: Ein Fehlschlag darf den Kommentar nicht kosten, der ist zu diesem
+ * Zeitpunkt bereits gespeichert.
+ */
+async function rememberDisplayName(
+  supabase: AdminClient,
+  subscriberId: string,
+  displayName: string,
+): Promise<void> {
+  const name = displayName.trim()
+  if (!name) return
+  const { error } = await supabase
+    .from('subscribers')
+    .update({ name, updated_at: new Date().toISOString() })
+    .eq('id', subscriberId)
+  if (error) console.error('[Comments] Anzeigename nicht gemerkt:', error.message)
+}
+
+/** Der am Abo hinterlegte Anzeigename — für die Vorbelegung des Formulars. */
+export async function getSubscriberDisplayName(
+  supabase: AdminClient,
+  subscriberId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('subscribers')
+    .select('name')
+    .eq('id', subscriberId)
+    .maybeSingle()
+  const name = (data as { name?: string | null } | null)?.name
+  return name?.trim() || null
+}
+
+/**
  * Kommentar mit BELEGTER Identität: sofort moderieren, Status aus dem Verdict.
  * Liefert den Status zurück, damit die UI ehrlich sagen kann, ob der Beitrag
  * live ist oder in der Prüfung.
@@ -159,6 +201,9 @@ export async function submitVerifiedComment(
     published_at: status === 'published' ? new Date().toISOString() : null,
   })
   if (error) throw new Error(`Kommentar nicht speicherbar: ${error.message}`)
+
+  // Erst nach dem Insert: der Kommentar ist wichtiger als die Vorbelegung.
+  await rememberDisplayName(supabase, subscriberId, guardDisplayName(input.displayName))
 
   if (status === 'published') {
     await revalidatePostPaths(supabase, input.postSource, input.postId)
@@ -258,7 +303,7 @@ export async function verifyAndPublishComments(
   const supabase = createAdminClient()
   const { data: parked } = await supabase
     .from('post_comments')
-    .select('id, post_source, post_id, body')
+    .select('id, post_source, post_id, body, display_name')
     .eq('subscriber_id', resolved.subscriberId)
     .eq('status', 'pending_verify')
     // NUR die Kommentare, die MIT DIESEM Token geparkt wurden — nicht alle
@@ -272,7 +317,7 @@ export async function verifyAndPublishComments(
 
   let published = 0
   let pending = 0
-  for (const row of (parked ?? []) as Array<{ id: string; post_source: PostSource; post_id: string; body: string }>) {
+  for (const row of (parked ?? []) as Array<{ id: string; post_source: PostSource; post_id: string; body: string; display_name: string }>) {
     const title = await postTitle(supabase, row.post_source, row.post_id)
     const moderation = await moderateComment(row.body, title)
     const status = moderation.verdict === 'publish' ? 'published'
@@ -291,6 +336,16 @@ export async function verifyAndPublishComments(
       pending++
     }
   }
+  // Den Anzeigenamen ERST HIER ans Abo haengen, nicht schon beim Parken.
+  // Im unverifizierten Flow tippt der Absender eine fremde Adresse ein; wuerde
+  // der Name sofort gespeichert, koennte man das Abo eines anderen umbenennen,
+  // ohne je Zugriff auf dessen Postfach gehabt zu haben. Der Magic-Link belegt
+  // genau diesen Zugriff.
+  const zuletzt = (parked ?? [])[(parked ?? []).length - 1] as { display_name?: string } | undefined
+  if (zuletzt?.display_name) {
+    await rememberDisplayName(supabase, resolved.subscriberId, zuletzt.display_name)
+  }
+
   return { subscriberId: resolved.subscriberId, published, pending }
 }
 

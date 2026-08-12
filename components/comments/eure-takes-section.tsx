@@ -73,13 +73,28 @@ export function EureTakesSection({ postSource, postId, locale }: EureTakesSectio
   // Namen aus dem letzten Besuch vorbelegen und ?ct=-Token aus der URL lesen —
   // beides client-only nach der Hydration, damit die Sektion statisch bleibt.
   useEffect(() => {
+    // localStorage zuerst: sofort da, ohne auf das Netz zu warten.
     try {
       const saved = localStorage.getItem(NAME_KEY)
       if (saved) setDisplayName(saved)
     } catch { /* Private Mode */ }
+
+    // Dann der am ABO hinterlegte Name — er gilt geraeteuebergreifend und
+    // ueberschreibt den lokalen Stand (Betreiber-Wunsch 2026-08-12). So heisst
+    // derselbe Mensch auf Telefon und Rechner gleich, statt sich zweimal
+    // unterschiedlich einzutippen. Der Aufruf ist reine Bequemlichkeit: faellt
+    // er aus, bleibt der lokale Name stehen.
     const params = new URLSearchParams(window.location.search)
     const ct = params.get('ct')
     if (ct) setCommentToken(ct)
+
+    fetch(`/api/comments/me${ct ? `?ct=${encodeURIComponent(ct)}` : ''}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const name = typeof d?.displayName === 'string' ? d.displayName.trim() : ''
+        if (name) setDisplayName(name)
+      })
+      .catch(() => { /* Vorbelegung ist optional */ })
 
     // Rückkehr aus dem NEWSLETTER: Wer dort auf 👍/👎 geklickt hat, kommt mit
     // `?take=<anker>` zurück — die Stimme ist verbucht, jetzt soll wie auf der
