@@ -64,9 +64,25 @@ describe('Newsletter — Take-Barometer', () => {
     expect(html.match(/api\/newsletter-vote\?v=agree/g)).toHaveLength(1)
   })
 
-  it('beschriftet englisch, wenn die Ausgabe englisch ist', async () => {
+  it('reicht die Sprache an die Vote-Route durch', async () => {
     const html = await generateEmailContentWithVotes(post, 'https://www.synthszr.com', undefined, 'en')
-    expect(html).toContain('Agree')
     expect(html).toContain('l=en')
+    expect(html).toContain('title="Agree"')
+  })
+
+  // Betreiber-Wunsch 2026-08-12: nur die Emoji, inline am Satzende.
+  it('zeigt KEINEN Beschriftungstext neben den Daumen', async () => {
+    const html = await generateEmailContentWithVotes(post, 'https://www.synthszr.com')
+    // Als Tooltip erlaubt, als sichtbarer Text nicht.
+    expect(html).not.toMatch(/>\s*👍\s*Sehe ich auch so/)
+    expect(html).not.toMatch(/👎\s*Sehe ich anders\s*</)
+  })
+
+  it('setzt die Daumen INNERHALB des Take-Absatzes, nicht als eigenen Block', async () => {
+    const html = await generateEmailContentWithVotes(post, 'https://www.synthszr.com')
+    const absatz = html.split('So sehe ich das')[1] ?? ''
+    // Zwischen Satzende und Daumen darf kein </p> stehen.
+    const bisDaumen = absatz.slice(0, absatz.indexOf('👍'))
+    expect(bisDaumen).not.toContain('</p>')
   })
 })

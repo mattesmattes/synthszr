@@ -869,10 +869,13 @@ export async function generateEmailContentWithVotes(
     const prods = paragraphProducts.get(index)
     if (prods && prods.length > 0) {
       const chartsBadges = generateChartsBadgesHtml(prods, baseUrl, locale)
-      return prefix + baseHtml.replace(/<\/p>$/, `${chartsBadges}</p>`) + barometerHtml(node, abschnittsAnker, post.slug, locale)
+      // Daumen zuerst, dann die Charts — beide INNERHALB des Absatzes, damit sie
+      // in derselben Zeile wie der letzte Satz bleiben (Betreiber-Wunsch).
+      return prefix + baseHtml.replace(/<\/p>$/, `${barometerHtml(node, abschnittsAnker, post.slug, locale)}${chartsBadges}</p>`)
     }
 
-    return prefix + baseHtml + barometerHtml(node, abschnittsAnker, post.slug, locale)
+    const daumen = barometerHtml(node, abschnittsAnker, post.slug, locale)
+    return prefix + (daumen ? baseHtml.replace(/<\/p>\s*$/, `${daumen}</p>`) : baseHtml)
   })
 
   let html = htmlParts.join('\n')
@@ -980,6 +983,15 @@ function sanitizeHtmlForEmail(s: string): string {
  * damit der Schlüssel, unter dem auch die Website-Votes zählen. Fehlt er (etwa
  * bei einem handgeschriebenen Abschnitt), wäre eine Stimme keiner Sektion
  * zuzuordnen — dann lieber keine Daumen zeigen als falsch zählen.
+ *
+ * INLINE, nicht als eigener Block (Betreiber-Wunsch 2026-08-12): Die Daumen
+ * hängen mit einem Leerzeichen Abstand hinter dem letzten Satz des Takes und
+ * bleiben in derselben Zeile, solange Platz ist. Deshalb liefert diese Funktion
+ * ein Fragment OHNE Container — der Aufrufer setzt es vor das schließende </p>,
+ * und zwar vor die Synthszr-Charts.
+ *
+ * Nur die Emoji, kein Beschriftungstext: „👍 Sehe ich auch so" sprengte die Zeile
+ * und machte aus dem Zusatz einen eigenen Absatz.
  */
 function barometerHtml(
   node: TiptapNode,
@@ -991,16 +1003,16 @@ function barometerHtml(
   if (!/synthszr (take|contra):?/i.test(extractTextFromNode(node))) return ''
 
   const lang = locale || 'de'
-  const de = lang === 'de'
   const link = (v: 'agree' | 'disagree') =>
     `${SITE_URL}/api/newsletter-vote?v=${v}&s=${encodeURIComponent(anchor)}` +
     `&slug=${encodeURIComponent(slug)}&l=${encodeURIComponent(lang)}&ct={{COMMENT_TOKEN}}`
 
-  const stil = 'text-decoration: none; color: #666666; font-size: 14px;'
-  return `<div style="margin: 8px 0 20px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;">
-  <a href="${link('agree')}" style="${stil} margin-right: 20px;">👍 ${de ? 'Sehe ich auch so' : 'Agree'}</a>
-  <a href="${link('disagree')}" style="${stil}">👎 ${de ? 'Sehe ich anders' : 'Disagree'}</a>
-</div>`
+  // title= statt sichtbarem Text: der Zweck bleibt erkennbar (Tooltip,
+  // Screenreader), ohne die Zeile zu verlängern.
+  const stil = 'text-decoration: none; white-space: nowrap;'
+  const de = lang === 'de'
+  return ` <a href="${link('agree')}" style="${stil}" title="${de ? 'Sehe ich auch so' : 'Agree'}">👍</a>` +
+    ` <a href="${link('disagree')}" style="${stil}" title="${de ? 'Sehe ich anders' : 'Disagree'}">👎</a>`
 }
 
 /**
