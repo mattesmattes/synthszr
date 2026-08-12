@@ -77,8 +77,33 @@ export function EureTakesSection({ postSource, postId, locale }: EureTakesSectio
       const saved = localStorage.getItem(NAME_KEY)
       if (saved) setDisplayName(saved)
     } catch { /* Private Mode */ }
-    const ct = new URLSearchParams(window.location.search).get('ct')
+    const params = new URLSearchParams(window.location.search)
+    const ct = params.get('ct')
     if (ct) setCommentToken(ct)
+
+    // Rückkehr aus dem NEWSLETTER: Wer dort auf 👍/👎 geklickt hat, kommt mit
+    // `?take=<anker>` zurück — die Stimme ist verbucht, jetzt soll wie auf der
+    // Website sofort das Schreib-Overlay aufgehen (Betreiber-Wunsch 2026-08-12).
+    // Ohne das bräche die Kette genau dort ab, wo der Leser seine Meinung
+    // gerade geäußert hat.
+    //
+    // Die Headline bleibt leer: Der Abschnitts-Chip ist entfallen, gebraucht
+    // wird nur der Anker — er bindet den Take an denselben Abschnitt wie die
+    // eben abgegebene Stimme.
+    const take = params.get('take')
+    if (take) {
+      setSectionRef({ anchor: take, headline: '' })
+      setModalOpen(true)
+      // Parameter aus der Adresszeile nehmen, sonst öffnet ein Reload das
+      // Overlay erneut — auch nachdem der Take längst abgeschickt wurde.
+      params.delete('take')
+      const rest = params.toString()
+      window.history.replaceState(
+        null,
+        '',
+        window.location.pathname + (rest ? `?${rest}` : '') + window.location.hash,
+      )
+    }
   }, [])
 
   // (Die veröffentlichten Takes lädt jetzt jeder Abschnitts-Block selbst.)

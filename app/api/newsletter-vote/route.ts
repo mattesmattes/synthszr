@@ -60,11 +60,25 @@ function subscriberVoterHash(subscriberId: string): string {
   return createHash('sha256').update(`newsletter-vote:${subscriberId}`).digest('hex')
 }
 
-/** Fällt etwas aus, landet der Leser trotzdem beim Artikel — eine Fehlerseite
- *  für einen Mail-Klick wäre die schlechtere Antwort als eine stille Nicht-Stimme. */
-function redirectToArticle(lang: string, slug: string, anchor?: string): string {
+/**
+ * Ziel nach dem Klick.
+ *
+ * Fällt etwas aus, landet der Leser trotzdem beim Artikel — eine Fehlerseite für
+ * einen Mail-Klick wäre die schlechtere Antwort als eine stille Nicht-Stimme.
+ *
+ * Bei ERFOLG trägt die URL zusätzlich `?take=<anker>`: Die Artikelseite öffnet
+ * daraufhin das Schreib-Overlay für genau diesen Abschnitt — dieselbe Geste wie
+ * auf der Website, wo ein Daumenklick das Overlay sofort aufklappt. Ohne das
+ * bräche die Kette genau dort ab, wo der Leser gerade seine Meinung geäußert hat.
+ *
+ * Der Anker steht zusätzlich als Fragment in der URL, damit der Browser zum
+ * richtigen Abschnitt springt.
+ */
+function redirectToArticle(lang: string, slug: string, anchor?: string, openTake = false): string {
   const base = `${SITE_URL}/${lang}/posts/${encodeURIComponent(slug)}`
-  return anchor ? `${base}#${encodeURIComponent(anchor)}` : base
+  if (!anchor) return base
+  const query = openTake ? `?take=${encodeURIComponent(anchor)}` : ''
+  return `${base}${query}#${encodeURIComponent(anchor)}`
 }
 
 export async function GET(request: NextRequest) {
@@ -115,7 +129,9 @@ export async function GET(request: NextRequest) {
   }
 
   // Kurze Lesersitzung: ab jetzt zwei Stunden lang ohne Magic Link kommentieren.
-  const res = NextResponse.redirect(ziel, { status: 303 })
+  // Ziel MIT ?take=: die Stimme ist verbucht, jetzt darf der Leser optional noch
+  // schreiben — dieselbe Geste wie auf der Website.
+  const res = NextResponse.redirect(redirectToArticle(lang, slug, sectionAnchor, true), { status: 303 })
   const expiresAt = new Date(Date.now() + VOTE_SESSION_TTL_SECONDS * 1000)
   res.cookies.set(READER_COOKIE_NAME, sealReaderSession(resolved.subscriberId, expiresAt), {
     httpOnly: true,
