@@ -37,6 +37,7 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 import { getMatcherTerms } from '@/lib/glossary/terms'
 import { findGlossaryMentions, extractLexTags } from '@/lib/glossary/mentions'
 import { identifyCandidates } from '@/lib/glossary/generate'
+import { filterCandidates } from '@/lib/glossary/candidate-filter'
 import { buildCandidateList } from '@/lib/glossary/candidates'
 import { extractVisibleText } from '@/lib/posts/product-mentions'
 
@@ -525,7 +526,18 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
           const tagged = extractLexTags(content)
           const visibleText = extractVisibleText(content)
           const matched = findGlossaryMentions(visibleText, terms)
-          const fresh = await identifyCandidates(visibleText, terms.map((t) => t.slug))
+          const freshRaw = await identifyCandidates(visibleText, terms.map((t) => t.slug))
+          // ZWEITE INSTANZ, wie im Artikel-Crawl: identifyCandidates urteilt im
+          // Kontext DIESES Artikels, und dort wirkt ein Allgemeinwort
+          // erklärungsbedürftig („Testumgebung", „Übernahme", „Vorstandschef" —
+          // Betreiber-Befund 2026-08-12). Ohne diesen Schritt landet der
+          // Fehlgriff in der Freigabe des Tagespostens, und bestätigt ihn
+          // jemand, kostet er einen vollen Generierungslauf.
+          //
+          // Nur `fresh` prüfen: `tagged` sind ausdrückliche {lex:…}-Anweisungen
+          // des Autors und `matched` bereits vorhandene Begriffe — beide sind
+          // gesetzt, nicht geraten.
+          const { keep: fresh } = await filterCandidates(freshRaw)
           const candidates = await buildCandidateList(supabase, terms, tagged, matched, fresh)
 
           await supabase
