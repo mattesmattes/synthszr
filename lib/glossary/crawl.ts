@@ -32,6 +32,7 @@ import { backfillGlossaryLinks, type BackfillResult } from '@/lib/glossary/backf
 import { relinkTranslationsBatch, type TranslationBackfillResult } from '@/lib/glossary/backfill-translations'
 import { getMatcherTerms, buildReservedNames, getChartProductNames } from '@/lib/glossary/terms'
 import { isExcludedGlossaryTerm } from '@/lib/data/glossary-exclusions'
+import { filterCandidates } from '@/lib/glossary/candidate-filter'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -343,10 +344,33 @@ export async function extractCandidates(
       // trotzdem vor, sonst bliebe der Crawl an diesem Artikel hängen.
       console.error('[GlossaryCrawl] identifyCandidates fehlgeschlagen für', post.id, err)
     }
+    // ZWEITE INSTANZ über die NEUEN Namen dieses Artikels.
+    //
+    // identifyCandidates entscheidet im Kontext EINES Textes — dort wirkt ein
+    // Allgemeinwort erklärungsbedürftig („Testumgebung" in einem Technikartikel,
+    // „Übernahme" in einem Finanzartikel). Die Prüfung sieht die Namen dagegen
+    // als blanke Liste und fragt: stünde das in einem Fachlexikon?
+    //
+    // Betreiber-Befund 2026-08-12: von 62 gesammelten Kandidaten war rund die
+    // Hälfte ungültig, darunter Firmennamen, die der Prompt ausdrücklich
+    // ausschließt. Ein Prüfaufruf je Artikel ist dagegen billig — jeder
+    // durchgerutschte Fehlbegriff kostet sonst einen vollen Generierungslauf.
+    //
+    // Nur die NEUEN Namen prüfen: bereits gesammelte Kandidaten hat der Operator
+    // womöglich schon bewertet, die soll ein Nachlauf nicht hinter seinem Rücken
+    // umsortieren.
+    const neueNamen = found.map((n) => n.trim()).filter((n) => n && slugify(n) && !(n in candidates))
+    const { keep } = neueNamen.length > 0
+      ? await filterCandidates(neueNamen)
+      : { keep: [] as string[] }
+    const erlaubt = new Set(keep)
+
     for (const name of found) {
       const key = name.trim()
       if (!key || !slugify(key)) continue
-      if (!(key in candidates)) newCandidates++
+      const istNeu = !(key in candidates)
+      if (istNeu && !erlaubt.has(key)) continue
+      if (istNeu) newCandidates++
       candidates[key] = (candidates[key] ?? 0) + 1
     }
   }
