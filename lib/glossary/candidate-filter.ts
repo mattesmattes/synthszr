@@ -82,6 +82,42 @@ ${names.map((n) => `- ${n}`).join('\n')}
 Antworte via Tool mit reject: nur den abzulehnenden Kandidaten, jeder mit Grund. Ist alles gültig, gib eine leere Liste zurück.`
 }
 
+/**
+ * Prompt für die Prüfung BESTEHENDER Einträge — bewusst konservativer.
+ *
+ * Bei einem Kandidaten kostet ein Fehlurteil nichts: der Begriff wird einfach
+ * nicht erzeugt. Bei einem bestehenden Eintrag kostet es einen bezahlten Text,
+ * seine Illustration, die Übersetzung, die Verlinkungen in Artikeln und eine
+ * indexierte Seite.
+ *
+ * An einer Stichprobe von 150 Bestandsbegriffen lehnte der Kandidaten-Prompt
+ * 28 % ab — darunter „Bash", „CMS", „CRM" und „DirectX", also etablierte
+ * Fachbegriffe. Genau diese Klasse fängt der Zusatz unten ab.
+ */
+export function buildExistingTermsPrompt(names: string[]): string {
+  return `Hier sind Einträge, die BEREITS in einem Fachlexikon stehen. Prüfe, welche dort nicht hingehören.
+
+DAS LEXIKON ERKLÄRT: Technik/IT, KI, Finanzen/Kapitalmarkt sowie Mathematik/Wissenschaft, soweit sie in KI-Artikeln vorkommt.
+
+WICHTIG — DIESE EINTRÄGE EXISTIEREN BEREITS. Sie zu entfernen kostet mehr, als einen zweifelhaften stehen zu lassen. Lehne deshalb NUR ab, was eindeutig nicht hineingehört. Im Zweifel IMMER behalten.
+
+UNBEDINGT BEHALTEN, auch wenn sie kurz, geläufig oder abgekürzt sind:
+- Etablierte Fachabkürzungen: Bash, CMS, CRM, API, SQL, GPU, RAM, SDK, CI/CD, DNS.
+- Benannte Technologien und Standards, auch mit Firmenherkunft: Kubernetes, DirectX, gVisor, Graviton, CUDA, PyTorch.
+- Gesetze, Normen, Institutionen mit eigenem Erklärgehalt: Defense Production Act, EU AI Act, DSGVO, ISO 27001.
+- Fachjargon aus Technik, KI, Finanzen und Mathematik, egal wie speziell.
+
+NUR DIESE ABLEHNEN (mit Grund):
+- allgemeinwort — Ein Erwachsener ohne jedes Fachwissen versteht es vollständig, und es hat keine fachliche Bedeutung darüber hinaus. Beispiele: Ankermieter, Call-Center, Cash Cow, Clickbait, Büroarbeit, Vorstandschef, Übernahme, Testumgebung, Beschaffungsregeln, Adoptionsgeschwindigkeit.
+- firma_oder_produkt — REINE Firmen-, Marken- oder Plattformnamen ohne technischen Erklärgehalt. Beispiele: AWS, Reddit, Stack Overflow, TUI. (Eine Technologie wie DirectX ist KEIN solcher Fall.)
+- adhoc_formulierung — Erfundene Wendung aus einem einzelnen Artikel, die niemand nachschlägt. Beispiele: "Post-Chatbot-Ära", "1260H-Liste", "Context Machine", "Gigawatt-Maßstab (Rechenzentren)".
+
+EINTRÄGE:
+${names.map((n) => `- ${n}`).join('\n')}
+
+Antworte via Tool mit reject: nur den eindeutig abzulehnenden Einträgen. Eine leere Liste ist ein gutes Ergebnis.`
+}
+
 export interface CandidateFilterResult {
   keep: string[]
   rejected: Array<{ name: string; reason: string }>
@@ -93,7 +129,10 @@ export interface CandidateFilterResult {
  * Die harte Liste (isExcludedGlossaryTerm) greift VOR dem Modell — was dort
  * steht, ist eine Betreiber-Entscheidung und wird nicht zur Abstimmung gestellt.
  */
-export async function filterCandidates(names: string[]): Promise<CandidateFilterResult> {
+export async function filterCandidates(
+  names: string[],
+  opts: { bestand?: boolean } = {},
+): Promise<CandidateFilterResult> {
   const rejected: Array<{ name: string; reason: string }> = []
   const zuPruefen: string[] = []
   for (const n of names) {
@@ -115,7 +154,7 @@ export async function filterCandidates(names: string[]): Promise<CandidateFilter
       max_tokens: 4096,
       tools: [FILTER_TOOL],
       tool_choice: { type: 'tool', name: FILTER_TOOL.name },
-      messages: [{ role: 'user', content: buildFilterPrompt(zuPruefen) }],
+      messages: [{ role: 'user', content: opts.bestand ? buildExistingTermsPrompt(zuPruefen) : buildFilterPrompt(zuPruefen) }],
     })
     const block = resp.content.find((b) => b.type === 'tool_use')
     const parsed = VerdictSchema.safeParse(block && 'input' in block ? block.input : null)
