@@ -820,8 +820,18 @@ export async function generateEmailContentWithVotes(
   }
 
   // Convert to HTML with vote badges and thumbnails
+  // Anker des laufenden Abschnitts fuer die Barometer-Links: die queueItemId der
+  // zuletzt gesehenen H2. Genau derselbe Schluessel, den das Web-Barometer
+  // verwendet (s. lib/tiptap/dom-processors/take-barometer.ts) — nur so landen
+  // Stimmen aus der Mail und von der Website in derselben Auswertung.
+  let abschnittsAnker: string | null = null
+
   const htmlParts = doc.content.map((node, index) => {
     let prefix = ''
+    if (node.type === 'heading' && (node.attrs?.level === 2 || node.attrs?.level === '2')) {
+      const qid = (node.attrs as { queueItemId?: unknown } | undefined)?.queueItemId
+      if (typeof qid === 'string' && qid) abschnittsAnker = qid
+    }
 
     // Check if this is an H2 heading (article heading)
     if (node.type === 'heading' && (node.attrs?.level === 2 || node.attrs?.level === '2')) {
@@ -859,10 +869,10 @@ export async function generateEmailContentWithVotes(
     const prods = paragraphProducts.get(index)
     if (prods && prods.length > 0) {
       const chartsBadges = generateChartsBadgesHtml(prods, baseUrl, locale)
-      return prefix + baseHtml.replace(/<\/p>$/, `${chartsBadges}</p>`)
+      return prefix + baseHtml.replace(/<\/p>$/, `${chartsBadges}</p>`) + barometerHtml(node, abschnittsAnker, post.slug, locale)
     }
 
-    return prefix + baseHtml
+    return prefix + baseHtml + barometerHtml(node, abschnittsAnker, post.slug, locale)
   })
 
   let html = htmlParts.join('\n')
@@ -951,6 +961,46 @@ function sanitizeHtmlForEmail(s: string): string {
   return s.replace(/<\/?([a-zA-Z0-9]+)([^>]*)>/g, (full, tag: string) => {
     return allowed.test(tag) ? full : ''
   })
+}
+
+/**
+ * Take-Barometer für die E-Mail: zwei Links statt zweier Knöpfe.
+ *
+ * Auf der Website ist das Barometer eine React-Komponente, die per POST mit
+ * Cookie abstimmt. In einer Mail läuft kein JavaScript, und die POST-Route
+ * verlangt zu Recht einen gültigen Origin — ein Mail-Client kann nur einem Link
+ * folgen. Deshalb zeigen diese Links auf /api/newsletter-vote, das die Stimme
+ * verbucht, eine zweistündige Lesersitzung setzt und auf den Artikel weiterleitet.
+ *
+ * `{{COMMENT_TOKEN}}` bleibt als Platzhalter stehen; der Versand ersetzt ihn je
+ * Empfänger (newsletter-send/route.ts) — derselbe Weg, den der Artikellink
+ * bereits nutzt.
+ *
+ * OHNE ANKER KEINE LINKS: Der Anker ist die queueItemId der Abschnitts-H2 und
+ * damit der Schlüssel, unter dem auch die Website-Votes zählen. Fehlt er (etwa
+ * bei einem handgeschriebenen Abschnitt), wäre eine Stimme keiner Sektion
+ * zuzuordnen — dann lieber keine Daumen zeigen als falsch zählen.
+ */
+function barometerHtml(
+  node: TiptapNode,
+  anchor: string | null,
+  slug: string | undefined,
+  locale?: string,
+): string {
+  if (node.type !== 'paragraph' || !anchor || !slug) return ''
+  if (!/synthszr (take|contra):?/i.test(extractTextFromNode(node))) return ''
+
+  const lang = locale || 'de'
+  const de = lang === 'de'
+  const link = (v: 'agree' | 'disagree') =>
+    `${SITE_URL}/api/newsletter-vote?v=${v}&s=${encodeURIComponent(anchor)}` +
+    `&slug=${encodeURIComponent(slug)}&l=${encodeURIComponent(lang)}&ct={{COMMENT_TOKEN}}`
+
+  const stil = 'text-decoration: none; color: #666666; font-size: 14px;'
+  return `<div style="margin: 8px 0 20px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;">
+  <a href="${link('agree')}" style="${stil} margin-right: 20px;">👍 ${de ? 'Sehe ich auch so' : 'Agree'}</a>
+  <a href="${link('disagree')}" style="${stil}">👎 ${de ? 'Sehe ich anders' : 'Disagree'}</a>
+</div>`
 }
 
 /**
