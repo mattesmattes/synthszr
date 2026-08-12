@@ -79,8 +79,28 @@ export async function GET(request: NextRequest) {
   if (!kind) return NextResponse.json({ error: 'Unbekannte Lauf-Art' }, { status: 400 })
 
   const postId = searchParams.get('postId') ?? undefined
-  const job = await getJobStatus(createAdminClient(), kind, postId)
-  return NextResponse.json({ job })
+  const supabase = createAdminClient()
+  const job = await getJobStatus(supabase, kind, postId)
+
+  // Wartet der Lauf, dann WORAUF? Je Tick arbeitet der Cron nur EINEN
+  // Lexikon-Lauf ab; ein zweiter bleibt so lange 'pending'. Ohne diese Angabe
+  // stand im Panel bloß „Wartet." — bei einem Erzeugungslauf, der pro Begriff
+  // 60-90s braucht, sieht das minutenlang wie ein Hänger aus und wurde auch als
+  // solcher gemeldet (Betreiber 2026-08-12), obwohl der blockierende Lauf
+  // ordentlich vorankam.
+  let blockedBy: { kind: string; doneCount: number; total: number | null } | null = null
+  if (job?.status === 'pending') {
+    const { data } = await supabase
+      .from('glossary_jobs')
+      .select('kind, done_count, total')
+      .eq('status', 'processing')
+      .limit(1)
+      .maybeSingle()
+    const aktiv = data as { kind: string; done_count: number; total: number | null } | null
+    if (aktiv) blockedBy = { kind: aktiv.kind, doneCount: aktiv.done_count, total: aktiv.total }
+  }
+
+  return NextResponse.json({ job, blockedBy })
 }
 
 /** Abbruchwunsch; der naechste Cron-Tick wertet ihn aus. */

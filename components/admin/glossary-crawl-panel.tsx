@@ -48,10 +48,6 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
   const [busy, setBusy] = useState<'extract' | 'generate' | 'generate-all' | 'reset' | 'images' | 'relink' | 'translations' | 'term-translations' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastResult, setLastResult] = useState<string | null>(null)
-  /** Startdatum der Nachverlinkung. Default heute: der Lauf geht von neu nach
-   *  alt, "heute" heisst also "alles". Ein aelteres Datum ueberspringt die
-   *  neueren Artikel — nuetzlich, um einen abgebrochenen Lauf gezielt dort
-   *  fortzusetzen, wo er stehen geblieben ist. */
   /**
    * Untere Datumsgrenze der Nachverlinkung. LEER = ganzer Bestand.
    *
@@ -642,12 +638,12 @@ export function GlossaryCrawlPanel({ onTermsChanged }: { onTermsChanged?: () => 
           {/* Fortschritt und Protokoll kommen aus den Jobs, nicht mehr aus
               lokalem State — sie ueberleben damit ein Neuladen der Seite und
               erscheinen von selbst, wenn hier gerade ein Lauf offen ist. */}
-          <JobLog job={extractJob.job} unit="Artikel" verb="gelesen" />
-          <JobLog job={termsJob.job} unit="Begriffe" verb="erzeugt" />
-          <JobLog job={imagesJob.job} unit="Illustrationen" verb="erzeugt" />
-          <JobLog job={relinkJob.job} unit="Artikel" verb="verlinkt" />
-          <JobLog job={translationsJob.job} unit="Uebersetzungen" verb="verlinkt" />
-          <JobLog job={termTranslationsJob.job} unit="Begriffe" verb="uebersetzt" />
+          <JobLog job={extractJob.job} blockedBy={extractJob.blockedBy} unit="Artikel" verb="gelesen" />
+          <JobLog job={termsJob.job} blockedBy={termsJob.blockedBy} unit="Begriffe" verb="erzeugt" />
+          <JobLog job={imagesJob.job} blockedBy={imagesJob.blockedBy} unit="Illustrationen" verb="erzeugt" />
+          <JobLog job={relinkJob.job} blockedBy={relinkJob.blockedBy} unit="Artikel" verb="verlinkt" />
+          <JobLog job={translationsJob.job} blockedBy={translationsJob.blockedBy} unit="Uebersetzungen" verb="verlinkt" />
+          <JobLog job={termTranslationsJob.job} blockedBy={termTranslationsJob.blockedBy} unit="Begriffe" verb="uebersetzt" />
 
 
           {busy === 'generate' && (

@@ -25,6 +25,29 @@ export function isJobOpen(job: JobView | null | undefined): boolean {
   return job?.status === 'pending' || job?.status === 'processing'
 }
 
+/** Der Lauf, der gerade den seriellen Slot haelt — nur gesetzt, wenn der eigene
+ *  Lauf deshalb wartet. */
+export interface BlockedBy {
+  kind: string
+  doneCount: number
+  total: number | null
+}
+
+/** Deutsche Namen der Lauf-Arten fuer die Wartemeldung. */
+const KIND_LABELS: Record<string, string> = {
+  generate: 'Begriffe erzeugen',
+  images: 'Illustrationen',
+  relink: 'Nachverlinkung',
+  pending: 'Begriffs-Freigabe',
+  translations: 'Übersetzungen nachverlinken',
+  'term-translations': 'Begriffe übersetzen',
+  extract: 'Artikel lesen',
+}
+
+export function kindLabel(kind: string): string {
+  return KIND_LABELS[kind] ?? kind
+}
+
 /**
  * Liest den Job-Status, solange ein Lauf offen ist.
  *
@@ -44,6 +67,7 @@ export function isJobOpen(job: JobView | null | undefined): boolean {
  */
 export function useJob(kind: JobKind, postId?: string, onFinished?: () => void) {
   const [job, setJob] = useState<JobView | null>(null)
+  const [blockedBy, setBlockedBy] = useState<BlockedBy | null>(null)
 
   const load = useCallback(async () => {
     const url = postId
@@ -53,6 +77,7 @@ export function useJob(kind: JobKind, postId?: string, onFinished?: () => void) 
     if (!res.ok) return
     const data = await res.json().catch(() => null)
     setJob(data?.job ?? null)
+    setBlockedBy(data?.blockedBy ?? null)
   }, [kind, postId])
 
   // Einmaliger Initial-Load beim Mount: so erscheint ein bereits laufender Job
@@ -84,7 +109,7 @@ export function useJob(kind: JobKind, postId?: string, onFinished?: () => void) 
     wasOpen.current = open
   }, [job?.status, onFinished, job])
 
-  return { job, reload: load }
+  return { job, blockedBy, reload: load }
 }
 
 /**
@@ -132,7 +157,13 @@ export function JobCancelButton({
  * statt aus lokalem log/current-State, damit sie einen Neuladen der Seite
  * ueberleben.
  */
-export function JobLog({ job, unit, verb }: { job: JobView | null; unit: string; verb: string }) {
+export function JobLog({ job, unit, verb, blockedBy }: {
+  job: JobView | null
+  unit: string
+  verb: string
+  /** Der Lauf, der gerade den seriellen Slot haelt (s. useJob). */
+  blockedBy?: BlockedBy | null
+}) {
   if (!job) return null
   const open = isJobOpen(job)
   // 'pending' getrennt von 'processing': solange der Job wartet, hat noch
@@ -140,8 +171,14 @@ export function JobLog({ job, unit, verb }: { job: JobView | null; unit: string;
   // dem Serialisierungs-Fix laeuft je Tick maximal ein Lexikonlauf; ein
   // zweiter angestossener Lauf bleibt also fuer die Dauer des ersten in
   // 'pending' stehen.
+  // „Wartet." allein sah minutenlang wie ein Haenger aus (Betreiber-Meldung
+  // 2026-08-12), obwohl der blockierende Lauf ordentlich vorankam. Deshalb
+  // benennen, WORAUF gewartet wird — samt dessen Fortschritt.
+  const wartetAuf = blockedBy
+    ? `Wartet — „${kindLabel(blockedBy.kind)}" laeuft noch (${blockedBy.doneCount}${blockedBy.total !== null ? `/${blockedBy.total}` : ''}).`
+    : 'Wartet auf den naechsten Cron-Tick.'
   const headline = job.status === 'pending'
-    ? 'Wartet.'
+    ? wartetAuf
     : job.status === 'processing'
       ? `In Arbeit — ${job.done_count}${job.total !== null ? ` von ${job.total}` : ''} ${unit}`
       : job.status === 'done'
