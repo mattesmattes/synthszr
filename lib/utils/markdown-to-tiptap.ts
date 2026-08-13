@@ -4,11 +4,12 @@ import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import { normalizeQuotes } from '@/lib/utils/typography'
 import { HeadingWithQueueId } from '@/lib/tiptap/heading-with-queue-id'
+import type { BundleType } from '@/lib/i18n/bundle-labels'
 
 export interface BundleMarker {
   /** 0-based index among ALL heading lines in the markdown (in document order). */
   headingIndex: number
-  bundleType: 'topic' | 'recap'
+  bundleType: BundleType
 }
 
 const HEADING_LINE_RE = /^\s*#{1,6}\s/
@@ -32,7 +33,7 @@ export function extractBundleMarkers(markdown: string): { cleaned: string; marke
     headingIndex++
     const match = line.match(BUNDLE_MARKER_RE)
     if (!match) return line
-    markers.push({ headingIndex: idx, bundleType: match[1] as 'topic' | 'recap' })
+    markers.push({ headingIndex: idx, bundleType: match[1] as BundleType })
     return line.replace(BUNDLE_MARKER_RE, '')
   })
   return { cleaned: cleanedLines.join('\n'), markers }

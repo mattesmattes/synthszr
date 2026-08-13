@@ -24,6 +24,7 @@ import { loadFeedCache, persistFeedCache, hostOf } from '@/lib/techmeme/feed-dis
 import { fetchSourceText, type FetchContext } from '@/lib/techmeme/fetch-text'
 import { buildQueueItem, filterKnownSources, storyKeyFor, type TechmemeQueueItem } from '@/lib/techmeme/queue-items'
 import { addToQueue } from '@/lib/news-queue/service'
+import { pickTopicStories, TOPIC_STORY_LIMIT } from '@/lib/techmeme/topic-selection'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -48,6 +49,8 @@ export interface TechmemeRunResult {
   /** Wegen Zeitbudget liegen geblieben. */
   offen: number
   modi: Record<string, number>
+  /** Wie viele Stories als „Thema des Tages" laufen. */
+  themen: number
   fehler: string[]
 }
 
@@ -126,6 +129,32 @@ async function loadStoryCounts(supabase: AdminClient): Promise<Map<string, numbe
   return counts
 }
 
+/**
+ * Story-Schlüssel, die bereits als Thema des Tages vorgemerkt sind.
+ *
+ * Ohne diese Zählung markierte jeder Lauf erneut „die obersten fünf" — nach
+ * sechs Läufen am Tag stünden bis zu dreißig Leitartikel im Post, jeder bis zu
+ * 25 Sätze lang.
+ */
+async function loadActiveTopicStories(supabase: AdminClient): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('news_queue')
+    .select('metadata')
+    .eq('status', 'selected')
+    .eq('bundle_type', 'topic')
+    .range(0, 999)
+
+  if (error) {
+    throw new Error(`Vorgemerkte Themen nicht lesbar: ${error.message}`)
+  }
+  const keys = new Set<string>()
+  for (const zeile of (data ?? []) as Array<{ metadata: Record<string, unknown> | null }>) {
+    const key = zeile.metadata?.techmeme_story
+    if (typeof key === 'string') keys.add(key)
+  }
+  return keys
+}
+
 interface Aufgabe {
   story: TechmemeStory
   source: { url: string; publication: string }
@@ -133,6 +162,8 @@ interface Aufgabe {
   /** Position der Story auf der Startseite — Techmemes Haupturteil. */
   storyIndex: number
   totalStories: number
+  /** Gehört zu den Themen des Tages (Bündel-Abschnitt statt Einzelmeldung). */
+  istThema: boolean
 }
 
 /** Arbeitet die Liste mit fester Parallelität ab und hält das Zeitbudget ein. */
@@ -150,7 +181,7 @@ async function abarbeiten(
       if (Date.now() > deadline) return
       const i = next++
       if (i >= aufgaben.length) return
-      const { story, source, rank, storyIndex, totalStories } = aufgaben[i]
+      const { story, source, rank, storyIndex, totalStories, istThema } = aufgaben[i]
 
       try {
         const text = await fetchSourceText(ctx, source.url)
@@ -161,7 +192,7 @@ async function abarbeiten(
         }
         ergebnis.modi[text.mode] = (ergebnis.modi[text.mode] ?? 0) + 1
         fertig.push(buildQueueItem({
-          story, source, rank, storyIndex, totalStories,
+          story, source, rank, storyIndex, totalStories, istThema,
           text: text.text,
           title: text.title,
           mode: text.mode,
@@ -186,7 +217,7 @@ export async function runTechmemeJob(
   const deadline = Date.now() + (opts.budgetMs ?? DEFAULT_BUDGET_MS)
   const ergebnis: TechmemeRunResult = {
     stories: 0, relevant: 0, kandidaten: 0, verarbeitet: 0,
-    hinzugefuegt: 0, ohneText: 0, offen: 0, modi: {}, fehler: [],
+    hinzugefuegt: 0, ohneText: 0, offen: 0, modi: {}, themen: 0, fehler: [],
   }
 
   const stories = await fetchTopStories(opts.maxStories ?? 20)
@@ -202,6 +233,14 @@ export async function runTechmemeJob(
 
   const bekannt = await loadKnownUrls(supabase)
   const storyCounts = await loadStoryCounts(supabase)
+
+  // Die obersten Stories werden „Thema des Tages" — ein gebündelter Leitartikel
+  // je Story, der alle ihre Quellen zusammenführt (Betreiber-Vorgabe).
+  const themen = pickTopicStories(
+    relevante.map((s) => storyKeyFor(s)),
+    await loadActiveTopicStories(supabase),
+  )
+  ergebnis.themen = Math.min(themen.size, TOPIC_STORY_LIMIT)
 
   // Techmemes Reihenfolge bleibt erhalten: Rang 0 ist die Hauptmeldung. Der
   // Rang wird VOR dem Abgleich vergeben, damit er die Position bei Techmeme
@@ -219,13 +258,18 @@ export async function runTechmemeJob(
 
     // Die Obergrenze gilt JE STORY, nicht je Lauf: Was frühere Durchgänge schon
     // angelegt haben, zählt mit.
-    const belegt = storyCounts.get(storyKeyFor(story)) ?? 0
+    const storyKey = storyKeyFor(story)
+    const belegt = storyCounts.get(storyKey) ?? 0
     const frei = Math.max(0, SOURCES_PER_STORY - belegt)
     if (frei === 0) continue
 
     const frisch = filterKnownSources(gewaehlt, bekannt).slice(0, frei)
     for (const source of frisch) {
-      aufgaben.push({ story, source, rank: gewaehlt.indexOf(source), storyIndex, totalStories: stories.length })
+      aufgaben.push({
+        story, source, rank: gewaehlt.indexOf(source), storyIndex,
+        totalStories: stories.length,
+        istThema: themen.has(storyKey),
+      })
     }
   }
   ergebnis.kandidaten = aufgaben.length

@@ -63,6 +63,8 @@ export interface QueueItemInput {
   title: string | null
   mode: FetchMode
   publishedAt: string | null
+  /** Gehört die Story zu den Themen des Tages? */
+  istThema?: boolean
 }
 
 export interface TechmemeQueueItem {
@@ -74,6 +76,11 @@ export interface TechmemeQueueItem {
   /** Techmeme nennt die Publikation im Klartext — sonst stünde in der Queue
    *  nur die Domain. */
   sourceDisplayName: string
+  /** 'topic' für die obersten Stories des Tages, sonst nichts. */
+  bundleType: 'topic' | null
+  /** Themen starten direkt auf 'selected' — Betreiber-Vorgabe „vollautomatisch
+   *  bis in den Post". */
+  status: 'pending' | 'selected'
   emailReceivedAt: string | null
   contentLength: number
   /**
@@ -95,7 +102,7 @@ export interface TechmemeQueueItem {
 const EXCERPT_LENGTH = 400
 
 export function buildQueueItem(input: QueueItemInput): TechmemeQueueItem {
-  const { story, source, rank, storyIndex, totalStories, text, title, mode, publishedAt } = input
+  const { story, source, rank, storyIndex, totalStories, text, title, mode, publishedAt, istThema } = input
   const publikation = publicationLabel(source.publication)
 
   // Die BREITE zaehlt alle Quellen der Story, nicht nur die verarbeiteten:
@@ -115,6 +122,8 @@ export function buildQueueItem(input: QueueItemInput): TechmemeQueueItem {
     sourceUrl: source.url,
     sourceEmail: null,
     sourceDisplayName: publikation,
+    bundleType: istThema ? 'topic' : null,
+    status: istThema ? 'selected' : 'pending',
     emailReceivedAt: publishedAt,
     contentLength: text.length,
     synthesisScore: score,

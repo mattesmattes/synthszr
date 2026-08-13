@@ -1,3 +1,4 @@
+import type { BundleType } from '@/lib/i18n/bundle-labels'
 // Supabase Database Types for Newsletter Aggregator
 
 export interface NewsletterSource {
@@ -106,7 +107,7 @@ export interface NewsQueueItem {
   expires_at: string
   email_received_at: string | null
   metadata: Record<string, unknown>
-  bundle_type?: 'topic' | 'recap' | null
+  bundle_type?: BundleType | null
 }
 
 export interface NewsQueueSourceDistribution {

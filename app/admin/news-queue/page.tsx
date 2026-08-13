@@ -46,6 +46,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { RankingSuggestionsPanel } from '@/components/admin/ranking-suggestions-panel'
+import type { BundleType } from '@/lib/i18n/bundle-labels'
 
 interface QueueStats {
   pending: number
@@ -87,7 +88,7 @@ interface QueueItem {
   email_received_at: string | null
   skip_reason: string | null
   via_ranking?: boolean // true when this selected item came from accepting an AI suggestion
-  bundle_type?: 'topic' | 'recap' | null
+  bundle_type?: BundleType | null
 }
 
 /**
@@ -652,7 +653,7 @@ export default function NewsQueuePage() {
 
   // Toggle a bundle tag ("Thema des Tages" / "Nachlese") on a selected item.
   // Exclusive: clicking the active tag clears it, clicking the other tag switches.
-  const handleBundleType = async (itemId: string, tag: 'topic' | 'recap') => {
+  const handleBundleType = async (itemId: string, tag: BundleType) => {
     const current = items.find(item => item.id === itemId)?.bundle_type ?? null
     const nextValue = current === tag ? null : tag
     setActionLoading(`bundle-${itemId}`)
@@ -1327,6 +1328,19 @@ export default function NewsQueuePage() {
                                   }`}
                                 >
                                   Thema des Tages
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleBundleType(item.id, 'deep_dive')}
+                                  disabled={actionLoading === `bundle-${item.id}`}
+                                  title="Deep Dive"
+                                  className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap shrink-0 transition-colors ${
+                                    item.bundle_type === 'deep_dive'
+                                      ? 'bg-rose-400 text-black border-rose-500'
+                                      : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-rose-500 hover:text-rose-600'
+                                  }`}
+                                >
+                                  Deep Dive
                                 </button>
                                 <button
                                   type="button"

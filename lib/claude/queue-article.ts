@@ -34,6 +34,7 @@ import { isLikelyTruncated } from '@/lib/claude/rewrite-truncation'
 import { getBalancedSelection, getSelectedItems, selectItemsForArticle, deriveSourceUrl } from '@/lib/news-queue/service'
 import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
 import { getModelForUseCase } from '@/lib/ai/model-config'
+import type { BundleType } from '@/lib/i18n/bundle-labels'
 
 export interface QueueArticleParams {
   queueItemIds?: string[]   // Specific items to use (optional)
@@ -78,7 +79,8 @@ export function toPipelineItem(item: {
   source_display_name: string | null
   source_url: string | null
   source_identifier: string
-  bundle_type?: 'topic' | 'recap' | null
+  bundle_type?: BundleType | null
+  metadata?: Record<string, unknown> | null
 }): PipelineItem {
   return {
     id: item.id,
@@ -88,7 +90,24 @@ export function toPipelineItem(item: {
     source_url: sanitizeUrl(item.source_url) || deriveSourceUrl(null, item.source_identifier),
     source_identifier: item.source_identifier,
     bundle_type: item.bundle_type ?? null,
+    bundle_key: bundleKeyOf(item.metadata),
   }
+}
+
+/**
+ * Woran erkennt die Pipeline, dass zwei gebündelte News DASSELBE Thema
+ * behandeln?
+ *
+ * An der Techmeme-Story. Sie steht bereits in den Metadaten — ein eigenes Feld
+ * daneben könnte davon abweichen und wäre eine zweite Wahrheit über dieselbe
+ * Sache.
+ *
+ * Ohne Schlüssel (händisch markierte News) bleibt es beim bisherigen Verhalten:
+ * alle Items eines Typs bilden EIN Bündel.
+ */
+export function bundleKeyOf(metadata: Record<string, unknown> | null | undefined): string | null {
+  const key = metadata?.techmeme_story
+  return typeof key === 'string' && key.length > 0 ? key : null
 }
 
 /**
@@ -126,7 +145,10 @@ export async function selectAndEnrichItems(opts: {
     source_display_name: string | null
     source_url: string | null
     source_identifier: string
-    bundle_type?: 'topic' | 'recap' | null
+    bundle_type?: BundleType | null
+    // Trägt die Techmeme-Story, aus der bundleKeyOf den Gruppierungsschlüssel
+    // liest — ohne sie fielen fünf Themen wieder zu einem Abschnitt zusammen.
+    metadata?: Record<string, unknown> | null
   }>
 
   if (queueItemIds && queueItemIds.length > 0) {

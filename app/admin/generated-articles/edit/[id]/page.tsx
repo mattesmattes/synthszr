@@ -33,6 +33,7 @@ import { runEditorInChiefOnMarkdown } from '@/lib/editor-in-chief/run-stream'
 import type { LearnedPattern } from '@/lib/edit-learning/retrieval'
 import { GlossaryApprovalPanel } from '@/components/admin/glossary-approval-panel'
 import type { GlossaryCandidate } from '@/lib/glossary/types'
+import type { BundleType } from '@/lib/i18n/bundle-labels'
 
 // Fetch helper for die news-queue "by-ids" Action (Security-Stufe 2, Welle 1c) —
 // ersetzt direkte Browser-Queries `.from('news_queue').select(...).in('id', ids)[.limit(n)]`.
@@ -51,7 +52,7 @@ interface QueueItem {
   title: string
   source_display_name: string | null
   source_identifier: string
-  bundle_type?: 'topic' | 'recap' | null
+  bundle_type?: BundleType | null
 }
 
 interface AppliedPatternData {
@@ -449,7 +450,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   // Bündel-Tag ("Thema des Tages" / "Nachlese") an einer Quell-News toggeln.
   // Schreibt news_queue.bundle_type (wie in der News-Queue); der Artikel-Text
   // bleibt unangetastet — das Tag wirkt erst bei einer Neu-Generierung.
-  const handleBundleType = async (itemId: string, tag: 'topic' | 'recap') => {
+  const handleBundleType = async (itemId: string, tag: BundleType) => {
     const current = queueItems.find(item => item.id === itemId)?.bundle_type ?? null
     const nextValue = current === tag ? null : tag
     setBundleLoadingId(itemId)
@@ -1259,6 +1260,19 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                             }`}
                           >
                             Thema des Tages
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleBundleType(item.id, 'deep_dive')}
+                            disabled={bundleLoadingId === item.id}
+                            title="Deep Dive"
+                            className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap shrink-0 transition-colors ${
+                              item.bundle_type === 'deep_dive'
+                                ? 'bg-rose-400 text-black border-rose-500'
+                                : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-rose-500 hover:text-rose-600'
+                            }`}
+                          >
+                            Deep Dive
                           </button>
                           <button
                             type="button"

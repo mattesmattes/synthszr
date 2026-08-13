@@ -288,6 +288,14 @@ export async function addToQueue(
      * weiter mit der Domain.
      */
     sourceDisplayName?: string | null
+    /**
+     * Bündel-Zuordnung schon beim Anlegen. Der Techmeme-Lauf kennt die
+     * Story-Zugehörigkeit bereits — sie nachträglich zu setzen hieße, die eben
+     * geschriebenen Zeilen über ihre URL wiederzufinden.
+     */
+    bundleType?: 'topic' | 'recap' | 'deep_dive' | null
+    /** Abweichender Anfangsstatus (Techmeme-Themen starten auf 'selected'). */
+    status?: 'pending' | 'selected'
     synthesisScore?: number
     relevanceScore?: number
     uniquenessScore?: number
@@ -341,6 +349,8 @@ export async function addToQueue(
       source_pub_rate: item.sourcePubRate ?? 0,
       content_length: item.contentLength ?? (item.content?.length || 0),
       email_received_at: item.emailReceivedAt || null,
+      ...(item.bundleType ? { bundle_type: item.bundleType } : {}),
+      ...(item.status ? { status: item.status, selected_at: new Date().toISOString() } : {}),
       metadata: item.metadata || {}
     }
   })
