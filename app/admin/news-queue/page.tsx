@@ -90,6 +90,44 @@ interface QueueItem {
   bundle_type?: 'topic' | 'recap' | null
 }
 
+/**
+ * Herkunft eines Eintrags — Grundlage für das Badge in der Zeile UND für den
+ * Tag-Filter darüber.
+ *
+ * Beides aus EINER Quelle, weil es sonst auseinanderläuft: Bis 2026-08-13
+ * durchsuchte der Filter nur Titel, Auszug und Quellenname. Ein Filter-Tag
+ * „Techmeme" hätte damit null Treffer geliefert, obwohl das Badge daneben
+ * sichtbar „Techmeme" sagt — für den Bedienenden schlicht ein kaputter Filter.
+ *
+ * Techmeme steht nur in `metadata`: In `news_queue` trägt `source_identifier`
+ * die Domain des Originalartikels, der Aggregator wird beim Queueing bewusst
+ * wegnormalisiert (lib/news-queue/service.ts, AGGREGATOR_EMAILS).
+ *
+ * Reihenfolge wie bisher: Manuell schlägt alles andere — die Absicht des
+ * Bedienenden steht über der automatischen Einordnung.
+ */
+function herkunftOf(item: QueueItem): { label: string; cls: string } | null {
+  const meta = item.metadata as { manual?: boolean; techmeme?: boolean } | null | undefined
+  if (meta?.manual === true) {
+    return { label: 'Manual', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' }
+  }
+  if (meta?.techmeme === true) {
+    return { label: 'Techmeme', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' }
+  }
+  const st = item.daily_repo?.source_type
+  if (!st) return null
+  if (st === 'webcrawl') {
+    return { label: 'Web', cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' }
+  }
+  if (st === 'article') {
+    return { label: 'Art', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' }
+  }
+  if (st === 'newsletter') {
+    return { label: 'NL', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' }
+  }
+  return { label: st.slice(0, 3).toUpperCase(), cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' }
+}
+
 interface BalancedSelection {
   id: string
   title: string
@@ -743,7 +781,12 @@ export default function NewsQueuePage() {
   const filteredItems = items.filter(item => {
     if (item.content && item.content.length < minContentLength) return false
     if (tagNeedle) {
-      const haystack = `${item.title ?? ''} ${item.excerpt ?? ''} ${item.source_identifier ?? ''} ${item.source_display_name ?? ''}`.toLowerCase()
+      // Die Herkunft gehört mit in die Suche: Sonst findet ein Filter-Tag
+      // „Techmeme" nichts, obwohl das Badge daneben sichtbar „Techmeme" sagt.
+      // Gilt für alle Herkünfte gleichermaßen — auch „Web" und „Manual" sind
+      // damit filterbar.
+      const herkunft = herkunftOf(item)?.label ?? ''
+      const haystack = `${item.title ?? ''} ${item.excerpt ?? ''} ${item.source_identifier ?? ''} ${item.source_display_name ?? ''} ${herkunft}`.toLowerCase()
       if (!haystack.includes(tagNeedle)) return false
     }
     return true
@@ -1306,38 +1349,14 @@ export default function NewsQueuePage() {
                             >
                               <div className="text-sm font-medium truncate hover:text-primary flex items-center gap-1.5">
                                 {(() => {
-                                  // Source-type buckets:
-                                  //   metadata.manual → amber "Manual"  (user-added, score boosted to ~20)
-                                  //   webcrawl        → purple "Web"
-                                  //   article         → green  "Art"   (newsletter body re-classified)
-                                  //   newsletter      → blue   "NL"    (legacy)
-                                  //   any other       → blue with the first 3 chars of the raw type
-                                  // Manual wins over source_type because user intent overrides
-                                  // automatic pipeline classification.
-                                  const isManual = item.metadata && (item.metadata as { manual?: boolean }).manual === true
-                                  const st = item.daily_repo?.source_type
-                                  if (!isManual && !st) return null
-                                  let cls: string
-                                  let label: string
-                                  if (isManual) {
-                                    cls = 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
-                                    label = 'Manual'
-                                  } else if (st === 'webcrawl') {
-                                    cls = 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                                    label = 'Web'
-                                  } else if (st === 'article') {
-                                    cls = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                    label = 'Art'
-                                  } else if (st === 'newsletter') {
-                                    cls = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                                    label = 'NL'
-                                  } else {
-                                    cls = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                                    label = (st as string).slice(0, 3).toUpperCase()
-                                  }
+                                  // Herkunft: Manual (amber), Techmeme (rose), Web (purple),
+                                  // Art (emerald), NL (blue). Definition in herkunftOf() —
+                                  // dieselbe Quelle speist den Tag-Filter oben.
+                                  const herkunft = herkunftOf(item)
+                                  if (!herkunft) return null
                                   return (
-                                    <Badge className={`text-[9px] px-1 h-4 font-medium border-0 shrink-0 ${cls}`}>
-                                      {label}
+                                    <Badge className={`text-[9px] px-1 h-4 font-medium border-0 shrink-0 ${herkunft.cls}`}>
+                                      {herkunft.label}
                                     </Badge>
                                   )
                                 })()}
