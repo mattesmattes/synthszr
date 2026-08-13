@@ -131,6 +131,20 @@ describe('isNewsSourceUrl', () => {
     expect(isNewsSourceUrl(url)).toBe(false)
   })
 
+  it('schliesst Mastodon-Instanzen aus, nicht nur mastodon.social', () => {
+    // 2026-08-13 in der Queue gefunden: „@carnage4life@mas.to" als Quelle. Es
+    // gibt tausende Fediverse-Instanzen; eine Liste einzelner Hosts pflegt man
+    // nie vollstaendig.
+    expect(isNewsSourceUrl('https://mas.to/@carnage4life/1')).toBe(false)
+    expect(isNewsSourceUrl('https://hachyderm.io/@jemand/2')).toBe(false)
+  })
+
+  it('haelt echte Nachrichtenseiten mit /@ im Pfad heraus (Medium-Stil)', () => {
+    // Medium und Substack nutzen ebenfalls /@name — dort steht aber echter
+    // Text, und die Domain ist bekannt.
+    expect(isNewsSourceUrl('https://medium.com/@autor/artikel-xyz')).toBe(true)
+  })
+
   it('faellt bei Muell nicht um', () => {
     expect(isNewsSourceUrl('kein-url')).toBe(false)
   })

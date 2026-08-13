@@ -62,6 +62,13 @@ describe('looksBlocked', () => {
     expect(looksBlocked('Cloudflare blocks AI crawlers by default', bericht)).toBe(false)
   })
 
+  it('erkennt die Verifizierungsseite der Financial Times', () => {
+    // 2026-08-13 in der Queue gefunden: Titel „Security Verification", Score
+    // 10,65 — die BESTBEWERTETE Quelle ihres Themas. Mit der Fuenf-Quellen-
+    // Grenze waere sie garantiert in den Artikel gewandert.
+    expect(looksBlocked('Financial Times — Security Verification', 'Please verify you are human to continue reading.')).toBe(true)
+  })
+
   it('faellt bei leerem Text nicht um', () => {
     expect(looksBlocked(null, '')).toBe(false)
   })

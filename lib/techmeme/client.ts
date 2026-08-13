@@ -50,14 +50,31 @@ const NON_SOURCE_HOSTS = [
   'news.ycombinator.com', 'feedburner.com', 'youtube.com',
 ]
 
+/**
+ * Plattformen, die Beiträge unter `/@name` veröffentlichen und trotzdem echte
+ * Artikel tragen. Ohne diese Ausnahme fiele Medium mit den Fediverse-Instanzen
+ * zusammen.
+ */
+const HANDLE_PATH_PUBLISHERS = ['medium.com', 'substack.com']
+
 export function isNewsSourceUrl(url: string): boolean {
   try {
-    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '')
+    const u = new URL(url)
+    const host = u.hostname.toLowerCase().replace(/^www\./, '')
     // Ein Host ohne Punkt ist keine Domain, sondern ein Rest: Beim Messen am
     // 2026-08-13 tauchten „https://x" und „https://w" auf — abgeschnittene
     // Adressen. Ungeprüft landen sie als „Publikation ohne Feed" in der
     // Statistik und sehen dort aus wie ein normaler Rückfall auf den Crawl.
     if (!/\.[a-z]{2,}$/i.test(host)) return false
+
+    // Fediverse: Ein Beitrag steht dort unter „/@handle". Es gibt tausende
+    // Instanzen — eine Liste einzelner Hosts (mastodon.social, mas.to,
+    // hachyderm.io …) pflegt man nie vollständig, deshalb die Pfadform.
+    // 2026-08-13 durchgerutscht: „@carnage4life@mas.to" als Quelle einer Story.
+    if (/^\/@[^/]+/.test(u.pathname) && !HANDLE_PATH_PUBLISHERS.some((h) => host === h || host.endsWith(`.${h}`))) {
+      return false
+    }
+
     return !NON_SOURCE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))
   } catch {
     return false

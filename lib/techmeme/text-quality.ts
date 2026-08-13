@@ -18,6 +18,9 @@ const BLOCK_TITLES = [
   'are you a robot', 'attention required', 'access denied', 'just a moment',
   'security check', 'verify you are human', 'forbidden', 'bot verification',
   'one moment, please', 'pardon our interruption',
+  // 2026-08-13 in der Queue gefunden — die Financial Times nennt ihre
+  // Bot-Abwehr so, und sie war die bestbewertete Quelle ihres Themas.
+  'security verification', 'verifying you are human', 'checking if the site connection',
 ]
 
 /** Formulierungen, die im KOPF einer Abwehrseite stehen. */
