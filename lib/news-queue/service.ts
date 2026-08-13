@@ -279,6 +279,15 @@ export async function addToQueue(
     content?: string
     sourceEmail?: string | null
     sourceUrl?: string | null
+    /**
+     * Anzeigename, wenn die Quelle ihn KENNT und er nicht aus der Adresse
+     * abzuleiten ist. Techmeme nennt die Publikation im Klartext („Reuters");
+     * ohne diesen Weg stünde in der Queue nur „reuters.com", weil
+     * extractSourceDisplayName ohne E-Mail null liefert. Der
+     * source_identifier bleibt davon unberührt — die Quellenverteilung rechnet
+     * weiter mit der Domain.
+     */
+    sourceDisplayName?: string | null
     synthesisScore?: number
     relevanceScore?: number
     uniquenessScore?: number
@@ -315,7 +324,8 @@ export async function addToQueue(
   // Build all records first
   const records: NewsQueueItemInsert[] = items.map(item => {
     const sourceIdentifier = normalizeSourceIdentifier(item.sourceEmail ?? null, item.sourceUrl ?? null)
-    const sourceDisplayName = extractSourceDisplayName(item.sourceEmail ?? null, item.sourceUrl ?? null)
+    const sourceDisplayName = item.sourceDisplayName
+      ?? extractSourceDisplayName(item.sourceEmail ?? null, item.sourceUrl ?? null)
     return {
       daily_repo_id: item.dailyRepoId || null,
       title: item.title,

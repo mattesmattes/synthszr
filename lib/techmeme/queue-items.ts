@@ -66,6 +66,9 @@ export interface TechmemeQueueItem {
   content: string
   sourceUrl: string
   sourceEmail: null
+  /** Techmeme nennt die Publikation im Klartext — sonst stünde in der Queue
+   *  nur die Domain. */
+  sourceDisplayName: string
   emailReceivedAt: string | null
   contentLength: number
   metadata: Record<string, unknown>
@@ -88,6 +91,7 @@ export function buildQueueItem(input: QueueItemInput): TechmemeQueueItem {
     content: text,
     sourceUrl: source.url,
     sourceEmail: null,
+    sourceDisplayName: publikation,
     emailReceivedAt: publishedAt,
     contentLength: text.length,
     metadata: {
