@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { Fragment, useEffect, useState, useCallback, useRef } from 'react'
 import {
   ListTodo,
   Loader2,
@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/collapsible'
 import { RankingSuggestionsPanel } from '@/components/admin/ranking-suggestions-panel'
 import type { BundleType } from '@/lib/i18n/bundle-labels'
+import { buildStoryBlocks } from '@/lib/news-queue/story-blocks'
 
 interface QueueStats {
   pending: number
@@ -819,9 +820,13 @@ export default function NewsQueuePage() {
       }
       bucket.items.push(item)
     }
-    // Sort items within each day by total_score descending
-    for (const { items: dayItems } of groups.values()) {
-      dayItems.sort((a, b) => b.total_score - a.total_score)
+    // Innerhalb eines Tages nach Punktzahl — aber die Quellen EINER
+    // Techmeme-Story bleiben zusammen. Ohne das rutschten fremde Meldungen
+    // dazwischen (2026-08-13 beobachtet: vier Cisco-Quellen auf den Plätzen
+    // 1, 3, 4 und 7), und dass sie im Artikel EINEN Abschnitt ergeben, war der
+    // Liste nicht anzusehen.
+    for (const bucket of groups.values()) {
+      bucket.items = buildStoryBlocks(bucket.items).map((e) => e.item)
     }
     // Sort groups by date DESC so today is always the first header.
     return Array.from(groups.entries())
@@ -1272,10 +1277,30 @@ export default function NewsQueuePage() {
                         </div>
                       )}
                       <div className="divide-y">
-                        {dayItems.map((item, idx) => (
+                        {buildStoryBlocks(dayItems).map(({ item, blockStart, blockSize, headline }, idx) => (
+                          <Fragment key={item.id}>
+                            {/* Kopfzeile eines Techmeme-Bündels: Diese Quellen
+                                ergeben im Artikel EINEN Abschnitt. */}
+                            {blockStart && (
+                              <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-950/20 px-3 py-1 border-l-2 border-rose-400">
+                                <span className="text-[9px] font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-400 shrink-0">
+                                  Gebündelt
+                                </span>
+                                <span className="text-[11px] text-rose-900/80 dark:text-rose-200/80 truncate">
+                                  {headline}
+                                </span>
+                                <span className="text-[10px] text-rose-600 dark:text-rose-400 shrink-0 ml-auto">
+                                  {blockSize} Quellen
+                                </span>
+                                {item.bundle_type === 'topic' && (
+                                  <Badge className="text-[9px] px-1 h-4 border-0 shrink-0 bg-lime-400 text-black">
+                                    Thema des Tages
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
                           <div
-                            key={item.id}
-                            className={`flex items-center gap-2 px-3 py-2 transition-colors ${item.via_ranking ? 'bg-lime-50 hover:bg-lime-100' : 'hover:bg-muted/50'}`}
+                            className={`flex items-center gap-2 px-3 py-2 transition-colors ${blockSize > 1 ? 'border-l-2 border-rose-400 ' : ''}${item.via_ranking ? 'bg-lime-50 hover:bg-lime-100' : 'hover:bg-muted/50'}`}
                           >
                             {/* Rank number within day */}
                             <span className="text-[10px] font-mono text-muted-foreground w-6 text-right shrink-0">
@@ -1404,6 +1429,7 @@ export default function NewsQueuePage() {
                               </Button>
                             </div>
                           </div>
+                          </Fragment>
                         ))}
                       </div>
                     </div>
