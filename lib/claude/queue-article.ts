@@ -72,6 +72,72 @@ export interface QueueArticleEvent {
  * lib/article-jobs/service.ts so both job-creation paths (auto + manual) go
  * through the same mapping (no drift).
  */
+/**
+ * Gebündelte von gewöhnlichen Meldungen trennen.
+ *
+ * Gebündelte Quellen sind ABSICHTLICH mehrfach dasselbe Thema. Jede Regel, die
+ * Ähnlichkeit bestraft oder nach Stückzahl kappt, muss sie deshalb gesondert
+ * behandeln.
+ */
+export function splitBundled<T extends { bundle_type?: string | null }>(
+  items: T[],
+): { bundled: T[]; single: T[] } {
+  const bundled: T[] = []
+  const single: T[] = []
+  for (const item of items) {
+    if (item.bundle_type) bundled.push(item)
+    else single.push(item)
+  }
+  return { bundled, single }
+}
+
+/**
+ * Auf `maxUnits` ABSCHNITTE kappen — nicht auf Items.
+ *
+ * BEFUND 2026-08-13: Nach dem Techmeme-Umbau standen 48 gebündelte Quellen zu
+ * fünf Themen zur Auswahl. `slice(0, 25)` hätte sie nach Punktzahl
+ * durchgeschnitten: ein Thema mit 8 von 12 Quellen, das schwächste ganz weg.
+ *
+ * Der Denkfehler war die Einheit. `maxItems` begrenzt, wie viele ABSCHNITTE ein
+ * Artikel bekommt — und ein Bündel ist EIN Abschnitt, ganz gleich ob es aus drei
+ * oder zwölf Quellen entsteht.
+ *
+ * Bündel kommen zuerst und immer VOLLSTÄNDIG: Sie sind die gesetzten Themen des
+ * Tages, Einzelmeldungen füllen den Rest nach Punktzahl auf.
+ */
+export function capByUnits<T extends { total_score?: number; bundle_type?: string | null; metadata?: Record<string, unknown> | null }>(
+  items: T[],
+  maxUnits: number,
+): T[] {
+  const { bundled, single } = splitBundled(items)
+
+  // Je (Typ, Story) ein Bündel — dieselbe Aufteilung wie in der Schreibphase
+  // (computeBundleUnits). Ohne Story-Schlüssel bildet der Typ die Gruppe.
+  const gruppen = new Map<string, T[]>()
+  for (const item of bundled) {
+    const story = item.metadata?.techmeme_story
+    const key = `${item.bundle_type}::${typeof story === 'string' ? story : ''}`
+    const vorhanden = gruppen.get(key)
+    if (vorhanden) vorhanden.push(item)
+    else gruppen.set(key, [item])
+  }
+
+  const out: T[] = []
+  let einheiten = 0
+  for (const gruppe of gruppen.values()) {
+    if (einheiten >= maxUnits) break
+    out.push(...gruppe)
+    einheiten++
+  }
+
+  for (const item of [...single].sort((a, b) => (b.total_score ?? 0) - (a.total_score ?? 0))) {
+    if (einheiten >= maxUnits) break
+    out.push(item)
+    einheiten++
+  }
+  return out
+}
+
 export function toPipelineItem(item: {
   id: string
   title: string
@@ -163,10 +229,12 @@ export async function selectAndEnrichItems(opts: {
 
     if (manuallySelected.length > 0) {
       console.log(`[Ghostwriter-Queue] Using ${manuallySelected.length} manually selected items (maxItems=${maxItems})`)
-      // Cap manually selected items to maxItems
-      selectedItems = manuallySelected.slice(0, maxItems)
-      if (manuallySelected.length > maxItems) {
-        console.log(`[Ghostwriter-Queue] Capped from ${manuallySelected.length} to ${maxItems} items`)
+      // Auf maxItems ABSCHNITTE kappen, nicht auf Items: Ein Bündel ist EIN
+      // Abschnitt, ganz gleich ob es aus drei oder zwölf Quellen entsteht. Ein
+      // schlichtes slice() schnitte mitten durch die Themen des Tages.
+      selectedItems = capByUnits(manuallySelected, maxItems)
+      if (selectedItems.length < manuallySelected.length) {
+        console.log(`[Ghostwriter-Queue] Capped from ${manuallySelected.length} to ${selectedItems.length} items (${maxItems} Abschnitte)`)
       }
 
       // Fill up with balanced items if selected < maxItems
@@ -282,8 +350,14 @@ export async function selectAndEnrichItems(opts: {
   // failure inside dedupeByTopic returns the input unchanged.
   if (dedupeTopics && !queueItemIds?.length && selectedItems.length > 1) {
     const { dedupeByTopic } = await import('@/lib/news-queue/semantic-dedup')
+    // GEBÜNDELTE QUELLEN BLEIBEN AUSSEN VOR. Der Dedup verwirft Meldungen mit
+    // Ähnlichkeit ≥ 0,8 — und zwölf Quellen zur selben Meldung sind maximal
+    // ähnlich. Ohne diese Trennung überlebte von jedem Thema des Tages GENAU
+    // EINE Quelle, und die Bündelung wäre wirkungslos. Im Log stünde dazu nur
+    // „dropped 43 items (batch-dupe)": kein Fehler, nur ein leiser Verlust.
+    const { bundled: gebuendelt, single: einzeln } = splitBundled(selectedItems)
     const { kept, dropped } = await dedupeByTopic(
-      selectedItems.map(i => ({
+      einzeln.map(i => ({
         id: i.id,
         title: i.title,
         content: i.content,
@@ -301,16 +375,22 @@ export async function selectAndEnrichItems(opts: {
         console.log(`[Ghostwriter-Queue]   drop[${d.reason}] "${d.title.slice(0, 50)}" (sim=${d.similarity.toFixed(2)} → ${d.similarTo})`)
       }
       const keptIds = new Set(kept.map(k => k.id))
-      const droppedIds = selectedItems.filter(i => !keptIds.has(i.id)).map(i => i.id)
+      // Nur aus den EINZELMELDUNGEN: Die gebündelten waren nie Teil der
+      // Prüfung, sie hier als verworfen zu behandeln setzte die Themen des
+      // Tages auf 'pending' zurück.
+      const droppedIds = einzeln.filter(i => !keptIds.has(i.id)).map(i => i.id)
       // Release dropped items back to 'pending' — selectItemsForArticle already
       // marked them 'selected'; leaving them stuck would hide them for 24h.
       await supabase
         .from('news_queue')
         .update({ status: 'pending', selected_at: null })
         .in('id', droppedIds)
-      // Reduce to the kept set, preserving the original enriched objects.
-      const byId = new Map(selectedItems.map(i => [i.id, i]))
-      selectedItems = kept.map(k => byId.get(k.id)).filter(Boolean) as typeof selectedItems
+      // Auf die behaltenen reduzieren — die gebündelten unangetastet davor.
+      const byId = new Map(einzeln.map(i => [i.id, i]))
+      selectedItems = [
+        ...gebuendelt,
+        ...kept.map(k => byId.get(k.id)).filter(Boolean),
+      ] as typeof selectedItems
     }
   }
 
