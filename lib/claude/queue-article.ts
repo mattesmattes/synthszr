@@ -92,6 +92,22 @@ export function splitBundled<T extends { bundle_type?: string | null }>(
 }
 
 /**
+ * Wie viele Quellen ein gebündelter Abschnitt höchstens verarbeitet.
+ *
+ * BETREIBER-VORGABE 2026-08-13: „damit die Bündel-Artikel nicht total ausfransen
+ * mit sehr vielen Sourcen". Techmeme listet zu großen Meldungen bis zu 41
+ * Publikationen; ein Leitartikel aus zwölf Quellen zerfasert, ohne mehr zu
+ * sagen — die zwölfte Meldung wiederholt meist die erste.
+ *
+ * Die Auswahl trifft die Punktzahl, in der Techmemes eigener Rang bereits
+ * steckt: Es bleiben die Quellen, die Techmeme vorn platziert hat.
+ *
+ * In der QUEUE bleiben alle zehn Quellen stehen — die Grenze gilt nur für die
+ * Artikel-Erzeugung, damit die Auswahl von Hand weiterhin möglich ist.
+ */
+export const BUNDLE_SOURCES_MAX = 5
+
+/**
  * Auf `maxUnits` ABSCHNITTE kappen — nicht auf Items.
  *
  * BEFUND 2026-08-13: Nach dem Techmeme-Umbau standen 48 gebündelte Quellen zu
@@ -126,7 +142,12 @@ export function capByUnits<T extends { total_score?: number; bundle_type?: strin
   let einheiten = 0
   for (const gruppe of gruppen.values()) {
     if (einheiten >= maxUnits) break
-    out.push(...gruppe)
+    // Je Bündel die BESTEN Quellen — nicht die ersten. Die Punktzahl trägt
+    // Techmemes Rang in sich, es bleiben also die vorn platzierten.
+    const beste = [...gruppe]
+      .sort((a, b) => (b.total_score ?? 0) - (a.total_score ?? 0))
+      .slice(0, BUNDLE_SOURCES_MAX)
+    out.push(...beste)
     einheiten++
   }
 

@@ -14,7 +14,7 @@
  * Abschnitt. 48 gebündelte Quellen ergeben fünf Abschnitte, nicht 48.
  */
 import { describe, expect, it } from 'vitest'
-import { splitBundled, capByUnits } from '@/lib/claude/queue-article'
+import { splitBundled, capByUnits, BUNDLE_SOURCES_MAX } from '@/lib/claude/queue-article'
 
 interface Zeile {
   id: string
@@ -58,16 +58,19 @@ describe('capByUnits', () => {
     const drei = Array.from({ length: 3 }, (_, i) => q(`s2-${i}`, 8 - i * 0.1, 'topic', 's2'))
     const einzeln = [q('e1', 7), q('e2', 6)]
     const out = capByUnits([...zwoelf, ...drei, ...einzeln], 4)
-    // 2 Buendel + 2 Einzelmeldungen = 4 Einheiten, alle 17 Zeilen bleiben.
-    expect(out).toHaveLength(17)
+    // 2 Buendel + 2 Einzelmeldungen = 4 Einheiten. Zeilen: 5 (vom
+    // Zwoelfer-Buendel, gekappt auf BUNDLE_SOURCES_MAX) + 3 + 2 = 10.
+    expect(out).toHaveLength(10)
   })
 
-  it('schneidet ein Buendel NIEMALS an', () => {
-    const zwoelf = Array.from({ length: 12 }, (_, i) => q(`s1-${i}`, 9, 'topic', 's1'))
-    const out = capByUnits([...zwoelf, q('e', 5)], 1)
-    // Nur das Buendel passt — aber vollstaendig, nicht als Bruchstueck.
-    expect(out).toHaveLength(12)
+  it('nimmt ein Buendel ganz oder gar nicht — nie halb', () => {
+    // Das Einheiten-Limit darf ein Buendel nicht anschneiden. Die
+    // Quellen-Obergrenze (BUNDLE_SOURCES_MAX) ist etwas anderes: eine bewusste
+    // Beschraenkung je Abschnitt, kein Bruchstueck aus Platzmangel.
+    const acht = Array.from({ length: 8 }, (_, i) => q(`s1-${i}`, 9, 'topic', 's1'))
+    const out = capByUnits([...acht, q('e', 5)], 1)
     expect(out.every((z) => z.id.startsWith('s1-'))).toBe(true)
+    expect(out).toHaveLength(5)
   })
 
   it('bevorzugt Buendel vor Einzelmeldungen', () => {
@@ -92,5 +95,36 @@ describe('capByUnits', () => {
 
   it('kommt mit leerer Liste klar', () => {
     expect(capByUnits([], 25)).toEqual([])
+  })
+})
+
+describe('Quellen je Buendel', () => {
+  const zwoelf = Array.from({ length: 12 }, (_, i) =>
+    q(`s1-${i}`, 9 - i * 0.1, 'topic', 's1'))
+
+  it('nimmt hoechstens fuenf Quellen je Buendel', () => {
+    // Betreiber-Vorgabe 2026-08-13: Ein Leitartikel aus zwoelf Quellen franst
+    // aus. Fuenf reichen fuer die Breite, ohne den Abschnitt zu zerfasern.
+    expect(BUNDLE_SOURCES_MAX).toBe(5)
+    expect(capByUnits(zwoelf, 25)).toHaveLength(5)
+  })
+
+  it('nimmt die BESTEN fuenf, nicht die ersten fuenf', () => {
+    const gemischt = [q('schwach', 1, 'topic', 's'), ...Array.from({ length: 6 }, (_, i) => q(`gut-${i}`, 9 - i * 0.1, 'topic', 's'))]
+    const ids = capByUnits(gemischt, 25).map((z) => z.id)
+    expect(ids).not.toContain('schwach')
+    expect(ids).toHaveLength(5)
+  })
+
+  it('laesst kleinere Buendel unangetastet', () => {
+    const drei = Array.from({ length: 3 }, (_, i) => q(`s2-${i}`, 8, 'topic', 's2'))
+    expect(capByUnits(drei, 25)).toHaveLength(3)
+  })
+
+  it('das Buendel zaehlt weiterhin als EINE Einheit', () => {
+    const zweiThemen = [...zwoelf, ...Array.from({ length: 8 }, (_, i) => q(`s2-${i}`, 7, 'topic', 's2'))]
+    // 2 Buendel je 5 Quellen = 10 Zeilen, aber nur 2 Einheiten.
+    expect(capByUnits(zweiThemen, 2)).toHaveLength(10)
+    expect(capByUnits(zweiThemen, 1)).toHaveLength(5)
   })
 })
