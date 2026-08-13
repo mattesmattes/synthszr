@@ -22,6 +22,7 @@ import { parseFeedItems, findEntryForUrl } from '@/lib/techmeme/feed'
 import { extractArticleContent, extractViaMarkdownNew } from '@/lib/scraper/article-extractor'
 import { safeFetch } from '@/lib/security/ssrf'
 import type { FetchMode } from '@/lib/techmeme/queue-items'
+import { looksBlocked, stripMarkdownPreamble, capText } from '@/lib/techmeme/text-quality'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -88,18 +89,19 @@ async function fromFeed(ctx: FetchContext, url: string): Promise<FetchedText | n
  */
 export async function fetchSourceText(ctx: FetchContext, url: string): Promise<FetchedText | null> {
   const feed = await fromFeed(ctx, url).catch(() => null)
-  if (feed && feed.text.length >= FEED_FULLTEXT_MIN) return feed
+  const feedOk = feed && brauchbar(feed.title, feed.text)
+  if (feedOk && feed.text.length >= FEED_FULLTEXT_MIN) return veredelt(feed)
 
   try {
     const gecrawlt = await extractArticleContent(url)
     const text = gecrawlt?.textContent?.trim()
-    if (text && text.length >= USABLE_TEXT_MIN) {
-      return {
+    if (text && brauchbar(gecrawlt?.title ?? null, text)) {
+      return veredelt({
         text,
         title: gecrawlt?.title ?? null,
         mode: 'crawl',
         publishedAt: gecrawlt?.publishedDate ? gecrawlt.publishedDate.toISOString() : null,
-      }
+      })
     }
   } catch (err) {
     console.warn('[Techmeme] Crawl fehlgeschlagen:', hostOf(url), err instanceof Error ? err.message : err)
@@ -107,11 +109,33 @@ export async function fetchSourceText(ctx: FetchContext, url: string): Promise<F
 
   try {
     const md = await extractViaMarkdownNew(url)
-    if (md && md.content.length >= USABLE_TEXT_MIN) {
-      return { text: md.content, title: md.title, mode: 'markdown', publishedAt: null }
+    if (md) {
+      // Erst den Kopf abstreifen, DANN prüfen: Der Metadaten-Kopf von
+      // markdown.new trägt den Titel der Abwehrseite als Fließtext mit sich.
+      const sauber = stripMarkdownPreamble(md.content)
+      if (brauchbar(md.title, sauber)) {
+        return veredelt({ text: sauber, title: md.title, mode: 'markdown', publishedAt: null })
+      }
+      console.warn('[Techmeme] Abwehrseite statt Artikel:', hostOf(url), '|', (md.title ?? '').slice(0, 50))
     }
   } catch { /* letzter Rückfall unten */ }
 
-  if (feed && feed.text.length >= USABLE_TEXT_MIN) return feed
+  if (feedOk) return veredelt(feed)
   return null
+}
+
+/**
+ * Lang genug UND kein Abwehr-Bildschirm.
+ *
+ * Die Längenprüfung allein hat im ersten Produktionslauf drei Sperrseiten
+ * durchgelassen — sie sind mit über 1.000 Zeichen länger als mancher echte
+ * Anriss (siehe lib/techmeme/text-quality.ts).
+ */
+function brauchbar(title: string | null, text: string): boolean {
+  return text.length >= USABLE_TEXT_MIN && !looksBlocked(title, text)
+}
+
+/** Obergrenze anwenden, bevor der Text die Queue erreicht. */
+function veredelt(t: FetchedText): FetchedText {
+  return { ...t, text: capText(t.text) }
 }
