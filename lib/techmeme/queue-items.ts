@@ -18,6 +18,7 @@
  */
 import type { TechmemeStory, TechmemeSource } from '@/lib/techmeme/client'
 import { normalizeArticleUrl } from '@/lib/techmeme/feed'
+import { curationScore } from '@/lib/techmeme/scoring'
 
 /** Wie der Text beschafft wurde — für die spätere Auswertung der Strecke. */
 export type FetchMode = 'feed' | 'crawl' | 'markdown'
@@ -53,6 +54,10 @@ export interface QueueItemInput {
   source: TechmemeSource
   /** Position in Techmemes Reihenfolge — 0 ist die Hauptmeldung. */
   rank: number
+  /** Position der Story auf der Startseite, 0 = ganz oben. */
+  storyIndex: number
+  /** Wie viele Stories die Startseite hatte. */
+  totalStories: number
   text: string
   /** Titel, wie die Publikation selbst ihn nennt. */
   title: string | null
@@ -71,14 +76,32 @@ export interface TechmemeQueueItem {
   sourceDisplayName: string
   emailReceivedAt: string | null
   contentLength: number
+  /**
+   * Techmemes Kuration als Bewertung — alle drei Felder bekommen denselben
+   * Wert.
+   *
+   * Die Felder trennen drei Dimensionen, die die eigene Synthese-Pipeline
+   * getrennt ermittelt. Für Techmeme haben wir nur EIN Urteil, und es auf drei
+   * Dimensionen aufzuteilen täuschte eine Genauigkeit vor, die es nicht gibt.
+   * Gleiche Werte ergeben in der Formel
+   * (synthesis*0.4 + relevance*0.3 + uniqueness*0.3) genau diesen Wert.
+   */
+  synthesisScore: number
+  relevanceScore: number
+  uniquenessScore: number
   metadata: Record<string, unknown>
 }
 
 const EXCERPT_LENGTH = 400
 
 export function buildQueueItem(input: QueueItemInput): TechmemeQueueItem {
-  const { story, source, rank, text, title, mode, publishedAt } = input
+  const { story, source, rank, storyIndex, totalStories, text, title, mode, publishedAt } = input
   const publikation = publicationLabel(source.publication)
+
+  // Die BREITE zaehlt alle Quellen der Story, nicht nur die verarbeiteten:
+  // Wie viele Haeuser berichten, ist Techmemes Urteil — dass wir davon zehn
+  // lesen, ist unsere Begrenzung und sagt ueber die Meldung nichts aus.
+  const score = curationScore({ storyIndex, totalStories, sourceCount: story.sources.length, rank })
 
   // Der Titel der Publikation ist genauer als Techmemes Zusammenfassung —
   // Techmeme formuliert Überschriften um. Fehlt er, ist Techmemes besser als
@@ -94,12 +117,18 @@ export function buildQueueItem(input: QueueItemInput): TechmemeQueueItem {
     sourceDisplayName: publikation,
     emailReceivedAt: publishedAt,
     contentLength: text.length,
+    synthesisScore: score,
+    relevanceScore: score,
+    uniquenessScore: score,
     metadata: {
       techmeme: true,
       techmeme_story: storyKeyFor(story),
       techmeme_headline: story.headline,
       techmeme_permalink: story.permalink,
       techmeme_rank: rank,
+      techmeme_story_index: storyIndex,
+      techmeme_source_count: story.sources.length,
+      techmeme_curation_score: score,
       techmeme_publication: publikation,
       fetch_mode: mode,
     },

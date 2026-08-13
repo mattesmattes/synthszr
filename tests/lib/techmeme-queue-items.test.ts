@@ -56,9 +56,11 @@ describe('storyKeyFor', () => {
 
 describe('buildQueueItem', () => {
   const item = buildQueueItem({
-    story: STORY,
+    story: { ...STORY, sources: Array(12).fill(QUELLE) },
     source: QUELLE,
     rank: 3,
+    storyIndex: 1,
+    totalStories: 20,
     text: 'Der ganze Artikeltext, lang genug um als Inhalt zu taugen. '.repeat(20),
     title: 'Der Titel der Publikation selbst',
     mode: 'feed',
@@ -75,8 +77,8 @@ describe('buildQueueItem', () => {
 
   it('faellt auf Techmemes Ueberschrift zurueck, wenn die Quelle keine nennt', () => {
     const ohne = buildQueueItem({
-      story: STORY, source: QUELLE, rank: 0, text: 'x'.repeat(500),
-      title: null, mode: 'crawl', publishedAt: null,
+      story: STORY, source: QUELLE, rank: 0, storyIndex: 0, totalStories: 20,
+      text: 'x'.repeat(500), title: null, mode: 'crawl', publishedAt: null,
     })
     expect(ohne.title).toBe(STORY.headline)
   })
@@ -103,6 +105,20 @@ describe('buildQueueItem', () => {
 
   it('merkt sich die Publikation, wie Techmeme sie nennt', () => {
     expect((item.metadata as Record<string, unknown>).techmeme_publication).toBe('Example News')
+  })
+
+  it('traegt Techmemes Kuration als Bewertung — sonst steht der Eintrag unten', () => {
+    // Ohne sie kamen die Eintraege des ersten Laufs mit 0,02 bis 0,31 in eine
+    // Queue mit Median 6,1 und waren praktisch unsichtbar.
+    expect(item.synthesisScore).toBeGreaterThan(0)
+    expect(item.relevanceScore).toBe(item.synthesisScore)
+    expect(item.uniquenessScore).toBe(item.synthesisScore)
+  })
+
+  it('rechnet die Breite ueber ALLE Quellen der Story, nicht die verarbeiteten', () => {
+    // Dass wir nur zehn lesen, ist unsere Begrenzung und sagt ueber die
+    // Bedeutung der Meldung nichts aus.
+    expect((item.metadata as Record<string, unknown>).techmeme_source_count).toBe(12)
   })
 
   it('erzeugt einen Auszug, der kuerzer ist als der Text', () => {

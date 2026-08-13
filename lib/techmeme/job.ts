@@ -96,6 +96,9 @@ interface Aufgabe {
   story: TechmemeStory
   source: { url: string; publication: string }
   rank: number
+  /** Position der Story auf der Startseite — Techmemes Haupturteil. */
+  storyIndex: number
+  totalStories: number
 }
 
 /** Arbeitet die Liste mit fester Parallelität ab und hält das Zeitbudget ein. */
@@ -113,7 +116,7 @@ async function abarbeiten(
       if (Date.now() > deadline) return
       const i = next++
       if (i >= aufgaben.length) return
-      const { story, source, rank } = aufgaben[i]
+      const { story, source, rank, storyIndex, totalStories } = aufgaben[i]
 
       try {
         const text = await fetchSourceText(ctx, source.url)
@@ -124,7 +127,7 @@ async function abarbeiten(
         }
         ergebnis.modi[text.mode] = (ergebnis.modi[text.mode] ?? 0) + 1
         fertig.push(buildQueueItem({
-          story, source, rank,
+          story, source, rank, storyIndex, totalStories,
           text: text.text,
           title: text.title,
           mode: text.mode,
@@ -168,12 +171,19 @@ export async function runTechmemeJob(
   // Techmemes Reihenfolge bleibt erhalten: Rang 0 ist die Hauptmeldung. Der
   // Rang wird VOR dem Abgleich vergeben, damit er die Position bei Techmeme
   // beschreibt und nicht die in unserer Restliste.
+  //
+  // Der STORY-INDEX ist Techmemes Position auf der Startseite, nicht die
+  // Position in unserer gefilterten Liste: Er ist das redaktionelle Urteil,
+  // das wir uebernehmen wollen. Wuerde er nach dem Relevanzfilter neu vergeben,
+  // rueckte jede Story auf, sobald davor eine als nicht KI-relevant wegfaellt —
+  // und aus Platz 12 wuerde Platz 3.
   const aufgaben: Aufgabe[] = []
-  for (const story of relevante) {
+  for (const [reihe, story] of relevante.entries()) {
+    const storyIndex = relevanz.keepIndices[reihe] ?? reihe
     const gewaehlt = selectSources(story.sources)
     const frisch = filterKnownSources(gewaehlt, bekannt)
     for (const source of frisch) {
-      aufgaben.push({ story, source, rank: gewaehlt.indexOf(source) })
+      aufgaben.push({ story, source, rank: gewaehlt.indexOf(source), storyIndex, totalStories: stories.length })
     }
   }
   ergebnis.kandidaten = aufgaben.length
