@@ -14,6 +14,7 @@
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { knownFeedFor } from '@/lib/techmeme/known-feeds'
+import { safeFetch } from '@/lib/security/ssrf'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -79,9 +80,12 @@ function looksLikeFeed(contentType: string | null, body: string): boolean {
 
 async function probe(url: string): Promise<boolean> {
   try {
-    const res = await fetch(url, {
+    // safeFetch statt fetch: Die Adressen stammen aus fremdem HTML. Ohne
+    // Prüfung liesse sich der Job auf interne Netze richten — safeFetch
+    // validiert jeden Redirect-Hop gegen die SSRF-Sperrliste.
+    const res = await safeFetch(url, {
       headers: { 'User-Agent': UA, Accept: 'application/rss+xml, application/atom+xml, application/xml' },
-      signal: AbortSignal.timeout(10_000),
+      timeoutMs: 10_000,
     })
     if (!res.ok) return false
     const body = (await res.text()).slice(0, 2000)
@@ -138,9 +142,9 @@ export async function discoverFeed(
   let found: string | null = null
 
   try {
-    const res = await fetch(origin, {
+    const res = await safeFetch(origin, {
       headers: { 'User-Agent': UA, Accept: 'text/html' },
-      signal: AbortSignal.timeout(12_000),
+      timeoutMs: 12_000,
     })
     if (res.ok) {
       const html = (await res.text()).slice(0, 200_000)

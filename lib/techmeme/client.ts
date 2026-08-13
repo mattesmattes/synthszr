@@ -19,6 +19,7 @@
  */
 
 import { isPriorityPublication } from '@/lib/techmeme/known-feeds'
+import { safeFetch } from '@/lib/security/ssrf'
 
 /** Eine Story: die Hauptmeldung plus die Quellen, die darüber berichten. */
 export interface TechmemeStory {
@@ -205,12 +206,12 @@ export function selectSources(sources: TechmemeSource[], limit = SOURCES_PER_STO
 /** Holt die Startseite. Eigener User-Agent mit Kontakt-URL: ein anonymer
  *  Bot-String wird von vielen Seiten pauschal geblockt. */
 export async function fetchTechmemeHtml(): Promise<string> {
-  const res = await fetch(TECHMEME_URL, {
+  const res = await safeFetch(TECHMEME_URL, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; SynthszrBot/1.0; +https://www.synthszr.com)',
       Accept: 'text/html,application/xhtml+xml',
     },
-    signal: AbortSignal.timeout(20_000),
+    timeoutMs: 20_000,
   })
   if (!res.ok) throw new Error(`Techmeme nicht erreichbar: HTTP ${res.status}`)
   return res.text()

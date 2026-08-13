@@ -38,6 +38,10 @@
     {
       "path": "/api/cron/glossary-term-translations",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/techmeme",
+      "schedule": "10 */4 * * *"
     }
   ],
   "headers": [
