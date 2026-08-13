@@ -613,6 +613,13 @@ export async function generateEmailContentWithVotes(
     doc = rawContent as TiptapDoc
   }
 
+  // Direktiven raus, BEVOR gerendert wird — und VOR dem Guard, damit das
+  // content-Narrowing danach erhalten bleibt. Knotenuebergreifend, weil die
+  // Mark-Injektion den Tag in `{lex:` | Begriff | `}` zerlegt (s.
+  // stripLexFragments). Eine Stelle wirkt fuer beide Renderpfade (mit und ohne
+  // Satz-Hervorhebung).
+  if (doc) doc = stripLexFragments(doc)
+
   if (!doc || !doc.content) {
     return post.excerpt || ''
   }
@@ -964,6 +971,59 @@ function sanitizeHtmlForEmail(s: string): string {
   return s.replace(/<\/?([a-zA-Z0-9]+)([^>]*)>/g, (full, tag: string) => {
     return allowed.test(tag) ? full : ''
   })
+}
+
+/**
+ * Entfernt `{lex:…}`-Direktiven KNOTENÜBERGREIFEND aus einem TipTap-Dokument.
+ *
+ * BETREIBER-BEFUND 2026-08-13: Im Newsletter stand „{lex:Supervised
+ * Fine-Tuning}" im Klartext, während dieselbe Stelle im Web sauber verlinkt war.
+ * Beides hat DIESELBE Ursache: Sobald die Mark-Injektion den Begriff verlinkt
+ * hat, zerfällt der Tag im Dokument in drei Textknoten —
+ * `{lex:` · `Supervised Fine-Tuning` (mit glossaryLink-Mark) · `}`.
+ * `stripLexTags` sucht den Tag per Regex am Stück und findet ihn dann nicht
+ * mehr; die Klammern blieben stehen. An zehn Artikeln gemessen: 10 Tags standen
+ * in einem Knoten (wurden korrekt entfernt), 57 waren verteilt.
+ *
+ * Das Web löst das seit 2026-08-05 im DOM (hideExplicitCompanyTags) mit genau
+ * dieser Zustandslogik: öffnendes Fragment entfernen, die zugehörige schließende
+ * Klammer im nächsten Knoten nachziehen.
+ *
+ * KEIN TRIM, KEIN WHITESPACE-KOLLAPS — an einer Knotengrenze ist ein führendes
+ * oder abschließendes Leerzeichen bedeutungstragend. Im Web entstanden daraus
+ * einmal „Sandboxund" und „eingestuftesBenchmarking". Ersetzt wird nur der Tag.
+ */
+function stripLexFragments(doc: TiptapDoc): TiptapDoc {
+  let offen = false
+
+  const walk = (node: TiptapNode): TiptapNode => {
+    if (typeof node.text === 'string') {
+      let text = node.text
+      // Zuerst die vollständigen Tags — der einfache Fall, unverändert.
+      text = text.replace(/\{lex:([^{}]+)\}/g, '$1')
+      // Schließende Klammer eines Tags, dessen `{lex:` in einem früheren Knoten
+      // stand. Nur die ERSTE, und nur wenn eine aussteht.
+      if (offen) {
+        const idx = text.indexOf('}')
+        if (idx !== -1) {
+          text = text.slice(0, idx) + text.slice(idx + 1)
+          offen = false
+        }
+      }
+      // Öffnendes Fragment am Knotenende: der Begriff folgt im nächsten Knoten.
+      if (/\{lex:\s*$/.test(text)) {
+        text = text.replace(/\{lex:\s*$/, '')
+        offen = true
+      }
+      return { ...node, text }
+    }
+    if (Array.isArray(node.content)) {
+      return { ...node, content: node.content.map(walk) }
+    }
+    return node
+  }
+
+  return { ...doc, content: (doc.content ?? []).map(walk) }
 }
 
 /**
@@ -1350,7 +1410,9 @@ export function convertTiptapToHtml(doc: TiptapDoc, locale: string = 'de'): stri
   // Auf dem JSON, VOR dem Bauen des HTML: hier entstehen gleich Attribute
   // (href, style), in denen ein `"` kein Inhalt ist. E-Mail-Clients zeigen die
   // Zollzeichen genauso wie der Browser, der Pfad darf also nicht abweichen.
-  const typed = applyTypographicQuotes(doc, locale) as TiptapDoc
+  // Direktiven zuerst raus (knotenuebergreifend, s. stripLexFragments) — sonst
+  // stuende „{lex:Begriff}" auch in diesem Renderpfad im Klartext.
+  const typed = applyTypographicQuotes(stripLexFragments(doc), locale) as TiptapDoc
   if (!typed.content) return ''
   return typed.content.map(node => convertNodeToHtml(node, locale)).join('\n')
 }
