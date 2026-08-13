@@ -26,6 +26,7 @@ import {
   X
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { htmlToPlainText } from '@/lib/utils/html-to-text'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -1428,52 +1429,39 @@ export default function NewsQueuePage() {
 
       {/* View Item Dialog */}
       <Dialog open={!!viewingItem} onOpenChange={() => setViewingItem(null)}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-sm flex items-center gap-2">
-              {viewingItem && getStatusIcon(viewingItem.status)}
-              <span className="truncate">{viewingItem?.title}</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              {viewingItem?.source_display_name || viewingItem?.source_identifier}
+        {/* Leseansicht im Stil des Quellen-Layers der Synthszr Charts
+            (components/rankings/mention-list.tsx, Betreiber-Wunsch 2026-08-13):
+            Datum · Quelle, große Überschrift, Zitat am gelben Balken, dann
+            Fließtext. Die Scores sind Admin-Information und stehen deshalb
+            dezent am Ende statt als graue Kästen über dem Text. */}
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="space-y-1">
+            <DialogDescription className="text-xs font-bold text-foreground tabular-nums">
+              {viewingItem && new Date(viewingItem.queued_at).toLocaleDateString('de-DE', {
+                day: 'numeric', month: 'short', year: 'numeric',
+              })}
+              {viewingItem?.source_display_name || viewingItem?.source_identifier
+                ? ` · ${viewingItem.source_display_name || viewingItem.source_identifier}`
+                : ''}
             </DialogDescription>
+            <DialogTitle className="text-lg font-bold leading-tight">
+              {viewingItem?.title}
+            </DialogTitle>
           </DialogHeader>
           {viewingItem && (
-            <div className="space-y-3 text-xs">
-              <div className="grid grid-cols-3 gap-2">
-                <div className="p-2 bg-muted rounded">
-                  <div className="text-muted-foreground">Synthesis</div>
-                  <div className="font-mono font-bold">{viewingItem.synthesis_score.toFixed(1)}</div>
-                </div>
-                <div className="p-2 bg-muted rounded">
-                  <div className="text-muted-foreground">Relevance</div>
-                  <div className="font-mono font-bold">{viewingItem.relevance_score.toFixed(1)}</div>
-                </div>
-                <div className="p-2 bg-muted rounded">
-                  <div className="text-muted-foreground">Uniqueness</div>
-                  <div className="font-mono font-bold">{viewingItem.uniqueness_score.toFixed(1)}</div>
-                </div>
-              </div>
-              <div className="p-2 bg-muted rounded">
-                <div className="text-muted-foreground mb-1">Total Score</div>
-                <div className="font-mono font-bold text-lg">{viewingItem.total_score.toFixed(1)}</div>
-                <div className="text-[10px] text-muted-foreground">
-                  = (0.4×Synthesis + 0.3×Relevance + 0.3×Uniqueness) × Tier-Multiplier
-                </div>
-              </div>
+            <div className="space-y-4">
+              {viewingItem.excerpt && (
+                <p className="border-l-2 border-[#CCFF00] pl-3 text-sm font-semibold">
+                  „{viewingItem.excerpt}"
+                </p>
+              )}
               {viewingItem.content ? (
-                <div>
-                  <div className="text-muted-foreground mb-1">Content</div>
-                  <div className="text-sm bg-muted/50 p-3 rounded max-h-[300px] overflow-y-auto whitespace-pre-wrap">
-                    {viewingItem.content}
-                  </div>
+                /* Markup rausrechnen: gecrawlte Artikel liegen als
+                   Readability-HTML vor und standen hier bisher roh im Kasten. */
+                <div className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                  {htmlToPlainText(viewingItem.content)}
                 </div>
-              ) : viewingItem.excerpt ? (
-                <div>
-                  <div className="text-muted-foreground mb-1">Excerpt</div>
-                  <p className="text-sm">{viewingItem.excerpt}</p>
-                </div>
-              ) : loadingContent ? (
+              ) : viewingItem.excerpt ? null : loadingContent ? (
                 <div className="p-3 bg-muted/30 rounded text-center text-muted-foreground">
                   <p className="text-sm">Content wird geladen...</p>
                 </div>
@@ -1493,27 +1481,38 @@ export default function NewsQueuePage() {
                   )}
                 </div>
               )}
+              {/* „Zum Original" wie im Charts-Layer: benannter Link statt roher
+                  URL, die ueber die halbe Breite lief. */}
               {viewingItem.source_url && (viewingItem.content || viewingItem.excerpt) && (
                 <a
                   href={viewingItem.source_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline block truncate flex items-center gap-1"
+                  className="inline-flex items-center gap-1 text-sm font-semibold underline"
                 >
-                  <ExternalLink className="h-3 w-3 shrink-0" />
-                  {viewingItem.source_url}
+                  Zum Original <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               )}
               {viewingItem.skip_reason && (
-                <div className="p-2 bg-orange-500/10 rounded">
-                  <div className="text-orange-600 font-medium">Skip-Grund:</div>
+                <div className="rounded bg-orange-500/10 p-2 text-xs">
+                  <div className="font-medium text-orange-600">Skip-Grund:</div>
                   <p>{viewingItem.skip_reason}</p>
                 </div>
               )}
-              <div className="text-muted-foreground">
-                Queued: {new Date(viewingItem.queued_at).toLocaleString('de-DE')}
-                <br />
-                Expires: {new Date(viewingItem.expires_at).toLocaleString('de-DE')}
+              {/* Bewertung und Fristen: Admin-Angaben, deshalb klein und ganz
+                  unten — vorher standen sie als graue Kaesten VOR dem Text und
+                  schoben den eigentlichen Inhalt aus dem Blick. */}
+              <div className="border-t pt-3 text-[11px] text-muted-foreground">
+                <div className="font-mono">
+                  Total {viewingItem.total_score.toFixed(1)}
+                  {' · '}Synthesis {viewingItem.synthesis_score.toFixed(1)}
+                  {' · '}Relevance {viewingItem.relevance_score.toFixed(1)}
+                  {' · '}Uniqueness {viewingItem.uniqueness_score.toFixed(1)}
+                </div>
+                <div className="mt-1">
+                  Queued {new Date(viewingItem.queued_at).toLocaleString('de-DE')}
+                  {' · '}Expires {new Date(viewingItem.expires_at).toLocaleString('de-DE')}
+                </div>
               </div>
             </div>
           )}
