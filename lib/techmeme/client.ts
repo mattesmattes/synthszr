@@ -43,13 +43,20 @@ const TECHMEME_URL = 'https://www.techmeme.com/'
 const NON_SOURCE_HOSTS = [
   'techmeme.com', 'memeorandum.com', 'mediagazer.com', 'wesmirch.com',
   'twitter.com', 'x.com', 'facebook.com', 'linkedin.com', 'bsky.app',
-  'threads.net', 'mastodon.social', 'techhub.social', 'reddit.com',
+  // threads.com UND .net: Meta hat die Domain gewechselt, Techmeme verlinkt
+  // beide. Nur eine zu sperren, lässt Handles durchrutschen.
+  'threads.net', 'threads.com', 'mastodon.social', 'techhub.social', 'reddit.com',
   'news.ycombinator.com', 'feedburner.com', 'youtube.com',
 ]
 
 export function isNewsSourceUrl(url: string): boolean {
   try {
     const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '')
+    // Ein Host ohne Punkt ist keine Domain, sondern ein Rest: Beim Messen am
+    // 2026-08-13 tauchten „https://x" und „https://w" auf — abgeschnittene
+    // Adressen. Ungeprüft landen sie als „Publikation ohne Feed" in der
+    // Statistik und sehen dort aus wie ein normaler Rückfall auf den Crawl.
+    if (!/\.[a-z]{2,}$/i.test(host)) return false
     return !NON_SOURCE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))
   } catch {
     return false
@@ -105,6 +112,13 @@ interface ParsedItem {
  * darin verlinkte Adresse ist nur die STARTSEITE der Publikation — die
  * eigentliche Artikel-URL steht im nächsten Link danach. Wer den CITE-Link
  * nimmt, sammelt Domains statt Artikel.
+ *
+ * DER ERSTE LINK NACH DEM CITE ENTSCHEIDET — und nur er. Techmeme hängt an
+ * viele Cluster einen Diskussionsblock (`DIV CLASS="dbpt"`, „X:"), in dem
+ * Handles ebenfalls in `<CITE>` stehen. Deren Links zeigen alle auf x.com und
+ * sind damit ausgeschlossen. Eine Suche, die daraufhin WEITERLÄUFT, greift den
+ * nächsten erstbesten Link und schreibt einen fremden Artikel unter das Handle.
+ * (2026-08-13 gemessen: fünf solcher Fehltreffer je Seitenabruf.)
  */
 function parseItems(block: string): ParsedItem[] {
   const citeRe = /<CITE>([\s\S]*?)<\/CITE>/gi
@@ -116,18 +130,13 @@ function parseItems(block: string): ParsedItem[] {
     const publication = cleanText(m[1]).replace(/:$/, '').trim()
     if (!publication) continue
 
-    // Artikel-URL: erster echter Link NACH dem CITE-Block.
+    // Artikel-URL: der ERSTE absolute Link nach dem CITE. Ist er keine
+    // Nachrichtenquelle, gehört der Eintrag nicht zu uns — nicht weitersuchen.
     const rest = block.slice(m.index + m[0].length, m.index + m[0].length + 3000)
-    const linkRe = /HREF\s*=\s*["']?(https?:\/\/[^"'\s>]+)/gi
-    let url: string | null = null
-    let lm: RegExpExecArray | null
-    while ((lm = linkRe.exec(rest)) !== null) {
-      const candidate = lm[1].replace(/&amp;/g, '&')
-      if (!isNewsSourceUrl(candidate)) continue
-      url = candidate
-      break
-    }
-    if (!url) continue
+    const erster = rest.match(/HREF\s*=\s*["']?(https?:\/\/[^"'\s>]+)/i)
+    if (!erster) continue
+    const url = erster[1].replace(/&amp;/g, '&')
+    if (!isNewsSourceUrl(url)) continue
 
     let host: string
     try { host = new URL(url).hostname.toLowerCase().replace(/^www\./, '') } catch { continue }

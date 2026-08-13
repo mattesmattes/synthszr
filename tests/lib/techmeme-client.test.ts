@@ -28,9 +28,11 @@ const FIXTURE = `
     <CITE><A HREF="https://zweitblatt.de/">Zweitblatt</A>:</CITE>
     <A HREF="https://zweitblatt.de/artikel/modell-x">Auch dazu</A>
   </DIV>
-  <DIV CLASS="item">
-    <CITE><A HREF="https://twitter.com/jemand">@jemand</A>:</CITE>
-    <A HREF="https://twitter.com/jemand/status/1">Kommentar</A>
+  <DIV CLASS="dbpt"> <SPAN CLASS="drhed">X:</SPAN>
+    <CITE><A HREF="https://x.com/jemand">Jemand / @jemand</A>:</CITE>
+    <A HREF="https://x.com/jemand/status/1">Kommentar</A>,
+    <A HREF="https://x.com/andere/status/2">noch einer</A>,
+    <A HREF="https://spaetere-quelle.de/artikel/xyz">steht weiter hinten im Cluster</A>
   </DIV>
 </DIV>
 <DIV CLASS="clus">
@@ -65,10 +67,37 @@ describe('parseTechmemeHtml', () => {
     expect(stories[1].headline).toContain('Chip-Ausbeute')
   })
 
-  it('laesst soziale Netze aus — das sind keine Nachrichtenquellen', () => {
-    const hosts = stories[0].sources.map((s) => s.url)
-    expect(hosts.some((u) => u.includes('twitter.com'))).toBe(false)
+  it('laesst Techmemes Diskussionsblock aus — Tweets sind keine Quellen', () => {
+    // Die Handles im „X:"-Block stehen ebenfalls in <CITE>. Wer sie mitnimmt,
+    // haelt Kommentare fuer Publikationen.
+    const urls = stories[0].sources.map((s) => s.url)
+    expect(urls.some((u) => u.includes('x.com'))).toBe(false)
     expect(stories[0].sources).toHaveLength(2)
+  })
+
+  it('ordnet einem Handle keinen spaeteren Artikel-Link zu', () => {
+    // 2026-08-13 an der echten Seite gemessen: Weil alle Links eines X-Blocks
+    // ausgeschlossen sind, lief die Suche WEITER und griff den naechsten
+    // erstbesten Link — auf der echten Seite bis zum Rand des Suchfensters,
+    // wo sie eine URL mittendrin abschnitt („https://x").
+    //
+    // Die Regel: Der ERSTE Link nach dem CITE ist der Artikel. Ist er keiner,
+    // gehoert der Eintrag nicht zu uns — verwerfen statt weitersuchen.
+    const urls = stories[0].sources.map((s) => s.url)
+    expect(urls.some((u) => u.includes('spaetere-quelle.de'))).toBe(false)
+    const publikationen = stories[0].sources.map((s) => s.publication)
+    expect(publikationen.some((p) => p.includes('@'))).toBe(false)
+  })
+
+  it('verwirft URLs ohne plausiblen Host', () => {
+    const kaputt = parseTechmemeHtml(`<DIV CLASS="clus">
+      <DIV CLASS="item">
+        <CITE><A HREF="https://x.de/">Irgendwas</A>:</CITE>
+        <A HREF="https://abgeschnitten">Text</A>
+        <STRONG>Eine Ueberschrift, die lang genug ist</STRONG>
+      </DIV>
+    </DIV>`)
+    expect(kaputt.flatMap((s) => s.sources)).toHaveLength(0)
   })
 
   it('haelt Techmemes Reihenfolge ein — die vorderste Quelle zuerst', () => {
