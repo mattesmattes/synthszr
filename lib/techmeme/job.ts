@@ -18,11 +18,11 @@
  * und meldet, was liegen blieb — der nächste Lauf holt es nach.
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
-import { fetchTopStories, selectSources, type TechmemeStory } from '@/lib/techmeme/client'
+import { fetchTopStories, selectSources, SOURCES_PER_STORY, type TechmemeStory } from '@/lib/techmeme/client'
 import { filterRelevantStories } from '@/lib/techmeme/relevance'
 import { loadFeedCache, persistFeedCache, hostOf } from '@/lib/techmeme/feed-discovery'
 import { fetchSourceText, type FetchContext } from '@/lib/techmeme/fetch-text'
-import { buildQueueItem, filterKnownSources, type TechmemeQueueItem } from '@/lib/techmeme/queue-items'
+import { buildQueueItem, filterKnownSources, storyKeyFor, type TechmemeQueueItem } from '@/lib/techmeme/queue-items'
 import { addToQueue } from '@/lib/news-queue/service'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -90,6 +90,40 @@ async function loadKnownUrls(supabase: AdminClient): Promise<string[]> {
     if (seite.length < PAGE) break
   }
   return out
+}
+
+/**
+ * Wie viele Einträge je Techmeme-Story schon in der Queue stehen.
+ *
+ * NÖTIG, WEIL DIE OBERGRENZE SONST NUR JE LAUF GILT: Techmeme nimmt im Lauf des
+ * Tages neue Quellen in eine Story auf. Die rücken in die vorderen zehn vor, und
+ * über mehrere Durchgänge summierte sich das — am 2026-08-13 auf zwölf Einträge
+ * bei einer Story, obwohl SOURCES_PER_STORY zehn erlaubt. Bei einer Meldung, die
+ * zwei Tage auf der Startseite steht, liefe das immer weiter auf.
+ */
+async function loadStoryCounts(supabase: AdminClient): Promise<Map<string, number>> {
+  const seit = new Date(Date.now() - KNOWN_URL_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  const PAGE = 1000
+  const counts = new Map<string, number>()
+
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('news_queue')
+      .select('metadata')
+      .gte('queued_at', seit)
+      .range(from, from + PAGE - 1)
+
+    if (error) {
+      throw new Error(`Story-Belegung nicht lesbar: ${error.message}`)
+    }
+    const seite = (data ?? []) as Array<{ metadata: Record<string, unknown> | null }>
+    for (const zeile of seite) {
+      const key = zeile.metadata?.techmeme_story
+      if (typeof key === 'string') counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    if (seite.length < PAGE) break
+  }
+  return counts
 }
 
 interface Aufgabe {
@@ -167,6 +201,7 @@ export async function runTechmemeJob(
   }
 
   const bekannt = await loadKnownUrls(supabase)
+  const storyCounts = await loadStoryCounts(supabase)
 
   // Techmemes Reihenfolge bleibt erhalten: Rang 0 ist die Hauptmeldung. Der
   // Rang wird VOR dem Abgleich vergeben, damit er die Position bei Techmeme
@@ -181,7 +216,14 @@ export async function runTechmemeJob(
   for (const [reihe, story] of relevante.entries()) {
     const storyIndex = relevanz.keepIndices[reihe] ?? reihe
     const gewaehlt = selectSources(story.sources)
-    const frisch = filterKnownSources(gewaehlt, bekannt)
+
+    // Die Obergrenze gilt JE STORY, nicht je Lauf: Was frühere Durchgänge schon
+    // angelegt haben, zählt mit.
+    const belegt = storyCounts.get(storyKeyFor(story)) ?? 0
+    const frei = Math.max(0, SOURCES_PER_STORY - belegt)
+    if (frei === 0) continue
+
+    const frisch = filterKnownSources(gewaehlt, bekannt).slice(0, frei)
     for (const source of frisch) {
       aufgaben.push({ story, source, rank: gewaehlt.indexOf(source), storyIndex, totalStories: stories.length })
     }
