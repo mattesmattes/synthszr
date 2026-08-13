@@ -18,6 +18,8 @@
  *    case-insensitiv und akzeptiert Attribute ohne Anführungszeichen.
  */
 
+import { isPriorityPublication } from '@/lib/techmeme/known-feeds'
+
 /** Eine Story: die Hauptmeldung plus die Quellen, die darüber berichten. */
 export interface TechmemeStory {
   /** Überschrift der Hauptmeldung. */
@@ -158,6 +160,37 @@ function cleanText(raw: string): string {
 export function publicationFromHost(host: string): string {
   const base = host.replace(/^www\./, '').split('.')[0]
   return base.charAt(0).toUpperCase() + base.slice(1)
+}
+
+/**
+ * Wie viele Quellen je Story verarbeitet werden (Betreiber-Vorgabe 2026-08-13:
+ * von 5 auf 10 erhöht). Techmeme listet im Schnitt zwölf.
+ */
+export const SOURCES_PER_STORY = 10
+
+/**
+ * Wählt die zu verarbeitenden Quellen einer Story.
+ *
+ * Techmemes Reihenfolge folgt der PROMINENZ einer Publikation, nicht unserer
+ * fachlichen Nähe. Deshalb werden die ausdrücklich gewünschten Häuser
+ * (VentureBeat, The New Stack) nach vorn gezogen, wenn sie überhaupt gelistet
+ * sind — sonst fielen sie bei einer Story mit fünfzehn Quellen hinten heraus,
+ * obwohl sie fachlich näher stehen als mancher Generalist davor.
+ *
+ * Die übrigen behalten Techmemes Reihenfolge: Sie ist redaktionell begründet
+ * und besser als jede Rangfolge, die wir uns selbst ausdenken.
+ */
+export function selectSources(sources: TechmemeSource[], limit = SOURCES_PER_STORY): TechmemeSource[] {
+  const bevorzugt: TechmemeSource[] = []
+  const rest: TechmemeSource[] = []
+  for (const s of sources) {
+    const host = (() => {
+      try { return new URL(s.url).hostname } catch { return '' }
+    })()
+    if (host && isPriorityPublication(host)) bevorzugt.push(s)
+    else rest.push(s)
+  }
+  return [...bevorzugt, ...rest].slice(0, limit)
 }
 
 /** Holt die Startseite. Eigener User-Agent mit Kontakt-URL: ein anonymer

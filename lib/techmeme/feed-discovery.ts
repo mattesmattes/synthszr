@@ -13,6 +13,7 @@
  * NEGATIVE Ergebnis gespeichert.
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
+import { knownFeedFor } from '@/lib/techmeme/known-feeds'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -122,6 +123,13 @@ export async function discoverFeed(
   const host = hostOf(articleUrl)
   const c = cache ?? (await readCache(supabase))
   if (!host) return { feedUrl: null, cache: c, fromCache: false }
+
+  // Fest hinterlegte Adresse zuerst: Sie ist geprueft und umgeht die
+  // Entdeckung voellig — genau dort scheitert die dynamische Suche bei den
+  // wertvollsten Publikationen (Startseite antwortet mit 401, oder der Feed
+  // steht gar nicht erst im HTML).
+  const curated = knownFeedFor(host)
+  if (curated) return { feedUrl: curated, cache: c, fromCache: true }
 
   const known = c[host]
   if (known && isFresh(known)) return { feedUrl: known.feedUrl, cache: c, fromCache: true }
