@@ -1,6 +1,11 @@
 import type { LanguageCode } from '@/lib/types'
 
-export type BundleType = 'topic' | 'recap'
+/**
+ * Aufschrift über einem gebündelten Abschnitt. „Deep Dive" kam 2026-08-13
+ * hinzu (Betreiber-Wunsch): gleiche Mechanik und Länge wie „Thema des Tages",
+ * nur eine andere Aufschrift, die im Editor umgestellt werden kann.
+ */
+export type BundleType = 'topic' | 'recap' | 'deep_dive'
 
 /**
  * Visible label for a bundled article section ("Thema des Tages" / "Nachlese"),
@@ -15,6 +20,15 @@ const BUNDLE_LABELS: Record<BundleType, Partial<Record<LanguageCode, string>>> =
     fr: 'Sujet du jour',
     cs: 'Téma dne',
     nds: "Thema vun'n Dag",
+  },
+  deep_dive: {
+    // Als Anglizismus in allen Sprachen gebräuchlich und als Format-Aufschrift
+    // wiedererkennbar — eine Übersetzung („Tiefenbohrung") träfe es nicht.
+    de: 'Deep Dive',
+    en: 'Deep Dive',
+    fr: 'Deep Dive',
+    cs: 'Deep Dive',
+    nds: 'Deep Dive',
   },
   recap: {
     de: 'Nachlese',

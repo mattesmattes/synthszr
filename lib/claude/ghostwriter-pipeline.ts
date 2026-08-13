@@ -47,6 +47,8 @@ import { isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { bundleLabel, type BundleType } from '@/lib/i18n/bundle-labels'
+
 export interface PipelineItem {
   id: string
   title: string
@@ -54,7 +56,16 @@ export interface PipelineItem {
   source_display_name: string | null
   source_url: string | null
   source_identifier: string
-  bundle_type?: 'topic' | 'recap' | null
+  bundle_type?: BundleType | null
+  /**
+   * Gruppierungsschlüssel innerhalb eines Bündel-Typs.
+   *
+   * Ohne ihn bilden alle Items EINES Typs ein einziges Bündel — so war es bis
+   * 2026-08-13, und so bleibt es für händisch markierte News. Techmeme-Items
+   * tragen hier ihre Story, damit aus fünf Stories fünf Abschnitte werden
+   * statt eines.
+   */
+  bundle_key?: string | null
 }
 
 export interface ArticlePlan {
@@ -78,23 +89,85 @@ export interface ArticlePlan {
 // items, then everything else in its existing relative order.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Eine zusammengehörige Gruppe von Quellen, die EINEN Abschnitt ergibt. */
+export interface BundleUnitIndices {
+  bundleType: BundleType
+  /** Was die Gruppe zusammenhält — Story-Schlüssel oder ersatzweise der Typ. */
+  key: string
+  /** 1-basierte Item-Indizes, in Eingabereihenfolge. */
+  indices: number[]
+}
+
+/**
+ * Reihenfolge der Bündel-Typen im Artikel: Themen führen, Deep Dives folgen,
+ * die Nachlese steht hinten.
+ */
+const BUNDLE_TYPE_ORDER: BundleType[] = ['topic', 'deep_dive', 'recap']
+
+/**
+ * Bündel-Einheiten aus den Items — die zentrale Gruppierung.
+ *
+ * Gruppiert nach (Typ, Schlüssel). Ohne Schlüssel greift der Typ selbst, dann
+ * entsteht wie bisher genau ein Bündel je Typ. Mit Schlüssel — Techmeme setzt
+ * dort seine Story — wird aus jeder Story ein eigener Abschnitt.
+ *
+ * Die REIHENFOLGE folgt dem ersten Vorkommen, nicht dem Alphabet: Bei Techmeme
+ * ist die Reihenfolge die redaktionelle Aussage, und die soll den Aufbau des
+ * Artikels bestimmen.
+ */
+export function computeBundleUnits(items: PipelineItem[]): BundleUnitIndices[] {
+  const units = new Map<string, BundleUnitIndices>()
+
+  items.forEach((item, i) => {
+    const typ = item.bundle_type
+    if (!typ || !BUNDLE_TYPE_ORDER.includes(typ)) return
+    const key = item.bundle_key || typ
+    const id = `${typ}::${key}`
+    const vorhanden = units.get(id)
+    if (vorhanden) vorhanden.indices.push(i + 1)
+    else units.set(id, { bundleType: typ, key, indices: [i + 1] })
+  })
+
+  // Nach Typ sortieren, innerhalb eines Typs die Fundreihenfolge behalten.
+  return [...units.values()].sort(
+    (a, b) => BUNDLE_TYPE_ORDER.indexOf(a.bundleType) - BUNDLE_TYPE_ORDER.indexOf(b.bundleType),
+  )
+}
+
+/**
+ * Die zwei Listen, die der PLAN kennt.
+ *
+ * Bewusst unverändert: `plan.bundleGroups` ist eine gewachsene Struktur, die
+ * normalize-plan.ts prüft und der Planungs-Prompt dem Modell zeigt. Für die
+ * Frage „welche Items gehören überhaupt in ein Bündel" reicht sie; die feinere
+ * Aufteilung in einzelne Abschnitte macht computeBundleUnits.
+ */
 export function computeBundleGroups(items: PipelineItem[]): { topic: number[]; recap: number[] } {
   const topic: number[] = []
   const recap: number[] = []
   items.forEach((item, i) => {
-    if (item.bundle_type === 'topic') topic.push(i + 1)
+    // Deep Dives zählen für den Plan wie Themen — beide führen den Artikel an.
+    if (item.bundle_type === 'topic' || item.bundle_type === 'deep_dive') topic.push(i + 1)
     else if (item.bundle_type === 'recap') recap.push(i + 1)
   })
   return { topic, recap }
 }
 
+/**
+ * Zwingt die Bündel in der Reihenfolge nach vorn — Bündel für Bündel.
+ *
+ * Entscheidend ist, dass die Items EINES Bündels ZUSAMMENHÄNGEND stehen: Die
+ * Schreibphase gruppiert später nach denselben Einheiten, und eine Reihenfolge,
+ * die zwei Stories verschränkt, ergäbe Abschnitte, deren Überschriften nicht
+ * mehr zu ihrem Inhalt passen.
+ */
 export function enforceBundleOrdering(
   ordering: number[],
-  groups: { topic: number[]; recap: number[] },
+  units: BundleUnitIndices[],
 ): number[] {
-  const bundled = new Set([...groups.topic, ...groups.recap])
-  const normal = ordering.filter((idx) => !bundled.has(idx))
-  return [...groups.topic, ...groups.recap, ...normal]
+  const gebuendelt = new Set(units.flatMap((u) => u.indices))
+  const normal = ordering.filter((idx) => !gebuendelt.has(idx))
+  return [...units.flatMap((u) => u.indices), ...normal]
 }
 
 /**
@@ -104,7 +177,8 @@ export function enforceBundleOrdering(
  * Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird — siehe
  * writeSectionsBatch / runGhostwriterPipeline.
  */
-export function hasBundles(groups: { topic: number[]; recap: number[] }): boolean {
+export function hasBundles(groups: { topic: number[]; recap: number[] } | BundleUnitIndices[]): boolean {
+  if (Array.isArray(groups)) return groups.length > 0
   return groups.topic.length + groups.recap.length > 0
 }
 
@@ -420,7 +494,9 @@ Erstelle folgenden JSON-Plan:
   // write it onto the plan and force topic-group → recap-group → normal
   // ordering, overriding whatever order the model chose for those items.
   plan.bundleGroups = bundleGroups
-  plan.ordering = enforceBundleOrdering(plan.ordering, bundleGroups)
+  // Die Reihenfolge richtet sich nach den EINHEITEN, nicht nach den zwei
+  // Plan-Listen: Nur so bleiben die Quellen einer Story zusammenhängend.
+  plan.ordering = enforceBundleOrdering(plan.ordering, computeBundleUnits(items))
 
   // Validate: ensure exactly 3 excerpt bullets
   while (plan.excerptBullets.length < 3) {
@@ -727,7 +803,7 @@ function insertBeforeTake(section: string, block: string): string {
 // das ist aber nur eine Prompt-Bitte, keine Code-Garantie (analog zu
 // reapplyBundleTypeAttrs in lib/i18n/translation-service.ts für die
 // Übersetzung).
-export function ensureBundleMarker(section: string, bundleType: 'topic' | 'recap'): string {
+export function ensureBundleMarker(section: string, bundleType: BundleType): string {
   return section.replace(/^(\s*#{1,6}[^\n]*)/, (line) =>
     line.includes('data-bundle-type') ? line : `${line} <!-- data-bundle-type:${bundleType} -->`,
   )
@@ -746,7 +822,7 @@ export function ensureBundleMarker(section: string, bundleType: 'topic' | 'recap
 // (markdown-to-tiptap.ts).
 export function reinjectBundleMarkers(
   fullText: string,
-  bundleUnits: Array<{ bundleType: 'topic' | 'recap' }>,
+  bundleUnits: Array<{ bundleType: BundleType }>,
 ): string {
   if (bundleUnits.length === 0) return fullText
   const chunks = fullText.split(/(?=^## )/m)
@@ -763,7 +839,7 @@ export function reinjectBundleMarkers(
 
 export async function writeBundleSection(
   items: PipelineItem[],
-  bundleType: 'topic' | 'recap',
+  bundleType: BundleType,
   heading: string,
   model: AIModel,
   context: {
@@ -828,9 +904,12 @@ export async function writeBundleSection(
   const angleBlock = context.takeAngle
     ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung): ${context.takeAngle}`
     : ''
-  const bundleLabel = bundleType === 'topic' ? 'Thema des Tages' : 'Nachlese'
+  // Aus der zentralen Label-Tabelle, nicht als Zweiweg-Abfrage: Mit „Deep Dive"
+  // als drittem Typ hätte ein `=== 'topic' ? … : 'Nachlese'` dort still
+  // „Nachlese" in den Prompt geschrieben.
+  const bundleLabelText = bundleLabel(bundleType, 'de')
 
-  const userPrompt = `BÜNDEL-LEITARTIKEL — ${bundleLabel}: Führe die folgenden ${items.length} Quellen zu EINEM zusammenhängenden Abschnitt zusammen (redundanzfrei, alle unterschiedlichen Aspekte abdecken, Redundantes NICHT wiederholen).
+  const userPrompt = `BÜNDEL-LEITARTIKEL — ${bundleLabelText}: Führe die folgenden ${items.length} Quellen zu EINEM zusammenhängenden Abschnitt zusammen (redundanzfrei, alle unterschiedlichen Aspekte abdecken, Redundantes NICHT wiederholen).
 
 THEMEN-HINWEIS (übergreifende Klammer für alle Quellen — schreibe deine EIGENE journalistisch präzise Überschrift nach den ÜBERSCHRIFT-Regeln, die den gemeinsamen Nachrichtenkern benennt; NICHT wörtlich übernehmen und NICHT ins Kryptische zuspitzen): ${heading}${angleBlock}
 
@@ -1159,7 +1238,7 @@ export async function buildSectionContext(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type BundleWriteUnit =
-  | { kind: 'bundle'; bundleType: 'topic' | 'recap'; items: PipelineItem[]; heading: string; takeAngle?: string; retrievalHint?: string }
+  | { kind: 'bundle'; bundleType: BundleType; items: PipelineItem[]; heading: string; takeAngle?: string; retrievalHint?: string }
   | { kind: 'single'; item: PipelineItem; heading: string; takeAngle?: string; retrievalHint?: string }
 
 /**
@@ -1185,20 +1264,31 @@ export function buildBundleWriteUnits(orderedItems: PipelineItem[], plan: Articl
       retrievalHint: (plan.retrievalHints ?? {})[key] || undefined,
     }
   })
-  const topic = positioned.filter((p) => p.item.bundle_type === 'topic')
-  const recap = positioned.filter((p) => p.item.bundle_type === 'recap')
-  const normal = positioned.filter((p) => p.item.bundle_type !== 'topic' && p.item.bundle_type !== 'recap')
+  // Gruppierung ueber dieselbe Funktion, die auch die Reihenfolge bestimmt —
+  // sonst liefen Reihenfolge und Abschnittsbildung auseinander, und eine
+  // Ueberschrift landete ueber dem Text einer anderen Story.
+  const einheiten = computeBundleUnits(positioned.map((p) => p.item))
+  const gebuendelt = new Set(einheiten.flatMap((u) => u.indices))
 
   const units: BundleWriteUnit[] = []
-  if (topic.length > 0) {
-    units.push({ kind: 'bundle', bundleType: 'topic', items: topic.map((p) => p.item), heading: topic[0].heading, takeAngle: topic[0].takeAngle, retrievalHint: topic[0].retrievalHint })
+  for (const einheit of einheiten) {
+    const teile = einheit.indices.map((i) => positioned[i - 1]).filter(Boolean)
+    if (teile.length === 0) continue
+    units.push({
+      kind: 'bundle',
+      bundleType: einheit.bundleType,
+      items: teile.map((p) => p.item),
+      // Ueberschrift, Blickwinkel und Recherche-Hinweis kommen vom ERSTEN Item
+      // der Einheit: In Techmemes Reihenfolge ist das die Hauptmeldung.
+      heading: teile[0].heading,
+      takeAngle: teile[0].takeAngle,
+      retrievalHint: teile[0].retrievalHint,
+    })
   }
-  if (recap.length > 0) {
-    units.push({ kind: 'bundle', bundleType: 'recap', items: recap.map((p) => p.item), heading: recap[0].heading, takeAngle: recap[0].takeAngle, retrievalHint: recap[0].retrievalHint })
-  }
-  for (const p of normal) {
+  positioned.forEach((p, i) => {
+    if (gebuendelt.has(i + 1)) return
     units.push({ kind: 'single', item: p.item, heading: p.heading, takeAngle: p.takeAngle, retrievalHint: p.retrievalHint })
-  }
+  })
   return units
 }
 

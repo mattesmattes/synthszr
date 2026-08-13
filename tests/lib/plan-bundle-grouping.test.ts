@@ -11,8 +11,14 @@ describe('computeBundleGroups', () => {
 })
 describe('enforceBundleOrdering', () => {
   it('setzt topic-Gruppe vor recap vor normale', () => {
-    const g = { topic: [4], recap: [1] }
-    // normale Reihenfolge [2,3] soll erhalten bleiben, aber nach den Bündeln
+    // Seit 2026-08-13 nimmt die Funktion Bündel-EINHEITEN statt zweier Listen —
+    // nötig, damit mehrere Themen je einen eigenen Abschnitt ergeben. Die
+    // Aussage dieses Tests bleibt dieselbe: Bündel vor Einzelmeldungen, Thema
+    // vor Nachlese, und die normale Reihenfolge [2,3] bleibt erhalten.
+    const g = [
+      { bundleType: 'topic' as const, key: 'topic', indices: [4] },
+      { bundleType: 'recap' as const, key: 'recap', indices: [1] },
+    ]
     expect(enforceBundleOrdering([2, 3, 1, 4], g)).toEqual([4, 1, 2, 3])
   })
 })
