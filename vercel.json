@@ -42,6 +42,10 @@
     {
       "path": "/api/cron/techmeme",
       "schedule": "10 */4 * * *"
+    },
+    {
+      "path": "/api/cron/week-wrapup",
+      "schedule": "0 6 * * 0"
     }
   ],
   "headers": [
