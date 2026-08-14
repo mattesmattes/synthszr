@@ -437,11 +437,35 @@
   }
 }
 
-/* Highlight last sentence of Synthszr Take with neon cyan background */
+/* Hervorhebung des letzten Take-Satzes.
+ *
+ * BETREIBER-BEFUND 2026-08-14 (im DOM nachgemessen): Im Text klafften Lücken um
+ * jeden verlinkten Begriff — „nichts mit dem ␣Tokenpreis␣ zu tun haben".
+ *
+ * Ursache war der SEITLICHE Innenabstand. Die Hervorhebung ist EIN Span,
+ * solange nichts sie unterbricht; ein Glossar-Link zerschneidet sie aber in
+ * mehrere:
+ *
+ *   <span class="…">…nichts mit dem </span>
+ *   <a class="glossary-link"><span class="…">Tokenpreis</span></a>
+ *   <span class="…"> zu tun haben…</span>
+ *
+ * Mit `box-decoration-break: clone` bekommt JEDES dieser Bruchstücke die vollen
+ * 0.25em links und rechts — bei vier Links im Satz also acht zusätzliche
+ * Abstände mitten im Fließtext, dazu an jeder Bruchstelle eine eigene Rundung,
+ * weshalb auch die Farbe sichtbar aufreißt.
+ *
+ * Im HTML steht dazwischen KEIN Leerraum; es ist reines CSS.
+ *
+ * Ohne seitliches Padding sitzt die Hervorhebung an Satzanfang und -ende etwas
+ * knapper am Text — der Preis dafür, dass sie im Satzinneren nichts mehr
+ * auseinanderzieht. Die Rundung bleibt, `clone` ebenfalls: Über einen
+ * Zeilenumbruch hinweg soll weiterhin jede Zeile ihren eigenen Kasten bekommen.
+ */
 .synthszr-last-sentence {
   background-color: #00FFFF;
   color: #000;
-  padding: 0.1em 0.25em;
+  padding: 0.1em 0;
   border-radius: 0.15em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
