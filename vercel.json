@@ -13,7 +13,7 @@
     },
     {
       "path": "/api/cron/glossary-news",
-      "schedule": "0 4 * * 1"
+      "schedule": "0 */4 * * *"
     },
     {
       "path": "/api/cron/glossary-review",
