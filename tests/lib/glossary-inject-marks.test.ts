@@ -202,6 +202,16 @@ describe('injectGlossaryMarks — Flexionsendungen', () => {
     expect(linked(out)[0]?.text).toBe('Intel')
   })
 
+  it('nimmt die englische -ing-Form mit in den Link', () => {
+    // BETREIBER-BEFUND 2026-08-14 (Screenshot): Im Take stand „europäisches
+    // Host ing" — „Host" war aus „Hosting" herausgelöst und verlinkt, das „ing"
+    // blieb als Rest daneben stehen. Diese Texte sind voller englischer
+    // Gerundien (Hosting, Training, Prompting), und „ing" ist dort ebenso eine
+    // Endung wie „en" im Deutschen.
+    const out = injectGlossaryMarks(doc('Europäisches Hosting hilft.'), ['host'], t('Host', 'host'))
+    expect(linked(out)[0]?.text).toBe('Hosting')
+  })
+
   it('lässt ein Kompositum unangetastet', () => {
     // "Inferenzkosten": "kosten" ist keine Flexionsendung, der Link umfasst
     // weiterhin nur den Begriff.

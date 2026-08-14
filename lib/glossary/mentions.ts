@@ -123,9 +123,16 @@ export function matchWholeWordInText(
  * damit unberuehrt, und "Inferenzkosten" verlinkt weiterhin nur "Inferenz" —
  * "kosten" ist keine Endung, sondern ein zweites Wort.
  *
- * Laengste zuerst, damit "en" vor "e" und "es" vor "e" greift.
+ * "ing"/"ings" sind keine deutschen Flexionsendungen, gehoeren hier aber dazu:
+ * Diese Texte sind voller englischer Gerundien (Hosting, Training, Prompting),
+ * und ohne sie stand im Take "europaeisches Host ing" — der Begriff verlinkt,
+ * die Endung als Rest daneben (Betreiber-Befund 2026-08-14). Sie sind ebenso
+ * geschlossen wie die uebrigen: "ing" folgt nur dort, wo es wirklich die Endung
+ * ist, nicht vor einem zweiten Wort.
+ *
+ * Laengste zuerst, damit "en" vor "e", "es" vor "e" und "ings" vor "ing" greift.
  */
-const INFLECTIONS = ['en', 'es', 'er', 'em', 'ns', 'n', 's', 'e']
+const INFLECTIONS = ['ings', 'ing', 'en', 'es', 'er', 'em', 'ns', 'n', 's', 'e']
 
 /**
  * Dehnt einen Treffer um eine Flexionsendung aus, wenn danach eine Wortgrenze
