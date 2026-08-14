@@ -1250,7 +1250,18 @@ export async function buildSectionContext(
 
 export type BundleWriteUnit =
   | { kind: 'bundle'; bundleType: BundleType; items: PipelineItem[]; heading: string; takeAngle?: string; retrievalHint?: string }
-  | { kind: 'single'; item: PipelineItem; heading: string; takeAngle?: string; retrievalHint?: string }
+  | {
+      kind: 'single'
+      item: PipelineItem
+      heading: string
+      takeAngle?: string
+      retrievalHint?: string
+      /**
+       * Gesetzt, wenn dieser Abschnitt die EINZELFASSUNG eines Bündels ist —
+       * derselbe Stoff im gewöhnlichen Format, zur Auswahl für den Autor.
+       */
+      alternativeTo?: string
+    }
 
 /**
  * Groups `orderedItems` into write units by each item's `bundle_type`: all
@@ -1295,6 +1306,28 @@ export function buildBundleWriteUnits(orderedItems: PipelineItem[], plan: Articl
       takeAngle: teile[0].takeAngle,
       retrievalHint: teile[0].retrievalHint,
     })
+
+    // EINZELFASSUNG ZUR AUSWAHL (Betreiber-Vorgabe 2026-08-14): Entscheidet der
+    // Autor sich gegen den grossen Leitartikel, soll dieselbe Meldung im
+    // gewoehnlichen Format bereitstehen. Beide Fassungen stehen im Artikel; er
+    // loescht, was er nicht will.
+    //
+    // NICHT fuer die Nachlese: Sie ist ein Rueckblick, keine Leitmeldung, fuer
+    // die eine Einzelfassung sinnvoll waere.
+    if (einheit.bundleType === 'topic' || einheit.bundleType === 'deep_dive') {
+      // Dieselbe Wahl wie beim Quellenblock: die inhaltsstaerkste Quelle traegt
+      // die Meldung am besten allein.
+      const staerkste = teile.reduce((a, b) =>
+        (b.item.content?.length ?? 0) > (a.item.content?.length ?? 0) ? b : a)
+      units.push({
+        kind: 'single',
+        item: staerkste.item,
+        heading: staerkste.heading,
+        takeAngle: staerkste.takeAngle,
+        retrievalHint: staerkste.retrievalHint,
+        alternativeTo: einheit.key,
+      })
+    }
   }
   positioned.forEach((p, i) => {
     if (gebuendelt.has(i + 1)) return
