@@ -677,7 +677,9 @@ BÜNDEL-MODUS (überschreibt die EIN-Thema-Regel oben):
 - Die Zusammenfassung darf ausführlicher sein (bis zu ~25 Sätze), bleibt aber ein NÜCHTERNER Bericht ohne Wertung. Jede Wertung gehört in den Synthszr Take.
 - Gliedere diese längere Zusammenfassung in MEHRERE Absätze, getrennt durch eine Leerzeile: pro thematischem Block bzw. Aspekt/Quelle ein eigener Absatz (Richtwert 3-6 Sätze je Absatz). KEIN einziger Textblock über viele Sätze — der Leitartikel muss durch Absätze gegliedert und lesbar sein. Nur die Zusammenfassung wird so gegliedert; der Synthszr Take bleibt EIN Absatz.
 - Der Synthszr Take bleibt NORMALE Länge (5-7 Sätze) und wächst NICHT durch die Bündelung. Genau EIN gebündelter Take mit EINEM Blickwinkel, nicht mehrere aneinandergereihte Takes.
-- Company-Tags wie gewohnt (max 3 relevanteste über alle Quellen), ABER gib KEINE Quellen-Pfeil-Zeile aus (kein "→ [Quelle](URL)"): die Quellenangaben (Haupt- und Nebenquellen) werden deterministisch nach der Generierung ergänzt.`
+- Company-Tags wie gewohnt (max 3 relevanteste über alle Quellen), ABER gib KEINE Quellen-Pfeil-Zeile aus (kein "→ [Quelle](URL)"): die Quellenangaben (Haupt- und Nebenquellen) werden deterministisch nach der Generierung ergänzt.
+- NENNE DIE PUBLIKATIONEN NICHT IM FLIESSTEXT. Keine Wendungen wie "wie TechCrunch berichtet", "laut Reuters", "einem Bericht der Financial Times zufolge". Der Abschnitt fasst mehrere Quellen zusammen; würde jede beim Namen genannt, zerfiele der Text in eine Aufzählung von Presseschauen. Die Quellenangaben stehen ohnehin vollständig unter dem Abschnitt.
+- Schreibe stattdessen die SACHE: nicht "TechCrunch berichtet, dass Amazon Twitch-Streams zum Training nutzt", sondern "Amazon nutzt Twitch-Streams zum Training". Wo sich Quellen widersprechen oder eine etwas exklusiv meldet, genügt eine unpersönliche Zuschreibung ("nach Angaben von Insidern", "in einem Fall wird von … berichtet").`
 
 const BUNDLE_SYSTEM_PROMPT = SECTION_SYSTEM_PROMPT + BUNDLE_SYSTEM_ADDENDUM
 

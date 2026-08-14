@@ -265,6 +265,28 @@ export interface ExtractionResult {
  * die, zu denen Leser heute einen Begriff suchen; ein Abbruch nach der Hälfte
  * hat damit die nützlichere Hälfte erledigt.
  */
+/**
+ * Welche Artikel auf Lexikon-Begriffe gelesen werden.
+ *
+ * BETREIBER-VORGABE 2026-08-14: „jeder draft eines posts soll zu einer
+ * begriffs-extraktion und generierung führen".
+ *
+ * Vorher zählte nur `published`. Das hatte zwei Nachteile. Erstens standen die
+ * Begriffe erst NACH der Freigabe bereit — der Artikel ging also ohne
+ * Verlinkung online und bekam sie erst beim nächsten Lauf. Zweitens läuft die
+ * Nachführung an `created_at` entlang, und einen Freigabe-Zeitstempel gibt es
+ * nicht (`generated_posts.published_at` existiert nicht): Wer zwei Artikel in
+ * anderer Reihenfolge freigab, als sie entstanden sind, verlor den älteren
+ * dauerhaft aus dem Raster — ohne Fehlermeldung.
+ *
+ * Entwürfe zu lesen behebt beides: Die Reihenfolge der Erzeugung ist monoton,
+ * und die Begriffe stehen bereit, bevor der Artikel erscheint.
+ *
+ * `archived` bleibt aussen vor — verworfene Artikel sollen das Lexikon nicht
+ * mit Begriffen füllen, die nie jemand liest.
+ */
+const CRAWLED_POST_STATES = ['published', 'draft']
+
 export async function extractCandidates(
   supabase: AdminClient,
   knownSlugs: string[],
@@ -276,7 +298,7 @@ export async function extractCandidates(
   let query = supabase
     .from('generated_posts')
     .select('id, title, content, created_at')
-    .eq('status', 'published')
+    .in('status', CRAWLED_POST_STATES)
     .limit(POSTS_PER_EXTRACTION)
   if (phase === 'nachfuehren') {
     // Bestand ist durch — nur noch, was seit der Hochwassermarke dazukam,
@@ -295,7 +317,7 @@ export async function extractCandidates(
   const { count: totalPosts } = await supabase
     .from('generated_posts')
     .select('id', { count: 'exact', head: true })
-    .eq('status', 'published')
+    .in('status', CRAWLED_POST_STATES)
 
   const rows = (posts ?? []) as Array<{ id: string; content: unknown; created_at: string }>
   if (rows.length === 0) {
@@ -312,7 +334,7 @@ export async function extractCandidates(
       const { data: neuester } = await supabase
         .from('generated_posts')
         .select('created_at')
-        .eq('status', 'published')
+        .in('status', CRAWLED_POST_STATES)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -393,7 +415,7 @@ export async function extractCandidates(
     const { count: offen } = await supabase
       .from('generated_posts')
       .select('id', { count: 'exact', head: true })
-      .eq('status', 'published')
+      .in('status', CRAWLED_POST_STATES)
       .gt('created_at', marke)
     remaining = offen ?? 0
     // „X von N gelesen" bleibt so aussagekräftig: gelesen ist alles bis auf die
@@ -454,7 +476,7 @@ export async function generateMissingIllustrations(
   const { data, error } = await supabase
     .from('glossary_terms')
     .select('id, slug, canonical_name, summary')
-    .eq('status', 'published')
+    .in('status', CRAWLED_POST_STATES)
     .is('illustration_url', null)
     .order('slug')
   if (error) throw new Error(`Begriffe nicht ladbar: ${error.message}`)

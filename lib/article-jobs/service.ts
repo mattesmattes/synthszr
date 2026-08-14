@@ -32,6 +32,7 @@ import {
   type PipelineItem,
 } from '@/lib/claude/ghostwriter-pipeline'
 import { selectAndEnrichItems, buildVocabularyContext, toPipelineItem } from '@/lib/claude/queue-article'
+import { createOrGetJob } from '@/lib/glossary/jobs/service'
 import { normalizeArticlePlan } from '@/lib/claude/normalize-plan'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { getMatcherTerms } from '@/lib/glossary/terms'
@@ -374,6 +375,28 @@ async function persistDraftPost(supabase: AdminClient, job: ArticleJob, fullMark
     .single()
 
   if (error) throw new Error(`insert failed: ${error.message}`)
+
+  // BETREIBER-VORGABE 2026-08-14: „jeder draft eines posts soll zu einer
+  // begriffs-extraktion und generierung führen".
+  //
+  // Der Entwurf steht — jetzt die Lexikon-Läufe anstoßen, damit die Begriffe
+  // BEREIT sind, wenn der Artikel freigegeben wird. Vorher lief die Extraktion
+  // erst nach der Freigabe: Der Artikel ging ohne Verlinkung online und bekam
+  // sie erst beim nächsten Lauf.
+  //
+  // Fehler hier dürfen den Artikel NICHT scheitern lassen — er ist geschrieben
+  // und gespeichert. Ein nicht angelegter Lexikon-Lauf ist ein Nachteil, ein
+  // verlorener Artikel wäre ein Schaden.
+  try {
+    // createOrGetJob ist idempotent (glossary_jobs_one_open_per_kind): Läuft
+    // schon ein Lauf dieser Art, wird er zurückgegeben statt ein zweiter
+    // angelegt.
+    await createOrGetJob(supabase, 'extract')
+    await createOrGetJob(supabase, 'generate')
+  } catch (e) {
+    console.error('[ArticleJob] Lexikon-Laeufe nicht anstossbar:', e instanceof Error ? e.message : e)
+  }
+
   return newPost.id
 }
 
