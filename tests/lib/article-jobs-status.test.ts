@@ -51,7 +51,11 @@ beforeEach(() => { state.job = null })
 
 describe('getArticleJobStatus — total', () => {
   it('meldet bei aktiven Bündeln die Zahl der SEKTIONEN, nicht der Items', async () => {
-    // 3 topic + 2 recap + 5 normal = 10 Items, aber 1 + 1 + 5 = 7 Sektionen.
+    // 3 topic + 2 recap + 5 normal = 10 Items, aber 8 Sektionen:
+    // 1 topic-Buendel + 1 Einzelfassung dazu + 1 recap-Buendel + 5 normale.
+    // Die Einzelfassung kam am 2026-08-14 dazu (Betreiber-Vorgabe): Zu jedem
+    // Thema und Deep Dive steht dieselbe Meldung zusaetzlich im gewoehnlichen
+    // Format bereit, damit der Autor waehlen kann. Die Nachlese bekommt keine.
     state.job = {
       id: 'j1', status: 'processing', phase: 'writing', cursor: 7,
       selected_items: items(['topic', 'topic', 'topic', 'recap', 'recap', 'normal', 'normal', 'normal', 'normal', 'normal']),
@@ -62,7 +66,7 @@ describe('getArticleJobStatus — total', () => {
     const status = await getArticleJobStatus('j1')
     // Ohne den Fix wäre total 10 und der Fortschritt bliebe bei "7 von 10"
     // stehen, obwohl cursor === units.length die Phase abgeschlossen hat.
-    expect(status?.total).toBe(7)
+    expect(status?.total).toBe(8)
     expect(status?.cursor).toBe(7)
   })
 

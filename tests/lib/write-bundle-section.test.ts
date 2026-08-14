@@ -36,13 +36,20 @@ describe('buildBundleWriteUnits', () => {
       retrievalHints: {},
     } as any
     const units = buildBundleWriteUnits(orderedItems, plan)
-    expect(units.map((u) => u.kind)).toEqual(['bundle', 'bundle', 'single'])
+    // Seit 2026-08-14 folgt jedem topic- und deep_dive-Buendel eine
+    // Einzelfassung derselben Meldung (Betreiber-Vorgabe: der Autor soll
+    // waehlen koennen). Die Nachlese bekommt keine — deshalb hier
+    // bundle(topic) → single(Alternative) → bundle(recap) → single(normal).
+    expect(units.map((u) => u.kind)).toEqual(['bundle', 'single', 'bundle', 'single'])
     expect(units[0]).toMatchObject({ kind: 'bundle', bundleType: 'topic' })
     expect((units[0] as any).items.map((i: any) => i.id)).toEqual(['1', '4'])
-    expect(units[1]).toMatchObject({ kind: 'bundle', bundleType: 'recap' })
-    expect((units[1] as any).items.map((i: any) => i.id)).toEqual(['3'])
-    expect(units[2]).toMatchObject({ kind: 'single', heading: 'H2' })
-    expect((units[2] as any).item.id).toBe('2')
+    // units[1] ist die Einzelfassung zum topic-Buendel (seit 2026-08-14).
+    expect(units[1]).toMatchObject({ kind: 'single' })
+    expect((units[1] as any).alternativeTo).toBeTruthy()
+    expect(units[2]).toMatchObject({ kind: 'bundle', bundleType: 'recap' })
+    expect((units[2] as any).items.map((i: any) => i.id)).toEqual(['3'])
+    expect(units[3]).toMatchObject({ kind: 'single', heading: 'H2' })
+    expect((units[3] as any).item.id).toBe('2')
   })
 
   it('ohne bundle_type: nur Einzel-Einheiten (kein Regress)', () => {
