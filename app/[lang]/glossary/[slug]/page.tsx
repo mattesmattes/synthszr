@@ -223,7 +223,7 @@ export default async function GlossaryTermPage({ params }: PageProps) {
                 // Rasterweite zusammenhängt: das 768px-Bild wird dadurch stärker
                 // verkleinert, das Dither-Raster erscheint also rund 15% feiner
                 // (s. generateGlossaryIllustration).
-                className="mx-auto h-auto w-full max-w-[326px] dithered-cover"
+                className="mx-auto h-auto w-full max-w-[326px] dithered-cover dithered-invert"
               />
             </figure>
           )}

@@ -36,7 +36,7 @@ function buildVotePill(entry: ProductLinkEntry, locale: string): HTMLElement {
   pill.className = 'synthszr-product-pill'
   pill.href = `/${locale}/rankings/${entry.slug}`
   pill.style.cssText =
-    'display:inline-flex;align-items:center;gap:3px;margin-left:4px;padding:1px 6px;border:1px solid #e5e7eb;border-radius:9999px;vertical-align:middle;line-height:1;white-space:nowrap;text-decoration:none;'
+    'display:inline-flex;align-items:center;gap:3px;margin-left:4px;padding:1px 6px;border:1px solid var(--pill-border, #e5e7eb);border-radius:9999px;vertical-align:middle;line-height:1;white-space:nowrap;text-decoration:none;'
 
   const spark = entry.spark ?? []
   if (spark.length >= 2) {

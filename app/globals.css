@@ -705,7 +705,7 @@
  * graustufig sind, ist das genau richtig und braucht keinen Hue-Ausgleich.
  * Die leichte Abdunklung nimmt dem invertierten Weiss die Haerte — reines
  * Schwarz-auf-Weiss wirkt umgekehrt greller als das Original. */
-.dark .dithered-cover {
+.dark .dithered-invert {
   filter: invert(1) brightness(0.92);
 }
 @media (max-width: 500px) {
@@ -787,4 +787,43 @@
 .glossary-link:focus-visible {
   text-decoration-style: solid;
   text-decoration-color: currentColor;
+}
+
+/* Rahmen der Charts-Pillen. Im Hellmodus ein zartes Grau; im Dunkelmodus wirkte
+ * dasselbe Grau als leuchtend weisser Ring um jede Pille (Betreiber-Befund
+ * 2026-08-15). Dort genuegt eine Andeutung. */
+:root { --pill-border: #e5e7eb; }
+.dark { --pill-border: oklch(0.3 0.01 250); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * DUNKELMODUS — NACHZUEGLER (Variante C)
+ *
+ * Steht bewusst ganz am Ende der Datei. Mehrere @supports-Bloecke weiter oben
+ * setzen die Farben DIREKT auf der Klasse statt ueber die Variable
+ * (.synthszr-last-sentence bekommt dort color(display-p3 0 1 1)). Der
+ * Variablen-Ansatz allein greift dort nicht — auf P3-Displays blieb die
+ * Hervorhebung deshalb grell cyan, und der schwarze Text darauf verschwand.
+ * Erst diese spaeteren Regeln gewinnen.
+ * ─────────────────────────────────────────────────────────────────────────── */
+.dark .synthszr-last-sentence {
+  background-color: var(--neon-cyan);
+  color: var(--neon-cyan-fg);
+}
+
+.dark .mattes-synthese {
+  background-color: var(--neon-cyan);
+  color: var(--neon-cyan-fg);
+}
+
+.dark .tiptap-content h1.mattes-synthese-heading,
+.dark .tiptap-content h2.mattes-synthese-heading,
+.dark .tiptap-content h3.mattes-synthese-heading,
+.dark .prose h1.mattes-synthese-heading,
+.dark .prose h2.mattes-synthese-heading,
+.dark .prose h3.mattes-synthese-heading,
+.dark .ProseMirror h1.mattes-synthese-heading,
+.dark .ProseMirror h2.mattes-synthese-heading,
+.dark .ProseMirror h3.mattes-synthese-heading {
+  background-color: var(--neon-cyan);
+  color: var(--neon-cyan-fg);
 }
