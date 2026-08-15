@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
+import { ThemeToggle } from '@/components/theme-toggle'
 import Image from 'next/image'
 import Link from 'next/link'
 import type { LanguageCode } from '@/lib/types'
@@ -73,6 +74,7 @@ export function BloomLanguageSwitcherClient({
   if (languages.length <= 1) {
     return (
       <div className="flex justify-center items-center gap-4 mb-6">
+        <ThemeToggle mode="light" />
         <span className={`${linkStyle} opacity-50`}>Language</span>
         {/* Zweite Fassung desselben Headers (nur eine Sprache aktiv). Muss
             identisch bleiben — die beiden Zweige sind heute schon einmal
@@ -91,6 +93,7 @@ export function BloomLanguageSwitcherClient({
         <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
           Search
         </button>
+        <ThemeToggle mode="dark" />
       </div>
     )
   }
@@ -180,6 +183,7 @@ export function BloomLanguageSwitcherClient({
       <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
         Search
       </button>
+      <ThemeToggle mode="dark" />
     </div>
   )
 }

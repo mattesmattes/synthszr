@@ -647,6 +647,21 @@
 .dithered-cover {
   image-rendering: pixelated;
 }
+
+/* DITHER-BILDER IM DUNKELMODUS UMKEHREN.
+ *
+ * Betreiber-Vorgabe 2026-08-15: Die Illustrationen sind Dither-Grafiken, aber
+ * als durchgehende PNGs gerendert — schwarze Punkte auf weissem Grund, ohne
+ * Transparenz. Auf dunklem Hintergrund steht sonst eine leuchtend weisse
+ * Kachel mitten im Text, und der gesamte Kontrast der Grafik kippt.
+ *
+ * `invert(1)` allein wuerde auch die Farben umkehren; da diese Grafiken
+ * graustufig sind, ist das genau richtig und braucht keinen Hue-Ausgleich.
+ * Die leichte Abdunklung nimmt dem invertierten Weiss die Haerte — reines
+ * Schwarz-auf-Weiss wirkt umgekehrt greller als das Original. */
+.dark .dithered-cover {
+  filter: invert(1) brightness(0.92);
+}
 @media (max-width: 500px) {
   .dithered-cover {
     image-rendering: auto;

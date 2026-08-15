@@ -6,6 +6,7 @@ import { ConsentBanner } from "@/components/consent-banner"
 import { NewsletterPopup } from "@/components/newsletter-popup"
 import { PageTracker } from "@/components/analytics/page-tracker"
 import { SearchOverlay } from "@/components/search-overlay"
+import { THEME_INIT_SCRIPT } from "@/lib/theme/script"
 import { safeJsonLd } from "@/lib/seo/site"
 import "./globals.css"
 
@@ -93,6 +94,10 @@ export default function RootLayout({
         <link rel="preconnect" href="https://lbrzdn804nhy3kox.public.blob.vercel-storage.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://lbrzdn804nhy3kox.public.blob.vercel-storage.com" />
         <link rel="alternate" type="application/rss+xml" title="Synthszr RSS" href="https://www.synthszr.com/feed.xml" />
+        {/* Theme VOR dem Rendern setzen — sonst blitzt bei jedem Seitenaufruf
+            kurz die helle Fassung auf. Muss blockierend im <head> stehen: ein
+            useEffect oder ein deferred Script kommen zu spaet. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className={`${ibmPlexSerif.variable} ${spaceMono.variable} font-serif antialiased`}>
         {children}
