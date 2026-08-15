@@ -46,6 +46,10 @@
     {
       "path": "/api/cron/week-wrapup",
       "schedule": "0 6 * * 0"
+    },
+    {
+      "path": "/api/cron/podcast-modes",
+      "schedule": "0 3 * * 1"
     }
   ],
   "headers": [

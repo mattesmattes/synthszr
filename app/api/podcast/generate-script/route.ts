@@ -24,6 +24,7 @@ export const maxDuration = 300 // Allow up to 5 minutes for AI script generation
 import { NextRequest, NextResponse } from 'next/server'
 import { pickOpener, pickCloser } from '@/lib/podcast/openers'
 import { getRecentEdges, recentEdgesSection } from '@/lib/podcast/recent-openings'
+import { loadModes } from '@/lib/podcast/mode-generator'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth/session'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
@@ -552,12 +553,16 @@ export async function POST(request: NextRequest) {
     const episodeNo = Number.isFinite(Number(body.episodeNumber))
       ? Number(body.episodeNumber)
       : Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000)
-    const opener = pickOpener(episodeNo)
-    const closer = pickCloser(episodeNo)
+    // Die Modi der laufenden Woche (lib/podcast/mode-generator.ts). Ohne
+    // erzeugten Satz greifen die eingebauten — der Podcast entsteht in jedem
+    // Fall.
+    const { set: modeSet, fallback: modesFallback } = await loadModes(createAdminClient(), ttsLang)
+    const opener = pickOpener(episodeNo, modeSet.openers)
+    const closer = pickCloser(episodeNo, modeSet.closers)
     prompt = prompt + (ttsLang === 'de'
       ? `\n\n**EINSTIEG DIESER FOLGE (verbindlich):**\n${opener.instruction}\nDer Wiedererkennungssatz ("Hey, Hey und Willkommen bei Synthesizer Daily am ${weekday}, den ${date}!") folgt DANACH — spätestens nach etwa 30 Sekunden.\n\n**SCHLUSS DIESER FOLGE (verbindlich):**\n${closer.instruction}\nDie beiden Pflicht-Elemente (morgen wieder, Weiterempfehlung) gehören hinein, aber NEU formuliert — keine der oben genannten verbrauchten Wendungen.`
       : `\n\n**OPENING OF THIS EPISODE (mandatory):**\n${opener.instruction}\nThe recognisable greeting follows AFTER that — within roughly 30 seconds.\n\n**CLOSING OF THIS EPISODE (mandatory):**\n${closer.instruction}\nBoth mandatory elements (see you tomorrow, please recommend us) must be there, but freshly worded.`)
-    console.log(`[Podcast Script] Folge ${episodeNo}: Einstieg "${opener.key}", Schluss "${closer.key}"`)
+    console.log(`[Podcast Script] Folge ${episodeNo}: Einstieg "${opener.key}", Schluss "${closer.key}" (Satz: ${modesFallback ? 'eingebaut' : modeSet.week})`)
 
     // Was zuletzt lief, im Wortlaut — damit sich innerhalb eines Modus nicht
     // dieselbe Formulierung einschleift. Acht Einstiege sind sonst nach ein

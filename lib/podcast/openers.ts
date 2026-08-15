@@ -105,6 +105,12 @@ export const CLOSERS: Mode[] = [
  * Über die Episodennummer, nicht über Zufall: So durchlaufen die Modi der Reihe
  * nach, und derselbe Einstieg kommt erst nach einer vollen Runde wieder.
  *
+ * Seit 2026-08-15 sind diese Listen nur noch der RÜCKFALL: Im Normalfall
+ * kommen die Modi aus einem wöchentlich neu erzeugten Satz
+ * (lib/podcast/mode-generator.ts). Eine feste Liste wirkt gegen Wiederholung
+ * nur so lange, wie sie neu ist — nach einer vollen Runde ist sie selbst das
+ * Muster.
+ *
  * Die beiden Listen sind UNTERSCHIEDLICH LANG (8 Eröffnungen, 7 Schlüsse), und
  * das ist der eigentliche Trick. Ein blosser Versatz genügt nicht: Bei gleicher
  * Länge ist die Paarung für jede Folge fest, es gäbe also weiterhin nur acht
@@ -112,12 +118,14 @@ export const CLOSERS: Mode[] = [
  * teilerfremd sind, durchlaufen Einstieg und Schluss erst nach 56 Folgen
  * dieselbe Paarung wieder.
  */
-export function pickOpener(episodeNumber: number): Mode {
-  return OPENERS[mod(episodeNumber, OPENERS.length)]
+export function pickOpener(episodeNumber: number, modes: Mode[] = OPENERS): Mode {
+  const list = modes.length ? modes : OPENERS
+  return list[mod(episodeNumber, list.length)]
 }
 
-export function pickCloser(episodeNumber: number): Mode {
-  return CLOSERS[mod(episodeNumber * 3 + 1, CLOSERS.length)]
+export function pickCloser(episodeNumber: number, modes: Mode[] = CLOSERS): Mode {
+  const list = modes.length ? modes : CLOSERS
+  return list[mod(episodeNumber * 3 + 1, list.length)]
 }
 
 /** Modulo, das auch für negative und krumme Eingaben einen gültigen Index gibt. */
