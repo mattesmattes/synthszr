@@ -1,7 +1,21 @@
 import type { ReactNode } from 'react'
 import { PODCAST_APPLE as APPLE, PODCAST_SPOTIFY as SPOTIFY } from '@/lib/podcast/platform-links'
 
-function BadgeLink({ name, image, url }: { name: string; image: string; url: string }) {
+/**
+ * `imageDark` ist optional: nur Apple braucht eine zweite Fassung, weil dessen
+ * Wortmarke schwarz ist. Wo sie fehlt (Spotify), bleibt es bei einem Bild —
+ * ein durchgehend gruenes Logo traegt auf beiden Gruenden.
+ *
+ * Zwei <img> mit dark:hidden statt eines CSS-Filters: die Marke soll in beiden
+ * Themes exakt sie selbst sein. Dasselbe Muster wie bei der synthszr-Wortmarke
+ * in der Kopfleiste.
+ *
+ * Beide Bilder sind dekorativ (alt=""): den zugaenglichen Namen traegt das
+ * aria-label am Link. Haenge man ihn stattdessen an ein Bild, waere er im
+ * jeweils anderen Theme weg — `hidden` ist display:none und damit auch fuer
+ * Screenreader nicht vorhanden.
+ */
+function BadgeLink({ name, image, imageDark, url }: { name: string; image: string; imageDark?: string; url: string }) {
   return (
     <a
       href={url}
@@ -13,12 +27,25 @@ function BadgeLink({ name, image, url }: { name: string; image: string; url: str
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={image}
-        alt={name}
+        alt=""
+        aria-hidden
         loading="lazy"
         decoding="async"
-        className="w-auto"
+        className={imageDark ? 'w-auto dark:hidden' : 'w-auto'}
         style={{ height: 30 }}
       />
+      {imageDark && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageDark}
+          alt=""
+          aria-hidden
+          loading="lazy"
+          decoding="async"
+          className="w-auto hidden dark:block"
+          style={{ height: 30 }}
+        />
+      )}
     </a>
   )
 }
@@ -46,7 +73,11 @@ function BadgeLink({ name, image, url }: { name: string; image: string; url: str
  */
 export function PodcastBadges({ children, appleEpisodeUrl }: { children?: ReactNode; appleEpisodeUrl?: string | null }) {
   return (
-    <div className="px-4 py-3" style={{ backgroundColor: '#ffffff' }}>
+    // bg-background statt eines Inline-Styles mit #ffffff. Der Inline-Style war
+    // fuer .dark prinzipiell unerreichbar (Inline schlaegt jeden Selektor), der
+    // Streifen blieb im Dunkelmodus deshalb ein weisses Band zwischen Cover und
+    // Text. Dieselbe Falle wie bei den Glasebenen des Players.
+    <div className="px-4 py-3 bg-background">
       <div className="flex flex-wrap items-center justify-center gap-3 pt-2 md:flex-nowrap md:justify-between md:gap-4 lg:gap-6">
         {/* Apple links to the episode (if known); Spotify stays show-level. */}
         <BadgeLink {...APPLE} url={appleEpisodeUrl || APPLE.url} />

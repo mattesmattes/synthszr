@@ -5,6 +5,13 @@
 export const PODCAST_APPLE = {
   name: 'Apple Podcasts',
   image: '/podcast-apple.png',
+  // Fassung fuer dunkle Gruende: die Wortmarke „Apple Podcast" ist im Original
+  // schwarz und verschwand auf schwarzem Grund restlos. Erzeugt wurde sie durch
+  // Invertieren ausschliesslich der ACHROMATISCHEN und DUNKLEN Pixel — das
+  // lila Icon behaelt seine Markenfarbe, das weisse Mikrofon darin bleibt weiss.
+  // Spotify braucht keine Entsprechung: dessen Wortmarke ist durchgehend gruen
+  // und traegt auf hellem wie dunklem Grund.
+  imageDark: '/podcast-apple-hell.png',
   // Full white rounded-button PNG (logo baked onto white) for email: email
   // dark mode inverts CSS backgrounds but not image pixels, so a baked-in white
   // button stays white in Gmail iOS dark mode where a CSS white bg gets darkened.

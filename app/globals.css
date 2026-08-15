@@ -266,11 +266,24 @@
 
 /* Die Utilities setzen ihre Farben im P3-Block direkt, nicht ueber Variablen —
  * dort muessen die dunklen Werte deshalb noch einmal gesetzt werden. */
-/* Der Hero-Teaser nutzt bg-neon-cyan als FLAECHE hinter dem Dither-Bild — dort
- * ist Variante C zu dunkel, das Bild verschwindet darin (Betreiber-Befund
- * 2026-08-15). Flaechen bekommen deshalb einen eigenen, deutlich helleren Wert
- * als die Text-Hervorhebung. */
-.dark .bg-neon-cyan   { background-color: oklch(0.62 0.13 195); color: oklch(0.14 0.02 220); }
+/* bg-neon-cyan ist die FLAECHE hinter dem Dither-Cover (Artikelkopf,
+ * Featured-Teaser, CODE-CRASH-Kachel) — nicht die Text-Hervorhebung, die laeuft
+ * ueber var(--neon-cyan).
+ *
+ * ZWEIMAL ZU DUNKEL GEMELDET (Betreiber, 2026-08-15): erst 0.24, dann 0.62.
+ * Beim zweiten Mal war die Schlussfolgerung falsch, nicht nur der Wert. Diese
+ * Flaeche gehoert zum BILD, nicht zur Oberflaeche — und ein Motiv wechselt
+ * seine Farbe nicht mit dem Theme. Variante C zielt auf Hervorhebungen, wo
+ * Schrift auf der Flaeche liegt; hier liegt ein Bild darauf.
+ *
+ * Dazu kommt: das Dither-PNG streut etwa zur Haelfte schwarze Punkte darueber.
+ * Der gesetzte Wert kommt beim Auge also deutlich dunkler an, als er dasteht —
+ * deshalb reichte auch der Sprung auf 0.62 nicht.
+ *
+ * Der Wert entspricht jetzt dem Hellmodus (#00FFFF), das Cover sieht in beiden
+ * Themes gleich aus. Die Schrift darauf bleibt dunkel, weil die Flaeche hell
+ * bleibt. */
+.dark .bg-neon-cyan   { background-color: oklch(0.91 0.13 195); color: oklch(0.14 0.02 220); }
 .dark .bg-neon-green  { background-color: var(--neon-green);  color: var(--neon-green-fg); }
 .dark .bg-neon-orange { background-color: var(--neon-orange); color: var(--neon-orange-fg); }
 .dark .bg-neon-yellow { background-color: var(--neon-yellow); color: var(--neon-yellow-fg); }
