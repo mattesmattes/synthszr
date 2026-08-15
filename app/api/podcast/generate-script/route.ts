@@ -22,6 +22,7 @@
 export const maxDuration = 300 // Allow up to 5 minutes for AI script generation
 
 import { NextRequest, NextResponse } from 'next/server'
+import { pickOpener, pickCloser } from '@/lib/podcast/openers'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth/session'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
@@ -45,8 +46,10 @@ const DEFAULT_SCRIPT_PROMPT_DE = `Du bist ein erfahrener Podcast-Skriptautor. Er
 
 **WICHTIG - Podcast-Name und Begrüßung:**
 - Der Podcast heißt IMMER "Synthesizer Daily" - NIEMALS andere Namen wie "TechFinance Daily" oder ähnliche Fantasienamen verwenden!
-- Die allererste Zeile des Skripts MUSS exakt so beginnen: HOST: [cheerful and warm, genuinely happy, slightly faster pacing] Hey, Hey und Willkommen bei Synthesizer Daily am {weekday}, den {date}!
-- Danach soll der HOST das Thema der heutigen Folge kurz anreißen
+- Der WIEDERERKENNUNGSSATZ lautet: "Hey, Hey und Willkommen bei Synthesizer Daily am {weekday}, den {date}!" Er MUSS vorkommen, in dieser Formulierung, gesprochen vom HOST.
+- Er muss aber NICHT die erste Zeile sein. Ein Cold Open davor ist ausdrücklich erwünscht — die Begrüßung wird dann nachgeschoben, spätestens nach etwa 30 Sekunden. Der Hörer soll früh wissen, wo er ist.
+- WIE die Folge beginnt, steht weiter unten unter EINSTIEG DIESER FOLGE. Halte dich daran.
+- Nach der Begrüßung reißt der HOST das Thema der heutigen Folge kurz an.
 
 **Rollen:**
 - HOST (weiblich): Moderatorin — moderiert das Gespräch, stellt Fragen, fasst zusammen
@@ -168,10 +171,19 @@ Wenn eines fehlt: ÜBERARBEITE das Skript bevor du es ausgibst.
 4. **Landing (1-2 Min.):** 3 Takeaways + 1 offene Frage + menschliches Outro
 
 **WICHTIG - Verabschiedung am Ende:**
-Der Podcast MUSS mit einer freundlichen Verabschiedung enden, die folgende Elemente enthält:
-- Hinweis, dass wir uns morgen wiedersehen/wiederhören
-- Bitte an die Hörer, den Podcast Freunden weiterzuempfehlen
-Beispiel: "Wir sehen uns morgen wieder! Und wenn euch die Folge gefallen hat, empfehlt uns gerne weiter."
+Der Podcast MUSS mit einer freundlichen Verabschiedung enden, die zwei Dinge enthält:
+- Hinweis, dass wir uns morgen wiederhören
+- Bitte an die Hörer, den Podcast weiterzuempfehlen
+
+WIE das verpackt wird, steht unten unter SCHLUSS DIESER FOLGE.
+
+VERBRAUCHTE WENDUNGEN — keine einzige davon verwenden:
+- "Wir sehen uns morgen wieder!" / "Bis morgen!" als alleiniger Schlusssatz
+- "Wenn euch die Folge gefallen hat, empfehlt uns gerne weiter"
+- "Bleibt neugierig" / "Bleibt dran" / "Macht's gut"
+- "Das war's für heute" als Einleitung der Verabschiedung
+- "spannende Themen" in jeder Form
+Diese Sätze standen in fast jeder bisherigen Folge. Formuliere beide Pflicht-Elemente NEU, aus dem Inhalt dieser Sendung heraus.
 
 **WICHTIG: Im gesamten Dialog wird der GUEST IMMER als "Synthesizer" bezeichnet — NIEMALS als "Synthszr".**
 Der GUEST (Synthesizer) bringt die pointierten Meinungen/Einschätzungen aus dem Artikel ein (im Artikel als "Synthszr Take" markiert).
@@ -355,6 +367,9 @@ Start directly with "HOST:" - no introduction.`
 const DEFAULT_SCRIPT_PROMPT = DEFAULT_SCRIPT_PROMPT_DE
 
 interface GenerateScriptRequest {
+  /** Folgennummer — steuert, welcher Einstiegs- und Schluss-Modus dran ist
+   *  (s. lib/podcast/openers.ts). Fehlt sie, greift die Tages-Nummer im Jahr. */
+  episodeNumber?: number
   postId: string
   locale?: string
   durationMinutes?: number
@@ -523,6 +538,26 @@ export async function POST(request: NextRequest) {
       .replaceAll('{weekday}', weekday)
       .replaceAll('{date}', date)
 
+    // EINSTIEG UND SCHLUSS DIESER FOLGE (Betreiber-Vorgabe 2026-08-15).
+    //
+    // Angehängt statt in die Vorlage geschrieben — dieselbe Technik wie beim
+    // Smalltalk darunter: Das Grundgerüst gilt unverändert, die Modi kommen
+    // dazu. So bleibt auch ein eigener customPrompt des Betreibers wirksam und
+    // bekommt die Abwechslung trotzdem.
+    //
+    // Die Modi rotieren über die Episodennummer (s. lib/podcast/openers.ts).
+    // Fehlt sie, greift die Tages-Nummer im Jahr: Sie wächst ebenso monoton und
+    // vermeidet, dass ohne Nummer jeden Tag derselbe Modus gezogen wird.
+    const episodeNo = Number.isFinite(Number(body.episodeNumber))
+      ? Number(body.episodeNumber)
+      : Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000)
+    const opener = pickOpener(episodeNo)
+    const closer = pickCloser(episodeNo)
+    prompt = prompt + (ttsLang === 'de'
+      ? `\n\n**EINSTIEG DIESER FOLGE (verbindlich):**\n${opener.instruction}\nDer Wiedererkennungssatz ("Hey, Hey und Willkommen bei Synthesizer Daily am ${weekday}, den ${date}!") folgt DANACH — spätestens nach etwa 30 Sekunden.\n\n**SCHLUSS DIESER FOLGE (verbindlich):**\n${closer.instruction}\nDie beiden Pflicht-Elemente (morgen wieder, Weiterempfehlung) gehören hinein, aber NEU formuliert — keine der oben genannten verbrauchten Wendungen.`
+      : `\n\n**OPENING OF THIS EPISODE (mandatory):**\n${opener.instruction}\nThe recognisable greeting follows AFTER that — within roughly 30 seconds.\n\n**CLOSING OF THIS EPISODE (mandatory):**\n${closer.instruction}\nBoth mandatory elements (see you tomorrow, please recommend us) must be there, but freshly worded.`)
+    console.log(`[Podcast Script] Folge ${episodeNo}: Einstieg "${opener.key}", Schluss "${closer.key}"`)
+
     // Wochenrückblick: Haltung der beiden Stimmen anpassen. Angehängt statt in
     // die Vorlage geschrieben, weil das Grundgerüst (Länge, Format,
     // Sprecherwechsel, Personality) unverändert gelten soll — nur die Haltung
@@ -535,8 +570,8 @@ export async function POST(request: NextRequest) {
     // Inject optional smalltalk section
     if (body.smalltalkTopic?.trim()) {
       const smalltalkSection = ttsLang === 'de'
-        ? `\n\n**SMALLTALK AM ANFANG (PFLICHT):**\nNach der Begrüßung ("HOST: [cheerful and warm, genuinely happy, slightly faster pacing] Hey, Hey und Willkommen...") und dem kurzen Themen-Teaser sprechen HOST und GUEST kurz (~1-2 Minuten) locker über folgendes Thema, BEVOR es ins Hauptthema geht:\n"${body.smalltalkTopic}"\nDieser Smalltalk soll natürlich und persönlich wirken. Danach leitet der HOST nahtlos zum Hauptthema über.`
-        : `\n\n**SMALLTALK AT THE START (MANDATORY):**\nAfter the greeting ("HOST: [cheerful and warm, genuinely happy, slightly faster pacing] Hey, Hey and welcome to Synthesizer Daily...") and the brief topic tease, HOST and GUEST briefly (~1-2 minutes) chat casually about the following topic BEFORE getting into the main content:\n"${body.smalltalkTopic}"\nThis smalltalk should feel natural and personal. Afterwards, HOST transitions smoothly into the main topic.`
+        ? `\n\n**SMALLTALK AM ANFANG (PFLICHT):**\nNach der Begrüßung und dem kurzen Themen-Teaser sprechen HOST und GUEST kurz (~1-2 Minuten) locker über folgendes Thema, BEVOR es ins Hauptthema geht:\n"${body.smalltalkTopic}"\nDieser Smalltalk soll natürlich und persönlich wirken. Danach leitet der HOST nahtlos zum Hauptthema über.`
+        : `\n\n**SMALLTALK AT THE START (MANDATORY):**\nAfter the greeting and the brief topic tease, HOST and GUEST briefly (~1-2 minutes) chat casually about the following topic BEFORE getting into the main content:\n"${body.smalltalkTopic}"\nThis smalltalk should feel natural and personal. Afterwards, HOST transitions smoothly into the main topic.`
       prompt = prompt + smalltalkSection
     }
 
