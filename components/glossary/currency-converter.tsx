@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { WaehrungsInfo } from '@/lib/currency/currencies'
 
 interface Props {
@@ -42,6 +42,25 @@ export function CurrencyConverter({ waehrung, kurs, stand, lang, labels }: Props
   // den Kurs sofort ablesen kann, ohne selbst zu rechnen.
   const [fremd, setFremd] = useState('100')
   const [euro, setEuro] = useState(() => formatiere(100 / kurs, lang))
+
+  // BETRAG AUS DEM LINK ÜBERNEHMEN. Wer im Artikel auf „123 Millionen Yuan"
+  // klickt, soll hier nicht 100 vorfinden, sondern seine 123 Millionen —
+  // umgerechnet.
+  //
+  // Gelesen wird aus window.location, NICHT über useSearchParams(): dieser Hook
+  // nimmt den umgebenden Teilbaum aus dem statischen Prerender heraus (an
+  // derselben Stelle ist heute schon die Kopfleiste aus dem SSR-HTML
+  // verschwunden). Die Lexikonseite ist ISR-gecacht und soll das bleiben. Dass
+  // der Betrag erst nach dem Hydrieren steht, merkt niemand — vorher kann
+  // ohnehin niemand tippen.
+  useEffect(() => {
+    const roh = new URLSearchParams(window.location.search).get('betrag')
+    if (!roh) return
+    const zahl = Number(roh)
+    if (!Number.isFinite(zahl) || zahl <= 0) return
+    setFremd(formatiere(zahl, lang, false))
+    setEuro(formatiere(zahl / kurs, lang))
+  }, [kurs, lang])
 
   function parse(eingabe: string): number | null {
     // Alles wegwerfen, was kein Zifferzeichen ist. Vorzeichen sind bei einem
@@ -121,11 +140,19 @@ export function CurrencyConverter({ waehrung, kurs, stand, lang, labels }: Props
   )
 }
 
-/** Zwei Nachkommastellen genügen für Beträge; mehr suggeriert eine Genauigkeit,
- *  die ein Tagesreferenzkurs nicht hat. */
-function formatiere(wert: number, lang: string): string {
+/**
+ * Zwei Nachkommastellen genügen für Beträge; mehr suggeriert eine Genauigkeit,
+ * die ein Tagesreferenzkurs nicht hat.
+ *
+ * Ganze Zahlen bekommen KEINE Nachkommastellen: ein aus dem Artikel
+ * übernommener Betrag von 123 Millionen soll „123.000.000" heißen und nicht
+ * „123.000.000,00" — die zwei Nullen sind bei dieser Größenordnung nur Lärm.
+ * Für Kurs und Umrechnungsergebnis bleiben sie erzwungen, dort tragen sie
+ * Information.
+ */
+function formatiere(wert: number, lang: string, immerZweiStellen = true): string {
   return new Intl.NumberFormat(lang === 'de' ? 'de-DE' : 'en-US', {
-    minimumFractionDigits: 2,
+    minimumFractionDigits: immerZweiStellen || !Number.isInteger(wert) ? 2 : 0,
     maximumFractionDigits: 2,
   }).format(wert)
 }

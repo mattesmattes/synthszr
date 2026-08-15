@@ -1,5 +1,7 @@
 import { matchNameInText } from '@/lib/glossary/mentions'
 import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
+import { waehrungFuerSlug } from '@/lib/currency/currencies'
+import { betragVorFundstelle, betragFuerUrl } from '@/lib/currency/amounts'
 
 const MARK_TYPE = 'glossaryLink'
 
@@ -124,8 +126,27 @@ export function injectGlossaryMarks(
           const pos = matchNameInText(o.text as string, name, opts.lang ?? 'de')
           if (!pos) continue
           done.add(term.slug)
-          const before = (o.text as string).slice(0, pos.start)
-          const hit = (o.text as string).slice(pos.start, pos.end)
+
+          // WÄHRUNGEN NEHMEN IHREN BETRAG MIT (Betreiber-Wunsch 2026-08-15).
+          // Steht vor der Währung eine Zahl, beginnt die Verlinkung bei der
+          // Zahl statt beim Wort: aus „Yuan" wird „123 Millionen Yuan". Der
+          // Betrag wandert zusätzlich als Attribut in die Mark und von dort in
+          // den href — der Umrechner im Lexikon hat ihn dann schon stehen.
+          //
+          // Die Erweiterung greift NUR nach vorn. Nach hinten wäre sie falsch:
+          // dort steht die Fortsetzung des Satzes, nicht der Betrag.
+          let markStart = pos.start
+          let betrag: number | null = null
+          if (waehrungFuerSlug(term.slug)) {
+            const fund = betragVorFundstelle(o.text as string, pos.start)
+            if (fund) {
+              markStart = fund.start
+              betrag = fund.betrag
+            }
+          }
+
+          const before = (o.text as string).slice(0, markStart)
+          const hit = (o.text as string).slice(markStart, pos.end)
           const after = (o.text as string).slice(pos.end)
           const baseMarks = Array.isArray(o.marks) ? o.marks : []
           const parts: Node[] = []
@@ -140,7 +161,12 @@ export function injectGlossaryMarks(
           parts.push({
             ...o,
             text: hit,
-            marks: [...baseMarks, { type: MARK_TYPE, attrs: { slug: term.slug } }],
+            marks: [...baseMarks, {
+              type: MARK_TYPE,
+              attrs: betrag === null
+                ? { slug: term.slug }
+                : { slug: term.slug, betrag: betragFuerUrl(betrag) },
+            }],
           })
           if (after) parts.push(...asArray(walk({ ...o, text: after })))
           return parts

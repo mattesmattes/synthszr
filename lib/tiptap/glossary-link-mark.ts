@@ -28,6 +28,17 @@ export const GlossaryLinkMark = Mark.create<GlossaryLinkOptions>({
         renderHTML: (attrs) =>
           attrs.slug ? { 'data-glossary-slug': attrs.slug as string } : {},
       },
+      /** Nur bei Währungsbegriffen gesetzt: der Betrag, der im Text vor der
+       *  Währung stand („123 Millionen Yuan" → 123000000). Er wandert als
+       *  Parameter in den href, damit der Umrechner im Lexikon ihn schon
+       *  stehen hat. Ohne Betrag bleibt das Attribut null und der Link sieht
+       *  aus wie jeder andere Lexikonlink. */
+      betrag: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-betrag'),
+        renderHTML: (attrs) =>
+          attrs.betrag ? { 'data-betrag': String(attrs.betrag) } : {},
+      },
     }
   },
 
@@ -48,8 +59,16 @@ export const GlossaryLinkMark = Mark.create<GlossaryLinkOptions>({
     // (Client-Renderer und render-static-html für den Prerender-Pfad) und ein
     // vergessener Aufrufer still die alte, falsche URL erzeugen würde.
     const lang = this.options.lang === 'de' ? 'de' : 'en'
+    // Der Betrag hängt als Parameter am Link, damit der Umrechner auf der
+    // Lexikonseite ihn ohne Zutun des Lesers übernimmt. encodeURIComponent ist
+    // hier Formsache — der Wert ist immer eine Zahl —, aber ein ungeprüfter
+    // Wert im href wäre eine Nachlässigkeit, die später jemand ausnutzt.
+    const betrag = HTMLAttributes['data-betrag']
+    const href = betrag
+      ? `/${lang}/glossary/${slug}?betrag=${encodeURIComponent(String(betrag))}`
+      : `/${lang}/glossary/${slug}`
     return ['a', mergeAttributes(HTMLAttributes, {
-      href: `/${lang}/glossary/${slug}`,
+      href,
       class: 'glossary-link',
     }), 0]
   },
