@@ -230,7 +230,7 @@ export default async function GlossaryTermPage({ params }: PageProps) {
 
           <header className="mb-6">
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{term.canonicalName}</h1>
-            <p className="mt-4 text-xl text-gray-700 leading-snug">{term.summary}</p>
+            <p className="mt-4 text-xl text-foreground/80 leading-snug">{term.summary}</p>
           </header>
 
           {bodyHtml && (
