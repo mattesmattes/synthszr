@@ -2,20 +2,19 @@ import type { ReactNode } from 'react'
 import { PODCAST_APPLE as APPLE, PODCAST_SPOTIFY as SPOTIFY } from '@/lib/podcast/platform-links'
 
 /**
- * `imageDark` ist optional: nur Apple braucht eine zweite Fassung, weil dessen
- * Wortmarke schwarz ist. Wo sie fehlt (Spotify), bleibt es bei einem Bild —
- * ein durchgehend gruenes Logo traegt auf beiden Gruenden.
+ * Ein Bild pro Dienst, kein Theme-Umschalten: beide offiziellen Assets bringen
+ * ihren Kontrast selbst mit (s. lib/podcast/platform-links.ts). Eine frueher
+ * hier stehende Zweitfassung fuer den Dunkelmodus ist damit hinfaellig — sie
+ * war ohnehin nur ein Notbehelf um zu kleine, auf Weiss einkomponierte PNGs.
  *
- * Zwei <img> mit dark:hidden statt eines CSS-Filters: die Marke soll in beiden
- * Themes exakt sie selbst sein. Dasselbe Muster wie bei der synthszr-Wortmarke
- * in der Kopfleiste.
+ * `height` kommt aus den Plattformdaten, weil die beiden Assets verschieden
+ * gebaut sind: Apple liefert einen Knopf mit Innenabstand, Spotify ein
+ * freistehendes Logo. Gleiche Pixelhoehe haette ungleich grosse Schrift ergeben.
  *
- * Beide Bilder sind dekorativ (alt=""): den zugaenglichen Namen traegt das
- * aria-label am Link. Haenge man ihn stattdessen an ein Bild, waere er im
- * jeweils anderen Theme weg — `hidden` ist display:none und damit auch fuer
- * Screenreader nicht vorhanden.
+ * Das Bild ist dekorativ (alt=""), den zugaenglichen Namen traegt das
+ * aria-label am Link.
  */
-function BadgeLink({ name, image, imageDark, url }: { name: string; image: string; imageDark?: string; url: string }) {
+function BadgeLink({ name, image, height, url }: { name: string; image: string; height: number; url: string }) {
   return (
     <a
       href={url}
@@ -31,21 +30,9 @@ function BadgeLink({ name, image, imageDark, url }: { name: string; image: strin
         aria-hidden
         loading="lazy"
         decoding="async"
-        className={imageDark ? 'w-auto dark:hidden' : 'w-auto'}
-        style={{ height: 30 }}
+        className="w-auto"
+        style={{ height }}
       />
-      {imageDark && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={imageDark}
-          alt=""
-          aria-hidden
-          loading="lazy"
-          decoding="async"
-          className="w-auto hidden dark:block"
-          style={{ height: 30 }}
-        />
-      )}
     </a>
   )
 }
@@ -103,10 +90,16 @@ export function PodcastPromoBadges({ appleUrl }: { appleUrl?: string | null }) {
   return (
     <div className="mt-3 flex items-stretch justify-center gap-2 sm:gap-3">
       {items.map((b) => (
+        // bg-background statt bg-white: die Kachel gehoert zur Oberflaeche und
+        // dreht mit. Frueher noetig war das Weiss, weil die PNG-Wortmarken
+        // schwarz waren — die Vektorfassungen bringen ihren Kontrast selbst mit.
         <a key={b.name} href={b.url} target="_blank" rel="noopener noreferrer"
-           className="flex flex-1 min-w-0 max-w-44 items-center justify-center rounded-xl bg-white px-3 py-2 shadow-sm hover:shadow-md transition-shadow">
+           className="flex flex-1 min-w-0 max-w-44 items-center justify-center rounded-xl bg-background px-3 py-2 shadow-sm hover:shadow-md transition-shadow">
+          {/* Dasselbe Groessenverhaeltnis wie in der grossen Leiste (40 zu 26),
+              nur kleiner — ein fester max-h fuer beide haette die Apple-Schrift
+              gegenueber Spotify schrumpfen lassen. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={b.image} alt={b.name} className="h-auto w-auto max-h-6 max-w-full object-contain" />
+          <img src={b.image} alt={b.name} className="w-auto max-w-full object-contain" style={{ height: Math.round(b.height * 0.7) }} />
         </a>
       ))}
     </div>
