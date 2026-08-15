@@ -58,27 +58,27 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
             key={src}
             onClick={() => toggle(src)}
             className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
-              expanded.has(src) ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-700 hover:border-black'
+              expanded.has(src) ? 'bg-foreground text-background border-foreground' : 'border-border text-foreground/80 hover:border-foreground'
             }`}
           >
             {src} <span className="opacity-60">({ms.length})</span>
           </button>
         ))}
-        {sorted.length === 0 && <span className="text-gray-500 text-sm">{t('rankings.no_evidence')}</span>}
+        {sorted.length === 0 && <span className="text-muted-foreground text-sm">{t('rankings.no_evidence')}</span>}
       </div>
 
       {sorted.filter(([src]) => expanded.has(src)).map(([src, ms]) => (
         <div key={src} className="mt-3">
-          <div className="text-xs font-semibold text-gray-500 mb-1">{src}</div>
+          <div className="text-xs font-semibold text-muted-foreground mb-1">{src}</div>
           <ul className="space-y-1">
             {ms.map((m, i) => (
               <li key={i}>
                 <button
                   onClick={() => setOpen(m)}
-                  className="w-full flex items-baseline gap-2 text-left rounded-md border border-gray-200 px-2.5 py-1.5 text-sm hover:border-black transition-colors"
+                  className="w-full flex items-baseline gap-2 text-left rounded-md border border-border px-2.5 py-1.5 text-sm hover:border-foreground transition-colors"
                 >
-                  <span className="text-black text-xs font-bold shrink-0 tabular-nums">{fmtDate(m.mentionDate)}</span>
-                  <span className="font-semibold text-gray-900 truncate">{m.sourceTitle || (m.excerpt ? `„${m.excerpt}"` : src)}</span>
+                  <span className="text-foreground text-xs font-bold shrink-0 tabular-nums">{fmtDate(m.mentionDate)}</span>
+                  <span className="font-semibold text-foreground truncate">{m.sourceTitle || (m.excerpt ? `„${m.excerpt}"` : src)}</span>
                 </button>
               </li>
             ))}
@@ -88,24 +88,24 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setOpen(null)}>
-          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-background rounded-2xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-4 mb-3">
               <div>
-                <div className="text-xs font-bold text-black tabular-nums">{fmtDate(open.mentionDate)}{open.sourceMedium ? ` · ${open.sourceMedium}` : ''}</div>
+                <div className="text-xs font-bold text-foreground tabular-nums">{fmtDate(open.mentionDate)}{open.sourceMedium ? ` · ${open.sourceMedium}` : ''}</div>
                 <h3 className="text-lg font-bold leading-tight mt-0.5">{open.sourceTitle ?? 'Newsletter'}</h3>
               </div>
-              <button onClick={() => setOpen(null)} className="shrink-0 text-gray-400 hover:text-black" aria-label="Schließen">
+              <button onClick={() => setOpen(null)} className="shrink-0 text-muted-foreground/70 hover:text-foreground" aria-label="Schließen">
                 <X className="w-5 h-5" />
               </button>
             </div>
             {open.excerpt && (
-              <p className="text-sm font-semibold text-gray-900 border-l-2 border-[#CCFF00] pl-3 mb-4">„{open.excerpt}"</p>
+              <p className="text-sm font-semibold text-foreground border-l-2 border-[#CCFF00] pl-3 mb-4">„{open.excerpt}"</p>
             )}
             {open.sourceContent
-              ? <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{open.sourceContent}</div>
-              : <p className="text-sm text-gray-400">Kein Volltext verfügbar.</p>}
+              ? <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">{open.sourceContent}</div>
+              : <p className="text-sm text-muted-foreground/70">Kein Volltext verfügbar.</p>}
             {open.sourceUrl && (
-              <a href={open.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-black underline mt-4">
+              <a href={open.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-foreground underline mt-4">
                 {t('rankings.to_original')} <ExternalLink className="w-3.5 h-3.5" />
               </a>
             )}

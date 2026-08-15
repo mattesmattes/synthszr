@@ -32,7 +32,9 @@ interface CompanyCardProps {
 const directionStyles = {
   up: 'bg-neon-green text-black',
   down: 'bg-neon-orange text-black',
-  neutral: 'bg-gray-300 text-black',
+  /* Anders als die beiden Neonfaelle darueber ist dieser Grund eine Graustufe —
+     er dreht mit dem Theme, also muss die Schrift mitdrehen. */
+  neutral: 'bg-secondary text-foreground',
 }
 
 const directionArrows = {

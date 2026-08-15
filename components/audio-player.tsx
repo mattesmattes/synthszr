@@ -282,8 +282,8 @@ export function AudioPlayer({ postId }: AudioPlayerProps) {
         className="relative flex items-center justify-center w-7 h-7 rounded-full hover:bg-black/8 dark:hover:bg-white/10 transition-colors shrink-0"
         aria-label="30 Sekunden zurück"
       >
-        <RotateCcw className="h-3.5 w-3.5 text-black/50 dark:text-white/50" strokeWidth={2.5} />
-        <span className="absolute text-[6px] font-bold text-black/50 dark:text-white/50 mt-px">30</span>
+        <RotateCcw className="h-3.5 w-3.5 text-black/50 dark:text-white/70" strokeWidth={2.5} />
+        <span className="absolute text-[6px] font-bold text-black/50 dark:text-white/70 mt-px">30</span>
       </button>
 
       {/* Play/Pause */}
@@ -308,14 +308,14 @@ export function AudioPlayer({ postId }: AudioPlayerProps) {
         className="relative flex items-center justify-center w-7 h-7 rounded-full hover:bg-black/8 dark:hover:bg-white/10 transition-colors shrink-0"
         aria-label="30 Sekunden vorspulen"
       >
-        <RotateCw className="h-3.5 w-3.5 text-black/50 dark:text-white/50" strokeWidth={2.5} />
-        <span className="absolute text-[6px] font-bold text-black/50 dark:text-white/50 mt-px">30</span>
+        <RotateCw className="h-3.5 w-3.5 text-black/50 dark:text-white/70" strokeWidth={2.5} />
+        <span className="absolute text-[6px] font-bold text-black/50 dark:text-white/70 mt-px">30</span>
       </button>
 
       {/* Progress bar */}
       <div
         onClick={handleProgressClick}
-        className="relative w-28 sm:w-40 h-1 bg-black/10 dark:bg-white/15 rounded-full cursor-pointer group"
+        className="relative w-28 sm:w-40 h-1 bg-black/10 dark:bg-white/25 rounded-full cursor-pointer group"
       >
         <div
           className="absolute inset-y-0 left-0 bg-black/60 dark:bg-white/70 rounded-full transition-[width] duration-150 ease-linear"
@@ -329,7 +329,7 @@ export function AudioPlayer({ postId }: AudioPlayerProps) {
       </div>
 
       {/* Time display */}
-      <span className="text-[10px] font-mono text-black/50 dark:text-white/50 tabular-nums whitespace-nowrap select-none">
+      <span className="text-[10px] font-mono text-black/50 dark:text-white/70 tabular-nums whitespace-nowrap select-none">
         {formatTime(currentTime)}
         <span className="mx-px opacity-50">/</span>
         {formatTime(duration)}
@@ -342,92 +342,51 @@ export function AudioPlayer({ postId }: AudioPlayerProps) {
           className="flex items-center justify-center w-6 h-6 rounded-full hover:bg-black/8 dark:hover:bg-white/10 transition-colors shrink-0"
           aria-label="Close player"
         >
-          <X className="h-3 w-3 text-black/40 dark:text-white/40" />
+          <X className="h-3 w-3 text-black/40 dark:text-white/60" />
         </button>
       )}
     </div>
   )
 
-  // Glass layers shared by cover pill and flying nav
+  // Die Glasebenen, geteilt von der Pille auf dem Cover und dem fliegenden
+  // Player.
+  //
+  // DIE FARBEN STEHEN IN app/globals.css, NICHT HIER. Frueher waren es
+  // Inline-Styles aus hartem rgba(255,255,255,..) — und Inline schlaegt jeden
+  // Selektor, `.dark` kam nicht daran vorbei. Im Dunkelmodus blieb die Pille
+  // deshalb weiss und verschluckte ihre eigenen Bedienelemente. Wer die Optik
+  // aendern will, aendert die .glass-*-Klassen; hier steht nur noch der Aufbau.
+  //
+  // Einzige Ausnahme ist die Deckkraft der Fuellung: die ist kein Farbwert,
+  // sondern Zustand — der fliegende Player blendet von deckend nach durchsichtig.
   const glassLayers = (milkyOpacity: number) => (
     <>
-      {/* Layer 1: Backdrop blur — frosted glass base */}
-      <div
-        className="absolute inset-0 rounded-full"
-        style={{
-          backdropFilter: 'blur(16px) saturate(1.8) brightness(1.1) contrast(1.05)',
-          WebkitBackdropFilter: 'blur(16px) saturate(1.8) brightness(1.1) contrast(1.05)',
-        }}
-      />
+      {/* Ebene 1: Milchglas-Unterbau */}
+      <div className="glass-blur absolute inset-0 rounded-full" />
 
-      {/* Layer 2: Glass tint with depth gradient — thicker glass at edges */}
-      <div
-        className="absolute inset-0 rounded-full pointer-events-none"
-        style={{
-          background: `radial-gradient(ellipse 90% 90% at 50% 45%,
-            rgba(255,255,255,0.12) 0%,
-            rgba(255,255,255,0.18) 40%,
-            rgba(255,255,255,0.35) 70%,
-            rgba(255,255,255,0.55) 90%,
-            rgba(255,255,255,0.7) 100%
-          )`,
-        }}
-      />
+      {/* Ebene 2: Glaskoerper mit Tiefenverlauf */}
+      <div className="glass-tint absolute inset-0 rounded-full pointer-events-none" />
 
-      {/* Layer 3: Top caustic band */}
-      <div
-        className="absolute inset-0 rounded-full pointer-events-none"
-        style={{
-          background: `linear-gradient(172deg,
-            rgba(255,255,255,0.9) 0%,
-            rgba(255,255,255,0.45) 6%,
-            rgba(255,255,255,0.08) 18%,
-            transparent 30%,
-            transparent 85%,
-            rgba(0,0,0,0.03) 100%
-          )`,
-        }}
-      />
+      {/* Ebene 3: Lichtband oben */}
+      <div className="glass-caustic absolute inset-0 rounded-full pointer-events-none" />
 
-      {/* Layer 4: Chromatic aberration */}
-      <div
-        className="absolute inset-0 rounded-full pointer-events-none"
-        style={{
-          boxShadow: `
-            inset 6px 0 18px -4px rgba(0,130,255,0.25),
-            inset -6px 0 18px -4px rgba(255,80,0,0.2),
-            inset 0 6px 16px -4px rgba(255,255,255,0.7),
-            inset 0 -4px 12px -4px rgba(0,0,0,0.06),
-            inset 0 0 30px 0 rgba(255,255,255,0.05)
-          `,
-        }}
-      />
+      {/* Ebene 4: Farbsaum an den Kanten */}
+      <div className="glass-chroma absolute inset-0 rounded-full pointer-events-none" />
 
-      {/* Milky overlay — controls opaqueness */}
+      {/* Ebene 5: deckende Fuellung */}
       <div
-        className="absolute inset-0 rounded-full pointer-events-none"
+        className="glass-milk absolute inset-0 rounded-full pointer-events-none"
         style={{
-          background: 'rgba(255,255,255,0.88)',
           opacity: milkyOpacity,
           transition: 'opacity 1.5s ease-out',
         }}
       />
 
-      {/* Layer 5: Sharp specular reflection line */}
-      <div
-        className="absolute inset-x-3 top-[1px] h-[1px] rounded-full pointer-events-none"
-        style={{
-          background: 'linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.95) 20%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.95) 80%, transparent 95%)',
-        }}
-      />
+      {/* Ebene 6: Spiegelung auf der Oberkante */}
+      <div className="glass-specular absolute inset-x-3 top-[1px] h-[1px] rounded-full pointer-events-none" />
 
-      {/* Layer 6: Bottom rim light */}
-      <div
-        className="absolute inset-x-6 bottom-[1px] h-[1px] rounded-full pointer-events-none opacity-40"
-        style={{
-          background: 'linear-gradient(90deg, transparent 10%, rgba(255,255,255,0.6) 30%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0.6) 70%, transparent 90%)',
-        }}
-      />
+      {/* Ebene 7: Streiflicht auf der Unterkante */}
+      <div className="glass-rim absolute inset-x-6 bottom-[1px] h-[1px] rounded-full pointer-events-none opacity-40" />
     </>
   )
 

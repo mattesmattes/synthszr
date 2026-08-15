@@ -46,11 +46,14 @@ export function MomentumChart({
 
   return (
     <div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height }} preserveAspectRatio="none" role="img" aria-label="Momentum-Verlauf">
+      {/* stroke="currentColor" statt "#000" — sonst schwarze Linie auf schwarzem
+          Grund. var() waere hier wirkungslos: SVG-Praesentationsattribute loesen
+          keine CSS-Variablen auf. */}
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full text-foreground" style={{ height }} preserveAspectRatio="none" role="img" aria-label="Momentum-Verlauf">
         <polygon points={area} fill="#CCFF00" opacity={0.4} />
-        <polyline points={line} fill="none" stroke="#000" strokeWidth={1.5} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        <polyline points={line} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       </svg>
-      <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+      <div className="flex justify-between text-[10px] text-muted-foreground/70 mt-1">
         <span>{fmtShort(points[0].t)}</span>
         <span>{fmtShort(points[n - 1].t)}</span>
       </div>

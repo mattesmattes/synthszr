@@ -61,7 +61,7 @@ export function TermNews({
 
   return (
     <section>
-      <h2 className="text-sm font-semibold text-gray-500 mb-2">{heading}</h2>
+      <h2 className="text-sm font-semibold text-muted-foreground mb-2">{heading}</h2>
       <ul className="space-y-3">
         {news.map((item, i) => {
           const href = localizePath(item.sourceUrl, lang)
@@ -71,15 +71,15 @@ export function TermNews({
               <a
                 href={href}
                 {...(isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                className="font-medium text-gray-700 hover:text-black hover:underline"
+                className="font-medium text-foreground/80 hover:text-foreground hover:underline"
               >
                 {item.title}
               </a>
-              <div className="text-xs text-gray-400 mt-0.5">
+              <div className="text-xs text-muted-foreground/70 mt-0.5">
                 {[item.sourceName, fmtDate(item.publishedAt, lang)].filter(Boolean).join(' · ')}
               </div>
               {item.contextSentence && (
-                <p className="text-xs text-gray-500 mt-1">{item.contextSentence}</p>
+                <p className="text-xs text-muted-foreground mt-1">{item.contextSentence}</p>
               )}
             </li>
           )

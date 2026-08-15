@@ -69,13 +69,22 @@
   --secondary: oklch(0.2 0 0);
   --secondary-foreground: oklch(0.98 0 0);
   --muted: oklch(0.2 0 0);
-  --muted-foreground: oklch(0.55 0 0);
+  /* 0.55 war aus dem Hellmodus uebernommen und dort auch richtig: gegen einen
+     fast weissen Grund (0.98) ergibt das ~5.6:1. Gegen den dunklen Grund (0.12)
+     sind es nur ~4.2:1 — unter den 4.5:1, die AA fuer Flieaesstext verlangt.
+     Genau daran lag der "dunkelgraue Text auf Schwarz" in den Charts.
+     0.7 hebt das auf ~7.6:1 und bleibt trotzdem klar zweite Stimme neben
+     --foreground (0.98). Merke: ein Grauwert, der in beiden Themes gleich
+     bleibt, ist im dunkleren der beiden fast immer zu schwach. */
+  --muted-foreground: oklch(0.7 0 0);
   --accent: oklch(0.62 0.21 27);
   --accent-foreground: oklch(0.12 0 0);
   --destructive: oklch(0.396 0.141 25.723);
   --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.2 0 0);
-  --input: oklch(0.2 0 0);
+  /* Linien brauchen im Dunkeln etwas mehr Abstand zum Grund als im Hellen, sonst
+     verschwinden Tabellenzeilen und Kartenraender ganz. */
+  --border: oklch(0.26 0 0);
+  --input: oklch(0.26 0 0);
   --ring: oklch(0.98 0 0);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
@@ -683,6 +692,120 @@
 
 .flying-player-enter {
   animation: flying-player-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ===== Liquid-Glass-Pille des Podcast-Players =====
+ *
+ * WARUM DAS HIER STEHT UND NICHT IM BAUTEIL: Diese sieben Ebenen lagen als
+ * INLINE-Styles in components/audio-player.tsx. Inline schlaegt jeden Selektor —
+ * `.dark` kam prinzipiell nicht daran vorbei. Im Dunkelmodus blieb die Pille
+ * deshalb eine milchig weisse Flaeche (das Milchglas unten liegt beim
+ * Cover-Player auf voller Deckkraft), auf der die weissen Bedienelemente
+ * unsichtbar wurden. Die Bedienelemente selbst hatten ihre dark:-Varianten
+ * laengst — das war nie der Fehler.
+ *
+ * Das Glas ist im Hellen weiss und im Dunkeln schwarz: es bleibt dasselbe
+ * Material, nur die Lichtstimmung dreht sich. Spitzlichter und Kantenreflexe
+ * bleiben in beiden Faellen weiss (Licht ist weiss), aber im Dunkeln erheblich
+ * schwaecher — sonst leuchtet die Pille wie ein Ring.
+ */
+
+/* Ebene 1: Milchglas-Unterbau. */
+.glass-blur {
+  backdrop-filter: blur(16px) saturate(1.8) brightness(1.1) contrast(1.05);
+  -webkit-backdrop-filter: blur(16px) saturate(1.8) brightness(1.1) contrast(1.05);
+}
+.dark .glass-blur {
+  /* brightness < 1: im Dunkeln soll das Glas den Grund daempfen, nicht anheben. */
+  backdrop-filter: blur(16px) saturate(1.4) brightness(0.7) contrast(1.05);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4) brightness(0.7) contrast(1.05);
+}
+
+/* Ebene 2: Glaskoerper mit Tiefenverlauf — an den Raendern ist das Glas dicker. */
+.glass-tint {
+  background: radial-gradient(ellipse 90% 90% at 50% 45%,
+    rgba(255,255,255,0.12) 0%,
+    rgba(255,255,255,0.18) 40%,
+    rgba(255,255,255,0.35) 70%,
+    rgba(255,255,255,0.55) 90%,
+    rgba(255,255,255,0.7) 100%
+  );
+}
+.dark .glass-tint {
+  background: radial-gradient(ellipse 90% 90% at 50% 45%,
+    rgba(0,0,0,0.25) 0%,
+    rgba(0,0,0,0.35) 40%,
+    rgba(0,0,0,0.5) 70%,
+    rgba(0,0,0,0.65) 90%,
+    rgba(0,0,0,0.75) 100%
+  );
+}
+
+/* Ebene 3: Lichtband oben. */
+.glass-caustic {
+  background: linear-gradient(172deg,
+    rgba(255,255,255,0.9) 0%,
+    rgba(255,255,255,0.45) 6%,
+    rgba(255,255,255,0.08) 18%,
+    transparent 30%,
+    transparent 85%,
+    rgba(0,0,0,0.03) 100%
+  );
+}
+.dark .glass-caustic {
+  background: linear-gradient(172deg,
+    rgba(255,255,255,0.16) 0%,
+    rgba(255,255,255,0.08) 6%,
+    rgba(255,255,255,0.02) 18%,
+    transparent 30%,
+    transparent 85%,
+    rgba(0,0,0,0.25) 100%
+  );
+}
+
+/* Ebene 4: Farbsaum an den Kanten (chromatische Aberration). */
+.glass-chroma {
+  box-shadow:
+    inset 6px 0 18px -4px rgba(0,130,255,0.25),
+    inset -6px 0 18px -4px rgba(255,80,0,0.2),
+    inset 0 6px 16px -4px rgba(255,255,255,0.7),
+    inset 0 -4px 12px -4px rgba(0,0,0,0.06),
+    inset 0 0 30px 0 rgba(255,255,255,0.05);
+}
+.dark .glass-chroma {
+  box-shadow:
+    inset 6px 0 18px -4px rgba(0,130,255,0.18),
+    inset -6px 0 18px -4px rgba(255,80,0,0.14),
+    inset 0 6px 16px -4px rgba(255,255,255,0.14),
+    inset 0 -4px 12px -4px rgba(0,0,0,0.3),
+    inset 0 0 30px 0 rgba(255,255,255,0.02);
+}
+
+/* Ebene 5: die deckende Fuellung. Ihre Deckkraft steuert das Bauteil (der
+ * fliegende Player blendet von deckend nach durchsichtig), die FARBE gehoert
+ * hierher — sie ist das, was im Dunkelmodus kippen muss. */
+.glass-milk {
+  background: rgba(255,255,255,0.88);
+}
+.dark .glass-milk {
+  /* Nahe an --background (oklch 0.12), damit die Pille zum Seitengrund gehoert. */
+  background: rgba(22,22,22,0.9);
+}
+
+/* Ebene 6: scharfe Spiegelung auf der Oberkante. */
+.glass-specular {
+  background: linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.95) 20%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.95) 80%, transparent 95%);
+}
+.dark .glass-specular {
+  background: linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.3) 20%, rgba(255,255,255,0.38) 50%, rgba(255,255,255,0.3) 80%, transparent 95%);
+}
+
+/* Ebene 7: Streiflicht auf der Unterkante. */
+.glass-rim {
+  background: linear-gradient(90deg, transparent 10%, rgba(255,255,255,0.6) 30%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0.6) 70%, transparent 90%);
+}
+.dark .glass-rim {
+  background: linear-gradient(90deg, transparent 10%, rgba(255,255,255,0.16) 30%, rgba(255,255,255,0.22) 50%, rgba(255,255,255,0.16) 70%, transparent 90%);
 }
 
 /* ===== Dithered cover images ===== */

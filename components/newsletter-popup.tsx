@@ -183,7 +183,7 @@ export function NewsletterPopup() {
         {/* Close button */}
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 p-2 text-gray-500 hover:text-gray-800 transition-colors"
+          className="absolute top-4 right-4 p-2 text-muted-foreground hover:text-foreground transition-colors"
           aria-label="Close"
         >
           <X className="h-5 w-5" />
@@ -192,20 +192,20 @@ export function NewsletterPopup() {
         {status === 'success' ? (
           <div className="text-center py-6">
             <CheckCircle2 className="h-10 w-10 text-green-600 mx-auto mb-3" />
-            <p className="text-base text-gray-700">{t.success}</p>
+            <p className="text-base text-foreground/80">{t.success}</p>
           </div>
         ) : (
           <>
             {/* Heading */}
             <h2
               id="newsletter-popup-heading"
-              className="text-xl md:text-2xl font-bold text-gray-900 leading-tight mb-2 pr-8"
+              className="text-xl md:text-2xl font-bold text-foreground leading-tight mb-2 pr-8"
             >
               Subscribe free. Unsubscribe<br />the second it sucks.
             </h2>
 
             {/* Subheading */}
-            <p className="text-base md:text-lg text-gray-400 leading-relaxed mb-6">
+            <p className="text-base md:text-lg text-muted-foreground/70 leading-relaxed mb-6">
               {t.subheading}
             </p>
 
@@ -218,12 +218,12 @@ export function NewsletterPopup() {
                 placeholder={t.placeholder}
                 required
                 disabled={status === 'loading'}
-                className="flex-1 px-3 py-2.5 text-sm border border-gray-300 bg-white focus:border-gray-500 focus:outline-none disabled:opacity-50"
+                className="flex-1 px-3 py-2.5 text-sm border border-border bg-background focus:border-muted-foreground focus:outline-none disabled:opacity-50"
               />
               <button
                 type="submit"
                 disabled={status === 'loading'}
-                className="px-6 py-2.5 text-sm font-medium bg-black text-white hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap"
+                className="px-6 py-2.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 {status === 'loading' ? (
                   <>

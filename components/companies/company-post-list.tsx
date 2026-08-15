@@ -40,17 +40,17 @@ export function CompanyPostList({
 
   return (
     <section className="mt-10 border-t border-border pt-6">
-      <h2 className="mb-2 text-sm font-semibold text-gray-500">{heading}</h2>
+      <h2 className="mb-2 text-sm font-semibold text-muted-foreground">{heading}</h2>
       <ul className="space-y-3">
         {posts.map((post) => (
           <li key={post.slug} className="text-sm">
             <Link
               href={`/${lang}/posts/${post.slug}`}
-              className="font-medium text-gray-700 hover:text-black hover:underline"
+              className="font-medium text-foreground/80 hover:text-foreground hover:underline"
             >
               {post.title}
             </Link>
-            <div className="mt-0.5 text-xs text-gray-400">{fmt(post.createdAt)}</div>
+            <div className="mt-0.5 text-xs text-muted-foreground/70">{fmt(post.createdAt)}</div>
           </li>
         ))}
       </ul>

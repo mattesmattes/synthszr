@@ -22,7 +22,7 @@ export async function HomeHero({ locale }: { locale?: string }) {
         className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 py-2 text-sm sm:text-base hover:opacity-70 transition-opacity text-center"
       >
         <span className="font-bold tracking-tight">{t['home.charts_new']}</span>
-        <span className="text-gray-600">{t['home.charts_tagline']}</span>
+        <span className="text-foreground/80">{t['home.charts_tagline']}</span>
         <span className="bg-[#00FFFF] text-black rounded px-1.5 py-0.5 text-xs font-bold">Beta</span>
       </Link>
     </div>

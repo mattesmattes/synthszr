@@ -70,13 +70,13 @@ export function RelatedTerms({
 
   return (
     <section>
-      <h2 className="text-sm font-semibold text-gray-500 mb-2">{heading}</h2>
+      <h2 className="text-sm font-semibold text-muted-foreground mb-2">{heading}</h2>
       <ul className="flex flex-wrap gap-2">
         {terms.map((term) => (
           <li key={term.slug}>
             <Link
               href={`/${lang}/glossary/${term.slug}`}
-              className="inline-block rounded-full border border-gray-200 px-3 py-1 text-sm text-gray-600 transition-colors hover:border-black hover:text-black"
+              className="inline-block rounded-full border border-border px-3 py-1 text-sm text-foreground/80 transition-colors hover:border-foreground hover:text-foreground"
             >
               {term.canonicalName}
             </Link>

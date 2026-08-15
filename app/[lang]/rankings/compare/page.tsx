@@ -63,20 +63,20 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
       </Suspense>
       <RankingsBanner />
 
-      <Link href={`/${lang}/rankings`} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-black mb-4">
+      <Link href={`/${lang}/rankings`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
         <ArrowLeft className="w-4 h-4" /> {t('rankings.breadcrumb_all')}
       </Link>
       <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-1">{t('rankings.compare_title')}</h1>
-      <p className="text-gray-500 text-sm mb-6">{products.length} {t('rankings.compare_products')}</p>
+      <p className="text-muted-foreground text-sm mb-6">{products.length} {t('rankings.compare_products')}</p>
 
       {products.length === 0 ? (
-        <p className="text-gray-500 text-sm">{t('rankings.compare_empty')}</p>
+        <p className="text-muted-foreground text-sm">{t('rankings.compare_empty')}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left p-2 w-40 font-medium text-gray-400 align-bottom">{t('rankings.compare_feature')}</th>
+              <tr className="border-b border-border">
+                <th className="text-left p-2 w-40 font-medium text-muted-foreground/70 align-bottom">{t('rankings.compare_feature')}</th>
                 {products.map((p) => (
                   <th key={p.slug} className="text-left p-2 align-bottom min-w-[140px]">
                     <Link href={`/${lang}/rankings/${p.slug}`} className="inline-flex items-center gap-2 hover:underline">
@@ -88,28 +88,28 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b border-gray-100">
-                <td className="p-2 text-gray-400">{t('rankings.momentum')}</td>
+              <tr className="border-b border-border">
+                <td className="p-2 text-muted-foreground/70">{t('rankings.momentum')}</td>
                 {products.map((p) => <td key={p.slug} className="p-2 font-bold tabular-nums">{p.score ?? '—'}</td>)}
               </tr>
-              <tr className="border-b border-gray-100">
-                <td className="p-2 text-gray-400">{t('rankings.compare_vendor')}</td>
+              <tr className="border-b border-border">
+                <td className="p-2 text-muted-foreground/70">{t('rankings.compare_vendor')}</td>
                 {products.map((p) => (
                   <td key={p.slug} className="p-2">
                     <Link href={`/${lang}/companies/${p.vendor}`} className="hover:underline">{p.vendor}</Link>
                   </td>
                 ))}
               </tr>
-              <tr className="border-b border-gray-100">
-                <td className="p-2 text-gray-400">{t('rankings.compare_release')}</td>
+              <tr className="border-b border-border">
+                <td className="p-2 text-muted-foreground/70">{t('rankings.compare_release')}</td>
                 {products.map((p) => <td key={p.slug} className="p-2">{p.releasedAt ?? '—'}</td>)}
               </tr>
               {dims.map((d) => (
-                <tr key={d} className="border-b border-gray-100">
-                  <td className="p-2 text-gray-400">{d}</td>
+                <tr key={d} className="border-b border-border">
+                  <td className="p-2 text-muted-foreground/70">{d}</td>
                   {products.map((p) => {
                     const f = p.features.find((x) => canonDim(x.dimension) === d)
-                    return <td key={p.slug} className={`p-2 ${f ? 'font-medium' : 'text-gray-300'}`}>{f?.value ?? '—'}</td>
+                    return <td key={p.slug} className={`p-2 ${f ? 'font-medium' : 'text-muted-foreground/70'}`}>{f?.value ?? '—'}</td>
                   })}
                 </tr>
               ))}

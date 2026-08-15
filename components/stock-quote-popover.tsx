@@ -49,7 +49,7 @@ export function StockQuotePopover({ company, onClose }: StockQuotePopoverProps) 
   }, [company])
 
   const DirectionIcon = data?.direction === 'up' ? TrendingUp : data?.direction === 'down' ? TrendingDown : Minus
-  const directionColor = data?.direction === 'up' ? 'text-[#39FF14]' : data?.direction === 'down' ? 'text-[#FF6600]' : 'text-gray-400'
+  const directionColor = data?.direction === 'up' ? 'text-[#39FF14]' : data?.direction === 'down' ? 'text-[#FF6600]' : 'text-muted-foreground/70'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

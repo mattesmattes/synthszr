@@ -145,7 +145,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
       className={`rounded-md px-2.5 py-1 text-sm whitespace-nowrap transition-colors ${
         active
           ? 'bg-[#00785a] text-white font-semibold'
-          : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+          : 'text-foreground/80 hover:bg-secondary hover:text-foreground'
       }`}
     >
       {label}
@@ -174,13 +174,13 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
             : t('rankings.h1')}
         </h1>
         {catIntro ? (
-          <div className="mt-2 space-y-2 text-sm text-gray-600 leading-relaxed">
+          <div className="mt-2 space-y-2 text-sm text-foreground/80 leading-relaxed">
             {catIntro.intro.map((p, i) => (
               <p key={i}>{p}</p>
             ))}
           </div>
         ) : (
-          <p className="mt-1 text-sm text-gray-600 leading-relaxed">{t('rankings.intro')}</p>
+          <p className="mt-1 text-sm text-foreground/80 leading-relaxed">{t('rankings.intro')}</p>
         )}
       </header>
       {/* Nav Ebene 1+2 in abgesetztem Panel. Ist eine Gruppe aktiv, werden die übrigen
@@ -199,7 +199,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
                 gtab(`${tabBase}?category=other`, catName('other', 'Sonstige'), category === 'other')}
             </nav>
             {activeGroup && (
-              <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-gray-200 pt-2.5">
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-border pt-2.5">
                 {activeGroup.categories.map((slug) => (
                   <Link
                     key={slug}
@@ -207,7 +207,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
                     className={`rounded-full border px-3 py-1 text-xs whitespace-nowrap transition-colors ${
                       category === slug
                         ? 'bg-[#00785a] text-white border-[#00785a] font-medium'
-                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400 hover:text-gray-900'
+                        : 'bg-background text-foreground/80 border-border hover:border-muted-foreground hover:text-foreground'
                     }`}
                   >
                     {catName(slug, nameBySlug.get(slug) ?? slug)}
@@ -228,16 +228,16 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
 
       {products.length > 0 && (
         <div className="flex items-center gap-1.5 mb-2 text-xs">
-          <span className="text-gray-400 mr-1">{lang === 'de' ? 'Sortieren:' : 'Sort:'}</span>
+          <span className="text-muted-foreground/70 mr-1">{lang === 'de' ? 'Sortieren:' : 'Sort:'}</span>
           <Link
             href={ctx ? `${tabBase}?${ctx}` : tabBase}
-            className={`px-2 py-0.5 rounded-full border transition-colors ${sort !== 'vendor' ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'}`}
+            className={`px-2 py-0.5 rounded-full border transition-colors ${sort !== 'vendor' ? 'bg-foreground text-background border-foreground' : 'border-border text-foreground/80 hover:border-foreground'}`}
           >
             Momentum
           </Link>
           <Link
             href={`${tabBase}?${ctx ? `${ctx}&` : ''}sort=vendor`}
-            className={`px-2 py-0.5 rounded-full border transition-colors ${sort === 'vendor' ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'}`}
+            className={`px-2 py-0.5 rounded-full border transition-colors ${sort === 'vendor' ? 'bg-foreground text-background border-foreground' : 'border-border text-foreground/80 hover:border-foreground'}`}
           >
             {lang === 'de' ? 'Unternehmen' : 'Company'}
           </Link>
@@ -245,16 +245,16 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
       )}
 
       {products.length === 0 ? (
-        <p className="text-gray-500 text-sm">{t('rankings.empty')}</p>
+        <p className="text-muted-foreground text-sm">{t('rankings.empty')}</p>
       ) : (
         <ol className="space-y-1">
           {products.map((p) => (
             <li key={p.id} className="flex items-center gap-1">
               <Link
                 href={`/${lang}/rankings/${p.slug}`}
-                className="flex-1 min-w-0 flex items-center gap-2.5 rounded-lg border border-gray-200 px-3 py-2 transition-colors hover:border-black"
+                className="flex-1 min-w-0 flex items-center gap-2.5 rounded-lg border border-border px-3 py-2 transition-colors hover:border-foreground"
               >
-                <div className="w-6 text-center text-sm font-bold shrink-0 text-gray-500 tabular-nums">
+                <div className="w-6 text-center text-sm font-bold shrink-0 text-muted-foreground tabular-nums">
                   {p.rank}
                 </div>
 
@@ -262,7 +262,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
 
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm truncate leading-tight">{p.canonicalName}</div>
-                  <div className="text-[11px] text-gray-500 truncate leading-tight">
+                  <div className="text-[11px] text-muted-foreground truncate leading-tight">
                     {p.vendor} · {p.mentionCount}× · {fmtDate(p.lastSeen, lang)}
                   </div>
                 </div>
@@ -276,7 +276,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         </ol>
       )}
 
-      <footer className="mt-8 text-[11px] text-gray-400 border-t pt-3">
+      <footer className="mt-8 text-[11px] text-muted-foreground/70 border-t pt-3">
         {t('rankings.footer')}
       </footer>
       <PinBar lang={lang} />

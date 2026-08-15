@@ -38,7 +38,7 @@ export function PostCompanies({
           <li key={company.slug} className="text-sm">
             <Link
               href={`/${lang}/companies/${company.slug}`}
-              className="text-gray-700 hover:text-black hover:underline"
+              className="text-foreground/80 hover:text-foreground hover:underline"
             >
               {company.name}
             </Link>

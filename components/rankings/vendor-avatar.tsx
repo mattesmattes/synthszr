@@ -47,7 +47,12 @@ export function VendorAvatar({ vendor, size = 40 }: { vendor: string; size?: num
         width={size}
         height={size}
         loading="lazy"
-        className="rounded-lg shrink-0 bg-white object-contain border border-gray-100 p-0.5"
+        /* bg-white bleibt FEST: das sind fremde Favicons, viele davon dunkle
+           Glyphen auf durchsichtigem Grund. Auf einer mitdrehenden Flaeche
+           waeren die im Dunkelmodus weg. Fremde Logos brauchen einen
+           zugesicherten hellen Grund — dieselbe Ueberlegung wie bei den
+           Podcast-Badges. */
+        className="rounded-lg shrink-0 bg-white object-contain border border-border p-0.5"
       />
     )
   }

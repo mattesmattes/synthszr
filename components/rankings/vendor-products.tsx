@@ -45,7 +45,7 @@ export async function VendorProducts({
           <li key={x.slug}>
             <Link
               href={`/${lang}/rankings/${x.slug}`}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm transition-colors hover:border-black"
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm transition-colors hover:border-foreground"
             >
               <VendorAvatar vendor={x.vendor} size={20} />
               <span className="font-medium">{x.name}</span>

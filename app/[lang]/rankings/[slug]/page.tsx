@@ -41,10 +41,10 @@ interface PageProps {
 }
 
 function sentimentClass(score: number | null): string {
-  if (score == null) return 'bg-gray-100 text-gray-700'
-  if (score >= 0.3) return 'bg-[#CCFF00]/40 text-black'
+  if (score == null) return 'bg-secondary text-foreground/80'
+  if (score >= 0.3) return 'bg-[#CCFF00]/40 text-foreground'
   if (score <= -0.3) return 'bg-red-100 text-red-700'
-  return 'bg-gray-100 text-gray-700'
+  return 'bg-secondary text-foreground/80'
 }
 
 function fmtDate(d: string | null, lang: string): string {
@@ -131,16 +131,18 @@ export default async function ProductDetailPage({ params }: PageProps) {
         <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
       </Suspense>
       <RankingsBanner />
-      <nav className="flex items-center gap-1.5 text-sm text-gray-600 mb-8 flex-wrap rounded-xl bg-[#75fbbd] px-3 py-2">
+      {/* Feste Mintflaeche, also feste dunkle Schrift — text-foreground waere im
+          Dunkelmodus weiss auf Mint gewesen. */}
+      <nav className="flex items-center gap-1.5 text-sm text-black/80 mb-8 flex-wrap rounded-xl bg-[#75fbbd] px-3 py-2">
         <Link href={`/${lang}/rankings`} className="hover:text-black">{t('rankings.breadcrumb_all')}</Link>
         {p.category && (
           <>
-            <span className="text-gray-300">›</span>
+            <span className="text-black/50">›</span>
             <Link href={`/${lang}/rankings?category=${p.category.slug}`} className="hover:text-black">{translations[`rankings.cat.${p.category.slug}`] ?? p.category.name}</Link>
           </>
         )}
-        <span className="text-gray-300">›</span>
-        <span className="text-gray-800 font-medium truncate">{p.canonicalName}</span>
+        <span className="text-black/50">›</span>
+        <span className="text-black font-medium truncate">{p.canonicalName}</span>
       </nav>
 
       <header className="mb-4 flex items-start gap-3">
@@ -158,7 +160,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
               )
             )}
           </div>
-          <p className="text-gray-500 text-xs mt-0.5">
+          <p className="text-muted-foreground text-xs mt-0.5">
             <Link href={`/${lang}/companies/${companyVendor}`} className="hover:underline">{companyName}</Link>
             {p.version && <> · v{p.version}</>}
             {p.qualifier && <> · {p.qualifier}</>}
@@ -170,18 +172,18 @@ export default async function ProductDetailPage({ params }: PageProps) {
           <PinButton slug={p.slug} />
           <div className="text-right">
             <div className="text-3xl font-bold leading-none tabular-nums">{p.score ?? '—'}</div>
-            <div className="text-[10px] uppercase tracking-wide text-gray-400">{t('rankings.momentum')}</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70">{t('rankings.momentum')}</div>
           </div>
         </div>
       </header>
 
       {/* Produktbeschreibung (aus Web-Research) */}
       {p.description && (
-        <p className="text-[15px] text-gray-800 leading-relaxed mb-6">{p.description}</p>
+        <p className="text-[15px] text-foreground leading-relaxed mb-6">{p.description}</p>
       )}
 
       {/* Momentum-Verlauf */}
-      <div className="rounded-xl border border-gray-200 p-3 mb-6">
+      <div className="rounded-xl border border-border p-3 mb-6">
         <SingleMomentumChart points={p.history} height={120} />
       </div>
 
@@ -200,11 +202,11 @@ export default async function ProductDetailPage({ params }: PageProps) {
       {p.features.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-3">{t('rankings.features')}</h2>
-          <table className="w-full border border-gray-200 rounded-xl overflow-hidden text-sm">
+          <table className="w-full border border-border rounded-xl overflow-hidden text-sm">
             <tbody>
               {p.features.map((f, i) => (
-                <tr key={i} className={i % 2 ? 'bg-gray-50/60' : ''}>
-                  <td className="w-48 align-top px-3 py-2 text-gray-500 border-r border-gray-100">{f.dimension}</td>
+                <tr key={i} className={i % 2 ? 'bg-secondary/60' : ''}>
+                  <td className="w-48 align-top px-3 py-2 text-muted-foreground border-r border-border">{f.dimension}</td>
                   <td className="px-3 py-2 font-medium">{f.value}</td>
                 </tr>
               ))}
@@ -230,7 +232,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
       {vendorSyn && <PremarketSynthesisBlock company={vendorSyn.company} synthesis={vendorSyn.synthesis} locale={lang} />}
       {vendorStock && <StockSynthesisBlock company={vendorStock.company} companyKey={vendorStock.companyKey} initial={vendorStock.data} createdAt={vendorStock.createdAt} stale={vendorStock.stale} locale={lang} />}
 
-      <footer className="mt-10 text-xs text-gray-400 border-t pt-4">
+      <footer className="mt-10 text-xs text-muted-foreground/70 border-t pt-4">
         {t('rankings.footer_product')}
       </footer>
       <PinBar lang={lang} />

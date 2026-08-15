@@ -12,7 +12,14 @@ interface Series {
   points: Array<{ t: number; value: number }>
 }
 
-const COLORS = ['#111827', '#e63946', '#2a9d8f', '#e76f51', '#457b9d', '#9d4edd', '#d4a017', '#06947a']
+/* Die erste Reihe fuehrt und war deshalb fast schwarz (#111827) — im
+ * Dunkelmodus war ausgerechnet die wichtigste Linie unsichtbar. `currentColor`
+ * laesst sie mit dem Theme kippen: dunkel auf hell, hell auf dunkel. Eine
+ * CSS-Variable ginge hier NICHT, denn diese Werte landen als
+ * SVG-Praesentationsattribut (stroke="…"), und dort wird var() nicht aufgeloest.
+ * Die uebrigen sieben sind mittelhelle Buntfarben und tragen in beiden Themes;
+ * sie bleiben fest, damit eine Reihe ihre Farbe behaelt. */
+const COLORS = ['currentColor', '#e63946', '#2a9d8f', '#e76f51', '#457b9d', '#9d4edd', '#d4a017', '#06947a']
 const RANGES = [90, 30, 7]
 
 function fmtShort(t: number): string {
@@ -41,15 +48,15 @@ export function MultiMomentumChart({ series, lang }: { series: Series[]; lang: s
   const go = (slug: string) => router.push(`/${lang}/rankings/${slug}`)
 
   return (
-    <div className="rounded-xl border border-gray-200 p-3">
+    <div className="rounded-xl border border-border p-3">
       <div className="flex justify-between items-center mb-2">
-        <span className="text-xs uppercase tracking-wide text-gray-500">{t('rankings.momentum_history')}</span>
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">{t('rankings.momentum_history')}</span>
         <div className="flex gap-1">
           {RANGES.map((d) => (
             <button
               key={d}
               onClick={() => setDays(d)}
-              className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors ${days === d ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'}`}
+              className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors ${days === d ? 'bg-foreground text-background border-foreground' : 'border-border text-foreground/80 hover:border-foreground'}`}
             >
               {d} {t('rankings.days')}
             </button>
@@ -57,7 +64,7 @@ export function MultiMomentumChart({ series, lang }: { series: Series[]; lang: s
         </div>
       </div>
 
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full text-foreground" style={{ height: H }} preserveAspectRatio="none">
         {data.map((s, i) => {
           const dimmed = hover !== null && hover !== i
           return (
@@ -80,7 +87,7 @@ export function MultiMomentumChart({ series, lang }: { series: Series[]; lang: s
           )
         })}
       </svg>
-      <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+      <div className="flex justify-between text-[10px] text-muted-foreground/70 mt-1">
         <span>{fmtShort(cutoff)}</span>
         <span>{fmtShort(maxT)}</span>
       </div>
@@ -94,11 +101,14 @@ export function MultiMomentumChart({ series, lang }: { series: Series[]; lang: s
             onMouseEnter={() => setHover(i)}
             onMouseLeave={() => setHover(null)}
             title={s.label}
-            className={`inline-flex items-center gap-1.5 text-[11px] rounded-full border px-1.5 py-0.5 transition-colors ${hover === i ? 'border-black' : 'border-gray-200'} hover:border-black`}
+            className={`inline-flex items-center gap-1.5 text-[11px] rounded-full border px-1.5 py-0.5 transition-colors ${hover === i ? 'border-foreground' : 'border-border'} hover:border-foreground`}
           >
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+            {/* text-foreground explizit: der Farbpunkt der ersten Reihe ist
+                `currentColor` und haengt sonst davon ab, was der Knopf gerade
+                erbt. */}
+            <span className="w-2 h-2 rounded-full shrink-0 text-foreground" style={{ background: COLORS[i % COLORS.length] }} />
             <VendorAvatar vendor={s.vendor} size={14} />
-            <span className="text-gray-700 max-w-[120px] truncate">{s.label}</span>
+            <span className="text-foreground/80 max-w-[120px] truncate">{s.label}</span>
           </button>
         ))}
       </div>

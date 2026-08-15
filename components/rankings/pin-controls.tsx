@@ -43,7 +43,7 @@ export function PinButton({ slug }: { slug: string }) {
       onClick={toggle}
       title={pinned ? t('rankings.unpin') : t('rankings.pin')}
       aria-label={t('rankings.pin')}
-      className={`shrink-0 rounded-md p-1 transition-colors ${pinned ? 'text-black' : 'text-gray-300 hover:text-gray-600'}`}
+      className={`shrink-0 rounded-md p-1 transition-colors ${pinned ? 'text-foreground' : 'text-muted-foreground/70 hover:text-foreground/80'}`}
     >
       <Pin className="w-4 h-4" fill={pinned ? 'currentColor' : 'none'} />
     </button>
@@ -55,12 +55,15 @@ export function PinBar({ lang }: { lang: string }) {
   const t = useTranslation()
   if (pins.length === 0) return null
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-full bg-black text-white shadow-lg px-4 py-2 text-sm">
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-full bg-foreground text-background shadow-lg px-4 py-2 text-sm">
       <span>{pins.length} {t('rankings.pinned')}</span>
+      {/* text-black bleibt FEST: der Grund ist die Take-Farbe und dreht mit dem
+          Theme nicht mit. Ein text-foreground haette hier im Dunkelmodus weisse
+          Schrift auf leuchtendem Neongelb ergeben. */}
       <Link href={`/${lang}/rankings/compare?slugs=${pins.join(',')}`} className="font-semibold bg-[#CCFF00] text-black rounded-full px-3 py-1 hover:opacity-90">
         {t('rankings.compare')}
       </Link>
-      <button onClick={() => writePins([])} aria-label="Pins leeren" className="text-white/70 hover:text-white">
+      <button onClick={() => writePins([])} aria-label="Pins leeren" className="text-background/70 hover:text-background">
         <X className="w-4 h-4" />
       </button>
     </div>

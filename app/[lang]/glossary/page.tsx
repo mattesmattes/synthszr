@@ -80,11 +80,11 @@ export default async function GlossaryIndexPage({ params }: PageProps) {
 
         <header className="mb-10">
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{t('glossary.index_title')}</h1>
-          <p className="mt-4 text-xl text-gray-700 leading-snug">{t('glossary.index_intro')}</p>
+          <p className="mt-4 text-xl text-foreground/80 leading-snug">{t('glossary.index_intro')}</p>
         </header>
 
         {terms.length === 0 ? (
-          <p className="text-gray-500">{t('glossary.index_empty')}</p>
+          <p className="text-muted-foreground">{t('glossary.index_empty')}</p>
         ) : (
           <div className="space-y-10">
             {/* Sprungleiste erst ab 8 Buchstaben: die A-Z-Gliederung selbst gibt es
@@ -97,7 +97,7 @@ export default async function GlossaryIndexPage({ params }: PageProps) {
                   <a
                     key={letter}
                     href={`#letter-${letter}`}
-                    className="font-mono text-sm text-gray-500 hover:text-black hover:underline"
+                    className="font-mono text-sm text-muted-foreground hover:text-foreground hover:underline"
                   >
                     {letter}
                   </a>
@@ -106,7 +106,7 @@ export default async function GlossaryIndexPage({ params }: PageProps) {
             )}
             {letters.map((letter) => (
               <section key={letter} id={`letter-${letter}`} className="scroll-mt-6">
-                <h2 className="mb-3 font-mono text-sm text-gray-400">{letter}</h2>
+                <h2 className="mb-3 font-mono text-sm text-muted-foreground/70">{letter}</h2>
                 <ul className="space-y-4">
                   {grouped.get(letter)!.map((term) => (
                     <li key={term.slug}>
@@ -116,7 +116,7 @@ export default async function GlossaryIndexPage({ params }: PageProps) {
                       >
                         {term.canonicalName}
                       </Link>
-                      <p className="text-gray-600">{term.summary}</p>
+                      <p className="text-foreground/80">{term.summary}</p>
                     </li>
                   ))}
                 </ul>

@@ -11,7 +11,7 @@ function mdLinks(text: string): ReactNode {
   if (parts.length === 1) return text
   return parts.map((part, i) => {
     const m = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
-    if (m) return <a key={i} href={m[2]} target="_blank" rel="noopener noreferrer" className="underline hover:text-black">{m[1]}</a>
+    if (m) return <a key={i} href={m[2]} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">{m[1]}</a>
     return <span key={i}>{part}</span>
   })
 }
@@ -19,8 +19,8 @@ function mdLinks(text: string): ReactNode {
 function ratingClass(r: StockRating): string {
   if (r === 'BUY') return 'bg-green-500 text-white'
   if (r === 'SELL') return 'bg-orange-600 text-white'
-  if (r === 'HOLD') return 'bg-yellow-400 text-black'
-  return 'bg-gray-200 text-gray-700'
+  if (r === 'HOLD') return 'bg-yellow-400 text-foreground'
+  return 'bg-secondary text-foreground/80'
 }
 
 /**
@@ -95,16 +95,16 @@ export function StockSynthesisBlock({
             <button type="button" onClick={() => setShowQuote(true)} className="inline-flex items-baseline gap-1.5 text-sm mt-0.5 hover:underline cursor-pointer">
               <span className="font-mono font-semibold">{quote.symbol}</span>
               <span className="tabular-nums">{quote.price.toFixed(2)} {quote.currency}</span>
-              <span className={quote.direction === 'up' ? 'text-green-600' : quote.direction === 'down' ? 'text-orange-600' : 'text-gray-400'}>
+              <span className={quote.direction === 'up' ? 'text-green-600' : quote.direction === 'down' ? 'text-orange-600' : 'text-muted-foreground/70'}>
                 {quote.changePercent >= 0 ? '+' : ''}{quote.changePercent.toFixed(2)}%
               </span>
             </button>
           )}
         </div>
-        <span className="flex items-center gap-2 text-[11px] text-gray-400 shrink-0">
+        <span className="flex items-center gap-2 text-[11px] text-muted-foreground/70 shrink-0">
           {refreshing && (
             <span className="flex items-center gap-1">
-              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-gray-500" />
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-border border-t-gray-500" />
               {data ? L.updating : L.generating}
             </span>
           )}
@@ -116,12 +116,12 @@ export function StockSynthesisBlock({
         <>
           {/* Synthszr Vote */}
           {data.final_recommendation && (
-            <div className="rounded-xl border border-gray-200 p-4 mb-5">
+            <div className="rounded-xl border border-border p-4 mb-5">
               <div className="flex items-center gap-2 mb-2">
                 <span className={`px-2 py-0.5 rounded text-xs font-bold ${ratingClass(data.final_recommendation.rating)}`}>{data.final_recommendation.rating}</span>
-                <span className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Synthszr Vote</span>
+                <span className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Synthszr Vote</span>
               </div>
-              {data.final_recommendation.rationale && <p className="text-sm text-gray-800 leading-snug">{mdLinks(data.final_recommendation.rationale)}</p>}
+              {data.final_recommendation.rationale && <p className="text-sm text-foreground leading-snug">{mdLinks(data.final_recommendation.rationale)}</p>}
             </div>
           )}
 
@@ -129,7 +129,7 @@ export function StockSynthesisBlock({
           {data.executive_summary && (
             <div className="mb-5">
               <h3 className="text-sm font-semibold mb-2">{L.summary}</h3>
-              <p className="text-sm text-gray-800 leading-snug">{mdLinks(data.executive_summary)}</p>
+              <p className="text-sm text-foreground leading-snug">{mdLinks(data.executive_summary)}</p>
             </div>
           )}
 
@@ -137,7 +137,7 @@ export function StockSynthesisBlock({
           {data.key_takeaways?.length > 0 && (
             <div className="mb-5">
               <h3 className="text-sm font-semibold mb-2">Key Takeaways</h3>
-              <ol className="space-y-1.5 list-decimal list-inside text-sm text-gray-800">
+              <ol className="space-y-1.5 list-decimal list-inside text-sm text-foreground">
                 {data.key_takeaways.map((t, i) => <li key={i} className="leading-snug">{mdLinks(t)}</li>)}
               </ol>
             </div>
@@ -149,10 +149,10 @@ export function StockSynthesisBlock({
               <h3 className="text-sm font-semibold mb-2">{L.actionIdeas}</h3>
               <div className="grid sm:grid-cols-3 gap-2">
                 {data.action_ideas.map((a, i) => (
-                  <div key={i} className="rounded-lg border border-gray-200 p-3">
+                  <div key={i} className="rounded-lg border border-border p-3">
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${ratingClass(a.rating)}`}>{a.rating}</span>
-                    <p className="text-xs text-gray-700 mt-1.5 leading-snug">{a.thesis}</p>
-                    {a.time_horizon_months != null && <p className="text-[10px] text-gray-400 mt-1">{L.horizon}: {a.time_horizon_months} {L.months}</p>}
+                    <p className="text-xs text-foreground/80 mt-1.5 leading-snug">{a.thesis}</p>
+                    {a.time_horizon_months != null && <p className="text-[10px] text-muted-foreground/70 mt-1">{L.horizon}: {a.time_horizon_months} {L.months}</p>}
                   </div>
                 ))}
               </div>
@@ -163,7 +163,7 @@ export function StockSynthesisBlock({
           {data.contrarian_insights?.length > 0 && (
             <div className="mb-5">
               <h3 className="text-sm font-semibold mb-2">Contrarian Insights</h3>
-              <ul className="space-y-1.5 text-sm text-gray-800 bg-[#CCFF00]/10 rounded-lg p-3">
+              <ul className="space-y-1.5 text-sm text-foreground bg-[#CCFF00]/10 rounded-lg p-3">
                 {data.contrarian_insights.map((c, i) => <li key={i} className="leading-snug">• {mdLinks(c)}</li>)}
               </ul>
             </div>
@@ -173,10 +173,10 @@ export function StockSynthesisBlock({
           {data.sources?.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold mb-1">{L.sources} ({data.sources.length})</h3>
-              <ul className="text-xs text-gray-500 space-y-0.5">
+              <ul className="text-xs text-muted-foreground space-y-0.5">
                 {data.sources.slice(0, 12).map((src, i) => (
                   <li key={i} className="truncate">
-                    <a href={src.startsWith('http') ? src : `https://${src}`} target="_blank" rel="noopener noreferrer" className="underline hover:text-black">{src}</a>
+                    <a href={src.startsWith('http') ? src : `https://${src}`} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">{src}</a>
                   </li>
                 ))}
               </ul>

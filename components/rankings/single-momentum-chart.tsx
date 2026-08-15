@@ -30,24 +30,29 @@ export function SingleMomentumChart({ points, height = 110 }: { points: Array<{ 
   return (
     <div>
       <div className="flex justify-between items-center mb-1">
-        <span className="text-xs uppercase tracking-wide text-gray-500">{t('rankings.momentum_history')}</span>
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">{t('rankings.momentum_history')}</span>
         <div className="flex gap-1">
           {RANGES.map((d) => (
             <button
               key={d}
               onClick={() => setDays(d)}
-              className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors ${days === d ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:border-black'}`}
+              className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors ${days === d ? 'bg-foreground text-background border-foreground' : 'border-border text-foreground/80 hover:border-foreground'}`}
             >
               {d} {t('rankings.days')}
             </button>
           ))}
         </div>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Momentum-Verlauf">
+      {/* stroke="currentColor" statt "#000": die Verlaufslinie war eine schwarze
+          Linie auf schwarzem Grund und im Dunkelmodus schlicht weg. CSS-Variablen
+          helfen hier nicht — var() wird in SVG-PRAESENTATIONSATTRIBUTEN nicht
+          aufgeloest, nur in echten CSS-Eigenschaften. currentColor dagegen ist
+          SVG-eigen und nimmt die Textfarbe, die text-foreground am <svg> setzt. */}
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full text-foreground" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Momentum-Verlauf">
         <polygon points={area} fill="#CCFF00" opacity={0.4} />
-        <polyline points={line} fill="none" stroke="#000" strokeWidth={1.5} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        <polyline points={line} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       </svg>
-      <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+      <div className="flex justify-between text-[10px] text-muted-foreground/70 mt-1">
         <span>{fmtShort(cutoff)}</span>
         <span>{fmtShort(maxT)}</span>
       </div>
