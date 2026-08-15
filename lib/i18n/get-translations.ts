@@ -170,6 +170,10 @@ export const defaultTranslations: Record<string, string> = {
   // sichtbar sein. Dass an Wochenenden der letzte Handelstag gilt, liest man am
   // angezeigten Datum ab — dafür braucht es keinen Satz.
   'glossary.converter_source': 'Quelle: Referenzkurse der Europäischen Zentralbank, börsentäglich gegen 16:00 Uhr MEZ.',
+  'glossary.chart_title': 'Kurs je Euro',
+  'glossary.chart_range': 'Spanne',
+  'glossary.chart_years': 'Jahre',
+  'glossary.chart_months': 'Monate',
 
   // Common
   'common.loading': 'Laden...',

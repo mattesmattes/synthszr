@@ -17,8 +17,10 @@ import { TermProducts } from '@/components/glossary/term-products'
 import { TermNews } from '@/components/glossary/term-news'
 import { TermIndexNav } from '@/components/glossary/term-index-nav'
 import { CurrencyConverter } from '@/components/glossary/currency-converter'
+import { CurrencyChart } from '@/components/glossary/currency-chart'
 import { waehrungFuerSlug } from '@/lib/currency/currencies'
 import { fetchEcbRates } from '@/lib/currency/ecb-rates'
+import { fetchKursverlauf, ausduennen } from '@/lib/currency/history'
 import { getPublishedTermList } from '@/lib/glossary/terms'
 import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
 import type { LanguageCode } from '@/lib/types'
@@ -104,9 +106,16 @@ export default async function GlossaryTermPage({ params }: PageProps) {
   // Schlägt der Abruf fehl oder führt die EZB die Währung nicht, bleibt der
   // Umrechner einfach weg. Der Erklärtext ist der Hauptinhalt; er darf an
   // einer fremden Datenquelle nicht scheitern.
+  // Tageskurs und Verlauf parallel: sie hängen nicht voneinander ab, und in
+  // Reihe geladen addierten sich zwei fremde Latenzen auf den Seitenaufbau.
   const waehrung = waehrungFuerSlug(slug)
-  const kurse = waehrung ? await fetchEcbRates() : null
+  const [kurse, verlauf] = waehrung
+    ? await Promise.all([fetchEcbRates(), fetchKursverlauf(waehrung.code, 3)])
+    : [null, []]
   const kurs = waehrung && kurse ? kurse.rates[waehrung.code] : undefined
+  // Drei Jahre Tageskurse sind rund 780 Werte — mehr, als die Kurve auflösen
+  // kann, und jeder Punkt kostet Zeichen im ausgelieferten HTML.
+  const verlaufKurz = ausduennen(verlauf, 160)
   // A-Z-Navigation über alle Begriffe: von jeder Begriffsseite aus soll das
   // ganze Lexikon erreichbar sein, ohne den Umweg über den Index.
   // includeSummary=false: das Register zeigt nur Namen. Bei 500 Begriffen sind
@@ -271,6 +280,23 @@ export default async function GlossaryTermPage({ params }: PageProps) {
                 ueberschrift: t('glossary.converter_title'),
                 stand: t('glossary.converter_date'),
                 quelle: t('glossary.converter_source'),
+              }}
+            />
+          )}
+
+          {/* Verlauf direkt unter dem Rechner: erst „was ist es wert", dann
+              „wie hat es sich entwickelt". Fehlt die Reihe, entfällt nur die
+              Kurve. */}
+          {waehrung && verlaufKurz.length > 1 && (
+            <CurrencyChart
+              punkte={verlaufKurz}
+              code={waehrung.code}
+              lang={lang}
+              labels={{
+                ueberschrift: t('glossary.chart_title'),
+                spanne: t('glossary.chart_range'),
+                jahre: t('glossary.chart_years'),
+                monate: t('glossary.chart_months'),
               }}
             />
           )}
