@@ -258,6 +258,10 @@
   --neon-yellow: oklch(0.26 0.06 100);
   --neon-yellow-fg: oklch(0.92 0.16 100);
   --cyan-vivid: oklch(0.24 0.06 195);
+  /* Fehlte beim Umbau auf Variante C: die Flaeche wurde abgedunkelt, die Schrift
+     darauf nicht mitgedreht. Der Newsletter-Block stand dadurch schwarz auf
+     fast schwarz (gemessener Kontrast 1.3:1). */
+  --cyan-vivid-fg: oklch(0.9 0.15 195);
 }
 
 /* Die Utilities setzen ihre Farben im P3-Block direkt, nicht ueber Variablen —
@@ -270,7 +274,9 @@
 .dark .bg-neon-green  { background-color: var(--neon-green);  color: var(--neon-green-fg); }
 .dark .bg-neon-orange { background-color: var(--neon-orange); color: var(--neon-orange-fg); }
 .dark .bg-neon-yellow { background-color: var(--neon-yellow); color: var(--neon-yellow-fg); }
-.dark .bg-cyan-vivid  { background-color: var(--cyan-vivid); }
+/* color gehoert hier dazu wie bei den .bg-neon-*-Zeilen darueber — eine Flaeche,
+ * die im Dunkelmodus kippt, muss ihre Schrift mitnehmen. */
+.dark .bg-cyan-vivid  { background-color: var(--cyan-vivid); color: var(--cyan-vivid-fg); }
 .dark .text-neon-cyan   { color: var(--neon-cyan-fg); }
 .dark .text-neon-green  { color: var(--neon-green-fg); }
 .dark .text-neon-orange { color: var(--neon-orange-fg); }

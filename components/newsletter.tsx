@@ -62,8 +62,12 @@ export function Newsletter({ locale = 'de' }: NewsletterProps) {
     <>
       <section className="mt-8">
       <div className="mx-auto max-w-2xl bg-cyan-vivid p-8 rounded-lg">
-        <h2 className="font-mono text-2xl font-bold md:text-lg text-black">Subscribe free. Unsubscribe the second it sucks.</h2>
-        <p className="mt-4 text-black/70">
+        {/* Keine eigene Schriftfarbe: .bg-cyan-vivid bestimmt sie und dreht im
+            Dunkelmodus mit (Variante C). Ein festes text-black stand hier
+            schwarz auf fast schwarzem Grund. Die Abstufung des Absatzes laeuft
+            deshalb ueber opacity statt ueber einen zweiten Farbwert. */}
+        <h2 className="font-mono text-2xl font-bold md:text-lg">Subscribe free. Unsubscribe the second it sucks.</h2>
+        <p className="mt-4 opacity-75">
           High-signal news across AI, business, UX, and tech. Every morning.
         </p>
 

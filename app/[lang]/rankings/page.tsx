@@ -142,10 +142,14 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
     <Link
       key={href}
       href={href}
+      // Diese Pillen sitzen auf der festen Mintflaeche des Panels (bg-[#75fbbd]),
+      // die mit dem Theme NICHT mitdreht. Schrift und Hover muessen deshalb
+      // ebenfalls fest sein — mit text-foreground standen sie im Dunkelmodus
+      // fast weiss auf hellem Mint und waren praktisch unlesbar.
       className={`rounded-md px-2.5 py-1 text-sm whitespace-nowrap transition-colors ${
         active
           ? 'bg-[#00785a] text-white font-semibold'
-          : 'text-foreground/80 hover:bg-secondary hover:text-foreground'
+          : 'text-black/75 hover:bg-black/10 hover:text-black'
       }`}
     >
       {label}
