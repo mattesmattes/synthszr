@@ -253,7 +253,11 @@
 
 /* Die Utilities setzen ihre Farben im P3-Block direkt, nicht ueber Variablen —
  * dort muessen die dunklen Werte deshalb noch einmal gesetzt werden. */
-.dark .bg-neon-cyan   { background-color: var(--neon-cyan);   color: var(--neon-cyan-fg); }
+/* Der Hero-Teaser nutzt bg-neon-cyan als FLAECHE hinter dem Dither-Bild — dort
+ * ist Variante C zu dunkel, das Bild verschwindet darin (Betreiber-Befund
+ * 2026-08-15). Flaechen bekommen deshalb einen eigenen, deutlich helleren Wert
+ * als die Text-Hervorhebung. */
+.dark .bg-neon-cyan   { background-color: oklch(0.62 0.13 195); color: oklch(0.14 0.02 220); }
 .dark .bg-neon-green  { background-color: var(--neon-green);  color: var(--neon-green-fg); }
 .dark .bg-neon-orange { background-color: var(--neon-orange); color: var(--neon-orange-fg); }
 .dark .bg-neon-yellow { background-color: var(--neon-yellow); color: var(--neon-yellow-fg); }
