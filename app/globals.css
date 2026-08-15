@@ -39,6 +39,13 @@
   --neon-orange: #FF4D00;                     /* sRGB fallback (boosted orange) */
   --neon-cyan: #00FFFF;                       /* sRGB fallback */
   --neon-green: #00FF00;                      /* sRGB fallback (pure green) */
+
+  /* Schriftfarbe AUF den Neonflaechen. Im Hellmodus schwarz; im Dunkelmodus
+     tauschen Flaeche und Schrift die Rollen (s. Block nach dem P3-Abschnitt). */
+  --neon-cyan-fg: #000;
+  --neon-green-fg: #000;
+  --neon-orange-fg: #000;
+  --neon-yellow-fg: #000;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -141,19 +148,23 @@
 }
 
 .bg-neon-yellow {
-  background-color: #FFFF00;
+  background-color: var(--neon-yellow);
+  color: var(--neon-yellow-fg);
 }
 
 .bg-neon-orange {
-  background-color: #FF4D00;
+  background-color: var(--neon-orange);
+  color: var(--neon-orange-fg);
 }
 
 .bg-neon-cyan {
-  background-color: #00FFFF;
+  background-color: var(--neon-cyan);
+  color: var(--neon-cyan-fg);
 }
 
 .bg-neon-green {
-  background-color: #00FF00;
+  background-color: var(--neon-green);
+  color: var(--neon-green-fg);
 }
 
 /* Subtle pulse animation for neon backgrounds */
@@ -171,15 +182,15 @@
 }
 
 .text-neon-green {
-  color: #00FF00;
+  color: var(--neon-green);
 }
 
 .text-neon-orange {
-  color: #FF4D00;
+  color: var(--neon-orange);
 }
 
 .text-neon-cyan {
-  color: #00FFFF;
+  color: var(--neon-cyan);
 }
 
 @supports (color: color(display-p3 0 0 0)) {
@@ -215,6 +226,41 @@
     color: color(display-p3 0 1 1);
   }
 }
+
+/* NEONFARBEN IM DUNKELMODUS — Variante C ("umgekehrt", Betreiber-Wahl
+ * 2026-08-15 aus fünf Vorschlägen).
+ *
+ * Fläche und Schrift tauschen die Rollen: gedämpfter Farbgrund, leuchtende
+ * Schrift darauf. Reines #00FFFF auf fast schwarzem Grund blendet beim Lesen —
+ * gerade dort, wo ganze Absätze markiert sind (Synthszr Take).
+ *
+ * DIESER BLOCK MUSS NACH dem @supports-Abschnitt stehen: `.dark` und `:root`
+ * haben dieselbe Spezifität, es entscheidet die Reihenfolge. Stünde er weiter
+ * oben, überschriebe der P3-Block ihn und der Dunkelmodus bliebe grell.
+ *
+ * Der HELLMODUS bleibt vollständig unangetastet, samt P3-Erweiterung. */
+.dark {
+  --neon-cyan: oklch(0.24 0.06 195);
+  --neon-cyan-fg: oklch(0.9 0.15 195);
+  --neon-green: oklch(0.24 0.07 145);
+  --neon-green-fg: oklch(0.9 0.18 145);
+  --neon-orange: oklch(0.26 0.08 40);
+  --neon-orange-fg: oklch(0.86 0.16 45);
+  --neon-yellow: oklch(0.26 0.06 100);
+  --neon-yellow-fg: oklch(0.92 0.16 100);
+  --cyan-vivid: oklch(0.24 0.06 195);
+}
+
+/* Die Utilities setzen ihre Farben im P3-Block direkt, nicht ueber Variablen —
+ * dort muessen die dunklen Werte deshalb noch einmal gesetzt werden. */
+.dark .bg-neon-cyan   { background-color: var(--neon-cyan);   color: var(--neon-cyan-fg); }
+.dark .bg-neon-green  { background-color: var(--neon-green);  color: var(--neon-green-fg); }
+.dark .bg-neon-orange { background-color: var(--neon-orange); color: var(--neon-orange-fg); }
+.dark .bg-neon-yellow { background-color: var(--neon-yellow); color: var(--neon-yellow-fg); }
+.dark .bg-cyan-vivid  { background-color: var(--cyan-vivid); }
+.dark .text-neon-cyan   { color: var(--neon-cyan-fg); }
+.dark .text-neon-green  { color: var(--neon-green-fg); }
+.dark .text-neon-orange { color: var(--neon-orange-fg); }
 
 /* Add Tiptap prose styles */
 .ProseMirror {
@@ -384,8 +430,8 @@
 
 /* Synthszr Take / Mattes Synthese styling - neon cyan background */
 .mattes-synthese {
-  background-color: #00FFFF;
-  color: #000;
+  background-color: var(--neon-cyan);
+  color: var(--neon-cyan-fg);
   padding: 0.25em 0.5em;
   border-radius: 0.25em;
   font-weight: 700;
@@ -463,8 +509,8 @@
  * Zeilenumbruch hinweg soll weiterhin jede Zeile ihren eigenen Kasten bekommen.
  */
 .synthszr-last-sentence {
-  background-color: #00FFFF;
-  color: #000;
+  background-color: var(--neon-cyan);
+  color: var(--neon-cyan-fg);
   padding: 0.1em 0;
   border-radius: 0.15em;
   box-decoration-break: clone;
