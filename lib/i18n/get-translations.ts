@@ -172,6 +172,9 @@ export const defaultTranslations: Record<string, string> = {
   'glossary.converter_source': 'Quelle: Referenzkurse der Europäischen Zentralbank, börsentäglich gegen 16:00 Uhr MEZ.',
   'glossary.chart_title': 'Kurs je Euro',
   'glossary.chart_range': 'Spanne',
+  // Singular getrennt: „1 Jahre" wäre falsch, und im Englischen gilt dasselbe
+  // („1 years"). Eine Pluralregel im Code wäre für zwei Wörter zu viel Apparat.
+  'glossary.chart_year': 'Jahr',
   'glossary.chart_years': 'Jahre',
   'glossary.chart_months': 'Monate',
 

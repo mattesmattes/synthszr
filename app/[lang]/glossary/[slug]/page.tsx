@@ -295,6 +295,7 @@ export default async function GlossaryTermPage({ params }: PageProps) {
               labels={{
                 ueberschrift: t('glossary.chart_title'),
                 spanne: t('glossary.chart_range'),
+                jahr: t('glossary.chart_year'),
                 jahre: t('glossary.chart_years'),
                 monate: t('glossary.chart_months'),
               }}

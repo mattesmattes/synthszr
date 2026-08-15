@@ -7,7 +7,7 @@ interface Props {
   punkte: KursPunkt[]
   code: string
   lang: string
-  labels: { ueberschrift: string; spanne: string; jahre: string; monate: string }
+  labels: { ueberschrift: string; spanne: string; jahr: string; jahre: string; monate: string }
 }
 
 /** Auswahl in Monaten — 3 Jahre, 1 Jahr, 3 Monate. */
@@ -65,7 +65,11 @@ export function CurrencyChart({ punkte, code, lang, labels }: Props) {
         <div className="flex gap-1">
           {BEREICHE.map((m) => (
             <button key={m} onClick={() => setMonate(m)} className={pille(monate === m)}>
-              {m >= 12 ? `${m / 12} ${labels.jahre}` : `${m} ${labels.monate}`}
+              {m === 12
+                ? `1 ${labels.jahr}`
+                : m > 12
+                  ? `${m / 12} ${labels.jahre}`
+                  : `${m} ${labels.monate}`}
             </button>
           ))}
         </div>
