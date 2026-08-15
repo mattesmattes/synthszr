@@ -100,6 +100,13 @@ export function BloomLanguageSwitcherClient({
 
   return (
     <div ref={containerRef} className="flex justify-center items-center gap-4 mb-6">
+      {/* Hell-Schalter LINKS neben „Language" — das Gegenstück zum Dunkel-Schalter
+          ganz rechts. Er fehlte hier, während er im Zweig oben (nur eine Sprache
+          aktiv) stand; produktiv gerendert wird aber dieser Zweig, also war auf
+          der Seite nie ein Weg zurück ins Helle. Beide Zweige sind schon zweimal
+          auseinandergelaufen — wer hier etwas ändert, ändert es auch oben. */}
+      <ThemeToggle mode="light" />
+
       {/* Switch Language dropdown */}
       <div className="relative" ref={menuRef}>
         <button

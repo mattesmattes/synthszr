@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Moon, Sun } from 'lucide-react'
 import { THEME_STORAGE_KEY, type Theme } from '@/lib/theme/script'
 
 /**
@@ -10,6 +11,12 @@ import { THEME_STORAGE_KEY, type Theme } from '@/lib/theme/script'
  * der Dunkel-Schalter RECHTS neben „Search". Zwei getrennte Schalter an zwei
  * Stellen, kein Umschalter in der Mitte — deshalb nimmt die Komponente die
  * gewünschte Seite als Eigenschaft entgegen und rendert genau einen Knopf.
+ *
+ * ZEICHEN STATT WORT (Betreiber-Vorgabe 2026-08-15): Sonne und Mond, nicht
+ * „Light"/„Dark". Die Kopfleiste trägt mit „Language" und „Search" schon zwei
+ * Wörter; ein drittes und viertes hätten die Wortmarke in der Mitte erdrückt.
+ * Die Wörter leben als `aria-label` und `title` weiter — für Screenreader und
+ * für den Mauszeiger bleibt der Schalter benannt.
  *
  * „System" hat KEINEN sichtbaren Schalter, ist aber die Voreinstellung: Wer
  * nichts wählt, bekommt, was sein Betriebssystem sagt. Sichtbar wird das nur
@@ -54,6 +61,7 @@ export function ThemeToggle({ mode }: { mode: 'light' | 'dark' }) {
   }
 
   const label = mode === 'light' ? 'Light' : 'Dark'
+  const Zeichen = mode === 'light' ? Sun : Moon
 
   return (
     <button
@@ -65,11 +73,17 @@ export function ThemeToggle({ mode }: { mode: 'light' | 'dark' }) {
       // Vor dem Hydrieren ist `aktiv` null — dann sieht der Knopf neutral aus.
       // Ein geratener Anfangszustand würde bei „system" die Hälfte der Besucher
       // kurz falsch anzeigen.
-      className={`text-xs font-mono uppercase tracking-wider transition-opacity cursor-pointer ${
-        aktiv === null ? 'opacity-60' : aktiv ? 'opacity-100 underline underline-offset-4' : 'opacity-50 hover:opacity-80'
+      //
+      // Der aktive Zustand lief früher über eine Unterstreichung — an einem
+      // Zeichen ohne Grundlinie sieht die aus wie ein verrutschter Strich.
+      // Stattdessen entscheidet die Deckkraft: der gewählte Modus steht voll da,
+      // der andere tritt zurück. Das gefüllte Zeichen verstärkt den Unterschied
+      // für alle, die feine Deckkraftstufen schlecht auseinanderhalten.
+      className={`flex h-5 w-5 shrink-0 items-center justify-center transition-opacity cursor-pointer ${
+        aktiv === null ? 'opacity-60' : aktiv ? 'opacity-100' : 'opacity-40 hover:opacity-70'
       }`}
     >
-      {label}
+      <Zeichen className={`h-4 w-4 ${aktiv ? 'fill-current' : ''}`} strokeWidth={1.75} aria-hidden />
     </button>
   )
 }
