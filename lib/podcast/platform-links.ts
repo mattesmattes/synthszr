@@ -26,19 +26,21 @@
 
 export const PODCAST_APPLE = {
   name: 'Apple Podcasts',
-  // Offizieller „Listen on Apple Podcasts"-Badge (Apple Marketing Tools,
-  // badge-2). Reine Vektoren, 13 KB. Die ebenfalls angebotene „glass"-Fassung
-  // waere 667 KB gewesen — sie bettet das Icon als 2048px-PNG ein und haette
-  // das Aufloesungsproblem nur verlagert.
+  // KEIN `image`: Apple wird als INLINE-SVG gerendert
+  // (components/podcast/apple-podcasts-badge.tsx), weil Schrift und Apfel auf
+  // currentColor liegen und mit dem Theme kippen muessen — im Hellmodus
+  // schwarz, im Dunkelmodus weiss. Ein <img src="…svg"> koennte das nicht: es
+  // ist ein eigenes Dokument und erbt keine Textfarbe.
   //
-  // EINE Datei fuer beide Themes: der Badge bringt seinen Kontrast selbst mit
-  // (schwarzer Koerper, grauer Rahmen, weisse Schrift). Auf hellem Grund traegt
-  // der Koerper, auf dunklem der Rahmen. Genau dafuer ist der Rahmen da.
-  image: '/podcast-apple-badge.svg',
-  // Der Badge hat reichlich Innenabstand; auf gleiche Hoehe wie ein
-  // freistehendes Logo gesetzt wirkte seine Schrift zu klein. 40 zu 26 gleicht
-  // das optisch aus (visuell abgeglichen).
-  height: 40,
+  // Betreiber-Vorgabe 2026-08-15: freigestellt, ohne den schwarzen Knopfkoerper
+  // und ohne den grauen Rahmen des Originals — es steht jetzt so frei wie das
+  // Spotify-Logo daneben. Das lila Podcast-Zeichen behaelt seinen Verlauf und
+  // kippt NICHT mit.
+  //
+  // 26 zu 26 mit Spotify: freigestellt hat der Badge das Seitenverhaeltnis
+  // 4.47:1 (mit Knopf waren es 3.15:1), gleiche Hoehe stellt Apple-Zeichen und
+  // Spotify-Kreis optisch gleich gross (visuell abgeglichen).
+  height: 26,
   // Full white rounded-button PNG (logo baked onto white) for email: email
   // dark mode inverts CSS backgrounds but not image pixels, so a baked-in white
   // button stays white in Gmail iOS dark mode where a CSS white bg gets darkened.
@@ -54,6 +56,8 @@ export const PODCAST_SPOTIFY = {
   // Markenfarbe zu tauschen waere ein unnoetiger Bruch. Die weisse Fassung aus
   // demselben Kit liegt bereit, falls das spaeter anders gewuenscht ist.
   image: '/podcast-spotify-logo.svg',
+  // Anders als Apple bleibt Spotify ein <img>: das Logo ist einfarbig gruen und
+  // braucht keine Theme-Kopplung, also auch kein Inline-Markup im HTML.
   height: 26,
   buttonImage: '/podcast-spotify-button.png',
   url: 'https://open.spotify.com/show/0FJkPjKXvobgqI8U881yiF?si=wMJJ-CQxQdyuW18VXQZQOQ',

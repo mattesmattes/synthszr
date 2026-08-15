@@ -1,20 +1,22 @@
 import type { ReactNode } from 'react'
 import { PODCAST_APPLE as APPLE, PODCAST_SPOTIFY as SPOTIFY } from '@/lib/podcast/platform-links'
+import { ApplePodcastsBadge } from '@/components/podcast/apple-podcasts-badge'
 
 /**
- * Ein Bild pro Dienst, kein Theme-Umschalten: beide offiziellen Assets bringen
- * ihren Kontrast selbst mit (s. lib/podcast/platform-links.ts). Eine frueher
- * hier stehende Zweitfassung fuer den Dunkelmodus ist damit hinfaellig — sie
- * war ohnehin nur ein Notbehelf um zu kleine, auf Weiss einkomponierte PNGs.
+ * Die beiden Dienste werden UNTERSCHIEDLICH gerendert, und das ist Absicht:
  *
- * `height` kommt aus den Plattformdaten, weil die beiden Assets verschieden
- * gebaut sind: Apple liefert einen Knopf mit Innenabstand, Spotify ein
- * freistehendes Logo. Gleiche Pixelhoehe haette ungleich grosse Schrift ergeben.
+ *   Apple   inline als SVG-Komponente. Schrift und Apfel liegen auf
+ *           currentColor und kippen mit dem Theme; das lila Podcast-Zeichen
+ *           behaelt seinen Verlauf. Ein <img src="…svg"> koennte das nicht —
+ *           es ist ein eigenes Dokument und erbt keine Textfarbe.
+ *   Spotify als <img>. Einfarbig gruen, traegt auf hellem wie dunklem Grund,
+ *           braucht also keine Kopplung — und muss dann auch nicht als
+ *           Markup im HTML jeder Artikelseite stehen.
  *
- * Das Bild ist dekorativ (alt=""), den zugaenglichen Namen traegt das
- * aria-label am Link.
+ * Beide Grafiken sind dekorativ (aria-hidden bzw. alt=""), den zugaenglichen
+ * Namen traegt das aria-label am Link.
  */
-function BadgeLink({ name, image, height, url }: { name: string; image: string; height: number; url: string }) {
+function BadgeLink({ name, url, children }: { name: string; url: string; children: ReactNode }) {
   return (
     <a
       href={url}
@@ -23,17 +25,30 @@ function BadgeLink({ name, image, height, url }: { name: string; image: string; 
       className="hover:opacity-80 transition-opacity shrink-0"
       aria-label={name}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={image}
-        alt=""
-        aria-hidden
-        loading="lazy"
-        decoding="async"
-        className="w-auto"
-        style={{ height }}
-      />
+      {children}
     </a>
+  )
+}
+
+/** height als style statt als Tailwind-Klasse: der Wert kommt aus den
+ *  Plattformdaten und ist damit zur Bauzeit nicht bekannt — eine dynamisch
+ *  zusammengesetzte Klasse wuerde von Tailwind nicht erzeugt. */
+function AppleArt({ height }: { height: number }) {
+  return <ApplePodcastsBadge className="w-auto" style={{ height }} />
+}
+
+function SpotifyArt({ height }: { height: number }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={SPOTIFY.image}
+      alt=""
+      aria-hidden
+      loading="lazy"
+      decoding="async"
+      className="w-auto"
+      style={{ height }}
+    />
   )
 }
 
@@ -67,13 +82,17 @@ export function PodcastBadges({ children, appleEpisodeUrl }: { children?: ReactN
     <div className="px-4 py-3 bg-background">
       <div className="flex flex-wrap items-center justify-center gap-3 pt-2 md:flex-nowrap md:justify-between md:gap-4 lg:gap-6">
         {/* Apple links to the episode (if known); Spotify stays show-level. */}
-        <BadgeLink {...APPLE} url={appleEpisodeUrl || APPLE.url} />
+        <BadgeLink name={APPLE.name} url={appleEpisodeUrl || APPLE.url}>
+          <AppleArt height={APPLE.height} />
+        </BadgeLink>
         {children && (
           <div className="order-last w-full flex justify-center md:order-none md:w-auto md:flex-1 md:min-w-0">
             {children}
           </div>
         )}
-        <BadgeLink {...SPOTIFY} />
+        <BadgeLink name={SPOTIFY.name} url={SPOTIFY.url}>
+          <SpotifyArt height={SPOTIFY.height} />
+        </BadgeLink>
       </div>
     </div>
   )
@@ -86,22 +105,25 @@ export function PodcastBadges({ children, appleEpisodeUrl }: { children?: ReactN
 export function PodcastPromoBadges({ appleUrl }: { appleUrl?: string | null }) {
   // Apple links to the specific episode (resolved via iTunes Lookup); Spotify
   // stays show-level (no key-free Spotify episode lookup available).
-  const items = [{ ...APPLE, url: appleUrl || APPLE.url }, SPOTIFY]
+  // bg-background statt bg-white: die Kachel gehoert zur Oberflaeche und dreht
+  // mit. Frueher noetig war das Weiss, weil die PNG-Wortmarken schwarz waren —
+  // die Vektorfassungen tragen auf beiden Gruenden.
+  const kachel =
+    'flex flex-1 min-w-0 max-w-44 items-center justify-center rounded-xl ' +
+    'bg-background px-3 py-2 shadow-sm hover:shadow-md transition-shadow'
+  // Dasselbe Groessenverhaeltnis wie in der grossen Leiste, nur kleiner.
+  const h = (basis: number) => Math.round(basis * 0.8)
+
   return (
     <div className="mt-3 flex items-stretch justify-center gap-2 sm:gap-3">
-      {items.map((b) => (
-        // bg-background statt bg-white: die Kachel gehoert zur Oberflaeche und
-        // dreht mit. Frueher noetig war das Weiss, weil die PNG-Wortmarken
-        // schwarz waren — die Vektorfassungen bringen ihren Kontrast selbst mit.
-        <a key={b.name} href={b.url} target="_blank" rel="noopener noreferrer"
-           className="flex flex-1 min-w-0 max-w-44 items-center justify-center rounded-xl bg-background px-3 py-2 shadow-sm hover:shadow-md transition-shadow">
-          {/* Dasselbe Groessenverhaeltnis wie in der grossen Leiste (40 zu 26),
-              nur kleiner — ein fester max-h fuer beide haette die Apple-Schrift
-              gegenueber Spotify schrumpfen lassen. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={b.image} alt={b.name} className="w-auto max-w-full object-contain" style={{ height: Math.round(b.height * 0.7) }} />
-        </a>
-      ))}
+      <a href={appleUrl || APPLE.url} target="_blank" rel="noopener noreferrer"
+         className={kachel} aria-label={APPLE.name}>
+        <AppleArt height={h(APPLE.height)} />
+      </a>
+      <a href={SPOTIFY.url} target="_blank" rel="noopener noreferrer"
+         className={kachel} aria-label={SPOTIFY.name}>
+        <SpotifyArt height={h(SPOTIFY.height)} />
+      </a>
     </div>
   )
 }
