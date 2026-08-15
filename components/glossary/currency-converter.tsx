@@ -91,7 +91,9 @@ export function CurrencyConverter({ waehrung, kurs, stand, lang, labels }: Props
     'tabular-nums text-foreground focus:border-foreground focus:outline-none'
 
   return (
-    <section className="not-prose my-8 rounded-xl border border-border p-4 sm:p-5">
+    // mt-5 statt my-8: der Rechner steht direkt unter der Einleitung und soll
+    // ohne Scrollen sichtbar sein — jeder Pixel darüber zählt.
+    <section className="not-prose mt-5 mb-8 rounded-xl border border-border p-4 sm:p-5">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
         {labels.ueberschrift}
       </h2>

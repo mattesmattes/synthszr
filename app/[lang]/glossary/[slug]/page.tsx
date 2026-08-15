@@ -252,21 +252,15 @@ export default async function GlossaryTermPage({ params }: PageProps) {
             <p className="mt-4 text-xl text-foreground/80 leading-snug">{term.summary}</p>
           </header>
 
-          {bodyHtml && (
-            <div
-              // Gleiche Klassen wie der Artikel-Renderer
-              // (components/post-content-view.tsx) — Lesetypografie, volle
-              // Spaltenbreite, keine Sidebar.
-              className="prose prose-neutral max-w-none font-serif text-base leading-relaxed tiptap-content"
-              dangerouslySetInnerHTML={{ __html: bodyHtml }}
-            />
-          )}
+          {/* DIREKT UNTER DER EINLEITUNG, noch vor dem Erklärtext
+              (Betreiber-Vorgabe 2026-08-15): Der Rechner ist der Grund, warum
+              jemand diese Seite aus einem Artikel heraus aufruft — er soll ohne
+              Scrollen dastehen, nicht am Ende einer Erklärung.
 
-          {/* NACH dem Erklärtext, nicht davor: der erste substanzielle
-              Textblock ist die Passage, die Sprachmodelle zitieren (Design-Spec
-              §I) — ein Formular davor würde sie verdrängen. Wer den Rechner
-              sucht, findet ihn trotzdem sofort, er ist das einzige interaktive
-              Element der Seite. */}
+              Die GEO-Regel aus Design-Spec §I bleibt dabei gewahrt: der erste
+              substanzielle Textblock ist die Zusammenfassung im <header>
+              darüber, und die steht weiterhin an erster Stelle. Verschoben ist
+              nur der Erklärtext, der ohnehin nachrangig zitiert wird. */}
           {waehrung && kurs && kurse && (
             <CurrencyConverter
               waehrung={waehrung}
@@ -278,6 +272,16 @@ export default async function GlossaryTermPage({ params }: PageProps) {
                 stand: t('glossary.converter_date'),
                 quelle: t('glossary.converter_source'),
               }}
+            />
+          )}
+
+          {bodyHtml && (
+            <div
+              // Gleiche Klassen wie der Artikel-Renderer
+              // (components/post-content-view.tsx) — Lesetypografie, volle
+              // Spaltenbreite, keine Sidebar.
+              className="prose prose-neutral max-w-none font-serif text-base leading-relaxed tiptap-content"
+              dangerouslySetInnerHTML={{ __html: bodyHtml }}
             />
           )}
         </article>

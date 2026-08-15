@@ -166,7 +166,10 @@ export const defaultTranslations: Record<string, string> = {
   // (s. lib/currency/currencies.ts).
   'glossary.converter_title': 'Währungsrechner',
   'glossary.converter_date': 'Stand',
-  'glossary.converter_source': 'Quelle: Referenzkurse der Europäischen Zentralbank. Die EZB stellt sie an Handelstagen gegen 16:00 Uhr MEZ fest; an Wochenenden und Feiertagen gilt der letzte Handelstag.',
+  // Kurz gehalten: der Rechner steht über dem Erklärtext und soll ohne Scrollen
+  // sichtbar sein. Dass an Wochenenden der letzte Handelstag gilt, liest man am
+  // angezeigten Datum ab — dafür braucht es keinen Satz.
+  'glossary.converter_source': 'Quelle: Referenzkurse der Europäischen Zentralbank, börsentäglich gegen 16:00 Uhr MEZ.',
 
   // Common
   'common.loading': 'Laden...',
