@@ -16,6 +16,9 @@ import { RelatedTerms } from '@/components/glossary/related-terms'
 import { TermProducts } from '@/components/glossary/term-products'
 import { TermNews } from '@/components/glossary/term-news'
 import { TermIndexNav } from '@/components/glossary/term-index-nav'
+import { CurrencyConverter } from '@/components/glossary/currency-converter'
+import { waehrungFuerSlug } from '@/lib/currency/currencies'
+import { fetchEcbRates } from '@/lib/currency/ecb-rates'
 import { getPublishedTermList } from '@/lib/glossary/terms'
 import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
 import type { LanguageCode } from '@/lib/types'
@@ -88,6 +91,22 @@ export default async function GlossaryTermPage({ params }: PageProps) {
   const t = (key: string) => translations[key] ?? key
 
   const bodyHtml = renderStaticArticleHtml(term.body as Record<string, unknown> | string, lang)
+
+  // Ist dieser Begriff eine Fremdwährung, bekommt er einen Umrechner. Die
+  // Zuordnung steht im Code, nicht in der Datenbank (Begründung in
+  // lib/currency/currencies.ts).
+  //
+  // Die Kurse werden HIER geladen, nicht im Bauteil: die Seite ist ohnehin
+  // ISR-gecacht, damit kommt der Kurs ohne einen zusätzlichen Client-Aufruf
+  // mit — und ohne eine eigene API-Route. Dass er dadurch bis zu 15 Minuten
+  // alt sein kann, ist bei einem Tagesreferenzkurs bedeutungslos.
+  //
+  // Schlägt der Abruf fehl oder führt die EZB die Währung nicht, bleibt der
+  // Umrechner einfach weg. Der Erklärtext ist der Hauptinhalt; er darf an
+  // einer fremden Datenquelle nicht scheitern.
+  const waehrung = waehrungFuerSlug(slug)
+  const kurse = waehrung ? await fetchEcbRates() : null
+  const kurs = waehrung && kurse ? kurse.rates[waehrung.code] : undefined
   // A-Z-Navigation über alle Begriffe: von jeder Begriffsseite aus soll das
   // ganze Lexikon erreichbar sein, ohne den Umweg über den Index.
   // includeSummary=false: das Register zeigt nur Namen. Bei 500 Begriffen sind
@@ -240,6 +259,25 @@ export default async function GlossaryTermPage({ params }: PageProps) {
               // Spaltenbreite, keine Sidebar.
               className="prose prose-neutral max-w-none font-serif text-base leading-relaxed tiptap-content"
               dangerouslySetInnerHTML={{ __html: bodyHtml }}
+            />
+          )}
+
+          {/* NACH dem Erklärtext, nicht davor: der erste substanzielle
+              Textblock ist die Passage, die Sprachmodelle zitieren (Design-Spec
+              §I) — ein Formular davor würde sie verdrängen. Wer den Rechner
+              sucht, findet ihn trotzdem sofort, er ist das einzige interaktive
+              Element der Seite. */}
+          {waehrung && kurs && kurse && (
+            <CurrencyConverter
+              waehrung={waehrung}
+              kurs={kurs}
+              stand={kurse.date}
+              lang={lang}
+              labels={{
+                ueberschrift: t('glossary.converter_title'),
+                stand: t('glossary.converter_date'),
+                quelle: t('glossary.converter_source'),
+              }}
             />
           )}
         </article>

@@ -162,6 +162,11 @@ export const defaultTranslations: Record<string, string> = {
   // Hover-Tooltips sind ein explizites Design-Spec-Nicht-Ziel, deshalb hier
   // kein Aufruf erzwungen — kein Bug, siehe Task-18-Report.
   'glossary.explained_here': 'Im Lexikon erklärt',
+  // Währungsrechner — erscheint nur bei Begriffen, die eine Fremdwährung sind
+  // (s. lib/currency/currencies.ts).
+  'glossary.converter_title': 'Währungsrechner',
+  'glossary.converter_date': 'Stand',
+  'glossary.converter_source': 'Quelle: Referenzkurse der Europäischen Zentralbank. Die EZB stellt sie an Handelstagen gegen 16:00 Uhr MEZ fest; an Wochenenden und Feiertagen gilt der letzte Handelstag.',
 
   // Common
   'common.loading': 'Laden...',
