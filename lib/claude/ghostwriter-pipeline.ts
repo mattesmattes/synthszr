@@ -15,6 +15,7 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import { capTake } from '@/lib/claude/take-cap'
+import { sanitizeLexTags } from '@/lib/glossary/lex-tags'
 import { enforceHeadingLength } from '@/lib/claude/heading-length'
 import { enforceTakeEnding, TAKE_MARKER_RE } from '@/lib/claude/take-ending'
 import { capSummarySentences, shortenBySentences, BUNDLE_TAG_LINE_RE } from '@/lib/claude/bundle-length'
@@ -335,6 +336,8 @@ OUTPUT-FORMAT — halte dich an diese Reihenfolge:
 - Fakten, Zahlen, Namen konkret ausführen (die bestehende Stärke, beibehalten), aber pro Satz EIN Gedanke: keine Aufzählung mehrerer loser Detailzahlen in einem Satz, die den Bericht zur Faktenliste macht.
 - KEINE Erzähler-Wertung: kein "Auffällig:", "bemerkenswert", "der eigentliche Wettbewerb", "X wird zur Ware". Solche Sätze sind Kommentar und gehören in den Take.
 - FACHBEGRIFF-TAGS: Markiere einen erklärungsbedürftigen Fachbegriff (Modellarchitektur, Trainings-/Inferenzverfahren oder sonstiger Fachjargon, über den ein Leser ohne Vorwissen stolpert — KEINE Firmennamen, KEINE Produktnamen, KEINE Allgemeinbegriffe, die jeder kennt) bei seiner ERSTEN Erwähnung in kanonischer Schreibweise mit {lex:Begriff}, z.B. „{lex:Mixture of Experts}" statt „Mixture of Experts". Maximal 5 {lex:}-Tags im GESAMTEN Artikel — du siehst die anderen Abschnitte nicht, deshalb pro Abschnitt SPARSAM: meistens keiner, höchstens einer. NIEMALS in der Überschrift und NIEMALS im Synthszr Take, nur in der Zusammenfassung.
+  WAS ZUERST GETAGGT WIRD (bei begrenztem Kontingent): unbekannte ABKÜRZUNGEN und VERFAHRENSNAMEN haben Vorrang — „SAO", „RLHF", „IndexShare", „slime". Genau daran scheitert ein Leser, und genau dafür ist das Lexikon da. NACHRANGIG: gängige Wirtschaftsbegriffe (Go-to-Market, Underwriting, Restricted Stock Units) — die versteht die Zielgruppe, sie verbrauchen nur das Kontingent.
+  Ein Verfahren, das im Text nur mit Namen genannt und nicht erklärt wird, MUSS getaggt werden, wenn du überhaupt taggst.
 SO NICHT (Bericht driftet in Kommentar):
 > "Die Modelle werden zur austauschbaren Ware, und die Woche liefert den Beleg gleich mit ..." (These statt Nachricht)
 > "Damit ist der Wettbewerb in der täglichen Toolchain angekommen ..." (Interpretation statt Fakt)
@@ -634,7 +637,10 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
 
   // Company-Tag/Quelle-Zeile an den letzten Absatz der Zusammenfassung anhängen
   // statt sie als eigenen Absatz stehen zu lassen.
-  trimmed = capTake(joinCompanyTagToSummary(trimmed))
+  // Lexikon-Tags bereinigen: kaputte raus, auf die Obergrenze begrenzt, und die
+  // fachlich stärksten behalten. Der Prompt allein hält die Grenze nicht — an
+  // einem echten Post wurden 24 statt 5 Tags gezählt.
+  trimmed = sanitizeLexTags(capTake(joinCompanyTagToSummary(trimmed)))
 
   // "Wer …"-Schlussfigur deterministisch durchsetzen: Das FATAL-Verbot im
   // Prompt allein ließ die Figur in 2 von 4 Test-Takes durch (2026-07-13).
@@ -958,7 +964,7 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   // arbeitete diese an einem Satz, der gleich wegfällt. Gerade hier nötig: Über
   // dem Take stehen bis zu 25 Sätze Zusammenfassung, und das Modell lässt ihn
   // danebenstehend mitwachsen, trotz ausdrücklicher Anweisung im Prompt.
-  withSources = capTake(withSources)
+  withSources = sanitizeLexTags(capTake(withSources))
 
   return ensureBundleMarker(withSources, bundleType)
 }
