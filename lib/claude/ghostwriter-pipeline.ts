@@ -16,7 +16,8 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import { capTake } from '@/lib/claude/take-cap'
 import { sanitizeLexTags } from '@/lib/glossary/lex-tags'
-import { enforceHeadingLength } from '@/lib/claude/heading-length'
+import { enforceHeadingLength, sanitizeHeading } from '@/lib/claude/heading-length'
+import { generateHeadlineVariants, embedHeadlineVariants } from '@/lib/claude/headline-variants'
 import { enforceTakeEnding, TAKE_MARKER_RE } from '@/lib/claude/take-ending'
 import { capSummarySentences, shortenBySentences, BUNDLE_TAG_LINE_RE } from '@/lib/claude/bundle-length'
 import { stripLoneSurrogates, escapeQuellmaterialTag } from '@/lib/claude/sanitize'
@@ -648,6 +649,58 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   trimmed = await enforceTakeEnding(trimmed, (take) => rewriteWerEnding(take, model))
 
   return trimmed
+}
+
+/**
+ * Erzeugt die drei Überschriften-Varianten zu einem fertigen Abschnitt und
+ * schreibt sie hinein: Variante 1 wird die Überschrift, die anderen beiden
+ * reisen als Marker auf derselben Zeile mit (gleiche Bauart wie
+ * `data-bundle-type`, s. embedHeadlineVariants).
+ *
+ * Nach der Erzeugung läuft die 90-Zeichen-Regel auf JEDE der drei — die
+ * Prompt-Grenze ist weich, und eine überlange Variante wäre im Editor nicht
+ * auswählbar, ohne das Layout zu sprengen. Gekürzt wird nur, was zu lang ist;
+ * schlägt das Kürzen fehl, bleibt die Variante wie sie ist.
+ *
+ * Als Faktengrundlage dient die Original-Schlagzeile der Quelle — bei Bündeln
+ * die des ersten Items, weil es dort keine einzelne gibt.
+ */
+async function addHeadlineVariants(
+  section: string,
+  unit: BundleWriteUnit,
+  model: AIModel,
+): Promise<string> {
+  const originalTitel = unit.kind === 'bundle'
+    ? (unit.items[0]?.title ?? unit.heading)
+    : (unit.item.title ?? unit.heading)
+
+  const varianten = await generateHeadlineVariants(
+    section,
+    originalTitel,
+    model,
+    (userPrompt, system, m) =>
+      // thinking:false ist hier WESENTLICH, nicht Sparsamkeit: Opus 5 denkt per
+      // Default, wenn das Feld fehlt (s. callModelNonStreaming). Mit Denken
+      // fraesse ein knappes Budget die Antwort auf und der Call gaebe leeren
+      // oder mitten im Wort abgeschnittenen Text zurueck — in einem A/B-Lauf
+      // ohne dieses Flag sah das nach einer 40-Prozent-Ausfallrate aus.
+      // 1000 statt 600 Tokens als Reserve; drei Ueberschriften brauchen ~120.
+      callModelNonStreaming(userPrompt, system, m, { thinking: false, maxTokens: 1000 }),
+  )
+  if (!varianten) return section
+
+  const gekuerzt = await Promise.all(
+    varianten.map(async (v) => {
+      if (v.length <= 90) return v
+      try {
+        const kurz = sanitizeHeading(await shortenHeadingViaModel(v, model))
+        return kurz && kurz.length < v.length ? kurz : v
+      } catch {
+        return v
+      }
+    }),
+  )
+  return embedHeadlineVariants(section, gekuerzt)
 }
 
 // Formt den Schluss eines Takes um, dessen letzter/vorletzter Satz mit der
@@ -1469,6 +1522,24 @@ export async function writeSectionsBatch(
       if (unit.kind === 'single' && bundlesActive) {
         section = shortenBySentences(section, 2)
       }
+
+      // ÜBERSCHRIFTEN-VARIANTEN (Betreiber-Entscheidung 2026-08-15).
+      // Ganz am Ende, auf dem FERTIGEN Abschnitt: Variante 2 greift die Pointe
+      // des Takes auf, Variante 3 den Widerspruch — beides kann man erst
+      // formulieren, wenn der Take steht. Deshalb nicht im writeSection-Prompt,
+      // dessen Ausgabeformat die Überschrift als Erstes verlangt.
+      //
+      // Alle drei werden frisch erzeugt, auch die journalistische; sie ersetzt
+      // die bisherige Überschrift. Der Rückfallweg ist wichtig: liefert der
+      // Call nichts Brauchbares (parseHeadlineVariants gibt dann null), bleibt
+      // die Überschrift aus writeSection unverändert stehen. Ein Abschnitt darf
+      // an diesem Zusatz nicht scheitern.
+      section = await withTimeout(
+        addHeadlineVariants(section, unit, model),
+        SECTION_PROOFREAD_TIMEOUT_MS,
+        section,
+      ).catch(() => section)
+
       return section
     }))
     out.push(...results.map(r => r + '\n\n'))

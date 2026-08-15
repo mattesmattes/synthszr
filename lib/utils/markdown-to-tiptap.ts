@@ -39,6 +39,69 @@ export function extractBundleMarkers(markdown: string): { cleaned: string; marke
   return { cleaned: cleanedLines.join('\n'), markers }
 }
 
+/** Marker der Überschriften-Varianten, gesetzt in lib/claude/headline-variants.ts.
+ *  NICHT ans Zeilenende verankert: der Bundle-Marker steht dahinter und braucht
+ *  seinerseits das `$` in BUNDLE_MARKER_RE. */
+const HEADLINE_MARKER_RE = /\s*<!--\s*hl-alts:([A-Za-z0-9+/=]+)\s*-->/
+
+export interface HeadlineMarker {
+  headingIndex: number
+  varianten: string[]
+}
+
+/**
+ * Löst `<!-- hl-alts:BASE64 -->` aus den Überschriftenzeilen — dieselbe Bauart
+ * wie extractBundleMarkers, und aus demselben Grund: ein HTML-Kommentar
+ * überlebt weder marked() noch das DOM-Parsen, der Marker muss vorher heraus
+ * und danach als Attribut nachgetragen werden.
+ *
+ * Die Ordinalzählung MUSS über alle Überschriften laufen, nicht nur über die
+ * markierten — sonst verschiebt sich die Zuordnung, sobald eine Überschrift
+ * ohne Varianten dazwischenliegt (z.B. nach einem fehlgeschlagenen Call).
+ */
+export function extractHeadlineMarkers(markdown: string): { cleaned: string; markers: HeadlineMarker[] } {
+  const markers: HeadlineMarker[] = []
+  let headingIndex = 0
+  const cleanedLines = markdown.split('\n').map((line) => {
+    if (!HEADING_LINE_RE.test(line)) return line
+    const idx = headingIndex
+    headingIndex++
+    const match = line.match(HEADLINE_MARKER_RE)
+    if (!match) return line
+    const ohne = line.replace(HEADLINE_MARKER_RE, '')
+    try {
+      const roh = JSON.parse(Buffer.from(match[1], 'base64').toString('utf8'))
+      if (Array.isArray(roh) && roh.every((x) => typeof x === 'string') && roh.length > 0) {
+        markers.push({ headingIndex: idx, varianten: roh as string[] })
+      }
+    } catch {
+      // Kaputter Marker: Zeile wird trotzdem gesäubert, damit der Kommentar
+      // nicht als sichtbarer Text im Artikel landet.
+    }
+    return ohne
+  })
+  return { cleaned: cleanedLines.join('\n'), markers }
+}
+
+/** Schreibt `headlineAlts` auf den N-ten Heading-Knoten. Spiegelbild zu
+ *  applyBundleMarkers. */
+export function applyHeadlineMarkers(json: Record<string, unknown>, markers: HeadlineMarker[]): void {
+  if (!markers.length) return
+  const content = (json as { content?: unknown }).content
+  if (!Array.isArray(content)) return
+  const byIndex = new Map(markers.map((m) => [m.headingIndex, m.varianten]))
+  let headingIndex = 0
+  for (const node of content) {
+    if (!node || typeof node !== 'object' || (node as { type?: unknown }).type !== 'heading') continue
+    const varianten = byIndex.get(headingIndex)
+    if (varianten) {
+      const n = node as { attrs?: Record<string, unknown> }
+      n.attrs = { ...(n.attrs || {}), headlineAlts: varianten }
+    }
+    headingIndex++
+  }
+}
+
 /**
  * Writes `bundleType` onto the Nth top-level heading node (N = marker.headingIndex),
  * mutating the TipTap JSON in place. No-op if there are no markers.
@@ -73,7 +136,11 @@ export function markdownToTiptap(markdown: string): Record<string, unknown> {
   // Extract data-bundle-type markers from heading lines before marked() runs —
   // marked would keep the HTML comment as literal text, and TipTap's DOM
   // parser silently drops HTML comment nodes, losing the signal either way.
-  const { cleaned, markers } = extractBundleMarkers(normalizedMarkdown)
+  const { cleaned: ohneBundle, markers } = extractBundleMarkers(normalizedMarkdown)
+  // Nach den Bundle-Markern: der hl-alts-Marker steht VOR ihnen auf der Zeile
+  // (s. embedHeadlineVariants), die Reihenfolge der beiden Extraktionen ist
+  // deshalb frei — diese hier zuerst zu machen wäre genauso richtig.
+  const { cleaned, markers: headlineMarkers } = extractHeadlineMarkers(ohneBundle)
 
   // Convert markdown to HTML
   const html = marked.parse(cleaned, { async: false }) as string
@@ -93,6 +160,7 @@ export function markdownToTiptap(markdown: string): Record<string, unknown> {
   ])
 
   applyBundleMarkers(json, markers)
+  applyHeadlineMarkers(json, headlineMarkers)
 
   return json
 }

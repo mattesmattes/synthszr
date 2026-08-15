@@ -34,9 +34,11 @@ export async function markdownToTiptapServer(markdown: string): Promise<Record<s
   const { HeadingWithQueueId } = await import('@/lib/tiptap/heading-with-queue-id')
   const { normalizeQuotes } = await import('@/lib/utils/typography')
   const { JSDOM } = await import('jsdom')
-  const { extractBundleMarkers, applyBundleMarkers } = await import('@/lib/utils/markdown-to-tiptap')
+  const { extractBundleMarkers, applyBundleMarkers, extractHeadlineMarkers, applyHeadlineMarkers } =
+    await import('@/lib/utils/markdown-to-tiptap')
 
-  const { cleaned, markers } = extractBundleMarkers(normalizeQuotes(markdown, 'de'))
+  const { cleaned: ohneBundle, markers } = extractBundleMarkers(normalizeQuotes(markdown, 'de'))
+  const { cleaned, markers: headlineMarkers } = extractHeadlineMarkers(ohneBundle)
   const html = marked.parse(cleaned, { async: false }) as string
   const schema = getSchema([
     StarterKit.configure({ heading: false }),
@@ -48,5 +50,6 @@ export async function markdownToTiptapServer(markdown: string): Promise<Record<s
     .parse(dom.window.document.body)
     .toJSON() as Record<string, unknown>
   applyBundleMarkers(json, markers)
+  applyHeadlineMarkers(json, headlineMarkers)
   return json
 }
