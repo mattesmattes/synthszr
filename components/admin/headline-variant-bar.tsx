@@ -34,12 +34,25 @@ interface AktiveUeberschrift {
  */
 export function HeadlineVariantBar({ editor, postId }: Props) {
   const [aktiv, setAktiv] = useState<AktiveUeberschrift | null>(null)
+  const [gesamt, setGesamt] = useState(0)
 
   // Bei jeder Cursorbewegung prüfen, ob wir in einer Überschrift mit
   // Vorschlägen stehen. `$from.node(d)` läuft die Knotentiefen hoch — der
   // Cursor sitzt im Textknoten, die Attribute hängen am heading darüber.
   const pruefen = useCallback(() => {
     if (!editor) return setAktiv(null)
+
+    // Wie viele Überschriften im Dokument überhaupt Vorschläge haben. Ohne
+    // diese Zahl ist das Feature unsichtbar: Steht der Cursor im Fließtext,
+    // zeigt die Leiste nichts, und man kann nicht wissen, dass es etwas zu
+    // sehen gäbe. (Dieselbe Falle wie bei den Bündel-Knöpfen daneben, die
+    // ebenfalls nur bei aktiver H2 erscheinen.)
+    let mitVorschlaegen = 0
+    editor.state.doc.forEach((node) => {
+      if (node.type.name === 'heading' && Array.isArray(node.attrs.headlineAlts)) mitVorschlaegen++
+    })
+    setGesamt(mitVorschlaegen)
+
     const { $from } = editor.state.selection
     for (let d = $from.depth; d > 0; d--) {
       const node = $from.node(d)
@@ -106,7 +119,18 @@ export function HeadlineVariantBar({ editor, postId }: Props) {
     [editor, aktiv, postId],
   )
 
-  if (!aktiv) return null
+  // Cursor steht nicht in einer Überschrift mit Vorschlägen — aber es gibt
+  // welche im Dokument. Dann ist ein Hinweis nötig, sonst bleibt das Feature
+  // unentdeckt.
+  if (!aktiv) {
+    if (gesamt === 0) return null
+    return (
+      <div className="border-b bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
+        {gesamt} {gesamt === 1 ? 'Überschrift hat' : 'Überschriften haben'} Vorschläge —
+        Cursor in eine Überschrift setzen, um sie zu sehen.
+      </div>
+    )
+  }
 
   // Welche Variante steht gerade? Über den Text, nicht über einen gespeicherten
   // Index: der Betreiber kann die Überschrift auch von Hand ändern, dann ist
