@@ -45,6 +45,20 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     defaultModel: 'claude-opus-4-8',
     allowedProviders: ['anthropic', 'openai', 'google'],
   },
+  headline_variants: {
+    label: 'Überschriften-Varianten',
+    description: 'Drei Überschriften je Abschnitt vorschlagen (journalistisch, Pointe, Insight)',
+    // Betreiber-Vorgabe 2026-08-16: Fable 5. Die Aufgabe ist sprachlich, nicht
+    // analytisch — hier zählt Formulierung, nicht Faktenarbeit.
+    //
+    // ⚠️ Fable 5 steht in NO_DISABLED_THINKING (lib/claude/model-capabilities.ts):
+    // `thinking: { type: 'disabled' }` lehnt es mit HTTP 400 ab, es DENKT also
+    // immer. Der Aufruf braucht deshalb ein deutlich größeres Token-Budget als
+    // bei einem abschaltbaren Modell — sonst verbraucht das Denken alles und die
+    // Antwort kommt leer oder mitten im Wort abgeschnitten zurück.
+    defaultModel: 'claude-fable-5',
+    allowedProviders: ['anthropic'],
+  },
   article_planning: {
     label: 'Artikel-Planung',
     description: 'Struktur, Reihenfolge und Überschriften planen',

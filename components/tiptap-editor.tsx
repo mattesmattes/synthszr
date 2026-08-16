@@ -214,6 +214,32 @@ export function TiptapEditor({ content, onChange, postId }: TiptapEditorProps) {
             >
               Nachlese
             </Button>
+            {/* Deep Dive: der dritte Bündel-Typ. Er steht seit der Migration
+                20260813120000 in BUNDLE_TYPE_ORDER und wird von der Pipeline
+                wie „Thema des Tages" nach vorn sortiert — nur ein Knopf, um ihn
+                von Hand zu setzen, fehlte hier. */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              title="Als 'Deep Dive' markieren (Bündel)"
+              onClick={() =>
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("heading", {
+                    bundleType: editor.getAttributes("heading").bundleType === "deep_dive" ? null : "deep_dive",
+                  })
+                  .run()
+              }
+              className={cn(
+                "h-7 px-2 text-[11px]",
+                editor.getAttributes("heading").bundleType === "deep_dive" &&
+                  "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300",
+              )}
+            >
+              Deep Dive
+            </Button>
           </>
         )}
         <div className="mx-1 w-px bg-border" />

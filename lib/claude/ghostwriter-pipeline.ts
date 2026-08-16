@@ -676,18 +676,26 @@ async function addHeadlineVariants(
     ? (unit.items[0]?.title ?? unit.heading)
     : (unit.item.title ?? unit.heading)
 
+  // EIGENES MODELL fuer die Varianten (Betreiber-Vorgabe 2026-08-16: Fable 5).
+  // Die Aufgabe ist sprachlich, nicht analytisch — der Abschnitt liegt fertig
+  // vor, gesucht ist die Formulierung.
+  const variantenModell = (await getModelForUseCase('headline_variants')) as AIModel
+
   const varianten = await generateHeadlineVariants(
     section,
     originalTitel,
-    model,
+    variantenModell,
     (userPrompt, system, m) =>
-      // thinking:false ist hier WESENTLICH, nicht Sparsamkeit: Opus 5 denkt per
-      // Default, wenn das Feld fehlt (s. callModelNonStreaming). Mit Denken
-      // fraesse ein knappes Budget die Antwort auf und der Call gaebe leeren
-      // oder mitten im Wort abgeschnittenen Text zurueck — in einem A/B-Lauf
-      // ohne dieses Flag sah das nach einer 40-Prozent-Ausfallrate aus.
-      // 1000 statt 600 Tokens als Reserve; drei Ueberschriften brauchen ~120.
-      callModelNonStreaming(userPrompt, system, m, { thinking: false, maxTokens: 1000 }),
+      // thinking:false ist eine BITTE, keine Zusicherung: callModelNonStreaming
+      // setzt `disabled` nur bei Modellen, die es akzeptieren. Fable 5 tut das
+      // NICHT (NO_DISABLED_THINKING) und denkt in jedem Fall.
+      //
+      // Deshalb 8000 statt 1000 Tokens. Drei Ueberschriften brauchen rund 120 —
+      // der Rest ist Reserve fuers Denken. Zu knapp bemessen kommt die Antwort
+      // leer oder mitten im Wort abgeschnitten zurueck; in einem A/B-Lauf sah
+      // genau das nach einer 40-Prozent-Ausfallrate und nach Prompt-Verstoessen
+      // aus, war aber nur ein zu kleines Budget.
+      callModelNonStreaming(userPrompt, system, m, { thinking: false, maxTokens: 8000 }),
   )
   if (!varianten) return section
 
