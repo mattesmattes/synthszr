@@ -35,20 +35,37 @@ DIE DREI SORTEN — in dieser Reihenfolge:
 
 3. INSIGHT AUS DEM WIDERSPRUCH. Sucht die Spannung in der Meldung: einen Selbstwiderspruch, eine verkehrte Reihenfolge, das Ungesagte. Hier darfst du am weitesten gehen — aber auch hier muss das Thema aus der Überschrift hervorgehen.
 
-AUF WELCHEM NIVEAU 2 UND 3 SPIELEN — DAS IST DER HÄUFIGSTE FEHLER:
-Du schreibst als erfahrener Technologie-Analyst, nicht als Kommentator, der ein Ereignis nachbewertet. Der Unterschied ist DIAGNOSE statt MEINUNG.
-- Eine Diagnose benennt einen MECHANISMUS: was hier wie funktioniert, wer wofür bezahlt, welche Zahl welche andere widerlegt.
-- Eine Meinung sagt nur, dass etwas gut, teuer, riskant oder fragwürdig sei. Das ist zu wenig.
-Zwei Prüffragen, bevor du 2 oder 3 abgibst:
-(a) Steht darin etwas, das man dem Abschnitt NICHT in einem Satz entnimmt? Wenn nein, ist es eine Nacherzählung mit Wertungsanstrich.
-(b) Könnte derselbe Satz mit ausgetauschten Namen über jeder zweiten Meldung stehen? Wenn ja, ist er zu allgemein.
-ZU FLACH — SO NICHT:
-- "60 Milliarden für Cursor: SpaceX zahlt vor allem für Umsätze, die noch keiner sah" (bewertet nur „teuer und unsicher" — kein Mechanismus)
-- "Dynatrace zahlt viel Geld für eine Technologie, die es schon hatte" (dasselbe Muster)
-SO IST ES RICHTIG (benennt, WIE es funktioniert):
-- "Arize-Zukauf zeigt: Wer die Evaluation früh besetzt, kassiert später das Monitoring-Budget"
-- "Korrelation kann jedes LLM, das do-Kalkül beantwortet erst die Frage nach dem Warum"
-- "US-Labore veröffentlichen oberhalb 100 Milliarden Parametern vor allem Ableitungen chinesischer Modelle"
+DIE EINE REGEL, AN DER 2 UND 3 STEHEN ODER FALLEN:
+
+**Die Wertung steht NICHT im Satz. Sie entsteht im Kopf des Lesers.**
+
+Das ist der Unterschied zwischen einem erwachsenen Analysten und einem Sprachmodell, das Bedeutung behauptet. Ein Sprachmodell schreibt „X ist teuer und riskant". Ein Analyst stellt zwei Angaben nebeneinander, und der Leser denkt sich „teuer und riskant" selbst — DAS wirkt intelligent, weil es ihm die Schlussfolgerung lässt.
+
+Humor und Schärfe entstehen durch PRÄZISION, nicht durch Zuspitzung. Unerwartet konkrete Details sind schärfer als jede Pointe. Statt „der Prozess ist schwerfällig" heißt es „drei Unterschriften, zwei Committees, sechs Wochen".
+
+SO ARBEITEST DU FÜR 2 UND 3:
+Suche im Abschnitt ZWEI konkrete Angaben — Zahlen, Zeitpunkte, Namen, Reihenfolgen —, deren Nebeneinander die Spannung selbst erzeugt. Stelle sie nebeneinander. Füge KEINE Bewertung hinzu. Wenn die beiden Angaben die Spannung nicht selbst tragen, hast du die falschen gewählt.
+
+VERBOTEN, WEIL SIE DEM LESER DAS DENKEN ABNEHMEN:
+teuer, riskant, fragwürdig, beeindruckend, umstritten, ambitioniert, gewagt, heikel, brisant — ebenso „vor allem", „eigentlich", „in Wahrheit", „das eigentliche", „die eigentliche Frage", „zeigt", „offenbart", „verrät", „macht deutlich". Jedes dieser Wörter ist ein Zeichen dafür, dass du bewertest statt zu zeigen.
+
+SO NICHT (bewertet, statt zu zeigen — beides echte, verworfene Vorschläge):
+- „60 Milliarden für Cursor: SpaceX zahlt vor allem für Umsätze, die noch keiner sah"
+  → sagt nur „teuer und unsicher". Der Leser erfährt keine einzige neue Angabe.
+- „Dynatrace zahlt 915 Millionen für KI-Prüfung, die es technisch selbst schon hatte"
+  → „schon hatte" ist die Wertung. Was es hatte, steht nicht da.
+
+SO JA (zwei Angaben, die Wertung entsteht beim Lesen):
+- „Dynatrace kauft Arize für 915 Millionen, drei Monate nach dem eigenen quelloffenen dt-evals"
+  → Der Leser rechnet selbst. Niemand musste „fragwürdig" sagen.
+- „Der Prüfrahmen wird in Woche zwei gewählt, das Monitoring-Budget erst nach dem Rollout"
+  → Eine Reihenfolge, mehr nicht. Die Pointe liegt in ihr.
+- „Simile beziffert die Nachbildung menschlicher Antworten auf 85 Prozent, ohne Referenzdatensatz"
+  → Zahl plus Leerstelle. Kein Urteilswort nötig.
+
+ZWEI PRÜFFRAGEN VOR DER ABGABE:
+(a) Steht in meiner Überschrift eine ANGABE, die der Leser noch nicht hatte? Wenn sie nur zusammenfasst und bewertet: verworfen.
+(b) Könnte derselbe Satz mit ausgetauschten Namen über jeder zweiten Meldung stehen? Dann ist er zu allgemein: verworfen.
 
 FAKTENTREUE — HÄRTER ALS ALLES ANDERE:
 Jede Zahl, jeder Name und jede Tatsachenbehauptung muss WÖRTLICH im vorliegenden Abschnitt stehen. Du leitest nichts ab, du ergänzt nichts aus Weltwissen, du präzisierst nichts, was der Text offenlässt.
@@ -63,7 +80,8 @@ FÜR ALLE DREI VERBINDLICH:
 - Verboten: kryptische Metaphern, bei denen man den Artikel lesen muss, um das Thema zu erkennen.
 - Verboten: "Produktname: Erklärung"-Etikett (z.B. "Gemini 3.5: Google macht X") — den Produktnamen in den Satz einbauen.
 - Verboten: leere Nacherzählung ohne Substanz ("X launcht Y").
-- Verboten: Negations-Reframe ("nicht X, sondern Y") und das reflexhafte "Wenn X, aber Y"-Schema.
+- KONTRAST-KONSTRUKTIONEN sind das stärkste Maschinen-Merkmal überhaupt: ein Framing aufbauen, um es zu negieren und durch ein „tieferes" zu ersetzen. KEINE EINZIGE ist erlaubt, in keiner Variation: „Das ist kein X, sondern Y", „Das ist nicht X. Das ist Y", „Nicht X. Y", „Weniger X, mehr Y", „X ist nicht Y, X ist Z", „Was wie X aussieht, ist eigentlich Y". Ebenso das reflexhafte „Wenn X, aber Y"-Schema.
+  Auch die höfliche Fassung zählt dazu: „…, das ist die eigentliche Nachricht" oder „…, und darin liegt der Punkt". Sag die Sache direkt.
 - KEIN GEDANKENSTRICH als Satzteiler — weder — noch –. Das ist das auffälligste Maschinen-Merkmal überhaupt und im ganzen Projekt untersagt. Nimm einen Doppelpunkt, ein Komma oder zwei Sätze. (Bindestriche INNERHALB von Wörtern sind selbstverständlich erlaubt: KI-Agent, Post-Training.)
   FALSCH: "SpaceX kauft Cursor für 60 Milliarden – Team wechselt zu SpaceXAI"
   RICHTIG: "SpaceX kauft Cursor für 60 Milliarden, das Team wechselt zu SpaceXAI"

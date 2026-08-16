@@ -125,7 +125,7 @@ export function HeadlineVariantBar({ editor, postId }: Props) {
   if (!aktiv) {
     if (gesamt === 0) return null
     return (
-      <div className="border-b bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
+      <div className="sticky top-0 z-20 border-b bg-muted/95 px-3 py-1.5 text-[11px] text-muted-foreground backdrop-blur">
         {gesamt} {gesamt === 1 ? 'Überschrift hat' : 'Überschriften haben'} Vorschläge —
         Cursor in eine Überschrift setzen, um sie zu sehen.
       </div>
@@ -140,7 +140,11 @@ export function HeadlineVariantBar({ editor, postId }: Props) {
   const sorte = ['journalistisch', 'Pointe aus dem Take', 'Insight im Widerspruch']
 
   return (
-    <div className="border-b bg-muted/30 px-3 py-2">
+    // sticky: In einem langen Artikel steht die zu bearbeitende Überschrift
+    // weit unten, die Leiste wäre oben aus dem Bild gescrollt und damit
+    // nutzlos. bg deckend (nicht /30) und backdrop-blur, weil der Artikeltext
+    // sonst durch die schwebende Leiste hindurchscrollt.
+    <div className="sticky top-0 z-20 border-b bg-muted/95 px-3 py-2 backdrop-blur">
       <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         Überschrift wählen
         {aktiverIndex === -1 && (
