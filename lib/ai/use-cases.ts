@@ -11,6 +11,7 @@
 
 export type UseCase =
   | 'ghostwriter'
+  | 'headline_variants'
   | 'article_planning'
   | 'proofreading'
   | 'synthesis_scoring'
