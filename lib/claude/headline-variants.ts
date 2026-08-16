@@ -122,7 +122,10 @@ export async function generateHeadlineVariants(
  * machen und TipTaps DOM-Parser verwürfe den Kommentarknoten stillschweigend.
  */
 export function embedHeadlineVariants(abschnitt: string, varianten: string[]): string {
-  if (varianten.length !== HEADLINE_VARIANT_COUNT) return abschnitt
+  // Bewusst KEINE feste Länge: solange der Schalter aus ist, steht die
+  // bestehende Überschrift als zusätzlicher erster Eintrag davor (dann vier).
+  // Index 0 ist immer das, was gerade in der Überschrift steht.
+  if (varianten.length < 2) return abschnitt
   const nutzlast = Buffer.from(JSON.stringify(varianten), 'utf8').toString('base64')
 
   return abschnitt.replace(/^(\s*#{1,6}\s+)([^\n]*)/, (_ganz, praefix: string, rest: string) => {
@@ -145,6 +148,35 @@ export function embedHeadlineVariants(abschnitt: string, varianten: string[]): s
   })
 }
 
+/**
+ * Ist die Ersetzung der Überschrift durch Variante 1 scharf?
+ *
+ * SCHALTER, WEIL DIE ERZEUGUNG VOR DER AUSWAHL FERTIG WURDE: Die Varianten
+ * entstehen bereits, das Auswahl-Popover im Editor noch nicht. Ohne Schalter
+ * würde der 05:30-Cron ab sofort andere Überschriften veröffentlichen, ohne
+ * dass jemand eingreifen kann.
+ *
+ * WICHTIG: Der Schalter steuert NUR die Ersetzung. Erzeugt und mitgeführt
+ * werden die Varianten in jedem Fall — sonst fehlten die Daten für die
+ * Auswertung genau in der Anlaufzeit, in der sie am meisten aussagen.
+ *
+ * Aus `settings` (Key-Value, wie llm_model_config), damit das Umlegen keine
+ * Auslieferung braucht:
+ *   key   = 'headline_variants_config'
+ *   value = { "replaceHeading": true }
+ * Fehlt der Eintrag, gilt AUS — der sichere Zustand.
+ */
+export async function isHeadlineReplacementEnabled(
+  loadSetting: (key: string) => Promise<unknown>,
+): Promise<boolean> {
+  try {
+    const wert = await loadSetting('headline_variants_config')
+    return (wert as { replaceHeading?: unknown } | null)?.replaceHeading === true
+  } catch {
+    return false
+  }
+}
+
 /** Liest die Varianten aus einer Überschriftenzeile und gibt die Zeile ohne
  *  Marker zurück. Für den Markdown→TipTap-Konverter. */
 export function extractHeadlineVariants(zeile: string): { cleaned: string; varianten: string[] | null } {
@@ -153,7 +185,10 @@ export function extractHeadlineVariants(zeile: string): { cleaned: string; varia
   const cleaned = zeile.replace(MARKER_RE, '')
   try {
     const roh = JSON.parse(Buffer.from(treffer[1], 'base64').toString('utf8'))
-    if (Array.isArray(roh) && roh.every((x) => typeof x === 'string') && roh.length === HEADLINE_VARIANT_COUNT) {
+    // Länge NICHT auf HEADLINE_VARIANT_COUNT festnageln: solange der
+    // Ersetzungs-Schalter aus ist, steht die bestehende Überschrift als
+    // zusätzlicher erster Eintrag davor, dann sind es vier.
+    if (Array.isArray(roh) && roh.every((x) => typeof x === 'string') && roh.length >= 2) {
       return { cleaned, varianten: roh as string[] }
     }
   } catch { /* kaputter Marker: Zeile trotzdem säubern */ }

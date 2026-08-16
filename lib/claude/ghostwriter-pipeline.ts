@@ -17,7 +17,8 @@ import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import { capTake } from '@/lib/claude/take-cap'
 import { sanitizeLexTags } from '@/lib/glossary/lex-tags'
 import { enforceHeadingLength, sanitizeHeading } from '@/lib/claude/heading-length'
-import { generateHeadlineVariants, embedHeadlineVariants } from '@/lib/claude/headline-variants'
+import { generateHeadlineVariants, embedHeadlineVariants, isHeadlineReplacementEnabled } from '@/lib/claude/headline-variants'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { enforceTakeEnding, TAKE_MARKER_RE } from '@/lib/claude/take-ending'
 import { capSummarySentences, shortenBySentences, BUNDLE_TAG_LINE_RE } from '@/lib/claude/bundle-length'
 import { stripLoneSurrogates, escapeQuellmaterialTag } from '@/lib/claude/sanitize'
@@ -669,6 +670,7 @@ async function addHeadlineVariants(
   section: string,
   unit: BundleWriteUnit,
   model: AIModel,
+  ersetzeUeberschrift: boolean,
 ): Promise<string> {
   const originalTitel = unit.kind === 'bundle'
     ? (unit.items[0]?.title ?? unit.heading)
@@ -700,7 +702,15 @@ async function addHeadlineVariants(
       }
     }),
   )
-  return embedHeadlineVariants(section, gekuerzt)
+  // Ist der Schalter aus, bleibt die Überschrift aus writeSection stehen und
+  // die Vorschläge reihen sich dahinter ein. Index 0 des Attributs ist damit
+  // IMMER das, was gerade in der Überschrift steht — das Popover kann sich
+  // darauf verlassen, egal wie der Schalter steht.
+  if (ersetzeUeberschrift) return embedHeadlineVariants(section, gekuerzt)
+
+  const bestehende = section.match(/^\s*#{1,6}\s+([^\n<]*)/)?.[1]?.trim()
+  if (!bestehende) return section
+  return embedHeadlineVariants(section, [bestehende, ...gekuerzt])
 }
 
 // Formt den Schluss eines Takes um, dessen letzter/vorletzter Satz mit der
@@ -1490,6 +1500,16 @@ export async function writeSectionsBatch(
   // → Fallback-Plan ohne normalizeArticlePlan) fehlt. computeBundleGroups hält beide
   // Pfade konsistent → normale Sektionen werden auch bei aktivem Bündel gekürzt.
   const bundlesActive = hasBundles(computeBundleGroups(orderedItems))
+
+  // Schalter EINMAL je Lauf lesen, nicht je Abschnitt: bei 40 Items wären das
+  // 40 Abfragen für einen Wert, der sich während eines Laufs nicht ändert.
+  const ersetzeUeberschrift = await isHeadlineReplacementEnabled(async (key) => {
+    const { data } = await createAdminClient()
+      .from('settings').select('value').eq('key', key).maybeSingle()
+    return data?.value ?? null
+  })
+  console.log(`[Pipeline] Überschriften-Ersetzung: ${ersetzeUeberschrift ? 'AN' : 'aus (Varianten werden trotzdem erzeugt)'}`)
+
   const out: string[] = []
   let i = cursor
   const concurrency = 6
@@ -1535,7 +1555,7 @@ export async function writeSectionsBatch(
       // die Überschrift aus writeSection unverändert stehen. Ein Abschnitt darf
       // an diesem Zusatz nicht scheitern.
       section = await withTimeout(
-        addHeadlineVariants(section, unit, model),
+        addHeadlineVariants(section, unit, model, ersetzeUeberschrift),
         SECTION_PROOFREAD_TIMEOUT_MS,
         section,
       ).catch(() => section)
