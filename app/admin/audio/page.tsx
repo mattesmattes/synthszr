@@ -845,7 +845,12 @@ function AudioPage() {
 
   async function fetchRecentPosts() {
     try {
-      const res = await fetch('/api/admin/posts?limit=20&published=false')
+      // Nur VERÖFFENTLICHTE Posts (Betreiber-Vorgabe 2026-08-16). `published=false`
+      // schaltete den Statusfilter ganz ab — dadurch standen auch Entwürfe und
+      // vor allem ARCHIVIERTE Artikel in der Auswahl, für die kein Podcast mehr
+      // gebraucht wird. Der Standard der Route ist bereits „nur published",
+      // deshalb genügt es, den Parameter wegzulassen.
+      const res = await fetch('/api/admin/posts?limit=20')
       if (res.ok) {
         const data = await res.json()
         const posts = data.posts || []
