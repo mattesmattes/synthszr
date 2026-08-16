@@ -6,8 +6,6 @@ import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import { HeadingWithQueueId } from "@/lib/tiptap/heading-with-queue-id"
-import { HeadlineVariantBar } from "@/components/admin/headline-variant-bar"
-import { HeadlineReplacementToggle } from "@/components/admin/headline-replacement-toggle"
 import { GlossaryLinkMark } from "@/lib/tiptap/glossary-link-mark"
 import { Bold, Italic, Strikethrough, List, ListOrdered, Heading1, Heading2, Quote, Undo, Redo, Link as LinkIcon, Unlink } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -25,11 +23,9 @@ import { Label } from "@/components/ui/label"
 interface TiptapEditorProps {
   content: Record<string, unknown>
   onChange: (content: Record<string, unknown>) => void
-  /** Für das Protokoll der Überschriften-Wahl. Ohne sie wird nur getauscht. */
-  postId?: string
 }
 
-export function TiptapEditor({ content, onChange, postId }: TiptapEditorProps) {
+export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState("")
 
@@ -117,14 +113,7 @@ export function TiptapEditor({ content, onChange, postId }: TiptapEditorProps) {
 
   return (
     <div className="border border-border">
-      {/* EIN gemeinsamer sticky-Block für Werkzeugleiste UND Überschriften-
-          Auswahl. Beide einzeln auf `sticky top-0` zu setzen funktioniert
-          NICHT: sie kleben dann an derselben Stelle, und die zweite
-          verschwindet hinter der ersten. Zusammen in einem Wrapper bleibt die
-          Auswahl unter der Leiste sichtbar, auch wenn man in einem langen
-          Artikel weit unten arbeitet. */}
-      <div className="sticky top-0 z-10">
-      <div className="flex flex-wrap gap-1 border-b border-border bg-[#f5f5f5] dark:bg-[#1a1a1a] p-2">
+      <div className="sticky top-0 z-10 flex flex-wrap gap-1 border-b border-border bg-[#f5f5f5] dark:bg-[#1a1a1a] p-2">
         <Button
           type="button"
           variant="ghost"
@@ -317,15 +306,6 @@ export function TiptapEditor({ content, onChange, postId }: TiptapEditorProps) {
         >
           <Redo className="h-4 w-4" />
         </Button>
-        <div className="flex-1" />
-        {/* Wirkt auf KÜNFTIGE Ghostwriter-Läufe, nicht auf den offenen
-            Artikel — dessen Überschriften stehen längst im Dokument. */}
-        <HeadlineReplacementToggle />
-      </div>
-
-      {/* Überschriften-Auswahl: sichtbar nur, wenn der Cursor in einer
-          Überschrift mit Vorschlägen steht. Teil des sticky-Blocks oben. */}
-      <HeadlineVariantBar editor={editor} postId={postId} />
       </div>
 
       <EditorContent editor={editor} />

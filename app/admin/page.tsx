@@ -1267,7 +1267,6 @@ export default function AdminPage() {
                   <TiptapEditor
                     content={editForm.content}
                     onChange={(content) => setEditForm({ ...editForm, content })}
-                    postId={editingPost?.id}
                   />
                 </div>
               </TabsContent>

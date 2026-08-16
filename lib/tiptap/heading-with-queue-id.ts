@@ -43,40 +43,6 @@ export const HeadingWithQueueId = Heading.extend({
           }
         },
       },
-      /**
-       * Die drei Überschriften-Vorschläge zu diesem Abschnitt (JSON-Array).
-       * Gesetzt von der markdown→TipTap-Konvertierung aus dem
-       * `<!-- hl-alts:BASE64 -->`-Marker (lib/claude/headline-variants.ts).
-       * Index 0 ist die aktuell verwendete Überschrift.
-       *
-       * ⚠️ Dieses Attribut MUSS hier stehen, nicht nur im Editor: Die Extension
-       * wird auch von lib/tiptap/render-static-html.ts geladen, und dort führt
-       * ein unbekanntes Attribut über generateHTML in den catch — der liefert
-       * einen LEEREN String, und der komplette Artikel verschwindet aus dem
-       * Prerender-HTML, ohne Fehler und ohne Log.
-       */
-      headlineAlts: {
-        default: null,
-        parseHTML: element => {
-          const roh = element.getAttribute('data-headline-alts')
-          if (!roh) return null
-          try {
-            const parsed = JSON.parse(roh)
-            return Array.isArray(parsed) ? parsed : null
-          } catch {
-            return null
-          }
-        },
-        renderHTML: attributes => {
-          const alts = attributes.headlineAlts
-          if (!Array.isArray(alts) || alts.length === 0) {
-            return {}
-          }
-          return {
-            'data-headline-alts': JSON.stringify(alts),
-          }
-        },
-      },
     }
   },
 })

@@ -17,7 +17,6 @@ import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import { capTake } from '@/lib/claude/take-cap'
 import { sanitizeLexTags } from '@/lib/glossary/lex-tags'
 import { enforceHeadingLength, sanitizeHeading } from '@/lib/claude/heading-length'
-import { generateHeadlineVariants, embedHeadlineVariants, isHeadlineReplacementEnabled } from '@/lib/claude/headline-variants'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { enforceTakeEnding, TAKE_MARKER_RE } from '@/lib/claude/take-ending'
 import { capSummarySentences, shortenBySentences, BUNDLE_TAG_LINE_RE } from '@/lib/claude/bundle-length'
@@ -650,75 +649,6 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   trimmed = await enforceTakeEnding(trimmed, (take) => rewriteWerEnding(take, model))
 
   return trimmed
-}
-
-/**
- * Erzeugt die drei Überschriften-Varianten zu einem fertigen Abschnitt und
- * schreibt sie hinein: Variante 1 wird die Überschrift, die anderen beiden
- * reisen als Marker auf derselben Zeile mit (gleiche Bauart wie
- * `data-bundle-type`, s. embedHeadlineVariants).
- *
- * Nach der Erzeugung läuft die 90-Zeichen-Regel auf JEDE der drei — die
- * Prompt-Grenze ist weich, und eine überlange Variante wäre im Editor nicht
- * auswählbar, ohne das Layout zu sprengen. Gekürzt wird nur, was zu lang ist;
- * schlägt das Kürzen fehl, bleibt die Variante wie sie ist.
- *
- * Als Faktengrundlage dient die Original-Schlagzeile der Quelle — bei Bündeln
- * die des ersten Items, weil es dort keine einzelne gibt.
- */
-async function addHeadlineVariants(
-  section: string,
-  unit: BundleWriteUnit,
-  model: AIModel,
-  ersetzeUeberschrift: boolean,
-): Promise<string> {
-  const originalTitel = unit.kind === 'bundle'
-    ? (unit.items[0]?.title ?? unit.heading)
-    : (unit.item.title ?? unit.heading)
-
-  // EIGENES MODELL fuer die Varianten (Betreiber-Vorgabe 2026-08-16: Fable 5).
-  // Die Aufgabe ist sprachlich, nicht analytisch — der Abschnitt liegt fertig
-  // vor, gesucht ist die Formulierung.
-  const variantenModell = (await getModelForUseCase('headline_variants')) as AIModel
-
-  const varianten = await generateHeadlineVariants(
-    section,
-    originalTitel,
-    variantenModell,
-    (userPrompt, system, m) =>
-      // thinking:false ist eine BITTE, keine Zusicherung: callModelNonStreaming
-      // setzt `disabled` nur bei Modellen, die es akzeptieren. Fable 5 tut das
-      // NICHT (NO_DISABLED_THINKING) und denkt in jedem Fall.
-      //
-      // Deshalb 8000 statt 1000 Tokens. Drei Ueberschriften brauchen rund 120 —
-      // der Rest ist Reserve fuers Denken. Zu knapp bemessen kommt die Antwort
-      // leer oder mitten im Wort abgeschnitten zurueck; in einem A/B-Lauf sah
-      // genau das nach einer 40-Prozent-Ausfallrate und nach Prompt-Verstoessen
-      // aus, war aber nur ein zu kleines Budget.
-      callModelNonStreaming(userPrompt, system, m, { thinking: false, maxTokens: 8000 }),
-  )
-  if (!varianten) return section
-
-  const gekuerzt = await Promise.all(
-    varianten.map(async (v) => {
-      if (v.length <= 90) return v
-      try {
-        const kurz = sanitizeHeading(await shortenHeadingViaModel(v, model))
-        return kurz && kurz.length < v.length ? kurz : v
-      } catch {
-        return v
-      }
-    }),
-  )
-  // Ist der Schalter aus, bleibt die Überschrift aus writeSection stehen und
-  // die Vorschläge reihen sich dahinter ein. Index 0 des Attributs ist damit
-  // IMMER das, was gerade in der Überschrift steht — das Popover kann sich
-  // darauf verlassen, egal wie der Schalter steht.
-  if (ersetzeUeberschrift) return embedHeadlineVariants(section, gekuerzt)
-
-  const bestehende = section.match(/^\s*#{1,6}\s+([^\n<]*)/)?.[1]?.trim()
-  if (!bestehende) return section
-  return embedHeadlineVariants(section, [bestehende, ...gekuerzt])
 }
 
 // Formt den Schluss eines Takes um, dessen letzter/vorletzter Satz mit der
@@ -1509,15 +1439,6 @@ export async function writeSectionsBatch(
   // Pfade konsistent → normale Sektionen werden auch bei aktivem Bündel gekürzt.
   const bundlesActive = hasBundles(computeBundleGroups(orderedItems))
 
-  // Schalter EINMAL je Lauf lesen, nicht je Abschnitt: bei 40 Items wären das
-  // 40 Abfragen für einen Wert, der sich während eines Laufs nicht ändert.
-  const ersetzeUeberschrift = await isHeadlineReplacementEnabled(async (key) => {
-    const { data } = await createAdminClient()
-      .from('settings').select('value').eq('key', key).maybeSingle()
-    return data?.value ?? null
-  })
-  console.log(`[Pipeline] Überschriften-Ersetzung: ${ersetzeUeberschrift ? 'AN' : 'aus (Varianten werden trotzdem erzeugt)'}`)
-
   const out: string[] = []
   let i = cursor
   const concurrency = 6
@@ -1550,23 +1471,6 @@ export async function writeSectionsBatch(
       if (unit.kind === 'single' && bundlesActive) {
         section = shortenBySentences(section, 2)
       }
-
-      // ÜBERSCHRIFTEN-VARIANTEN (Betreiber-Entscheidung 2026-08-15).
-      // Ganz am Ende, auf dem FERTIGEN Abschnitt: Variante 2 greift die Pointe
-      // des Takes auf, Variante 3 den Widerspruch — beides kann man erst
-      // formulieren, wenn der Take steht. Deshalb nicht im writeSection-Prompt,
-      // dessen Ausgabeformat die Überschrift als Erstes verlangt.
-      //
-      // Alle drei werden frisch erzeugt, auch die journalistische; sie ersetzt
-      // die bisherige Überschrift. Der Rückfallweg ist wichtig: liefert der
-      // Call nichts Brauchbares (parseHeadlineVariants gibt dann null), bleibt
-      // die Überschrift aus writeSection unverändert stehen. Ein Abschnitt darf
-      // an diesem Zusatz nicht scheitern.
-      section = await withTimeout(
-        addHeadlineVariants(section, unit, model, ersetzeUeberschrift),
-        SECTION_PROOFREAD_TIMEOUT_MS,
-        section,
-      ).catch(() => section)
 
       return section
     }))

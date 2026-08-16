@@ -1019,7 +1019,6 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
             candidates={glossaryCandidates}
             value={confirmedGlossarySlugs}
             onChange={setConfirmedGlossarySlugs}
-            postId={id}
             runAfterSave={glossaryRunTrigger}
           />
 
@@ -1185,7 +1184,6 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                 onChange={handleContentChange}
                 appliedPatterns={appliedPatterns}
                 onPatternFeedback={handlePatternFeedback}
-                postId={id}
               />
             </TabsContent>
 
