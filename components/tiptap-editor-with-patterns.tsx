@@ -42,6 +42,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { PatternHighlightMark } from "@/lib/tiptap/pattern-highlight-mark"
+import { HeadlineVariantBar } from "@/components/admin/headline-variant-bar"
 import type { LearnedPattern } from "@/lib/edit-learning/retrieval"
 
 interface AppliedPatternData {
@@ -61,6 +62,8 @@ interface TiptapEditorWithPatternsProps {
     appliedPatternId: string,
     action: "accept" | "reject" | "deactivate"
   ) => void
+  /** Für das Protokoll der Überschriften-Wahl. Ohne sie wird nur getauscht. */
+  postId?: string
 }
 
 export function TiptapEditorWithPatterns({
@@ -68,6 +71,7 @@ export function TiptapEditorWithPatterns({
   onChange,
   appliedPatterns = [],
   onPatternFeedback,
+  postId,
 }: TiptapEditorWithPatternsProps) {
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState("")
@@ -336,6 +340,10 @@ export function TiptapEditorWithPatterns({
           </>
         )}
       </div>
+
+      {/* Überschriften-Auswahl: zwischen Werkzeugleiste und Text, sichtbar nur
+          wenn der Cursor in einer Überschrift mit Vorschlägen steht. */}
+      <HeadlineVariantBar editor={editor} postId={postId} />
 
       {/* Editor Content */}
       <div ref={editorRef}>

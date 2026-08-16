@@ -1185,6 +1185,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                 onChange={handleContentChange}
                 appliedPatterns={appliedPatterns}
                 onPatternFeedback={handlePatternFeedback}
+                postId={id}
               />
             </TabsContent>
 
