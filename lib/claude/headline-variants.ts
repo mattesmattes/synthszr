@@ -31,9 +31,30 @@ DIE DREI SORTEN — in dieser Reihenfolge:
 
 1. JOURNALISTISCH. Benennt ZUERST die Kernaussage: wer tut was, oder was ist passiert. Der Leser versteht das Thema aus der Überschrift allein, ohne den Text. Namen, Zahlen, das eigentliche Ereignis. Eine dezente Zuspitzung am Ende ist erlaubt, nie auf Kosten der Klarheit.
 
-2. POINTE AUS DEM TAKE. Nimmt die Haltung des Synthszr Take vorweg — die Wertung, die der Take vertritt, wird zur Überschrift. Der Gegenstand muss trotzdem drinstehen: man muss erkennen, WORUM es geht, nicht nur, dass jemand eine Meinung hat.
+2. POINTE AUS DEM TAKE. Nimmt die Haltung des Synthszr Take vorweg. Der Gegenstand muss drinstehen: man muss erkennen, WORUM es geht, nicht nur, dass jemand eine Meinung hat.
 
 3. INSIGHT AUS DEM WIDERSPRUCH. Sucht die Spannung in der Meldung: einen Selbstwiderspruch, eine verkehrte Reihenfolge, das Ungesagte. Hier darfst du am weitesten gehen — aber auch hier muss das Thema aus der Überschrift hervorgehen.
+
+AUF WELCHEM NIVEAU 2 UND 3 SPIELEN — DAS IST DER HÄUFIGSTE FEHLER:
+Du schreibst als erfahrener Technologie-Analyst, nicht als Kommentator, der ein Ereignis nachbewertet. Der Unterschied ist DIAGNOSE statt MEINUNG.
+- Eine Diagnose benennt einen MECHANISMUS: was hier wie funktioniert, wer wofür bezahlt, welche Zahl welche andere widerlegt.
+- Eine Meinung sagt nur, dass etwas gut, teuer, riskant oder fragwürdig sei. Das ist zu wenig.
+Zwei Prüffragen, bevor du 2 oder 3 abgibst:
+(a) Steht darin etwas, das man dem Abschnitt NICHT in einem Satz entnimmt? Wenn nein, ist es eine Nacherzählung mit Wertungsanstrich.
+(b) Könnte derselbe Satz mit ausgetauschten Namen über jeder zweiten Meldung stehen? Wenn ja, ist er zu allgemein.
+ZU FLACH — SO NICHT:
+- "60 Milliarden für Cursor: SpaceX zahlt vor allem für Umsätze, die noch keiner sah" (bewertet nur „teuer und unsicher" — kein Mechanismus)
+- "Dynatrace zahlt viel Geld für eine Technologie, die es schon hatte" (dasselbe Muster)
+SO IST ES RICHTIG (benennt, WIE es funktioniert):
+- "Arize-Zukauf zeigt: Wer die Evaluation früh besetzt, kassiert später das Monitoring-Budget"
+- "Korrelation kann jedes LLM, das do-Kalkül beantwortet erst die Frage nach dem Warum"
+- "US-Labore veröffentlichen oberhalb 100 Milliarden Parametern vor allem Ableitungen chinesischer Modelle"
+
+FAKTENTREUE — HÄRTER ALS ALLES ANDERE:
+Jede Zahl, jeder Name und jede Tatsachenbehauptung muss WÖRTLICH im vorliegenden Abschnitt stehen. Du leitest nichts ab, du ergänzt nichts aus Weltwissen, du präzisierst nichts, was der Text offenlässt.
+Besonders bei den Varianten 2 und 3 ist die Versuchung groß, die Aussage „zuzuspitzen", bis sie etwas behauptet, das so nicht dasteht.
+KONKRETES BEISPIEL EINES ECHTEN FEHLERS: Im Abschnitt stand, ein Käufer wolle sein Modell auf den Daten des übernommenen Dienstes trainieren. Daraus wurde „trainiert Grok auf Mitarbeiterdaten" — es waren die Daten und der Code der NUTZER. Das ist keine Zuspitzung mehr, das ist eine andere Behauptung.
+Im Zweifel die vorsichtigere Formulierung. Eine Überschrift, die weniger behauptet, ist immer besser als eine, die etwas Falsches behauptet.
 
 FÜR ALLE DREI VERBINDLICH:
 - Deutsch. Eine englische Überschrift ist ein FATALER FEHLER.
@@ -43,6 +64,10 @@ FÜR ALLE DREI VERBINDLICH:
 - Verboten: "Produktname: Erklärung"-Etikett (z.B. "Gemini 3.5: Google macht X") — den Produktnamen in den Satz einbauen.
 - Verboten: leere Nacherzählung ohne Substanz ("X launcht Y").
 - Verboten: Negations-Reframe ("nicht X, sondern Y") und das reflexhafte "Wenn X, aber Y"-Schema.
+- KEIN GEDANKENSTRICH als Satzteiler — weder — noch –. Das ist das auffälligste Maschinen-Merkmal überhaupt und im ganzen Projekt untersagt. Nimm einen Doppelpunkt, ein Komma oder zwei Sätze. (Bindestriche INNERHALB von Wörtern sind selbstverständlich erlaubt: KI-Agent, Post-Training.)
+  FALSCH: "SpaceX kauft Cursor für 60 Milliarden – Team wechselt zu SpaceXAI"
+  RICHTIG: "SpaceX kauft Cursor für 60 Milliarden, das Team wechselt zu SpaceXAI"
+- Verboten: Bewertungswörter ohne Substanz ("teuer", "riskant", "fragwürdig", "beeindruckend", "umstritten") als Kern der Aussage. Sie ersetzen die Beobachtung durch ein Urteil.
 - Verboten: generische oder tote Sprache ("Spannende Entwicklungen", "KI-Update").
 - Die drei müssen sich WIRKLICH unterscheiden. Drei Umformulierungen desselben Satzes sind wertlos.
 
@@ -147,6 +172,30 @@ export function embedHeadlineVariants(abschnitt: string, varianten: string[]): s
     return teile.join(' ')
   })
 }
+
+/**
+ * Gedankenstrich als Satzteiler — Halbgeviert (–) oder Geviert (—), jeweils
+ * mit Leerzeichen drumherum oder am Wortrand.
+ *
+ * Der Bindestrich INNERHALB eines Wortes (KI-Agent, Post-Training) ist ein
+ * anderes Zeichen (U+002D) und bleibt unberührt. Geprüft werden nur U+2013 und
+ * U+2014, und die stehen in einer Überschrift praktisch immer als Satzteiler.
+ */
+export function enthaeltGedankenstrich(text: string): boolean {
+  return /[–—]/.test(text)
+}
+
+export const GEDANKENSTRICH_FIX_SYSTEM = `Du entfernst den Gedankenstrich aus einer deutschen Überschrift. Der Halbgeviert- oder Geviertstrich (– oder —) als Satzteiler ist ein Maschinen-Merkmal und in diesem Projekt untersagt.
+
+Ersetze ihn durch das, was der Satz braucht: einen Doppelpunkt, ein Komma, ein verbindendes Wort — oder bau den Satz leicht um. Bindestriche innerhalb von Wörtern (KI-Agent, Post-Training) bleiben unangetastet.
+
+Inhalt, Aussage, Zahlen und Namen bleiben WÖRTLICH erhalten. Du formulierst nicht neu, du reparierst nur die Zeichensetzung. Die Überschrift darf dabei nicht länger als 90 Zeichen werden.
+
+Beispiel:
+  vorher : SpaceX kauft Cursor für 60 Milliarden – Team wechselt zu SpaceXAI
+  nachher: SpaceX kauft Cursor für 60 Milliarden, das Team wechselt zu SpaceXAI
+
+Gib NUR die überarbeitete Überschrift zurück — kein Markdown, keine Anführungszeichen, keine Erklärung.`
 
 /**
  * Ist die Ersetzung der Überschrift durch Variante 1 scharf?

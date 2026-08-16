@@ -6,6 +6,8 @@ import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import { HeadingWithQueueId } from "@/lib/tiptap/heading-with-queue-id"
+import { HeadlineVariantBar } from "@/components/admin/headline-variant-bar"
+import { HeadlineReplacementToggle } from "@/components/admin/headline-replacement-toggle"
 import { GlossaryLinkMark } from "@/lib/tiptap/glossary-link-mark"
 import { Bold, Italic, Strikethrough, List, ListOrdered, Heading1, Heading2, Quote, Undo, Redo, Link as LinkIcon, Unlink } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -23,9 +25,11 @@ import { Label } from "@/components/ui/label"
 interface TiptapEditorProps {
   content: Record<string, unknown>
   onChange: (content: Record<string, unknown>) => void
+  /** Für das Protokoll der Überschriften-Wahl. Ohne sie wird nur getauscht. */
+  postId?: string
 }
 
-export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
+export function TiptapEditor({ content, onChange, postId }: TiptapEditorProps) {
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState("")
 
@@ -280,7 +284,16 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
         >
           <Redo className="h-4 w-4" />
         </Button>
+        <div className="flex-1" />
+        {/* Wirkt auf KÜNFTIGE Ghostwriter-Läufe, nicht auf den offenen
+            Artikel — dessen Überschriften stehen längst im Dokument. */}
+        <HeadlineReplacementToggle />
       </div>
+
+      {/* Überschriften-Auswahl: sichtbar nur, wenn der Cursor in einer
+          Überschrift mit Vorschlägen steht. */}
+      <HeadlineVariantBar editor={editor} postId={postId} />
+
       <EditorContent editor={editor} />
 
       {/* Link Dialog */}
