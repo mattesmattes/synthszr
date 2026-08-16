@@ -43,6 +43,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { PatternHighlightMark } from "@/lib/tiptap/pattern-highlight-mark"
 import { HeadlineVariantBar } from "@/components/admin/headline-variant-bar"
+import { HeadlineReplacementToggle } from "@/components/admin/headline-replacement-toggle"
 import type { LearnedPattern } from "@/lib/edit-learning/retrieval"
 
 interface AppliedPatternData {
@@ -307,6 +308,10 @@ export function TiptapEditorWithPatterns({
           </Button>
         )}
         <div className="flex-1" />
+        {/* Wirkt auf KÜNFTIGE Ghostwriter-Läufe, nicht auf den offenen
+            Artikel — dessen Überschriften stehen längst im Dokument. */}
+        <HeadlineReplacementToggle />
+        <div className="mx-1 h-5 w-px bg-border" />
         <Button
           type="button"
           variant="ghost"
