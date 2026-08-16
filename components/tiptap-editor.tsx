@@ -117,7 +117,14 @@ export function TiptapEditor({ content, onChange, postId }: TiptapEditorProps) {
 
   return (
     <div className="border border-border">
-      <div className="sticky top-0 z-10 flex flex-wrap gap-1 border-b border-border bg-[#f5f5f5] dark:bg-[#1a1a1a] p-2">
+      {/* EIN gemeinsamer sticky-Block für Werkzeugleiste UND Überschriften-
+          Auswahl. Beide einzeln auf `sticky top-0` zu setzen funktioniert
+          NICHT: sie kleben dann an derselben Stelle, und die zweite
+          verschwindet hinter der ersten. Zusammen in einem Wrapper bleibt die
+          Auswahl unter der Leiste sichtbar, auch wenn man in einem langen
+          Artikel weit unten arbeitet. */}
+      <div className="sticky top-0 z-10">
+      <div className="flex flex-wrap gap-1 border-b border-border bg-[#f5f5f5] dark:bg-[#1a1a1a] p-2">
         <Button
           type="button"
           variant="ghost"
@@ -317,8 +324,9 @@ export function TiptapEditor({ content, onChange, postId }: TiptapEditorProps) {
       </div>
 
       {/* Überschriften-Auswahl: sichtbar nur, wenn der Cursor in einer
-          Überschrift mit Vorschlägen steht. */}
+          Überschrift mit Vorschlägen steht. Teil des sticky-Blocks oben. */}
       <HeadlineVariantBar editor={editor} postId={postId} />
+      </div>
 
       <EditorContent editor={editor} />
 
