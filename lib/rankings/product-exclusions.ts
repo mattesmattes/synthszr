@@ -37,6 +37,14 @@ export const AUTOLINK_STOPWORDS = new Set<string>([
   // (vendor-lose Einträge, identity_confidence 0); im Fließtext meinen die Wörter
   // fast immer den Junior-Entwickler bzw. "Zero-Day"/"Zero-Shot" — kein Produkt.
   'junior', 'zero',
+  // "Mai": Microsoft führt die Modellfamilie MAI (MAI-1, MAI-Thinking-1) — ein
+  // ECHTES Produkt, das in den Charts sichtbar bleibt. Im deutschen Fließtext
+  // ist "Mai" aber praktisch immer der Monat ("im Mai stand die Bewertung
+  // bei …"), und genau so wurde er im Newsletter verlinkt. Deshalb hier und
+  // NICHT in COMMON_WORD_NONPRODUCTS. Die versionierten Namen (MAI-Thinking-1)
+  // sind eindeutig und von der Sperre nicht betroffen: sie greift über den
+  // exakten Namensvergleich nur auf den bloßen Familiennamen.
+  'mai',
 ])
 
 /** Produktname ist ein gängiges Wort → nicht automatisch aus Fließtext verlinken. */

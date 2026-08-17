@@ -12,7 +12,7 @@ describe('isCommonWordNonProduct (harte Charts-Exclusion)', () => {
     }
   })
   it('lässt echte Produkte durch — auch Single-Word-Namen', () => {
-    for (const w of ['Codex', 'Sora', 'Atlas', 'Composer', 'Cursor', 'Norm', 'Vision', 'LLM']) {
+    for (const w of ['Codex', 'Sora', 'Atlas', 'Composer', 'Cursor', 'Norm', 'Vision', 'LLM', 'MAI', 'MAI-Thinking-1']) {
       expect(isCommonWordNonProduct(w)).toBe(false)
     }
   })
@@ -20,7 +20,7 @@ describe('isCommonWordNonProduct (harte Charts-Exclusion)', () => {
 
 describe('isAutolinkStopword (Blog-Anzeige unterdrücken, Produkt bleibt in Charts)', () => {
   it('unterdrückt mehrdeutige Wörter mit gleichnamigem echten Produkt', () => {
-    for (const w of ['LLM', 'Pitch', 'Edits', 'Norm', 'Vision', 'tempo', 'vibe', 'Junior', 'Zero']) {
+    for (const w of ['LLM', 'Pitch', 'Edits', 'Norm', 'Vision', 'tempo', 'vibe', 'Junior', 'Zero', 'Mai', 'mai', 'MAI']) {
       expect(isAutolinkStopword(w)).toBe(true)
     }
   })

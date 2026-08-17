@@ -74,6 +74,24 @@ export interface TiptapDoc {
 }
 
 // Rating badge styles (email-safe inline styles) - colors match website
+/**
+ * Darstellung der Lexikon-Links im NEWSLETTER — bewusst anders als im Web.
+ *
+ * Im Browser trägt `.glossary-link` eine gepunktete Unterstreichung über
+ * `text-decoration-style: dotted` plus `text-underline-offset`. In E-Mail
+ * funktioniert das nicht: Die meisten Clients kennen weder `dotted` als
+ * Unterstreichungsstil (sie fallen auf eine DURCHGEZOGENE Linie zurück) noch
+ * `text-underline-offset`. Die Linie klebte dadurch am Text und schnitt die
+ * Unterlängen von g, p und y — im Fließtext kaum noch lesbar
+ * (Betreiber-Befund 2026-08-17).
+ *
+ * `border-bottom` auf dem Inline-Element wird dagegen breit unterstützt und
+ * sitzt eine Spur tiefer, unter der Textbox statt an der Grundlinie. Die
+ * gepunktete Optik bleibt damit erhalten, ohne die Schrift zu beschädigen.
+ */
+const GLOSSARY_LINK_STYLE =
+  'color: inherit; text-decoration: none; border-bottom: 1px dotted #9a9a9a; padding-bottom: 1px;'
+
 const RATING_STYLES = {
   BUY: 'background-color: #00FF00; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
   HOLD: 'background-color: #FFFF00; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; text-decoration: none;',
@@ -1329,7 +1347,7 @@ function applyMarks(text: string, marks?: Array<{ type: string; attrs?: Record<s
           const slug = mark.attrs?.slug
           if (!slug) break
           // Absolute URL: relative Pfade funktionieren in E-Mail-Clients nicht.
-          result = `<a href="${SITE_URL}/${glossaryLangFor(lang)}/glossary/${slug}" style="color: inherit; text-decoration: underline dotted; text-underline-offset: 2px;">${result}</a>`
+          result = `<a href="${SITE_URL}/${glossaryLangFor(lang)}/glossary/${slug}" style="${GLOSSARY_LINK_STYLE}">${result}</a>`
           break
         }
       }
@@ -1477,7 +1495,7 @@ function renderContent(content?: TiptapNode[], lang: string = 'de'): string {
               const slug = mark.attrs?.slug
               if (!slug) break
               // Absolute URL: relative Pfade funktionieren in E-Mail-Clients nicht.
-              text = `<a href="${SITE_URL}/${glossaryLangFor(lang)}/glossary/${slug}" style="color: inherit; text-decoration: underline dotted; text-underline-offset: 2px;">${text}</a>`
+              text = `<a href="${SITE_URL}/${glossaryLangFor(lang)}/glossary/${slug}" style="${GLOSSARY_LINK_STYLE}">${text}</a>`
               break
             }
           }
