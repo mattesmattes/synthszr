@@ -108,7 +108,7 @@ export default function NewsletterSendPage() {
   /** Lexikon-Stand des Posts: erkannt / erzeugt / illustriert / verlinkt. */
   const [glossaryStatus, setGlossaryStatus] = useState<{
     detected: number; generated: number; withImage: number; linked: number
-    state: 'ok' | 'pending' | 'images_pending' | 'unlinked' | 'none'; label: string
+    state: 'ok' | 'pending' | 'generation_stalled' | 'images_pending' | 'unlinked' | 'none'; label: string
   } | null>(null)
   const [checkingGlossary, setCheckingGlossary] = useState(false)
 
@@ -783,7 +783,7 @@ export default function NewsletterSendPage() {
                   <div className={`mb-3 p-2 rounded text-xs flex items-center gap-2 ${
                     glossaryStatus.state === 'unlinked'
                       ? 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200'
-                      : glossaryStatus.state === 'pending' || glossaryStatus.state === 'images_pending'
+                      : glossaryStatus.state === 'pending' || glossaryStatus.state === 'images_pending' || glossaryStatus.state === 'generation_stalled'
                         ? 'bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
                         : 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200'
                   }`}>
@@ -793,6 +793,11 @@ export default function NewsletterSendPage() {
                       <AlertCircle className="h-3 w-3" />
                     ) : glossaryStatus.state === 'pending' ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : glossaryStatus.state === 'generation_stalled' ? (
+                      /* KEIN Spinner: hier arbeitet gerade nichts. Ein
+                         drehendes Rad hiesse "gleich fertig" — tatsaechlich
+                         passiert ohne erneutes Speichern gar nichts. */
+                      <AlertCircle className="h-3 w-3" />
                     ) : glossaryStatus.state === 'images_pending' ? (
                       /* KEIN Spinner: hier arbeitet nichts, der 08:00-Cron holt
                          die Illustrationen nach. Ein drehendes Rad hiesse

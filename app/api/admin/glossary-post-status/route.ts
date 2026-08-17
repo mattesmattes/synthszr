@@ -66,11 +66,26 @@ export async function GET(request: NextRequest) {
     .select('slug, status, illustration_url')
     .in('slug', detectedSlugs)
 
+  // Läuft für DIESEN Artikel gerade ein Lauf? Ohne diese Angabe meldete die
+  // Anzeige bei fehlenden Begriffen immer „Rest läuft im Hintergrund" — auch
+  // wenn gar kein Job existierte (Befund 2026-08-17: 14 offen, 0 Jobs,
+  // Spinner drehte). `kind` wird nicht eingegrenzt: jeder laufende Lexikon-Job
+  // dieses Artikels kann die Zahl bewegen.
+  const { data: jobs } = await supabase
+    .from('glossary_jobs')
+    .select('params')
+    .in('status', ['queued', 'processing'])
+  const runActive = (jobs ?? []).some(
+    (j) => (j as { params?: unknown }).params &&
+      JSON.stringify((j as { params?: unknown }).params).includes(postId),
+  )
+
   const rows = (terms ?? []) as Array<{ slug: string; status: string; illustration_url: string | null }>
   return NextResponse.json(computeGlossaryPostStatus({
     detectedSlugs,
     publishedSlugs: rows.filter((t) => t.status === 'published').map((t) => t.slug),
     withImageSlugs: rows.filter((t) => t.illustration_url).map((t) => t.slug),
     linkedSlugs,
+    runActive,
   }))
 }

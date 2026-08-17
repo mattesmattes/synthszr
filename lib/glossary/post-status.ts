@@ -21,6 +21,18 @@ export interface GlossaryPostStatusInput {
   withImageSlugs: string[]
   /** Slugs, die im Artikeltext tatsächlich eine glossaryLink-Mark tragen. */
   linkedSlugs: string[]
+  /**
+   * Läuft für diesen Artikel gerade ein Lexikon-Lauf (Job in 'queued' oder
+   * 'processing')?
+   *
+   * OHNE DIESE ANGABE LÜGT DIE ANZEIGE. Fehlende Begriffe hießen bisher immer
+   * „Rest läuft im Hintergrund" — auch dann, wenn gar kein Job existierte.
+   * Genau derselbe Fehler war am 2026-08-09 schon einmal für die
+   * Illustrationen behoben worden (s. Kommentar bei `images_pending`); für die
+   * Begriffe blieb er stehen. Befund 2026-08-17: 14 von 262 Begriffen offen,
+   * null aktive Jobs, Spinner drehte.
+   */
+  runActive?: boolean
 }
 
 export interface GlossaryPostStatus {
@@ -38,7 +50,7 @@ export interface GlossaryPostStatus {
    *  nicht kosmetisch: bis zum 2026-08-09 teilten sich beide Faelle 'pending',
    *  und die UI zeigte fuer den zweiten einen Spinner mit 20s-Polling. 284
    *  Begriffe standen so tagelang da, waehrend die Anzeige Arbeit vortaeuschte. */
-  state: 'ok' | 'pending' | 'images_pending' | 'unlinked' | 'none'
+  state: 'ok' | 'pending' | 'generation_stalled' | 'images_pending' | 'unlinked' | 'none'
   /** Fertige Meldung für die Anzeige, deutsch. */
   label: string
 }
@@ -58,10 +70,16 @@ export function computeGlossaryPostStatus(input: GlossaryPostStatusInput): Gloss
   }
 
   if (generated < detected) {
-    // Der wichtigste Fall für den Operator: die Hintergrund-Routine arbeitet noch.
-    // Zahlen statt "läuft", damit erkennbar ist, DASS sie vorankommt.
-    return { detected, generated, withImage, linked, state: 'pending',
-      label: `${generated} von ${detected} Begriffen erzeugt — Rest läuft im Hintergrund` }
+    const offen = detected - generated
+    // NUR wenn wirklich ein Lauf arbeitet, darf hier "läuft" stehen und die
+    // Anzeige pollen. Sonst wartet der Operator auf etwas, das nie kommt.
+    if (input.runActive) {
+      // Zahlen statt "läuft", damit erkennbar ist, DASS es vorankommt.
+      return { detected, generated, withImage, linked, state: 'pending',
+        label: `${generated} von ${detected} Begriffen erzeugt — Rest läuft im Hintergrund` }
+    }
+    return { detected, generated, withImage, linked, state: 'generation_stalled',
+      label: `${generated} von ${detected} Begriffen erzeugt, ${offen} offen — gerade läuft kein Lauf. Artikel erneut speichern stößt die nächsten an.` }
   }
 
   if (withImage < detected) {

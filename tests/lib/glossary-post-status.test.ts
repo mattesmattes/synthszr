@@ -15,9 +15,23 @@ describe('computeGlossaryPostStatus', () => {
   it('meldet den Zwischenstand mit Zahlen, während die Erzeugung läuft', () => {
     const s = computeGlossaryPostStatus({
       detectedSlugs: all(12), publishedSlugs: all(3), withImageSlugs: all(3), linkedSlugs: [],
+      runActive: true,
     })
     expect(s.state).toBe('pending')
     expect(s.label).toContain('3 von 12')
+  })
+
+  it('sagt NICHT "läuft", wenn gar kein Lauf aktiv ist', () => {
+    // Befund 2026-08-17: 14 von 262 Begriffen offen, null Jobs — die Anzeige
+    // zeigte trotzdem Spinner und "Rest läuft im Hintergrund". Derselbe Fehler
+    // war für die Illustrationen schon behoben, für die Begriffe nicht.
+    const s = computeGlossaryPostStatus({
+      detectedSlugs: all(12), publishedSlugs: all(3), withImageSlugs: all(3), linkedSlugs: [],
+    })
+    expect(s.state).toBe('generation_stalled')
+    expect(s.label).toContain('3 von 12')
+    expect(s.label).toContain('9 offen')
+    expect(s.label).not.toMatch(/läuft im Hintergrund/)
   })
 
   it('meldet fehlende Illustrationen, wenn die Texte fertig sind', () => {
@@ -123,6 +137,7 @@ describe('computeGlossaryPostStatus', () => {
       // Der echte Wartefall: da arbeitet tatsaechlich ein Job.
       const s = computeGlossaryPostStatus({
         detectedSlugs: all(12), publishedSlugs: all(3), withImageSlugs: all(3), linkedSlugs: [],
+        runActive: true,
       })
       expect(s.state).toBe('pending')
     })
