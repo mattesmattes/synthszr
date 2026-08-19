@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
   const { data: jobs } = await supabase
     .from('glossary_jobs')
     .select('params')
-    .in('status', ['queued', 'processing'])
+    .in('status', ['pending', 'processing'])
   const runActive = (jobs ?? []).some(
     (j) => (j as { params?: unknown }).params &&
       JSON.stringify((j as { params?: unknown }).params).includes(postId),

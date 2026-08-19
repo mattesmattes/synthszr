@@ -45,17 +45,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch subscribers' }, { status: 500 })
     }
 
-    // Get counts by status
-    const { data: statusCounts } = await supabase
-      .from('subscribers')
-      .select('status')
+    // Get counts by status. HEAD requests with count:'exact' report the true
+    // total via Content-Range, unlike a plain select() which PostgREST caps
+    // at 1000 rows — counting rows fetched into the client silently topped
+    // out at 1000 once the table grew past it (Befund 2026-08-19).
+    const [allCount, pendingCount, activeCount, unsubscribedCount, bouncedCount] = await Promise.all([
+      supabase.from('subscribers').select('id', { count: 'exact', head: true }),
+      supabase.from('subscribers').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('subscribers').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+      supabase.from('subscribers').select('id', { count: 'exact', head: true }).eq('status', 'unsubscribed'),
+      supabase.from('subscribers').select('id', { count: 'exact', head: true }).eq('status', 'bounced'),
+    ])
 
     const counts = {
-      all: statusCounts?.length || 0,
-      pending: statusCounts?.filter(s => s.status === 'pending').length || 0,
-      active: statusCounts?.filter(s => s.status === 'active').length || 0,
-      unsubscribed: statusCounts?.filter(s => s.status === 'unsubscribed').length || 0,
-      bounced: statusCounts?.filter(s => s.status === 'bounced').length || 0,
+      all: allCount.count || 0,
+      pending: pendingCount.count || 0,
+      active: activeCount.count || 0,
+      unsubscribed: unsubscribedCount.count || 0,
+      bounced: bouncedCount.count || 0,
     }
 
     // Growth stats for day/week/month

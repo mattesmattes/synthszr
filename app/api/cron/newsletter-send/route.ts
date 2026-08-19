@@ -9,6 +9,7 @@ import { verifyCronAuth } from '@/lib/security/cron-auth'
 import { getActiveAdPromo } from '@/lib/ad-promos/get-active'
 import { getActiveTipPromo } from '@/lib/tip-promos/get-active'
 import { mintNewsletterLinkTokens } from '@/lib/newsletter/access-tokens'
+import { fetchAllActiveSubscribers } from '@/lib/newsletter/active-subscribers'
 
 // Allow up to 2 minutes for large subscriber lists
 export const maxDuration = 120
@@ -155,12 +156,9 @@ export async function GET(request: NextRequest) {
     const previewText = post.excerpt || ''
 
     // Get all active subscribers with their language preferences
-    const { data: subscribers, error: subError } = await supabase
-      .from('subscribers')
-      .select('id, email, preferences')
-      .eq('status', 'active')
+    const subscribers = await fetchAllActiveSubscribers(supabase)
 
-    if (subError || !subscribers || subscribers.length === 0) {
+    if (subscribers.length === 0) {
       return NextResponse.json({
         success: true,
         message: 'No active subscribers',

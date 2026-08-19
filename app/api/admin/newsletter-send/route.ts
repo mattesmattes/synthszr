@@ -10,6 +10,7 @@ import type { LanguageCode } from '@/lib/types'
 import { getActiveAdPromo } from '@/lib/ad-promos/get-active'
 import { getActiveTipPromo } from '@/lib/tip-promos/get-active'
 import { mintNewsletterLinkTokens } from '@/lib/newsletter/access-tokens'
+import { fetchAllActiveSubscribers } from '@/lib/newsletter/active-subscribers'
 
 // Allow up to 2 minutes for large subscriber lists
 export const maxDuration = 120
@@ -223,12 +224,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Get all active subscribers with their language preferences
-    const { data: subscribers, error: subError } = await supabase
-      .from('subscribers')
-      .select('id, email, preferences')
-      .eq('status', 'active')
+    const subscribers = await fetchAllActiveSubscribers(supabase)
 
-    if (subError || !subscribers || subscribers.length === 0) {
+    if (subscribers.length === 0) {
       return NextResponse.json({
         error: 'Keine aktiven Subscriber gefunden',
       }, { status: 400 })
