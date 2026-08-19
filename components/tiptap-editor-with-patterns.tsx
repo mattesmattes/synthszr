@@ -259,6 +259,80 @@ export function TiptapEditorWithPatterns({
         >
           <Heading2 className="h-4 w-4" />
         </Button>
+        {/* Bündel-Tags: nur bei aktivem H2. Setzen das bundleType-Attribut direkt
+            am Heading-Node — spiegelt components/tiptap-editor.tsx, das hier
+            beim Bau der Bündel-Buttons nicht mitgezogen wurde (Befund 2026-08-19). */}
+        {editor.isActive("heading", { level: 2 }) && (
+          <>
+            <div className="w-px h-6 bg-border mx-1" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              title="Als 'Thema des Tages' markieren (Bündel)"
+              onClick={() =>
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("heading", {
+                    bundleType: editor.getAttributes("heading").bundleType === "topic" ? null : "topic",
+                  })
+                  .run()
+              }
+              className={cn(
+                "h-7 px-2 text-[11px]",
+                editor.getAttributes("heading").bundleType === "topic" &&
+                  "bg-lime-100 text-lime-800 hover:bg-lime-200 dark:bg-lime-900/30 dark:text-lime-300",
+              )}
+            >
+              Thema des Tages
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              title="Als 'Nachlese' markieren (Bündel)"
+              onClick={() =>
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("heading", {
+                    bundleType: editor.getAttributes("heading").bundleType === "recap" ? null : "recap",
+                  })
+                  .run()
+              }
+              className={cn(
+                "h-7 px-2 text-[11px]",
+                editor.getAttributes("heading").bundleType === "recap" &&
+                  "bg-cyan-100 text-cyan-800 hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300",
+              )}
+            >
+              Nachlese
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              title="Als 'Deep Dive' markieren (Bündel)"
+              onClick={() =>
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("heading", {
+                    bundleType: editor.getAttributes("heading").bundleType === "deep_dive" ? null : "deep_dive",
+                  })
+                  .run()
+              }
+              className={cn(
+                "h-7 px-2 text-[11px]",
+                editor.getAttributes("heading").bundleType === "deep_dive" &&
+                  "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300",
+              )}
+            >
+              Deep Dive
+            </Button>
+          </>
+        )}
         <div className="w-px h-6 bg-border mx-1" />
         <Button
           type="button"
