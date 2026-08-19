@@ -17,6 +17,18 @@ describe('convertTiptapToHtml — bundle label badge', () => {
     expect(en).toContain('Topic of the Day')
   })
 
+  it('renders the badge for bundleType "deep_dive" (Befund 2026-08-19: fehlte in der Bedingung)', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        { type: 'heading', attrs: { level: 2, bundleType: 'deep_dive' }, content: [{ type: 'text', text: 'Foo' }] },
+      ],
+    }
+    const html = convertTiptapToHtml(doc)
+    expect(html).toContain('Deep Dive')
+    expect(html).toContain('border-radius:999px')
+  })
+
   it('renders no badge for a heading without bundleType', () => {
     const doc = {
       type: 'doc',

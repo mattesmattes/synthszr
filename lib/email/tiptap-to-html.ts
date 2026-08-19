@@ -1397,10 +1397,11 @@ function convertNodeToHtml(node: TiptapNode, locale: string = 'de'): string {
         headingHtml = `${favicon}<a href="${srcUrl}" style="color: inherit; text-decoration: none;">${headingHtml}</a>`
       }
 
-      // Bundle-Label ("Thema des Tages" / "Nachlese") — vom Assembly (Task 5/7)
-      // als bundleType-Attribut auf das Abschnitts-H2 geschrieben.
+      // Bundle-Label ("Thema des Tages" / "Nachlese" / "Deep Dive") — vom
+      // Assembly (Task 5/7) als bundleType-Attribut auf das Abschnitts-H2
+      // geschrieben.
       const bundleType = node.attrs?.bundleType as string | undefined
-      const badgeHtml = (bundleType === 'topic' || bundleType === 'recap')
+      const badgeHtml = (bundleType === 'topic' || bundleType === 'recap' || bundleType === 'deep_dive')
         ? `<div style="display:inline-block;background:#000;color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin:0 0 6px 0;">${escapeHtml(bundleLabel(bundleType as BundleType, locale))}</div><br/>`
         : ''
 
