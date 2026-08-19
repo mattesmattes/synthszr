@@ -28,16 +28,16 @@ const PAGE_SIZE = 1000
  * jede der (wachsenden Zahl an) Begriffsseiten, mehrfach pro Tag. Der Katalog
  * existierte beim letzten Egress-Audit (2026-08-01) noch gar nicht — das
  * Fachbegriff-Lexikon ging erst am 2026-08-04 live und ist seither ungeprüft
- * mitgewachsen. 10 Minuten TTL, dieselbe Größenordnung wie der
- * bestehende Tip-Promo-Cache in diesem Projekt: die einzige Nebenwirkung ist,
- * dass ein neu veröffentlichter Begriff bis zu 10 Minuten lang nicht rückwirkend
- * in älteren Begriffstexten verlinkt erscheint — die Verlinkung selbst bleibt
- * korrekt (kein verlorener Begriff), nur ihr Erscheinen verzögert sich kurz.
- * Nur ERFOLGREICHE Ergebnisse werden gecacht; ein Fehler (`null`) schlägt beim
- * nächsten Aufruf sofort erneut durch, statt einen transienten Ausfall für
- * 10 Minuten festzuschreiben.
+ * mitgewachsen. 60 Minuten TTL (angehoben von ursprünglich 10 Min, 2026-08-19,
+ * zusammen mit dem auf 6h angehobenen `revalidate` der Begriffsseite): die
+ * einzige Nebenwirkung ist, dass ein neu veröffentlichter Begriff bis zu einer
+ * Stunde lang nicht rückwirkend in älteren Begriffstexten verlinkt erscheint —
+ * die Verlinkung selbst bleibt korrekt (kein verlorener Begriff), nur ihr
+ * Erscheinen verzögert sich. Nur ERFOLGREICHE Ergebnisse werden gecacht; ein
+ * Fehler (`null`) schlägt beim nächsten Aufruf sofort erneut durch, statt
+ * einen transienten Ausfall für die volle Stunde festzuschreiben.
  */
-const CACHE_TTL_MS = 10 * 60 * 1000
+const CACHE_TTL_MS = 60 * 60 * 1000
 
 /** Alle Cache-Stores dieser Datei, nur damit resetGlossaryTermsCachesForTests
  *  sie gemeinsam leeren kann. */

@@ -27,8 +27,13 @@ import type { LanguageCode } from '@/lib/types'
 
 // ISR statt on-demand-only: der Erklärungstext ändert sich nur über den
 // redaktionellen Monats-Cron (Design-Spec §I). Kein generateStaticParams →
-// kein Build-time-Prerender, Seiten rendern on-demand und cachen 15 min am Edge.
-export const revalidate = 900
+// kein Build-time-Prerender, Seiten rendern on-demand und cachen 6h am Edge.
+// Vorher 900s (15 Min) — bei einem Monats-Rhythmus für Inhalts-Updates war das
+// unnötig knapp und der Haupttreiber der Egress-Eskalation vom 2026-08-19: bei
+// 2171 Begriffsseiten prüft ein kurzes Fenster viel öfter auf Änderungen, als
+// welche vorkommen. 6h balanciert Egress gegen die Reaktionszeit auf manuelle
+// Korrekturen (Bild, Text) außerhalb des Monats-Crons.
+export const revalidate = 21600
 
 // Leeres generateStaticParams aktiviert on-demand ISR: ohne diese Funktion
 // behandelt Vercel Dynamic-Segment-Routen als voll dynamisch und ignoriert
