@@ -7,10 +7,17 @@
  * 34% der Zeilen verschluckt) und breite Selects in Listen-Queries (Ursache der
  * Egress-Overage).
  */
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { resetGlossaryTermsCachesForTests } from '@/lib/glossary/terms'
 
 const mocks = vi.hoisted(() => ({ from: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: mocks.from }) }))
+
+// Sonst profitiert ein Testfall vom Ergebnis eines frueheren, weil
+// getPublishedTermList seit 2026-08-19 modulweit fuer 10 Minuten cacht.
+beforeEach(() => {
+  resetGlossaryTermsCachesForTests()
+})
 
 /** Fake-PostgREST mit range()-Unterstuetzung, das seitenweise ausliefert. */
 function fakeTable(allRows: Array<Record<string, unknown>>) {

@@ -18,6 +18,54 @@ const NAV_COLUMNS = 'id, slug, canonical_name'
  *  verschluckt, ohne Fehler und ohne Log. */
 const PAGE_SIZE = 1000
 
+/**
+ * TTL-Cache für die drei Voll-Katalog-Scans dieser Datei (Begriffsliste,
+ * Matcher-Liste, Chart-Produktnamen).
+ *
+ * Befund 2026-08-19: `getMatcherTerms` und `getPublishedTermList` laufen
+ * ungecacht bei JEDEM Rendern/ISR-Revalidate einer Begriffsseite — bei 2171
+ * veröffentlichten Begriffen ~220 Byte/Zeile sind das ~480 KB je Aufruf, für
+ * jede der (wachsenden Zahl an) Begriffsseiten, mehrfach pro Tag. Der Katalog
+ * existierte beim letzten Egress-Audit (2026-08-01) noch gar nicht — das
+ * Fachbegriff-Lexikon ging erst am 2026-08-04 live und ist seither ungeprüft
+ * mitgewachsen. 10 Minuten TTL, dieselbe Größenordnung wie der
+ * bestehende Tip-Promo-Cache in diesem Projekt: die einzige Nebenwirkung ist,
+ * dass ein neu veröffentlichter Begriff bis zu 10 Minuten lang nicht rückwirkend
+ * in älteren Begriffstexten verlinkt erscheint — die Verlinkung selbst bleibt
+ * korrekt (kein verlorener Begriff), nur ihr Erscheinen verzögert sich kurz.
+ * Nur ERFOLGREICHE Ergebnisse werden gecacht; ein Fehler (`null`) schlägt beim
+ * nächsten Aufruf sofort erneut durch, statt einen transienten Ausfall für
+ * 10 Minuten festzuschreiben.
+ */
+const CACHE_TTL_MS = 10 * 60 * 1000
+
+/** Alle Cache-Stores dieser Datei, nur damit resetGlossaryTermsCachesForTests
+ *  sie gemeinsam leeren kann. */
+const allCacheStores: Array<Map<string, { value: unknown; expiresAt: number }>> = []
+
+function withTtlCache<A extends unknown[], R>(
+  fn: (...args: A) => Promise<R>,
+  keyOf: (...args: A) => string,
+  isCacheable: (value: R) => boolean = (v) => v !== null,
+): (...args: A) => Promise<R> {
+  const store = new Map<string, { value: R; expiresAt: number }>()
+  allCacheStores.push(store as Map<string, { value: unknown; expiresAt: number }>)
+  return async (...args: A): Promise<R> => {
+    const key = keyOf(...args)
+    const hit = store.get(key)
+    if (hit && hit.expiresAt > Date.now()) return hit.value
+    const value = await fn(...args)
+    if (isCacheable(value)) store.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS })
+    return value
+  }
+}
+
+/** Nur für Tests: ohne dieses Leeren würde ein Testfall vom (gemockten)
+ *  Erfolg eines früheren profitieren, weil der Cache modulweit lebt. */
+export function resetGlossaryTermsCachesForTests(): void {
+  for (const store of allCacheStores) store.clear()
+}
+
 /** Begriffe je Übersetzungs-Abfrage. `.in('term_id', ids)` landet als
  *  Query-String in der URL, nicht im Body: bei 745 Begriffen sind das rund
  *  27.500 Zeichen, und PostgREST antwortet mit `Bad Request`. An Prod gemessen
@@ -68,7 +116,7 @@ async function fetchTranslationsChunked(
   return { rows, error: null }
 }
 
-export async function getPublishedTermList(
+async function getPublishedTermListUncached(
   lang: string,
   options: { includeSummary?: boolean } = {},
 ): Promise<Array<{ slug: string; canonicalName: string; summary: string }>> {
@@ -108,6 +156,26 @@ export async function getPublishedTermList(
   return translated.map(({ id: _id, ...rest }) => rest)
 }
 
+/** Gecacht (s. CACHE_TTL_MS oben) — läuft ungecacht bei jedem Rendern einer
+ *  Begriffsseite (Sidebar-Register) sowie der Sitemap und dem Lexikon-Index.
+ *  Von Hand statt über withTtlCache: der optionale zweite Parameter mit
+ *  Default (`options: {...} = {}`) geht über generische Tupel-Inferenz sonst
+ *  als PFLICHT-Argument verloren — jeder Aufrufer ohne zweites Argument bräche. */
+const publishedTermListCache = new Map<string, { value: Array<{ slug: string; canonicalName: string; summary: string }>; expiresAt: number }>()
+allCacheStores.push(publishedTermListCache as unknown as Map<string, { value: unknown; expiresAt: number }>)
+
+export async function getPublishedTermList(
+  lang: string,
+  options: { includeSummary?: boolean } = {},
+): Promise<Array<{ slug: string; canonicalName: string; summary: string }>> {
+  const key = `${lang}:${options.includeSummary ?? true}`
+  const hit = publishedTermListCache.get(key)
+  if (hit && hit.expiresAt > Date.now()) return hit.value
+  const value = await getPublishedTermListUncached(lang, options)
+  if (value.length > 0) publishedTermListCache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS })
+  return value
+}
+
 /**
  * Rückgabe `null`, wenn eine der beiden Datenbankabfragen fehlschlägt — die
  * Begriffsliste selbst (`error` unten) genauso wie die Übersetzungsabfrage
@@ -140,7 +208,7 @@ export async function getPublishedTermList(
  * weiterhin mit `?? []`; die beiden Schreibpfade brechen bei `null` ab,
  * statt eine leere Begriffsliste wie ein Ergebnis zu behandeln.
  */
-export async function getMatcherTerms(lang: string): Promise<GlossaryMatcherTerm[] | null> {
+async function getMatcherTermsUncached(lang: string): Promise<GlossaryMatcherTerm[] | null> {
   const supabase = createAdminClient()
   // SEITENWEISE laden. PostgREST kappt eine Abfrage ohne `range()` still bei 1000
   // Zeilen — kein Fehler, kein Log.
@@ -202,11 +270,19 @@ export async function getMatcherTerms(lang: string): Promise<GlossaryMatcherTerm
   })
 }
 
+/** Gecacht (s. CACHE_TTL_MS oben) — die EINZIGE Quelle der Begriffsliste für
+ *  Verlinkung/Nachverlinkung, ungecacht bei jedem Rendern einer Begriffsseite
+ *  neu geholt (Befund 2026-08-19, Egress-Explosion). */
+export const getMatcherTerms = withTtlCache(
+  getMatcherTermsUncached,
+  (lang) => lang,
+)
+
 /** Chart-Produktnamen für die Kollisions-Reservierung bei der Mark-Injektion
  *  (Task 11) — Kollisionsregel: Company > Chart-Produkt > Lexikonbegriff.
  *  Nur `canonical_name`, keine weiteren Spalten (Egress). Paginiert wie in
  *  lib/rankings/categorize.ts: PostgREST kappt sonst still bei 1000 Zeilen. */
-export async function getChartProductNames(): Promise<string[]> {
+async function getChartProductNamesUncached(): Promise<string[]> {
   const supabase = createAdminClient()
   const names: string[] = []
   for (let off = 0; ; off += 1000) {
@@ -225,6 +301,13 @@ export async function getChartProductNames(): Promise<string[]> {
   }
   return names
 }
+
+/** Gecacht (s. CACHE_TTL_MS oben) — wird pro Begriff in mehreren Schreibpfaden
+ *  (confirm/crawl/backfill/translate) erneut geholt. */
+export const getChartProductNames = withTtlCache(
+  getChartProductNamesUncached,
+  () => 'all',
+)
 
 /** Baut die reservierte Namensliste für die Glossar-Mark-Injektion
  *  (Kollisionsregel: Company > Chart-Produkt > Lexikonbegriff) — gemeinsam

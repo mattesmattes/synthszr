@@ -5,6 +5,7 @@
  * tests/lib/newsletter-access-tokens.test.ts:20-32.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { resetGlossaryTermsCachesForTests } from '@/lib/glossary/terms'
 
 const state = vi.hoisted(() => ({
   result: { data: [] as unknown, error: null as unknown },
@@ -39,6 +40,10 @@ beforeEach(() => {
   state.result = { data: [], error: null }
   state.queue.length = 0
   state.chains.length = 0
+  // Sonst profitiert ein Testfall vom (gemockten) Erfolg eines früheren, weil
+  // getMatcherTerms/getChartProductNames/getPublishedTermList seit 2026-08-19
+  // modulweit für 10 Minuten cachen.
+  resetGlossaryTermsCachesForTests()
 })
 
 describe('getPublishedTermList', () => {

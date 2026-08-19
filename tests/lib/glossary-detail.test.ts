@@ -11,6 +11,7 @@
  * prüfbar, nur die Antwort-Zuordnung ist tabellenbewusst.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { resetGlossaryTermsCachesForTests } from '@/lib/glossary/terms'
 
 const state = vi.hoisted(() => ({
   queues: {} as Record<string, unknown[]>,
@@ -52,6 +53,9 @@ beforeEach(() => {
   state.chains = {}
   rpcMock.mockReset()
   rpcMock.mockResolvedValue({ data: [], error: null })
+  // Sonst profitiert ein Testfall vom Ergebnis eines frueheren, weil
+  // getMatcherTerms seit 2026-08-19 modulweit fuer 10 Minuten cacht.
+  resetGlossaryTermsCachesForTests()
 })
 
 function queue(table: string, ...results: unknown[]) {
