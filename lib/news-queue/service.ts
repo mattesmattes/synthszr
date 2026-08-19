@@ -302,6 +302,13 @@ export async function addToQueue(
     sourcePubRate?: number
     contentLength?: number
     emailReceivedAt?: string | null
+    /**
+     * Kürzere Verfallszeit als der Tabellen-Default (Techmeme-Herkunft:
+     * Befund 2026-08-19 — eine 18h alte Story mit hohem Score gewann gegen
+     * frischere, schwächer bewertete Konkurrenz im Tages-Lauf. Ohne Deckel
+     * bleibt ein liegengebliebenes Item bis zum Default-Verfall wählbar).
+     */
+    expiresInHours?: number
     metadata?: Record<string, unknown>
   }>
 ): Promise<{ added: number; skipped: number; errors: string[] }> {
@@ -351,6 +358,9 @@ export async function addToQueue(
       email_received_at: item.emailReceivedAt || null,
       ...(item.bundleType ? { bundle_type: item.bundleType } : {}),
       ...(item.status ? { status: item.status, selected_at: new Date().toISOString() } : {}),
+      ...(item.expiresInHours
+        ? { expires_at: new Date(Date.now() + item.expiresInHours * 60 * 60 * 1000).toISOString() }
+        : {}),
       metadata: item.metadata || {}
     }
   })

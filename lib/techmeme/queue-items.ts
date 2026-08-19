@@ -24,6 +24,18 @@ import { curationScore } from '@/lib/techmeme/scoring'
 export type FetchMode = 'feed' | 'crawl' | 'markdown'
 
 /**
+ * Verfallszeit für Techmeme-Items, kürzer als der Tabellen-Default.
+ *
+ * Befund 2026-08-19: eine 18h alte Story mit hohem Score (Rang 0, 17 Quellen)
+ * gewann im Tages-Lauf gegen frischere, aber schwächer bewertete Konkurrenz
+ * vom selben Morgen — der weiche Recency-Malus in get_balanced_queue_selection
+ * reicht dafür nicht aus. 30h geben einer Story, die den Cutoff des Tages-Laufs
+ * knapp verpasst, genau EINE Chance am nächsten Tag, statt tagelang gegen
+ * frischere Meldungen mitzubieten.
+ */
+export const TECHMEME_QUEUE_EXPIRY_HOURS = 30
+
+/**
  * Der Publikationsname aus Techmemes „Autor / Publikation".
  *
  * Ungeteilt landete in der Queue eine Quelle namens „Patrick Howell O'Neill /
@@ -82,6 +94,7 @@ export interface TechmemeQueueItem {
    *  bis in den Post". */
   status: 'pending' | 'selected'
   emailReceivedAt: string | null
+  expiresInHours: number
   contentLength: number
   /**
    * Techmemes Kuration als Bewertung — alle drei Felder bekommen denselben
@@ -125,6 +138,7 @@ export function buildQueueItem(input: QueueItemInput): TechmemeQueueItem {
     bundleType: istThema ? 'topic' : null,
     status: istThema ? 'selected' : 'pending',
     emailReceivedAt: publishedAt,
+    expiresInHours: TECHMEME_QUEUE_EXPIRY_HOURS,
     contentLength: text.length,
     synthesisScore: score,
     relevanceScore: score,
