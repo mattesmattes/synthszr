@@ -26,7 +26,15 @@ function fakeTable(allRows: Array<Record<string, unknown>>) {
     select: vi.fn((cols: string) => { calls.selects.push(cols); return chain }),
     eq: vi.fn(() => chain),
     order: vi.fn(() => chain),
-    in: vi.fn(() => Promise.resolve({ data: [], error: null })),
+    // Der Uebersetzungspfad kettet .in(...).eq(...) und wartet auf das Ergebnis;
+    // ohne das zweite Glied bricht er mit "eq is not a function" ab.
+    in: vi.fn((_col: string, _ids: string[]) => {
+      const t: Record<string, unknown> = {
+        eq: vi.fn(() => Promise.resolve({ data: [], error: null })),
+        then: (r: (v: unknown) => void) => r({ data: [], error: null }),
+      }
+      return t
+    }),
     range: vi.fn((from: number, to: number) => {
       calls.ranges.push([from, to])
       return Promise.resolve({ data: allRows.slice(from, to + 1), error: null })
@@ -66,6 +74,17 @@ describe('getPublishedTermList', () => {
     await getPublishedTermList('de', { includeSummary: false })
     expect(calls.selects[0]).not.toContain('summary')
     expect(calls.selects[0]).toContain('slug')
+  })
+
+  it('laedt das summary auch in einer UEBERSETZTEN Sprache nicht mit', async () => {
+    // Der Test darueber prueft nur 'de' — also genau die Sprache, in der
+    // applyTranslations gar nicht laeuft. Deshalb blieb unbemerkt, dass die
+    // Uebersetzungsabfrage `summary` IMMER mitholte: der Redis-Eintrag
+    // termlist:en:false wog dadurch 674 KB statt 154 KB (Befund 2026-08-20).
+    const calls = fakeTable([row(0)])
+    const { getPublishedTermList } = await import('@/lib/glossary/terms')
+    await getPublishedTermList('en', { includeSummary: false })
+    expect(calls.selects.some((c) => c.includes('summary'))).toBe(false)
   })
 
   it('laedt das summary standardmaessig weiter mit', async () => {

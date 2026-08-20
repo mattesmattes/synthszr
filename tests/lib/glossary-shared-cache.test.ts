@@ -30,6 +30,9 @@ beforeEach(() => {
   mocks.set.mockReset()
   vi.stubEnv('KV_REST_API_URL', 'https://example.upstash.io')
   vi.stubEnv('KV_REST_API_TOKEN', 'token')
+  // .env.local setzt VERCEL_ENV=production — ohne dieses Zuruecksetzen haenge
+  // die Namensraum-Erwartung an der lokalen Konfiguration des Entwicklers.
+  vi.stubEnv('VERCEL_ENV', '')
 })
 afterEach(() => vi.unstubAllEnvs())
 
@@ -59,7 +62,22 @@ describe('withSharedCache', () => {
     const { withSharedCache } = await load()
     const loader = vi.fn().mockResolvedValue(['frisch'])
     expect(await withSharedCache('k', loader)).toEqual(['frisch'])
-    expect(mocks.set).toHaveBeenCalledWith('k', ['frisch'], expect.objectContaining({ ex: expect.any(Number) }))
+    expect(mocks.set).toHaveBeenCalledWith('local:k', ['frisch'], expect.objectContaining({ ex: expect.any(Number) }))
+  })
+
+  it('trennt die Schluessel nach Umgebung, damit Tests/Dev Produktion nicht ueberschreiben', async () => {
+    // Genau das ist am 2026-08-20 passiert: ein Testlauf hat den Prod-Schluessel
+    // glossary:v1:matcher:de mit einem einzigen Fixture-Begriff ueberschrieben.
+    vi.stubEnv('VERCEL_ENV', 'production')
+    const prod = await load()
+    mocks.get.mockResolvedValue(null)
+    await prod.withSharedCache('glossary:v1:matcher:de', vi.fn().mockResolvedValue(['x']))
+    expect(mocks.get).toHaveBeenCalledWith('production:glossary:v1:matcher:de')
+
+    vi.stubEnv('VERCEL_ENV', 'preview')
+    const preview = await load()
+    await preview.withSharedCache('glossary:v1:matcher:de', vi.fn().mockResolvedValue(['x']))
+    expect(mocks.get).toHaveBeenCalledWith('preview:glossary:v1:matcher:de')
   })
 
   it('degradiert auf den Loader, wenn Redis beim Lesen ausfaellt', async () => {

@@ -28,6 +28,20 @@ import { Redis } from '@upstash/redis'
 
 const TTL_SECONDS = 60 * 60
 
+/**
+ * Schluessel-Namensraum je Umgebung. Ohne ihn schreiben lokale Entwicklung,
+ * Preview-Deployments und Tests in DIESELBEN Schluessel wie Produktion — alle
+ * lesen .env.local bzw. dieselbe Upstash-Instanz.
+ *
+ * Das ist nicht theoretisch: am 2026-08-20 hat ein Testlauf (der Supabase mockt)
+ * `glossary:v1:matcher:de` mit einem einzigen Fixture-Begriff ueberschrieben,
+ * wo 2187 stehen. Ein geteilter Cache verteilt so ein Teilergebnis an ALLE
+ * Instanzen und ueberlebt Deployments — der alte In-Memory-Cache haette den
+ * Schaden auf eine Instanz begrenzt. tests/setup.ts entfernt die Credentials
+ * inzwischen zusaetzlich; dieser Namensraum ist die zweite, strukturelle Sperre.
+ */
+const NAMESPACE = process.env.VERCEL_ENV || 'local'
+
 let client: Redis | null = null
 let missingConfigLogged = false
 
@@ -64,13 +78,14 @@ function getRedis(): Redis | null {
  * TTL-Cache in terms.ts.
  */
 export async function withSharedCache<T>(
-  key: string,
+  rawKey: string,
   load: () => Promise<T>,
   isCacheable: (value: T) => boolean = (v) => v !== null,
 ): Promise<T> {
   const redis = getRedis()
   if (!redis) return load()
 
+  const key = `${NAMESPACE}:${rawKey}`
   try {
     const hit = await redis.get<T>(key)
     if (hit !== null && hit !== undefined) return hit

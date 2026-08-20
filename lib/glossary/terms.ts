@@ -153,7 +153,7 @@ async function getPublishedTermListUncached(
     })))
     if (data.length < PAGE_SIZE) break
   }
-  const translated = lang === 'de' ? rows : await applyTranslations(rows, lang)
+  const translated = lang === 'de' ? rows : await applyTranslations(rows, lang, includeSummary)
   return translated.map(({ id: _id, ...rest }) => rest)
 }
 
@@ -487,12 +487,17 @@ interface TranslatableRow {
 async function applyTranslations<T extends TranslatableRow>(
   rows: T[],
   lang: string,
+  // Befund 2026-08-20: die Uebersetzungsabfrage holte `summary` IMMER, auch wenn
+  // der Aufrufer includeSummary=false gesetzt hat. Fuer Deutsch griff die
+  // Ersparnis (kein applyTranslations), fuer jede uebersetzte Sprache nicht —
+  // der Cache-Eintrag termlist:en:false wog dadurch 674 KB statt 154 KB.
+  includeSummary = true,
 ): Promise<T[]> {
   if (rows.length === 0) return rows
   const supabase = createAdminClient()
   const { rows: data, error } = await fetchTranslationsChunked(
     supabase,
-    'term_id, canonical_name, summary',
+    includeSummary ? 'term_id, canonical_name, summary' : 'term_id, canonical_name',
     rows.map((r) => r.id),
     lang,
   )
@@ -513,7 +518,9 @@ async function applyTranslations<T extends TranslatableRow>(
     return {
       ...r,
       canonicalName: t9n.canonicalName ?? r.canonicalName,
-      summary: t9n.summary ?? r.summary,
+      // ohne includeSummary traegt die Uebersetzung kein summary — den Wert der
+      // Basiszeile behalten (dort ebenfalls '' ), statt undefined einzusetzen.
+      summary: includeSummary ? (t9n.summary ?? r.summary) : r.summary,
     }
   })
 }
