@@ -5,7 +5,7 @@ import { getRankedProducts } from '@/lib/rankings/leaderboard'
 import { fetchAllCompanyMentions } from '@/lib/companies/mention-rows'
 import { categorySlugsWithIntro } from '@/lib/rankings/category-intros'
 import { AUTHOR } from '@/lib/data/author'
-import { getPublishedTermList } from '@/lib/glossary/terms'
+import { getPublishedTermListShared } from '@/lib/glossary/terms'
 
 // ISR statt voll-dynamisch: der cookie-freie Anon-Client erlaubt Prerender +
 // stündliche Regenerierung. Wichtig für Googlebot: schlägt eine Regenerierung
@@ -233,7 +233,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // sobald sich das Lexikon dieser Größenordnung nähert.
   try {
     // Ohne summary: die Sitemap braucht nur Slugs.
-    const terms = await getPublishedTermList(DEFAULT_LOCALE, { includeSummary: false })
+    const terms = await getPublishedTermListShared(DEFAULT_LOCALE, { includeSummary: false })
     for (const term of terms) {
       const alternates: Record<string, string> = {
         'x-default': `${BASE_URL}/${DEFAULT_LOCALE}/glossary/${term.slug}`,

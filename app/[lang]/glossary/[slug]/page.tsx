@@ -21,7 +21,7 @@ import { CurrencyChart } from '@/components/glossary/currency-chart'
 import { waehrungFuerSlug } from '@/lib/currency/currencies'
 import { fetchEcbRates } from '@/lib/currency/ecb-rates'
 import { fetchKursverlauf, ausduennen } from '@/lib/currency/history'
-import { getPublishedTermList } from '@/lib/glossary/terms'
+import { getPublishedTermListShared } from '@/lib/glossary/terms'
 import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
 import type { LanguageCode } from '@/lib/types'
 
@@ -125,7 +125,7 @@ export default async function GlossaryTermPage({ params }: PageProps) {
   // ganze Lexikon erreichbar sein, ohne den Umweg über den Index.
   // includeSummary=false: das Register zeigt nur Namen. Bei 500 Begriffen sind
   // das rund 20 KB statt 120 KB je Seitenaufbau.
-  const allTerms = await getPublishedTermList(lang, { includeSummary: false })
+  const allTerms = await getPublishedTermListShared(lang, { includeSummary: false })
 
   // Logo und Score für die Produktkarten, damit die Darstellung der in den
   // Rankings entspricht. includeHistory=FALSE ist wesentlich: der history-JSONB

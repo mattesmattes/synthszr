@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { withSharedCache } from '@/lib/glossary/shared-cache'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
 
@@ -515,4 +516,48 @@ async function applyTranslations<T extends TranslatableRow>(
       summary: t9n.summary ?? r.summary,
     }
   })
+}
+
+
+/* ------------------------------------------------------------------------- *
+ * LESE-PFADE: zusaetzlich instanzuebergreifend gecacht (Upstash Redis).
+ *
+ * Die beiden Funktionen unten sind die einzigen, die Redis benutzen duerfen.
+ * Sie bedienen genau vier Aufrufstellen — Begriffsseite, Lexikon-Index,
+ * verwandte Begriffe (detail.ts) und die Sitemap. Alle vier rendern nur.
+ *
+ * Die Schreib-/Job-Pfade rufen weiterhin getMatcherTerms / getPublishedTermList
+ * direkt: lib/glossary/confirm.ts holt die Matcher-Liste bewusst DIREKT NACH dem
+ * Publish-Update, damit der frisch bestaetigte Begriff darin steht. Ein
+ * wirksamer geteilter Cache wuerde diesen dokumentierten Ablauf brechen — s.
+ * ausfuehrliche Begruendung in lib/glossary/shared-cache.ts.
+ *
+ * Schluessel tragen ein v1: aendert sich die Form der Werte, hebt v2 den alten
+ * Bestand aus, statt ihn falsch zu deserialisieren.
+ * ------------------------------------------------------------------------- */
+
+/** Wie getPublishedTermList, zusaetzlich ueber Instanzgrenzen gecacht.
+ *  NUR fuer Lese-Pfade (s. Block oben). */
+export async function getPublishedTermListShared(
+  lang: string,
+  options: { includeSummary?: boolean } = {},
+): Promise<Array<{ slug: string; canonicalName: string; summary: string }>> {
+  const includeSummary = options.includeSummary ?? true
+  return withSharedCache(
+    `glossary:v1:termlist:${lang}:${includeSummary}`,
+    () => getPublishedTermList(lang, options),
+    // Gleiche Regel wie im TTL-Cache: eine leere Liste ist nicht vom Lesefehler
+    // zu unterscheiden und darf nicht fuer eine Stunde festgeschrieben werden.
+    (v) => v.length > 0,
+  )
+}
+
+/** Wie getMatcherTerms, zusaetzlich ueber Instanzgrenzen gecacht.
+ *  NUR fuer Lese-Pfade (s. Block oben) — NICHT in confirm/crawl/translate. */
+export async function getMatcherTermsShared(lang: string): Promise<GlossaryMatcherTerm[] | null> {
+  return withSharedCache(
+    `glossary:v1:matcher:${lang}`,
+    () => getMatcherTerms(lang),
+    (v) => v !== null && v.length > 0,
+  )
 }

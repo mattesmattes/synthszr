@@ -28,6 +28,12 @@ vi.mock('@/lib/supabase/admin', () => ({
 }))
 
 vi.mock('@/lib/glossary/terms', () => ({
+  // sitemap.ts liest ueber die Shared-Variante (Redis-Schicht); der Testmock
+  // bedient beide Namen, damit er nicht an der Cache-Frage haengt.
+  getPublishedTermListShared: vi.fn(async () => [
+    { slug: 'inferenz', canonicalName: 'Inferenz', summary: 'Testeintrag' },
+    { slug: 'mixture-of-experts', canonicalName: 'Mixture of Experts', summary: 'Testeintrag' },
+  ]),
   getPublishedTermList: vi.fn(async () => [
     { slug: 'inferenz', canonicalName: 'Inferenz', summary: 'Testeintrag' },
     { slug: 'mixture-of-experts', canonicalName: 'Mixture of Experts', summary: 'Testeintrag' },

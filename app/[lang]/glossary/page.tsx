@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import type { Metadata } from 'next'
-import { getPublishedTermList } from '@/lib/glossary/terms'
+import { getPublishedTermListShared } from '@/lib/glossary/terms'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import { SITE_URL, safeJsonLd } from '@/lib/seo/site'
@@ -45,7 +45,7 @@ export default async function GlossaryIndexPage({ params }: PageProps) {
   // getPublishedTermList) — der Bestand liegt heute weit darunter; braucht
   // die Funktion Range-Pagination, sobald sich das Lexikon dieser
   // Größenordnung nähert.
-  const terms = await getPublishedTermList(lang)
+  const terms = await getPublishedTermListShared(lang)
 
   const translations = await getTranslations(locale)
   const t = (key: string) => translations[key] ?? key

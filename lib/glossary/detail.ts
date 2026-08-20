@@ -1,6 +1,6 @@
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getMatcherTerms } from '@/lib/glossary/terms'
+import { getMatcherTermsShared } from '@/lib/glossary/terms'
 import { findGlossaryMentions } from '@/lib/glossary/mentions'
 import { injectGlossaryMarks } from '@/lib/glossary/inject-marks'
 import { injectStockLinks } from '@/lib/glossary/inject-stock-links'
@@ -191,7 +191,7 @@ async function linkRelatedTerms(
   // fehlgeschlagen ist (terms.ts) — Lesepfad, deshalb Fehler geloggt (bereits
   // in getMatcherTerms selbst) und auf leere Kandidatenliste degradiert,
   // statt die Detailseite abstürzen zu lassen.
-  const candidates = ((await getMatcherTerms(lang)) ?? []).filter((t) => t.slug !== term.slug)
+  const candidates = ((await getMatcherTermsShared(lang)) ?? []).filter((t) => t.slug !== term.slug)
   const text = extractVisibleText(term.body)
   const mentions = candidates.length > 0 && text ? findGlossaryMentions(text, candidates) : []
   const slugs = mentions.map((m) => m.slug)
