@@ -126,6 +126,14 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
     url: `${SITE_URL}/${lang}/rankings`,
     creator: { '@type': 'Organization', name: 'Synthszr', url: `${SITE_URL}/de` },
     isAccessibleForFree: true,
+    // license: von Google als empfohlenes Dataset-Feld gefuehrt; die Search
+    // Console hat sein Fehlen am 2026-08-21 gemeldet. Fuer den Zweck dieses
+    // Markups — die Charts als ZITIERFAEHIGE Quelle fuer Google Dataset Search
+    // und AI-Engines auszuweisen — ist es das entscheidende Feld: ohne
+    // Lizenzangabe ist die Nachnutzung rechtlich unklar. CC BY 4.0 erlaubt die
+    // Weiterverwendung unter Namensnennung, was genau die gewuenschte
+    // Gegenleistung ist (Zitat mit Quelle).
+    license: 'https://creativecommons.org/licenses/by/4.0/',
     keywords: ['AI products', 'AI ranking', 'LLM', 'AI tools', 'momentum'],
   }
   const t = (key: string) => translations[key] ?? key
