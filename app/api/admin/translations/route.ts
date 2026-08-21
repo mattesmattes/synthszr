@@ -23,10 +23,31 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Get queue statistics
-    const { data: allQueueItems } = await supabase
-      .from('translation_queue')
-      .select('status, target_language')
+    // Get queue statistics — SEITENWEISE laden.
+    //
+    // PROD-BEFUND 2026-08-21: ohne range() kappt PostgREST die Antwort still bei
+    // 1000 Zeilen — kein Fehler, kein Log. Bei 1017 Zeilen in translation_queue
+    // waren in den ersten 1000 nur completed und cancelled; die zwei pending
+    // Eintraege (die JUENGSTEN) fielen heraus. stats.pending war damit 0, und
+    // weil der Knopf "Queue verarbeiten" als disabled={!stats.pending} haengt,
+    // liess sich die Warteschlange von Hand nicht mehr anstossen — waehrend die
+    // Liste darunter die pending-Eintraege korrekt zeigte, weil sie paginiert.
+    // Dasselbe Cap traf am 2026-08-19 den Newsletter-Versand.
+    const PAGE = 1000
+    const allQueueItems: Array<{ status: string; target_language: string }> = []
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('translation_queue')
+        .select('status, target_language')
+        .range(from, from + PAGE - 1)
+      if (error) {
+        console.error('[Translations] Stats fetch error:', error.message)
+        break
+      }
+      const page = (data ?? []) as Array<{ status: string; target_language: string }>
+      allQueueItems.push(...page)
+      if (page.length < PAGE) break
+    }
 
     const stats = {
       pending: 0,
