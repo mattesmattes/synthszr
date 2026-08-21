@@ -245,6 +245,7 @@ async function translateContentChunked(
   const targetLangName = LANGUAGE_NAMES[targetLanguage]
   const blocks = (source.content as { type: string; content: unknown[] }).content
   const CHUNK_SIZE = 15 // blocks per chunk
+  const CHUNK_ATTEMPTS = 3 // je Chunk, gegen schwankende Antwortformate
 
   console.log(`[Translation] Chunked mode: ${blocks.length} blocks in ${Math.ceil(blocks.length / CHUNK_SIZE)} chunks`)
 
@@ -284,26 +285,44 @@ Return ONLY the translated JSON array (not wrapped in an object).
 CONTENT:
 ${JSON.stringify(chunk)}`
 
-    let chunkText: string
-    if (model.startsWith('claude')) {
-      chunkText = await translateWithClaude(systemPrompt, chunkPrompt, model)
-    } else {
-      chunkText = await translateWithGemini(systemPrompt, chunkPrompt, model)
+    // Bis zu CHUNK_ATTEMPTS Versuche je Chunk. Das Antwortformat der Modelle
+    // schwankt (derselbe Artikel lief am 2026-08-21 in FR/CS/NDS sauber durch und
+    // scheiterte nur in EN) — ein zweiter Anlauf heilt das in aller Regel. Frueher
+    // wurde beim ersten Fehlschlag STILL der deutsche Originalblock eingesetzt und
+    // die Uebersetzung trotzdem als 'completed' gespeichert; genau so ging ein halb
+    // deutscher Newsletter an 626 englische Abonnenten.
+    let blocksForChunk: unknown[] | null = null
+    let lastProblem = ''
+    for (let attempt = 1; attempt <= CHUNK_ATTEMPTS && !blocksForChunk; attempt++) {
+      try {
+        const chunkText = model.startsWith('claude')
+          ? await translateWithClaude(systemPrompt, chunkPrompt, model)
+          : await translateWithGemini(systemPrompt, chunkPrompt, model)
+        blocksForChunk = extractBlockArray(parseChunkResponse(chunkText))
+        if (!blocksForChunk) lastProblem = 'kein Block-Array in der Antwort'
+      } catch (error) {
+        // parseChunkResponse wirft bei kaputtem JSON — frueher riss das den
+        // ganzen Lauf mit, obwohl ein neuer Versuch meist genuegt.
+        lastProblem = error instanceof Error ? error.message : 'unbekannt'
+        blocksForChunk = null
+      }
+      if (!blocksForChunk) {
+        console.warn(`[Translation] Chunk ${chunkNum}/${totalChunks} Versuch ${attempt}/${CHUNK_ATTEMPTS} fehlgeschlagen: ${lastProblem}`)
+      }
     }
 
-    // Parse the chunk response (should be a JSON array)
-    const parsedChunk = parseChunkResponse(chunkText)
-
-    if (Array.isArray(parsedChunk)) {
-      translatedBlocks.push(...parsedChunk)
-    } else if (typeof parsedChunk === 'object' && parsedChunk !== null && 'content' in parsedChunk && Array.isArray((parsedChunk as Record<string, unknown>).content)) {
-      // LLM might wrap it in a doc object
-      translatedBlocks.push(...((parsedChunk as Record<string, unknown>).content as unknown[]))
-    } else {
-      // Fallback: use original chunk
-      console.warn(`[Translation] Chunk ${chunkNum} returned unexpected format, using original`)
-      translatedBlocks.push(...chunk)
+    if (!blocksForChunk) {
+      // KEIN stiller Rueckfall auf den Originaltext mehr. Der Fehler laesst den
+      // Lauf scheitern, die translation_queue zaehlt den Versuch hoch und nimmt
+      // ihn beim naechsten Tick erneut auf — und `content_translations` bleibt
+      // ohne 'completed', sodass der Newsletter sauber auf Deutsch zurueckfaellt
+      // statt eine halb uebersetzte Fassung zu verschicken.
+      throw new Error(
+        `Chunk ${chunkNum}/${totalChunks} nach ${CHUNK_ATTEMPTS} Versuchen nicht uebersetzbar (${lastProblem}) `
+        + '— Lauf abgebrochen, statt unuebersetzten Text als fertig auszugeben.',
+      )
     }
+    translatedBlocks.push(...blocksForChunk)
   }
 
   const translatedContent = {
@@ -410,6 +429,36 @@ function isOverloadError(error: unknown): boolean {
 /**
  * Parse a chunk response that can be a JSON array or object
  */
+/**
+ * Holt das Block-Array aus einer Chunk-Antwort — egal, wie das Modell es verpackt.
+ *
+ * Der Uebersetzer bekommt ein TipTap-Block-Array und soll eines zurueckgeben. In
+ * der Praxis liefert das Modell mal ein nacktes Array, mal `{content: [...]}`,
+ * mal einen selbst erfundenen Wrapper (`{blocks: ...}`, `{translation: ...}`).
+ * Der alte Code kannte nur die ersten zwei Formen und setzte sonst STILL den
+ * deutschen Originalblock ein — so ging am 2026-08-21 ein halb deutscher
+ * Newsletter an 626 englische Abonnenten (s. tests/lib/translation-chunk-format).
+ *
+ * Rueckgabe `null` heisst „hier ist keine brauchbare Uebersetzung drin" und
+ * loest oben einen neuen Versuch aus. Ein LEERES Array gilt bewusst als
+ * unbrauchbar: es wuerde den Abschnitt spurlos loeschen, was schlimmer waere als
+ * unuebersetzter Text.
+ */
+export function extractBlockArray(parsed: unknown): unknown[] | null {
+  const isBlocks = (v: unknown): v is unknown[] =>
+    Array.isArray(v) && v.length > 0 &&
+    v.every((b) => typeof b === 'object' && b !== null && 'type' in (b as Record<string, unknown>))
+
+  if (isBlocks(parsed)) return parsed
+  if (typeof parsed === 'object' && parsed !== null) {
+    const obj = parsed as Record<string, unknown>
+    // content zuerst — das ist die dokumentierte Form eines TipTap-doc.
+    if (isBlocks(obj.content)) return obj.content
+    for (const value of Object.values(obj)) if (isBlocks(value)) return value
+  }
+  return null
+}
+
 function parseChunkResponse(text: string): unknown {
   let cleaned = text.trim()
   if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7)
