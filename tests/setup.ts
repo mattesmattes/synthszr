@@ -4,7 +4,7 @@ import { config } from 'dotenv'
 config({ path: '.env.local' })
 
 // Upstash-Credentials aus .env.local NICHT in Tests durchreichen: sonst spricht
-// der geteilte Begriffs-Cache (lib/glossary/shared-cache.ts) echtes Redis an —
+// der geteilte Begriffs-Cache (lib/cache/shared-cache.ts) echtes Redis an —
 // langsam, nicht deterministisch, und er beantwortet Testfaelle aus fremden
 // Laeufen. Ohne Konfiguration faellt withSharedCache auf den Loader durch, also
 // exakt auf das Verhalten vor der Cache-Schicht. Tests, die die Schicht selbst

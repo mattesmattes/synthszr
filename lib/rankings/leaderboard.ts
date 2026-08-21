@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toDisplayScore } from '@/lib/rankings/score'
+import { withSharedCache } from '@/lib/cache/shared-cache'
 
 export interface RankedProduct {
   id: string
@@ -150,4 +151,32 @@ export async function getActiveCategories(): Promise<Array<{ slug: string; name:
     .order('display_order')
   if (error) throw new Error(`categories: ${error.message}`)
   return (data ?? []).map((c) => ({ slug: c.slug as string, name: c.name as string }))
+}
+
+
+/**
+ * Wie getCategoryCappedProducts, aber instanzuebergreifend gecacht (Redis).
+ *
+ * WARUM: der Aufruf zieht den GESAMTEN Chart-Katalog — gemessen 2026-08-21:
+ * 737 KB product_metrics (2890 Zeilen) + 614 KB product_category_membership
+ * (7352 Zeilen) = 1,35 MB. PostProductLinks laesst das auf JEDER Artikelseite
+ * laufen, um darin ein paar Produktnamen zu verlinken; der Artikel selbst wiegt
+ * 45 KB. Bei ~8500 Renders/Tag war das der groesste verbliebene Egress-Posten.
+ *
+ * Frische: die Werte entstehen im taeglichen precompute-Cron (30 5 * * *), eine
+ * Stunde TTL ist also unkritisch. Nur nicht-leere Ergebnisse werden gecacht.
+ *
+ * Fuer LESE-Pfade gedacht (Artikel, Lexikon, Suche, Newsletter-Rendering). Wer
+ * frisch vorberechnete Werte im selben Lauf weiterverarbeitet, ruft weiterhin
+ * getCategoryCappedProducts direkt.
+ */
+export async function getCategoryCappedProductsShared(
+  cap = 50,
+  includeHistory = false,
+): Promise<CategoryCappedProduct[]> {
+  return withSharedCache(
+    `charts:v1:capped:${cap}:${includeHistory}`,
+    () => getCategoryCappedProducts(cap, includeHistory),
+    (v) => Array.isArray(v) && v.length > 0,
+  )
 }

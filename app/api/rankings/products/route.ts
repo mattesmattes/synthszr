@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
+import { getCategoryCappedProductsShared } from '@/lib/rankings/leaderboard'
 import { toDisplayScore } from '@/lib/rankings/score'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -28,7 +28,7 @@ export async function GET() {
     // Preis: die Pill zeigt keine Sparkline mehr, nur noch den Rang in Trend-Farbe.
     // buildVotePill (lib/tiptap/dom-processors/product-links.ts) laesst die Kurve
     // bei leerem spark von selbst weg.
-    const capped = await getCategoryCappedProducts(50, false)
+    const capped = await getCategoryCappedProductsShared(50, false)
 
     // Nur recherchierte Produkte (mit Beschreibung) fürs Auto-Verlinken im Blog —
     // keine leeren Stubs. DB-Fehler → ungefiltert (nicht schlechter als vorher).

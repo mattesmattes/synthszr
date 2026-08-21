@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
+import { getCategoryCappedProductsShared } from '@/lib/rankings/leaderboard'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { findMentionedProducts, extractVisibleText } from '@/lib/posts/product-mentions'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -16,9 +16,9 @@ export async function PostProductLinks({
   content: Record<string, unknown>
   locale: LanguageCode
 }) {
-  let products: Awaited<ReturnType<typeof getCategoryCappedProducts>>
+  let products: Awaited<ReturnType<typeof getCategoryCappedProductsShared>>
   try {
-    products = await getCategoryCappedProducts(50, false) // keine Sparkline hier → kein history-Egress
+    products = await getCategoryCappedProductsShared(50, false) // keine Sparkline hier → kein history-Egress; Redis-gecacht (1,35 MB je Render)
   } catch {
     return null
   }

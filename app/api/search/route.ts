@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
-import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
+import { getCategoryCappedProductsShared } from '@/lib/rankings/leaderboard'
 import { embedQuery } from '@/lib/search/embeddings'
 import { rerankPostHits } from '@/lib/search/rerank'
 import { searchPublishedTerms, type GlossarySearchHit } from '@/lib/glossary/terms'
@@ -440,7 +440,7 @@ export async function GET(request: NextRequest) {
   //    (getCategoryCappedProducts ist gecacht). Prefix-Treffer zuerst, dann Kat-Rang.
   let products: ProductHit[] = []
   try {
-    const capped = await getCategoryCappedProducts(50, false) // Suche zeigt nur Name/Rang → kein history-Egress
+    const capped = await getCategoryCappedProductsShared(50, false) // Suche zeigt nur Name/Rang → kein history-Egress
     products = capped
       .filter((p) => p.canonicalName.toLowerCase().includes(lowerQuery))
       .sort((a, b) => {

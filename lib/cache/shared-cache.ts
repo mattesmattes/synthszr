@@ -1,8 +1,11 @@
 import { Redis } from '@upstash/redis'
 
 /**
- * Instanzuebergreifende Cache-Schicht (Upstash Redis, REST) vor den
- * Voll-Katalog-Scans des Lexikons.
+ * Instanzuebergreifende Cache-Schicht (Upstash Redis, REST) vor Voll-Katalog-Scans.
+ *
+ * Genutzt von den Lese-Pfaden des Lexikons (lib/glossary/terms.ts) und der
+ * Produkt-Charts (lib/rankings/leaderboard.ts). Beide holten ihren gesamten
+ * Katalog bei JEDEM Seitenrender neu aus der DB.
  *
  * WARUM ZUSAETZLICH ZUM TTL-CACHE IN terms.ts: der dortige `withTtlCache` ist
  * eine modulweite `Map` und lebt damit pro Function-Instanz. Next deployt jede

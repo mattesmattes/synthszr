@@ -22,7 +22,7 @@ import { waehrungFuerSlug } from '@/lib/currency/currencies'
 import { fetchEcbRates } from '@/lib/currency/ecb-rates'
 import { fetchKursverlauf, ausduennen } from '@/lib/currency/history'
 import { getPublishedTermListShared } from '@/lib/glossary/terms'
-import { getCategoryCappedProducts } from '@/lib/rankings/leaderboard'
+import { getCategoryCappedProductsShared } from '@/lib/rankings/leaderboard'
 import type { LanguageCode } from '@/lib/types'
 
 // ISR statt on-demand-only: der Erklärungstext ändert sich nur über den
@@ -135,7 +135,7 @@ export default async function GlossaryTermPage({ params }: PageProps) {
   // stehen trotzdem da.
   let chartBySlug = new Map<string, { vendor: string | null; score: number | null }>()
   try {
-    const chartProducts = await getCategoryCappedProducts(50, false)
+    const chartProducts = await getCategoryCappedProductsShared(50, false)
     chartBySlug = new Map(chartProducts.map((p) => [p.slug, { vendor: p.vendor ?? null, score: p.score ?? null }]))
   } catch (err) {
     console.error('[Glossary] Chart-Daten für Produkte nicht ladbar:', err)

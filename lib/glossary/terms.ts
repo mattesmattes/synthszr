@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { withSharedCache } from '@/lib/glossary/shared-cache'
+import { withSharedCache } from '@/lib/cache/shared-cache'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
 
@@ -537,7 +537,7 @@ async function applyTranslations<T extends TranslatableRow>(
  * direkt: lib/glossary/confirm.ts holt die Matcher-Liste bewusst DIREKT NACH dem
  * Publish-Update, damit der frisch bestaetigte Begriff darin steht. Ein
  * wirksamer geteilter Cache wuerde diesen dokumentierten Ablauf brechen — s.
- * ausfuehrliche Begruendung in lib/glossary/shared-cache.ts.
+ * ausfuehrliche Begruendung in lib/cache/shared-cache.ts.
  *
  * Schluessel tragen ein v1: aendert sich die Form der Werte, hebt v2 den alten
  * Bestand aus, statt ihn falsch zu deserialisieren.

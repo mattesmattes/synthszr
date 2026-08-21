@@ -22,7 +22,7 @@ vi.mock('@upstash/redis', () => ({
 
 async function load() {
   vi.resetModules()
-  return import('@/lib/glossary/shared-cache')
+  return import('@/lib/cache/shared-cache')
 }
 
 beforeEach(() => {
