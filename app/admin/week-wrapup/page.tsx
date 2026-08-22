@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, CalendarRange, AlertCircle } from 'lucide-react'
+import { Loader2, CalendarRange, AlertCircle, CheckCircle2, CircleSlash } from 'lucide-react'
 
 /**
  * AI-Week Wrap-up: fasst die „Thema des Tages"-Nachrichten der letzten
@@ -17,6 +17,17 @@ import { Loader2, CalendarRange, AlertCircle } from 'lucide-react'
 export default function WeekWrapupPage() {
   const router = useRouter()
   const [running, setRunning] = useState(false)
+  /**
+   * Zustand des Sonntagslaufs. Ohne diese Anzeige war ein Fehlschlag unsichtbar:
+   * der Cron gibt in jedem Fall 200 zurueck, und am 2026-08-16 entstand trotz
+   * sechs verfuegbarer Themen kein Entwurf — bemerkt wurde es sechs Tage spaeter.
+   */
+  const [status, setStatus] = useState<{
+    weekLabel: string
+    topicCount: number
+    verdict: 'vorhanden' | 'fehlt' | 'keine_themen'
+    post: { id: string; slug: string; status: string; created_at: string } | null
+  } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{
     postId: string
@@ -44,8 +55,17 @@ export default function WeekWrapupPage() {
       setError(err instanceof Error ? err.message : 'Fehlgeschlagen')
     } finally {
       setRunning(false)
+      void loadStatus() // Anzeige nachziehen, sonst steht dort weiter "fehlt"
     }
   }
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/week-wrapup')
+      if (res.ok) setStatus(await res.json())
+    } catch { /* Anzeige ist Beiwerk — ein Fehler hier darf die Seite nicht blockieren */ }
+  }, [])
+  useEffect(() => { void loadStatus() }, [loadStatus])
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
@@ -59,6 +79,57 @@ export default function WeekWrapupPage() {
           (Montag bis Sonnabend) zu einem Rückblick zusammen.
         </p>
       </div>
+
+      {status && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Letzte abgeschlossene Woche</CardTitle>
+            <CardDescription className="text-xs">
+              {status.weekLabel} — der Cron läuft sonntags um 06:00 UTC und legt einen Entwurf an.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {status.verdict === 'fehlt' && (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  <strong>Rückblick fehlt.</strong> Für diese Woche liegen{' '}
+                  {status.topicCount} {status.topicCount === 1 ? 'Thema' : 'Themen'} vor, aber es
+                  gibt keinen Entwurf — der Sonntagslauf ist also nicht durchgekommen. Unten von
+                  Hand erzeugen.
+                </span>
+              </div>
+            )}
+            {status.verdict === 'vorhanden' && status.post && (
+              <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3 text-sm">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="flex-1">
+                  Rückblick vorhanden ({status.post.status === 'draft' ? 'Entwurf' : status.post.status}),
+                  angelegt am {new Date(status.post.created_at).toLocaleString('de-DE')} aus{' '}
+                  {status.topicCount} {status.topicCount === 1 ? 'Thema' : 'Themen'}.
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-2 align-middle"
+                    onClick={() => router.push(`/admin/generated-articles/edit/${status.post!.id}`)}
+                  >
+                    Öffnen
+                  </Button>
+                </span>
+              </div>
+            )}
+            {status.verdict === 'keine_themen' && (
+              <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+                <CircleSlash className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Keine „Thema des Tages"-Artikel in dieser Woche — es gibt nichts
+                  zusammenzufassen. Das ist kein Fehler.
+                </span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

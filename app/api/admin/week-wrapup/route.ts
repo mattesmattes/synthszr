@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildWeekWrapup } from '@/lib/wrapup/build'
+import { getWrapupStatus } from '@/lib/wrapup/status'
 
 /**
  * Erzeugt den Wochenrückblick der letzten abgeschlossenen Woche als Entwurf —
@@ -16,6 +17,26 @@ import { buildWeekWrapup } from '@/lib/wrapup/build'
  * vorhandene Texte (~60-90s).
  */
 export const maxDuration = 300
+
+/**
+ * Zustand des Rueckblicks der letzten abgeschlossenen Woche — die Anzeige, die
+ * dem Panel bisher fehlte.
+ *
+ * Der Sonntags-Cron gibt in jedem Fall 200 zurueck, ein Fehlschlag sah deshalb
+ * aus wie ein Erfolg: am 2026-08-16 lief er, die Woche gab 6 Themen her, und es
+ * entstand trotzdem kein Entwurf — bemerkt wurde das erst sechs Tage spaeter.
+ */
+export async function GET() {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+  try {
+    return NextResponse.json(await getWrapupStatus(createAdminClient()))
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unbekannter Fehler'
+    console.error('[WeekWrapup] Status:', err)
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
