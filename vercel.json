@@ -24,6 +24,10 @@
       "schedule": "*/1 * * * *"
     },
     {
+      "path": "/api/cron/article-jobs",
+      "schedule": "*/1 * * * *"
+    },
+    {
       "path": "/api/cron/glossary-relink",
       "schedule": "0 6 * * *"
     },

@@ -8,6 +8,7 @@ import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPub
 import { MAX_DIGEST_SECTIONS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresholds'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
 import { getModelForUseCase } from '@/lib/ai/model-config'
+import { isStepComplete, dependencyGate } from '@/lib/scheduler/gating'
 
 export const runtime = 'nodejs'
 export const maxDuration = 800 // 13 minutes max (Vercel Pro limit)
@@ -144,8 +145,16 @@ export async function GET(request: NextRequest) {
         // and 401 deployment-protection issues that silently killed HTTP subrequests.
         const fetchResult = await processNewsletters()
         console.log('[Scheduler] Newsletter fetch completed:', fetchResult.message ?? `${fetchResult.processed ?? 0} newsletters, ${fetchResult.articles ?? 0} articles`)
-        if (fetchResult.success) await markTaskRun(supabase, 'newsletter_fetch')
-        results.newsletterFetch = fetchResult.success ? 'completed' : 'error'
+        // Nur abhaken, wenn tatsaechlich Mails ankamen. Am 2026-08-23 lief der
+        // Abruf um 03:46 ins Leere (Newsletter kamen erst gegen 07:00), galt
+        // trotzdem als erledigt — und sperrte damit jeden weiteren Versuch des
+        // Tages. Ohne Quellmaterial fiel die Tagesanalyse aus und mit ihr der
+        // Artikel. Jetzt bleibt der Schritt offen und wiederholt sich, bis Post da ist.
+        const fetchDone = isStepComplete({ success: fetchResult.success, produced: fetchResult.articles })
+        if (fetchDone) await markTaskRun(supabase, 'newsletter_fetch')
+        results.newsletterFetch = fetchDone
+          ? 'completed'
+          : (fetchResult.success ? 'waiting_for_mail' : 'error')
         if (fetchResult.processed !== undefined) results.newslettersFetched = fetchResult.processed.toString()
         if (fetchResult.articles !== undefined) results.articlesExtracted = fetchResult.articles.toString()
       } catch (error) {
@@ -166,8 +175,13 @@ export async function GET(request: NextRequest) {
       try {
         const crawlResult = await processWebcrawl()
         console.log('[Scheduler] WebCrawl fetch completed:', crawlResult.message || `${crawlResult.articles} articles`)
-        if (crawlResult.success) await markTaskRun(supabase, 'webcrawl_fetch')
-        results.webcrawlFetch = crawlResult.success ? 'completed' : 'error'
+        // Gleiche Regel wie beim Newsletter-Abruf: ein Lauf ohne Ausbeute ist
+        // nicht erledigt, sondern wartet auf den naechsten Versuch.
+        const crawlDone = isStepComplete({ success: crawlResult.success, produced: crawlResult.articles })
+        if (crawlDone) await markTaskRun(supabase, 'webcrawl_fetch')
+        results.webcrawlFetch = crawlDone
+          ? 'completed'
+          : (crawlResult.success ? 'waiting_for_articles' : 'error')
         if (crawlResult.articles !== undefined) results.webcrawlArticles = crawlResult.articles.toString()
       } catch (error) {
         console.error('[Scheduler] WebCrawl fetch error:', error)
@@ -187,7 +201,13 @@ export async function GET(request: NextRequest) {
       try {
         const digestResult = await runDailyAnalysisAndSynthesis(supabase, baseUrl)
         if (digestResult.success) await markTaskRun(supabase, 'daily_analysis')
-        results.dailyAnalysis = digestResult.success ? 'completed' : 'error'
+        // Fehlendes Quellmaterial ist KEIN Fehler, sondern ein Warten: der
+        // Abruf kann sich verspaeten (s. 2026-08-23). Der Unterschied ist nicht
+        // kosmetisch — beide Zustaende setzen keine Tagesmarke, aber nur einer
+        // davon soll im Log nach Stoerung aussehen.
+        results.dailyAnalysis = digestResult.success
+          ? 'completed'
+          : (digestResult.waitingForSources ? 'waiting_for_sources' : 'error')
         if (digestResult.digestId) results.digestId = digestResult.digestId
         if (digestResult.synthesesCreated !== undefined) results.synthesesCreated = digestResult.synthesesCreated.toString()
       } catch (error) {
@@ -203,11 +223,14 @@ export async function GET(request: NextRequest) {
   if (config.postGeneration.enabled) {
     const shouldRun = runAll || isTimeMatch(config.postGeneration.hour, config.postGeneration.minute, currentHour, currentMinute)
     const recentlyRan = !forceRun && await hasRunToday(supabase, 'post_generation')
-    const analysisOk = ['completed', 'already_ran'].includes(results.dailyAnalysis || '')
+    const gate = dependencyGate(results.dailyAnalysis)
     if (shouldRun && !recentlyRan) {
-      if (!analysisOk && config.dailyAnalysis.enabled) {
-        console.log('[Scheduler] Skipping post generation - daily analysis not completed')
-        results.postGeneration = 'skipped_dependency_failed'
+      if (gate === 'waiting' && config.dailyAnalysis.enabled) {
+        // WARTEN, nicht ueberspringen: es wird keine Tagesmarke gesetzt, also
+        // nimmt der naechste Tick den Artikel auf, sobald die Analyse steht.
+        // Der Tag ist damit nicht verloren, nur spaeter dran.
+        console.log('[Scheduler] Post generation waits for daily analysis')
+        results.postGeneration = 'waiting_for_analysis'
       } else {
         // Enqueue a resumable article job (processed over later ticks by the
         // advanceArticleJob block below). The job's finalize phase calls
@@ -494,6 +517,8 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
   digestId?: string
   synthesesCreated?: number
   error?: string
+  /** Es fehlte nur an Quellmaterial — der Scheduler wartet dann, statt zu melden. */
+  waitingForSources?: boolean
 }> {
   // Use today's date for analysis (we analyze newsletters collected earlier today)
   const today = new Date()
@@ -543,8 +568,14 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
   const analysisResult = await processAnalysis(dateStr)
 
   if (!analysisResult.success || !analysisResult.content) {
-    console.error('[DailyAnalysis] Analysis failed:', analysisResult.error)
-    return { success: false, error: analysisResult.error || 'Analysis failed' }
+    // Fehlendes Material getrennt melden: der Abruf kann sich verspaeten, und
+    // dann soll die Kette warten statt den Tag als gestoert abzuhaken.
+    if (analysisResult.noSources) {
+      console.log('[DailyAnalysis] Noch kein Quellmaterial — warte auf den naechsten Abruf')
+    } else {
+      console.error('[DailyAnalysis] Analysis failed:', analysisResult.error)
+    }
+    return { success: false, error: analysisResult.error || 'Analysis failed', waitingForSources: analysisResult.noSources }
   }
 
   const analysisContent = analysisResult.content

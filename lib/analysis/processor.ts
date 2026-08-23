@@ -44,7 +44,26 @@ const GARBAGE_TITLE_PATTERNS = [
 ]
 
 const MIN_CONTENT_LENGTH = 120
-const MAX_TOTAL_CHARS = 2000000
+/**
+ * Obergrenze des Analyse-Inputs.
+ *
+ * MESSUNG 2026-08-23: Mit den alten 2.000.000 Zeichen (251 von 599 Items)
+ * brauchte /api/analyze 255 Sekunden. Vercel deckelt Functions bei 300s — die
+ * Analyse lief also nur noch knapp durch und brach bei etwas mehr Material ab,
+ * ohne dass ein Digest entstand. Im Panel sah das aus wie eine Sackgasse.
+ *
+ * 1.200.000 Zeichen sind nach derselben Messung grob 155 Sekunden — rund die
+ * Haelfte des Limits, also Luft auch fuer einen Tag mit ungewoehnlich viel
+ * Material oder langsamerer Modellantwort. Der Preis ist eine kleinere
+ * Stichprobe; ein Digest ueber ~150 Quellen ist aber allemal besser als ein
+ * Timeout ueber 251.
+ *
+ * ⚠️ Die Items werden weiter unten ZUFAELLIG sortiert (sort(() => Math.random()
+ * - 0.5)). Je kleiner dieser Deckel, desto staerker haengt die Auswahl am
+ * Zufall statt an Relevanz — falls die Digest-Qualitaet leidet, ist das die
+ * Stelle, die eine echte Rangfolge braucht.
+ */
+const MAX_TOTAL_CHARS = 1200000
 
 function extractSubstackInfo(email: string | null): { name: string; url: string } | null {
   if (!email || !email.includes('@substack.com')) return null
@@ -77,7 +96,10 @@ export interface PreparedAnalysisInput {
 
 export type PreparedAnalysisResult =
   | { ok: true; data: PreparedAnalysisInput }
-  | { ok: false; status: number; error: string }
+  /** `noSources`: es lag schlicht noch kein Material vor — ein Wartezustand,
+   *  kein Defekt. Der Scheduler unterscheidet danach, ob er es spaeter erneut
+   *  versucht (Abruf verspaetet, s. 2026-08-23) oder eine Stoerung meldet. */
+  | { ok: false; status: number; error: string; noSources?: boolean }
 
 export async function prepareAnalysisInput(
   supabase: SupabaseAdminClient,
@@ -113,7 +135,7 @@ export async function prepareAnalysisInput(
     .order('collected_at', { ascending: false })
 
   if (!rawItems || rawItems.length === 0) {
-    return { ok: false, status: 400, error: 'Keine Inhalte für dieses Datum gefunden' }
+    return { ok: false, status: 400, error: 'Keine Inhalte für dieses Datum gefunden', noSources: true }
   }
 
   const filteredItems = rawItems.filter(item => {
@@ -126,7 +148,7 @@ export async function prepareAnalysisInput(
   console.log(`[Analyze] Garbage filter: ${rawItems.length} → ${filteredItems.length} items`)
 
   if (filteredItems.length === 0) {
-    return { ok: false, status: 400, error: 'Keine relevanten Inhalte nach Filterung gefunden' }
+    return { ok: false, status: 400, error: 'Keine relevanten Inhalte nach Filterung gefunden', noSources: true }
   }
 
   const items = filteredItems.sort(() => Math.random() - 0.5)
@@ -184,6 +206,8 @@ export interface AnalysisProcessResult {
   content?: string
   itemIds?: string[]
   error?: string
+  /** Kein Quellmaterial vorhanden — Wartezustand, kein Defekt (s. oben). */
+  noSources?: boolean
 }
 
 /**
@@ -197,7 +221,7 @@ export async function processAnalysis(
   const supabase = createAdminClient()
   const prepared = await prepareAnalysisInput(supabase, date, promptId)
   if (!prepared.ok) {
-    return { success: false, error: prepared.error }
+    return { success: false, error: prepared.error, noSources: prepared.noSources }
   }
 
   try {
