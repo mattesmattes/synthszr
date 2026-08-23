@@ -344,7 +344,7 @@ async function generatePodcastForPost(
         }),
         shouldAnnounceMemoryAwakening(ttsLang),
       ])
-      memoryBrief = buildMemoryBrief(recent, similar, { announceAwakening })
+      memoryBrief = buildMemoryBrief(recent, similar, { announceAwakening, locale })
     } catch (memErr) {
       console.warn('[Podcast] Memory retrieval failed (continuing without):', memErr)
     }

@@ -17,6 +17,7 @@
  * not a failed job.
  */
 
+import { episodeTimeReference, stripEpisodeNumbers } from '@/lib/podcast/episode-reference'
 import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateEmbedding } from '@/lib/embeddings/generator'
@@ -267,12 +268,21 @@ export async function consumeMemoryAwakeningSlot(locale: string): Promise<void> 
 export function buildMemoryBrief(
   recent: EpisodeMemoryRow[],
   similar: EpisodeMemoryRow[],
-  options: { announceAwakening?: boolean } = {}
+  options: { announceAwakening?: boolean; locale?: string } = {}
 ): string {
-  const { announceAwakening = false } = options
+  const { announceAwakening = false, locale = 'de' } = options
   if (recent.length === 0 && similar.length === 0 && !announceAwakening) return ''
 
-  const sections: string[] = ['═════ EPISODE-MEMORY — was bisher war ═════']
+  const sections: string[] = [
+    '═════ EPISODE-MEMORY — was bisher war ═════',
+    'RÜCKBEZÜGE: Verweist auf frühere Folgen IMMER über die unten genannte',
+    'Zeitangabe („letzten Dienstag", „vor zwei Wochen", „im Mai") und NIEMALS',
+    'über eine Folgennummer. Formulierungen vom Typ „wie wir in Episode',
+    '<Nummer> gesagt haben" sind verboten — eine Nummer sagt einer Hörerin',
+    'nichts, ein Zeitpunkt schon. Erfindet auch keine Nummern: es gibt hier',
+    'bewusst keine. (Absichtlich ohne Beispielzahl: eine genannte Zahl landet',
+    'erfahrungsgemäß irgendwann im Skript.)',
+  ]
 
   if (announceAwakening) {
     sections.push(
@@ -303,13 +313,13 @@ export function buildMemoryBrief(
   if (recent.length > 0) {
     sections.push('LETZTE FOLGEN (chronologisch, jüngste zuerst):')
     for (const r of recent) {
-      const dateLabel = formatDateShort(r.recorded_at)
-      const topics = r.topics_covered.slice(0, 4).join(', ')
+      const wann = episodeTimeReference(r.recorded_at, locale) ?? formatDateShort(r.recorded_at)
+      const topics = r.topics_covered.slice(0, 4).map(stripEpisodeNumbers).join(', ')
       const hostBits = r.host_positions.slice(0, 2).map((p) => `HOST zu ${p.topic}: "${truncate(p.stance, 80)}"`).join('; ')
       const guestBits = r.guest_positions.slice(0, 2).map((p) => `GUEST zu ${p.topic}: "${truncate(p.stance, 80)}"`).join('; ')
-      const moments = r.key_moments.slice(0, 2).map((m) => `· ${truncate(m, 100)}`).join('\n  ')
+      const moments = r.key_moments.slice(0, 2).map((m) => `· ${truncate(stripEpisodeNumbers(m), 100)}`).join('\n  ')
       sections.push(
-        `- Folge ${r.episode_number} (${dateLabel}): Themen ${topics || '(unbekannt)'}.${r.tone_summary ? ` Atmosphäre: ${r.tone_summary}` : ''}`
+        `- ${wann}: Themen ${topics || '(unbekannt)'}.${r.tone_summary ? ` Atmosphäre: ${r.tone_summary}` : ''}`
           + (hostBits ? `\n  Positionen: ${hostBits}` : '')
           + (guestBits ? `\n  ${guestBits}` : '')
           + (moments ? `\n  Momente:\n  ${moments}` : '')
@@ -320,12 +330,12 @@ export function buildMemoryBrief(
   if (similar.length > 0) {
     sections.push('\nFRÜHERE FOLGEN ZU THEMATISCH ÄHNLICHEN INHALTEN:')
     for (const r of similar) {
-      const dateLabel = formatDateShort(r.recorded_at)
-      const topics = r.topics_covered.slice(0, 3).join(', ')
+      const wann = episodeTimeReference(r.recorded_at, locale) ?? formatDateShort(r.recorded_at)
+      const topics = r.topics_covered.slice(0, 3).map(stripEpisodeNumbers).join(', ')
       const hostBits = r.host_positions.slice(0, 2).map((p) => `HOST zu ${p.topic}: "${truncate(p.stance, 90)}"`).join('; ')
       const guestBits = r.guest_positions.slice(0, 2).map((p) => `GUEST zu ${p.topic}: "${truncate(p.stance, 90)}"`).join('; ')
       sections.push(
-        `- Folge ${r.episode_number} (${dateLabel}, Themen: ${topics || '–'})`
+        `- ${wann} (Themen: ${topics || '–'})`
           + (hostBits ? `\n  ${hostBits}` : '')
           + (guestBits ? `\n  ${guestBits}` : '')
       )
@@ -340,7 +350,10 @@ export function buildMemoryBrief(
   if (allGags.size > 0) {
     sections.push('\nLAUFENDE INSIDE-JOKES / GAGS (aufgreifbar, nicht erzwungen):')
     for (const g of Array.from(allGags).slice(0, 6)) {
-      sections.push(`- ${truncate(g, 110)}`)
+      // Altbestand: in den gespeicherten Gags stecken teils Folgennummern
+      // ("Episode 262 slop argument"). Ohne dieses Ausfiltern traegt der
+      // Kontext die Nummer zurueck in den Dialog, allen Prompt-Regeln zum Trotz.
+      sections.push(`- ${truncate(stripEpisodeNumbers(g), 110)}`)
     }
   }
 
@@ -372,7 +385,7 @@ function formatDateShort(iso: string): string {
 }
 
 function buildExtractionPrompt(script: string): string {
-  return `Du bist Memory-Archivar für einen KI-Podcast mit zwei Stimmen (HOST und GUEST). Lies das Skript der gerade aufgenommenen Episode und extrahiere die strukturierte Erinnerung für künftige Folgen.
+  return `Du bist Memory-Archivar für einen KI-Podcast mit zwei Stimmen (HOST und GUEST). Lies das Skript der gerade aufgenommenen Episode und extrahiere die strukturierte Erinnerung für künftige Folgen.\n\nWICHTIG: Schreibe in KEINES der Felder eine Folgen- oder Episodennummer. Beschreibe eine frühere Folge über ihr Thema, nie über ihre Nummer — die Nummer landet sonst später im gesprochenen Dialog, und dort sagt sie einer Hörerin nichts.
 
 Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in genau dieser Form, kein Markdown, kein Vorwort:
 

@@ -611,7 +611,7 @@ export async function POST(request: NextRequest) {
         }),
         shouldAnnounceMemoryAwakening(ttsLang),
       ])
-      memoryBrief = buildMemoryBrief(recent, similar, { announceAwakening })
+      memoryBrief = buildMemoryBrief(recent, similar, { announceAwakening, locale })
       if (memoryBrief) {
         console.log(`[Podcast Script] Memory brief built (${recent.length} recent + ${similar.length} similar episodes, awakening=${announceAwakening})`)
       }
