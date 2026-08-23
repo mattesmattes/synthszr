@@ -14,8 +14,10 @@ export interface WrapupStatus {
   post: { id: string; slug: string; status: string; created_at: string } | null
   topicCount: number
   /**
-   * `fehlt` ist der einzige Zustand, der Aufmerksamkeit braucht: Material war
-   * da, ein Rueckblick nicht. `keine_themen` ist ein normaler Betriebsfall.
+   * `fehlt`: Material liegt vor, ein Rueckblick noch nicht — seit dem Wegfall
+   * des Sonntags-Crons (2026-08-23, Betreiberentscheidung) ist das eine
+   * ERINNERUNG, keine Stoerung: der Rueckblick wird bewusst von Hand angestossen.
+   * `keine_themen` heisst, es gaebe ohnehin nichts zusammenzufassen.
    */
   verdict: 'vorhanden' | 'fehlt' | 'keine_themen'
 }
@@ -23,13 +25,14 @@ export interface WrapupStatus {
 /**
  * Zustand des Wochenrueckblicks fuer die letzte abgeschlossene Woche.
  *
- * WARUM ES DAS GIBT: Der Sonntags-Cron (app/api/cron/week-wrapup) gibt in JEDEM
- * Fall HTTP 200 zurueck — absichtlich, damit Vercel eine themenlose Woche nicht
- * als Ausfall fuehrt. Die Kehrseite: ein echter Fehlschlag sieht genauso aus wie
- * ein Erfolg. Am 2026-08-16 lief der Cron, die Woche gab 6 Themen her, und es
- * entstand trotzdem kein Entwurf — bemerkt wurde das erst sechs Tage spaeter,
- * als das Log laengst rotiert war. Es gab schlicht keinen Ort, an dem
- * „Rueckblick fehlt" gestanden haette.
+ * WARUM ES DAS GIBT: Bis zum 2026-08-23 erzeugte ein Sonntags-Cron den
+ * Rueckblick. Er gab in JEDEM Fall HTTP 200 zurueck, weshalb ein Fehlschlag
+ * genauso aussah wie ein Erfolg — am 2026-08-16 entstand trotz sechs
+ * verfuegbarer Themen kein Entwurf, bemerkt wurde es erst sechs Tage spaeter.
+ * Der Cron ist inzwischen entfernt (Betreiberentscheidung: der Rueckblick wird
+ * von Hand ueber /admin/week-wrapup angestossen). Die Anzeige bleibt trotzdem
+ * nuetzlich — sie beantwortet auf einen Blick, ob fuer die abgelaufene Woche
+ * schon ein Rueckblick existiert und auf wie vielen Tagen er beruht.
  *
  * Deshalb wird hier der ZUSTAND gemeldet statt eines Fehlers protokolliert: der
  * Zustand ist die eigentliche Information, er braucht keine neue Tabelle, und er

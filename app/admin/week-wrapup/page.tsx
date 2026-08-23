@@ -18,9 +18,9 @@ export default function WeekWrapupPage() {
   const router = useRouter()
   const [running, setRunning] = useState(false)
   /**
-   * Zustand des Sonntagslaufs. Ohne diese Anzeige war ein Fehlschlag unsichtbar:
-   * der Cron gibt in jedem Fall 200 zurueck, und am 2026-08-16 entstand trotz
-   * sechs verfuegbarer Themen kein Entwurf — bemerkt wurde es sechs Tage spaeter.
+   * Zustand der abgelaufenen Woche. Seit dem Wegfall des Sonntags-Crons
+   * (2026-08-23) entsteht der Rueckblick nur noch auf Knopfdruck — die Anzeige
+   * beantwortet deshalb vor allem: ist diese Woche schon erledigt?
    */
   const [status, setStatus] = useState<{
     weekLabel: string
@@ -85,7 +85,7 @@ export default function WeekWrapupPage() {
           <CardHeader>
             <CardTitle className="text-base">Letzte abgeschlossene Woche</CardTitle>
             <CardDescription className="text-xs">
-              {status.weekLabel} — der Cron läuft sonntags um 06:00 UTC und legt einen Entwurf an.
+              {status.weekLabel} — der Rückblick wird von Hand erzeugt (kein automatischer Lauf).
             </CardDescription>
           </CardHeader>
           <CardContent>

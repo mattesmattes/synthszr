@@ -1,17 +1,17 @@
 /**
  * Sichtbarkeit des Sonntags-Rueckblicks.
  *
- * PROD-BEFUND 2026-08-22: Der Cron /api/cron/week-wrapup ist bei Vercel
- * registriert und lief am Sonntag 2026-08-16 — trotzdem gab es KEINEN einzigen
- * Rueckblick in der Datenbank, obwohl die Woche 6 Themen hergab. Warum der Lauf
- * scheiterte, liess sich nicht mehr feststellen: die Route gibt in JEDEM Fall
- * 200 zurueck (damit Vercel eine themenlose Woche nicht als Ausfall fuehrt),
- * und das Log war laengst rotiert. Es gab keinen Ort, an dem "Rueckblick fehlt"
- * sichtbar geworden waere.
+ * VORGESCHICHTE: Bis 2026-08-23 erzeugte ein Sonntags-Cron den Rueckblick. Am
+ * 2026-08-16 lief er, die Woche gab 6 Themen her — und es entstand trotzdem
+ * kein Entwurf. Warum, liess sich nicht mehr feststellen: die Route gab in
+ * JEDEM Fall 200 zurueck, und das Log war laengst rotiert. Es gab keinen Ort,
+ * an dem "Rueckblick fehlt" sichtbar geworden waere. Der Cron ist inzwischen
+ * entfernt (der Rueckblick wird von Hand angestossen); die Statusanzeige bleibt,
+ * weil sonst gar nicht auffiele, dass eine Woche noch offen ist.
  *
- * getWrapupStatus macht genau diesen Zustand pruefbar. Der springende Punkt ist
- * die Unterscheidung zwischen "fehlt, obwohl Material da war" (Stoerung) und
- * "keine Themen" (normaler Betriebsfall, z. B. Urlaubswoche).
+ * getWrapupStatus macht den Zustand pruefbar. Der springende Punkt ist die
+ * Unterscheidung zwischen "Material liegt bereit, Rueckblick fehlt noch" (also:
+ * dran denken) und "keine Themen" (es gaebe ohnehin nichts zusammenzufassen).
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 

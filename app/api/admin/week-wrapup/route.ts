@@ -8,9 +8,10 @@ import { getWrapupStatus } from '@/lib/wrapup/status'
  * Erzeugt den Wochenrückblick der letzten abgeschlossenen Woche als Entwurf —
  * auf Knopfdruck im Panel.
  *
- * Die Arbeit selbst steht in lib/wrapup/build.ts, weil sie sich diese Route mit
- * dem Sonntags-Cron teilt (app/api/cron/week-wrapup). Zwei Fassungen derselben
- * Logik liefen mit der Zeit auseinander.
+ * Die Arbeit selbst steht in lib/wrapup/build.ts. Sie teilte sich diese Route
+ * frueher mit einem Sonntags-Cron; der ist seit 2026-08-23 entfernt (der
+ * Rueckblick wird bewusst von Hand angestossen), die Trennung bleibt aber
+ * sinnvoll — zwei Fassungen derselben Logik liefen mit der Zeit auseinander.
  *
  * KEIN article_jobs-Eintrag: Der Job-Mechanismus existiert, weil 40 Sektionen à
  * 45-90s das 300s-Limit sprengen. Hier ist es EIN Aufruf über bis zu sechs
@@ -22,9 +23,9 @@ export const maxDuration = 300
  * Zustand des Rueckblicks der letzten abgeschlossenen Woche — die Anzeige, die
  * dem Panel bisher fehlte.
  *
- * Der Sonntags-Cron gibt in jedem Fall 200 zurueck, ein Fehlschlag sah deshalb
- * aus wie ein Erfolg: am 2026-08-16 lief er, die Woche gab 6 Themen her, und es
- * entstand trotzdem kein Entwurf — bemerkt wurde das erst sechs Tage spaeter.
+ * Zeigt, ob fuer die abgelaufene Woche schon ein Rueckblick existiert. Wichtig,
+ * seit er nur noch von Hand entsteht: ohne diese Anzeige faellt schlicht nicht
+ * auf, dass eine Woche noch offen ist.
  */
 export async function GET() {
   const session = await getSession()
