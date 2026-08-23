@@ -1,6 +1,5 @@
 import { verifyBearerToken } from '@/lib/security/cron-auth'
 import { NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { prepareAnalysisInput, streamAnalysis } from '@/lib/analysis/processor'
@@ -24,10 +23,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { date, promptId } = body
 
-    const supabase = cronSecretValid ? createAdminClient() : await createClient()
-    // prepareAnalysisInput uses admin-level reads (analysis_prompts, daily_repo).
-    // For user sessions this still works because RLS allows reads for these tables;
-    // if that ever changes, switch to createAdminClient() unconditionally.
+    // IMMER der Admin-Client — der Fall, den der frühere Kommentar hier
+    // vorhergesagt hat ("if that ever changes, switch to createAdminClient()
+    // unconditionally"), ist eingetreten: seit dem RLS-Umbau darf der anon-Key
+    // daily_repo nicht mehr lesen. Gemessen 2026-08-23 für denselben Tag:
+    // service_role 677 Zeilen, anon 0 Zeilen — und PostgREST meldet das als
+    // HTTP 200 mit leerem Ergebnis, nicht als Fehler. Die Analyse lief damit
+    // über den Cron einwandfrei und scheiterte im Panel mit "Keine Inhalte für
+    // dieses Datum gefunden", obwohl 677 Einträge dastanden.
+    //
+    // Sicher ist das, weil die Berechtigung oben bereits geprüft wurde: hierher
+    // kommt nur, wer eine Admin-Session ODER das Cron-Secret hat. Dasselbe
+    // Muster nutzen die übrigen Admin-Routen (z. B. api/admin/translations).
+    const supabase = createAdminClient()
     const prepared = await prepareAnalysisInput(
       supabase as unknown as ReturnType<typeof createAdminClient>,
       date,
