@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { FetchProgress } from '@/components/admin/fetch-progress'
 import { SystemAlertBanner } from '@/components/admin/system-alert-banner'
+import { FetchStatusBanner } from '@/components/admin/fetch-status-banner'
 
 interface DailyRepoItem {
   id: string
@@ -408,6 +409,7 @@ export default function DailyRepoPage() {
   return (
     <div className="p-4 md:p-6 max-w-full">
       <SystemAlertBanner />
+      <FetchStatusBanner />
       {/* Header */}
       <div className="mb-5">
         <h1 className="text-lg font-semibold tracking-tight">Daily Repo</h1>
