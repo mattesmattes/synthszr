@@ -21,8 +21,11 @@ export async function GET() {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
     const from = new Date(`${today}T00:00:00+02:00`).toISOString()
 
-    const [{ count }, marks] = await Promise.all([
+    const [{ count }, { count: processed }, marks] = await Promise.all([
       supabase.from('daily_repo').select('id', { count: 'exact', head: true }).gte('collected_at', from),
+      // news_queue = was aus den Rohartikeln tatsaechlich als News herausgefiltert
+      // wurde. Diese Zahl entscheidet die Ampel, nicht die Rohmenge.
+      supabase.from('news_queue').select('id', { count: 'exact', head: true }).gte('queued_at', from),
       supabase.from('settings').select('key, value').in('key', ['last_run_newsletter_fetch', 'last_run_webcrawl_fetch']),
     ])
 
@@ -33,6 +36,7 @@ export async function GET() {
 
     return NextResponse.json(buildFetchStatus({
       articleCount: count ?? 0,
+      processedCount: processed ?? 0,
       lastNewsletterFetch: val('last_run_newsletter_fetch'),
       lastWebcrawl: val('last_run_webcrawl_fetch'),
     }))

@@ -1,20 +1,19 @@
 /**
- * Tages-Fetchstand fuer das Banner im Admin.
+ * Tages-Ampel fuer den News-Nachschub im Admin.
  *
- * WARUM ES DAS GIBT (Befund 2026-08-23, Sonntag): Der Newsletter-Abruf lief um
- * 03:46 und sammelte NULL Artikel. Der Scheduler verbuchte das als Erfolg —
- * `if (fetchResult.success) markTaskRun(...)`, und null Artikel sind formal kein
- * Fehler. Danach sperrte hasRunToday jeden weiteren Versuch fuer den restlichen
- * Tag. Ohne Quellmaterial scheiterte die Tagesanalyse, und weil die
- * Post-Erzeugung an ihr haengt (results.postGeneration =
- * 'skipped_dependency_failed'), entstand kein Artikel. Bemerkt wurde es erst,
- * als der Betreiber den fehlenden Post suchte.
- *
- * Die Trennung von Zahl und Bewertung steckt hier, damit sie pruefbar ist: NULL
- * gesammelte Artikel ist der Warnfall, nicht eine unauffaellige Null.
+ * WARUM ES DAS GIBT (Befund 2026-08-23): Der Newsletter-Abruf lief um 03:46 und
+ * sammelte NULL Artikel — die Newsletter kamen an dem Tag erst gegen 07:00. Der
+ * Scheduler verbuchte den leeren Lauf als Erfolg (null Artikel sind formal kein
+ * Fehler) und sperrte damit jeden weiteren Versuch des Tages. Ohne Quellmaterial
+ * fiel die Tagesanalyse aus, und weil die Post-Erzeugung an ihr haengt, entstand
+ * kein Artikel. Bemerkt wurde es erst, als der Betreiber den fehlenden Post suchte.
  */
+
 export interface FetchStatusInput {
+  /** Eingesammelte Quellartikel heute (daily_repo). */
   articleCount: number
+  /** Daraus verarbeitete News heute (news_queue) — die Groesse, die zaehlt. */
+  processedCount: number
   lastNewsletterFetch: string | null
   lastWebcrawl: string | null
   now?: Date
@@ -22,10 +21,26 @@ export interface FetchStatusInput {
 
 export interface FetchStatus {
   articleCount: number
-  level: 'ok' | 'warn'
+  processedCount: number
+  level: 'gruen' | 'gelb' | 'rot'
   lastFetchLabel: string
   lastWebcrawlLabel: string
 }
+
+/**
+ * Schwellen, gemessen ueber 11 Tage (verarbeitete News je Tag):
+ *   normale Werktage 573-844 (Median 699)
+ *   Sonntag 16.08.   297   -> ruhig, aber voellig in Ordnung
+ *   22.08.            81   -> der Tag, an dem der Abruf ausfiel
+ *
+ * GRUEN ab 250: deckt auch ruhige Sonntage ab. Eine hoehere Schwelle haette
+ * jeden Sonntag grundlos Alarm geschlagen — eine Ampel, die regelmaessig ohne
+ * Anlass warnt, wird ignoriert und ist dann wertlos.
+ * GELB ab 50: auffaellig wenig, aber es laeuft etwas.
+ * ROT darunter: der Tagesartikel ist in Gefahr.
+ */
+const GRUEN_AB = 250
+const GELB_AB = 50
 
 const TZ = 'Europe/Berlin'
 const dayIn = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: TZ })
@@ -40,11 +55,18 @@ function label(iso: string | null, now: Date): string {
 
 export function buildFetchStatus(input: FetchStatusInput): FetchStatus {
   const now = input.now ?? new Date()
+  // Ohne eingesammelte Artikel ist der Tag unabhaengig von allem anderen rot:
+  // genau diese Null hat am 2026-08-23 den Artikel gekostet.
+  const level: FetchStatus['level'] =
+    input.articleCount === 0 ? 'rot'
+    : input.processedCount >= GRUEN_AB ? 'gruen'
+    : input.processedCount >= GELB_AB ? 'gelb'
+    : 'rot'
+
   return {
     articleCount: input.articleCount,
-    // Nur die Menge entscheidet: ein Abruf, der nichts einsammelt, ist genau der
-    // Fall, der den Tagesartikel gekostet hat.
-    level: input.articleCount > 0 ? 'ok' : 'warn',
+    processedCount: input.processedCount,
+    level,
     lastFetchLabel: label(input.lastNewsletterFetch, now),
     lastWebcrawlLabel: label(input.lastWebcrawl, now),
   }
