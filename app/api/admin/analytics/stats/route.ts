@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { fetchDailyCounts } from '@/lib/analytics/daily-counts'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 
@@ -16,16 +17,12 @@ const BERLIN_TZ = 'Europe/Berlin'
 
 // Page-View unter den Synthszr Charts (/[lang]/rankings…). Matcht /de/rankings,
 // /en/rankings/google-gemini-3-5 usw., aber nicht z.B. /de/xrankings.
-function isRankingsPath(path: string | null | undefined): boolean {
-  return !!path && /\/rankings(\/|$)/.test(path)
-}
-
 // Page-View im Lexikon (/[lang]/glossary…). Matcht die Übersicht und die
 // Begriffsseiten in jeder Sprache, aber nicht /de/xglossary oder /de/glossaryx.
 //
 // `/admin/` ist ausgenommen: /admin/glossary ist das Redaktionswerkzeug, keine
 // Leser-Nutzung — sonst schriebe sich der Betreiber selbst in die Zahlen.
-// isRankingsPath braucht diese Ausnahme nicht, weil es unter /admin keine
+// Der Rankings-Filter braucht diese Ausnahme nicht, weil es unter /admin keine
 // Rankings-Ansicht gibt.
 export function isGlossaryPath(path: string | null | undefined): boolean {
   return !!path && !path.startsWith('/admin/') && /\/glossary(\/|$)/.test(path)
@@ -93,23 +90,6 @@ function generateBuckets(granularity: Granularity, startMs: number, endMs: numbe
 const PAGE_SIZE = 1000
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function fetchAllRows<T = any>(
-  queryBuilder: any
-): Promise<T[]> {
-  const allRows: T[] = []
-  let offset = 0
-
-  while (true) {
-    const { data, error } = await queryBuilder.range(offset, offset + PAGE_SIZE - 1)
-    if (error) throw new Error(error.message)
-    if (!data || data.length === 0) break
-    allRows.push(...(data as T[]))
-    if (data.length < PAGE_SIZE) break // last page
-    offset += PAGE_SIZE
-  }
-
-  return allRows
-}
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -131,39 +111,49 @@ export async function GET(request: NextRequest) {
     const currentStart = new Date(now - lookbackMs).toISOString()
     const previousStart = new Date(now - 2 * lookbackMs).toISOString()
 
-    // Fetch current + previous period in parallel using pagination
-    // PostgREST caps at 1000 rows per request regardless of .limit() — must paginate with .range()
-    const [analyticsData, podcastData, prevAnalyticsData, prevPodcastData] = await Promise.all([
-      fetchAllRows<{ event_type: string; created_at: string; path: string | null }>(
-        supabase
-          .from('analytics_events')
-          .select('event_type, created_at, path')
-          .gte('created_at', currentStart)
-          .order('created_at', { ascending: false })
-      ),
-      fetchAllRows<{ played_at: string }>(
-        supabase
-          .from('podcast_plays')
-          .select('played_at')
-          .gte('played_at', currentStart)
-          .order('played_at', { ascending: false })
-      ),
-      fetchAllRows<{ event_type: string; created_at: string; path: string | null }>(
-        supabase
-          .from('analytics_events')
-          .select('event_type, created_at, path')
-          .gte('created_at', previousStart)
-          .lt('created_at', currentStart)
-          .order('created_at', { ascending: false })
-      ),
-      fetchAllRows<{ played_at: string }>(
-        supabase
-          .from('podcast_plays')
-          .select('played_at')
-          .gte('played_at', previousStart)
-          .lt('played_at', currentStart)
-          .order('played_at', { ascending: false })
-      ),
+    // Serverseitig zaehlen statt Rohzeilen zu holen.
+    //
+    // BEFUND 2026-08-23: Die 3-Monats-Ansicht hing. Sie las JEDE Rohzeile fuer
+    // Zeitraum UND Vergleichsperiode — ~100.000 Zeilen, ~15 MB, ~100
+    // sequenzielle Requests (die Rohzeilen wurden paginiert) — und zaehlte sie in
+    // JavaScript, um daraus 90 Balken zu machen. Jetzt liefert die Datenbank je
+    // Metrik ~90 Tageswerte; die groeberen Raster (Woche/Monat) entstehen unten
+    // aus den Tageswerten.
+    //
+    // Die Pfad-Filter sind gegen die alten JS-Regexe geprueft und liefern fuer
+    // dasselbe 90-Tage-Fenster identische Zahlen (rankings 13098, glossary 13653).
+    const RANKINGS_RE = '/rankings(/|$)'
+    const GLOSSARY_RE = '/glossary(/|$)'
+    const span = (from: string, to?: string) => ({ from, to })
+    const cur = span(currentStart)
+    const prev = span(previousStart, currentStart)
+
+    const daily = (
+      table: string, dateColumn: string, w: { from: string; to?: string },
+      extra: Partial<Parameters<typeof fetchDailyCounts>[1]> = {},
+    ) => fetchDailyCounts(supabase, { table, dateColumn, from: w.from, to: w.to, ...extra })
+
+    const ev = (w: { from: string; to?: string }, extra = {}) =>
+      daily('analytics_events', 'created_at', w, extra)
+
+    const [
+      pageViews, rankingsViews, glossaryViews, stockClicks, voteClicks, podcastEv, podcastTable,
+      pPageViews, pRankingsViews, pGlossaryViews, pStockClicks, pVoteClicks, pPodcastEv, pPodcastTable,
+    ] = await Promise.all([
+      ev(cur, { eq: { event_type: 'page_view' } }),
+      ev(cur, { eq: { event_type: 'page_view' }, match: { path: RANKINGS_RE } }),
+      ev(cur, { eq: { event_type: 'page_view' }, match: { path: GLOSSARY_RE }, notLike: { path: '/admin/*' } }),
+      ev(cur, { eq: { event_type: 'stock_ticker_click' } }),
+      ev(cur, { eq: { event_type: 'synthszr_vote_click' } }),
+      ev(cur, { eq: { event_type: 'podcast_play' } }),
+      daily('podcast_plays', 'played_at', cur),
+      ev(prev, { eq: { event_type: 'page_view' } }),
+      ev(prev, { eq: { event_type: 'page_view' }, match: { path: RANKINGS_RE } }),
+      ev(prev, { eq: { event_type: 'page_view' }, match: { path: GLOSSARY_RE }, notLike: { path: '/admin/*' } }),
+      ev(prev, { eq: { event_type: 'stock_ticker_click' } }),
+      ev(prev, { eq: { event_type: 'synthszr_vote_click' } }),
+      ev(prev, { eq: { event_type: 'podcast_play' } }),
+      daily('podcast_plays', 'played_at', prev),
     ])
 
     // Generate all buckets and initialize to zero
@@ -182,28 +172,23 @@ export async function GET(request: NextRequest) {
       countsMap.set(b, { page_views: 0, rankings_page_views: 0, glossary_page_views: 0, stock_ticker_clicks: 0, synthszr_vote_clicks: 0, podcast_plays: 0 })
     }
 
-    // Aggregate analytics_events
-    for (const event of analyticsData) {
-      const key = truncateDateKey(event.created_at, granularity)
-      const bucket = countsMap.get(key)
-      if (!bucket) continue
-      if (event.event_type === 'page_view') {
-        bucket.page_views++
-        if (isRankingsPath(event.path)) bucket.rankings_page_views++
-        if (isGlossaryPath(event.path)) bucket.glossary_page_views++
+    // Tageswerte in die (ggf. groeberen) Balken einsortieren. Mittag als
+    // Uhrzeit, damit die Zeitzonen-Umrechnung nicht ueber die Tagesgrenze kippt.
+    const intoBuckets = (m: Map<string, number>, feld: keyof BucketData) => {
+      for (const [day, n] of m) {
+        const bucket = countsMap.get(truncateDateKey(`${day}T12:00:00.000Z`, granularity))
+        if (bucket) bucket[feld] += n
       }
-      else if (event.event_type === 'stock_ticker_click') bucket.stock_ticker_clicks++
-      else if (event.event_type === 'synthszr_vote_click') bucket.synthszr_vote_clicks++
-      else if (event.event_type === 'podcast_play') bucket.podcast_plays++
     }
+    intoBuckets(pageViews, 'page_views')
+    intoBuckets(rankingsViews, 'rankings_page_views')
+    intoBuckets(glossaryViews, 'glossary_page_views')
+    intoBuckets(stockClicks, 'stock_ticker_clicks')
+    intoBuckets(voteClicks, 'synthszr_vote_clicks')
+    intoBuckets(podcastEv, 'podcast_plays')
+    intoBuckets(podcastTable, 'podcast_plays')
 
-    // Aggregate podcast_plays
-    for (const play of podcastData) {
-      const key = truncateDateKey(play.played_at, granularity)
-      const bucket = countsMap.get(key)
-      if (!bucket) continue
-      bucket.podcast_plays++
-    }
+    const summe = (m: Map<string, number>) => [...m.values()].reduce((a, b) => a + b, 0)
 
     const events = buckets.map(date => ({ date, ...countsMap.get(date)! }))
 
@@ -220,14 +205,14 @@ export async function GET(request: NextRequest) {
       { page_views: 0, rankings_page_views: 0, glossary_page_views: 0, stock_ticker_clicks: 0, synthszr_vote_clicks: 0, podcast_plays: 0 }
     )
 
-    // Previous period totals (for % comparison)
+    // Previous period totals (for % comparison) — ebenfalls aggregiert
     const previous_totals = {
-      page_views: prevAnalyticsData.filter(e => e.event_type === 'page_view').length,
-      rankings_page_views: prevAnalyticsData.filter(e => e.event_type === 'page_view' && isRankingsPath(e.path)).length,
-      glossary_page_views: prevAnalyticsData.filter(e => e.event_type === 'page_view' && isGlossaryPath(e.path)).length,
-      stock_ticker_clicks: prevAnalyticsData.filter(e => e.event_type === 'stock_ticker_click').length,
-      synthszr_vote_clicks: prevAnalyticsData.filter(e => e.event_type === 'synthszr_vote_click').length,
-      podcast_plays: prevPodcastData.length,
+      page_views: summe(pPageViews),
+      rankings_page_views: summe(pRankingsViews),
+      glossary_page_views: summe(pGlossaryViews),
+      stock_ticker_clicks: summe(pStockClicks),
+      synthszr_vote_clicks: summe(pVoteClicks),
+      podcast_plays: summe(pPodcastEv) + summe(pPodcastTable),
     }
 
     // Subscriber data — same period window and granularity as events
