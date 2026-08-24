@@ -151,15 +151,18 @@
       "form-data@>=4.0.0 <4.0.6": ">=4.0.6",
       "linkify-it@<=5.0.1": ">=5.0.2",
       "ws@>=8.0.0 <8.21.0": ">=8.21.0",
-      "postcss@<=8.5.17": ">=8.5.18"
+      "postcss@<=8.5.17": ">=8.5.18",
+      "nanoid@<3.3.18": ">=3.3.18"
     },
     "auditConfig": {
       "ignoreGhsas": [
-        "GHSA-f88m-g3jw-g9cj"
+        "GHSA-f88m-g3jw-g9cj",
+        "GHSA-jmr9-qjv8-65gv"
       ]
     },
     "auditExceptionNotes": {
-      "GHSA-f88m-g3jw-g9cj": "sharp <0.35.0 (libvips CVEs). Accepted risk: sharp 0.35.x crashes on the Vercel Lambda runtime (newsletter thumbnails returned HTTP 500, verified), so the upgrade is not deployable. Exposure is bounded: sharp only ever processes images fetched through lib/security/safe-image-fetch.ts, which enforces an exact-hostname allowlist (own Blob store + own Supabase project), an 8 MiB byte cap, a 16 MP pixel cap and PNG/JPEG/WebP magic-byte validation - so untrusted images never reach libvips. Owner: Mattes. Re-evaluate when sharp ships a release that runs on Vercel Lambda, or at the latest on 2026-11-02."
+      "GHSA-f88m-g3jw-g9cj": "sharp <0.35.0 (libvips CVEs). Accepted risk: sharp 0.35.x crashes on the Vercel Lambda runtime (newsletter thumbnails returned HTTP 500, verified), so the upgrade is not deployable. Exposure is bounded: sharp only ever processes images fetched through lib/security/safe-image-fetch.ts, which enforces an exact-hostname allowlist (own Blob store + own Supabase project), an 8 MiB byte cap, a 16 MP pixel cap and PNG/JPEG/WebP magic-byte validation - so untrusted images never reach libvips. Owner: Mattes. Re-evaluate when sharp ships a release that runs on Vercel Lambda, or at the latest on 2026-11-02.",
+      "GHSA-jmr9-qjv8-65gv": "extract-zip <=2.0.1 (unvalidated symlink path traversal). Accepted risk: NO patched version exists - 2.0.1 is the latest published release and the advisory lists patched_versions '<0.0.0', so an override cannot fix it. Reaches us transitively via @remotion/renderer (also through @remotion/bundler, @remotion/studio, @remotion/lambda), the video-rendering chain. Exposure is bounded: Remotion uses extract-zip to unpack its own browser downloads, never archives from user input, and no endpoint of this app accepts ZIP uploads - exploiting it would require control over the Remotion download itself, at which point the supply chain is already compromised. Owner: Mattes. Re-evaluate when extract-zip ships a release beyond 2.0.1 (npm view extract-zip version) or Remotion switches unpacking libraries, at the latest on 2026-11-24."
     }
   }
 }

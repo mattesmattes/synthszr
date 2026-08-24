@@ -192,3 +192,12 @@ jobs:
         run: pnpm exec vitest run tests/lib/
         env:
           NODE_ENV: test
+          # Platzhalter, KEIN echter Schluessel. Mehrere Module pruefen beim
+          # Start nur, OB der Key gesetzt ist (z. B. lib/glossary/generate.ts:426
+          # wirft "ANTHROPIC_API_KEY fehlt"). Lokal kommt er aus .env.local, die
+          # in CI fehlt — dadurch scheiterten 19 Tests, die lokal gruen sind.
+          # Ein echter Aufruf ist ausgeschlossen: die Tests mocken
+          # @anthropic-ai/sdk, es geht keine Anfrage hinaus.
+          ANTHROPIC_API_KEY: test-key-not-used
+          OPENAI_API_KEY: test-key-not-used
+          GOOGLE_GENERATIVE_AI_API_KEY: test-key-not-used
