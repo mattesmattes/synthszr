@@ -64,6 +64,7 @@ import {
 } from '@/components/ui/select'
 import { GmailCountdown } from '@/components/gmail-countdown'
 import { FetchStatusBanner } from '@/components/admin/fetch-status-banner'
+import { HealthStatusBanner } from '@/components/admin/health-status-banner'
 import { TiptapEditor } from '@/components/tiptap-editor'
 import { TiptapRenderer } from '@/components/tiptap-renderer'
 import { PostImageGallery } from '@/components/post-image-gallery'
@@ -752,6 +753,7 @@ export default function AdminPage() {
     <div className="p-4 md:p-8 max-w-full overflow-x-hidden">
       <GmailCountdown />
       <FetchStatusBanner />
+      <HealthStatusBanner />
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">

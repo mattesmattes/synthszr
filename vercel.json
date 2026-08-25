@@ -50,6 +50,10 @@
     {
       "path": "/api/cron/podcast-modes",
       "schedule": "0 3 * * 1"
+    },
+    {
+      "path": "/api/cron/health-check",
+      "schedule": "0 */4 * * *"
     }
   ],
   "headers": [
