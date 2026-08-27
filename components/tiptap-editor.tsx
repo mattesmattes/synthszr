@@ -52,6 +52,11 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
       GlossaryLinkMark.configure({ lang: 'de' }),
     ],
     content: content,
+    // TipTap v3 rendert die React-Komponente bei Transaktionen nicht mehr von
+    // sich aus neu (v2 tat das noch). Ohne diese Option erfaehrt React nichts
+    // von Cursor-Bewegungen, und die Werkzeugleiste bewertet `editor.isActive`
+    // nie neu — die Buendel-Knoepfe am H2 blieben deshalb unsichtbar.
+    shouldRerenderOnTransaction: true,
     onUpdate: ({ editor }) => {
       onChange(editor.getJSON())
     },
