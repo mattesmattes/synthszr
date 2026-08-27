@@ -324,6 +324,14 @@ export async function GET(request: NextRequest) {
             to: subscriber.email,
             subject: localizedSubject,
             html,
+            headers: {
+              // Spamfilter werten einen fehlenden Abmelde-Header gegen den
+              // Absender. Kein List-Unsubscribe-Post (One-Click): der braeuchte
+              // einen POST-Endpunkt ohne Origin-Pruefung, und
+              // /api/newsletter/unsubscribe ist bewusst origin-geschuetzt,
+              // damit Mail-Gateways niemanden per Prefetch abmelden.
+              'List-Unsubscribe': `<${unsubscribeUrl}>`,
+            },
           }
         })
 
