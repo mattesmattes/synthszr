@@ -32,6 +32,31 @@ import { Redis } from '@upstash/redis'
 const TTL_SECONDS = 60 * 60
 
 /**
+ * Speicher-Ebene VOR Redis, damit eine warme Function-Instanz nicht fuer jede
+ * Seite erneut Redis fragt.
+ *
+ * Vorher lag die einzige Speicher-Ebene (withTtlCache in terms.ts) HINTER
+ * dieser Schicht, also im Loader — dort spart sie nichts mehr, weil Redis
+ * bereits geantwortet hat. Eine Begriffsseite kostete drei Redis-Commands
+ * (Begriffsliste, Chart-Produkte, Matcher-Liste). Bei 2360 Begriffen x 5
+ * Sprachen sind das 35.400 pro Vollcrawl; das Upstash-Kontingent von 500.000
+ * Commands im Monat war damit nach 14 Crawls erschoepft — eingetreten am
+ * 28.08.2026, seitdem lief alles ungecacht gegen Supabase.
+ *
+ * 60 Sekunden, nicht die vollen 60 Minuten von Redis: Die Ebenen verketten
+ * sich, ein aus Redis geholter Wert kann selbst fast eine Stunde alt sein. Kurz
+ * gehalten bleibt der schlimmste Fall bei 1h+1min statt 2h, und die Ersparnis
+ * ist praktisch dieselbe — ein Crawler mit 100 Seiten pro Minute braucht damit
+ * einen Redis-Zugriff statt 300.
+ */
+const MEMORY_TTL_MS = 60 * 1000
+const memory = new Map<string, { value: unknown; expiresAt: number }>()
+
+function remember(key: string, value: unknown): void {
+  memory.set(key, { value, expiresAt: Date.now() + MEMORY_TTL_MS })
+}
+
+/**
  * Schluessel-Namensraum je Umgebung. Ohne ihn schreiben lokale Entwicklung,
  * Preview-Deployments und Tests in DIESELBEN Schluessel wie Produktion — alle
  * lesen .env.local bzw. dieselbe Upstash-Instanz.
@@ -89,9 +114,16 @@ export async function withSharedCache<T>(
   if (!redis) return load()
 
   const key = `${NAMESPACE}:${rawKey}`
+
+  const mem = memory.get(key)
+  if (mem && mem.expiresAt > Date.now()) return mem.value as T
+
   try {
     const hit = await redis.get<T>(key)
-    if (hit !== null && hit !== undefined) return hit
+    if (hit !== null && hit !== undefined) {
+      if (isCacheable(hit)) remember(key, hit)
+      return hit
+    }
   } catch (err) {
     console.warn('[GlossaryCache] Lesen fehlgeschlagen, gehe an die DB:', err instanceof Error ? err.message : err)
     return load()
@@ -99,6 +131,7 @@ export async function withSharedCache<T>(
 
   const value = await load()
   if (isCacheable(value)) {
+    remember(key, value)
     try {
       await redis.set(key, value, { ex: TTL_SECONDS })
     } catch (err) {

@@ -110,3 +110,82 @@ describe('withSharedCache', () => {
     expect(mocks.set).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * Speicher-Ebene VOR Redis (28.08.2026).
+ *
+ * Vorher fragte withSharedCache bei JEDEM Aufruf Redis, obwohl der TTL-Cache in
+ * terms.ts die Antwort oft schon hatte — der sass aber HINTER dieser Schicht,
+ * also erst im Loader, wo er nichts mehr spart. Eine Begriffsseite kostete so
+ * drei Redis-Commands; bei 2360 Begriffen x 5 Sprachen sind das 35.400 pro
+ * Vollcrawl, und das Upstash-Kontingent (500.000/Monat) war nach 14 Crawls
+ * erschoepft — was am 28.08. auch eintrat.
+ *
+ * Die Speicher-TTL ist bewusst KURZ (60s) und nicht so lang wie die
+ * Redis-TTL (1h): Die Ebenen verketten sich, ein aus Redis geholter Wert kann
+ * selbst schon fast eine Stunde alt sein. 60s halten den schlimmsten Fall bei
+ * 1h+1min statt bei 2h und sparen praktisch dasselbe — ein Crawler, der 100
+ * Seiten pro Minute abruft, braucht damit einen Redis-Zugriff statt 300.
+ */
+describe('withSharedCache — Speicher-Ebene vor Redis', () => {
+  it('fragt Redis beim zweiten Aufruf desselben Schluessels nicht erneut', async () => {
+    mocks.get.mockResolvedValue(['aus-redis'])
+    const { withSharedCache } = await load()
+    const loader = vi.fn().mockResolvedValue(['aus-db'])
+
+    expect(await withSharedCache('k', loader)).toEqual(['aus-redis'])
+    expect(await withSharedCache('k', loader)).toEqual(['aus-redis'])
+
+    expect(mocks.get).toHaveBeenCalledTimes(1)
+    expect(loader).not.toHaveBeenCalled()
+  })
+
+  it('haelt verschiedene Schluessel auseinander', async () => {
+    mocks.get.mockResolvedValue(['x'])
+    const { withSharedCache } = await load()
+    const loader = vi.fn().mockResolvedValue(['y'])
+    await withSharedCache('a', loader)
+    await withSharedCache('b', loader)
+    expect(mocks.get).toHaveBeenCalledTimes(2)
+  })
+
+  it('merkt sich auch einen Wert, der erst der Loader geliefert hat', async () => {
+    mocks.get.mockResolvedValue(null) // Redis-Fehltreffer
+    const { withSharedCache } = await load()
+    const loader = vi.fn().mockResolvedValue(['aus-db'])
+
+    await withSharedCache('k', loader)
+    await withSharedCache('k', loader)
+
+    expect(loader).toHaveBeenCalledTimes(1)
+    expect(mocks.get).toHaveBeenCalledTimes(1)
+  })
+
+  it('fragt nach Ablauf der Speicher-TTL wieder Redis', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.get.mockResolvedValue(['v'])
+      const { withSharedCache } = await load()
+      const loader = vi.fn().mockResolvedValue(['w'])
+
+      await withSharedCache('k', loader)
+      vi.advanceTimersByTime(61_000)
+      await withSharedCache('k', loader)
+
+      expect(mocks.get).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('zementiert einen nicht cachebaren Wert auch im Speicher nicht', async () => {
+    mocks.get.mockResolvedValue(null)
+    const { withSharedCache } = await load()
+    const loader = vi.fn().mockResolvedValue([]) // leere Liste = nicht cachebar
+
+    await withSharedCache('k', loader, (v) => (v as unknown[]).length > 0)
+    await withSharedCache('k', loader, (v) => (v as unknown[]).length > 0)
+
+    expect(loader).toHaveBeenCalledTimes(2)
+  })
+})
