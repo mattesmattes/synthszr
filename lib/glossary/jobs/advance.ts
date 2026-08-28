@@ -40,7 +40,12 @@ export const MAX_ATTEMPTS = 10
  * Mal falsch.
  */
 export function stamp(): string {
-  return new Date().toLocaleTimeString('de-DE', {
+  // Mit Tag und Monat (Betreiber-Wunsch 28.08.2026): Die Jobs laufen resumable
+  // ueber viele Cron-Ticks und damit ueber Tagesgrenzen — eine reine Uhrzeit
+  // liess offen, von welchem Tag ein Eintrag stammt. Ohne Jahr, weil ein
+  // Job-Protokoll keine Jahre ueberdauert und die Spalte schmal ist.
+  return new Date().toLocaleString('de-DE', {
+    day: '2-digit', month: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Berlin',
   })
 }
