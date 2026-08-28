@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { HealthResult } from '@/lib/health/check'
+import type { CacheHealth } from '@/lib/health/cache-check'
 
 /**
  * Letztes Ergebnis der Verfügbarkeitsprüfung für das Banner im Admin.
@@ -16,7 +17,7 @@ export async function GET() {
     const supabase = createAdminClient()
     const { data } = await supabase
       .from('settings').select('value').eq('key', 'health_check_last').maybeSingle()
-    const health = (data?.value ?? null) as HealthResult | null
+    const health = (data?.value ?? null) as (HealthResult & { cache?: CacheHealth }) | null
     if (!health) return NextResponse.json({ state: 'unbekannt' })
 
     // Älter als neun Stunden heisst: der Cron (alle vier Stunden) kommt nicht
@@ -28,6 +29,9 @@ export async function GET() {
       state: veraltet ? 'veraltet' : health.healthy ? 'ok' : 'fehler',
       checked: health.checked,
       failed: health.failed,
+      // Ohne diese Zeile stuende das Banner bei einem reinen Cache-Ausfall auf
+      // rot, ohne einen Grund zu nennen: failed waere leer.
+      cache: health.cache ?? null,
       checkedAt: health.checkedAt,
     })
   } catch (err) {

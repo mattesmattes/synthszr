@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkPages, evaluateHealth, shouldNotify, type HealthResult } from '@/lib/health/check'
+import { checkSharedCache, type CacheHealth } from '@/lib/health/cache-check'
 import { buildPageList } from '@/lib/health/pages'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
 
@@ -36,7 +37,18 @@ export async function GET(request: NextRequest) {
   try {
     const urls = await buildPageList(supabase, BASE_URL)
     const results = await checkPages(urls)
-    const health = evaluateHealth(results)
+    const pages = evaluateHealth(results)
+
+    // Der geteilte Cache faellt lautlos aus: Der Fallback greift, die Seiten
+    // bleiben erreichbar, nur der Supabase-Egress steigt wieder an. Am
+    // 28.08.2026 lief das TAGELANG unbemerkt (erschoepftes Upstash-Kontingent),
+    // entdeckt wurde es zufaellig. Deshalb zaehlt er hier mit.
+    const cache = await checkSharedCache()
+    const health: HealthResult & { cache: CacheHealth } = {
+      ...pages,
+      healthy: pages.healthy && cache.healthy,
+      cache,
+    }
 
     const { data: prevRow } = await supabase
       .from('settings').select('value').eq('key', SETTINGS_KEY).maybeSingle()
@@ -49,8 +61,8 @@ export async function GET(request: NextRequest) {
       mailed = await sendAlert(health)
     }
 
-    console.log(`[HealthCheck] ${health.checked} Seiten, ${health.failed.length} Ausfälle${mailed ? ', Mail verschickt' : ''}`)
-    return NextResponse.json({ ok: true, healthy: health.healthy, checked: health.checked, failed: health.failed.length, mailed })
+    console.log(`[HealthCheck] ${health.checked} Seiten, ${health.failed.length} Ausfälle, Cache ${cache.healthy ? 'ok' : 'GESTOERT'}${mailed ? ', Mail verschickt' : ''}`)
+    return NextResponse.json({ ok: true, healthy: health.healthy, checked: health.checked, failed: health.failed.length, cache, mailed })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unbekannt'
     console.error('[HealthCheck]', error)
@@ -58,12 +70,15 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function sendAlert(health: HealthResult): Promise<boolean> {
+async function sendAlert(health: HealthResult & { cache?: CacheHealth }): Promise<boolean> {
   try {
     const zeit = new Date(health.checkedAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })
+    const cacheKaputt = health.cache && !health.cache.healthy
     const betreff = health.healthy
       ? '✅ synthszr.com ist wieder erreichbar'
-      : `🔴 synthszr.com: ${health.failed.length} von ${health.checked} Seiten nicht erreichbar`
+      : health.failed.length === 0 && cacheKaputt
+        ? '🟠 synthszr.com: geteilter Cache gestört'
+        : `🔴 synthszr.com: ${health.failed.length} von ${health.checked} Seiten nicht erreichbar`
 
     const zeilen = health.failed.length
       ? health.failed.map((f) => `<li><code>${f.url}</code> — ${f.error ? `Netzwerkfehler: ${f.error}` : `HTTP ${f.status}`}</li>`).join('')
@@ -76,6 +91,7 @@ async function sendAlert(health: HealthResult): Promise<boolean> {
       html: `<p>Verfügbarkeitsprüfung vom ${zeit}:</p>
 <ul>${zeilen}</ul>
 <p>${health.checked} Seiten geprüft, ${health.failed.length} davon nicht erreichbar.</p>
+${cacheKaputt ? `<p><strong>Geteilter Cache gestört:</strong> ${health.cache!.error}</p><p style="color:#666;font-size:13px">Die Seiten funktionieren trotzdem — der Cache fällt auf die Datenbank zurück. Es steigt aber der Supabase-Egress, gegen den dieser Cache gebaut wurde.</p>` : ''}
 <p style="color:#666;font-size:13px">Diese Mail kommt nur bei einem Zustandswechsel — also wenn ein Ausfall beginnt oder endet, nicht alle vier Stunden erneut.</p>`,
     })
     return true

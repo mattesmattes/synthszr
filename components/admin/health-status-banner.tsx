@@ -7,6 +7,7 @@ interface Status {
   state: 'ok' | 'fehler' | 'veraltet' | 'unbekannt'
   checked?: number
   failed?: Array<{ url: string; status: number; error?: string }>
+  cache?: { healthy: boolean; error?: string } | null
   checkedAt?: string
 }
 
@@ -59,7 +60,12 @@ export function HealthStatusBanner() {
         {s.state === 'fehler' && (
           <>
             <span className="font-semibold">
-              {s.failed?.length} von {s.checked} Seiten nicht erreichbar
+              {/* Ein reiner Cache-Ausfall laesst die Seiten erreichbar. Ohne
+                  eigene Ueberschrift stuende hier "0 von 11 Seiten nicht
+                  erreichbar" — rot ohne erkennbaren Grund. */}
+              {(s.failed?.length ?? 0) === 0 && s.cache && !s.cache.healthy
+                ? 'Geteilter Cache gestört — Seiten laufen, Egress steigt'
+                : `${s.failed?.length} von ${s.checked} Seiten nicht erreichbar`}
             </span>
             <span className="ml-2 text-xs opacity-80">zuletzt geprüft {zeit}</span>
             <ul className="mt-1 space-y-0.5 text-xs">
@@ -70,6 +76,9 @@ export function HealthStatusBanner() {
                 </li>
               ))}
               {(s.failed?.length ?? 0) > 5 && <li>und {(s.failed?.length ?? 0) - 5} weitere</li>}
+              {s.cache && !s.cache.healthy && (
+                <li className="mt-1">Cache: {s.cache.error ?? 'antwortet nicht'}</li>
+              )}
             </ul>
           </>
         )}

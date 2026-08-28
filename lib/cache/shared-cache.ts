@@ -91,7 +91,21 @@ function getRedis(): Redis | null {
   // cache: der Upstash-Client fetcht per Default mit `no-store`. In Next macht
   // ein no-store-Fetch die umgebende Route DYNAMISCH — /[lang]/glossary und
   // /sitemap.xml fielen dadurch von ISR auf Rendern-pro-Request zurueck, was den
-  // Egress erhoeht statt ihn zu senken (Build-Befund 2026-08-20).
+  // Egress erhoeht statt ihn zu senken (Build-Befund 2026-08-20, am 28.08.2026
+  // erneut nachgemessen: "couldn't be rendered statically because it used
+  // no-store fetch"; /[lang]/glossary faellt von ● auf ƒ).
+  //
+  // KEHRSEITE, die einmal teuer war: Next legt damit die Upstash-ANTWORTEN im
+  // Vercel Data Cache ab — auch die Fehlerantworten. Als das Upstash-Kontingent
+  // am 28.08.2026 erschoepft war, bekam die Function die Fehlermeldung danach
+  // dauerhaft serviert, mit identischer "Usage: 500000"-Zahl, obwohl Upstash
+  // nach dem Plan-Upgrade laengst wieder antwortete. Der Data Cache ueberlebt
+  // Deployments; geholfen hat erst `vercel cache purge --type data`.
+  //
+  // Merkmal fuer die Diagnose: Ein direkter Redis-Zugriff von aussen (Skript,
+  // lokal) funktioniert, die Function meldet weiter denselben Fehler mit
+  // GLEICHBLEIBENDER Zahl. lib/health/cache-check.ts prueft deshalb mit einem
+  // eigenen Client OHNE diese Option und per Schreib-Lese-Roundtrip.
   client = new Redis({ url, token, cache: 'force-cache' })
   return client
 }
