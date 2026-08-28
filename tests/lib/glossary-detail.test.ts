@@ -81,10 +81,25 @@ describe('getGlossaryTerm — Basisabfrage', () => {
     expect(await getGlossaryTerm('nope', 'de')).toBeNull()
   })
 
-  it('gibt bei DB-Fehler null statt zu werfen', async () => {
+  // UMGEDREHT am 28.08.2026. Vorher galt hier "gibt bei DB-Fehler null statt zu
+  // werfen" — die Absicht war, einen 500er zu vermeiden. Die Folge war teurer:
+  // null laesst die Seite notFound() rufen, und Next.js friert diesen 404 fuer
+  // revalidate=21600 (6 Stunden) im Cache ein. Ein Supabase-Ausfall von wenigen
+  // Minuten legte so 24 von 40 geprueften Glossar-Links auf 404, obwohl alle
+  // Begriffe published waren. Ein geworfener Fehler ergibt einen 500, der NICHT
+  // gecacht wird und von selbst heilt, sobald die DB wieder antwortet — so
+  // macht es lib/rankings/product-detail.ts seit jeher, weshalb die
+  // Ranking-Seiten denselben Ausfall unbeschadet ueberstanden haben.
+  it('wirft bei DB-Fehler, statt ihn als "nicht gefunden" auszugeben', async () => {
     queue('glossary_terms', { data: null, error: { message: 'boom' } })
     const { getGlossaryTerm } = await import('@/lib/glossary/detail')
-    await expect(getGlossaryTerm('moe', 'de')).resolves.toBeNull()
+    await expect(getGlossaryTerm('moe', 'de')).rejects.toThrow(/boom/)
+  })
+
+  it('gibt weiterhin null, wenn der Begriff wirklich fehlt (kein Fehler)', async () => {
+    queue('glossary_terms', { data: null, error: null })
+    const { getGlossaryTerm } = await import('@/lib/glossary/detail')
+    await expect(getGlossaryTerm('gibtsnicht', 'de')).resolves.toBeNull()
   })
 
   it('filtert auf slug und status=published', async () => {

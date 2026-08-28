@@ -64,9 +64,19 @@ export const getGlossaryTerm = cache(
       .eq('slug', slug)
       .eq('status', 'published')
       .maybeSingle()
+    // Ein Datenbankfehler ist NICHT "der Begriff existiert nicht". Gaeben wir
+    // hier null zurueck, ruft die Seite notFound() — und Next.js friert diesen
+    // 404 fuer revalidate=21600 (6 Stunden) im Cache ein. Am 28.08.2026 legte
+    // ein Supabase-Ausfall von wenigen Minuten so 24 von 40 geprueften
+    // Glossar-Links lahm, obwohl jeder Begriff published war: Ein Crawler lief
+    // waehrend des Ausfalls ueber die Seiten und schrieb die 404er in den Cache.
+    // Ein geworfener Fehler ergibt einen 500. Der wird nicht gecacht und heilt
+    // von selbst, sobald die DB wieder antwortet — genauso haelt es
+    // lib/rankings/product-detail.ts, dessen Seiten den Ausfall unbeschadet
+    // ueberstanden haben.
     if (error) {
       console.error('[Glossary] getGlossaryTerm:', error.message)
-      return null
+      throw new Error(`glossary term "${slug}": ${error.message}`)
     }
     if (!row) return null
 
