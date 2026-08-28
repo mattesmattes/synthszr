@@ -97,6 +97,48 @@ function getRedis(): Redis | null {
 }
 
 /**
+ * Holt mehrere Schluessel in EINEM Redis-Kommando (MGET) in die Speicher-Ebene.
+ *
+ * Eine Begriffsseite braucht drei Eintraege: Begriffsliste, Chart-Produkte,
+ * Matcher-Liste. Als drei getrennte withSharedCache-Aufrufe sind das drei
+ * Kommandos. Vorgewaermt ist es eines — die drei Aufrufe treffen danach den
+ * Speicher und fragen Redis nicht mehr.
+ *
+ * Bewusst KEIN gemeinsamer Schluessel fuer die drei: Der Lexikon-Index und die
+ * Sitemap brauchen nur die Begriffsliste. Ein Buendel wuerde ihnen die anderen
+ * beiden aufzwingen — mehr Bytes fuer weniger Kommandos, bei 2360 Begriffen ein
+ * schlechter Tausch.
+ *
+ * Reine Optimierung: Jeder Fehler bleibt folgenlos, die Einzelaufrufe holen den
+ * Wert dann eben selbst.
+ */
+export async function prewarmSharedCache(rawKeys: string[]): Promise<void> {
+  const redis = getRedis()
+  if (!redis) return
+
+  const now = Date.now()
+  const keys = rawKeys
+    .map((k) => `${NAMESPACE}:${k}`)
+    .filter((k) => {
+      const mem = memory.get(k)
+      return !(mem && mem.expiresAt > now)
+    })
+  if (keys.length === 0) return
+
+  try {
+    const values = await redis.mget<unknown[]>(keys)
+    keys.forEach((key, i) => {
+      const value = values?.[i]
+      // Nur echte Treffer merken. Was in Redis steht, hat isCacheable beim
+      // Schreiben bereits passiert — hier ist keine erneute Pruefung noetig.
+      if (value !== null && value !== undefined) remember(key, value)
+    })
+  } catch (err) {
+    console.warn('[GlossaryCache] Vorwaermen fehlgeschlagen:', err instanceof Error ? err.message : err)
+  }
+}
+
+/**
  * Liefert den Wert aus Redis, sonst aus `load()` — und schreibt ihn dann zurueck.
  *
  * Jeder Redis-Fehler faellt still auf `load()` durch: ein gestoerter Cache darf

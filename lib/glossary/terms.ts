@@ -545,13 +545,19 @@ async function applyTranslations<T extends TranslatableRow>(
 
 /** Wie getPublishedTermList, zusaetzlich ueber Instanzgrenzen gecacht.
  *  NUR fuer Lese-Pfade (s. Block oben). */
+/** Einzige Quelle fuer die Cache-Schluessel — auch das Vorwaermen der
+ *  Begriffsseite benutzt sie, damit nichts auseinanderlaufen kann. */
+export const termListCacheKey = (lang: string, includeSummary: boolean) =>
+  `glossary:v1:termlist:${lang}:${includeSummary}`
+export const matcherCacheKey = (lang: string) => `glossary:v1:matcher:${lang}`
+
 export async function getPublishedTermListShared(
   lang: string,
   options: { includeSummary?: boolean } = {},
 ): Promise<Array<{ slug: string; canonicalName: string; summary: string }>> {
   const includeSummary = options.includeSummary ?? true
   return withSharedCache(
-    `glossary:v1:termlist:${lang}:${includeSummary}`,
+    termListCacheKey(lang, includeSummary),
     () => getPublishedTermList(lang, options),
     // Gleiche Regel wie im TTL-Cache: eine leere Liste ist nicht vom Lesefehler
     // zu unterscheiden und darf nicht fuer eine Stunde festgeschrieben werden.
@@ -563,7 +569,7 @@ export async function getPublishedTermListShared(
  *  NUR fuer Lese-Pfade (s. Block oben) — NICHT in confirm/crawl/translate. */
 export async function getMatcherTermsShared(lang: string): Promise<GlossaryMatcherTerm[] | null> {
   return withSharedCache(
-    `glossary:v1:matcher:${lang}`,
+    matcherCacheKey(lang),
     () => getMatcherTerms(lang),
     (v) => v !== null && v.length > 0,
   )

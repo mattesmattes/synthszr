@@ -21,8 +21,9 @@ import { CurrencyChart } from '@/components/glossary/currency-chart'
 import { waehrungFuerSlug } from '@/lib/currency/currencies'
 import { fetchEcbRates } from '@/lib/currency/ecb-rates'
 import { fetchKursverlauf, ausduennen } from '@/lib/currency/history'
-import { getPublishedTermListShared } from '@/lib/glossary/terms'
-import { getCategoryCappedProductsShared } from '@/lib/rankings/leaderboard'
+import { getPublishedTermListShared, termListCacheKey, matcherCacheKey } from '@/lib/glossary/terms'
+import { prewarmSharedCache } from '@/lib/cache/shared-cache'
+import { getCategoryCappedProductsShared, cappedProductsCacheKey } from '@/lib/rankings/leaderboard'
 import type { LanguageCode } from '@/lib/types'
 
 // ISR statt on-demand-only: der Erklärungstext ändert sich nur über den
@@ -91,6 +92,21 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function GlossaryTermPage({ params }: PageProps) {
   const { lang, slug } = await params
   const locale = lang as LanguageCode
+
+  // Diese Seite braucht drei Cache-Eintraege: die Matcher-Liste (in
+  // getGlossaryTerm, fuer die verwandten Begriffe), die Begriffsliste (fuer die
+  // A-Z-Navigation) und die Chart-Produkte. Einzeln geholt sind das drei
+  // Redis-Kommandos je Seitenaufbau — bei 2360 Begriffen x 5 Sprachen 35.400
+  // pro Vollcrawl, womit das Upstash-Kontingent (500.000/Monat) nach 14 Crawls
+  // aufgebraucht ist. Genau das trat am 28.08.2026 ein. Vorgewaermt ist es ein
+  // einziges MGET; die drei Aufrufe unten treffen danach die Speicher-Ebene.
+  // Ein Fehlschlag bleibt folgenlos, dann holen sie ihre Werte eben selbst.
+  await prewarmSharedCache([
+    matcherCacheKey(lang),
+    termListCacheKey(lang, false),
+    cappedProductsCacheKey(50, false),
+  ])
+
   const term = await getGlossaryTerm(slug, lang)
   if (!term) notFound()
 

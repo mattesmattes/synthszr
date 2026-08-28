@@ -15,9 +15,9 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn() }))
+const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), mget: vi.fn() }))
 vi.mock('@upstash/redis', () => ({
-  Redis: class { get = mocks.get; set = mocks.set },
+  Redis: class { get = mocks.get; set = mocks.set; mget = mocks.mget },
 }))
 
 async function load() {
@@ -28,6 +28,7 @@ async function load() {
 beforeEach(() => {
   mocks.get.mockReset()
   mocks.set.mockReset()
+  mocks.mget.mockReset()
   vi.stubEnv('KV_REST_API_URL', 'https://example.upstash.io')
   vi.stubEnv('KV_REST_API_TOKEN', 'token')
   // .env.local setzt VERCEL_ENV=production — ohne dieses Zuruecksetzen haenge
@@ -187,5 +188,76 @@ describe('withSharedCache — Speicher-Ebene vor Redis', () => {
     await withSharedCache('k', loader, (v) => (v as unknown[]).length > 0)
 
     expect(loader).toHaveBeenCalledTimes(2)
+  })
+})
+
+/**
+ * Vorwaermen (28.08.2026, Schritt 2).
+ *
+ * Eine Begriffsseite braucht drei Cache-Eintraege: Begriffsliste,
+ * Chart-Produkte, Matcher-Liste. Als drei getrennte withSharedCache-Aufrufe
+ * sind das drei Redis-Kommandos. prewarmSharedCache holt sie in EINEM MGET in
+ * die Speicher-Ebene; die drei Einzelaufrufe treffen danach den Speicher und
+ * fragen Redis nicht mehr.
+ *
+ * Warum nicht ein gemeinsamer Schluessel fuer alle drei: Der Lexikon-Index und
+ * die Sitemap brauchen nur die Begriffsliste. Ein Buendel wuerde ihnen die
+ * Chart-Produkte und die Matcher-Liste aufzwingen — mehr Bytes fuer weniger
+ * Kommandos, ein schlechter Tausch bei 2360 Begriffen.
+ */
+describe('prewarmSharedCache', () => {
+  it('holt mehrere Schluessel in EINEM Kommando und bedient danach aus dem Speicher', async () => {
+    mocks.mget.mockResolvedValue([['liste'], ['produkte']])
+    const { prewarmSharedCache, withSharedCache } = await load()
+
+    await prewarmSharedCache(['a', 'b'])
+    expect(mocks.mget).toHaveBeenCalledTimes(1)
+
+    const loader = vi.fn().mockResolvedValue(['aus-db'])
+    expect(await withSharedCache('a', loader)).toEqual(['liste'])
+    expect(await withSharedCache('b', loader)).toEqual(['produkte'])
+
+    expect(mocks.get).not.toHaveBeenCalled()
+    expect(loader).not.toHaveBeenCalled()
+  })
+
+  it('merkt sich nur die Schluessel, die Redis wirklich hatte', async () => {
+    mocks.mget.mockResolvedValue([null, ['da']])
+    mocks.get.mockResolvedValue(null)
+    const { prewarmSharedCache, withSharedCache } = await load()
+
+    await prewarmSharedCache(['fehlt', 'da'])
+    const loader = vi.fn().mockResolvedValue(['aus-db'])
+
+    expect(await withSharedCache('fehlt', loader)).toEqual(['aus-db'])
+    expect(mocks.get).toHaveBeenCalledTimes(1) // nur fuer den fehlenden
+    expect(await withSharedCache('da', loader)).toEqual(['da'])
+    expect(mocks.get).toHaveBeenCalledTimes(1) // der andere kam aus dem Speicher
+  })
+
+  it('fragt gar nicht erst, wenn alles schon im Speicher liegt', async () => {
+    mocks.mget.mockResolvedValue([['x']])
+    const { prewarmSharedCache } = await load()
+    await prewarmSharedCache(['a'])
+    await prewarmSharedCache(['a'])
+    expect(mocks.mget).toHaveBeenCalledTimes(1)
+  })
+
+  it('bleibt folgenlos, wenn Redis beim Vorwaermen ausfaellt', async () => {
+    mocks.mget.mockRejectedValue(new Error('down'))
+    mocks.get.mockResolvedValue(null)
+    const { prewarmSharedCache, withSharedCache } = await load()
+
+    await expect(prewarmSharedCache(['a'])).resolves.toBeUndefined()
+    const loader = vi.fn().mockResolvedValue(['aus-db'])
+    expect(await withSharedCache('a', loader)).toEqual(['aus-db'])
+  })
+
+  it('tut nichts ohne Upstash-Konfiguration', async () => {
+    vi.stubEnv('KV_REST_API_URL', '')
+    vi.stubEnv('KV_REST_API_TOKEN', '')
+    const { prewarmSharedCache } = await load()
+    await prewarmSharedCache(['a'])
+    expect(mocks.mget).not.toHaveBeenCalled()
   })
 })

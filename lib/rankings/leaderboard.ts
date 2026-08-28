@@ -170,12 +170,17 @@ export async function getActiveCategories(): Promise<Array<{ slug: string; name:
  * frisch vorberechnete Werte im selben Lauf weiterverarbeitet, ruft weiterhin
  * getCategoryCappedProducts direkt.
  */
+/** Einzige Quelle fuer den Cache-Schluessel — s. termsCacheKey in
+ *  lib/glossary/terms.ts. */
+export const cappedProductsCacheKey = (cap: number, includeHistory: boolean) =>
+  `charts:v1:capped:${cap}:${includeHistory}`
+
 export async function getCategoryCappedProductsShared(
   cap = 50,
   includeHistory = false,
 ): Promise<CategoryCappedProduct[]> {
   return withSharedCache(
-    `charts:v1:capped:${cap}:${includeHistory}`,
+    cappedProductsCacheKey(cap, includeHistory),
     () => getCategoryCappedProducts(cap, includeHistory),
     (v) => Array.isArray(v) && v.length > 0,
   )
