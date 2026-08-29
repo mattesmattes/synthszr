@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Eye, Trash2, Plus, RefreshCw, StickyNote, Download, PenLine, Globe, ListTodo } from 'lucide-react'
+import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Eye, Trash2, Plus, RefreshCw, StickyNote, Download, PenLine, Globe, ListTodo, Newspaper } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -55,6 +55,7 @@ export default function DailyRepoPage() {
   const [manualUrl, setManualUrl] = useState('')
   const [manualContent, setManualContent] = useState('')
   const [manualSaving, setManualSaving] = useState(false)
+  const [techmemeRunning, setTechmemeRunning] = useState(false)
   const [showWebCrawlDialog, setShowWebCrawlDialog] = useState(false)
   const [webCrawlRunning, setWebCrawlRunning] = useState(false)
   const [webCrawlItems, setWebCrawlItems] = useState<Array<{ title: string; status: string; error?: string }>>([])
@@ -239,6 +240,33 @@ export default function DailyRepoPage() {
       return <span className="inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">Notiz</span>
     }
     return null
+  }
+
+  /**
+   * Techmeme-Lauf von Hand — derselbe Job wie der Cron alle vier Stunden.
+   *
+   * Kein Dialog wie beim WebCrawl: Der Lauf hat keine Parameter, er liest die
+   * Startseite und schreibt die KI-relevanten Quellen in die News-Queue. Die
+   * obersten Stories markiert er dabei als Thema des Tages (hoechstens fuenf
+   * pro Tagespost, bereits vorgemerkte zaehlen mit).
+   */
+  async function startTechmeme() {
+    setTechmemeRunning(true)
+    try {
+      const res = await fetch('/api/admin/techmeme-run', { method: 'POST', credentials: 'include' })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      // `offen` nennt, was das Zeitbudget nicht mehr geschafft hat — ein
+      // zweiter Klick holt es nach, der Job ist zustandslos.
+      const rest = data.offen > 0 ? `\n\n${data.offen} Quellen blieben offen (Zeitbudget) — nochmal klicken holt sie nach.` : ''
+      const fehler = Array.isArray(data.fehler) && data.fehler.length > 0 ? `\n\nFehler: ${data.fehler.length}` : ''
+      alert(`Techmeme: ${data.hinzugefuegt} Quellen neu in der Queue, ${data.themen} als Thema des Tages.\n${data.relevant} von ${data.stories} Meldungen waren KI-relevant.${rest}${fehler}`)
+      fetchRepoSummaries()
+    } catch (err) {
+      alert('Techmeme-Lauf fehlgeschlagen: ' + (err instanceof Error ? err.message : 'Unbekannter Fehler'))
+    } finally {
+      setTechmemeRunning(false)
+    }
   }
 
   async function startWebCrawl() {
@@ -426,6 +454,10 @@ export default function DailyRepoPage() {
             <Button size="sm" variant="outline" onClick={() => setShowWebCrawlDialog(true)} className="gap-1.5 text-xs h-8">
               <Globe className="h-3.5 w-3.5" />
               WebCrawl
+            </Button>
+            <Button size="sm" variant="outline" onClick={startTechmeme} disabled={techmemeRunning} className="gap-1.5 text-xs h-8">
+              {techmemeRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Newspaper className="h-3.5 w-3.5" />}
+              Techmeme
             </Button>
             <input
               type="date"
