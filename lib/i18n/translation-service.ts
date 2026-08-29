@@ -246,6 +246,7 @@ async function translateContentChunked(
   const blocks = (source.content as { type: string; content: unknown[] }).content
   const CHUNK_SIZE = 15 // blocks per chunk
   const CHUNK_ATTEMPTS = 3 // je Chunk, gegen schwankende Antwortformate
+  const CHUNK_CONCURRENCY = 3 // gleichzeitige Chunk-Uebersetzungen, s. Begruendung unten
 
   console.log(`[Translation] Chunked mode: ${blocks.length} blocks in ${Math.ceil(blocks.length / CHUNK_SIZE)} chunks`)
 
@@ -267,13 +268,24 @@ Return ONLY a valid JSON object:
   }
   const meta = parseJsonResponse(metaText)
 
-  // Then: translate content in chunks
-  const translatedBlocks: unknown[] = []
+  // Then: translate content in chunks — MEHRERE GLEICHZEITIG.
+  //
+  // Die Chunks sind voneinander unabhaengig: Jeder traegt ausser dem
+  // Artikeltitel und einem "Chunk 2 von 3" keinen Kontext, keiner baut auf dem
+  // Ergebnis eines anderen auf. Sequenziell kostete das bei gemini-2.5-pro rund
+  // 56s je Aufruf, also 226s im Median fuer drei Chunks plus Meta (gemessen am
+  // 29.08.2026 ueber 400 Laeufe, Ausreisser bis 408s) — nah am 300s-Fenster der
+  // Admin-Route.
+  //
+  // OBERGRENZE statt blindem Promise.all: gemini-2.5-pro hat engere Rate
+  // Limits, und callGeminiWithRetry federt Ueberlast mit exponentiellem Backoff
+  // ab (und weicht auf Flash aus). Zu viele gleichzeitige Anfragen loesen genau
+  // diese Bremse aus — dann waere parallel langsamer als sequenziell.
+  const totalChunks = Math.ceil(blocks.length / CHUNK_SIZE)
 
-  for (let i = 0; i < blocks.length; i += CHUNK_SIZE) {
-    const chunk = blocks.slice(i, i + CHUNK_SIZE)
-    const chunkNum = Math.floor(i / CHUNK_SIZE) + 1
-    const totalChunks = Math.ceil(blocks.length / CHUNK_SIZE)
+  async function uebersetzeChunk(chunkIndex: number): Promise<unknown[]> {
+    const chunk = blocks.slice(chunkIndex * CHUNK_SIZE, (chunkIndex + 1) * CHUNK_SIZE)
+    const chunkNum = chunkIndex + 1
 
     console.log(`[Translation] Translating chunk ${chunkNum}/${totalChunks} (${chunk.length} blocks)`)
 
@@ -322,8 +334,29 @@ ${JSON.stringify(chunk)}`
         + '— Lauf abgebrochen, statt unuebersetzten Text als fertig auszugeben.',
       )
     }
-    translatedBlocks.push(...blocksForChunk)
+    return blocksForChunk
   }
+
+  // In Wellen abarbeiten, damit nie mehr als CHUNK_CONCURRENCY Anfragen offen
+  // sind. Das Ergebnis wird ueber den Index einsortiert — die Reihenfolge im
+  // Artikel haengt nicht daran, welcher Aufruf zuerst zurueckkommt.
+  const ergebnisse: unknown[][] = new Array(totalChunks)
+  for (let start = 0; start < totalChunks; start += CHUNK_CONCURRENCY) {
+    const welle = []
+    for (let k = start; k < Math.min(start + CHUNK_CONCURRENCY, totalChunks); k++) {
+      welle.push(uebersetzeChunk(k).then((bloecke) => { ergebnisse[k] = bloecke }))
+    }
+    // allSettled statt all: Bei `Promise.all` lehnt das Sammel-Promise sofort
+    // ab, sobald EIN Chunk wirft — die uebrigen laufen weiter, und wirft davon
+    // ein zweiter, ist das eine unbehandelte Ablehnung. Hier warten wir alle ab
+    // und werfen danach den ersten Fehler weiter. Am Verhalten aendert das
+    // nichts: Scheitert ein Chunk endgueltig, scheitert der ganze Lauf, genau
+    // wie in der sequenziellen Fassung.
+    const ausgang = await Promise.allSettled(welle)
+    const gescheitert = ausgang.find((e) => e.status === 'rejected')
+    if (gescheitert && gescheitert.status === 'rejected') throw gescheitert.reason
+  }
+  const translatedBlocks: unknown[] = ergebnisse.flat()
 
   const translatedContent = {
     type: 'doc',
