@@ -13,7 +13,24 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { reinjectGlossaryMarksForTranslation } from '@/lib/glossary/translate'
 
 const MAX_ATTEMPTS = 3
-const STUCK_TIMEOUT_MS = 6 * 60 * 1000
+/**
+ * MUSS groesser sein als das Zeitfenster des Laufs, der diese Datei benutzt —
+ * das ist der Scheduler mit `maxDuration = 800`
+ * (app/api/cron/scheduled-tasks/route.ts). Ist der Timeout kuerzer, raeumt der
+ * naechste Tick einen Eintrag ab, der noch bearbeitet wird: Der laufende
+ * Prozess arbeitet weiter, ein zweiter startet dasselbe Stueck erneut,
+ * `attempts` steigt, und von aussen sieht es aus, als haenge die Uebersetzung.
+ *
+ * Die 6 Minuten hier stammten aus app/api/admin/translations/process-queue,
+ * wo sie richtig sind (maxDuration 300s). In dieser Datei waren sie zu kurz.
+ *
+ * Aufgefallen am 29.08.2026 an einer tschechischen Uebersetzung, die sich im
+ * Kreis drehte. Vor dem Retry-Commit 96b781e (21.08.) lag die Median-Dauer bei
+ * 132s, weit unter 360s — die Fehlbemessung war folgenlos. Mit bis zu drei
+ * Versuchen je Chunk stieg sie auf 226s, mit Ausreissern bis 408s (gemessen
+ * ueber alle vier Sprachen), und wurde damit wirksam.
+ */
+const STUCK_TIMEOUT_MS = 15 * 60 * 1000
 
 interface QueueResult {
   totalProcessed: number
