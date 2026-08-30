@@ -22,6 +22,48 @@ interface Props {
   className?: string
 }
 
+/** Raeumliche Frequenz des Aktivitaetsfeldes: eine Zone misst rund 110 Zellen,
+ *  also knapp ein Drittel der Bildbreite. Bei kleineren Zonen ueberlagert die
+ *  Halbtonverteilung des Motivs die Modulation und man sieht sie nicht mehr. */
+const ZONE_ORT = 0.009
+/** Zeitliche Frequenz: ueber einen Umlauf wandert das Feld zwei Zoneneinheiten. */
+const ZONE_ZEIT = 2 / FRAMES
+
+function fade(t: number): number { return t * t * t * (t * (t * 6 - 15) + 10) }
+function lerp(a: number, b: number, t: number): number { return a + (b - a) * t }
+
+function gitter(x: number, y: number, z: number): number {
+  let n = (x * 374761393 + y * 668265263 + z * 2147483647) >>> 0
+  n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967295
+}
+
+/** Value-Noise: raeumlich UND zeitlich stetig, im Gegensatz zum Hash. */
+function rauschen(x: number, y: number, z: number): number {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z)
+  const u = fade(x - xi), v = fade(y - yi), w = fade(z - zi)
+  const e = (dx: number, dy: number, dz: number) => gitter(xi + dx, yi + dy, zi + dz)
+  const x00 = lerp(e(0, 0, 0), e(1, 0, 0), u), x10 = lerp(e(0, 1, 0), e(1, 1, 0), u)
+  const x01 = lerp(e(0, 0, 1), e(1, 0, 1), u), x11 = lerp(e(0, 1, 1), e(1, 1, 1), u)
+  return lerp(lerp(x00, x10, v), lerp(x01, x11, v), w)
+}
+
+/** Aktivitaetsfeld 0..1, exakt periodisch ueber FRAMES.
+ *  Lineare Zeit im Rauschen wuerde beim Ruecksprung 15 -> 0 eine Naht erzeugen;
+ *  der Uebergang zwischen dem Feld bei t und bei t-FRAMES schliesst sie, weil
+ *  das Gewicht am Periodenende vollstaendig auf dem zweiten liegt und dieses
+ *  dort per Konstruktion dem Startzustand entspricht. */
+function zone(x: number, y: number, t: number): number {
+  const a = rauschen(x * ZONE_ORT, y * ZONE_ORT, t * ZONE_ZEIT)
+  const b = rauschen(x * ZONE_ORT, y * ZONE_ORT, (t - FRAMES) * ZONE_ZEIT)
+  const roh = lerp(a, b, t / FRAMES)
+  // Spreizen: Value-Noise haeuft sich um 0,5, die Randbereiche kommen kaum vor.
+  // Ohne diesen Schritt schrumpft eine nominal zwoelffache Modulation real auf
+  // etwa das Doppelte — zu wenig, um gegen die Halbtonverteilung anzukommen.
+  const k = Math.min(1, Math.max(0, (roh - 0.34) / 0.32))
+  return k * k * (3 - 2 * k)
+}
+
 function hash(x: number, y: number, t: number): number {
   let n = (x * 1664525 + y * 1013904223 + t * 2246822519) >>> 0
   n = Math.imul(n ^ (n >>> 15), 2246822519) >>> 0
@@ -101,7 +143,12 @@ function spruenge(kandidaten: Kandidat[], t: number, staerke: number): Int32Arra
   const belegt = new Set<number>()
   const paare: number[] = []
   for (const k of kandidaten) {
-    if (hash(k.x, k.y, t) >= staerke * k.gewicht) continue
+    // Das Aktivitaetsfeld hebt und senkt die Sprungchance, entscheidet aber
+    // nicht selbst: wuerde es allein entscheiden, spraenge eine ganze Zone
+    // gleichzeitig und der Effekt wirkte blockig statt koernig. Mittelwert der
+    // Modulation ist 1,0, die Gesamtmenge je Frame bleibt damit erhalten.
+    const chance = staerke * k.gewicht * (0.08 + 1.9 * zone(k.x, k.y, t))
+    if (hash(k.x, k.y, t) >= chance) continue
     const i = Math.floor(hash(k.x + 7919, k.y + 104729, t) * k.frei.length) % k.frei.length
     const ziel = k.frei[i]
     if (belegt.has(ziel)) continue
@@ -171,13 +218,26 @@ export function KornCanvas({ src, animation, className }: Props) {
         for (let k = 0; k < s.length; k += 2) { f[s[k]] = 0; f[s[k + 1]] = 1 }
         return f
       }
-      const z0 = zustand(0, 0.4), z1 = zustand(1, 0.4)
-      let anders = 0
-      for (let i = 0; i < z0.length; i++) if (z0[i] !== z1[i]) anders++
-      const gemessen = (anders / (Z * Z)) * 100
-      const staerke = gemessen > 0.01
-        ? Math.max(0.04, Math.min(1, 0.4 * (ZIEL / gemessen)))
-        : 0.4
+      // Zwei Durchgaenge statt einem. Seit das Aktivitaetsfeld die Sprungchance
+      // moduliert, kann sie ueber 1 steigen und SAETTIGT dort — der Punkt springt
+      // dann ohnehin. Damit ist die Rate nicht mehr streng linear in der Staerke,
+      // und ein einzelner Pass ueberschaetzt sie systematisch (gemessen 3,4 %
+      // statt der angepeilten 2 %). Der zweite Durchgang faengt genau das ab.
+      const rate = (st: number) => {
+        let anders = 0
+        const paare = [0, 5, 10]
+        for (const t0 of paare) {
+          const za = zustand(t0, st), zb = zustand((t0 + 1) % FRAMES, st)
+          for (let i = 0; i < za.length; i++) if (za[i] !== zb[i]) anders++
+        }
+        return (anders / paare.length / (Z * Z)) * 100
+      }
+      let staerke = 0.4
+      for (let runde = 0; runde < 2; runde++) {
+        const gemessen = rate(staerke)
+        if (gemessen <= 0.01) break
+        staerke = Math.max(0.04, Math.min(1, staerke * (ZIEL / gemessen)))
+      }
 
       const folge: Int32Array[] = []
       for (let i = 0; i < FRAMES; i++) folge.push(spruenge(kandidaten, i, staerke))
