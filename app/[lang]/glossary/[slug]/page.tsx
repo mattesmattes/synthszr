@@ -283,6 +283,15 @@ export default async function GlossaryTermPage({ params }: PageProps) {
                 // mx-auto/max-w-[326px] sitzen jetzt am Wrapper-<span>, nicht
                 // mehr hier — der Animations-Canvas braucht dieselbe Box.
                 className="h-auto w-full dithered-cover dithered-invert"
+                // Unoptimiert und mit CORS: Der Optimizer liefert per srcset eine
+                // 652er-Variante aus, deren Rasterzellen nicht mehr auf das
+                // 384er-Raster passen. Die Korn-Animation liest ihre Pixel aus
+                // genau diesem <img>, braucht dafuer die volle Aufloesung — und
+                // spart so den zweiten Download des identischen PNG. Bei einem
+                // palettierten 1-Bit-PNG von 7-40 kB gewinnt der Optimizer ohnehin
+                // nichts: er reicht es unveraendert durch.
+                unoptimized
+                crossOrigin="anonymous"
               />
               {term.animationParams?.verfahren === 'korn' && (
                 <KornCanvas

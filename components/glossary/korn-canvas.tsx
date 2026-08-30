@@ -15,8 +15,8 @@ const MS_PRO_FRAME = 170
 const ZIEL = 2.0
 
 interface Props {
-  /** Original-PNG. NICHT die next/image-Variante — die ist lossy neu kodiert
-   *  und das 1-Bit-Raster, von dem der Effekt lebt, wäre zerstört. */
+  /** Nur als Wechsel-Kennung für den Effekt — die Pixel kommen aus dem
+   *  bereits geladenen <img> daneben, nicht aus einem eigenen Download. */
   src: string
   animation: GlossaryAnimationParams
   className?: string
@@ -180,19 +180,49 @@ export function KornCanvas({ src, animation, className }: Props) {
     let beobachter: IntersectionObserver | null = null
 
     void (async () => {
-      const resp = await fetch(src)
-      if (!resp.ok || abgebrochen) return
-      const bitmap = await createImageBitmap(await resp.blob())
-      if (abgebrochen) { bitmap.close(); return }
+      // Die Pixel kommen aus dem <img>, das die Seite ohnehin laedt. Ein eigener
+      // fetch auf das Original im Blob-Store holte exakt dieselbe Datei ein
+      // zweites Mal (768x768 PNG, gemessen 7-40 kB je Bild) — der Bild-Optimizer
+      // reicht diese 1-Bit-PNGs unveraendert durch, weil palettiertes PNG hier
+      // bereits kleiner ist, als AVIF es waere.
+      const quelle = canvas.parentElement?.querySelector('img')
+      if (!quelle) return
+      if (!quelle.complete || !quelle.naturalWidth) {
+        await new Promise<void>((fertig) => {
+          quelle.addEventListener('load', () => fertig(), { once: true })
+          quelle.addEventListener('error', () => fertig(), { once: true })
+        })
+      }
+      // Nur die volle Rasteraufloesung taugt: eine skalierte Variante haette
+      // kein 384er-Zellraster mehr.
+      if (abgebrochen || quelle.naturalWidth !== KANTE) return
 
       const mess = document.createElement('canvas')
       mess.width = KANTE
       mess.height = KANTE
       const mctx = mess.getContext('2d', { willReadFrequently: true })
-      if (!mctx) { bitmap.close(); return }
-      mctx.drawImage(bitmap, 0, 0, KANTE, KANTE)
-      bitmap.close()
-      const roh = mctx.getImageData(0, 0, KANTE, KANTE).data
+      if (!mctx) return
+      try {
+        mctx.drawImage(quelle, 0, 0, KANTE, KANTE)
+      } catch {
+        return // fremde Herkunft: Canvas waere unlesbar, Bild bleibt statisch
+      }
+      let roh: Uint8ClampedArray
+      try {
+        roh = mctx.getImageData(0, 0, KANTE, KANTE).data
+      } catch {
+        return
+      }
+
+      // Sicherheitsnetz: Sollte der Optimizer eine Variante doch neu kodieren,
+      // waeren die Kanten weich und das Zellraster damit unbrauchbar. Dann
+      // laeuft der Effekt gar nicht erst an und das Bild bleibt statisch.
+      let weich = 0
+      for (let i = 3; i < roh.length; i += 4 * 97) {
+        const a = roh[i]
+        if (a > 24 && a < 231) weich++
+      }
+      if (weich > roh.length / (4 * 97) * 0.02) return
 
       // 768er-Bild auf das 384er-Zellraster zurückführen: jede Zelle ist ein
       // 2×2-Block, es genügt deren linke obere Ecke.
