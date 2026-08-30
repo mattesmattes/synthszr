@@ -20,6 +20,10 @@
       "schedule": "0 5 * * *"
     },
     {
+      "path": "/api/cron/glossary-dedupe",
+      "schedule": "0 4 * * 1"
+    },
+    {
       "path": "/api/cron/glossary-jobs",
       "schedule": "*/1 * * * *"
     },
