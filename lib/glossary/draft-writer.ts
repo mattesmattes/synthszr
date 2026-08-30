@@ -88,6 +88,12 @@ export async function generateAndInsertDraft(
       body: generated.body,
       illustration_url: illustrationUrl,
       illustration_alt: illustrationAlt,
+      // Ohne Region: das ganze Bild lebt. Eine Vision-Klassifikation je neuem
+      // Begriff wäre ein weiterer Modellaufruf im ohnehin schon mehrstufigen
+      // Generierungspfad, und der Unterschied zur Ganzbild-Variante war im
+      // Vergleich (korn.html) gering. Nur wenn eine Illustration existiert,
+      // sonst bliebe ein Canvas ohne Bild dahinter unbenutzt liegen.
+      animation_params: illustrationUrl ? { verfahren: 'korn' } : null,
       readability_score: generated.readabilityScore,
     }).select('id').single()
     if (error) throw new Error(`glossary_terms insert failed: ${error.message}`)

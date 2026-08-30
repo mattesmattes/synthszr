@@ -509,7 +509,8 @@ export async function generateMissingIllustrations(
         //     nachträglich erzeugten Bilder betrifft, war das jeder Eintrag.
         // Leer lassen heißt: keine Unterschrift. Nur ein wirklich beschreibender
         // Text aus der Generierung (generate.ts) bekommt eine.
-        .update({ illustration_url: url })
+        // animation_params ohne Region: das ganze Bild lebt, siehe draft-writer.ts.
+        .update({ illustration_url: url, animation_params: { verfahren: 'korn' } })
         .eq('id', term.id)
       if (upErr) {
         console.error(`[GlossaryCrawl] illustration_url für ${term.slug} nicht speicherbar:`, upErr.message)
