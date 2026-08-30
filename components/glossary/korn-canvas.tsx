@@ -15,8 +15,9 @@ const MS_PRO_FRAME = 170
 const ZIEL = 2.0
 
 interface Props {
-  /** Nur als Wechsel-Kennung für den Effekt — die Pixel kommen aus dem
-   *  bereits geladenen <img> daneben, nicht aus einem eigenen Download. */
+  /** Original-PNG im Blob-Store (nicht die next/image-optimierte Variante —
+   *  die kann lossy neu kodiert oder auf eine andere Aufloesung skaliert sein
+   *  und wuerde das 384er-Zellraster zerstoeren). */
   src: string
   animation: GlossaryAnimationParams
   className?: string
@@ -165,15 +166,6 @@ function spruenge(kandidaten: Kandidat[], t: number, staerke: number): Int32Arra
  * passende Daten, bei reduzierter Bewegung oder bei jedem Fehler bleibt der
  * Canvas unsichtbar und das Bild darunter ist der garantierte Ist-Zustand.
  */
-/** TEMPORAER (30.08.2026): der User meldet, dass die Animation auf einem
- *  regulaer genutzten Browser konsequent erst beim ZWEITEN Laden jeder Seite
- *  anspringt — in frischen und "vorbelasteten" Playwright-Chromium-Sessions
- *  (leerer Cache, CORS-Cache-Vergiftung simuliert) liess sich das NICHT
- *  reproduzieren. Diese Zeile macht sichtbar, an WELCHEM der sieben stillen
- *  Ausstiegspunkte es im echten Browser tatsaechlich haengt, statt weiter zu
- *  raten. Wird entfernt, sobald die Ursache gefunden ist.*/
-function diag(grund: string) { console.warn('[KornCanvas] STOPP:', grund) }
-
 export function KornCanvas({ src, animation, className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [bereit, setBereit] = useState(false)
@@ -189,42 +181,31 @@ export function KornCanvas({ src, animation, className }: Props) {
     let beobachter: IntersectionObserver | null = null
 
     void (async () => {
-      // Die Pixel kommen aus dem <img>, das die Seite ohnehin laedt. Ein eigener
-      // fetch auf das Original im Blob-Store holte exakt dieselbe Datei ein
-      // zweites Mal (768x768 PNG, gemessen 7-40 kB je Bild) — der Bild-Optimizer
-      // reicht diese 1-Bit-PNGs unveraendert durch, weil palettiertes PNG hier
-      // bereits kleiner ist, als AVIF es waere.
-      const quelle = canvas.parentElement?.querySelector('img')
-      if (!quelle) { diag('kein <img> im parentElement gefunden'); return }
-      if (!quelle.complete || !quelle.naturalWidth) {
-        await new Promise<void>((fertig) => {
-          quelle.addEventListener('load', () => fertig(), { once: true })
-          quelle.addEventListener('error', () => fertig(), { once: true })
-        })
-      }
-      // Nur die volle Rasteraufloesung taugt: eine skalierte Variante haette
-      // kein 384er-Zellraster mehr.
-      if (abgebrochen) { diag('Effekt abgebrochen (Komponente vor Ladeende unmounted)'); return }
-      if (quelle.naturalWidth !== KANTE) { diag(`naturalWidth=${quelle.naturalWidth} statt ${KANTE} (Optimizer liefert falsche Aufloesung?)`); return }
+      // EIGENER fetch statt Pixel aus dem sichtbaren <img> zu lesen (Umkehr von
+      // Commit 5a53c23): das <img>+drawImage()-Verfahren tainted den Canvas in
+      // Safari zuverlaessig (bestaetigt: in Chrome lief es, in Safari nie —
+      // auch nicht nach mehrfachem Reload), vermutlich Safaris strengere
+      // Cross-Site-Tracking-Praevention (ITP) fuer cross-origin Bildladung
+      // zusaetzlich zu den CORS-Regeln. fetch()+blob()+createImageBitmap() ist
+      // dagegen IMMUN: eine so erzeugte Bitmap traegt kein Taint-Flag, egal
+      // welche Cross-Origin-Regeln gelten — der spezifikationskonforme Weg,
+      // Pixel browserfest zu lesen. Der Zweit-Download (den 5a53c23 sparen
+      // wollte) faellt meist ohnehin weg: dieselbe URL, die das <img> gerade
+      // geladen hat (Cache-Control: public, max-age=2592000), wird ueblicherweise
+      // aus dem HTTP-Cache bedient statt erneut uebers Netz zu gehen.
+      const resp = await fetch(src, { cache: 'force-cache' })
+      if (!resp.ok || abgebrochen) return
+      const bitmap = await createImageBitmap(await resp.blob())
+      if (abgebrochen || bitmap.width !== KANTE || bitmap.height !== KANTE) { bitmap.close(); return }
 
       const mess = document.createElement('canvas')
       mess.width = KANTE
       mess.height = KANTE
       const mctx = mess.getContext('2d', { willReadFrequently: true })
-      if (!mctx) { diag('getContext(2d) lieferte null'); return }
-      try {
-        mctx.drawImage(quelle, 0, 0, KANTE, KANTE)
-      } catch (e) {
-        diag('drawImage wirft: ' + (e as Error)?.name + ' — ' + (e as Error)?.message)
-        return // fremde Herkunft: Canvas waere unlesbar, Bild bleibt statisch
-      }
-      let roh: Uint8ClampedArray
-      try {
-        roh = mctx.getImageData(0, 0, KANTE, KANTE).data
-      } catch (e) {
-        diag('getImageData wirft: ' + (e as Error)?.name + ' — ' + (e as Error)?.message)
-        return
-      }
+      if (!mctx) { bitmap.close(); return }
+      mctx.drawImage(bitmap, 0, 0, KANTE, KANTE)
+      bitmap.close()
+      const roh = mctx.getImageData(0, 0, KANTE, KANTE).data
 
       // Sicherheitsnetz: Sollte der Optimizer eine Variante doch neu kodieren,
       // waeren die Kanten weich und das Zellraster damit unbrauchbar. Dann
@@ -234,7 +215,7 @@ export function KornCanvas({ src, animation, className }: Props) {
         const a = roh[i]
         if (a > 24 && a < 231) weich++
       }
-      if (weich > roh.length / (4 * 97) * 0.02) { diag(`Kanten zu weich: ${weich} von ${Math.round(roh.length/(4*97))} Stichproben`); return }
+      if (weich > roh.length / (4 * 97) * 0.02) return
 
       // 768er-Bild auf das 384er-Zellraster zurückführen: jede Zelle ist ein
       // 2×2-Block, es genügt deren linke obere Ecke.
@@ -246,8 +227,7 @@ export function KornCanvas({ src, animation, className }: Props) {
       }
 
       const kandidaten = findeKandidaten(d, animation.region)
-      if (abgebrochen) { diag('abgebrochen nach Kandidatensuche'); return }
-      if (kandidaten.length < 40) { diag(`nur ${kandidaten.length} Kandidaten (< 40) — Bild zu wenig Halbton oder Rasterzellen falsch gelesen`); return }
+      if (abgebrochen || kandidaten.length < 40) return
 
       // Stärke an einem einzigen Messpass normieren: die Zahl der Sprünge ist
       // direkt proportional zur Stärke, eine Suche ist deshalb unnötig.
