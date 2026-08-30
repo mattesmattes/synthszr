@@ -8,7 +8,9 @@ import type { GlossaryAnimationParams } from '@/lib/glossary/types'
 const Z = 384
 const KANTE = Z * 2
 const FRAMES = 16
-const MS_PRO_FRAME = 85
+/** Zeit je Frame. 170 ms ⇒ rund 6 Bilder/s, ein Umlauf der 16 Frames dauert
+ *  2,7 s. Bewusst langsam: das Korn soll atmen, nicht flimmern. */
+const MS_PRO_FRAME = 170
 /** Zielrate geänderter Zellen je Frame, bezogen aufs ganze Bild. */
 const ZIEL = 2.0
 
