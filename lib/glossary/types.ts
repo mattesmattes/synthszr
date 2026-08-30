@@ -21,6 +21,21 @@ export interface GlossaryMatcherTerm {
   aliases: string[]
 }
 
+/** Die sieben Bewegungsmuster aus dem Vollkorpus-Test (29.08.2026,
+ *  2376/2376 kalibriert) — s. lib/dither-animation/warp.wgsl. */
+export type GlossaryAnimationMuster =
+  | 'drift' | 'sway' | 'flow' | 'ripple' | 'pulse' | 'spin' | 'shimmer'
+
+export interface GlossaryAnimationParams {
+  muster: GlossaryAnimationMuster
+  /** Kalibrierte Amplitude in 384er-Zellen (Bisektionssuche, Zielband 1,4-3,2 % Dosis). */
+  amp: number
+  /** Nur bei muster='sway': Drehpunkt in Zellen. */
+  pivot?: [number, number]
+  /** Gemessene mittlere Bewegungsdosis in Prozent, zur Diagnose — nicht fürs Rendern nötig. */
+  dosis?: number
+}
+
 export interface GlossaryTerm extends GlossaryMatcherTerm {
   id: string
   status: GlossaryStatus
@@ -28,6 +43,8 @@ export interface GlossaryTerm extends GlossaryMatcherTerm {
   body: unknown
   illustrationUrl: string | null
   illustrationAlt: string | null
+  /** NULL = keine Animation, Illustration bleibt statisch (Ist-Zustand). */
+  animationParams: GlossaryAnimationParams | null
 }
 
 export interface GlossaryMention {

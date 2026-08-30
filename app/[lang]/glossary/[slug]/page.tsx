@@ -18,6 +18,7 @@ import { TermNews } from '@/components/glossary/term-news'
 import { TermIndexNav } from '@/components/glossary/term-index-nav'
 import { CurrencyConverter } from '@/components/glossary/currency-converter'
 import { CurrencyChart } from '@/components/glossary/currency-chart'
+import { DitheredCanvas } from '@/components/glossary/dithered-canvas'
 import { waehrungFuerSlug } from '@/lib/currency/currencies'
 import { fetchEcbRates } from '@/lib/currency/ecb-rates'
 import { fetchKursverlauf, ausduennen } from '@/lib/currency/history'
@@ -244,6 +245,12 @@ export default async function GlossaryTermPage({ params }: PageProps) {
               daran und beide lesen sich als ein Block. */}
           {term.illustrationUrl && (
             <figure className="mt-8 mb-6">
+              {/* Der Wrapper traegt Groesse/Zentrierung (vorher Klassen am
+                  Image selbst); das Image bekommt dadurch eine Box, ueber die
+                  der Animations-Canvas exakt deckungsgleich gelegt werden kann.
+                  Ohne WebGPU bleibt der Canvas unsichtbar (opacity 0), das
+                  Image darunter ist unveraendert der Ist-Zustand. */}
+              <span className="relative mx-auto block w-full max-w-[326px]">
               <Image
                 src={term.illustrationUrl}
                 // Der Alt-Text traegt die Beschreibung — SICHTBARE Bildunterschrift
@@ -272,8 +279,19 @@ export default async function GlossaryTermPage({ params }: PageProps) {
                 // Rasterweite zusammenhängt: das 768px-Bild wird dadurch stärker
                 // verkleinert, das Dither-Raster erscheint also rund 15% feiner
                 // (s. generateGlossaryIllustration).
-                className="mx-auto h-auto w-full max-w-[326px] dithered-cover dithered-invert"
+                //
+                // mx-auto/max-w-[326px] sitzen jetzt am Wrapper-<span>, nicht
+                // mehr hier — der Animations-Canvas braucht dieselbe Box.
+                className="h-auto w-full dithered-cover dithered-invert"
               />
+              {term.animationParams && (
+                <DitheredCanvas
+                  src={term.illustrationUrl}
+                  animation={term.animationParams}
+                  className="dithered-cover dithered-invert"
+                />
+              )}
+              </span>
             </figure>
           )}
 

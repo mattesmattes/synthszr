@@ -6,7 +6,7 @@ import { injectGlossaryMarks } from '@/lib/glossary/inject-marks'
 import { injectStockLinks } from '@/lib/glossary/inject-stock-links'
 import { extractVisibleText } from '@/lib/posts/product-mentions'
 import { GLOSSARY_MAX_PER_ARTICLE } from '@/lib/glossary/types'
-import type { GlossaryStatus, GlossaryTerm } from '@/lib/glossary/types'
+import type { GlossaryStatus, GlossaryTerm, GlossaryAnimationParams } from '@/lib/glossary/types'
 
 /** Obergrenze für die beiden verbleibenden arrondierenden Blöcke (Produkte,
  *  News) — die Begriffsverlinkung selbst nutzt GLOSSARY_MAX_PER_ARTICLE, weil
@@ -60,7 +60,7 @@ export const getGlossaryTerm = cache(
 
     const { data: row, error } = await supabase
       .from('glossary_terms')
-      .select('id, slug, canonical_name, aliases, status, summary, body, illustration_url, illustration_alt, updated_at')
+      .select('id, slug, canonical_name, aliases, status, summary, body, illustration_url, illustration_alt, animation_params, updated_at')
       .eq('slug', slug)
       .eq('status', 'published')
       .maybeSingle()
@@ -90,6 +90,7 @@ export const getGlossaryTerm = cache(
       body: row.body,
       illustrationUrl: row.illustration_url as string | null,
       illustrationAlt: row.illustration_alt as string | null,
+      animationParams: row.animation_params as GlossaryAnimationParams | null,
     }
 
     if (lang !== 'de') {
