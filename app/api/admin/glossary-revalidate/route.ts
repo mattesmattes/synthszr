@@ -34,13 +34,23 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('glossary_terms')
-    .select('slug')
-    .not('illustration_url', 'is', null)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const slugs = (data ?? []).map((r) => r.slug as string)
+  // PostgREST kappt ohne range() still bei 1.000 Zeilen (s. reference_postgrest_grenzen
+  // in der Projekt-Memory — traf hier beim ersten Aufruf: 1000 von 2904 statt aller).
+  // Seitenweise abholen, bis eine Seite leer zurueckkommt.
+  const SEITE = 1000
+  const slugs: string[] = []
+  for (let off = 0; ; off += SEITE) {
+    const { data, error } = await supabase
+      .from('glossary_terms')
+      .select('slug')
+      .not('illustration_url', 'is', null)
+      .range(off, off + SEITE - 1)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!data || data.length === 0) break
+    slugs.push(...data.map((r) => r.slug as string))
+    if (data.length < SEITE) break
+  }
   for (const slug of slugs) {
     revalidatePath(`/de/glossary/${slug}`)
     revalidatePath(`/en/glossary/${slug}`)
