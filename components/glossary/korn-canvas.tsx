@@ -165,6 +165,15 @@ function spruenge(kandidaten: Kandidat[], t: number, staerke: number): Int32Arra
  * passende Daten, bei reduzierter Bewegung oder bei jedem Fehler bleibt der
  * Canvas unsichtbar und das Bild darunter ist der garantierte Ist-Zustand.
  */
+/** TEMPORAER (30.08.2026): der User meldet, dass die Animation auf einem
+ *  regulaer genutzten Browser konsequent erst beim ZWEITEN Laden jeder Seite
+ *  anspringt — in frischen und "vorbelasteten" Playwright-Chromium-Sessions
+ *  (leerer Cache, CORS-Cache-Vergiftung simuliert) liess sich das NICHT
+ *  reproduzieren. Diese Zeile macht sichtbar, an WELCHEM der sieben stillen
+ *  Ausstiegspunkte es im echten Browser tatsaechlich haengt, statt weiter zu
+ *  raten. Wird entfernt, sobald die Ursache gefunden ist.*/
+function diag(grund: string) { console.warn('[KornCanvas] STOPP:', grund) }
+
 export function KornCanvas({ src, animation, className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [bereit, setBereit] = useState(false)
@@ -186,7 +195,7 @@ export function KornCanvas({ src, animation, className }: Props) {
       // reicht diese 1-Bit-PNGs unveraendert durch, weil palettiertes PNG hier
       // bereits kleiner ist, als AVIF es waere.
       const quelle = canvas.parentElement?.querySelector('img')
-      if (!quelle) return
+      if (!quelle) { diag('kein <img> im parentElement gefunden'); return }
       if (!quelle.complete || !quelle.naturalWidth) {
         await new Promise<void>((fertig) => {
           quelle.addEventListener('load', () => fertig(), { once: true })
@@ -195,22 +204,25 @@ export function KornCanvas({ src, animation, className }: Props) {
       }
       // Nur die volle Rasteraufloesung taugt: eine skalierte Variante haette
       // kein 384er-Zellraster mehr.
-      if (abgebrochen || quelle.naturalWidth !== KANTE) return
+      if (abgebrochen) { diag('Effekt abgebrochen (Komponente vor Ladeende unmounted)'); return }
+      if (quelle.naturalWidth !== KANTE) { diag(`naturalWidth=${quelle.naturalWidth} statt ${KANTE} (Optimizer liefert falsche Aufloesung?)`); return }
 
       const mess = document.createElement('canvas')
       mess.width = KANTE
       mess.height = KANTE
       const mctx = mess.getContext('2d', { willReadFrequently: true })
-      if (!mctx) return
+      if (!mctx) { diag('getContext(2d) lieferte null'); return }
       try {
         mctx.drawImage(quelle, 0, 0, KANTE, KANTE)
-      } catch {
+      } catch (e) {
+        diag('drawImage wirft: ' + (e as Error)?.name + ' — ' + (e as Error)?.message)
         return // fremde Herkunft: Canvas waere unlesbar, Bild bleibt statisch
       }
       let roh: Uint8ClampedArray
       try {
         roh = mctx.getImageData(0, 0, KANTE, KANTE).data
-      } catch {
+      } catch (e) {
+        diag('getImageData wirft: ' + (e as Error)?.name + ' — ' + (e as Error)?.message)
         return
       }
 
@@ -222,7 +234,7 @@ export function KornCanvas({ src, animation, className }: Props) {
         const a = roh[i]
         if (a > 24 && a < 231) weich++
       }
-      if (weich > roh.length / (4 * 97) * 0.02) return
+      if (weich > roh.length / (4 * 97) * 0.02) { diag(`Kanten zu weich: ${weich} von ${Math.round(roh.length/(4*97))} Stichproben`); return }
 
       // 768er-Bild auf das 384er-Zellraster zurückführen: jede Zelle ist ein
       // 2×2-Block, es genügt deren linke obere Ecke.
@@ -234,7 +246,8 @@ export function KornCanvas({ src, animation, className }: Props) {
       }
 
       const kandidaten = findeKandidaten(d, animation.region)
-      if (abgebrochen || kandidaten.length < 40) return
+      if (abgebrochen) { diag('abgebrochen nach Kandidatensuche'); return }
+      if (kandidaten.length < 40) { diag(`nur ${kandidaten.length} Kandidaten (< 40) — Bild zu wenig Halbton oder Rasterzellen falsch gelesen`); return }
 
       // Stärke an einem einzigen Messpass normieren: die Zahl der Sprünge ist
       // direkt proportional zur Stärke, eine Suche ist deshalb unnötig.
