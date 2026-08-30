@@ -313,6 +313,21 @@ export function KornCanvas({ src, animation, className }: Props) {
       const starte = () => { if (!laufend) { laufend = true; anim = requestAnimationFrame(tick) } }
       const stoppe = () => { laufend = false; cancelAnimationFrame(anim) }
 
+      // KRITISCH: das statische <img> darunter muss verschwinden, sobald der
+      // Canvas uebernimmt. Bleibt es sichtbar, scheint es an JEDER Zelle durch,
+      // die der Canvas gerade als "aus" fuehrt (z.B. die Quellzelle eines
+      // Sprungs) — das "Verlassen" einer Zelle wird dadurch unsichtbar, nur
+      // das "Ankommen" an der neuen bleibt sichtbar. Gemessen: bei ~2%
+      // Bewegungsrate macht das rund 3,5% MEHR sichtbare Tinte als vorgesehen
+      // (95.840 statt 92.584 Pixel an einem Testbild) — der Effekt verdoppelt
+      // de facto die bewegte Tinte statt sie zu verschieben, und wirkt dadurch
+      // insgesamt dunkler als das Standbild.
+      const bildQuelle = canvas.parentElement?.querySelector('img')
+      if (bildQuelle) {
+        bildQuelle.style.transition = 'opacity 400ms ease-out'
+        bildQuelle.style.opacity = '0'
+      }
+
       zeige(0)
       setBereit(true)
 
@@ -332,6 +347,12 @@ export function KornCanvas({ src, animation, className }: Props) {
       abgebrochen = true
       beobachter?.disconnect()
       cancelAnimationFrame(anim)
+      // Bild wieder einblenden: falls die Komponente unmountet oder der Effekt
+      // neu laeuft (Begriffswechsel), bevor <img> je ausgeblendet wurde, ist
+      // dieser Reset wirkungslos; ansonsten verhindert er ein dauerhaft
+      // verstecktes Bild ohne aktiven Canvas darueber.
+      const bildQuelle = canvas.parentElement?.querySelector('img')
+      if (bildQuelle) bildQuelle.style.opacity = ''
     }
   }, [src, animation])
 
