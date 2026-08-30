@@ -5,19 +5,6 @@ const nextConfig = {
   // X-Powered-By: Next.js nicht verraten (Info-Disclosure)
   poweredByHeader: false,
   transpilePackages: ['@chenglou/pretext'],
-  // .wgsl-Import fuer die Dither-Animation (lib/dither-animation/warp.wgsl).
-  // "as" ist bei vgpu unter Next >= 15.5 Pflichtfeld. webpack-Regel bleibt
-  // daneben stehen (vgpu-Doku: beide Bloecke koexistieren), falls ein Build
-  // je auf den Webpack-Pfad zurueckfaellt statt Turbopack zu nutzen.
-  turbopack: {
-    rules: {
-      '*.wgsl': { loaders: ['@vgpu/wgsl/loader-webpack'], as: '*.js' },
-    },
-  },
-  webpack(config) {
-    config.module.rules.push({ test: /\.wgsl$/, loader: '@vgpu/wgsl/loader-webpack' })
-    return config
-  },
   images: {
     // Next Image Optimization aktiv (AVIF/WebP on-the-fly statt 1408px-PNG).
     // Einzige Remote-Quelle für Cover/Thumbnails ist Vercel Blob

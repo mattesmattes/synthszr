@@ -21,18 +21,25 @@ export interface GlossaryMatcherTerm {
   aliases: string[]
 }
 
-/** Die sieben Bewegungsmuster aus dem Vollkorpus-Test (29.08.2026,
- *  2376/2376 kalibriert) — s. lib/dither-animation/warp.wgsl. */
+/** Bewegungsmuster des verworfenen Warp-Verfahrens. Bleibt nur, weil die
+ *  Bestandsdatensaetze diese Werte noch tragen; ausgewertet werden sie nicht. */
 export type GlossaryAnimationMuster =
   | 'drift' | 'sway' | 'flow' | 'ripple' | 'pulse' | 'spin' | 'shimmer'
 
 export interface GlossaryAnimationParams {
-  muster: GlossaryAnimationMuster
-  /** Kalibrierte Amplitude in 384er-Zellen (Bisektionssuche, Zielband 1,4-3,2 % Dosis). */
-  amp: number
-  /** Nur bei muster='sway': Drehpunkt in Zellen. */
+  /** 'korn' = wanderndes Dither-Korn (aktuelles Verfahren). Fehlt das Feld,
+   *  stammt der Datensatz aus dem verworfenen Warp-Verfahren und wird ignoriert:
+   *  die Illustration bleibt dann statisch. */
+  verfahren?: 'korn'
+  /** Bildbereich, in dem das Korn leben darf: [x, y, Breite, Hoehe] in Prozent
+   *  der Bildkante. Fehlt er, lebt das ganze Bild. */
+  region?: [number, number, number, number]
+  /** Was in dieser Region zu sehen ist — nur zur Nachvollziehbarkeit. */
+  was?: string
+  /** Felder des alten Warp-Verfahrens, nur noch fuer Bestandsdaten. */
+  muster?: GlossaryAnimationMuster
+  amp?: number
   pivot?: [number, number]
-  /** Gemessene mittlere Bewegungsdosis in Prozent, zur Diagnose — nicht fürs Rendern nötig. */
   dosis?: number
 }
 

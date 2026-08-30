@@ -18,7 +18,7 @@ import { TermNews } from '@/components/glossary/term-news'
 import { TermIndexNav } from '@/components/glossary/term-index-nav'
 import { CurrencyConverter } from '@/components/glossary/currency-converter'
 import { CurrencyChart } from '@/components/glossary/currency-chart'
-import { DitheredCanvas } from '@/components/glossary/dithered-canvas'
+import { KornCanvas } from '@/components/glossary/korn-canvas'
 import { waehrungFuerSlug } from '@/lib/currency/currencies'
 import { fetchEcbRates } from '@/lib/currency/ecb-rates'
 import { fetchKursverlauf, ausduennen } from '@/lib/currency/history'
@@ -284,8 +284,8 @@ export default async function GlossaryTermPage({ params }: PageProps) {
                 // mehr hier — der Animations-Canvas braucht dieselbe Box.
                 className="h-auto w-full dithered-cover dithered-invert"
               />
-              {term.animationParams && (
-                <DitheredCanvas
+              {term.animationParams?.verfahren === 'korn' && (
+                <KornCanvas
                   src={term.illustrationUrl}
                   animation={term.animationParams}
                   className="dithered-cover dithered-invert"
