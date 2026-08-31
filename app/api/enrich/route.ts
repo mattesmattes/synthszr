@@ -12,7 +12,6 @@ import { extractSections } from '@/lib/enrich/sections'
 import { linkPostContent } from '@/lib/glossary/backfill'
 import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib/glossary/terms'
 import type { TiptapDoc, TiptapNode } from '@/lib/email/tiptap-to-html'
-import type { BundleType } from '@/lib/i18n/bundle-labels'
 
 export const runtime = 'nodejs'
 // Sequenziell verarbeitete Abschnitte — seit der Umstellung auf "alle
@@ -34,12 +33,14 @@ export const maxDuration = 800
  * Streamt pro Abschnitt ein Ereignis, damit bereits fertige Abschnitte im
  * Editor sichtbar bleiben, auch wenn ein spaeterer scheitert.
  *
- * Bundle-Abschnitte (topic/recap/deep_dive) tragen oft einen eingebetteten
- * "Synthszr Take:"-Absatz, der beim Schreiben haeufig ueber die eigentliche
- * 5-Satz-Vorgabe hinauswaechst (s. lib/claude/take-cap.ts) — buildSectionMessage
- * weist das Modell für genau diese Abschnitte an, diesen Take-Absatz um zwei
- * Saetze zu kuerzen. Der EINE abschliessende Post-Take (isTake-Abschnitt)
- * ist davon nicht betroffen.
+ * Jeder Abschnitt (nicht nur Bundle-Abschnitte) kann einen eingebetteten
+ * "Synthszr Take:"-Absatz tragen — der normale Ghostwriter-Prompt zielt zwar
+ * auf 5 Saetze, driftet aber besonders in Bundle-Abschnitten oft darueber
+ * hinaus (s. lib/claude/take-cap.ts). Betreiber-Korrektur 2026-08-31:
+ * buildSectionMessage bringt JEDEN eingebetteten Take-Absatz UND den einen
+ * abschliessenden Post-Take (isTake-Abschnitt) auf GENAU 4 Saetze — nur
+ * innerhalb des Enrich-Prompts, der globale TAKE_MAX_SENTENCES-Cap (5) fuer
+ * die normale Ghostwriter-Generierung bleibt unangetastet.
  *
  * Output-Protokoll (SSE-artig, newline-delimited JSON):
  *   {started, totalSections, model, promptName}
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
           )
           if (!sectionMarkdown.trim()) throw new Error('Abschnitt ergibt leeren Markdown')
 
-          const userMessage = buildSectionMessage(promptRow.prompt_text, sectionMarkdown, section.isTake, section.bundleType)
+          const userMessage = buildSectionMessage(promptRow.prompt_text, sectionMarkdown, section.isTake)
           const revisedMarkdown = await runSection(userMessage, resolved)
 
           const revisedDoc = await markdownToTiptapServer(revisedMarkdown)
@@ -214,13 +215,11 @@ function buildSectionMessage(
   promptText: string,
   sectionMarkdown: string,
   isTake: boolean,
-  bundleType: BundleType | null,
 ): string {
   return `${promptText}
 
 ---
-${isTake ? '\nHINWEIS: Dieser Abschnitt IST der Synthszr Take — wende Aufgabe 3 an.\n' : ''}
-${bundleType ? '\nHINWEIS: Dieser Abschnitt enthält einen eingebetteten "Synthszr Take:"-Absatz (Bündel-Abschnitte neigen dazu, ihn zu lang werden zu lassen). Kürze GENAU DIESEN Absatz um zwei Sätze gegenüber der Vorlage — behalte die stärksten Aussagen. Der Rest des Abschnitts folgt normal den Aufgaben 1+2.\n' : ''}
+${isTake ? '\nHINWEIS: Dieser Abschnitt IST der Synthszr Take — wende Aufgabe 3 an. Der überarbeitete Take muss GENAU 4 vollständige Sätze haben, nicht drei, nicht fünf.\n' : '\nHINWEIS: Falls dieser Abschnitt einen mit "Synthszr Take:" gekennzeichneten Absatz enthält, bringe GENAU diesen Absatz auf GENAU 4 vollständige Sätze (kürzen oder — falls er bereits kürzer ist — sinnvoll ergänzen, ohne neue Fakten zu erfinden). Der Rest des Abschnitts folgt normal den Aufgaben 1+2.\n'}
 Hier ist der zu überarbeitende Abschnitt (Markdown, beginnt mit einer Überschrift):
 
 \`\`\`markdown
