@@ -8,6 +8,7 @@ const EXPECTED_USE_CASES: UseCase[] = [
   'ghostwriter',
   'article_planning',
   'proofreading',
+  'enrich',
   'synthesis_scoring',
   'podcast_script',
   'edit_analysis',

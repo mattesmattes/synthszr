@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { PenTool, Plus, Trash2, Edit2, Loader2, Check, Star } from 'lucide-react'
+import { Sparkles, Plus, Trash2, Edit2, Loader2, Check, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -28,7 +28,14 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-interface EditorInChiefPrompt {
+/**
+ * Prompt-Verwaltung fuer Enrich (ersetzt 2026-08-31 die Editor-in-Chief-
+ * Prompt-Seite — gleiche Tabelle umbenannt, s. Migration
+ * 20260831120000_enrich_prompts_rename.sql). Struktur 1:1 wiederverwendet:
+ * genau ein aktiver Prompt, Loeschen archiviert statt zu entfernen.
+ */
+
+interface EnrichPrompt {
   id: string
   name: string
   prompt_text: string
@@ -37,14 +44,14 @@ interface EditorInChiefPrompt {
   updated_at: string
 }
 
-export default function EditorInChiefPage() {
-  const [prompts, setPrompts] = useState<EditorInChiefPrompt[]>([])
+export default function EnrichPromptsPage() {
+  const [prompts, setPrompts] = useState<EnrichPrompt[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [editingPrompt, setEditingPrompt] = useState<EditorInChiefPrompt | null>(null)
-  const [deletingPrompt, setDeletingPrompt] = useState<EditorInChiefPrompt | null>(null)
+  const [editingPrompt, setEditingPrompt] = useState<EnrichPrompt | null>(null)
+  const [deletingPrompt, setDeletingPrompt] = useState<EnrichPrompt | null>(null)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -59,7 +66,7 @@ export default function EditorInChiefPage() {
   async function fetchPrompts() {
     setLoading(true)
     try {
-      const res = await fetch('/api/admin/editor-in-chief-prompts', { credentials: 'include' })
+      const res = await fetch('/api/admin/enrich-prompts', { credentials: 'include' })
       if (res.ok) {
         const data = await res.json()
         setPrompts(data)
@@ -77,7 +84,7 @@ export default function EditorInChiefPage() {
     setDialogOpen(true)
   }
 
-  function openEditDialog(prompt: EditorInChiefPrompt) {
+  function openEditDialog(prompt: EnrichPrompt) {
     setEditingPrompt(prompt)
     setFormData({
       name: prompt.name,
@@ -87,7 +94,7 @@ export default function EditorInChiefPage() {
     setDialogOpen(true)
   }
 
-  function openDeleteDialog(prompt: EditorInChiefPrompt) {
+  function openDeleteDialog(prompt: EnrichPrompt) {
     setDeletingPrompt(prompt)
     setDeleteDialogOpen(true)
   }
@@ -102,7 +109,7 @@ export default function EditorInChiefPage() {
         ? { id: editingPrompt.id, ...formData }
         : formData
 
-      const res = await fetch('/api/admin/editor-in-chief-prompts', {
+      const res = await fetch('/api/admin/enrich-prompts', {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -128,7 +135,7 @@ export default function EditorInChiefPage() {
     if (!deletingPrompt) return
 
     try {
-      const res = await fetch(`/api/admin/editor-in-chief-prompts?id=${deletingPrompt.id}`, {
+      const res = await fetch(`/api/admin/enrich-prompts?id=${deletingPrompt.id}`, {
         method: 'DELETE',
         credentials: 'include',
       })
@@ -147,9 +154,9 @@ export default function EditorInChiefPage() {
     }
   }
 
-  async function toggleActive(prompt: EditorInChiefPrompt) {
+  async function toggleActive(prompt: EnrichPrompt) {
     try {
-      const res = await fetch('/api/admin/editor-in-chief-prompts', {
+      const res = await fetch('/api/admin/enrich-prompts', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -173,9 +180,9 @@ export default function EditorInChiefPage() {
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tighter">Editor-in-Chief-Prompts</h1>
+          <h1 className="text-3xl font-bold tracking-tighter">Enrich-Prompts</h1>
           <p className="mt-1 text-muted-foreground">
-            Prompts für die automatische Editor-Routine: Reihenfolge sortieren, Synthszr Takes prüfen, Verständlichkeit checken
+            Prompt für den Enrich-Pass: Nachrecherche, sprachliche Verfeinerung und Schärfung des Synthszr Take
           </p>
         </div>
         <Button className="gap-2" onClick={openAddDialog}>
@@ -192,11 +199,11 @@ export default function EditorInChiefPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <PenTool className="h-5 w-5" />
+              <Sparkles className="h-5 w-5" />
               Keine Prompts vorhanden
             </CardTitle>
             <CardDescription>
-              Erstelle deinen ersten Editor-in-Chief-Prompt, um Artikel zu redigieren.
+              Erstelle deinen ersten Enrich-Prompt, um Artikel-Abschnitte anzureichern.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -256,10 +263,10 @@ export default function EditorInChiefPage() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>
-              {editingPrompt ? 'Prompt bearbeiten' : 'Neuer Editor-in-Chief-Prompt'}
+              {editingPrompt ? 'Prompt bearbeiten' : 'Neuer Enrich-Prompt'}
             </DialogTitle>
             <DialogDescription>
-              Definiere die Editor-Routine: Sortierregeln, Stil-Checks, Output-Format.
+              Definiere die Enrich-Routine: Nachrecherche, Sprachfluss, Take-Schärfe.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
@@ -268,7 +275,7 @@ export default function EditorInChiefPage() {
                 <Label htmlFor="name">Name</Label>
                 <Input
                   id="name"
-                  placeholder="z.B. Synthszr Editor Standard"
+                  placeholder="z.B. Enrich Standard"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
@@ -278,7 +285,7 @@ export default function EditorInChiefPage() {
                 <Label htmlFor="prompt_text">Prompt</Label>
                 <Textarea
                   id="prompt_text"
-                  placeholder="Beschreibe die Editor-Routine..."
+                  placeholder="Beschreibe die Enrich-Routine..."
                   value={formData.prompt_text}
                   onChange={(e) => setFormData({ ...formData, prompt_text: e.target.value })}
                   className="font-mono text-sm flex-1 min-h-[200px] max-h-[50vh] resize-y"

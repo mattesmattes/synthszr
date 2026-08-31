@@ -13,6 +13,7 @@ export type UseCase =
   | 'ghostwriter'
   | 'article_planning'
   | 'proofreading'
+  | 'enrich'
   | 'synthesis_scoring'
   | 'podcast_script'
   | 'edit_analysis'
@@ -55,6 +56,16 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     label: 'Rechtschreibprüfung',
     description: 'Deutsche Rechtschreib- und Grammatikkorrektur',
     defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic', 'openai', 'google'],
+  },
+  enrich: {
+    label: 'Enrich',
+    description: 'Ausgewählte Artikel-Abschnitte nachrecherchieren, sprachlich verfeinern und den Synthszr Take schärfen',
+    defaultModel: 'claude-sonnet-5',
+    // Web-Recherche (Nachrecherche) laeuft nur mit dem nativen Anthropic
+    // web_search-Tool (s. app/api/enrich/route.ts) — bei openai/google faellt
+    // dieser Teil des Enrich-Passes weg, der Rest (Fluessigkeit, Take-Schaerfe)
+    // funktioniert trotzdem, deshalb bleiben alle drei Provider waehlbar.
     allowedProviders: ['anthropic', 'openai', 'google'],
   },
   synthesis_scoring: {

@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 
+/**
+ * CRUD fuer enrich_prompts (bis 2026-08-31: editor_in_chief_prompts,
+ * s. supabase/migrations/20260831120000_enrich_prompts_rename.sql). Ersetzt
+ * /api/admin/editor-in-chief-prompts 1:1 im Aufbau — nur der Tabellenname
+ * hat sich geaendert, das "genau ein aktiver Prompt"-Verhalten (deaktiviert
+ * beim Aktivieren alle anderen) bleibt identisch.
+ */
+
 export async function GET() {
   const session = await getSession()
   if (!session) {
@@ -10,7 +18,7 @@ export async function GET() {
 
   const supabase = createAdminClient()
   const { data, error } = await supabase
-    .from('editor_in_chief_prompts')
+    .from('enrich_prompts')
     .select('*')
     .eq('is_archived', false)
     .order('created_at', { ascending: false })
@@ -41,16 +49,15 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // If setting as active, deactivate all others first
     if (is_active) {
       await supabase
-        .from('editor_in_chief_prompts')
+        .from('enrich_prompts')
         .update({ is_active: false })
         .neq('id', '00000000-0000-0000-0000-000000000000')
     }
 
     const { data, error } = await supabase
-      .from('editor_in_chief_prompts')
+      .from('enrich_prompts')
       .insert({
         name: name.trim(),
         prompt_text: prompt_text.trim(),
@@ -91,16 +98,15 @@ export async function PUT(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // If setting as active, deactivate all others first
     if (is_active) {
       await supabase
-        .from('editor_in_chief_prompts')
+        .from('enrich_prompts')
         .update({ is_active: false })
         .neq('id', id)
     }
 
     const { data, error } = await supabase
-      .from('editor_in_chief_prompts')
+      .from('enrich_prompts')
       .update({
         name: name.trim(),
         prompt_text: prompt_text.trim(),
@@ -139,9 +145,8 @@ export async function DELETE(request: NextRequest) {
 
   const supabase = createAdminClient()
 
-  // Archive instead of delete
   const { error } = await supabase
-    .from('editor_in_chief_prompts')
+    .from('enrich_prompts')
     .update({ is_archived: true, is_active: false })
     .eq('id', id)
 

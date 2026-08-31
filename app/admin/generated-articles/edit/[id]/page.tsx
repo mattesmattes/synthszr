@@ -27,9 +27,9 @@ import { Badge } from '@/components/ui/badge'
 import { use } from 'react'
 import { ensureInitialEditHistory, recordEditVersion } from '@/lib/edit-learning/history'
 import { sanitizeTiptapUrls } from '@/lib/utils/url-verifier'
-import { convertTiptapToMarkdown, parseTiptapContent } from '@/lib/utils/tiptap-to-markdown'
-import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
-import { runEditorInChiefOnMarkdown } from '@/lib/editor-in-chief/run-stream'
+import { parseTiptapContent } from '@/lib/utils/tiptap-to-markdown'
+import { runEnrichOnTiptap } from '@/lib/enrich/run-stream'
+import { applySectionResult } from '@/lib/enrich/sections'
 import type { LearnedPattern } from '@/lib/edit-learning/retrieval'
 import { GlossaryApprovalPanel } from '@/components/admin/glossary-approval-panel'
 import type { GlossaryCandidate } from '@/lib/glossary/types'
@@ -140,12 +140,11 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   const [podcastStatus, setPodcastStatus] = useState<'idle' | 'generating' | 'success' | 'error'>('idle')
   const [podcastMessage, setPodcastMessage] = useState<string>('')
 
-  // Editor-in-Chief re-run for already-saved posts. Converts the current
-  // TipTap content to markdown, runs the editor, parses back to TipTap,
-  // and replaces the editor content. User still has to hit Save afterwards.
-  const [editorRerunning, setEditorRerunning] = useState(false)
-  const [editorRerunStatus, setEditorRerunStatus] = useState<string | null>(null)
-  const [editorRerunError, setEditorRerunError] = useState<string | null>(null)
+  // Enrich fuer bereits gespeicherte Posts. Waehlt serverseitig eine Teilmenge
+  // der Abschnitte, ersetzt sie lokal — Speichern bleibt ein separater Klick.
+  const [enriching, setEnriching] = useState(false)
+  const [enrichStatus, setEnrichStatus] = useState<string | null>(null)
+  const [enrichError, setEnrichError] = useState<string | null>(null)
 
   // Metadata section collapsed state
   const [metadataOpen, setMetadataOpen] = useState(false)
@@ -906,41 +905,50 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     )
   }
 
-  // Re-run: scan the article for Synthszr Takes that share the same
-  // Full Editor-in-Chief routine on the edit page: DB prompt drives the
-  // pass (section sort, style discipline incl. contrast killer, readability
-  // check, editor notes). Round-trips tiptap → markdown → /api/editor-in-chief
-  // → markdown → tiptap. Replaces editor content; user reviews and clicks Save.
-  async function rerunEditorInChief() {
-    if (editorRerunning) return
-    setEditorRerunning(true)
-    setEditorRerunError(null)
-    setEditorRerunStatus('Konvertiere Artikel...')
+  // Enrich (ersetzt 2026-08-31 Editor-in-Chief): waehlt serverseitig eine
+  // Teilmenge der Abschnitte aus (Synthszr Take immer, sonst Top 3 nach
+  // news_queue.total_score UNION alle mit Bundle-Label) und verarbeitet jeden
+  // einzeln. Jeder fertige Abschnitt wird SOFORT per applySectionResult
+  // eingesetzt (funktionales setState, damit schnell aufeinanderfolgende
+  // Abschnitts-Events nicht auf einen veralteten content-Stand schreiben) —
+  // ein spaeter scheiternder Abschnitt kostet keine bereits fertigen. Bleibt
+  // reversibel wie zuvor: nur lokaler State, kein DB-Write vor "Speichern".
+  async function runEnrich() {
+    if (enriching) return
+    setEnriching(true)
+    setEnrichError(null)
+    setEnrichStatus('Enrich startet…')
 
     try {
-      const doc = parseTiptapContent(content)
-      if (!doc) throw new Error('TipTap-Content ist nicht parsebar')
-      // preserveCompanyTags keeps {Company} braces alive for the EIC.
-      const markdown = convertTiptapToMarkdown(doc, { preserveCompanyTags: true })
-      if (!markdown.trim()) throw new Error('Konvertierter Markdown ist leer')
-
-      setEditorRerunStatus('Editor-in-Chief startet…')
-      const revisedMarkdown = await runEditorInChiefOnMarkdown(markdown, {
-        onStatus: setEditorRerunStatus,
+      const summary = await runEnrichOnTiptap(content, {
+        onStatus: setEnrichStatus,
+        onSectionDone: (result) => {
+          setContent((prev) => {
+            const doc = parseTiptapContent(prev)
+            if (!doc) return prev
+            const applied = applySectionResult(doc, result)
+            if (!applied) return prev
+            setArticleCount(countArticles(applied as unknown as Record<string, unknown>))
+            return applied as unknown as Record<string, unknown>
+          })
+        },
+        onSectionError: (err) => {
+          console.error('[Enrich] Abschnitt fehlgeschlagen:', err.headingText, err.error)
+        },
       })
 
-      setEditorRerunStatus('Konvertiere zurück zu TipTap...')
-      const newTiptap = markdownToTiptap(revisedMarkdown)
-      handleContentChange(newTiptap)
-
-      setEditorRerunStatus('Editor-in-Chief fertig. Bitte prüfen und speichern.')
-      setTimeout(() => setEditorRerunStatus(null), 8000)
+      setEnrichStatus(
+        `Enrich fertig: ${summary.processed} Abschnitt(e) überarbeitet` +
+        (summary.errors ? `, ${summary.errors} fehlgeschlagen (unverändert gelassen)` : '') +
+        '. Bitte prüfen und speichern.'
+      )
+      setTimeout(() => setEnrichStatus(null), 8000)
     } catch (err) {
-      console.error('[Editor-in-Chief Re-Run] Error:', err)
-      setEditorRerunError(err instanceof Error ? err.message : 'Unbekannter Fehler')
-      setEditorRerunStatus(null)
+      console.error('[Enrich] Error:', err)
+      setEnrichError(err instanceof Error ? err.message : 'Unbekannter Fehler')
+      setEnrichStatus(null)
     } finally {
-      setEditorRerunning(false)
+      setEnriching(false)
     }
   }
 
@@ -1139,33 +1147,33 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
             </TabsList>
 
             <TabsContent value="content" className="mt-2 space-y-3">
-              {/* Editor-in-Chief re-run for already-saved posts. Useful when
-                  the original generation pre-dated the editor pipeline, or
-                  when the prompt was tightened and the user wants the
-                  redaction applied retroactively. Replaces editor content
-                  in-place; user must save manually. */}
+              {/* Enrich: nachrecherchiert, verfluessigt und schaerft eine
+                  ausgewaehlte Teilmenge der Abschnitte (Take + Top 3 + gelabelte).
+                  Button ist IMMER aktiv — die Auswahl passt sich dem Artikel an,
+                  keine Vorbedingung noetig. Ersetzt Content nur lokal; Speichern
+                  bleibt ein separater Klick (reversibel). */}
               <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md border bg-muted/30">
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium flex items-center gap-1.5">
                     <ClipboardEdit className="h-3.5 w-3.5" />
-                    Editor-in-Chief erneut ausführen
+                    Enrich
                   </div>
-                  {editorRerunStatus && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{editorRerunStatus}</p>
+                  {enrichStatus && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{enrichStatus}</p>
                   )}
-                  {editorRerunError && (
-                    <p className="text-[11px] text-destructive mt-0.5">{editorRerunError}</p>
+                  {enrichError && (
+                    <p className="text-[11px] text-destructive mt-0.5">{enrichError}</p>
                   )}
                 </div>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={rerunEditorInChief}
-                  disabled={editorRerunning}
+                  onClick={runEnrich}
+                  disabled={enriching}
                   className="gap-1.5 shrink-0"
                 >
-                  {editorRerunning ? (
+                  {enriching ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       Läuft…
@@ -1173,7 +1181,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                   ) : (
                     <>
                       <Sparkles className="h-3.5 w-3.5" />
-                      Re-Run
+                      Enrich
                     </>
                   )}
                 </Button>

@@ -79,8 +79,8 @@ const navGroups: NavGroup[] = [
         icon: PenTool
       },
       {
-        label: 'Editor-in-Chief-Prompts',
-        href: '/admin/editor-in-chief',
+        label: 'Enrich-Prompts',
+        href: '/admin/enrich-prompts',
         icon: ClipboardEdit
       },
       {

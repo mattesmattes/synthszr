@@ -42,9 +42,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
+import { convertTiptapToMarkdown, parseTiptapContent } from '@/lib/utils/tiptap-to-markdown'
 import { parseArticleContent, generateSlug, type ArticleMetadata } from '@/lib/utils/parse-article-content'
 import { embedQueueItemIds } from '@/lib/utils/embed-queue-ids'
-import { runEditorInChiefOnMarkdown } from '@/lib/editor-in-chief/run-stream'
+import { runEnrichOnTiptap } from '@/lib/enrich/run-stream'
+import { applySectionResult } from '@/lib/enrich/sections'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
 import { ensureInitialEditHistory } from '@/lib/edit-learning/history'
 import { sanitizeTiptapUrls } from '@/lib/utils/url-verifier'
@@ -139,15 +141,17 @@ export default function CreateArticlePage() {
   // null unless someone hand-edits in the editor (saveAsDraft / EIC button).
   const [usedModel] = useState<string | null>(null)
 
-  // Editor-in-Chief routine state — runs after generation, replaces
-  // articleContent with the redaction LLM's revised markdown.
-  const [editorRunning, setEditorRunning] = useState(false)
-  // Set to true after a fresh ghostwriter run finishes WITHOUT the inline
-  // Editor-in-Chief (which is currently disabled, see ENABLE_INLINE_EIC).
-  // The button highlights itself so the user remembers to trigger it.
-  const [eicNeedsRun, setEicNeedsRun] = useState(false)
-  const [editorStatus, setEditorStatus] = useState<string | null>(null)
-  const [editorError, setEditorError] = useState<string | null>(null)
+  // Enrich state — verfeinert nach der Generierung eine Teilmenge der
+  // Abschnitte in articleContent (Markdown). queueItemId ist auf dieser Seite
+  // VOR dem Speichern nicht verfuegbar (wird erst beim Speichern per
+  // embedQueueItemIds zugeordnet, s.u.) — die Top-3-nach-Score-Auswahl faellt
+  // hier deshalb naturgemaess leer aus, Take + gelabelte Abschnitte bleiben
+  // trotzdem waehlbar (selectSectionsForEnrich degradiert dafuer bereits
+  // sauber, kein Sonderfall noetig). Auf der Edit-Seite nach dem Speichern
+  // steht die volle Top-3-Auswahl wieder zur Verfuegung.
+  const [enriching, setEnriching] = useState(false)
+  const [enrichStatus, setEnrichStatus] = useState<string | null>(null)
+  const [enrichError, setEnrichError] = useState<string | null>(null)
 
   // Publish date: smart default (tomorrow if after 17:00 Berlin time, else today)
   const [publishDate, setPublishDate] = useState<string>(() => {
@@ -296,7 +300,6 @@ export default function CreateArticlePage() {
     setGenerating(true)
     setPipelineStatus('Job wird angelegt…')
     setPipelineProgress(null)
-    setEicNeedsRun(false)
 
     try {
       // Resumable article job instead of one 300s inline stream (which aborted
@@ -428,35 +431,49 @@ export default function CreateArticlePage() {
     }
   }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity, repoIntensity, router])
 
-  // Thin wrapper around the shared helper so the rest of this file can
-  // keep its existing call signature.
-  async function runEditorInChiefStream(
-    markdown: string,
-    model: string | null,
-    onStatus?: (msg: string) => void
-  ): Promise<string> {
-    return runEditorInChiefOnMarkdown(markdown, { model, onStatus })
-  }
-
-  // Manual re-run from the button — articleContent is already set.
-  async function runEditorInChief() {
-    if (!articleContent || editorRunning) return
-    setEditorRunning(true)
-    setEditorError(null)
-    setEditorStatus('Editor-in-Chief startet...')
-    setEicNeedsRun(false)
+  // Manual trigger — articleContent ist Markdown, Enrich braucht TipTap fuer
+  // die Abschnitts-Erkennung (H2-Attribute). Konvertiert deshalb an den
+  // Raendern: markdownToTiptap rein, convertTiptapToMarkdown wieder raus.
+  // bundleType ueberlebt diesen Rundgang (Kommentar-Marker im Markdown),
+  // queueItemId nicht — s. Kommentar beim State oben, das ist hier erwartet.
+  async function runEnrich() {
+    if (!articleContent || enriching) return
+    setEnriching(true)
+    setEnrichError(null)
+    setEnrichStatus('Enrich startet…')
 
     try {
-      const revised = await runEditorInChiefStream(articleContent, usedModel, setEditorStatus)
-      startTransition(() => setArticleContent(revised))
-      setEditorStatus('Editor-in-Chief fertig.')
-      setTimeout(() => setEditorStatus(null), 3000)
+      const initialDoc = markdownToTiptap(articleContent)
+      const summary = await runEnrichOnTiptap(initialDoc, {
+        model: usedModel,
+        onStatus: setEnrichStatus,
+        onSectionDone: (result) => {
+          startTransition(() => {
+            setArticleContent((prevMarkdown) => {
+              const doc = parseTiptapContent(markdownToTiptap(prevMarkdown))
+              if (!doc) return prevMarkdown
+              const applied = applySectionResult(doc, result)
+              if (!applied) return prevMarkdown
+              return convertTiptapToMarkdown(applied, { preserveCompanyTags: true })
+            })
+          })
+        },
+        onSectionError: (err) => {
+          console.error('[Enrich] Abschnitt fehlgeschlagen:', err.headingText, err.error)
+        },
+      })
+
+      setEnrichStatus(
+        `Enrich fertig: ${summary.processed} Abschnitt(e) überarbeitet` +
+        (summary.errors ? `, ${summary.errors} fehlgeschlagen` : '') + '.'
+      )
+      setTimeout(() => setEnrichStatus(null), 3000)
     } catch (err) {
-      console.error('[Editor-in-Chief] Error:', err)
-      setEditorError(err instanceof Error ? err.message : 'Unbekannter Fehler')
-      setEditorStatus(null)
+      console.error('[Enrich] Error:', err)
+      setEnrichError(err instanceof Error ? err.message : 'Unbekannter Fehler')
+      setEnrichStatus(null)
     } finally {
-      setEditorRunning(false)
+      setEnriching(false)
     }
   }
 
@@ -1101,46 +1118,35 @@ export default function CreateArticlePage() {
             </div>
           )}
 
-          {/* Editor-in-Chief — manual trigger. The inline auto-run is
-              currently disabled (see ENABLE_INLINE_EIC in generateArticle),
-              so the user has to fire this off explicitly. The button
-              highlights itself in yellow when a fresh generation just
-              finished without the EIC pass. */}
+          {/* Enrich — manueller Trigger, immer aktiv sobald Content da ist.
+              Vor dem Speichern greift nur Take+Label (kein queueItemId fuer
+              die Top-3-Auswahl verfuegbar, s. Kommentar bei runEnrich). */}
           {articleContent && !generating && (
             <div className="space-y-1">
               <Button
-                onClick={runEditorInChief}
-                disabled={editorRunning}
-                variant={eicNeedsRun ? 'default' : 'outline'}
-                className={
-                  eicNeedsRun
-                    ? 'w-full gap-2 bg-[#CCFF00] text-black hover:bg-[#B8E600]'
-                    : 'w-full gap-2'
-                }
+                onClick={runEnrich}
+                disabled={enriching}
+                variant="outline"
+                className="w-full gap-2"
                 size="lg"
               >
-                {editorRunning ? (
+                {enriching ? (
                   <>
                     <Loader2 className="h-5 w-5 animate-spin" />
-                    {editorStatus?.slice(0, 60) || 'Editor-in-Chief läuft...'}
+                    {enrichStatus?.slice(0, 60) || 'Enrich läuft...'}
                   </>
                 ) : (
                   <>
                     <ClipboardEdit className="h-5 w-5" />
-                    {eicNeedsRun ? 'Editor-in-Chief starten (noch nicht gelaufen)' : 'Editor-in-Chief erneut ausführen'}
+                    Enrich
                   </>
                 )}
               </Button>
-              <p className="text-[11px] text-muted-foreground text-center">
-                {eicNeedsRun
-                  ? 'Wird derzeit NICHT automatisch ausgeführt — bitte manuell triggern.'
-                  : 'Bereits gelaufen. Erneut triggern z.B. nach Prompt-Änderung.'}
-              </p>
             </div>
           )}
 
-          {editorError && (
-            <p className="text-xs text-destructive">{editorError}</p>
+          {enrichError && (
+            <p className="text-xs text-destructive">{enrichError}</p>
           )}
         </div>
 
